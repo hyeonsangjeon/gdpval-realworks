@@ -58,11 +58,12 @@ TASK3_SUCCESSOR_READOUTS = {
     TASK3_B2_CELL: (16, TASK3_C2_CELL, {"id": "36288201352", "job": "pilot-live", "attempt": 1}),
     TASK3_A2_CELL: (17, TASK3_B2_CELL, {"id": "36289615941", "job": "pilot-live", "attempt": 1}),
 }
-# Only this published model-free record, never an ordinary judged successor.
+# Only these two published model-free records, never ordinary judged successors.
 TASK4_A1_WRITER_RUN = {"id": "36291118506", "job": "pilot-live", "attempt": 1}
+TASK4_A2_WRITER_RUN = {"id": "36298545498", "job": "pilot-live", "attempt": 1}
 # Only this ordinary grade consumes the recorded model-free A1 predecessor.
 TASK4_B1_WRITER_RUN = {"id": "36292532223", "job": "pilot-live", "attempt": 1}
-# Only these three published ordinary successors; A2 and task5 stay closed.
+# Only these three published ordinary successors; all task5 readers stay closed.
 TASK4_C1_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1"
 TASK4_C2_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2"
 TASK4_B2_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2"
@@ -116,6 +117,9 @@ def _writer_context(request):
     elif request == grading.TASK4_RETAINED[grading.TASK4_A1_CELL][1]:
         context = grading.compile_request("pilot/" + grading.TASK4_A1_CELL, TASK3_A1_WRITER_SOURCE,
             request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
+    elif request == grading.TASK4_RETAINED[grading.TASK4_A2_CELL][1]:
+        context = grading.compile_request("pilot/" + grading.TASK4_A2_CELL, TASK3_A1_WRITER_SOURCE,
+            request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
     elif request == grading.TASK4_RETAINED[grading.TASK4_B1_CELL][1]:
         context = grading.compile_request("pilot/" + grading.TASK4_B1_CELL, TASK3_A1_WRITER_SOURCE,
             request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
@@ -140,6 +144,8 @@ def _writer_run(context):
         return TASK4_B1_WRITER_RUN
     if context.cell["cell_id"] == grading.TASK4_A1_CELL:
         return TASK4_A1_WRITER_RUN
+    if context.cell["cell_id"] == grading.TASK4_A2_CELL:
+        return TASK4_A2_WRITER_RUN
     if context.cell["cell_id"] in TASK3_SUCCESSOR_READOUTS:
         return TASK3_SUCCESSOR_READOUTS[context.cell["cell_id"]][2]
     if context.cell["cell_id"] == grading.TASK3_A1_CELL:
@@ -156,7 +162,7 @@ def _writer_entry(context, renderer):
         "grade_readout_renderer_identity_refused")
     source_hash = (TASK3_A1_GRADER_SOURCE_HASH if context.cell["cell_id"] in {
                    grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL,
-                   grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS} else
+                   grading.TASK4_A2_CELL, grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS} else
                    TASK2_GRADER_SOURCE_HASH if context.cell["cell_id"] in TASK2_GRADE_RUNS else
                    B1_GRADER_SOURCE_HASH if context.cell["cell_id"] == grading.B1_CELL else GRADER_SOURCE_HASH)
     return {"config_hash": CONFIG_SHA256[:16], "renderer_fingerprint": renderer, "grader_source_hash": source_hash}
@@ -261,7 +267,8 @@ class _ReadOnlyGrade:
     def bind_retained(self, binding, context, cache, deadline):
         """Only the registered cell's inference controls, never payloads."""
         require(context.cell["cell_id"] in {*grading.TASK2_RETAINED, grading.TASK3_A1_CELL,
-                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}
+                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_A2_CELL,
+                grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}
                 and context.terminal_request is not None,
                 "grade_readout_retained_route_refused")
         revision = binding["retained"]["terminal_commit"]
@@ -293,7 +300,8 @@ class _ReadOnlyGrade:
         grading._grade_retained_input(context, binding, self, self._repo,
             grading._cache(cache, "verified"), self._token, deadline)
         if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL,
-                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}:
+                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_A2_CELL,
+                grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}:
             original, _ = retained._control(self, self._repo, claim_revision, claim,
                 grading._cache(cache, "predecessor"), self._token, deadline,
                 expected=terminal["claim_identity"], written_at=claim_revision)
@@ -457,13 +465,16 @@ def _receipt(value):
 
 
 def _verified_ungraded(api, context, cache, deadline):
-    """Only recorded task4 A1, with ordinary A2 and intrinsic B2 control proof."""
+    """Only task4 A1/A2, their ordinary parent and its intrinsic older control."""
     import codex_budget_pilot_ungraded as ungraded
 
     ungraded._scope(context)
-    require(context.cell["cell_id"] == grading.TASK4_A1_CELL
-            and context.plan["order"][17:19] == [TASK3_A2_CELL, grading.TASK4_A1_CELL],
+    task4_a2 = context.cell["cell_id"] == grading.TASK4_A2_CELL
+    require((task4_a2 and context.plan["order"][22:24] == [TASK4_B2_CELL, grading.TASK4_A2_CELL])
+            or (context.cell["cell_id"] == grading.TASK4_A1_CELL
+                and context.plan["order"][17:19] == [TASK3_A2_CELL, grading.TASK4_A1_CELL]),
             "grade_readout_ungraded_route_refused")
+    parent_cell = TASK4_B2_CELL if task4_a2 else TASK3_A2_CELL
     terminal, data = retained._control(api, api._repo, api.revision, api._terminal,
         grading._cache(cache, "terminal"), api._token, deadline, written_at=api.revision)
     require(terminal.get("format") == ungraded.TERMINAL_FORMAT and terminal.get("model_invoked") is False,
@@ -472,7 +483,7 @@ def _verified_ungraded(api, context, cache, deadline):
     entry = _writer_entry(context, binding["predecessor_entry"]["renderer_fingerprint"])
     expected = ungraded._binding(context, {"observation": binding["retained"], "terminal": {
         "publication_receipt_sha256": binding["publication_receipt_sha256"]}},
-        binding["inference_identity_sha256"], entry, TASK4_A1_WRITER_RUN)
+        binding["inference_identity_sha256"], entry, _writer_run(context))
     require(retained._encoded(binding) == retained._encoded(expected), "grade_readout_ungraded_binding_refused")
     claim_revision = terminal["claim_commit"]
     require(output._hash(claim_revision, 40) and claim_revision != api.revision, "grade_readout_claim_refused")
@@ -488,15 +499,22 @@ def _verified_ungraded(api, context, cache, deadline):
     require(len({api.revision, claim_revision, claim["expected_parent"]}) == 3,
             "grade_readout_predecessor_revision_refused")
     observed = api.bind_retained(binding, context, grading._cache(cache, "input"), deadline)
-    other = _writer_context(grading.TASK3_SUCCESSORS[TASK3_A2_CELL][1])
+    other = _writer_context(grading.TASK4_RETAINED[parent_cell][1] if task4_a2
+                            else grading.TASK3_SUCCESSORS[parent_cell][1])
     prior = _ReadOnlyGrade(api._api, api._repo, api._token, other)
     prior._metadata_open = False
     prior.revision = claim["expected_parent"]
     prior._metadata_paths[prior.revision] = {prior._terminal}
     prior._downloads.add((prior.revision, prior._terminal))
     previous, previous_entry, _ = _verified_grade(prior, other, grading._cache(cache, "previous"), deadline)
+    if task4_a2:
+        require(retained._encoded(previous_entry) == retained._encoded(entry)
+                and retained._encoded(claim["predecessor"]) == retained._encoded(
+                    {"cell_id": parent_cell, "revision": prior.revision, **previous["identity"]})
+                and retained._encoded(observed) == retained._encoded(previous["terminal"]["binding"]["retained"]),
+                "grade_readout_typed_predecessor_refused")
     require(previous_entry == entry
-            and claim["predecessor"] == {"cell_id": TASK3_A2_CELL, "revision": prior.revision, **previous["identity"]}
+            and claim["predecessor"] == {"cell_id": parent_cell, "revision": prior.revision, **previous["identity"]}
             and observed == previous["terminal"]["binding"]["retained"], "grade_readout_predecessor_identity_refused")
     parent_claim_revision = previous["terminal"]["claim_commit"]
     parent_claim, parent_bytes = retained._control(prior, api._repo, parent_claim_revision, prior._claim,
@@ -515,8 +533,8 @@ def _verified_ungraded(api, context, cache, deadline):
         api._token, deadline, written_at=prior.revision)
     retained._objects(api, api._repo, api.revision, [retained._object(api._claim, claim_bytes)],
         api._token, deadline, written_at=claim_revision)
-    # Transfer only A2's validated capabilities, including B2 terminal control.
-    # The native verifier rechecks A2; it never recursively verifies B2.
+    # Transfer only the ordinary parent's validated capabilities and its older
+    # terminal control. The native verifier rechecks that parent, not its parent.
     api._metadata_paths.update(prior._metadata_paths)
     api._downloads.update(prior._downloads)
     api._inference_revisions.update(prior._inference_revisions)
@@ -633,6 +651,10 @@ def main(args, *, _test_api=None, _test_transport=None):
             public.update(cell_id=grading.TASK4_A1_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
                 grade_writer_run=TASK4_A1_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
                 inference_terminal=None, inference_request_checksum=args.terminal_revision)
+        elif args.terminal_revision == grading.TASK4_RETAINED[grading.TASK4_A2_CELL][1]:
+            public.update(cell_id=grading.TASK4_A2_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
+                grade_writer_run=TASK4_A2_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
+                inference_terminal=None, inference_request_checksum=args.terminal_revision)
         elif args.terminal_revision == grading.TASK4_RETAINED[grading.TASK4_B1_CELL][1]:
             public.update(cell_id=grading.TASK4_B1_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
                 grade_writer_run=TASK4_B1_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
@@ -676,7 +698,7 @@ def main(args, *, _test_api=None, _test_transport=None):
             api = _ReadOnlyGrade(raw_api, repo, token, context)
             public["stage"] = "grade_snapshot"
             head = api.locate(deadline)
-            model_free = context.cell["cell_id"] == grading.TASK4_A1_CELL
+            model_free = context.cell["cell_id"] in {grading.TASK4_A1_CELL, grading.TASK4_A2_CELL}
             if model_free:
                 public["stage"] = "ungraded_terminal"
                 verified, entry, files = _verified_ungraded(api, context, root, deadline)
