@@ -69,6 +69,9 @@ TASK5_B1_WRITER_RUN = {"id": "36301611455", "job": "pilot-live", "attempt": 1}
 TASK5_C1_WRITER_RUN = {"id": "36301834721", "job": "pilot-live", "attempt": 1}
 # Only this model-free C2 record follows ordinary C1's fixed backing proof.
 TASK5_C2_WRITER_RUN = {"id": "36303175624", "job": "pilot-live", "attempt": 1}
+# Only the final ordinary B2 and model-free A2 records, with fixed backing.
+TASK5_B2_WRITER_RUN = {"id": "36304692953", "job": "pilot-live", "attempt": 1}
+TASK5_A2_WRITER_RUN = {"id": "36306339791", "job": "pilot-live", "attempt": 1}
 # Only this ordinary grade consumes the recorded model-free A1 predecessor.
 TASK4_B1_WRITER_RUN = {"id": "36292532223", "job": "pilot-live", "attempt": 1}
 # Only these three published ordinary task4 successors.
@@ -140,6 +143,12 @@ def _writer_context(request):
     elif request == grading.TASK5_RETAINED[grading.TASK5_C2_CELL][1]:
         context = grading.compile_request("pilot/" + grading.TASK5_C2_CELL, TASK3_A1_WRITER_SOURCE,
             request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
+    elif request == grading.TASK5_RETAINED[grading.TASK5_B2_CELL][1]:
+        context = grading.compile_request("pilot/" + grading.TASK5_B2_CELL, TASK3_A1_WRITER_SOURCE,
+            request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
+    elif request == grading.TASK5_RETAINED[grading.TASK5_A2_CELL][1]:
+        context = grading.compile_request("pilot/" + grading.TASK5_A2_CELL, TASK3_A1_WRITER_SOURCE,
+            request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
     elif request == grading.TASK4_RETAINED[grading.TASK4_B1_CELL][1]:
         context = grading.compile_request("pilot/" + grading.TASK4_B1_CELL, TASK3_A1_WRITER_SOURCE,
             request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
@@ -174,6 +183,10 @@ def _writer_run(context):
         return TASK5_C1_WRITER_RUN
     if context.cell["cell_id"] == grading.TASK5_C2_CELL:
         return TASK5_C2_WRITER_RUN
+    if context.cell["cell_id"] == grading.TASK5_B2_CELL:
+        return TASK5_B2_WRITER_RUN
+    if context.cell["cell_id"] == grading.TASK5_A2_CELL:
+        return TASK5_A2_WRITER_RUN
     if context.cell["cell_id"] in TASK3_SUCCESSOR_READOUTS:
         return TASK3_SUCCESSOR_READOUTS[context.cell["cell_id"]][2]
     if context.cell["cell_id"] == grading.TASK3_A1_CELL:
@@ -191,7 +204,7 @@ def _writer_entry(context, renderer):
     source_hash = (TASK3_A1_GRADER_SOURCE_HASH if context.cell["cell_id"] in {
                    grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL,
                    grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL,
-                   grading.TASK5_C2_CELL,
+                   grading.TASK5_C2_CELL, grading.TASK5_B2_CELL, grading.TASK5_A2_CELL,
                    grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS} else
                    TASK2_GRADER_SOURCE_HASH if context.cell["cell_id"] in TASK2_GRADE_RUNS else
                    B1_GRADER_SOURCE_HASH if context.cell["cell_id"] == grading.B1_CELL else GRADER_SOURCE_HASH)
@@ -299,7 +312,7 @@ class _ReadOnlyGrade:
         require(context.cell["cell_id"] in {*grading.TASK2_RETAINED, grading.TASK3_A1_CELL,
                 *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_A2_CELL,
                 grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL,
-                grading.TASK5_C2_CELL,
+                grading.TASK5_C2_CELL, grading.TASK5_B2_CELL, grading.TASK5_A2_CELL,
                 grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}
                 and context.terminal_request is not None,
                 "grade_readout_retained_route_refused")
@@ -334,7 +347,7 @@ class _ReadOnlyGrade:
         if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL,
                 *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_A2_CELL,
                 grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL,
-                grading.TASK5_C2_CELL,
+                grading.TASK5_C2_CELL, grading.TASK5_B2_CELL, grading.TASK5_A2_CELL,
                 grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}:
             original, _ = retained._control(self, self._repo, claim_revision, claim,
                 grading._cache(cache, "predecessor"), self._token, deadline,
@@ -479,6 +492,7 @@ class _Task5C2NativeReads(_Task5A1NativeReads):
         require(all(self._revisions[index].isdisjoint(other)
                     for index in range(5) for other in self._revisions[index + 1:]),
                 "grade_readout_predecessor_revision_refused")
+        self._full_footprints = footprints
         inputs = []
         for ordinal, owner in ((25, b1), (24, proof._owners[1]),
                                (23, proof._owners[2]), (22, proof._owners[2])):
@@ -491,25 +505,110 @@ class _Task5C2NativeReads(_Task5A1NativeReads):
             (previous.terminal_revision, parent), inputs[0], inputs[1], inputs[1], inputs[2], inputs[2], inputs[3])
         self._open = True
 
+    def _closed_footprints(self, context):
+        """Only B2/A2 consume this fixed closed C2 proof; never grant reads."""
+        require(context.cell["cell_id"] in {grading.TASK5_B2_CELL, grading.TASK5_A2_CELL}
+                and context.controller_source_sha == TASK3_A1_WRITER_SOURCE
+                and type(self) is _Task5C2NativeReads and self._open is False and self._metadata == ()
+                and type(self._owners) is tuple and len(self._owners) == 5
+                and all(type(owner) is _ReadOnlyGrade and owner._metadata_open is False
+                        and not owner._inference_metadata for owner in self._owners)
+                and [(owner._claim, owner._terminal) for owner in self._owners]
+                    == [grading._paths(context.plan["cells"][i]) for i in (27, 26, 25, 24, 23)]
+                and type(self._full_footprints) is tuple and len(self._full_footprints) == 5
+                and all(type(value) is frozenset for value in self._full_footprints)
+                and type(self._revisions) is tuple and len(self._revisions) == 5
+                and all(type(value) is frozenset for value in self._revisions),
+                "grade_readout_ungraded_parent_proof_required")
+        footprints = tuple(frozenset({*owner._metadata_paths, *owner._inference_revisions,
+            *(revision for revision, _ in owner._downloads)}) for owner in self._owners)
+        c1, b1 = self._owners[1:3]
+        ancestors = frozenset().union(*footprints[2:])
+        claims = {revision for revision, member in c1._downloads if member == c1._claim}
+        routing = (footprints[0], footprints[1] - {b1.revision}, *footprints[2:])
+        require(footprints == self._full_footprints and routing == self._revisions
+                and len(claims) == 1
+                and {c1.revision, *claims, *c1._inference_revisions}.isdisjoint(ancestors)
+                and footprints[1].intersection(ancestors) == {b1.revision}
+                and c1._metadata_paths[b1.revision] == {b1._terminal}
+                and {member for revision, member in c1._downloads if revision == b1.revision} == {b1._terminal}
+                and all(routing[index].isdisjoint(other)
+                        for index in range(5) for other in routing[index + 1:]),
+                "grade_readout_predecessor_revision_refused")
+        return footprints
+
+
+class _Task5A2NativeReads(_Task5A1NativeReads):
+    """Only final 29 -> ordinary 28 -> fixed C2/backing through ordinary 22."""
+
+    def __init__(self, selected, parent, context, previous, handoff):
+        require(context.cell["cell_id"] == grading.TASK5_A2_CELL
+                and previous.cell["cell_id"] == grading.TASK5_B2_CELL
+                and context.controller_source_sha == previous.controller_source_sha == TASK3_A1_WRITER_SOURCE
+                and context.plan["order"][21:30] == [TASK4_C2_CELL, TASK4_B2_CELL, grading.TASK4_A2_CELL,
+                    grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL,
+                    grading.TASK5_B2_CELL, grading.TASK5_A2_CELL],
+                "grade_readout_ungraded_route_refused")
+        require(type(handoff) is tuple and len(handoff) == 2 and type(handoff[1]) is frozenset
+                and type(handoff[0]) is _Task5C2NativeReads,
+                "grade_readout_ungraded_parent_proof_required")
+        proof, parent_footprint = handoff
+        footprints = proof._closed_footprints(context)
+        require(all(type(owner) is _ReadOnlyGrade and owner._metadata_open is False
+                    and not owner._inference_metadata for owner in (selected, parent))
+                and (parent._claim, parent._terminal) == grading._paths(previous.cell),
+                "grade_readout_ungraded_parent_proof_required")
+        current = tuple(frozenset({*owner._metadata_paths, *owner._inference_revisions,
+            *(revision for revision, _ in owner._downloads)}) for owner in (selected, parent))
+        c2 = proof._owners[0]
+        ancestors = frozenset().union(*footprints)
+        claims = {revision for revision, member in parent._downloads if member == parent._claim}
+        require(current[1] == parent_footprint and len(claims) == 1
+                and {parent.revision, *claims, *parent._inference_revisions}.isdisjoint(ancestors)
+                and current[1].intersection(ancestors) == {c2.revision}
+                and parent._metadata_paths[c2.revision] == {c2._terminal}
+                and {member for revision, member in parent._downloads if revision == c2.revision} == {c2._terminal}
+                and current[0].isdisjoint(ancestors | current[1]),
+                "grade_readout_predecessor_revision_refused")
+        self._owners = (selected, parent, *proof._owners)
+        self._revisions = (current[0], current[1] - {c2.revision}, *proof._revisions)
+        require(all(self._revisions[index].isdisjoint(other)
+                    for index in range(7) for other in self._revisions[index + 1:]),
+                "grade_readout_predecessor_revision_refused")
+        inputs = []
+        for ordinal, owner in ((27, c2), (26, proof._owners[1]), (25, proof._owners[2]),
+                               (24, proof._owners[3]), (23, proof._owners[4]), (22, proof._owners[4])):
+            path = retained._paths(context.plan["cells"][ordinal])[1]
+            revisions = [revision for revision, paths in owner._metadata_paths.items()
+                         if path in paths and revision in owner._inference_revisions]
+            require(len(revisions) == 1, "grade_readout_ungraded_parent_proof_required")
+            inputs.append((revisions[0], owner))
+        self._metadata = ((context.terminal_revision, selected), (previous.terminal_revision, parent),
+            (previous.terminal_revision, parent), inputs[0], inputs[1], inputs[1], inputs[2],
+            inputs[3], inputs[3], inputs[4], inputs[4], inputs[5])
+        self._open = True
+
 
 def _verified_grade(api, context, cache, deadline):
     terminal, _ = retained._control(api, api._repo, api.revision, grading._paths(context.cell)[1],
         grading._cache(cache, "terminal"), api._token, deadline, written_at=api.revision)
     entry = _writer_entry(context, terminal["binding"]["renderer_fingerprint"])
     task5_c1 = context.cell["cell_id"] == grading.TASK5_C1_CELL
+    task5_b2 = context.cell["cell_id"] == grading.TASK5_B2_CELL
     previous = None
     if context.terminal_request is not None:
         previous = api.bind_retained(terminal["binding"], context, grading._cache(cache, "inference-proof"), deadline)
-    if task5_c1:
+    if task5_c1 or task5_b2:
         require(terminal["claim_commit"] not in api._inference_revisions, "grade_readout_retained_revision_refused")
     api.bind(terminal, context, entry)
     task4_b1 = context.cell["cell_id"] == grading.TASK4_B1_CELL
     task4_successor = context.cell["cell_id"] in TASK4_SUCCESSOR_READOUTS
-    if context.cell["cell_id"] in TASK3_SUCCESSOR_READOUTS or task4_b1 or task4_successor or task5_c1:
+    if context.cell["cell_id"] in TASK3_SUCCESSOR_READOUTS or task4_b1 or task4_successor or task5_c1 or task5_b2:
         # Also needed for an immediate predecessor's intrinsic ordinary check;
         # this grants its older terminal control, not another semantic proof.
         # Full writer/input/entry equality still precedes selected payload access.
-        ordinal, cell, _ = ((26, grading.TASK5_B1_CELL, TASK5_C1_WRITER_RUN) if task5_c1 else
+        ordinal, cell, _ = ((28, grading.TASK5_C2_CELL, TASK5_B2_WRITER_RUN) if task5_b2 else
+                            (26, grading.TASK5_B1_CELL, TASK5_C1_WRITER_RUN) if task5_c1 else
                             (19, grading.TASK4_A1_CELL, TASK4_B1_WRITER_RUN) if task4_b1 else
                             TASK4_SUCCESSOR_READOUTS[context.cell["cell_id"]] if task4_successor else
                             TASK3_SUCCESSOR_READOUTS[context.cell["cell_id"]])
@@ -519,7 +618,7 @@ def _verified_grade(api, context, cache, deadline):
         require(set(claim) == {"format", "binding", "expected_parent", "predecessor"}
                 and claim["format"] == grading.CLAIM_FORMAT and claim["binding"] == terminal["binding"],
                 "grade_terminal_claim_mismatch")
-        if task4_b1 or task4_successor or task5_c1:
+        if task4_b1 or task4_successor or task5_c1 or task5_b2:
             require(claim_bytes == retained._encoded({**claim, "binding": terminal["binding"]}),
                     "grade_readout_typed_claim_refused")
         grading._task3_grade_predecessor(context, claim)
@@ -548,7 +647,14 @@ def _verify_predecessor(api, context, verified, inference_previous, cache, deadl
     task4_b1 = context.cell["cell_id"] == grading.TASK4_B1_CELL
     task4_successor = context.cell["cell_id"] in TASK4_SUCCESSOR_READOUTS
     task5_c1 = context.cell["cell_id"] == grading.TASK5_C1_CELL
-    if task5_c1:
+    task5_b2 = context.cell["cell_id"] == grading.TASK5_B2_CELL
+    if task5_b2:
+        require(ordinal == 28 and context.plan["order"][21:29] == [TASK4_C2_CELL, TASK4_B2_CELL,
+                grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL,
+                grading.TASK5_C2_CELL, grading.TASK5_B2_CELL],
+                "grade_readout_original_task5_c2_required")
+        other = _writer_context(grading.TASK5_RETAINED[grading.TASK5_C2_CELL][1])
+    elif task5_c1:
         require(ordinal == 26 and context.plan["order"][21:27] == [TASK4_C2_CELL, TASK4_B2_CELL,
                 grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL],
                 "grade_readout_original_task5_b1_required")
@@ -584,7 +690,7 @@ def _verify_predecessor(api, context, verified, inference_previous, cache, deadl
     path = grading._paths(other.cell)[1]
     prior._metadata_paths[revision] = {path}
     prior._downloads.add((revision, path))
-    if task4_b1 or task5_c1:
+    if task4_b1 or task5_c1 or task5_b2:
         # The dedicated model-free verifier owns the required failure inputs
         # and fixed backing controls. Ordinary verification stays separate.
         previous, previous_entry, _ = _verified_ungraded(prior, other, grading._cache(cache, "previous"), deadline)
@@ -601,6 +707,18 @@ def _verify_predecessor(api, context, verified, inference_previous, cache, deadl
             footprints = tuple(frozenset({*owner._metadata_paths, *owner._inference_revisions,
                 *(commit for commit, _ in owner._downloads)}) for owner in proof._owners)
             require(footprints == proof._revisions, "grade_readout_predecessor_revision_refused")
+            ancestors = frozenset().union(*footprints)
+            selected = {*api._metadata_paths, *api._inference_revisions, *(commit for commit, _ in api._downloads)}
+            require({api.revision, terminal["claim_commit"], *api._inference_revisions}.isdisjoint(ancestors)
+                    and selected.intersection(ancestors) == {revision}
+                    and api._metadata_paths[revision] == {path}
+                    and {member for commit, member in api._downloads if commit == revision} == {path},
+                    "grade_readout_predecessor_revision_refused")
+        elif task5_b2:
+            proof = prior.__dict__.pop("_task5_c2_proof", None)
+            require(type(proof) is _Task5C2NativeReads, "grade_readout_ungraded_parent_proof_required")
+            footprints = proof._closed_footprints(context)
+            require(proof._owners[0] is prior, "grade_readout_ungraded_parent_proof_required")
             ancestors = frozenset().union(*footprints)
             selected = {*api._metadata_paths, *api._inference_revisions, *(commit for commit, _ in api._downloads)}
             require({api.revision, terminal["claim_commit"], *api._inference_revisions}.isdisjoint(ancestors)
@@ -660,6 +778,10 @@ def _verify_predecessor(api, context, verified, inference_previous, cache, deadl
         # Capture the entire footprint after the final preservation check.
         api._task5_c1_proof = (proof, frozenset({*api._metadata_paths, *api._inference_revisions,
             *(commit for commit, _ in api._downloads)}))
+    if task5_b2:
+        # Only final A2 may consume this completed ordinary/C2 proof.
+        api._task5_b2_proof = (proof, frozenset({*api._metadata_paths, *api._inference_revisions,
+            *(commit for commit, _ in api._downloads)}))
 
 
 def _receipt(value):
@@ -680,7 +802,7 @@ def _receipt(value):
 
 
 def _verified_ungraded(api, context, cache, deadline):
-    """Fixed NG routes, including C2's ordinary C1 and bounded NG backing."""
+    """Fixed NG routes, including C2/A2's ordinary parents and bounded backing."""
     import codex_budget_pilot_ungraded as ungraded
 
     ungraded._scope(context)
@@ -688,9 +810,13 @@ def _verified_ungraded(api, context, cache, deadline):
     task5_a1 = context.cell["cell_id"] == grading.TASK5_A1_CELL
     task5_b1 = context.cell["cell_id"] == grading.TASK5_B1_CELL
     task5_c2 = context.cell["cell_id"] == grading.TASK5_C2_CELL
+    task5_a2 = context.cell["cell_id"] == grading.TASK5_A2_CELL
     ng_parent = task5_a1 or task5_b1
-    native_facade = ng_parent or task5_c2
-    require((task5_c2 and context.plan["order"][21:28] == [TASK4_C2_CELL, TASK4_B2_CELL, grading.TASK4_A2_CELL,
+    native_facade = ng_parent or task5_c2 or task5_a2
+    require((task5_a2 and context.plan["order"][21:30] == [TASK4_C2_CELL, TASK4_B2_CELL, grading.TASK4_A2_CELL,
+                grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL,
+                grading.TASK5_B2_CELL, grading.TASK5_A2_CELL])
+            or (task5_c2 and context.plan["order"][21:28] == [TASK4_C2_CELL, TASK4_B2_CELL, grading.TASK4_A2_CELL,
                 grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL])
             or (task5_b1 and context.plan["order"][22:26] == [TASK4_B2_CELL, grading.TASK4_A2_CELL,
                                                        grading.TASK5_A1_CELL, grading.TASK5_B1_CELL])
@@ -699,7 +825,8 @@ def _verified_ungraded(api, context, cache, deadline):
             or (context.cell["cell_id"] == grading.TASK4_A1_CELL
                 and context.plan["order"][17:19] == [TASK3_A2_CELL, grading.TASK4_A1_CELL]),
             "grade_readout_ungraded_route_refused")
-    parent_cell = (grading.TASK5_C1_CELL if task5_c2 else grading.TASK5_A1_CELL if task5_b1 else
+    parent_cell = (grading.TASK5_B2_CELL if task5_a2 else grading.TASK5_C1_CELL if task5_c2 else
+                   grading.TASK5_A1_CELL if task5_b1 else
                    grading.TASK4_A2_CELL if task5_a1 else
                    TASK4_B2_CELL if task4_a2 else TASK3_A2_CELL)
     terminal, data = retained._control(api, api._repo, api.revision, api._terminal,
@@ -728,7 +855,7 @@ def _verified_ungraded(api, context, cache, deadline):
     observed = api.bind_retained(binding, context, grading._cache(cache, "input"), deadline)
     if native_facade:
         require(claim_revision not in api._inference_revisions, "grade_readout_retained_revision_refused")
-    other = _writer_context(grading.TASK5_RETAINED[parent_cell][1] if task5_b1 or task5_c2 else
+    other = _writer_context(grading.TASK5_RETAINED[parent_cell][1] if task5_b1 or task5_c2 or task5_a2 else
                             grading.TASK4_RETAINED[parent_cell][1] if task4_a2 or task5_a1
                             else grading.TASK3_SUCCESSORS[parent_cell][1])
     prior = _ReadOnlyGrade(api._api, api._repo, api._token, other)
@@ -747,12 +874,12 @@ def _verified_ungraded(api, context, cache, deadline):
     else:
         previous, previous_entry, previous_inference = _verified_grade(
             prior, other, grading._cache(cache, "previous"), deadline)
-        if task5_c2:
-            # C1 remains ordinary, but its B1 boundary is semantic, not merely
-            # a terminal-control grant. Complete it before either C2 payload.
+        if task5_c2 or task5_a2:
+            # C1/B2 remain ordinary, but their NG boundaries are semantic,
+            # not merely terminal-control grants. Complete each fixed proof.
             _verify_predecessor(prior, other, previous, previous_inference,
-                grading._cache(cache, "c1-ungraded-proof"), deadline)
-            parent_proof = prior.__dict__.pop("_task5_c1_proof", None)
+                grading._cache(cache, "b2-ungraded-proof" if task5_a2 else "c1-ungraded-proof"), deadline)
+            parent_proof = prior.__dict__.pop("_task5_b2_proof" if task5_a2 else "_task5_c1_proof", None)
     if task4_a2 or native_facade:
         require(retained._encoded(previous_entry) == retained._encoded(entry)
                 and retained._encoded(claim["predecessor"]) == retained._encoded(
@@ -783,7 +910,8 @@ def _verified_ungraded(api, context, cache, deadline):
     if native_facade:
         # The selected owner never inherits its NG parents' failure-file or
         # B2/C2 grants. Only the native verifier gets the temporary facade.
-        native = (_Task5C2NativeReads(api, prior, context, other, parent_proof) if task5_c2 else
+        native = (_Task5A2NativeReads(api, prior, context, other, parent_proof) if task5_a2 else
+                  _Task5C2NativeReads(api, prior, context, other, parent_proof) if task5_c2 else
                   _Task5B1NativeReads(api, prior, context, other, parent_proof) if task5_b1 else
                   _Task5A1NativeReads(api, prior, context, other))
     else:
@@ -818,6 +946,9 @@ def _verified_ungraded(api, context, cache, deadline):
         # Closed proof-only handoff for the exact ordinary C1 caller. No read
         # authority is transferred, and incomplete verification saves nothing.
         api._task5_b1_proof = native
+    if task5_c2:
+        # Only ordinary B2 consumes this closed proof after both fetches.
+        api._task5_c2_proof = native
     return verified, entry, files
 
 
@@ -938,6 +1069,14 @@ def main(args, *, _test_api=None, _test_transport=None):
             public.update(cell_id=grading.TASK5_C2_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
                 grade_writer_run=TASK5_C2_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
                 inference_terminal=None, inference_request_checksum=args.terminal_revision)
+        elif args.terminal_revision == grading.TASK5_RETAINED[grading.TASK5_B2_CELL][1]:
+            public.update(cell_id=grading.TASK5_B2_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
+                grade_writer_run=TASK5_B2_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
+                inference_terminal=None, inference_request_checksum=args.terminal_revision)
+        elif args.terminal_revision == grading.TASK5_RETAINED[grading.TASK5_A2_CELL][1]:
+            public.update(cell_id=grading.TASK5_A2_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
+                grade_writer_run=TASK5_A2_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
+                inference_terminal=None, inference_request_checksum=args.terminal_revision)
         elif args.terminal_revision == grading.TASK4_RETAINED[grading.TASK4_B1_CELL][1]:
             public.update(cell_id=grading.TASK4_B1_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
                 grade_writer_run=TASK4_B1_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
@@ -982,7 +1121,7 @@ def main(args, *, _test_api=None, _test_transport=None):
             public["stage"] = "grade_snapshot"
             head = api.locate(deadline)
             model_free = context.cell["cell_id"] in {grading.TASK4_A1_CELL, grading.TASK4_A2_CELL,
-                                                  grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C2_CELL}
+                grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C2_CELL, grading.TASK5_A2_CELL}
             if model_free:
                 public["stage"] = "ungraded_terminal"
                 verified, entry, files = _verified_ungraded(api, context, root, deadline)
@@ -994,7 +1133,7 @@ def main(args, *, _test_api=None, _test_transport=None):
                 verified, entry, previous = _verified_grade(api, context, root, deadline)
                 terminal = verified["terminal"]
                 if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL,
-                        *TASK3_SUCCESSOR_READOUTS, grading.TASK4_B1_CELL, grading.TASK5_C1_CELL,
+                        *TASK3_SUCCESSOR_READOUTS, grading.TASK4_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_B2_CELL,
                         *TASK4_SUCCESSOR_READOUTS}:
                     _verify_predecessor(api, context, verified, previous, grading._cache(root, "predecessor"), deadline)
                 records = terminal["files"]

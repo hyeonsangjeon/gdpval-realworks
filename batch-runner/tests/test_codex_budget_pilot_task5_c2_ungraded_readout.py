@@ -49,7 +49,7 @@ NAMES = ("step2_inference_results.json", Path(pilot.LEDGER).name)
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     assert grading.TASK5_C2_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36265102718", REQUEST)
     assert ungraded.TASK5_C2_POLICY == "task5-c2-model-free-ungraded" and readout.TASK5_C2_WRITER_RUN == RUN
     actual = readout._writer_context(REQUEST)
@@ -83,7 +83,7 @@ def history(tmp_path_factory):
                 backing_path=initial.backing_path, control_cell=initial.control_cell,
                 control_revision=initial.control_revision, control_path=initial.control_path,
                 older_paths=initial.older_paths)
-            for variant in VARIANTS:
+            for variant in _variants:
                 destination = directory / variant
                 destination.mkdir()
                 row, ledger_bytes = copy.deepcopy(error_row), native_ledger
@@ -742,10 +742,11 @@ def test_fixed_task5_c2_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = controls._unregistered_requests()
-            assert len(requests) == 5 and row.request not in requests
+            assert len(requests) == 3 and row.request not in requests
             assert context.plan["order"][24:28] == [A1, B1, PARENT, CELL]
             assert context.plan["order"][28:] == [grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
-            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][28:]),
+            assert context.plan["order"][30:] == []
+            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][30:]),
                                      "9" * 64, "9" * 40, ""}
             assert not grading._model_free_context(readout._writer_context(grading.TASK5_RETAINED[PARENT][1]))
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
