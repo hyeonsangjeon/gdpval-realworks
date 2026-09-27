@@ -40,7 +40,7 @@ VARIANTS = c_reader.VARIANTS
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     assert grading.TASK4_B1_CELL == CELL
     assert grading.TASK4_RETAINED[CELL] == ("36235926112", REQUEST)
     assert readout.TASK4_B1_WRITER_RUN == RUN and CELL not in readout.TASK3_SUCCESSOR_READOUTS
@@ -104,7 +104,7 @@ def history(tmp_path_factory):
             assert shared.backing_context.cell["cell_id"] == readout.TASK3_A2_CELL
             assert shared.intrinsic_cell["cell_id"] == readout.TASK3_B2_CELL
             with redirect_stdout(capture.out), redirect_stderr(capture.err):
-                for variant in VARIANTS:
+                for variant in _variants:
                     destination = directory / variant
                     destination.mkdir()
                     current = SimpleNamespace(api=copy.deepcopy(api), context=readout._writer_context(request),
@@ -534,9 +534,9 @@ def test_fixed_task4_b1_readout_after_ungraded(history, tmp_path, monkeypatch, c
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 13 and history.request not in requests
+            assert len(requests) == 10 and history.request not in requests
             assert all(value[1] in requests for cell, value in {**grading.TASK4_RETAINED, **grading.TASK5_RETAINED}.items()
-                       if cell not in {ng_reader.CELL, CELL})
+                       if cell not in {ng_reader.CELL, CELL, *readout.TASK4_SUCCESSOR_READOUTS})
             assert ng_reader.CELL not in readout.TASK3_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
             for request in requests:
                 closed = list(args)

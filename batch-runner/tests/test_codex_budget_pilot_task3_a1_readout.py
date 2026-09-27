@@ -108,17 +108,26 @@ def _store_grade(api, revision, path, terminal, claim):
 
 
 def _unregistered_requests():
-    # Five task3 successors, model-free task4 A1 and its ordinary B1 consumer.
+    # Task3 stays complete; only task4 A1/B1/C1/C2/B2 have recorded readouts.
     registered = {readout.TASK3_B1_CELL, readout.TASK3_C1_CELL, readout.TASK3_C2_CELL,
                   readout.TASK3_B2_CELL, readout.TASK3_A2_CELL}
     assert set(readout.TASK3_SUCCESSOR_READOUTS) == registered
     assert registered == set(grading.TASK3_SUCCESSORS)
+    task4 = {
+        "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1": (20, grading.TASK4_B1_CELL,
+            {"id": "36294081159", "job": "pilot-live", "attempt": 1}),
+        "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2": (21, readout.TASK4_C1_CELL,
+            {"id": "36295603145", "job": "pilot-live", "attempt": 1}),
+        "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2": (22, readout.TASK4_C2_CELL,
+            {"id": "36297122393", "job": "pilot-live", "attempt": 1}),
+    }
+    assert readout.TASK4_SUCCESSOR_READOUTS == task4
     requests = [value[1] for cell, value in grading.TASK3_SUCCESSORS.items() if cell not in registered]
     closed = [value[1] for cell, value in {**grading.TASK4_RETAINED, **grading.TASK5_RETAINED}.items()
-              if cell not in {grading.TASK4_A1_CELL, grading.TASK4_B1_CELL}]
+              if cell not in {grading.TASK4_A1_CELL, grading.TASK4_B1_CELL, *task4}]
     requests.extend(closed)
     requests.extend(["9" * 64, "9" * 40, ""])
-    assert len(requests) == len(set(requests)) == 13
+    assert len(requests) == len(set(requests)) == 10
     assert all(request in requests for request in closed)
     actual = readout._writer_context(grading.TASK4_RETAINED[grading.TASK4_A1_CELL][1])
     assert actual.cell["cell_id"] == grading.TASK4_A1_CELL
@@ -129,6 +138,14 @@ def _unregistered_requests():
     assert ordinary.plan["order"][18:20] == [grading.TASK4_A1_CELL, grading.TASK4_B1_CELL]
     assert readout._writer_run(ordinary) == {"id": "36292532223", "job": "pilot-live", "attempt": 1}
     assert ordinary.requested_terminal not in requests
+    for cell, (ordinal, parent, run) in task4.items():
+        current = readout._writer_context(grading.TASK4_RETAINED[cell][1])
+        assert current.cell["cell_id"] == cell
+        assert current.plan["order"][ordinal - 1:ordinal + 1] == [parent, cell]
+        assert readout._writer_run(current) == run and current.requested_terminal not in requests
+    assert ordinary.plan["order"][20:23] == list(task4)
+    assert [grading.TASK4_RETAINED[ordinary.plan["order"][23]][1],
+            *(grading.TASK5_RETAINED[cell][1] for cell in ordinary.plan["order"][24:])] == closed
     assert all(grading.TASK3_SUCCESSORS[cell][1] not in requests for cell in registered)
     return requests
 
