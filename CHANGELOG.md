@@ -81,6 +81,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only the actual task3 B2 model-free grade readout for cell
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2`, ordinal 16, writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / grade run `36288201352` /
+  job `pilot-live` / integer attempt 1, original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36231296576`
+  and completion
+  `a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be`.
+  Require the exact immediate C2 grade, same writer / run `36286719528`,
+  before selected grade files open. The existing verifier, grants and
+  projection are unchanged: fully verify B2/C2, allowing only C1 terminal
+  control and preservation metadata for C2's intrinsic history check. No C1
+  semantic grade/claim/inference/payload walk, C2 payload download, recursive
+  verifier or arbitrary read grant is added. Preserve source/run/claim/
+  approval/retained-byte/history proof, config/grader-source/renderer
+  agreement, distinct observer authority, direct A1's historical task2 A2
+  handoff, states, denominators/exclusions and task/summary/ledger accounting.
+  `call_reachability_unknown` is not `price_missing`; no zero cost, invoice or
+  HTTP count is invented. One B2-only offline invocation returned **99
+  collected, 99 passed in 78.98s**, exit **0**, at
+  `1a25d121c229c123de8b1cd456c0c4baaf722c3e`, with shared genuine synthetic
+  history and isolated mutations. It checks exact read-depth permissions and
+  16 later/invalid refusals; A2 stays closed. Earlier C1/C2 **198 passed in
+  88.21s** at `f09db4dc342428edce63b857380d069581a6fc08`, B1 and split A1
+  observations remain separate and were not rerun. Only completion records
+  changed after the new tested SHA. Actual stored state, score, usage and
+  private revision remain unread and unknown; workflow success is not quality
+  evidence, and publication-derived proof is not independent original-envelope
+  authentication. Work remains local and unpublished. Main/controller69
+  remains unchanged and held; base review `5328127720` and nine passing checks
+  do not cover this reader bundle. Later publication authority, new-head
+  review/CI, a distinct reviewed observer and individual protected model-free
+  readout approval remain gates. No workflow/grading-writer/runtime/budget/
+  fingerprint change, push, PR, live call, new inference, regrade or held-source
+  change occurred.
+
 - Prepare only the actual task3 C1/C2 model-free readouts under writer
   `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, original producer
   `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, job `pilot-live`, integer
