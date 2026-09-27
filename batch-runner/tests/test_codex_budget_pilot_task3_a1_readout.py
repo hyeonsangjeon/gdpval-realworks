@@ -108,16 +108,22 @@ def _store_grade(api, revision, path, terminal, claim):
 
 
 def _unregistered_requests():
-    # Exactly five task3 successors join A1; every task4/task5 reader stays closed.
+    # Five task3 successors plus only the recorded model-free task4 A1.
     registered = {readout.TASK3_B1_CELL, readout.TASK3_C1_CELL, readout.TASK3_C2_CELL,
                   readout.TASK3_B2_CELL, readout.TASK3_A2_CELL}
     assert set(readout.TASK3_SUCCESSOR_READOUTS) == registered
     assert registered == set(grading.TASK3_SUCCESSORS)
     requests = [value[1] for cell, value in grading.TASK3_SUCCESSORS.items() if cell not in registered]
-    requests.extend(value[1] for value in (*grading.TASK4_RETAINED.values(), *grading.TASK5_RETAINED.values()))
+    closed = [value[1] for cell, value in {**grading.TASK4_RETAINED, **grading.TASK5_RETAINED}.items()
+              if cell != grading.TASK4_A1_CELL]
+    requests.extend(closed)
     requests.extend(["9" * 64, "9" * 40, ""])
-    assert len(requests) == len(set(requests)) == 15
-    assert all(value[1] in requests for value in (*grading.TASK4_RETAINED.values(), *grading.TASK5_RETAINED.values()))
+    assert len(requests) == len(set(requests)) == 14
+    assert all(request in requests for request in closed)
+    actual = readout._writer_context(grading.TASK4_RETAINED[grading.TASK4_A1_CELL][1])
+    assert actual.cell["cell_id"] == grading.TASK4_A1_CELL
+    assert readout._writer_run(actual) == {"id": "36291118506", "job": "pilot-live", "attempt": 1}
+    assert actual.requested_terminal not in requests
     assert all(grading.TASK3_SUCCESSORS[cell][1] not in requests for cell in registered)
     return requests
 

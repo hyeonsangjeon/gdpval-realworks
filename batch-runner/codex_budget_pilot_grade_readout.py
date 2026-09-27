@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -57,6 +58,8 @@ TASK3_SUCCESSOR_READOUTS = {
     TASK3_B2_CELL: (16, TASK3_C2_CELL, {"id": "36288201352", "job": "pilot-live", "attempt": 1}),
     TASK3_A2_CELL: (17, TASK3_B2_CELL, {"id": "36289615941", "job": "pilot-live", "attempt": 1}),
 }
+# Only this published model-free record, never an ordinary judged successor.
+TASK4_A1_WRITER_RUN = {"id": "36291118506", "job": "pilot-live", "attempt": 1}
 # These additional observed pins apply only to C1's predecessor proof. The
 # already-delivered B1 reader and production grading helpers keep their route.
 B1_PREDECESSOR_GRADE = "887c2373d456efc1eabf29a8bf3d3d7de12e43fe"
@@ -94,6 +97,9 @@ def _writer_context(request):
     elif task3_cell is not None:
         context = grading.compile_request("pilot/" + task3_cell, TASK3_A1_WRITER_SOURCE,
             request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
+    elif request == grading.TASK4_RETAINED[grading.TASK4_A1_CELL][1]:
+        context = grading.compile_request("pilot/" + grading.TASK4_A1_CELL, TASK3_A1_WRITER_SOURCE,
+            request, producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
     else:
         cell = _task2_cell(request)
         require(cell is not None, "grade_readout_route_refused")
@@ -106,6 +112,8 @@ def _writer_context(request):
 
 
 def _writer_run(context):
+    if context.cell["cell_id"] == grading.TASK4_A1_CELL:
+        return TASK4_A1_WRITER_RUN
     if context.cell["cell_id"] in TASK3_SUCCESSOR_READOUTS:
         return TASK3_SUCCESSOR_READOUTS[context.cell["cell_id"]][2]
     if context.cell["cell_id"] == grading.TASK3_A1_CELL:
@@ -120,7 +128,8 @@ def _writer_entry(context, renderer):
         "libreoffice_binary", "libreoffice_version", "pymupdf_version"}
         and all(type(value) is str and 0 < len(value) <= 1024 for value in renderer.values()),
         "grade_readout_renderer_identity_refused")
-    source_hash = (TASK3_A1_GRADER_SOURCE_HASH if context.cell["cell_id"] in {grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS} else
+    source_hash = (TASK3_A1_GRADER_SOURCE_HASH if context.cell["cell_id"] in {
+                   grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL} else
                    TASK2_GRADER_SOURCE_HASH if context.cell["cell_id"] in TASK2_GRADE_RUNS else
                    B1_GRADER_SOURCE_HASH if context.cell["cell_id"] == grading.B1_CELL else GRADER_SOURCE_HASH)
     return {"config_hash": CONFIG_SHA256[:16], "renderer_fingerprint": renderer, "grader_source_hash": source_hash}
@@ -224,7 +233,8 @@ class _ReadOnlyGrade:
 
     def bind_retained(self, binding, context, cache, deadline):
         """Only the registered cell's inference controls, never payloads."""
-        require(context.cell["cell_id"] in {*grading.TASK2_RETAINED, grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS}
+        require(context.cell["cell_id"] in {*grading.TASK2_RETAINED, grading.TASK3_A1_CELL,
+                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL}
                 and context.terminal_request is not None,
                 "grade_readout_retained_route_refused")
         revision = binding["retained"]["terminal_commit"]
@@ -255,7 +265,8 @@ class _ReadOnlyGrade:
         self._downloads.update({(claim_revision, claim), (output_revision, manifest)})
         grading._grade_retained_input(context, binding, self, self._repo,
             grading._cache(cache, "verified"), self._token, deadline)
-        if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS}:
+        if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL,
+                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL}:
             original, _ = retained._control(self, self._repo, claim_revision, claim,
                 grading._cache(cache, "predecessor"), self._token, deadline,
                 expected=terminal["claim_identity"], written_at=claim_revision)
@@ -365,6 +376,108 @@ def _receipt(value):
         "estimate_basis": ESTIMATE_BASIS, "invoice_complete": False, "http_request_count": None}
 
 
+def _verified_ungraded(api, context, cache, deadline):
+    """Only recorded task4 A1, with ordinary A2 and intrinsic B2 control proof."""
+    import codex_budget_pilot_ungraded as ungraded
+
+    ungraded._scope(context)
+    require(context.cell["cell_id"] == grading.TASK4_A1_CELL
+            and context.plan["order"][17:19] == [TASK3_A2_CELL, grading.TASK4_A1_CELL],
+            "grade_readout_ungraded_route_refused")
+    terminal, data = retained._control(api, api._repo, api.revision, api._terminal,
+        grading._cache(cache, "terminal"), api._token, deadline, written_at=api.revision)
+    require(terminal.get("format") == ungraded.TERMINAL_FORMAT and terminal.get("model_invoked") is False,
+            "model_free_terminal_type_required")
+    binding = terminal["binding"]
+    entry = _writer_entry(context, binding["predecessor_entry"]["renderer_fingerprint"])
+    expected = ungraded._binding(context, {"observation": binding["retained"], "terminal": {
+        "publication_receipt_sha256": binding["publication_receipt_sha256"]}},
+        binding["inference_identity_sha256"], entry, TASK4_A1_WRITER_RUN)
+    require(retained._encoded(binding) == retained._encoded(expected), "grade_readout_ungraded_binding_refused")
+    claim_revision = terminal["claim_commit"]
+    require(output._hash(claim_revision, 40) and claim_revision != api.revision, "grade_readout_claim_refused")
+    api._metadata_paths[claim_revision] = {api._claim}
+    api._downloads.add((claim_revision, api._claim))
+    claim, claim_bytes = retained._control(api, api._repo, claim_revision, api._claim,
+        grading._cache(cache, "claim"), api._token, deadline,
+        expected=terminal["claim_identity"], written_at=claim_revision)
+    require(set(claim) == {"format", "binding", "expected_parent", "predecessor"}
+            and claim_bytes == retained._encoded({**claim, "format": ungraded.CLAIM_FORMAT, "binding": expected}),
+            "model_free_claim_changed")
+    grading._task3_grade_predecessor(context, claim)
+    require(len({api.revision, claim_revision, claim["expected_parent"]}) == 3,
+            "grade_readout_predecessor_revision_refused")
+    observed = api.bind_retained(binding, context, grading._cache(cache, "input"), deadline)
+    other = _writer_context(grading.TASK3_SUCCESSORS[TASK3_A2_CELL][1])
+    prior = _ReadOnlyGrade(api._api, api._repo, api._token, other)
+    prior._metadata_open = False
+    prior.revision = claim["expected_parent"]
+    prior._metadata_paths[prior.revision] = {prior._terminal}
+    prior._downloads.add((prior.revision, prior._terminal))
+    previous, previous_entry, _ = _verified_grade(prior, other, grading._cache(cache, "previous"), deadline)
+    require(previous_entry == entry
+            and claim["predecessor"] == {"cell_id": TASK3_A2_CELL, "revision": prior.revision, **previous["identity"]}
+            and observed == previous["terminal"]["binding"]["retained"], "grade_readout_predecessor_identity_refused")
+    parent_claim_revision = previous["terminal"]["claim_commit"]
+    parent_claim, parent_bytes = retained._control(prior, api._repo, parent_claim_revision, prior._claim,
+        grading._cache(cache, "parent-claim"), api._token, deadline,
+        expected=previous["terminal"]["claim_identity"], written_at=parent_claim_revision)
+    require(parent_bytes == retained._encoded({**parent_claim, "format": grading.CLAIM_FORMAT,
+                "binding": previous["terminal"]["binding"]})
+            and len({api.revision, claim_revision, prior.revision, parent_claim_revision,
+                     parent_claim["expected_parent"]}) == 5
+            and set(api._metadata_paths).isdisjoint(prior._metadata_paths),
+            "grade_readout_predecessor_revision_refused")
+    api._metadata_paths[claim_revision].add(prior._terminal)
+    api._metadata_paths[api.revision].add(api._claim)
+    retained._objects(api, api._repo, claim_revision,
+        [retained._object(prior._terminal, retained._encoded(previous["terminal"]))],
+        api._token, deadline, written_at=prior.revision)
+    retained._objects(api, api._repo, api.revision, [retained._object(api._claim, claim_bytes)],
+        api._token, deadline, written_at=claim_revision)
+    # Transfer only A2's validated capabilities, including B2 terminal control.
+    # The native verifier rechecks A2; it never recursively verifies B2.
+    api._metadata_paths.update(prior._metadata_paths)
+    api._downloads.update(prior._downloads)
+    api._inference_revisions.update(prior._inference_revisions)
+    api._inference_metadata.update({context.terminal_revision, other.terminal_revision})
+    prefix = retained._paths(context.cell)[2]
+    names = ("step2_inference_results.json", Path(pilot.LEDGER).name)
+    output_revision = binding["retained"]["output_commit"]
+    api._downloads.update((output_revision, prefix + "/" + name) for name in names)
+    verified = ungraded.verify_terminal(api, api._repo, api.revision, context, entry,
+        grading._cache(cache, "verified"), api._token, deadline)
+    require(verified["identity"] == pilot._identity(data), "grade_readout_terminal_changed")
+    artifacts = verified["terminal"]["inference_completion"]["artifacts"]
+    files = {name: grading._fetch(api, api._repo, output_revision, prefix + "/" + name, artifacts[role],
+             grading._cache(cache, "projection"), api._token, deadline)
+             for name, role in zip(names, ("result", "ledger"))}
+    return verified, entry, files
+
+
+def _ungraded_projection(context, terminal, files):
+    from core.cost_receipts import build_receipt
+
+    payload = pilot._json_object(files["step2_inference_results.json"])
+    ledger = files[Path(pilot.LEDGER).name]
+    output._ledger(ledger, context.cell)
+    rows = [pilot._json_object(line.encode()) for line in ledger.decode("utf-8").splitlines()]
+    return {"record_kind": "model_free_ungraded", "grade_state": "ungraded", "grade_success": False,
+        "model_requested": False, "model_invoked": False, "payload_run_status": None,
+        "task_rows": 0, "expected_tasks": 1, "scored_tasks": 0, "task_error_recorded": None,
+        "score": None, "coverage": None, "partial_progress_retained": False, "ledger_state": "not_applicable",
+        "recorded_task_cost": None, "recorded_summary_cost": None, "ledger_derived_cost": None,
+        "inference_task_status": payload["results"][0]["status"],
+        "inference_completion": ci.validate_completion(terminal["inference_completion"]),
+        "inference_missing": terminal["inference_missing"],
+        "inference_accounting": {
+            "recorded_task_cost": _receipt(payload["results"][0].get("problem_solving_cost")),
+            "recorded_summary_cost": _receipt(payload["summary"].get("problem_solving_cost")),
+            "ledger_derived_cost": _receipt(build_receipt((row for row in rows if row["record_type"] == "call"),
+                (row for row in rows if row["record_type"] == "runtime")).as_dict())},
+        "recorder_accounting": terminal["recorder_accounting"]}
+
+
 def _projection(context, terminal, files, entry):
     import step8_grade as step8
     from core.cost_receipts import build_receipt, ledger_reference
@@ -434,7 +547,11 @@ def main(args, *, _test_api=None, _test_transport=None):
     try:
         cell = _task2_cell(args.terminal_revision)
         task3_cell = _task3_successor_cell(args.terminal_revision)
-        if args.terminal_revision == grading.TASK3_A1_COMPLETION_SHA256:
+        if args.terminal_revision == grading.TASK4_RETAINED[grading.TASK4_A1_CELL][1]:
+            public.update(cell_id=grading.TASK4_A1_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
+                grade_writer_run=TASK4_A1_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
+                inference_terminal=None, inference_request_checksum=args.terminal_revision)
+        elif args.terminal_revision == grading.TASK3_A1_COMPLETION_SHA256:
             public.update(cell_id=grading.TASK3_A1_CELL, grade_writer_source_sha=TASK3_A1_WRITER_SOURCE,
                 grade_writer_run=TASK3_A1_WRITER_RUN, inference_producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE,
                 inference_terminal=None, inference_request_checksum=args.terminal_revision)
@@ -468,22 +585,31 @@ def main(args, *, _test_api=None, _test_transport=None):
             api = _ReadOnlyGrade(raw_api, repo, token, context)
             public["stage"] = "grade_snapshot"
             head = api.locate(deadline)
-            public["stage"] = "grade_terminal"
-            verified, entry, previous = _verified_grade(api, context, root, deadline)
-            terminal = verified["terminal"]
+            model_free = context.cell["cell_id"] == grading.TASK4_A1_CELL
+            if model_free:
+                public["stage"] = "ungraded_terminal"
+                verified, entry, files = _verified_ungraded(api, context, root, deadline)
+                terminal, records = verified["terminal"], []
+                public["stage"] = "ungraded_projection"
+                summary = _ungraded_projection(context, terminal, files)
+            else:
+                public["stage"] = "grade_terminal"
+                verified, entry, previous = _verified_grade(api, context, root, deadline)
+                terminal = verified["terminal"]
+                if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS}:
+                    _verify_predecessor(api, context, verified, previous, grading._cache(root, "predecessor"), deadline)
+                records = terminal["files"]
+                api.allow_verified_files(records)
+                public["stage"] = "grade_payload"
+                cache = grading._cache(root, "payload")
+                files = {record["role"]: grading._fetch(api, repo, api.revision, record["path"], record, cache, token, deadline)
+                         for record in records}
+                summary = _projection(context, terminal, files, entry)
             renderer = entry["renderer_fingerprint"]
-            if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL, *TASK3_SUCCESSOR_READOUTS}:
-                _verify_predecessor(api, context, verified, previous, grading._cache(root, "predecessor"), deadline)
-            api.allow_verified_files(terminal["files"])
-            public["stage"] = "grade_payload"
-            cache = grading._cache(root, "payload")
-            files = {record["role"]: grading._fetch(api, repo, api.revision, record["path"], record, cache, token, deadline)
-                     for record in terminal["files"]}
-            summary = _projection(context, terminal, files, entry)
-        public.update(outcome="verified_retained_grade", stage="verified", **summary,
+        public.update(outcome="verified_retained_ungraded" if model_free else "verified_retained_grade", stage="verified", **summary,
             observed_branch_head=head, grade_revision=verified["revision"], terminal_identity=verified["identity"],
             claim_revision=terminal["claim_commit"], claim_identity=terminal["claim_identity"],
-            file_identities=[{key: record[key] for key in ("role", "size", "sha256")} for record in terminal["files"]],
+            file_identities=[{key: record[key] for key in ("role", "size", "sha256")} for record in records],
             inference_output_commit=terminal["binding"]["retained"]["output_commit"],
             inference_terminal=context.terminal_revision,
             grader_source_hash=entry["grader_source_hash"], grader_config_sha256=CONFIG_SHA256,

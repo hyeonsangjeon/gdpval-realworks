@@ -31,7 +31,7 @@ CLAIM, OUTPUT, TERMINAL, ADVANCED = (f"{70_000 + offset:040x}" for offset in ran
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _scenarios=c_reader.VARIANTS):
     ordinal, grade_run, inference_run, original_request, prior = RECORDED
     run = {"id": grade_run, "job": "pilot-live", "attempt": 1}
     assert readout.TASK3_A2_CELL == CELL
@@ -99,7 +99,7 @@ def history(tmp_path_factory):
                     previous_path=previous.path, backing_cell=backing_cell,
                     backing_revision=previous_claim["expected_parent"], backing_path=grading._paths(backing_cell)[1],
                     historical_path=initial.historical_path)
-                for scenario in c_reader.VARIANTS:
+                for scenario in _scenarios:
                     destination = directory / scenario
                     destination.mkdir()
                     current = SimpleNamespace(api=copy.deepcopy(api), workflow=workflow,
