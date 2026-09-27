@@ -13,34 +13,47 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Prepare publication of only the validated final task5 B2 ordinary and A2
-  MODEL-FREE UNGRADED readers on `b/codex-final-task5-readers-20260927`, from
-  exact main `13b403ed5452605a606b1c11187184a2efa93909`. Replay only the four
-  authorized commits; each original/replay pair has identical full-tree bytes.
-  Final replay `19f354140785f30f8a6397fcd59ea9684451dafc` matches old local
-  `891d0dc9ff02e4b9bd4ddbca17a281f7473e6861`: full tree
-  `67a2c06c170836ac27a4c26ff3ef430cae75f4d2`, production/test subtree
-  `18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`. Preserve the old branch and
-  main; only these two completion records change after replay. Exact mappings
-  are in [the latest task result](tasks/LATEST_TASK_RESULT/README.md).
-  No tests ran for Git replay. The one separately authorized B2/A2 invocation
-  passed **516 tests in 1683.63s**, exit **0**, only at original fixture-only
-  commit `7769580cda9abf5f96357f40349e7f321d4bc26c`. That repair moved genuine
-  A2 construction before the history's constructor guard; every guard and all
-  production code stayed unchanged. Preserve original
-  `7793b92bebb5301e2f877da37bd6d63df841a0ec` separately: **516 setup errors
-  in 146.96s**, exit **1**, with zero test bodies, caused by one shared fixture
-  defect, not 516 reader failures or a credential blocker. No prior selector
-  or full suite was rerun; all earlier observations and provenance remain
-  separate. The focused pass establishes no live readout, grade quality,
-  invoice or hosted-CI headroom. Base tree
-  `14297cb7963ae820085ae29d3041b7ef886d33c8` matches published `2feb`;
-  PR690 closure, review `5330512587` and all 10 passing CI checks are
-  leader-supplied facts and do not approve this final pair. One ordinary push
-  and one new draft PR are now authorized, not a closed-PR edit or merge.
-  Historical writer69/producer780 remain immutable; all 18 writers are
-  complete. New-head review/CI, a distinct reviewed observer, actual private
-  proofs and individual protected readout approval remain required.
+- Finalize the [pilot report for review](tasks/codex_budget_pilot/REPORT.md)
+  on `b/codex-budget-pilot-report-draft-20260927`, from exact main
+  `74ae7277a636643d37c4a7e854728df1aec83676`. Add only the leader-verified
+  final Task5 A2 UNGRADED row from readout `36337865696`, job `108672077172`,
+  attempt 1, succeeded `2026-09-27T17:45:27Z`: no deliverable or numeric grade,
+  not zero points. All other 23 score/full-denominator/run rows stay byte-exact.
+  The 107-line report now has 24 unique epoch04 projections (18 graded,
+  6 model-free UNGRADED, 0 pending) plus six separate frozen epoch03 T1
+  outcomes: all 30 original IDs, not 30 successful same-protocol runs or
+  30 epoch04 cells. A2's three original inference cost views agree on
+  USD 0.406518 known partial cost, with 4 recorded model calls;
+  `call_reachability_unknown`, `NULL` estimated cost, invoice false, HTTP
+  `null` and separately `NOT_MEASURED` recorder cost do not become zeros.
+  Exact supplied record/source/revision/claim/input and token-count evidence
+  is in [the current completion record](tasks/LATEST_TASK_RESULT/README.md).
+  Preserve included/full denominators, unread exclusion
+  causes/ID overlap, source changes, retry/retention confounding and partial
+  or missing accounting; no causal ranking or whole-pilot bill is claimed.
+  Literal reconciliation and protected English review only: no tests,
+  builds, new runtime validation or live queries. Only the report and two
+  current completion-record sections change; historical bodies remain intact.
+  The production/test subtree stays
+  `18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`; old branch and main are unchanged.
+  Preserve original `7793b92bebb5301e2f877da37bd6d63df841a0ec` separately:
+  **516 setup errors in 146.96s**, exit **1**, zero test bodies, one shared
+  fixture defect. The separately authorized fixture-only correction at
+  original `7769580cda9abf5f96357f40349e7f321d4bc26c` had **516 passed in
+  1683.63s**, exit **0**, with all guards intact. Neither is report validation
+  or a result on this draft SHA. Detailed replay/command/byte proofs remain
+  in the [immutable historical preparation record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/74ae7277a636643d37c4a7e854728df1aec83676/tasks/LATEST_TASK_RESULT/README.md#project5-publish-validated-final-readers);
+  all earlier observations remain separate. Per the leader, reader PR691 was
+  delivered after review `5331081033` and all 10 CI checks passed; those facts
+  do not approve this report and were not queried. Historical writer69 and
+  producer780 remain immutable. The three earlier correction admissions stay
+  separate; the retention-only contrast remains unanswered. One ordinary
+  push and one new draft PR are authorized for only these three Markdown files,
+  subject to new leader review; no future merge facts are recorded. No main,
+  old-branch, closed-PR691 or Project mutation, live service/readout call,
+  inference, grade, regrade or 30/220-task expansion. Merge belongs to the leader;
+  live readout retains separate approval gates. Stop after publication without
+  CI polling or a manual rerun.
 
 - Historical initial final-pair attempt: add only the final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readout
   bindings locally. Validation is incomplete: the single new B2/A2-only

@@ -1,108 +1,105 @@
 # Latest task result
 
-## PROJECT5-PUBLISH-VALIDATED-FINAL-READERS
+## PROJECT5-FINALIZE-PILOT-REPORT
 
-Only the validated final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readers
-have been replayed onto exact main `13b403ed5452605a606b1c11187184a2efa93909`
-on new branch `b/codex-final-task5-readers-20260927`. This is the verified
-candidate for one authorized ordinary push and one new draft PR. No tests
-ran for Git replay, and no result is attributed to a replayed SHA.
+Finalized the 107-line [English pilot report](../codex_budget_pilot/REPORT.md)
+with the leader's verified Task5 A2 model-free UNGRADED row. There are now
+**24 unique epoch04 projections: 18 graded, 6 UNGRADED and 0 pending**, with
+no duplicates or fabricated zero scores. Together with six separate frozen
+epoch03 T1 failure outcomes, these document all 30 original cell IDs—not
+30 successful same-protocol runs or 30 epoch04 cells. All other 23 result,
+score/full-denominator and readout-run rows remain byte-identical.
 
-### Exact replay and byte identity
+### Final A2 evidence
 
-A bounded remote check confirmed main `13b403ed5452605a606b1c11187184a2efa93909`.
-Its locally verified tree is `14297cb7963ae820085ae29d3041b7ef886d33c8`, exactly
-the published `2feb8724e1ed95610268598b773933266046e9f8` tree. The old branch
-`b/codex-task5-c1-c2-readout-20260927` remains at
-`891d0dc9ff02e4b9bd4ddbca17a281f7473e6861`; neither it nor the local main ref
-was moved. Only these four commits were replayed, in order:
+Readout [36337865696](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36337865696),
+job `108672077172`, attempt 1, succeeded at `2026-09-27T17:45:27Z` on observer
+`74ae7277a636643d37c4a7e854728df1aec83676`. It verifies original record
+`36306339791` under historical writer
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, original producer
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` and inference `36277325255`.
+The exact leader-supplied bindings, not guessed or fetched values, are:
 
-| Original commit | Ordinary cherry-pick |
-| --- | --- |
-| `7793b92bebb5301e2f877da37bd6d63df841a0ec` | `3d4dcf08442c72b0671ca442f826374d45adf6c8` |
-| `fbc06ee6878da2d0d8a8711144c5b5f4bbe3e11d` | `e6a469b87e5dcdd59fee5c9a9e7b51128b746719` |
-| `7769580cda9abf5f96357f40349e7f321d4bc26c` | `0e1656bb42e7818dceae9bc6a9bc2b5da6a2d1a5` |
-| `891d0dc9ff02e4b9bd4ddbca17a281f7473e6861` | `19f354140785f30f8a6397fcd59ea9684451dafc` |
+- Request: `40a4785b0720dfc271ffe1d148c77c6da9ed5c65a4101b6dc61e69e30ec0dab7`.
+- `grade_revision`: `b057ed17849c0ab31b0adfb8c28109d4d34a50f7`.
+- Claim: `41729a5caf6307a200921fc2c06a8b8e860ab95b`.
+- Input: `43b0532179308668fe68d34ee4277bfa5f670bf9`.
 
-For every original/replay pair, the full-tree IDs match and
-`git diff --exit-code ORIGINAL REPLAY` returned no differences. The final
-replay's full tree is
-`67a2c06c170836ac27a4c26ff3ef430cae75f4d2`, identical to preserved local
-`891d0dc9ff02e4b9bd4ddbca17a281f7473e6861`. The complete `batch-runner`
-production/test subtree is `18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`,
-identical to the original tested correction. Only `CHANGELOG.md` and this
-current section change after replay; all older record bodies stay unchanged.
+Original inference exited 1 with `child_nonzero_exit`, timeout false,
+cleanup true and no deliverables. Expected results 1, scored results 0 and
+score `NULL` mean no numeric grade, not zero points. The internal cause is unknown.
+All three original inference cost views agree on USD **0.406518 known partial**
+cost. The receipt records 4 model calls, 300390 input, 11097 output,
+227072 cached and 5380 reasoning tokens. Estimated cost remains `NULL`,
+status `call_reachability_unknown`, invoice false and HTTP count `null`;
+recorder accounting is separately `NOT_MEASURED`, not zero.
 
-### Preserved validation and fixture correction
+### Scope and document checks
+
+The report continues from clean local `a0c9d5908bb8b56d2e7de7a674431485d6e12dfe`
+on `b/codex-budget-pilot-report-draft-20260927`, based on exact supplied main
+`74ae7277a636643d37c4a7e854728df1aec83676` (base tree
+`0159c24f38ee68088ab211a942b56f2d648139d3`). The preserved old branch
+`b/codex-final-task5-readers-20260927` remains at
+`3a2d8a553c327d34b843e67bd4a526036cf1c8d5`; the local main ref was not moved.
+Only the report and the current sections of these two completion records
+change. The complete `batch-runner` production/test subtree remains
+`18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`; no code, test, workflow,
+runtime, writer, budget, input or framework changed.
+
+Literal reconciliation checked the A2 addition, all 24 unique ordered
+result/run identities, the 23 unchanged rows, frozen failure rows, partial-cost/
+model-call rows, task IDs and source/writer SHAs against the supplied evidence.
+The report preserves included/full denominators, unread T4 exclusion causes
+and ID overlap, the source chronology and operational corrections, A/B
+retry/retention confounding, and B/C's feedback contrast. Monetary totals
+remain `NULL` where prices are missing; partial inference receipts stay
+separate from recorder `NOT_MEASURED` accounting. No causal ranking,
+retention-only proof, invoice or whole-pilot bill is claimed.
+
+The previously reviewed catalog and `experiment-report-en` protection brief
+were reused for this bounded update, followed by protected `im-not-ai-en`
+copyediting. Literal and semantic checks passed. These are documentation
+checks only: **no tests, builds or new runtime validation ran**, and no live
+readout, review or CI was queried. Historical record bodies remain unchanged.
+
+### Prior runtime evidence, not report validation
 
 Original `7793b92bebb5301e2f877da37bd6d63df841a0ec` had **516 setup errors
-in 146.96s**, exit **1**, with zero test bodies. That was one shared fixture
-defect, not 516 independent reader failures or a credential/resource blocker.
-The separately authorized correction at original
-`7769580cda9abf5f96357f40349e7f321d4bc26c` passed its one focused offline
-invocation: **516 passed in 1683.63s (0:28:03)**, exit **0**. These remain
-two separate observations, not a combined result or tests run on new SHAs.
+in 146.96s**, exit **1**, with zero test bodies, from one shared fixture defect.
+The separately authorized fixture-only correction at original
+`7769580cda9abf5f96357f40349e7f321d4bc26c` had **516 passed in 1683.63s
+(0:28:03)**, exit **0**, with all constructor/network/model/HF/OIDC/write
+guards intact and no production change. These are separate prior invocations,
+not a combined result or tests run on this draft or replayed SHAs.
+Detailed commands, four replay mappings, byte proofs and historical limits
+remain in the [immutable prior publication-preparation record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/74ae7277a636643d37c4a7e854728df1aec83676/tasks/LATEST_TASK_RESULT/README.md#project5-publish-validated-final-readers).
+All earlier observations remain separate in the unchanged historical sections.
 
-The fixture-only repair started from clean local
-`fbc06ee6878da2d0d8a8711144c5b5f4bbe3e11d` and moved only genuine A2
-prototype/failure-row construction before reused writer history installs its
-runner-constructor guard. A narrow static AST comparison confirmed that all
-other test syntax nodes were unchanged. The only changed file was
-`batch-runner/tests/test_codex_budget_pilot_task5_final_readout.py`; the
-helper's offline seams and all constructor, network, model, HF, OIDC and
-write guards stayed intact for history and test execution. No guard bypass,
-synthetic-success relabeling or production change occurred in that repair.
-No reader, fixture, native verifier, workflow, grader/writer, runtime,
-budget, input, framework or projection code was edited for this publication.
+### Remaining decision and authority
 
-The original passing invocation used the same B2/A2 selector from
-`batch-runner`, with credentials cleared and offline boundaries intact.
-This preserved command was not rerun for publication:
+Per the leader, reader PR691 was delivered after review `5331081033` and all
+10 CI checks passed; those facts cover the delivered reader, not this finalized
+report. Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and
+producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable;
+observer SHAs are separate. No new inference, grade or regrade is authorized.
 
-```bash
-env -i PATH=/usr/bin:/bin PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 \
-  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-  HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 \
-  DO_NOT_TRACK=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GITHUB_ACTIONS=false \
-  /usr/bin/python3.10 -m pytest -m 'not integration' -p no:cacheprovider \
-  -q --tb=short -rs \
-  tests/test_codex_budget_pilot_task5_final_readout.py::test_final_task5_readouts
-```
+The final row resolves only A2's pending status. Exclusion causes/ID overlap,
+missing prices, source changes, A/B retry-plus-retention confounding, B/C's
+limited feedback contrast and the unanswered retention-only contrast remain
+limits. The three earlier correction admissions remain separate, not independent
+repeats. No model/condition superiority or whole-pilot bill is claimed.
 
-That invocation collected and passed all 516 selected cases using the existing
-genuine synthetic history. No old 269/406/206 reader family, other prior
-selector or full suite was rerun. All earlier split results, original tested
-SHAs and replay mappings remain separately in the unchanged historical sections.
-
-This is an offline test result over synthetic history, not a live readout,
-grade-quality result, invoice, HTTP measurement or hosted-CI headroom proof.
-B2 remains ordinary and requires real Step8/child/rubric/cleanup proofs;
-A2 remains MODEL-FREE UNGRADED and scoreless. Original failed-inference
-accounting stays separate from unmeasured recorder cost. B2's live stored
-grade state, score and usage, and actual private revisions, remain unknown.
-
-### Publication authority and remaining gates
-
-Per the leader, PR690 is delivered and closed; review `5330512587` and all
-10 passing CI checks cover the base tree, not this final B2/A2 pair or fixture
-repair. Review/CI were not queried. Publication authorization now covers one
-ordinary push of this new branch and one new draft PR for the final pair only.
-This record describes the candidate before push/draft creation, not a future
-published head, PR number or merge state. The closed PR and main stay untouched.
-
-Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and producer
-`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable. All 18 writer
-records are complete per the leader. No new inference, grade or regrade is
-authorized. No live HF/model/OIDC/readout/claim/write/dispatch, Azure-management,
-credential or Project action, merge or CI polling occurred. Direct leader
-review and CI of the new immutable head, a distinct reviewed observer, actual
-selected/parent private proofs and individual protected readout approval remain
-required before merge/live use. The existing catalog remains applicable and was
-reviewed once for this publication task. The grading specification and pre-edit
-decision also remain applicable; no scope change required repeating them.
-`experiment-report-en` followed by `im-not-ai-en` preserves the separate
-outcomes, exact provenance and limits while replacing only the current status
-in these two records.
+One ordinary push of this existing feature branch and one new draft PR are
+authorized for these three Markdown files only; the branch was absent remotely
+at the bounded pre-publication check. This records preparation for publication,
+not a future PR number or merge SHA/time/state. The new report still requires
+leader review. Main, the old branch, closed PR691 and Project state remain
+unchanged; merge belongs to the leader. No test/build, CI rerun/polling or live
+HF/model/OIDC/readout/Azure-management call is authorized. Live readout retains
+its distinct reviewed observer, actual selected/parent proofs and individual
+protected approval; no inference, grade, regrade or 30/220-task expansion is
+authorized. Stop after the single push and draft PR, without CI polling.
 
 ## Prior initial attempt: PROJECT5-FINAL-TASK5-B2-A2-READERS
 
