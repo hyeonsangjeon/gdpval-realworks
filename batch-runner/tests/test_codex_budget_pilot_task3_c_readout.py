@@ -544,6 +544,8 @@ def _check_successor_readout(selected, recorded, tmp_path, monkeypatch, capsys, 
         head = selected.advanced if scenario == "advanced" else revision
         assert public["observed_branch_head"] == head
         expected_downloads = selected_files | {("download", selected.backing_revision, selected.backing_path)}
+        expected_downloads.add(("download", terminal["binding"]["retained"]["output_commit"],
+                                retained._paths(context.cell)[2] + "/step2_inference_results.json"))
         allowed_paths = {("paths", head, path)}
         expected_metadata = {("metadata", grading.BRANCH)}
         for current, current_terminal, current_revision in (

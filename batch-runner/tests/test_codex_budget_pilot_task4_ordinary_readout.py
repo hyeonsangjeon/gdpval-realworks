@@ -714,6 +714,8 @@ def test_fixed_task4_ordinary_readouts(history, tmp_path, monkeypatch, capsys, s
             selected.backing_revision, selected.backing_path, selected.backing_cell)
         tr, tp, tc = terminal_only
         expected_downloads = selected_files | {("download", tr, tp)}
+        expected_downloads.add(("download", terminal["binding"]["retained"]["output_commit"],
+                                retained._paths(context.cell)[2] + "/step2_inference_results.json"))
         allowed_paths, metadata = {("paths", head, path)}, {("metadata", grading.BRANCH)}
         semantic = [(context, terminal, revision), (selected.previous_context, previous, pr)]
         originals = set()
@@ -750,7 +752,7 @@ def test_fixed_task4_ordinary_readouts(history, tmp_path, monkeypatch, capsys, s
             for item in inference["output_objects"]:
                 allowed_paths.update({("paths", ir, item["path"]), ("paths", inference["output_commit"], item["path"])})
         assert len(distinct_grade_revisions) == (9 if deep else 5)
-        assert downloads == expected_downloads and len(downloads) == (23 if deep else 11) + len(selected_files)
+        assert downloads == expected_downloads and len(downloads) == (24 if deep else 12) + len(selected_files)
         actual_paths = {("paths", commit, member) for op, commit, _, members in api.reads if op == "paths" for member in members}
         assert actual_paths <= allowed_paths and {call for call in api.calls if call[0] == "metadata"} == metadata
         assert all(op in {"metadata", "paths", "download"} for op, *_ in api.reads)

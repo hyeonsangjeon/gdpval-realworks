@@ -487,7 +487,8 @@ def test_fixed_task3_b1_grade_readout(history, tmp_path, monkeypatch, capsys, sc
         for cell in (context.cell, history.previous_context.cell):
             input_claim, input_terminal, prefix = retained._paths(cell)
             controls.update({input_claim, input_terminal, prefix + "/" + output.MANIFEST})
-        assert downloaded == controls | {item["path"] for item in terminal["files"]}
+        assert downloaded == controls | {item["path"] for item in terminal["files"]} | {
+            retained._paths(context.cell)[2] + "/step2_inference_results.json"}
         for reader in readers:
             assert not hasattr(reader, "create_commit") and not hasattr(reader, "create_branch")
             with pytest.raises(output.OutputPublicationRefused):

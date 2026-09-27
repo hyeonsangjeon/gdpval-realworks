@@ -87,9 +87,16 @@ Corrective epoch04 starts at ordinal 6, T2 A1. The [epoch03](../../batch-runner/
 Observer SHAs are separate from producer/writer SHAs. Source changes and corrective admissions prevent treating the report as one unchanged protocol or cohort; no pooled causal claim is made.
 These are recorded rubric outcomes; the supplied rows do not establish independent judge calibration. The retention-only contrast remains unanswered.
 
+## Budget-snapshot availability
+
+The reader projects only the selected inference result's existing `observability.task_deadline` fields: `total_seconds`, `started_unix`, `expires_unix`, `remaining_seconds`, `wait_seconds`, `attempts_admitted` and `native_resumes`. This adds measurement access without changing the model, intervention or budget.
+`total_seconds` is the budget, and the Unix timestamps mark its recorded start and expiry. `remaining_seconds` is zero-clamped, not exact uncapped elapsed time. `wait_seconds` records retry backoff, not all recovery or downtime; GitHub job wall time is not cell inference-budget elapsed.
+`attempts_admitted` counts durable admissions, not successful, model or HTTP attempts. `native_resumes` counts confirmed native-thread resume bindings, not resume requests, turns or Step2 `resume_rounds_used`.
+The shared `inference_budget_snapshot` projection uses `null` plus a `missing` reason of `not_recorded` for omitted fields, or `unavailable` for explicitly null native clocks; actual zeros stay zero. Malformed present values are refused. Historical schema support does not prove that each payload contains a snapshot. No live snapshot values were observed for this addition.
+
 ## Accounting and remaining decision
 
-All graded readouts report `price_missing`, with monetary totals `NULL`; they are not invoices. HTTP request counts are unknown. Model-call counts must not be converted into HTTP counts.
+All graded readouts report `price_missing` as a missing reason, with monetary totals `NULL`; they are not invoices. HTTP request counts are unknown. Model-call counts must not be converted into HTTP counts.
 The following amounts are known **partial NG inference USD**, not complete cell or pilot bills. Their model-call counts are kept in a separate column.
 
 | Cell | Known partial inference USD | Model calls |
@@ -101,7 +108,7 @@ The following amounts are known **partial NG inference USD**, not complete cell 
 | T5 C2 | 0.240000 | 6 |
 | T5 A2 | 0.406518 | 4 |
 
-For T5 A2, all three original inference cost views agree on USD 0.406518 known partial cost. The receipt records 4 model calls and 300390 input, 11097 output, 227072 cached and 5380 reasoning tokens; estimated cost is `NULL`, reachability is `call_reachability_unknown`, invoice is false and HTTP count is `null`.
+For T5 A2, all three original inference cost views agree on USD 0.406518 known partial cost. The receipt records 4 model calls and 300390 input, 11097 output, 227072 cached and 5380 reasoning tokens; its status is `partial` and `call_reachability_unknown` is a missing reason. Estimated cost is `NULL`, invoice is false and HTTP count is `null`.
 Recorder accounting remains `NOT_MEASURED`, not zero, and separate from inference receipts. No whole-pilot bill or cost-efficiency ranking is available from these facts.
 All 30 original IDs now have documented outcomes across the two epochs, with no pending epoch04 projection. This is outcome accounting, not evidence of one unchanged cohort or condition/model superiority. Exclusion causes/ID overlap, missing prices, source changes and the unresolved retention-only contrast remain limits.
-This report is ready for leader review through one authorized draft PR; it does not authorize more inference, grading, regrading, expansion or live readout calls. Merge and Project decisions remain with the leader.
+The outcome rows remain leader-verified. This snapshot-access addition awaits new-head review and CI, with separate approval required for any live observation. It does not authorize more inference, grading, regrading, expansion or live readout calls. Merge and Project decisions remain with the leader.
