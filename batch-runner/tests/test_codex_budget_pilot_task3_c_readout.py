@@ -489,7 +489,7 @@ def _check_successor_readout(selected, recorded, tmp_path, monkeypatch, capsys, 
         assert public["inference_terminal"] is None and public["observer_source_sha"] == OBSERVER
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 9 and selected.request not in requests
+            assert len(requests) == 8 and selected.request not in requests
             assert grading.TASK3_A1_COMPLETION_SHA256 not in requests
             assert all(grading.TASK3_SUCCESSORS[cell][1] not in requests for cell in readout.TASK3_SUCCESSOR_READOUTS)
             for request in requests:

@@ -44,7 +44,7 @@ VARIANTS = ("ungraded", "partial_cost", "missing_receipt", "price_missing")
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     assert grading.TASK4_A2_CELL == CELL and grading.TASK4_RETAINED[CELL] == ("36245490377", REQUEST)
     assert ungraded.A2_POLICY == "recorded_task4_failed_a2_no_judge"
     assert readout.TASK4_A2_WRITER_RUN == RUN and CELL not in readout.TASK4_SUCCESSOR_READOUTS
@@ -73,7 +73,7 @@ def history(tmp_path_factory):
                 older_paths={initial.backing_path, initial.ng_path, initial.a2_path, initial.intrinsic_path})
             assert previous.context.cell["cell_id"] == PARENT
             assert shared.backing_cell["cell_id"] == readout.TASK4_C2_CELL
-            for variant in VARIANTS:
+            for variant in _variants:
                 destination = directory / variant
                 destination.mkdir()
                 row, ledger_bytes = copy.deepcopy(error_row), native_ledger
@@ -474,8 +474,9 @@ def test_fixed_task4_a2_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 9 and row.request not in requests
-            assert set(requests) == {*(record[1] for record in grading.TASK5_RETAINED.values()), "9" * 64, "9" * 40, ""}
+            assert len(requests) == 8 and row.request not in requests
+            assert set(requests) == {*(record[1] for cell, record in grading.TASK5_RETAINED.items()
+                                      if cell != grading.TASK5_A1_CELL), "9" * 64, "9" * 40, ""}
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
             assert [cell for cell in context.plan["order"][18:24]
                     if grading._model_free_context(readout._writer_context(grading.TASK4_RETAINED[cell][1]))] == [
