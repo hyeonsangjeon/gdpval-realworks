@@ -121,6 +121,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only the recorded task4 A2 MODEL-FREE UNGRADED readout, cell
+  `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2`, ordinal 23, policy
+  `recorded_task4_failed_a2_no_judge`, campaign `budget_pilot_ci_20260925_04`,
+  writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, record `36298545498`,
+  job `pilot-live`, integer attempt 1. Original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference `36245490377` and
+  completion `8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9`
+  remain fixed. Require actual ordinary task4 B2 grade `36297122393`, same
+  writer, inference `36243795189` / completion
+  `ec4221834b04014e58775a4a4d94fc139e49ad2b7b45321e7fd2ccd58d75ef41`.
+  Only its older C2 terminal control is granted; no deeper claim/inference/
+  grade walk or parent payload access. Canonical fixed binding/claim/entry/
+  whole-predecessor equality, retained-byte proof, five distinct grade/control
+  revisions and carried-object/history checks precede the two A2 original
+  failure files. Reuse unchanged native UNGRADED and ordinary verifiers.
+  A1/A2 stay scoreless with original failed completion, denominator, partial
+  inference receipts and missingness separate from recorder `not_measured`;
+  no fabricated child, rubric, score, zero cost, invoice or HTTP count.
+  B1/C1/C2/B2 retain ordinary Step8/child/cleanup requirements. All six task4
+  IDs are explicit; the six task5 requests and three invalid requests remain
+  closed, exactly nine refusals. No workflow, grader/writer, runtime, budget,
+  fingerprint, input, generic framework or skip policy changed. One new
+  A2-only offline selector at `610571daa8eca1e7439ddea5a4875c7603441cca`
+  returned **105 collected, 105 passed in 83.18s**, exit **0**. It verifies
+  two readers, 13 unique/42 total downloads, five metadata calls, only B2
+  semantic proof and C2 terminal control, accounting missingness, isolated
+  typed/history/approval/privacy/cleanup/lost-response/replay refusals and
+  denied read capabilities over genuine synthetic writers. No earlier family
+  or full suite was rerun. The prior tail's **374 passed in 234.68s** at
+  `4618fd592a7c04f4ec0600f23a4f93e4291d73f2` and B1's **118 setup errors in
+  52.31s** at `b7d203795fe24227382d3ee73ea1a3dcd1ed7961`, then **118 passed
+  in 84.55s** at `945a4f1c8076f885c408053ff4c81ff1bafaca07` after a test-only
+  rubric binding correction, remain separate observations. No invocations
+  are combined. Only the two completion records change after validation.
+  The leader supplied A2 publication `05:57:25.3885652` and run success
+  `05:57:32` UTC `2026-09-27`, MODEL-FREE UNGRADED with Step8/OIDC skipped;
+  private revisions remain unknown. Published baseline
+  `8cbc2f92b3680b54a5732f81483d798d2d0117d6` awaits leader review/CI; old
+  `85a2e723a130aa8554d0db049e935e351ad4fe23` / review `5329061263` / all
+  **10 CI PASS** does not approve the later bundle or this local A2 delta.
+  Main/writer69 remains frozen. No push, PR change, merge, live readout,
+  inference, regrade or CI polling; new-head review/CI, later publication
+  permission, post-writer-sequence authorization, a distinct reviewed observer,
+  actual selected/parent proofs and individual protected readout approval
+  remain gates. Ordinary stored scores/usage remain unread, and no quality,
+  causal, live-cost or stronger provider-authentication claim is made.
+
 - Prepare only the recorded ordinary task4 C1/C2/B2 readouts, preserving
   B1's existing UNGRADED-A1 boundary. Exact new cells are
   `3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1` / ordinal 20 /
