@@ -1,34 +1,63 @@
 # Latest task result
 
-## PROJECT5-AUTHORIZE-FIXTURE-ORDER-REPAIR
+## PROJECT5-PUBLISH-VALIDATED-FINAL-READERS
 
-The authorized fixture-only repair passed its one focused offline invocation:
-**516 passed in 1683.63s (0:28:03)**, exit **0**, at
-`7769580cda9abf5f96357f40349e7f321d4bc26c`. The earlier attempt remains a
-separate observation: `7793b92bebb5301e2f877da37bd6d63df841a0ec` had
-**516 setup errors in 146.96s**, exit **1**, and no test body executed.
-That was one shared fixture defect, not 516 independent reader failures or
-a credential/resource blocker. The two invocations are not combined.
+Only the validated final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readers
+have been replayed onto exact main `13b403ed5452605a606b1c11187184a2efa93909`
+on new branch `b/codex-final-task5-readers-20260927`. This is the verified
+candidate for one authorized ordinary push and one new draft PR. No tests
+ran for Git replay, and no result is attributed to a replayed SHA.
 
-### Fixture-only scope and validation
+### Exact replay and byte identity
 
-The repair started from clean local `fbc06ee6878da2d0d8a8711144c5b5f4bbe3e11d`
-and moved only the genuine A2 prototype and failure-row construction before
-entering the reused writer history that installs its runner-constructor guard.
-The existing helper's offline seams and all constructor, network, model,
-HF, OIDC and write guards remain unchanged for history and test execution.
-There was no guard bypass, synthetic-success relabeling or production change.
+A bounded remote check confirmed main `13b403ed5452605a606b1c11187184a2efa93909`.
+Its locally verified tree is `14297cb7963ae820085ae29d3041b7ef886d33c8`, exactly
+the published `2feb8724e1ed95610268598b773933266046e9f8` tree. The old branch
+`b/codex-task5-c1-c2-readout-20260927` remains at
+`891d0dc9ff02e4b9bd4ddbca17a281f7473e6861`; neither it nor the local main ref
+was moved. Only these four commits were replayed, in order:
 
-A narrow static AST comparison confirmed that all other test syntax nodes
-were unchanged. The repair commit changes only
-`batch-runner/tests/test_codex_budget_pilot_task5_final_readout.py`.
-No reader, native verifier, workflow, grader/writer, runtime, budget, input,
-framework or projection code changed. The tested production/test subtree is
-`18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`. Only `CHANGELOG.md` and this
-completion record change after the tested SHA.
+| Original commit | Ordinary cherry-pick |
+| --- | --- |
+| `7793b92bebb5301e2f877da37bd6d63df841a0ec` | `3d4dcf08442c72b0671ca442f826374d45adf6c8` |
+| `fbc06ee6878da2d0d8a8711144c5b5f4bbe3e11d` | `e6a469b87e5dcdd59fee5c9a9e7b51128b746719` |
+| `7769580cda9abf5f96357f40349e7f321d4bc26c` | `0e1656bb42e7818dceae9bc6a9bc2b5da6a2d1a5` |
+| `891d0dc9ff02e4b9bd4ddbca17a281f7473e6861` | `19f354140785f30f8a6397fcd59ea9684451dafc` |
 
-The single newly authorized invocation used the same B2/A2 selector from
-`batch-runner`, with credentials cleared and offline boundaries intact:
+For every original/replay pair, the full-tree IDs match and
+`git diff --exit-code ORIGINAL REPLAY` returned no differences. The final
+replay's full tree is
+`67a2c06c170836ac27a4c26ff3ef430cae75f4d2`, identical to preserved local
+`891d0dc9ff02e4b9bd4ddbca17a281f7473e6861`. The complete `batch-runner`
+production/test subtree is `18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`,
+identical to the original tested correction. Only `CHANGELOG.md` and this
+current section change after replay; all older record bodies stay unchanged.
+
+### Preserved validation and fixture correction
+
+Original `7793b92bebb5301e2f877da37bd6d63df841a0ec` had **516 setup errors
+in 146.96s**, exit **1**, with zero test bodies. That was one shared fixture
+defect, not 516 independent reader failures or a credential/resource blocker.
+The separately authorized correction at original
+`7769580cda9abf5f96357f40349e7f321d4bc26c` passed its one focused offline
+invocation: **516 passed in 1683.63s (0:28:03)**, exit **0**. These remain
+two separate observations, not a combined result or tests run on new SHAs.
+
+The fixture-only repair started from clean local
+`fbc06ee6878da2d0d8a8711144c5b5f4bbe3e11d` and moved only genuine A2
+prototype/failure-row construction before reused writer history installs its
+runner-constructor guard. A narrow static AST comparison confirmed that all
+other test syntax nodes were unchanged. The only changed file was
+`batch-runner/tests/test_codex_budget_pilot_task5_final_readout.py`; the
+helper's offline seams and all constructor, network, model, HF, OIDC and
+write guards stayed intact for history and test execution. No guard bypass,
+synthetic-success relabeling or production change occurred in that repair.
+No reader, fixture, native verifier, workflow, grader/writer, runtime,
+budget, input, framework or projection code was edited for this publication.
+
+The original passing invocation used the same B2/A2 selector from
+`batch-runner`, with credentials cleared and offline boundaries intact.
+This preserved command was not rerun for publication:
 
 ```bash
 env -i PATH=/usr/bin:/bin PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 \
@@ -40,11 +69,10 @@ env -i PATH=/usr/bin:/bin PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 \
   tests/test_codex_budget_pilot_task5_final_readout.py::test_final_task5_readouts
 ```
 
-Pytest collected and passed all 516 selected cases. No old 269/406/206 reader
-family, other prior selector or full suite was rerun. The existing genuine
-synthetic history was reused; no prior test result was reassigned to this SHA.
-All earlier split results and replay mappings remain in the historical
-sections below, with only explicit historical labels added.
+That invocation collected and passed all 516 selected cases using the existing
+genuine synthetic history. No old 269/406/206 reader family, other prior
+selector or full suite was rerun. All earlier split results, original tested
+SHAs and replay mappings remain separately in the unchanged historical sections.
 
 This is an offline test result over synthetic history, not a live readout,
 grade-quality result, invoice, HTTP measurement or hosted-CI headroom proof.
@@ -53,29 +81,28 @@ A2 remains MODEL-FREE UNGRADED and scoreless. Original failed-inference
 accounting stays separate from unmeasured recorder cost. B2's live stored
 grade state, score and usage, and actual private revisions, remain unknown.
 
-### Publication status and remaining gates
+### Publication authority and remaining gates
 
-Per the leader, PR690 is delivered and closed. Supplied main
-`13b403ed5452605a606b1c11187184a2efa93909` has exact reviewed `2feb` tree
-`14297cb7963ae820085ae29d3041b7ef886d33c8`, review `5330512587` and all
-10 CI checks passing. Those supplied facts were not queried, and that review
-and CI do not cover the local final B2/A2 readers or fixture repair. The
-branch remains `b/codex-task5-c1-c2-readout-20260927`; nothing was pushed,
-and the closed PR and main were not changed.
+Per the leader, PR690 is delivered and closed; review `5330512587` and all
+10 passing CI checks cover the base tree, not this final B2/A2 pair or fixture
+repair. Review/CI were not queried. Publication authorization now covers one
+ordinary push of this new branch and one new draft PR for the final pair only.
+This record describes the candidate before push/draft creation, not a future
+published head, PR number or merge state. The closed PR and main stay untouched.
 
 Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and producer
 `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable. All 18 writer
 records are complete per the leader. No new inference, grade or regrade is
 authorized. No live HF/model/OIDC/readout/claim/write/dispatch, Azure-management,
-credential or Project action, merge or CI polling occurred.
-
-Later publication authorization, direct review and CI of the new head, a
-distinct reviewed observer, actual selected/parent private proofs and
-individual protected readout approval remain required. The existing catalog,
-grading specification and pre-edit decision remain applicable; no scope
-change required repeating them. `experiment-report-en` followed by
-`im-not-ai-en` preserves the separate outcomes, provenance and limits in
-these two records. Stop local and unpublished.
+credential or Project action, merge or CI polling occurred. Direct leader
+review and CI of the new immutable head, a distinct reviewed observer, actual
+selected/parent private proofs and individual protected readout approval remain
+required before merge/live use. The existing catalog remains applicable and was
+reviewed once for this publication task. The grading specification and pre-edit
+decision also remain applicable; no scope change required repeating them.
+`experiment-report-en` followed by `im-not-ai-en` preserves the separate
+outcomes, exact provenance and limits while replacing only the current status
+in these two records.
 
 ## Prior initial attempt: PROJECT5-FINAL-TASK5-B2-A2-READERS
 

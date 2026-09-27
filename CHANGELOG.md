@@ -13,28 +13,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Repair only the final B2/A2 test fixture's construction order. Move the
-  genuine A2 prototype and failure-row construction before the reused writer
-  history installs its constructor guard; keep every existing guard and all
-  production code unchanged. The one separately authorized invocation of the
-  same B2/A2 selector passed **516 tests in 1683.63s**, exit **0**, at
-  fixture-only commit `7769580cda9abf5f96357f40349e7f321d4bc26c`. Preserve
-  the initial `7793b92bebb5301e2f877da37bd6d63df841a0ec` observation separately:
-  **516 setup errors in 146.96s**, exit **1**, with no test bodies executed.
-  Those errors arose from one shared fixture defect, not 516 reader failures
-  or a credential blocker. No prior reader selector or full suite was rerun.
-  Only these two completion records change after the tested SHA. The focused
-  pass establishes no live readout, grade quality, invoice or hosted-CI
-  headroom. All earlier results and replay provenance remain separate.
-  Per the leader, PR690 is now closed and supplied main is
-  `13b403ed5452605a606b1c11187184a2efa93909`, with reviewed `2feb` tree
-  `14297cb7963ae820085ae29d3041b7ef886d33c8`, review `5330512587` and all
-  10 CI checks passing. That approval does not cover the local final pair or
-  this fixture repair. Historical writer69/producer780 remain immutable;
-  all 18 writers are complete. No push, PR edit, main change, merge, CI poll
-  or live call occurred. Later publication authority, new-head review/CI,
-  actual private proofs and individual protected readout approval remain
-  required. Stop local and unpublished.
+- Prepare publication of only the validated final task5 B2 ordinary and A2
+  MODEL-FREE UNGRADED readers on `b/codex-final-task5-readers-20260927`, from
+  exact main `13b403ed5452605a606b1c11187184a2efa93909`. Replay only the four
+  authorized commits; each original/replay pair has identical full-tree bytes.
+  Final replay `19f354140785f30f8a6397fcd59ea9684451dafc` matches old local
+  `891d0dc9ff02e4b9bd4ddbca17a281f7473e6861`: full tree
+  `67a2c06c170836ac27a4c26ff3ef430cae75f4d2`, production/test subtree
+  `18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`. Preserve the old branch and
+  main; only these two completion records change after replay. Exact mappings
+  are in [the latest task result](tasks/LATEST_TASK_RESULT/README.md).
+  No tests ran for Git replay. The one separately authorized B2/A2 invocation
+  passed **516 tests in 1683.63s**, exit **0**, only at original fixture-only
+  commit `7769580cda9abf5f96357f40349e7f321d4bc26c`. That repair moved genuine
+  A2 construction before the history's constructor guard; every guard and all
+  production code stayed unchanged. Preserve original
+  `7793b92bebb5301e2f877da37bd6d63df841a0ec` separately: **516 setup errors
+  in 146.96s**, exit **1**, with zero test bodies, caused by one shared fixture
+  defect, not 516 reader failures or a credential blocker. No prior selector
+  or full suite was rerun; all earlier observations and provenance remain
+  separate. The focused pass establishes no live readout, grade quality,
+  invoice or hosted-CI headroom. Base tree
+  `14297cb7963ae820085ae29d3041b7ef886d33c8` matches published `2feb`;
+  PR690 closure, review `5330512587` and all 10 passing CI checks are
+  leader-supplied facts and do not approve this final pair. One ordinary push
+  and one new draft PR are now authorized, not a closed-PR edit or merge.
+  Historical writer69/producer780 remain immutable; all 18 writers are
+  complete. New-head review/CI, a distinct reviewed observer, actual private
+  proofs and individual protected readout approval remain required.
 
 - Historical initial final-pair attempt: add only the final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readout
   bindings locally. Validation is incomplete: the single new B2/A2-only
