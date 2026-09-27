@@ -81,6 +81,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only task3 A1's model-free first-grade readout for cell
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1`, ordinal 12, writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / run `36282221138` / attempt 1,
+  distinct from original producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`,
+  inference run `36225255532` and completion
+  `1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d`.
+  Require its actual historical task2 A2 predecessor under writer
+  `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6` / run `36214413190` / revision
+  `3a8e135cd232ab900e003fc6d9c459957a0b990e`, with e7 inference terminal
+  `e22f0c3de79bbfce084aedde64fa56c40959fde0`. Reuse fixed control-path and
+  last-writer lookup, immutable byte/history/config/source/renderer/claim
+  checks and full inference-predecessor equality before grade-file access.
+  Observer authority remains distinct; there is no recursive history walk,
+  workflow change, model/Step8/OIDC execution, HF write or future readout row.
+  Existing state, denominator/exclusion, privacy and accounting-missingness
+  projections remain; publication-derived proof is not independent original
+  outer-envelope authentication. One new offline selector returned
+  **78 collected, 72 passed, 6 failed in 44.64s**, exit **1**, at
+  `8dfd601cebe29daeb2104f9c058705d947e3e6bf`. All six failures were the same
+  test expectation: an unsettled synthetic call records
+  `call_reachability_unknown`, not `price_missing`. After that test-only
+  correction, only the six failed nodes returned **6 collected, 6 passed in
+  32.00s**, exit **0**, at `fd7e1dba7d8066ad49e5a3ed94290f4d2f7dd6d6`.
+  Production was unchanged; the 72 passing cases and prior families were not
+  rerun, and no combined 78-pass invocation is claimed. Only completion
+  records changed after the corrected tested SHA. Work remains local and
+  unpublished on a new branch from exact controller69; supplied review
+  `5328127720` and nine passing checks cover the base tree only. Main/controller69
+  remains held during grading. New-head review/CI, later publication authority,
+  a distinct reviewed observer and individual protected model-free readout
+  approval remain gates. The actual A1 outcome, score, private grade revision
+  and usage remain unread; B1 is not registered in the reader. No push, PR,
+  live readout, new inference, regrade or main/source change occurred.
+
 - Prepare only final failed task5 A2, ordinal 29, under the explicit
   `task5-a2-model-free-ungraded` policy, with producer
   `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36277325255` and
