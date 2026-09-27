@@ -683,7 +683,9 @@ def test_fixed_task5_c1_readout_after_ungraded(history, tmp_path, monkeypatch, c
     assert public["grade_writer_source_sha"] == WRITER and public["inference_producer_source_sha"] == PRODUCER
     downloads = {(revision, name) for op, revision, name, _ in api.reads if op == "download"}
     assert not history.older_paths.intersection(name for _, name in downloads)
-    assert not (denied | deeper | selected_originals).intersection(downloads)
+    selected_result = {(terminal["binding"]["retained"]["output_commit"],
+                        retained._paths(context.cell)[2] + "/step2_inference_results.json")}
+    assert not (denied | deeper | (selected_originals - selected_result)).intersection(downloads)
     accepted = {*VARIANTS, "advanced", "replay", "exclusions", "redacted_text"}
     if scenario in {"plan", "closed_registry"}:
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()

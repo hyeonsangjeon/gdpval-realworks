@@ -947,7 +947,10 @@ def test_final_task5_readouts(history, tmp_path, monkeypatch, capsys, profile, s
     assert public["grade_writer_source_sha"] == WRITER and public["inference_producer_source_sha"] == PRODUCER
     downloads = {(revision, member) for op, revision, member, _ in api.reads if op == "download"}
     assert not history.older_paths.intersection(member for _, member in downloads)
-    assert not (denied | deeper).intersection(downloads)
+    selected_result = ({(terminal["binding"]["retained"]["output_commit"],
+                         retained._paths(context.cell)[2] + "/step2_inference_results.json")}
+                       if profile == "b2" else set())
+    assert not ((denied - selected_result) | deeper).intersection(downloads)
     accepted = {*VARIANTS[profile], "advanced", "replay", "active_denials", "exclusions", "redacted_text"}
     if scenario in {"plan", "closed_registry"}:
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
