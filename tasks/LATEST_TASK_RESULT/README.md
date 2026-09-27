@@ -1,22 +1,25 @@
 # Latest task result
 
-## PROJECT5-TASK3-B2-READOUT-PREP
+## PROJECT5-TASK3-FINAL-A2-READER
 
-Prepared only the actual task3 B2 model-free grade readout. One new B2-only
-offline invocation returned 99 passed in 78.98s. Work remains local and
-unpublished; the actual stored grade state, score, usage and private grade
-revision remain unread and unknown. Workflow success is not quality evidence.
+Prepared only the final task3 A2 model-free grade readout, completing the
+closed six-cell task3 reader set. One new A2-only offline invocation returned
+99 passed in 61.28s. The leader authorizes one ordinary push of this accumulated
+reader branch and one draft PR for review. That publication authority does not
+release the main/controller hold or authorize live readout. Actual stored
+grade states, scores, usage and private grade revisions remain unread and
+unknown; workflow success is not quality evidence.
 
-This unit started at `60db124038d3ef2138094d80e44680d8c1461701` on
+This unit started at `f4a58015eedffa4983fb3cdb6297b4288dbd3fbc` on
 `b/codex-task3-a1-readout-prep-20260927` in
 `/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`.
-Main/controller `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` remains unchanged
-and held throughout grading. Supplied review `5328127720` and nine passing
-checks cover its reviewed A3 tree, not this local reader bundle. No workflow,
+Main/controller `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` stays frozen through
+the remaining grade sequence. Supplied review `5328127720` and nine passing
+checks cover its reviewed A3 tree, not this reader bundle. No workflow,
 grading writer, runtime, budget or fingerprint changed, and no new input was
 introduced.
 
-### Exact binding and bounded proof
+### Exact final binding and bounded proof
 
 The new cell belongs to campaign `budget_pilot_ci_20260925_04`, with cell
 prefix `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_`, immutable grade writer
@@ -27,31 +30,36 @@ distinct from both writer and producer.
 
 | Cell suffix / ordinal | Grade run | Original inference run | Completion checksum |
 |---|---|---|---|
-| Selected `B_r2` / 16 | `36288201352` | `36231296576` | `a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be` |
-| Immediate parent `C_r2` / 15 | `36286719528` | `36229800066` | `1ae30db0cdb3f51e6a37dccaa04bfd7c376497556501802ddc505899f4a78f04` |
+| Selected `A_r2` / 17 | `36289615941` | `36232859421` | `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8` |
+| Immediate parent `B_r2` / 16 | `36288201352` | `36231296576` | `a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be` |
 
-Production changes only the fixed B2 registration and its comment; the
-existing verifier, read grants and projection are unchanged. Full selected
-B2 and immediate-parent C2 writer/run/source/approval, canonical claim,
-retained-inference observation equality, byte/history and carried-object
-proof must pass before selected grade files open. Config hash, grader source
-hash and renderer fingerprint must agree under the same controller. Fixed
-control-path last-writer lookup resolves original terminals after refs advance
-without guessing private revisions or adopting remote metadata as authority.
+The final production delta is only the A2 constant, fixed registry row and
+count comment. The existing verifier, read grants and projection are
+unchanged. Full selected A2 and immediate-parent B2 writer/run/source/approval,
+canonical claim, retained-inference observation equality, byte/history and
+carried-object proof must pass before selected grade files open. Config hash,
+grader source hash and renderer fingerprint must agree under the same
+controller. Fixed control-path last-writer lookup resolves original terminals
+after refs advance, without guessing private revisions or adopting remote
+metadata as authority.
 
-Each B2 readout uses two readers, two ordinary terminal verifications
-(`B2`, `C2`), one logical predecessor proof and one grading-branch snapshot.
-Only C1's terminal control and its preservation metadata are additionally
-read for C2's intrinsic ordinary-history check. No C1 semantic grade
-verification, claim/inference/payload walk, C2 grade-file download or older
-B1/A1/historical A2 control access is added. There is no recursive verifier,
-arbitrary read grant or retry.
+Each A2 readout uses two readers, two ordinary terminal verifications
+(`A2`, `B2`), one logical predecessor proof and one grading-branch snapshot.
+Only C2's terminal control and its preservation metadata are additionally
+read for B2's intrinsic ordinary-history check. No C2 semantic grade
+verification, claim/inference/payload walk, B2 grade-file download or deeper
+control access is added. There is no recursive verifier, arbitrary read grant
+or automatic retry.
 
-Prior readers retain their meaning. Direct A1's historical task2 A2 handoff
+The accumulated reader set is exactly task3 A1/B1/C1/C2/B2/A2 at original
+ordinals 12–17. Their grade runs are respectively `36282221138`,
+`36283710283`, `36285446183`, `36286719528`, `36288201352` and `36289615941`.
+Task4/task5 readouts remain closed. Direct A1's historical task2 A2 handoff
 remains writer `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`, grade run
 `36214413190`, revision `3a8e135cd232ab900e003fc6d9c459957a0b990e`, original
-e7 inference terminal `e22f0c3de79bbfce084aedde64fa56c40959fde0`. The fixed
-`default_v2_sol_max.yaml` / GPT-5.6 Sol/max contract is unchanged.
+e7 inference terminal `e22f0c3de79bbfce084aedde64fa56c40959fde0`. Earlier
+readers retain their meaning. The fixed `default_v2_sol_max.yaml` /
+GPT-5.6 Sol/max contract is unchanged.
 
 The existing privacy-safe projection preserves the real stored
 graded/partial/failed/ungraded state, available score and earned points,
@@ -71,24 +79,28 @@ validation or quality finding.
 | Only A1's six failed nodes after the test-only correction | `fd7e1dba7d8066ad49e5a3ed94290f4d2f7dd6d6` | 6 collected, 6 passed in 32.00s; exit 0 |
 | Earlier B1-only selector | `579153486e3262a6b3fcf683c735fc402d38d9b2` | 89 collected, 89 passed in 60.35s; exit 0 |
 | Earlier C1/C2-only selector | `f09db4dc342428edce63b857380d069581a6fc08` | 198 collected, 198 passed in 88.21s; exit 0 |
-| New B2-only selector | `1a25d121c229c123de8b1cd456c0c4baaf722c3e` | 99 collected, 99 passed in 78.98s; exit 0 |
+| Earlier B2-only selector | `1a25d121c229c123de8b1cd456c0c4baaf722c3e` | 99 collected, 99 passed in 78.98s; exit 0 |
+| New A2-only selector | `ebb2b677686d9b083fb7e63206efa3b07706fda2` | 99 collected, 99 passed in 61.28s; exit 0 |
 
 The A1 correction changed only the unsettled synthetic-call expectation to
 `call_reachability_unknown`; production was unchanged between those two SHAs.
 There is no combined 78-pass invocation. B1's settled unpriced-call fixture
-for `price_missing` remains separate. No earlier A1/B1/C1/C2 case, prior
-passing family or full suite was rerun for B2.
+for `price_missing` remains separate. No earlier A1/B1/C1/C2/B2 case, prior
+passing family or full suite was rerun for A2. These are separate invocations,
+not one combined six-cell test run.
 
 The only new selector was
-`tests/test_codex_budget_pilot_task3_b2_readout.py::test_fixed_task3_b2_grade_readout`.
-It reuses one genuine graded C1/C2 synthetic history, seven B2 retained-state/
-accounting variants and isolated mutations. A shared private assertion helper
-checks the exact B2/C2 proof, advanced refs, typed claim/source/run/approval/
-renderer/byte/history, intrinsic C1 control preservation, state/denominators,
-accounting missingness, privacy and local replay refusal. Instrumented reads
-check the exact reader count, verification depth and revision/path/operation
-permissions. Coupled registry assertions remove only the obsolete B2 refusal;
-16 distinct later/invalid requests remain refused, including task3 A2.
+`tests/test_codex_budget_pilot_task3_a2_readout.py::test_fixed_task3_a2_grade_readout`.
+It reuses one genuine graded C1/C2/B2 synthetic history, seven A2 retained-state/
+accounting variants and isolated mutations. B2's fixture now permits selection
+of its graded prefix without changing its existing default. The shared
+private assertion helper checks A2/B2 proof, advanced refs, typed claim/source/
+run/approval/renderer/byte/history, intrinsic C2 control preservation,
+state/denominators, accounting missingness, privacy and local replay refusal.
+Instrumented reads check the exact reader count, verification depth and
+revision/path/operation permissions. Coupled registry assertions remove only
+the obsolete A2 refusal; 15 distinct later/invalid requests remain refused,
+including every fixed task4/task5 completion.
 
 External/model boundaries were fake or blocked; reader writes, admission,
 OIDC, Step8 and rubric paths were blocked. Synthetic scores, bytes, receipts
@@ -97,8 +109,10 @@ credential-free `env -i`, offline HF/Transformers flags, disabled plugin
 autoload, `GITHUB_ACTIONS=false`, `PYTHONDONTWRITEBYTECODE=1` and
 `-m 'not integration' -p no:cacheprovider -q --tb=short`.
 The new log is
-`/tmp/project5-task3-b2-readout.TYdqdt/focused-1a25d121c229c123de8b1cd456c0c4baaf722c3e.log`.
-The C1/C2 log remains
+`/tmp/project5-task3-final-a2-reader.cUnSfF/focused-ebb2b677686d9b083fb7e63206efa3b07706fda2.log`.
+The B2 log remains
+`/tmp/project5-task3-b2-readout.TYdqdt/focused-1a25d121c229c123de8b1cd456c0c4baaf722c3e.log`;
+the C1/C2 log remains
 `/tmp/project5-task3-c1-c2-readout.cQulcS/focused-f09db4dc342428edce63b857380d069581a6fc08.log`;
 the B1 log remains `/tmp/project5-task3-b1-readout.sMZr1I/focused-579153486.log`,
 and A1 logs remain under `/tmp/project5-task3-a1-readout.Kpm7K4/`.
@@ -106,29 +120,34 @@ Only the two completion records changed after the new tested SHA.
 
 ### Supplied operations and remaining gates
 
-The leader supplied B2 grade workflow `36288201352`, Actions job
-`108533000866`, attempt 1, on `2026-09-27` UTC: prepared `02:22:53.7715675`,
-claim acknowledgment `02:23:04.7911198`, one judge/cleanup `02:39:18.5593825`,
-publication acknowledgment `02:39:23.8900082` and run success `02:39:27`.
+The leader supplied A2 grade workflow `36289615941`, Actions job
+`108537119197`, attempt 1, on `2026-09-27` UTC: prepared `02:52:15.0438107`,
+claim acknowledgment `02:52:24.8297433`, one judge/cleanup `03:15:53.6075116`,
+publication acknowledgment `03:15:58.5436587` and run success `03:16:02`.
 The numeric Actions job ID is operation evidence, not the persisted
-`pilot-live` binding job name. No actual stored grade state, score, usage or
-private grade revision was read or inferred.
+`pilot-live` binding job name. The leader reports all six task3 grade
+operations published; no actual stored grade state, score, usage or private
+grade revision was read or inferred here.
 
 The full catalog and consolidated grading spec were reviewed. The bounded
-pre-edit reasoner approved with conditions using the available model, not
-Claude; this is not final source or live-use approval. Experiment-report-en
+pre-edit reasoner approved with conditions using the available Codex model,
+not Claude; this is not final source or live-use approval. Experiment-report-en
 then im-not-ai-en preserve the separate observations and limits in these
 records. Older result blocks and changelog entries remain historical,
-including their earlier registration boundaries.
+including their earlier registration and publication boundaries.
 
-A2 readout remains closed. A2 grade run `36289615941` was supplied as issued
-and approved on controller69, with outcome unknown; it was not queried or
-registered. Main/controller69 stays held throughout the grading sequence.
-Later leader publication authorization after the controller hold, new-head
-review/CI, a distinct reviewed observer and individual protected model-free
-readout approval remain gates. No push, PR, merge, live HF/model/grade/readout/
-dispatch, remote branch or dataset creation, Project/Azure/credential change,
-new inference or regrade occurred.
+The publication preflight found main at the frozen controller69 and no
+existing remote branch or PR for this reader branch. One ordinary branch
+push and one draft PR are authorized for the accumulated six-reader bundle.
+Main/controller69 stays frozen through the remaining grades. New-head direct
+leader review/CI, a distinct reviewed observer and explicit leader approval
+after the writer sequence, including individual protected model-free readout
+approval, remain gates before merge or live use. Task4 A1 recorder run
+`36291118506` was supplied as issued and approved on controller69, with
+outcome unknown; it was not queried or registered. No merge, live HF/model/
+grade/readout/dispatch, HF branch or dataset creation, Project/Azure/credential
+change, new inference or regrade occurred. No CI polling or manual workflow
+rerun is authorized by publication.
 
 ## Prior PROJECT5-TASK3-B1-READOUT-PREP
 

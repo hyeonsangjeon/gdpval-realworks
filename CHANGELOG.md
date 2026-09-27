@@ -81,6 +81,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only the final task3 A2 model-free grade readout for cell
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2`, ordinal 17, writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / grade run `36289615941` /
+  job `pilot-live` / integer attempt 1, original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36232859421`
+  and completion
+  `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
+  Require immediate B2, same writer / grade run `36288201352`, before selected
+  grade files open. The final production delta is only the fixed A2 row,
+  constant and count comment; the verifier, grants and projection are
+  unchanged. Fully verify A2/B2, allowing only C2 terminal control and
+  preservation metadata for B2's intrinsic history check, without a C2
+  semantic grade/claim/inference/payload walk, B2 payload download, deeper
+  controls or recursive verifier. Preserve source/run/claim/approval/retained
+  bytes/history, config/grader-source/renderer agreement, distinct observer
+  authority, direct A1's historical task2 A2 handoff, states, denominators/
+  exclusions and separate task/summary/ledger accounting. No zero cost,
+  invoice or HTTP count is invented; `call_reachability_unknown` remains
+  distinct from `price_missing`. One new A2-only offline invocation returned
+  **99 collected, 99 passed in 61.28s**, exit **0**, at
+  `ebb2b677686d9b083fb7e63206efa3b07706fda2`, using shared genuine synthetic
+  history and isolated mutations. The exact task3 A1/B1/C1/C2/B2/A2 reader set
+  is complete; 15 later/invalid requests remain refused, including every
+  task4/task5 completion. Earlier B2 **99 passed in 78.98s** at
+  `1a25d121c229c123de8b1cd456c0c4baaf722c3e`, C1/C2, B1 and split A1
+  observations remain separate and were not rerun. Only the two completion
+  records changed after the new tested SHA. The leader reports all six task3
+  grade operations published, but stored states, scores, usage and private
+  revisions remain unread and unknown. Workflow success is not quality
+  evidence; publication-derived proof is not independent original-envelope
+  authentication. The leader authorizes one ordinary push of this accumulated
+  reader branch and one draft PR, not a release of frozen main/controller69.
+  Base review `5328127720` and nine passing checks do not cover this bundle.
+  New-head direct review/CI, a distinct reviewed observer and explicit leader
+  approval after the writer sequence, including individual protected readout
+  approval, remain gates. No workflow/grading-writer/runtime/budget/fingerprint
+  change, merge, live readout, new inference, regrade or main/source change
+  occurred. Task4 A1 recorder `36291118506` remains unregistered and its
+  outcome unknown. No CI polling or manual workflow rerun is authorized.
+
 - Prepare only the actual task3 B2 model-free grade readout for cell
   `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2`, ordinal 16, writer
   `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / grade run `36288201352` /
