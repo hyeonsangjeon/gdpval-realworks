@@ -94,9 +94,10 @@ def _writer(case, capsys, tmp_path, monkeypatch, scenario):
                                price_table=price_table) as ledger:
             ledger.reserve(call_id="recorded-call", task_id=case.context.cell["task_id"], stage="grading",
                 retry_kind="none", provider="azure", requested_model=model, note="synthetic_recorded_call")
-            if scenario == "partial_cost":
+            if scenario in {"partial_cost", "price_missing"}:
                 ledger.settle("recorded-call", usage=CallUsage(input_tokens=111, cached_input_tokens=17,
                     output_tokens=23, reasoning_tokens=8), resolved_model=model)
+            if scenario == "partial_cost":
                 ledger.reserve(call_id="unsettled-call", task_id=case.context.cell["task_id"], stage="grading",
                     retry_kind="none", provider="azure", requested_model=model)
             digest = ledger.export_jsonl(ledger_path)
