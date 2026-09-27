@@ -42,7 +42,7 @@ VARIANTS = ("ungraded", "partial_cost", "missing_receipt", "price_missing")
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     assert grading.TASK5_B1_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36248894311", REQUEST)
     assert ungraded.TASK5_B1_POLICY == "task5-b1-model-free-ungraded" and readout.TASK5_B1_WRITER_RUN == RUN
     actual = readout._writer_context(REQUEST)
@@ -69,7 +69,7 @@ def history(tmp_path_factory):
                 control_path=initial.control_path, older_paths=initial.older_paths)
             assert previous.context.cell["cell_id"] == PARENT and shared.a2_context.cell["cell_id"] == A2
             assert shared.backing_context.cell["cell_id"] == BACKING
-            for variant in VARIANTS:
+            for variant in _variants:
                 destination = directory / variant
                 destination.mkdir()
                 row, ledger_bytes = copy.deepcopy(error_row), native_ledger
@@ -620,10 +620,10 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = controls._unregistered_requests()
-            assert len(requests) == 7 and row.request not in requests
+            assert len(requests) == 6 and row.request not in requests
             assert context.plan["order"][24:] == [PARENT, CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL,
                                                  grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
-            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][26:]),
+            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][27:]),
                                      "9" * 64, "9" * 40, ""}
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
             for request in requests:

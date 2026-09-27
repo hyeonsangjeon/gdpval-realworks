@@ -534,9 +534,10 @@ def test_fixed_task4_b1_readout_after_ungraded(history, tmp_path, monkeypatch, c
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 7 and history.request not in requests
+            assert len(requests) == 6 and history.request not in requests
             assert all(value[1] in requests for cell, value in {**grading.TASK4_RETAINED, **grading.TASK5_RETAINED}.items()
                        if cell not in {ng_reader.CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, grading.TASK5_B1_CELL,
+                                       grading.TASK5_C1_CELL,
                                        CELL, *readout.TASK4_SUCCESSOR_READOUTS})
             assert ng_reader.CELL not in readout.TASK3_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
             for request in requests:
