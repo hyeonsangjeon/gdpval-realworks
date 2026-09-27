@@ -13,7 +13,30 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add only the final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readout
+- Repair only the final B2/A2 test fixture's construction order. Move the
+  genuine A2 prototype and failure-row construction before the reused writer
+  history installs its constructor guard; keep every existing guard and all
+  production code unchanged. The one separately authorized invocation of the
+  same B2/A2 selector passed **516 tests in 1683.63s**, exit **0**, at
+  fixture-only commit `7769580cda9abf5f96357f40349e7f321d4bc26c`. Preserve
+  the initial `7793b92bebb5301e2f877da37bd6d63df841a0ec` observation separately:
+  **516 setup errors in 146.96s**, exit **1**, with no test bodies executed.
+  Those errors arose from one shared fixture defect, not 516 reader failures
+  or a credential blocker. No prior reader selector or full suite was rerun.
+  Only these two completion records change after the tested SHA. The focused
+  pass establishes no live readout, grade quality, invoice or hosted-CI
+  headroom. All earlier results and replay provenance remain separate.
+  Per the leader, PR690 is now closed and supplied main is
+  `13b403ed5452605a606b1c11187184a2efa93909`, with reviewed `2feb` tree
+  `14297cb7963ae820085ae29d3041b7ef886d33c8`, review `5330512587` and all
+  10 CI checks passing. That approval does not cover the local final pair or
+  this fixture repair. Historical writer69/producer780 remain immutable;
+  all 18 writers are complete. No push, PR edit, main change, merge, CI poll
+  or live call occurred. Later publication authority, new-head review/CI,
+  actual private proofs and individual protected readout approval remain
+  required. Stop local and unpublished.
+
+- Historical initial final-pair attempt: add only the final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readout
   bindings locally. Validation is incomplete: the single new B2/A2-only
   invocation at `7793b92bebb5301e2f877da37bd6d63df841a0ec` collected **516**
   cases and ended with **516 setup errors in 146.96s**, exit **1**. No B2/A2

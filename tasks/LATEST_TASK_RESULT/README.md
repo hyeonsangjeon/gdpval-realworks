@@ -1,6 +1,83 @@
 # Latest task result
 
-## PROJECT5-FINAL-TASK5-B2-A2-READERS
+## PROJECT5-AUTHORIZE-FIXTURE-ORDER-REPAIR
+
+The authorized fixture-only repair passed its one focused offline invocation:
+**516 passed in 1683.63s (0:28:03)**, exit **0**, at
+`7769580cda9abf5f96357f40349e7f321d4bc26c`. The earlier attempt remains a
+separate observation: `7793b92bebb5301e2f877da37bd6d63df841a0ec` had
+**516 setup errors in 146.96s**, exit **1**, and no test body executed.
+That was one shared fixture defect, not 516 independent reader failures or
+a credential/resource blocker. The two invocations are not combined.
+
+### Fixture-only scope and validation
+
+The repair started from clean local `fbc06ee6878da2d0d8a8711144c5b5f4bbe3e11d`
+and moved only the genuine A2 prototype and failure-row construction before
+entering the reused writer history that installs its runner-constructor guard.
+The existing helper's offline seams and all constructor, network, model,
+HF, OIDC and write guards remain unchanged for history and test execution.
+There was no guard bypass, synthetic-success relabeling or production change.
+
+A narrow static AST comparison confirmed that all other test syntax nodes
+were unchanged. The repair commit changes only
+`batch-runner/tests/test_codex_budget_pilot_task5_final_readout.py`.
+No reader, native verifier, workflow, grader/writer, runtime, budget, input,
+framework or projection code changed. The tested production/test subtree is
+`18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`. Only `CHANGELOG.md` and this
+completion record change after the tested SHA.
+
+The single newly authorized invocation used the same B2/A2 selector from
+`batch-runner`, with credentials cleared and offline boundaries intact:
+
+```bash
+env -i PATH=/usr/bin:/bin PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 \
+  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 \
+  DO_NOT_TRACK=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GITHUB_ACTIONS=false \
+  /usr/bin/python3.10 -m pytest -m 'not integration' -p no:cacheprovider \
+  -q --tb=short -rs \
+  tests/test_codex_budget_pilot_task5_final_readout.py::test_final_task5_readouts
+```
+
+Pytest collected and passed all 516 selected cases. No old 269/406/206 reader
+family, other prior selector or full suite was rerun. The existing genuine
+synthetic history was reused; no prior test result was reassigned to this SHA.
+All earlier split results and replay mappings remain in the historical
+sections below, with only explicit historical labels added.
+
+This is an offline test result over synthetic history, not a live readout,
+grade-quality result, invoice, HTTP measurement or hosted-CI headroom proof.
+B2 remains ordinary and requires real Step8/child/rubric/cleanup proofs;
+A2 remains MODEL-FREE UNGRADED and scoreless. Original failed-inference
+accounting stays separate from unmeasured recorder cost. B2's live stored
+grade state, score and usage, and actual private revisions, remain unknown.
+
+### Publication status and remaining gates
+
+Per the leader, PR690 is delivered and closed. Supplied main
+`13b403ed5452605a606b1c11187184a2efa93909` has exact reviewed `2feb` tree
+`14297cb7963ae820085ae29d3041b7ef886d33c8`, review `5330512587` and all
+10 CI checks passing. Those supplied facts were not queried, and that review
+and CI do not cover the local final B2/A2 readers or fixture repair. The
+branch remains `b/codex-task5-c1-c2-readout-20260927`; nothing was pushed,
+and the closed PR and main were not changed.
+
+Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and producer
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable. All 18 writer
+records are complete per the leader. No new inference, grade or regrade is
+authorized. No live HF/model/OIDC/readout/claim/write/dispatch, Azure-management,
+credential or Project action, merge or CI polling occurred.
+
+Later publication authorization, direct review and CI of the new head, a
+distinct reviewed observer, actual selected/parent private proofs and
+individual protected readout approval remain required. The existing catalog,
+grading specification and pre-edit decision remain applicable; no scope
+change required repeating them. `experiment-report-en` followed by
+`im-not-ai-en` preserves the separate outcomes, provenance and limits in
+these two records. Stop local and unpublished.
+
+## Prior initial attempt: PROJECT5-FINAL-TASK5-B2-A2-READERS
 
 The final B2/A2 reader implementation is committed locally, but validation
 is incomplete. The one new focused offline invocation at
