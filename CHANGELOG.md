@@ -81,6 +81,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only the actual task3 C1/C2 model-free readouts under writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, job `pilot-live`, integer
+  attempt 1. Cells `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1` and
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2`, ordinals 14/15, bind grade
+  runs `36285446183`/`36286719528`, inference runs
+  `36228331579`/`36229800066` and respective completion checksums
+  `9574cb08f562e1fc38bc1c9412793140586f5a335a4b0781af98b2c3ca3f9940` /
+  `1ae30db0cdb3f51e6a37dccaa04bfd7c376497556501802ddc505899f4a78f04`.
+  Require exact immediate B1/C1 grades under the same controller before
+  selected grade-file access, preserving source/run/claim/approval/retained
+  bytes/history and matching config/grader-source/renderer proof. Each readout
+  verifies one logical predecessor; the unchanged ordinary verifier also reads
+  only that predecessor's older terminal control and checks its preservation
+  at the original claim. This is not another semantic grade verification or
+  recursive history walk. Prior readers, direct A1's historical task2 A2
+  handoff, distinct observer authority, privacy-safe states, denominators,
+  exclusions and separate task/summary/ledger accounting remain unchanged.
+  `call_reachability_unknown` is not `price_missing`; no zero cost, invoice or
+  HTTP count is invented. One new C1/C2-only offline invocation returned
+  **198 collected, 198 passed in 88.21s**, exit **0**, at
+  `f09db4dc342428edce63b857380d069581a6fc08`, with shared genuine synthetic
+  history and isolated mutations. The new selector also checks the exact
+  read-depth permissions and 17 later/invalid refusals; B2/A2 stay closed.
+  All earlier A1 split and B1 results below remain separate and were not rerun.
+  Only completion records changed after this tested SHA. Actual stored states,
+  scores, usage and private revisions remain unread and unknown; workflow
+  success is not quality evidence, and publication-derived proof is not
+  independent original-envelope authentication. Work remains local and
+  unpublished. Main/controller69 remains unchanged and held; base review
+  `5328127720` and nine passing checks do not cover this reader bundle.
+  Later publication authority, new-head review/CI, a distinct reviewed observer
+  and individual protected model-free readout approval remain gates. No
+  workflow/grading-writer/runtime/budget/fingerprint change, push, PR, live
+  call, new inference, regrade or held-source change occurred.
+
 - Prepare only task3 B1's model-free first-grade readout for cell
   `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1`, ordinal 13, writer
   `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / grade run `36283710283` /
