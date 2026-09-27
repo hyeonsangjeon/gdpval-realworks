@@ -69,6 +69,9 @@ def history(tmp_path_factory):
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
     assert ungraded.TASK5_A2_POLICY == "task5-a2-model-free-ungraded"
 
+    # Build the genuine A2 failure before reused history installs its runner guard.
+    prototype = grading.compile_request("pilot/" + CELLS["a2"], PRODUCER, REVISIONS["a2"][2])
+    error_row, native_ledger = failed._failed_row(prototype)
     # Reuse genuine C2 writer construction only, not the old 406 test cases.
     prefix = c2_reader.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
     initial = next(prefix)
@@ -147,8 +150,6 @@ def history(tmp_path_factory):
             claim_revision, output_revision, terminal_revision, _ = REVISIONS[profile]
             _, run_id, inference_run, actual_request = PROFILES[profile]
             previous = shared.rows["b2"]["graded"]
-            prototype = grading.compile_request("pilot/" + CELLS[profile], PRODUCER, terminal_revision)
-            error_row, native_ledger = failed._failed_row(prototype)
             for variant in VARIANTS[profile]:
                 destination = directory / (profile + "-" + variant)
                 destination.mkdir()
