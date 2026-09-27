@@ -81,6 +81,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only task4 A1's actual model-free UNGRADED readout for cell
+  `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1`, ordinal 18, policy
+  `recorded_task4_failed_a1_no_judge`, writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / run `36291118506` /
+  job `pilot-live` / integer attempt 1, original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36234320019`
+  and completion
+  `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8`.
+  Reuse unchanged `codex_budget_pilot_ungraded.verify_terminal`, not the
+  ordinary judged-terminal route. Require actual ordinary task3 A2, same
+  writer / grade run `36289615941` / inference run `36232859421` /
+  completion `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
+  Verify fixed typed source/run/config/policy/claim, original inference bytes,
+  full predecessor equality, renderer agreement and both preservation proofs
+  before selected original payloads. Use two readers, one grade-branch
+  snapshot and two ordinary A2 checks; B2 is intrinsic terminal control only,
+  with no deeper semantic/claim/inference/payload walk or parent grade-file
+  download. The projection is scoreless/no-model and keeps original failed
+  completion, denominator and task/summary/ledger receipts separate from
+  absent grade costs and unmeasured recorder costs. No fake child/cleanup,
+  rubric verdict, zero invoice, HTTP count or stronger authentication claim
+  is added. Earlier task3 readers and historical A1 handoff remain unchanged;
+  only task4 A1 is newly admitted, leaving 14 other/invalid requests refused.
+  The new offline selector returned **95 collected, 89 passed, 6 failed in
+  63.81s**, exit **1**, at `6790a7ecf76b415aaae2e8136a71f024ad1076ca`.
+  Correcting production cache construction to create the no-clobber projection
+  directory once before the two-file loop was followed by only those six
+  failed nodes: **6 collected, 6 passed in 40.78s**, exit **0**, at
+  `aaf9cca1f37bdb95c2f4f3b6f604310fc2cc9ae6`. This is not a fixture-only
+  correction or combined 95-pass invocation. The 89 passing cases and all
+  prior task3 families/full suite were not rerun; earlier results remain
+  separate. Only the two completion records changed after the corrected
+  tested SHA. Leader review `5328752284` covers only published
+  `167248279c6119ad297fd30bb70abe132c3ac395`; the supplied eight-pass/
+  pilot-contracts-running CI snapshot was not queried and does not approve
+  this delta. Main/writer69 remains frozen. Later publication authority,
+  new-head review/CI, distinct reviewed observer, actual parent proof and
+  individual protected readout approval after the writer sequence remain
+  gates. No push, PR change, merge, live call, CI polling, main/source change,
+  workflow/grading-writer/runtime/budget change, new inference or regrade.
+  The supplied UNGRADED publication is not a grade or model quality result;
+  private claim/terminal revisions remain unread and unknown. Other task4/
+  task5 readouts stay closed. Existing entries below remain historical.
+
 - Prepare only the final task3 A2 model-free grade readout for cell
   `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2`, ordinal 17, writer
   `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / grade run `36289615941` /
