@@ -1,6 +1,127 @@
 # Latest task result
 
-## PROJECT5-FINALIZE-TASK2-BUDGET-REPORT
+## PROJECT5-RETENTION-FAILED-CASES
+
+The five authorized fixture/assertion repairs passed at correction HEAD
+`91ffae589b240dd9d31978af0dd2cf19532e96c7`. No production runtime byte changed
+from the original tested implementation, `b1854e5b50eda9c25c9db5bc2627acf35022e70d`.
+That head's **5 failed, 42 passed in 334.92s**, exit 1, remains a separate
+47-case observation. The 42 passing cases were not rerun; this is not evidence
+of one 47-pass invocation.
+
+The correction commit changes only `batch-runner/tests/test_codex_native_resume.py`.
+It preserves the exact three-source-pin refusal, then checks the frozen 30-cell
+A/B/C registration using unmodified production compilers and helpers with a real
+temporary snapshot of `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`. Local Git archive
+materialization occurs during fixture setup; compilation runs with the existing
+process, network and credential guards active. No pins, policy or validators are
+replaced. The legacy compiler emits only the original A/B/C deadline mappings,
+not the experimental control. Timeout assertions now require both the
+1,800-second native wait and the separate 20-second shutdown join. Expiry
+assertions require the 1,800-second initial wait, shrinking 7-second wait and
+zero-budget shutdown, with unchanged expiry and admission counters.
+
+One corrective invocation ran from the worktree's `batch-runner` directory:
+
+```bash
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider 'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage[keep-registration]' 'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage[keep-turn_timeout]' 'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage[fresh-turn_timeout]' 'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage[keep-in_turn_expiry]' 'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage[fresh-in_turn_expiry]'
+```
+
+Result: **5 passed in 24.02s**, exit 0, at
+`91ffae589b240dd9d31978af0dd2cf19532e96c7`. No further pytest invocation ran.
+Byte comparisons against `b1854e5b50eda9c25c9db5bc2627acf35022e70d` passed for
+`batch-runner/core/codex_task_deadline.py`, `batch-runner/core/codex_runner.py`
+and `batch-runner/step2_run_inference.py`. Original runtime, isolation, usage,
+cross-cell and refusal assertions remain intact outside the repaired assertions.
+No frozen registration, source-pin, workflow, grader, upload, readout or
+retention-verifier file changed.
+
+The existing branch is `b/codex-retention-runtime-20260928`, in
+`/ai-work/copilot/worktrees/codex-retention-runtime-20260928`. Its reviewed base
+is `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`, with the leader-reviewed tree
+`4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`. Those prior
+checks do not validate this new head. Only `CHANGELOG.md` and this record changed
+after corrective validation. The combined PR scope remains the three runtime
+files, the selected test, `batch-runner/README.md` and these two records.
+
+Protected `im-not-ai-en` keeps the two results, source identities and uncertainty
+separate. The accepted `experiment-design` constraints are unchanged. Publication
+is limited to one ordinary branch push and one draft PR; exact-head review
+remains. The eight-cell campaign is unregistered and not launchable here, and the
+capability is not live-verified. No live model, readout, grading, credential,
+Azure, HF, OIDC, infrastructure or CI polling operation ran. No launch authority,
+causal retention benefit, complete costs or whole-card completion is claimed.
+
+The following section preserves the original failed-validation handoff. Its
+stop and publication statements describe the state before this authorized repair.
+
+## PROJECT5-RETENTION-RUNTIME
+
+Local implementation committed; validation failed. Nothing was pushed and no PR
+was opened. Branch `b/codex-retention-runtime-20260928` is in
+`/ai-work/copilot/worktrees/codex-retention-runtime-20260928`, created from exact
+base `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`. The original checkout and merged
+branches are preserved. The base's reviewed tree
+`4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288` and nine passing
+checks are leader-supplied provenance, not validation of this implementation.
+
+Tested implementation HEAD: `b1854e5b50eda9c25c9db5bc2627acf35022e70d`.
+Its five-file scope is `batch-runner/core/codex_task_deadline.py`,
+`batch-runner/core/codex_runner.py`, `batch-runner/step2_run_inference.py`,
+`batch-runner/tests/test_codex_native_resume.py` and `batch-runner/README.md`.
+This record and `CHANGELOG.md` are the only subsequent edits and remain
+uncommitted. Both commit identities are `hyeonsangjeon <wingnut0310@gmail.com>`;
+the existing Git identity was retained and no attribution trailers were added.
+
+The [capability documentation](../../batch-runner/README.md#experimental-retention-bundle-capability)
+describes the new identity-bound `retention_bundle_v1` keep/fresh choice, B's
+fixed retry eligibility/backoff and one durable 10,800-second deadline. Fresh
+state and output cleanup retain host receipt history, including unknown usage.
+Existing A/B/C mappings, the frozen 30-cell registration and original results
+were not changed. No workflow, source-pin configuration, grader, upload,
+readout or retention-verifier file changed.
+
+Exactly one pytest invocation ran, from the worktree's `batch-runner` directory:
+
+```bash
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider 'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage'
+```
+
+Result: **5 failed, 42 passed in 334.92s**, exit 1, with 47 selected cases.
+All five failures are parameters of the selector above:
+
+- `keep-registration`: `gpt54_comparison_preflight.compile_dispatch_plan`
+  raised `DispatchPlanRefused` for `source_pin:batch-runner/core/codex_runner.py`,
+  `source_pin:batch-runner/step2_run_inference.py` and
+  `source_pin:batch-runner/core/codex_task_deadline.py`.
+- `keep-turn_timeout` and `fresh-turn_timeout`: the assertion at test line 542
+  expected `[1800]`; the recorded joins were `[1800.0, 20.0]`.
+- `keep-in_turn_expiry` and `fresh-in_turn_expiry`: the assertion at test line
+  560 expected `[1800, 7]`; the recorded joins were `[1800.0, 7.0, 0.0]`.
+
+The source-pin refusal and additional shutdown joins are preserved, not bypassed.
+The original A/B/C cases and the new six-admission recovery, unknown-usage,
+settlement-replay, state-refusal and fresh-output cases passed in this invocation;
+the complete selected group did not pass. No code or test changed afterward,
+and no second invocation, push, PR or CI polling followed.
+
+`experiment-design` kept this an offline capability for a separately authorized
+diagnostic, not a new campaign or evidence of retention benefit. Protected
+`im-not-ai-en` preserved the timing, identity and uncertainty boundaries in the
+English documentation and records. Existing README text is unchanged outside
+the added section. No live model, observation, grading, credential, Azure, HF,
+OIDC or infrastructure operation ran.
+
+Remaining work requires leader direction on these five failures and review of
+the resulting exact source. The eight-cell campaign is not registered or
+launchable here, and the capability is not live-verified. Frozen registration
+pins were not updated. Native-turn waiting remains distinct from all-in elapsed
+time; shared temporary permissions remain unchanged. The prospective bundle
+comparison still cannot attribute effects to thread versus files, establish
+causality or judge calibration, or supply complete costs. No paid-run authority
+or whole-card completion is claimed.
+
+## Prior PROJECT5-FINALIZE-TASK2-BUDGET-REPORT
 
 Finalized the combined Task2 report on
 `b/codex-task2-budget-observation-draft-20260928`, from exact base

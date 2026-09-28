@@ -13,6 +13,49 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Finish the authorized fixture/assertion repair for the
+  [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability).
+  Correction HEAD `91ffae589b240dd9d31978af0dd2cf19532e96c7` changes only the
+  selected native-resume test. Its one five-node invocation passed **5 tests in
+  24.02s**, exit 0. The original **5 failed, 42 passed in 334.92s** at
+  `b1854e5b50eda9c25c9db5bc2627acf35022e70d` remains separate evidence; the
+  42 passing cases were not rerun, and no single 47-pass run is claimed.
+  The test now asserts the exact changed-source refusal, compiles the immutable
+  approved baseline with production helpers, and checks native waits separately
+  from bounded shutdown joins. All three runtime files remain byte-identical to
+  `b1854e5b50eda9c25c9db5bc2627acf35022e70d`; frozen pins, the 30-cell registration,
+  validators and runtime guards are unchanged. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-failed-cases)
+  records the exact command and both results. Reviewed base
+  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has reviewed tree
+  `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`.
+  New-head review, separate campaign registration and live authorization remain
+  outstanding. No live inference, grading, observation or CI polling ran.
+
+### Prior retention runtime validation (historical)
+
+- Add the local [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability)
+  with identity-bound keep/fresh modes, B's existing recovery policy, a durable
+  10,800-second deadline and fresh owned-state/output cleanup that preserves
+  host accounting. A/B/C mappings, frozen registrations and original results
+  remain unchanged. Implementation/test/documentation scope is the deadline
+  store, Codex runner, Step 2, the selected native-resume test and its README.
+  Tested HEAD `b1854e5b50eda9c25c9db5bc2627acf35022e70d` produced **5 failed,
+  42 passed in 334.92s** in the one authorized offline invocation. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-runtime)
+  records its exact command and failures: the frozen compiler's three changed
+  source-pin refusals and four join-list assertions that omit shutdown joins.
+  No pins or timing guards were loosened, and no code/test fix, rerun, push or
+  PR followed. Only these two completion records changed afterward and remain
+  uncommitted. Base `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has the
+  leader-reviewed tree `4445964f12cbbc085df7ab243d31fd1ee5968193`, review
+  `5337639288`; its prior passing checks do not validate this head. Follow-up
+  on the failures, exact-head review, separate campaign registration and live
+  authorization remain outstanding. No live inference, grading or observation
+  ran; no retention-benefit, complete-cost or whole-card-completion claim is made.
+
+### Prior Task2 budget report (historical)
+
 - Complete the six-cell [Task2 budget report](tasks/codex_budget_pilot/REPORT.md#task2-budget-observations-a1-b1-c1-c2-b2-and-a2)
   with A2 readout `36407670686`, attempt 1, job `108880187086`, compared with
   original `36220575848`. Coverage is 24 of 24 retained epoch04 budget snapshots,
