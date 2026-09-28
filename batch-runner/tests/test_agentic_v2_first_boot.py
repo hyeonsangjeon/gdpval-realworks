@@ -22,6 +22,7 @@ import json
 import os
 import signal
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -79,6 +80,7 @@ def plan(tmp_path, monkeypatch):
 class _Clock:
     def __init__(self):
         self.t = 0.0
+        self.tick = 100
 
     def now(self) -> float:
         return self.t
@@ -86,16 +88,29 @@ class _Clock:
     def sleep(self, seconds: float) -> None:
         self.t += seconds
 
+    def host_reading(self, *, round_up: bool = False) -> dict:
+        """Cross a synthetic tick on every probe, without reading the host."""
+        tick = self.tick
+        self.tick += 1
+        return {
+            "ticks_since_boot": tick,
+            "boot_id": "stand-in-boot",
+            "clock_ticks_per_second": 100,
+        }
 
-def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
+
+def _a_stand_in_guest_with_an_identity(
+    monkeypatch, *pids: int
+) -> Callable[[int], None]:
     """Let the invented PIDs answer the question a real guest answers.
 
     The launcher will not signal a process it cannot show it started, and a
     number a test made up names nothing on the host — so a stand-in that only
     reports *alive* is half a guest. This supplies the other half: for the PIDs
-    named here, "when did you start" answers with the host clock read the first
-    time it is asked, which is necessarily at or after the floor the run
-    recorded just before launching.
+    named here, the fake jailer records a birth after the launch floor and
+    before publishing the PID. Probing identity never invents a birth: a first
+    probe after the PID-read ceiling would make the stand-in look too young to
+    be the process that the jailer already published.
 
     **The answer is remembered per PID, and that is the point, not an
     optimisation.** A real process's start time never moves; answering with a
@@ -119,16 +134,17 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
     really_confined = agentic_v2_first_boot._confined_to_this_runs_jail
     really_pinned = agentic_v2_first_boot._a_proc_reference_pinned_to
     really_read = agentic_v2_first_boot._what_the_pinned_reference_still_says
-    remembered: dict[int, int | None] = {}
+    remembered: dict[int, int] = {}
     pinned_to: dict[int, int] = {}
+
+    def born_at_launch(tick: int) -> None:
+        assert not remembered, "a stand-in's birth belongs to one fake launch"
+        remembered.update((pid, tick) for pid in known)
 
     def started(pid: int) -> int | None:
         if pid not in known:
             return real(pid)
-        if pid not in remembered:
-            now = agentic_v2_first_boot._the_instant_this_run_launched()
-            remembered[pid] = now["ticks_since_boot"]
-        return remembered[pid]
+        return remembered.get(pid)
 
     def confined(pid: int, chroot_dir, **named):
         if pid in known:
@@ -181,6 +197,7 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
         "core.agentic_v2_first_boot._what_the_pinned_reference_still_says",
         through_the_reference,
     )
+    return born_at_launch
 
 
 def _records_every_signal(monkeypatch, into: list) -> list:
@@ -236,9 +253,19 @@ def _boot(plan, tmp_path, monkeypatch, *, jailer, running, results=None, reader=
     that fails.
     """
     clock = _Clock()
-    monkeypatch.setattr("core.agentic_v2_first_boot._run", jailer)
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._the_host_clock_in_ticks", clock.host_reading
+    )
+    born_at_launch = _a_stand_in_guest_with_an_identity(monkeypatch, 4242)
+
+    def launch(argv, timeout=300.0):
+        # first_boot has taken the floor; even a jailer that publishes a PID
+        # and then times out must give that guest its birth before publication.
+        born_at_launch(clock.host_reading()["ticks_since_boot"])
+        return jailer(argv, timeout=timeout)
+
+    monkeypatch.setattr("core.agentic_v2_first_boot._run", launch)
     monkeypatch.setattr("core.agentic_v2_first_boot._still_running", running)
-    _a_stand_in_guest_with_an_identity(monkeypatch, 4242)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot.files_out_of_work_disk",
         reader or (lambda image, names, **kw: dict(results or {})),
@@ -1055,6 +1082,91 @@ def test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill(
     assert pid_file.read_text().strip() == "1"
 
 
+def test_synthetic_birth_tick_edge_refuses_lazy_identity_and_accepts_launch_birth(
+    plan, tmp_path, monkeypatch
+):
+    """A published PID cannot belong to a guest born on its first later probe."""
+    signalled: list[tuple[int, int]] = []
+    _records_every_signal(monkeypatch, signalled)
+
+    # Recreate the former stand-in's lazy stamp, not the ownership predicate.
+    with monkeypatch.context() as lazy:
+        clock = _Clock()
+        lazy.setattr(
+            agentic_v2_first_boot, "_the_host_clock_in_ticks", clock.host_reading
+        )
+        remembered: dict[int, int] = {}
+
+        def lazy_started(pid):
+            assert pid == 4242
+            if pid not in remembered:
+                now = agentic_v2_first_boot._the_instant_this_run_launched()
+                remembered[pid] = now["ticks_since_boot"]
+            return remembered[pid]
+
+        lazy.setattr(
+            agentic_v2_first_boot, "_when_that_process_started", lazy_started
+        )
+        floor = agentic_v2_first_boot._the_instant_this_run_launched()
+        launch_tick = clock.host_reading()["ticks_since_boot"]
+        pid_file = tmp_path / "lazy-guest.pid"
+        pid_file.write_text("4242\n")
+        pid = int(pid_file.read_text())
+        ceiling = agentic_v2_first_boot._the_instant_the_number_was_read()
+        assert floor["ticks_since_boot"] == 100
+        assert launch_tick == 101
+        assert ceiling["ticks_since_boot"] == 102
+        assert remembered == {}
+        assert agentic_v2_first_boot._started_during_this_runs_launch(
+            pid, floor, ceiling
+        ) == (
+            None,
+            "process 4242 began 2 clock ticks after this run already had that "
+            "number in hand, so it is not what the number was published for",
+        )
+        assert remembered == {4242: 104}
+        assert lazy_started(pid) == 104
+
+    def jailer(argv, timeout=300.0):
+        assert agentic_v2_first_boot._when_that_process_started(4242) == 101
+        return _writes_the_pid_file(plan)(argv, timeout=timeout)
+
+    result = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=jailer,
+        running=lambda pid: False,
+        results=_finished(),
+    )
+    identity = result["pid_file"]
+    assert result["outcome"] == "booted"
+    assert identity["launch_floor"]["ticks_since_boot"] == 100
+    assert identity["pid_started_at_ticks"] == 101, identity["left_alone_because"]
+    assert identity["number_read_at"]["ticks_since_boot"] == 102
+    assert identity["owned_by_this_run"] is True
+    assert identity["left_alone_because"] is None
+    reference, verdict, why_not = (
+        agentic_v2_first_boot._a_proc_reference_pinned_to(4242)
+    )
+    assert reference is not None
+    try:
+        assert (verdict, why_not) == ("", "")
+        later = agentic_v2_first_boot._the_host_clock_in_ticks()
+        assert later["ticks_since_boot"] > 102
+        assert agentic_v2_first_boot._when_that_process_started(4242) == 101
+        assert agentic_v2_first_boot._what_the_pinned_reference_still_says(
+            reference
+        ) == (
+            agentic_v2_first_boot.PINNED_STILL_RUNNING,
+            101,
+            "",
+        )
+    finally:
+        os.close(reference)
+    assert signalled == []
+
+
 def test_this_runs_own_machine_is_stopped_when_it_is_still_running(
     plan, tmp_path, monkeypatch
 ):
@@ -1077,10 +1189,25 @@ def test_this_runs_own_machine_is_stopped_when_it_is_still_running(
         )
 
     process = caught.value.teardown["process"]
-    assert signalled == [(4242, signal.SIGKILL)]
+    assert signalled == [(4242, signal.SIGKILL)], {
+        "launch_floor": process["launch_floor"],
+        "number_read_at": process["number_read_at"],
+        "pid_started_at_ticks": process["pid_started_at_ticks"],
+        "stop_handle": process["stop_handle"],
+        "stop_handle_verdict": process["stop_handle_verdict"],
+        "left_alone_because": process["left_alone_because"],
+    }
     assert process["jail_held_by_this_run"] is True
     assert process["pid"] == 4242
     assert process["signalled"] is True
+    assert process["launch_floor"]["ticks_since_boot"] == 100
+    assert process["pid_started_at_ticks"] == 101
+    assert process["number_read_at"]["ticks_since_boot"] == 102
+    assert process["number_read_at_inherited"] is False
+    assert process["stop_handle"] == "pidfd"
+    assert process["stop_handle_verdict"] == "taken"
+    assert process["stop_signal_target"] == 4242
+    assert process["left_alone_because"] is None
 
 
 def test_only_the_path_the_plan_named_is_removed(plan, tmp_path, monkeypatch):
@@ -1114,4 +1241,3 @@ def test_only_the_path_the_plan_named_is_removed(plan, tmp_path, monkeypatch):
     assert not chroot.exists()
     assert somebody_elses.exists()
     assert (somebody_elses / "work.ext4").read_bytes() == b"another guest wrote this"
-
