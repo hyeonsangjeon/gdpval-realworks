@@ -13,7 +13,146 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Correct only Task2 B1's final observed-read subset and equality expectations
+- Finalize Task4 budget evidence with all six leader-verified snapshots
+  (6 of 24 epoch04 cells); no Task4 snapshot remains pending. The first
+  retained budget observation is for existing Task4 B1. Read-only run
+  `36356813899`, attempt 1, job `108726076308`, completed its read step at
+  `2026-09-27T22:57:11Z`; the job succeeded at `2026-09-27T22:57:13Z` on
+  observer `8e188db9cb4e937f33ba8723d88ffd2b52b359cc`. The snapshot records
+  **12 durable admissions**, **11 confirmed native resumes** and
+  **2340.6372985839844 seconds** of retry backoff (about **39.01 minutes**),
+  not all recovery/downtime, HTTP/model-call counts or successes. This is no
+  causal proof that resuming improved quality and no new inference, grade,
+  regrade, repetition or 31st original cell. The leader's comparison with
+  `36316075585` found every old field unchanged except `observer_source_sha`;
+  the only added key is `inference_budget_snapshot`. The original
+  **67.00% included / 53.84% full** score and all existing report tables are
+  unchanged. Exact values and bindings are in the
+  [178-line report](tasks/codex_budget_pilot/REPORT.md#budget-snapshot-availability).
+  Add only the newly supplied Task4 A1 observation alongside unchanged B1.
+  Model-free readout `36358392037`, attempt 1, job `108730558766`, completed
+  its read at `2026-09-27T23:23:58Z`; the job succeeded at
+  `2026-09-27T23:24:01Z` on the same observer. A1 records **4 durable
+  admissions**, **0 confirmed native resumes** and **420.1196165084839 seconds**
+  of retry backoff (about **7.00 minutes**), with
+  **10196.292588472366 seconds** remaining (about **169.94 minutes**).
+  This is not an observation of full **180-minute** exhaustion. It does not
+  establish the internal failure cause, that the four-attempt cap caused
+  failure, or exact uncapped elapsed. Against original readout `36314682247`,
+  every original projection field matches except `observer_source_sha`; only
+  `inference_budget_snapshot` is added. No deliverable, UNGRADED, score `NULL`
+  and partial accounting remain unchanged; `NULL` is not zero. A/B still
+  changes retry policy and retention together, and one task/repeat establishes
+  no causal retention or model-quality result. These observations add no
+  inference, grade, regrade, repetition or original cell. All existing tables
+  and historical sections remain byte-identical; only current sections change.
+  Add only the supplied Task4 C1 observation alongside frozen A1/B1 passages.
+  Budget readout `36360105814`, attempt 1, job `108735460955`, completed its
+  read at `2026-09-27T23:54:36Z`; the job succeeded at
+  `2026-09-27T23:54:38Z` on the same observer. C1 records **8 durable
+  admissions**, **7 confirmed native resumes** and **1380.4454476833344 seconds**
+  of retry backoff (about **23.01 minutes**), not HTTP/model-call or success
+  counts, exact uncapped elapsed time or all recovery/downtime. Against original
+  readout `36317678630`, every original projection field matches except
+  `observer_source_sha`; only `inference_budget_snapshot` was added. Its score
+  remains **64.56% included / 51.88% full**, with **29.05/45** included points
+  and **9 excluded items / 11 maximum points**; accounting and proof fields
+  are unchanged. The B1/C1 first-repeat comparison is descriptive, not evidence
+  that C's feedback causally reduced waiting or established superiority or
+  inferiority. Time-varying service errors, two repeats, joint A/B retry-policy
+  and retention changes, unread exclusion IDs/causes, judge calibration and
+  incomplete costs still limit attribution. No new inference, grade, regrade,
+  repetition or original cell is added. The scoped C1 literal/semantic and
+  protected copyediting checks passed; A1/B1 passages, all 24 outcome rows,
+  every existing table and historical sections are unchanged.
+  Add only the supplied Task4 C2 observation alongside frozen A1/B1/C1 passages.
+  Budget readout `36362019549`, attempt 1, job `108740926194`, completed its
+  read at `2026-09-28T00:25:40Z`; the job succeeded at
+  `2026-09-28T00:25:42Z` on the same observer. C2 records **6 durable
+  admissions**, **5 confirmed native resumes** and **900.3586511611938 seconds**
+  of retry backoff (about **15.01 minutes**), not HTTP/model-request or success
+  counts, exact uncapped elapsed time or all recovery/downtime. Against original
+  readout `36319348118`, every original projection field matches except
+  `observer_source_sha`; the only new key is `inference_budget_snapshot`.
+  Its score remains **64.33% included / 51.70% full**, with **28.95/45** included
+  points and **9 excluded items / 11 maximum points**; accounting and proof
+  fields are unchanged. Both C1 and C2 now have observed budgets, but two
+  repetitions of one task do not identify a feedback effect, model superiority,
+  a service-error cause or a retention-only benefit. Missing prices, unread
+  exclusion IDs/causes, judge calibration, source/epoch changes and joint A/B
+  retry-policy and retention changes remain limits. Nothing is repriced or
+  regraded; no inference, grading, regrading, repetition or original cell is
+  added. Scoped C2 literal/semantic and protected copyediting checks passed;
+  A1/B1/C1 passages, all 24 outcome rows, every table and history are preserved.
+  Add only the supplied Task4 B2 observation alongside frozen A1/B1/C1/C2
+  passages. Budget readout `36363889837`, attempt 1, job `108746339870`,
+  completed its read at `2026-09-28T00:56:26Z`; the job succeeded at
+  `2026-09-28T00:56:28Z` on the same observer. B2 records **6 durable
+  admissions**, **5 confirmed native resumes** and **900.3099925518036 seconds**
+  of retry backoff (about **15.01 minutes**). Admissions are not HTTP/model
+  calls or successful attempts; backoff is not all recovery/downtime, and the
+  snapshot does not give exact uncapped elapsed time. Against original readout
+  `36319579609`, every original field matches except `observer_source_sha`;
+  only `inference_budget_snapshot` was added. Its score remains **67.00%
+  included / 53.84% full**, with **30.15/45** included points and **9 excluded
+  items / 11 maximum points**; accounting and proof fields are unchanged.
+  B2 and C2 each record **6 admissions / 5 resumes / about 15.01 minutes**
+  of backoff, with full scores of **53.84%** and **51.70%**, respectively.
+  The first-repeat B1/C1 backoff difference is not repeated in the second
+  pair. These are descriptive observations only, not statistically established
+  feedback effects, superiority, service-error causes or retention-only proof.
+  Existing `NULL` failure grades are not zero; missing prices, unread exclusion
+  IDs/causes, source/epoch changes, judge calibration and joint A/B retry-policy
+  and retention changes remain limits. No complete costs are inferred, and no
+  inference, grading, regrading, repetition or original cell is added. Scoped
+  B2 literal/semantic and protected copyediting checks passed; A1/B1/C1/C2
+  passages, all 24 outcome rows, every table and history are preserved.
+  Complete the bundle with Task4 A2 model-free budget readout `36365781987`,
+  attempt 1, job `108751786517`: the actual read completed at
+  `2026-09-28T01:25:40Z`; the job succeeded at `2026-09-28T01:25:43Z` on
+  the same observer. A2 records **4 durable admissions**, **0 confirmed native
+  resumes**, **420.10989904403687 seconds** of retry backoff and
+  **10222.363258361816 seconds** remaining. Against original readout
+  `36326578241`, every original field matches except `observer_source_sha`;
+  only `inference_budget_snapshot` was added. UNGRADED, no deliverable, score
+  `NULL` and partial accounting remain unchanged; `NULL` is not zero.
+  The report adds one exact-value six-row summary in A1/B1/C1/C2/B2/A2 order.
+  All six snapshots have `total_seconds=10800` and `missing={}`. The leader's
+  `project5-task4-budget-evidence-complete-1021.json` has supplied SHA-256
+  `724f9df1c9d23698e25775118a545b363f3b6a1f6d3d9d93d7b84690742210bf`;
+  it is leader-local, not a claimed worktree file. The scoped reconciliation
+  passed for all 25 checked A2 literals and six ordered summary rows; the
+  protected copyediting gate passed without warnings. The five earlier
+  passages, all 24 outcome rows, every pre-existing table and history remain
+  byte-identical. These are re-observations of historical cells, not new
+  experiment runs, inference, grades, repetitions or original cells. In this
+  one Task4 sample, A1/A2 ended after **4 admissions / no resume**, without
+  deliverables and with substantial remaining snapshot budget; B/C made
+  **6–12 admissions / 5–11 resumes** with deliverables. This is an observed
+  association. It does not show that the four-attempt cap caused failure,
+  isolate a retention-only effect, establish whole-pilot success or
+  demonstrate model/feedback superiority. The second B/C pair records the
+  same **6 admissions / 5 resumes / about 15 minutes** of retry backoff;
+  two repeats and changing service errors do not establish causality.
+  Exact uncapped elapsed, all recovery/downtime, complete costs, exclusion
+  causes/item overlap and independent judge calibration remain unestablished;
+  missing prices, source/epoch history and A/B retry-plus-retention confounding
+  remain limits.
+  Reviewed code head `b5bb98736db2c6a3570756fddcaed477042d2f10`, review
+  `5332384590` and all **10** passing checks are leader-supplied facts; no
+  tests or CI queries ran for this draft. The full catalog was checked once;
+  `experiment-report-en` followed by protected `im-not-ai-en` preserved the
+  fixed measurement meanings and evidence limits. No new design or UI skill
+  applies. Task4 budget evidence is complete, not the whole card; the other
+  **18** epoch04 budget snapshots remain unobserved, not zero or `not_recorded`.
+  Prepare one combined three-file documentation commit, one ordinary push
+  and one new draft PR for leader report review and normal checks. No future
+  merge facts are asserted. No tests/builds, live readout, model/HF/OIDC/Azure
+  calls, CI polling, manual reruns or new 30/220-task expansion are authorized.
+  Runtime, tests, configs, workflows, main, the merged branch and preserved
+  checkout stay unchanged; Project and merge decisions remain with the leader.
+
+- Prior Task2 CI correction (historical entry): correct only Task2 B1's final observed-read subset and equality expectations
   in PR693. Successful non-plan readouts expect the unchanged `controls` plus
   only the exact selected `prefix/step2_inference_results.json`; plan/refusal
   paths remain control-only. Binding-time result denial, moving-ref metadata
