@@ -43,6 +43,47 @@ class TaskDeadlineExhausted(TimeoutError):
     """No time remains for another provider call."""
 
 
+def _native_workspace_layout(binding: dict) -> tuple[Path, Path, Path, Path, tuple[str, ...]]:
+    """Parse host metadata without treating missing directories as usable."""
+    from core.codex_runtime_config import resolve_run_root_base
+    from core.hf_publication import _assert_no_symlink_ancestors
+
+    try:
+        if (type(binding) is not dict or set(binding) != {
+            "root", "directories", "staged_reference_names",
+        } or type(binding["root"]) is not str
+                or not Path(binding["root"]).is_absolute()
+                or type(binding["directories"]) is not dict
+                or set(binding["directories"]) != {"root", "workspace", "codex_home", "home"}
+                or any(type(item) is not dict or set(item) != {"device", "inode"}
+                       or any(type(value) is not int or value < 0 for value in item.values())
+                       for item in binding["directories"].values())
+                or type(binding["staged_reference_names"]) is not list
+                or any(type(name) is not str or Path(name).name != name or name in {"", ".", ".."}
+                       for name in binding["staged_reference_names"])
+                or len(set(binding["staged_reference_names"])) != len(binding["staged_reference_names"])):
+            raise ValueError("invalid retained layout")
+        root = _assert_no_symlink_ancestors(Path(binding["root"]))
+        if root.parent != resolve_run_root_base().absolute():
+            raise ValueError("different run root")
+        return (root, root / "workspace", root / "codex_home", root / "home",
+                tuple(binding["staged_reference_names"]))
+    except (KeyError, TypeError, OSError, ValueError):
+        raise TaskDeadlineRefused("native workspace ownership binding is invalid") from None
+
+
+def _require_native_workspace_removed(binding: dict) -> tuple[Path, Path, Path, Path, tuple[str, ...]]:
+    """Only a retired bundle may be absent; it must not reappear or be linked."""
+    layout = _native_workspace_layout(binding)
+    try:
+        layout[0].lstat()
+    except FileNotFoundError:
+        return layout
+    except OSError:
+        pass
+    raise TaskDeadlineRefused("retired native workspace is still present or unsafe")
+
+
 @dataclass(frozen=True)
 class CodexTaskDeadlineControl:
     """Fixed legacy policies or the separately identified retention diagnostic."""
@@ -573,13 +614,11 @@ class CodexTaskDeadline:
 
     def retire_fresh_bundle(self, expected: dict) -> None:
         """Commit retirement only after exact owned cleanup; interrupted cleanup refuses."""
-        from core.codex_runner import CodexWorkspace
-
         data, cell, _ = self._state()
         if not self.fresh_bundle or cell["continuation"] != expected:
             raise TaskDeadlineRefused("fresh retirement binding changed")
         _require_fresh_recovery(expected)
-        CodexWorkspace.require_removed(expected["workspace"])
+        _require_native_workspace_removed(expected["workspace"])
         cell["retired_continuations"].append(expected)
         cell["continuation"] = None
         self.store._write(data)

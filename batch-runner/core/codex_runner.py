@@ -64,6 +64,7 @@ from core.codex_task_deadline import (
     CodexTaskDeadline, CodexTaskDeadlineStore,
     TaskDeadlineExhausted, TaskDeadlineRefused,
     _digest as _deadline_identity_digest,
+    _native_workspace_layout, _require_native_workspace_removed,
 )
 from core.cost_receipts import STAGE_GENERATION, RETRY_NONE, make_call_id
 from core.execution_envelope_observed import (
@@ -400,30 +401,7 @@ class CodexWorkspace:
     @classmethod
     def _bound_layout(cls, binding: dict) -> "CodexWorkspace":
         """Parse host metadata without treating missing directories as usable."""
-        from core.hf_publication import _assert_no_symlink_ancestors
-
-        try:
-            if (type(binding) is not dict or set(binding) != {
-                "root", "directories", "staged_reference_names",
-            } or type(binding["root"]) is not str
-                    or not Path(binding["root"]).is_absolute()
-                    or type(binding["directories"]) is not dict
-                    or set(binding["directories"]) != {"root", "workspace", "codex_home", "home"}
-                    or any(type(item) is not dict or set(item) != {"device", "inode"}
-                           or any(type(value) is not int or value < 0 for value in item.values())
-                           for item in binding["directories"].values())
-                    or type(binding["staged_reference_names"]) is not list
-                    or any(type(name) is not str or Path(name).name != name or name in {"", ".", ".."}
-                           for name in binding["staged_reference_names"])
-                    or len(set(binding["staged_reference_names"])) != len(binding["staged_reference_names"])):
-                raise ValueError("invalid retained layout")
-            root = _assert_no_symlink_ancestors(Path(binding["root"]))
-            if root.parent != resolve_run_root_base().absolute():
-                raise ValueError("different run root")
-            return cls(root, root / "workspace", root / "codex_home", root / "home",
-                       tuple(binding["staged_reference_names"]))
-        except (KeyError, TypeError, OSError, ValueError):
-            raise TaskDeadlineRefused("native workspace ownership binding is invalid") from None
+        return cls(*_native_workspace_layout(binding))
 
     @classmethod
     def restore(cls, binding: dict) -> "CodexWorkspace":
@@ -439,14 +417,7 @@ class CodexWorkspace:
     @classmethod
     def require_removed(cls, binding: dict) -> "CodexWorkspace":
         """Only a retired bundle may be absent; it must not reappear or be linked."""
-        workspace = cls._bound_layout(binding)
-        try:
-            workspace.root.lstat()
-        except FileNotFoundError:
-            return workspace
-        except OSError:
-            pass
-        raise TaskDeadlineRefused("retired native workspace is still present or unsafe")
+        return cls(*_require_native_workspace_removed(binding))
 
     @classmethod
     def remove_owned_bundle(cls, binding: dict) -> None:
