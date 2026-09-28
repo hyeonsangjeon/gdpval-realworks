@@ -13,6 +13,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Complete the [Task5 budget-observation report](tasks/codex_budget_pilot/REPORT.md#task5-budget-observations-a1-b1-c1-c2-b2-and-a2)
+  with all six leader-verified snapshots in original cell order. Final A2
+  readout `36376002130`, attempt 1, job `108781859651`, compares with original
+  `36337865696` and uses observer `81c822374674fdcad2a53ebf9fd9435b97182be4`.
+  B1/C1 retain their older observer
+  `8e188db9cb4e937f33ba8723d88ffd2b52b359cc`.
+  Task4 and Task5 each have six observed budgets, covering 12 of 24 epoch04
+  cells; the remaining 12 Task2/Task3 snapshots are unobserved here, not zero
+  or `not_recorded`. No Task5 budget observation is pending. Original grades,
+  partial accounting and proof fields are unchanged. Exact bindings and the
+  leader-local bundle reference/SHA-256 remain in the report; no local copy
+  or independent fetch of that bundle is claimed.
+  Final A2/six-row reconciliation passed 46 scoped checks and protected
+  copyediting. Earlier B1/C1 55-check, C2 40-check and A1/B2 58-check results
+  remain separate. All 24 outcome rows, prior five Task5 evidence passages,
+  pre-existing table bytes, Task4 evidence and history are preserved; only
+  the final A2 row completes the accepted Task5 table. Reviewed report head
+  `36fc0caff9c1dadf344abe219e8fcd972b71eeb0`, review `5333361607` and all
+  nine passing checks are leader-supplied provenance, not new validation.
+  Only the report and two current records change. One ordinary owner-account
+  push and one draft PR are authorized; the new report head requires leader
+  review and normal checks. No future merge facts are asserted. No tests,
+  builds or live observation queries ran, and no grade or cost was recomputed.
+  This completes Task5 budget evidence only, not the whole card; no new trial,
+  causal quality/feedback/retention claim or complete bill is asserted.
+
+### Prior entries (historical)
+
 - Finalize Task4 budget evidence with all six leader-verified snapshots
   (6 of 24 epoch04 cells); no Task4 snapshot remains pending. The first
   retained budget observation is for existing Task4 B1. Read-only run
