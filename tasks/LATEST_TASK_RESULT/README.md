@@ -1,5 +1,169 @@
 # Latest task result
 
+## PROJECT5-STEP2-OPTIONAL-RUNNER
+
+The single authorized three-node invocation passed at tested HEAD
+`7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27`: **3 passed in 49.11s**, exit 0.
+Step2 now allows a legacy execute-only adapter with no `runner` to reach
+`execute`. Explicit fresh/accounting requests without the required runner/store
+capabilities refuse before execution through `TaskDeadlineRefused` or an error
+row categorized as `task_deadline_state_refused`.
+
+The implementation commit changes `batch-runner/step2_run_inference.py` and two
+test files. Step2 forwards its already normalized `CodexTaskDeadlineControl`
+to the task helper, probes optional runner/store capabilities safely, and requires
+matching control and callable accounting/store methods when requested. It adds
+no configuration flag or new policy. The fresh reconciliation/output-binding
+sequence and existing retry, cleanup, timing and permission behavior are retained.
+`batch-runner/tests/test_codex_native_resume.py` adds two direct regressions:
+the runner-less adapter is called once, while missing capabilities for explicit
+fresh/accounting requests produce the expected refusal with zero executor or
+reconciliation calls. The existing assertion in
+`batch-runner/tests/test_codex_budget_pilot_task4_failed_grading.py` now includes
+only the synthetic boundary's returned status, error and category if it fails;
+its condition is unchanged and it exposes no task content or captured output.
+
+One pytest invocation ran from the worktree's `batch-runner` directory:
+
+```bash
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider 'tests/test_codex_native_resume.py::test_step2_execute_only_adapter_does_not_require_runner' 'tests/test_codex_native_resume.py::test_step2_explicit_fresh_or_accounting_requires_runner_capabilities' 'tests/test_codex_budget_pilot_budget_snapshot_readout.py::test_selected_budget_snapshot[recorded-ordinary]'
+```
+
+All three selected nodes passed. No prior three passing frozen-source
+representatives, native 42 plus 5 cases, full file or suite was rerun. These
+remain five separate observations, not one four-pass or 47-pass invocation:
+
+| Tested source | Selected scope | Actual result |
+| --- | --- | --- |
+| `b1854e5b50eda9c25c9db5bc2627acf35022e70d` | Original 47-case native-resume selector | 5 failed, 42 passed in 334.92s; exit 1 |
+| `91ffae589b240dd9d31978af0dd2cf19532e96c7` | Only the five failed native-resume nodes | 5 passed in 24.02s; exit 0 |
+| `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` | Four frozen-source fixture representatives | 3 passed, 1 setup error in 93.52s; exit 1 |
+| `6665c183c215aa6594622eb9fe92ca55633c7013` | Only the budget snapshot `recorded-ordinary` node | 1 setup error in 8.44s; exit 1 |
+| `7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27` | Two new Step2 regressions and the budget snapshot `recorded-ordinary` node | 3 passed in 49.11s; exit 0 |
+
+Production now intentionally differs from `b1854e5b50eda9c25c9db5bc2627acf35022e70d`
+only in Step2's optional capability probe and normalized-control forwarding.
+Static byte comparisons confirm that `batch-runner/core/codex_runner.py` and
+`batch-runner/core/codex_task_deadline.py` remain unchanged, as do all other
+production files. The legitimate root/registration fixture repair in
+`batch-runner/tests/test_codex_budget_pilot_budget_snapshot_readout.py` remains
+byte-identical to `6665c183c215aa6594622eb9fe92ca55633c7013`. Frozen source pins,
+registrations, validators, workflows, graders and existing time, permission,
+ownership and source guards are unchanged. This historical fixture pass does
+not authorize the modified runtime for the frozen 30-cell campaign.
+
+The same branch and worktree remain `b/codex-retention-runtime-20260928` and
+`/ai-work/copilot/worktrees/codex-retention-runtime-20260928`. Reviewed base
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has leader-reviewed tree
+`4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`. This approval is
+provenance, not review of the new implementation. Only `CHANGELOG.md` and this
+record change after the passing invocation. The prior uncommitted records and
+all earlier history are preserved below. Protected `im-not-ai-en` applies only
+to the new current passages, keeping exact identities, results and limits intact.
+
+Publication is limited to one ordinary owner-account push to existing draft
+[PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698), whose last
+published head before this update was `bb09ee9838927b4f3e2de0a1abdad2094ed0c8d5`.
+No new PR, merge or CI polling is part of this handoff. The last supplied CI run
+`36436421607` had nine failing backend checks. The three selected passes do not
+establish that every distinct CI cause is resolved, and no new-head CI result
+is claimed. Full source review and new-head CI remain required. The experimental
+campaign remains unregistered and live-unverified; no frozen campaign source
+approval or launch authority is added. No live model, readout, observation,
+Azure, OIDC, HF or paid execution ran. Existing design and causal limits remain.
+
+The following sections preserve earlier handoffs, including the uncommitted
+failed-validation record. Their stop, publication and byte-equivalence statements
+describe their historical states, before this separately authorized Step2 change.
+
+## PROJECT5-FIXTURE-PATH-CONSISTENCY
+
+The single authorized node failed during setup at fixture correction HEAD
+`6665c183c215aa6594622eb9fe92ca55633c7013`: **1 setup error in 8.44s**, exit 1.
+Code work and testing stopped. The fixture commits remain local, and these two
+completion records are updated locally after the failure. Draft
+[PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698) remains published
+at `bb09ee9838927b4f3e2de0a1abdad2094ed0c8d5`; nothing was pushed in this task.
+
+Only `batch-runner/tests/test_codex_budget_pilot_budget_snapshot_readout.py`
+changed in the new fixture commit. Its existing `historical_budget_source`
+fixture captures the legitimate relative paths of `pilot.REGISTRATION` and
+`ci.REGISTRATION` before rebinding `pilot.ROOT`. It checks both archived files
+against the original registration bytes, then binds both registration paths
+under the same `approved_pilot_source` as `pilot.ROOT` and `comparison.ROOT`.
+The shared fixture still materializes genuine local Git data from immutable
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce`. No fallback, outside-root exception,
+policy substitution or production change was added.
+
+These are four separate observations, not one four-pass or 47-pass invocation:
+
+| Tested source | Selected scope | Actual result |
+| --- | --- | --- |
+| `b1854e5b50eda9c25c9db5bc2627acf35022e70d` | Original 47-case native-resume selector | 5 failed, 42 passed in 334.92s; exit 1 |
+| `91ffae589b240dd9d31978af0dd2cf19532e96c7` | Only the five failed native-resume nodes | 5 passed in 24.02s; exit 0 |
+| `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` | Four frozen-source fixture representatives | 3 passed, 1 setup error in 93.52s; exit 1 |
+| `6665c183c215aa6594622eb9fe92ca55633c7013` | Only the budget snapshot `recorded-ordinary` node | 1 setup error in 8.44s; exit 1 |
+
+The four-node invocation at `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` passed
+`tests/test_gpt56_pilot_wire_receipt.py::test_five_task_bundle_real_upstream_verification_ready_last_and_no_live_clear`,
+`tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight[current]`
+and `tests/test_gpt54_comparison_preflight.py::test_active_grader_template_source_comparison[selector_source_drift]`.
+The budget snapshot node below had a setup error because the real-worktree
+registration path was outside the rebound immutable source root. Those three
+passing representatives and the earlier native 42 plus 5 cases were not rerun.
+
+The only new pytest invocation ran from the worktree's `batch-runner` directory:
+
+```bash
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider 'tests/test_codex_budget_pilot_budget_snapshot_readout.py::test_selected_budget_snapshot[recorded-ordinary]'
+```
+
+It stopped at this exact setup traceback:
+
+```text
+tests/test_codex_budget_pilot_budget_snapshot_readout.py:81: in history
+    shared = next(source)
+tests/test_codex_budget_pilot_task4_a1_ungraded_readout.py:59: in history
+    error_row, native_ledger = failed._failed_row(prototype)
+tests/test_codex_budget_pilot_task4_failed_grading.py:85: in _failed_row
+    assert len(produced) == 1 and produced[0]["success"] is False
+E   assert (0 == 1)
+E    +  where 0 = len([])
+```
+
+The cause of the empty `produced` list is not established. No further fixture
+inspection, repair or retry followed. Static comparisons before the invocation
+found no production-file differences from `b1854e5b50eda9c25c9db5bc2627acf35022e70d`,
+including `batch-runner/core/codex_task_deadline.py`,
+`batch-runner/core/codex_runner.py` and `batch-runner/step2_run_inference.py`.
+Both `codex_external_budget_pilot.yaml` and
+`codex_external_budget_ci_pilot_epoch04.yaml` remain byte-identical to the
+approved baseline. The frozen 30-cell registration, source-pin refusals,
+relative-path ownership checks, identity validation and runtime guards remain
+unchanged. No source pins, validators, workflows, graders, production readout
+code, skip markers or timeouts changed.
+
+The branch and worktree remain `b/codex-retention-runtime-20260928` and
+`/ai-work/copilot/worktrees/codex-retention-runtime-20260928`. Reviewed base
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has leader-reviewed tree
+`4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`; its earlier
+approval does not validate the modified runtime. Protected `im-not-ai-en`
+applies only to these new current passages and preserves the four results,
+exact source identities and unresolved limits. Earlier record text is unchanged.
+
+The last supplied CI run `36436421607` had nine failing backend checks. No CI
+state was refreshed here, and no new-head CI result is claimed. The known
+frozen-source fixture corrections do not establish that every CI cause is
+resolved. This setup failure, other causes not yet demonstrated fixed, full
+source review and new-head CI remain outstanding. Historical fixture success
+does not authorize the modified runtime for the frozen 30-cell campaign.
+The separate experimental campaign remains unregistered and live-unverified.
+No live model, observation, readout, Azure, OIDC, HF or paid execution ran, and no
+campaign, credential or launch authority is added.
+
+The following sections preserve earlier handoffs. Their validation, stop and
+publication statements describe their historical states, not this result.
+
 ## PROJECT5-RETENTION-FAILED-CASES
 
 The five authorized fixture/assertion repairs passed at correction HEAD

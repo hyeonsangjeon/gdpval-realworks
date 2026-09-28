@@ -13,6 +13,66 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Preserve Step2 compatibility with execute-only adapters that have no `runner`.
+  Optional capability probes use the existing normalized deadline control;
+  explicit fresh/accounting requests still refuse missing runner/store
+  capabilities before execution. Tested HEAD
+  `7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27` passed the one authorized combined
+  invocation: **3 passed in 49.11s**, exit 0. It selected the two new direct
+  regressions and only the existing budget snapshot `recorded-ordinary` node.
+  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-step2-optional-runner)
+  records the exact command, scope and separate results. Earlier evidence remains
+  unchanged: `b1854e5b50eda9c25c9db5bc2627acf35022e70d` had **5 failed, 42 passed
+  in 334.92s**, exit 1; `91ffae589b240dd9d31978af0dd2cf19532e96c7` had **5 passed
+  in 24.02s**, exit 0; `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` had **3 passed,
+  1 setup error in 93.52s**, exit 1; and
+  `6665c183c215aa6594622eb9fe92ca55633c7013` had **1 setup error in 8.44s**, exit 1.
+  No combined four-pass or 47-pass invocation is claimed. Production now differs
+  from `b1854e5b50eda9c25c9db5bc2627acf35022e70d` only in the authorized Step2
+  capability probe and normalized-control forwarding. The runner and deadline
+  store remain byte-identical, as does the legitimate `6665` fixture path repair.
+  Frozen registrations, source-pin validators and runtime guards are unchanged.
+  The synthetic failed-row assertion gains only a status/error/category diagnostic.
+  Reviewed base `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has reviewed tree
+  `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`.
+  This handoff is for one ordinary push to existing draft
+  [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698), not a new PR.
+  The last supplied CI run `36436421607` had nine failing backend checks; this
+  focused pass does not establish that every CI cause is resolved. Full source
+  review and new-head CI remain required. The experimental campaign remains
+  unregistered and live-unverified. No live operation or CI polling ran.
+
+### Prior fixture path-consistency validation (historical)
+
+- Repair only the registration-path bindings in the historical budget fixture.
+  Before rebinding its source root, it derives both legitimate registration
+  paths and checks their bytes against the genuine immutable
+  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` archive. Fixture correction HEAD
+  `6665c183c215aa6594622eb9fe92ca55633c7013` produced **1 setup error in 8.44s**,
+  exit 1, in the one authorized `recorded-ordinary` node. Setup reached
+  `test_codex_budget_pilot_task4_failed_grading.py:85`, where `produced` was empty.
+  No further code change, investigation, test invocation or push followed.
+  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-fixture-path-consistency)
+  records the exact command and traceback. Earlier observations remain separate:
+  `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` had **3 passed, 1 setup error in
+  93.52s**, exit 1; `b1854e5b50eda9c25c9db5bc2627acf35022e70d` had **5 failed,
+  42 passed in 334.92s**, exit 1; and
+  `91ffae589b240dd9d31978af0dd2cf19532e96c7` had **5 passed in 24.02s**, exit 0.
+  No combined four-pass or 47-pass invocation is claimed. Static comparisons
+  before this test found no production changes from `b1854e5b50eda9c25c9db5bc2627acf35022e70d`
+  and no registration changes from the approved baseline. Reviewed base
+  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` retains reviewed tree
+  `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`.
+  Draft [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698) remains
+  published at `bb09ee9838927b4f3e2de0a1abdad2094ed0c8d5`; these fixture corrections
+  and the updated records stay local. The last supplied CI run `36436421607`
+  had nine failing backend checks. This setup failure, other CI causes not yet
+  demonstrated fixed, full source review and new-head CI remain open. Historical
+  fixture success would not authorize the modified runtime for the frozen
+  30-cell campaign. No live operation, campaign launch or CI polling ran.
+
+### Prior retention fixture/assertion repair (historical)
+
 - Finish the authorized fixture/assertion repair for the
   [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability).
   Correction HEAD `91ffae589b240dd9d31978af0dd2cf19532e96c7` changes only the
