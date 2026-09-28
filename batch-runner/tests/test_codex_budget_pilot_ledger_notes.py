@@ -59,8 +59,9 @@ def produce(cell, tmp_path, monkeypatch, branch="success", *, abandon_note=None)
         clock = SimpleNamespace(now=1_000_000.0)
         if branch not in {"turn_not_started", "override"}:
             # Real private deadline persistence, outside the agent-writable /tmp.
+            # Use the stable worktree parent, not the historical source archive.
             host = Path(resources.enter_context(tempfile.TemporaryDirectory(
-                prefix=".ledger-note-deadline-", dir=pilot.ROOT,
+                prefix=".ledger-note-deadline-", dir=Path(__file__).resolve().parents[3],
             )))
             monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(host / "agent-work"))
             store = CodexTaskDeadlineStore(

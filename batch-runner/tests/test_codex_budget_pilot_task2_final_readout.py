@@ -59,6 +59,8 @@ def _selected(case, suffix, tmp_path, monkeypatch):
     return current
 
 
+# Materialize immutable source before the function-scoped subprocess guard.
+@pytest.mark.usefixtures("historical_budget_source")
 @pytest.mark.parametrize("suffix,scenario", [
     ("C_r1", "graded"), ("C_r2", "graded"), ("C_r1", "partial"), ("C_r2", "failed"),
     ("C_r1", "ungraded"), ("C_r2", "missing_ledger"), ("C_r1", "partial_cost"),
