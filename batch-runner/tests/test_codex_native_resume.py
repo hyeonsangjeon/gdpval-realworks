@@ -228,6 +228,73 @@ def executor_for(store, ledger=None, settings=SETTINGS):
 RATE = "HTTP 429 Too Many Requests"
 
 
+def test_step2_execute_only_adapter_does_not_require_runner(tmp_path):
+    calls = []
+
+    def execute_only(**kwargs):
+        calls.append(kwargs)
+        return {"success": True, "text": "synthetic adapter result", "files": []}
+
+    adapter = SimpleNamespace(execute=execute_only)
+    assert not hasattr(adapter, "runner")
+    row = execute(adapter, tmp_path)
+    assert len(calls) == 1 and calls[0]["task_id"] == TASK
+    assert row["status"] == "success" and row["content"] == "synthetic adapter result"
+    assert row["deliverable_files"] == [] and "error" not in row
+
+
+def test_step2_explicit_fresh_or_accounting_requires_runner_capabilities(host):
+    control = validate_deadline_execution({
+        "mode": "codex_foundry", "timeout": ATTEMPT_SECONDS, "max_retries": 3,
+        "codex": {"task_deadline": {
+            "condition": RETENTION_BUNDLE_CONDITION, "repetition": 1, "retention_bundle": "fresh",
+        }},
+    }, CONDITION)
+    store = store_at(host, Clock(), control=control)
+    calls = []
+
+    def forbidden_execute(**kwargs):
+        calls.append("execute")
+        raise AssertionError("missing capability reached execute")
+
+    def forbidden_reconcile(**kwargs):
+        calls.append("reconcile")
+        raise AssertionError("missing capability reached reconciliation")
+
+    adapters = (
+        SimpleNamespace(execute=forbidden_execute),
+        SimpleNamespace(execute=forbidden_execute, runner=SimpleNamespace(
+            reconcile_task_accounting=forbidden_reconcile)),
+        SimpleNamespace(execute=forbidden_execute, runner=SimpleNamespace(task_deadline_store=store)),
+        SimpleNamespace(execute=forbidden_execute, runner=SimpleNamespace(
+            task_deadline_store=SimpleNamespace(control=control),
+            reconcile_task_accounting=forbidden_reconcile)),
+    )
+    try:
+        for adapter in adapters:
+            def invoke(**options):
+                return step2._execute_single_task(
+                    {"task_id": TASK, "instruction": "Synthetic capability refusal.", "reference_files": []},
+                    CONDITION, adapter, "codex_foundry", None, SETTINGS.model,
+                    run_id="offline-cell-run", condition_name="condition_a", upload_root=host / "upload",
+                    **options,
+                )
+
+            row = invoke(deadline_control=control)
+            assert row["status"] == "error" and row["observability"]["error_category"] == STATE_REFUSED
+            assert row["error"] == "fresh retention requires the matching budgeted Codex runner"
+            assert row["deliverable_files"] == [] and calls == []
+            for options in ({}, {"deadline_control": control}):
+                with pytest.raises(TaskDeadlineRefused, match=(
+                    "^host accounting requires the budgeted Codex path without preprocessing$"
+                )):
+                    invoke(accounting_only=True, **options)
+                assert calls == []
+        assert not (host / "upload").exists()
+    finally:
+        store.close()
+
+
 @pytest.mark.parametrize("condition,scenario", [
     ("B", "original"), ("C", "original"), ("A", "original_cap"),
     ("keep", "registration"),

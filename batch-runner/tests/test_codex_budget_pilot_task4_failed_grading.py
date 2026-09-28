@@ -82,7 +82,12 @@ def _failed_row(context):
                     condition_name="condition_a", upload_root=host / "upload")
             finally:
                 runner.close()
-            assert len(produced) == 1 and produced[0]["success"] is False
+            # Only the synthetic boundary's status/error/category, never task
+            # content, references, accounting payloads or captured output.
+            assert len(produced) == 1 and produced[0]["success"] is False, {
+                "step2_status": row.get("status"), "step2_error": row.get("error"),
+                "step2_error_category": (row.get("observability") or {}).get("error_category"),
+            }
             assert row["status"] == "error" and row["deliverable_files"] == []
             row["problem_solving_cost"] = ledger.receipt_for(context.cell["task_id"], BUCKET_PROBLEM_SOLVING).as_dict()
             ledger_path = host / "synthetic.jsonl"
