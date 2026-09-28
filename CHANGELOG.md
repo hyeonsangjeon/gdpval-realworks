@@ -13,210 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Remove the execution-layer import from deadline retirement. The existing
-  deadline module now owns the shared native workspace layout and removed-root
-  checks used by `CodexWorkspace` and `retire_fresh_bundle`. Tested HEAD
-  `1fa84f2b2cff4d51a323aabd2051130fd8b119c8` passed the single authorized offline
-  invocation: **3 passed in 61.92s**, exit 0. It selected the grading import
-  guard, `fresh-retry_restore` and `fresh-retired_reappears`; the
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-metadata-import-boundary)
-  records the exact command. Only `core/codex_task_deadline.py` and
-  `core/codex_runner.py` change in production; all other production bytes remain
-  identical to `a2f16328946c71c2f3511d3c85cb411e57af1d8a`. Layout, inode,
-  parent, symlink, absence, reappeared-root and cleanup-interruption checks
-  retain their semantics. No test, AST walker, binary allowlist, image,
-  dependency, workflow, frozen registration or source pin changed. The prior
-  stop record, complete 54-module failed-node inventory and separate
-  SHA-specific results remain below. Legacy fixture completion is still
-  needed for the leader-reported `pytest`, `pilot-contracts` and
-  `budget-readout` failures; this local pass is not a CI result. Reviewed
-  baseline `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` remains fixed, and leader
-  review `5342606812` was conditional on CI. New-head delta review and CI
-  remain required for existing draft
+- Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
+  identity-bound keep/fresh modes use B's existing recovery policy and one
+  durable 10,800-second deadline without a fixed admission cap or C feedback.
+  Fresh thread/workspace/HOME/CODEX_HOME state and output selection preserve
+  host accounting and fail-closed ownership checks. Legacy A/B/C behavior,
+  frozen 30-cell registrations and original outcomes remain unchanged; the
+  original campaign compiler does not admit the new controls.
+- Preserve execute-only Step2 adapters through optional runner/store probes,
+  while explicit fresh/accounting requests still require their capabilities.
+  Share native workspace layout and removed-root checks in deadline metadata
+  without a runner import from the grading path. Keep permission, timing,
+  accounting, cleanup, source validation and the grading-image guard intact.
+- Use explicit historical-source fixtures backed by immutable
+  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`, including coherent plan/registration
+  paths, shared compilation/history lifetimes and direct `__wrapped__`
+  consumers. Grader-binding positives use that same tree. Current-source and
+  mutated-source refusals remain meaningful; historical fixture success does
+  not authorize the modified runtime for the old campaign. The latest local
+  correction changes 49 test files, with all production bytes and the image
+  guard frozen at `de3e0401b9c0ae9d2d142c25e14d1f4dab768383`.
+- Record the corrected eight-node invocation at
+  `3188e27a2eac24fd7ed3f3e074c9a088ad7d79e0`: **8 passed in 139.10s**, exit 0.
+  Only the approval-input selector's owning module changed; no code or fixture
+  edits were needed. The earlier attempt at the same SHA remains separate:
+  7 collected, 0 executed in 5.49s, exit 4, because the selector was not found.
+  The passing result permits one ordinary push to existing draft PR698. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-correct-test-owner)
+  contains the exact command/results, complete fixture-family scope, one
+  table of separate SHA-specific results and immutable links to prior handoffs
+  and the 54-module inventory. Leader review `5343801391` is conditional on CI;
+  new-HEAD delta review and CI remain required for draft
   [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
-  No legacy-fixture sweep, CI polling, merge, live operation or launch occurred.
-
-### Prior legacy-fixture boundary stop (historical)
-
-- Stop `PROJECT5-FINAL-LEGACY-FIXTURES` before fixture edits or a local pytest
-  invocation. Inventory of the three authorized logs from CI run `36458595611`
-  found a different safeguard failure in
-  `tests/test_grading_image.py::test_grading_path_shells_out_only_to_known_binaries`.
-  Its static import-closure scan reports `git` in
-  `batch-runner/core/agentic_authorization.py` and `docker` in
-  `batch-runner/core/sandbox_runner.py` outside `ALLOWED_SHELL_OUTS`.
-  This is not a source-pin refusal. No allowlist, source binding, production
-  code or test changed. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-final-legacy-fixtures)
-  records the exact diagnostic and complete failed-node/module inventory.
-  Local and published HEAD remain `a2f16328946c71c2f3511d3c85cb411e57af1d8a`.
-  There is no new tested HEAD or local test result; the previous
-  `3fdc5a95853619135d4165063392144eb6fea540` observation remains 8 passed in
-  26.06s, separate from every earlier result. Only these two current records
-  change locally; no commit or push is authorized by this stopped handoff.
-  Leader review `5342606812` is conditional on CI, not a failure waiver or
-  campaign approval. Resolution of the distinct shell-out guard, the remaining
-  fixture wiring, CI and subsequent delta review remain outstanding. No test
-  rerun, CI polling, live operation, merge or launch occurred.
-
-### Prior complete fixture-wiring validation (historical)
-
-- Complete explicit historical-source fixture wiring across the six comparison
-  modules and both pilot consumers identified in CI run `36455260095`.
-  Tested fixture HEAD `3fdc5a95853619135d4165063392144eb6fea540` passed the
-  single authorized invocation: **8 passed in 26.06s**, exit 0. Each exact
-  selector came from the two failed job logs; none was an earlier passing
-  representative. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-complete-fixture-wiring)
-  records the command, complete callsite inventory and separate SHA-specific
-  observations. The existing `conftest.py` now owns one non-autouse provider
-  each for historical comparison and Foundry source contexts, using genuine
-  immutable `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` bytes. Comparison tests
-  still assert the exact three current-source pin refusals before rebinding;
-  downstream plan and seed consumers retain coherent source lifetimes.
-  Twelve test files changed. All production bytes, including the Step2 fix,
-  remain identical to `d35029843ef902c71a6095ffe2b2f3709b3299e8`; frozen
-  registrations, YAML, workflows, validators, guards and business assertions
-  are unchanged. Earlier `b1854e5`, `91ffae5`, `6710299`, `6665c18`, `7bbe61f`
-  and `88b8a62` results remain separate in the historical records below.
-  Reviewed baseline `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` carries reviewed
-  tree `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`; it does
-  not approve the modified runtime. New-head CI and full source review of
-  existing draft [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698)
-  remain required. No full suite, CI rerun, polling or live execution occurred.
-  Historical fixture success adds no campaign or launch authority.
-
-### Prior remaining frozen-fixture validation (historical)
-
-- Bind the remaining proven historical-source fixtures to the existing immutable
-  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` archive. Tested fixture HEAD
-  `88b8a62b4b5f4802f6fc22c25b9348d78a931f65` passed the one authorized combined
-  invocation: **3 passed in 9.04s**, exit 0. It selected comparison input
-  `valid_r1`, retained grade readout `graded`, and the evidence gate's
-  `2026-09-20T03:00:00Z-library` case. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-remaining-frozen-fixtures)
-  records the exact command and all six separate validation observations.
-  Prior results remain distinct: `b1854e5` had 5 failed/42 passed in 334.92s;
-  `91ffae5` had 5 passed in 24.02s; `6710299` had 3 passed/1 setup error in
-  93.52s; `6665c18` had 1 setup error in 8.44s; and `7bbe61f` had 3 passed in
-  49.11s. No earlier passing selector was rerun or combined into this result.
-  The grade-readout module now owns the shared source context used by its direct
-  fixtures and the budget snapshot's `__wrapped__` consumers. Registration-byte
-  checks and the coherent root/registration bindings are preserved. Comparison
-  and evidence-intake fixtures use explicit, non-autouse source contexts; the
-  comparison still asserts the exact three modified-current-source refusals.
-  Bounded inspection traced the evidence-intake refusal to the same frozen
-  runtime hashes. All production bytes remain identical to
-  `bebcff243563a7ec852be3ec9f210da1e92f7814`, including the Step2 correction.
-  Leader-supplied CI run `36450978366` reported wire-contracts passing and the
-  three remaining failure paths addressed here; no CI state was queried.
-  The leader's Step2 review is partial, not whole-PR approval. This handoff is
-  for one ordinary push to existing draft
-  [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
-  New-head CI and full source review remain required. Frozen fixture success
-  does not authorize the modified runtime for the old 30-cell campaign.
-  No live operation, campaign launch, CI rerun or polling occurred.
-
-### Prior Step2 optional-runner validation (historical)
-
-- Preserve Step2 compatibility with execute-only adapters that have no `runner`.
-  Optional capability probes use the existing normalized deadline control;
-  explicit fresh/accounting requests still refuse missing runner/store
-  capabilities before execution. Tested HEAD
-  `7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27` passed the one authorized combined
-  invocation: **3 passed in 49.11s**, exit 0. It selected the two new direct
-  regressions and only the existing budget snapshot `recorded-ordinary` node.
-  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-step2-optional-runner)
-  records the exact command, scope and separate results. Earlier evidence remains
-  unchanged: `b1854e5b50eda9c25c9db5bc2627acf35022e70d` had **5 failed, 42 passed
-  in 334.92s**, exit 1; `91ffae589b240dd9d31978af0dd2cf19532e96c7` had **5 passed
-  in 24.02s**, exit 0; `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` had **3 passed,
-  1 setup error in 93.52s**, exit 1; and
-  `6665c183c215aa6594622eb9fe92ca55633c7013` had **1 setup error in 8.44s**, exit 1.
-  No combined four-pass or 47-pass invocation is claimed. Production now differs
-  from `b1854e5b50eda9c25c9db5bc2627acf35022e70d` only in the authorized Step2
-  capability probe and normalized-control forwarding. The runner and deadline
-  store remain byte-identical, as does the legitimate `6665` fixture path repair.
-  Frozen registrations, source-pin validators and runtime guards are unchanged.
-  The synthetic failed-row assertion gains only a status/error/category diagnostic.
-  Reviewed base `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has reviewed tree
-  `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`.
-  This handoff is for one ordinary push to existing draft
-  [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698), not a new PR.
-  The last supplied CI run `36436421607` had nine failing backend checks; this
-  focused pass does not establish that every CI cause is resolved. Full source
-  review and new-head CI remain required. The experimental campaign remains
-  unregistered and live-unverified. No live operation or CI polling ran.
-
-### Prior fixture path-consistency validation (historical)
-
-- Repair only the registration-path bindings in the historical budget fixture.
-  Before rebinding its source root, it derives both legitimate registration
-  paths and checks their bytes against the genuine immutable
-  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` archive. Fixture correction HEAD
-  `6665c183c215aa6594622eb9fe92ca55633c7013` produced **1 setup error in 8.44s**,
-  exit 1, in the one authorized `recorded-ordinary` node. Setup reached
-  `test_codex_budget_pilot_task4_failed_grading.py:85`, where `produced` was empty.
-  No further code change, investigation, test invocation or push followed.
-  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-fixture-path-consistency)
-  records the exact command and traceback. Earlier observations remain separate:
-  `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` had **3 passed, 1 setup error in
-  93.52s**, exit 1; `b1854e5b50eda9c25c9db5bc2627acf35022e70d` had **5 failed,
-  42 passed in 334.92s**, exit 1; and
-  `91ffae589b240dd9d31978af0dd2cf19532e96c7` had **5 passed in 24.02s**, exit 0.
-  No combined four-pass or 47-pass invocation is claimed. Static comparisons
-  before this test found no production changes from `b1854e5b50eda9c25c9db5bc2627acf35022e70d`
-  and no registration changes from the approved baseline. Reviewed base
-  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` retains reviewed tree
-  `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`.
-  Draft [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698) remains
-  published at `bb09ee9838927b4f3e2de0a1abdad2094ed0c8d5`; these fixture corrections
-  and the updated records stay local. The last supplied CI run `36436421607`
-  had nine failing backend checks. This setup failure, other CI causes not yet
-  demonstrated fixed, full source review and new-head CI remain open. Historical
-  fixture success would not authorize the modified runtime for the frozen
-  30-cell campaign. No live operation, campaign launch or CI polling ran.
-
-### Prior retention fixture/assertion repair (historical)
-
-- Finish the authorized fixture/assertion repair for the
-  [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability).
-  Correction HEAD `91ffae589b240dd9d31978af0dd2cf19532e96c7` changes only the
-  selected native-resume test. Its one five-node invocation passed **5 tests in
-  24.02s**, exit 0. The original **5 failed, 42 passed in 334.92s** at
-  `b1854e5b50eda9c25c9db5bc2627acf35022e70d` remains separate evidence; the
-  42 passing cases were not rerun, and no single 47-pass run is claimed.
-  The test now asserts the exact changed-source refusal, compiles the immutable
-  approved baseline with production helpers, and checks native waits separately
-  from bounded shutdown joins. All three runtime files remain byte-identical to
-  `b1854e5b50eda9c25c9db5bc2627acf35022e70d`; frozen pins, the 30-cell registration,
-  validators and runtime guards are unchanged. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-failed-cases)
-  records the exact command and both results. Reviewed base
-  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has reviewed tree
-  `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`.
-  New-head review, separate campaign registration and live authorization remain
-  outstanding. No live inference, grading, observation or CI polling ran.
-
-### Prior retention runtime validation (historical)
-
-- Add the local [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability)
-  with identity-bound keep/fresh modes, B's existing recovery policy, a durable
-  10,800-second deadline and fresh owned-state/output cleanup that preserves
-  host accounting. A/B/C mappings, frozen registrations and original results
-  remain unchanged. Implementation/test/documentation scope is the deadline
-  store, Codex runner, Step 2, the selected native-resume test and its README.
-  Tested HEAD `b1854e5b50eda9c25c9db5bc2627acf35022e70d` produced **5 failed,
-  42 passed in 334.92s** in the one authorized offline invocation. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-runtime)
-  records its exact command and failures: the frozen compiler's three changed
-  source-pin refusals and four join-list assertions that omit shutdown joins.
-  No pins or timing guards were loosened, and no code/test fix, rerun, push or
-  PR followed. Only these two completion records changed afterward and remain
-  uncommitted. Base `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has the
-  leader-reviewed tree `4445964f12cbbc085df7ab243d31fd1ee5968193`, review
-  `5337639288`; its prior passing checks do not validate this head. Follow-up
-  on the failures, exact-head review, separate campaign registration and live
-  authorization remain outstanding. No live inference, grading or observation
-  ran; no retention-benefit, complete-cost or whole-card-completion claim is made.
+  The capability remains unregistered and live-unverified, with no new
+  campaign, paid-run, merge or launch authority.
 
 ### Prior Task2 budget report (historical)
 
