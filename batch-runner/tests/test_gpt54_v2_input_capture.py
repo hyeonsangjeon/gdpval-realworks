@@ -73,6 +73,7 @@ def _record_conditions(linkage):
     return json.loads(scope["written"])["request_conditions"]
 
 
+@pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize("case", [
     "r1", "r2", "relative_argv", "new_workspace", "default_absent_and_null",
     "control_empty", "control_bool", "control_list", "control_extra", "control_version",

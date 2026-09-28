@@ -294,6 +294,7 @@ def _tree_snapshot(root):
     return result
 
 
+@pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize("case", [
     "identical", "relocated", "production_pins_reject_fixture",
     "missing_pin", "changed_pin", "loader_pin", "control_drift", "combined_plan_drift", "launch_flag",

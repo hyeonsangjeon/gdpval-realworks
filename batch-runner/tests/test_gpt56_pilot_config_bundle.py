@@ -45,7 +45,8 @@ def _fresh(files, parent, linked=False):
 
 
 @pytest.fixture
-def plan():
+def plan(historical_foundry_source):
+    assert pilot.ROOT == historical_foundry_source
     return pilot.load_plan(pilot.PLAN)
 
 

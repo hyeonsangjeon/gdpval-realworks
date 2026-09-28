@@ -14,7 +14,7 @@ import gpt56_foundry_evidence_intake as evidence
 import gpt56_sol_codex_pilot_preflight as pilot
 from .test_gpt56_foundry_evidence_intake import (
     AS_OF, OPTIONS, REVIEWED, _json, _offline, _parse_cache, _read, _seed,
-    _tree, _update_artifact, _update_intake, historical_foundry_source,
+    _tree, _update_artifact, _update_intake,
 )
 from .test_gpt56_sol_codex_pilot_preflight import offline_only
 

@@ -24,24 +24,6 @@ from gpt54_comparison_preflight import REQUIRED_SOURCES, ROOT, _canonical_json, 
 from .test_gpt54_v2_grading_input import test_v2_grading_input_is_bound_atomic_and_offline as _check_v2
 
 
-@pytest.fixture
-def historical_comparison_source(approved_pilot_source, monkeypatch):
-    import gpt54_comparison_preflight as comparison
-
-    current = inspect_plan(load_plan())
-    assert current["configuration_valid"] is False
-    assert current["configuration_problems"] == [
-        "source_pin:batch-runner/core/codex_runner.py",
-        "source_pin:batch-runner/step2_run_inference.py",
-        "source_pin:batch-runner/core/codex_task_deadline.py",
-    ]
-    plan = approved_pilot_source / comparison.PLAN.relative_to(comparison.ROOT)
-    assert plan.read_bytes() == comparison.PLAN.read_bytes()
-    monkeypatch.setattr(comparison, "ROOT", approved_pilot_source)
-    monkeypatch.setattr(comparison, "PLAN", plan)
-    return approved_pilot_source
-
-
 def _write_json(path, value):
     data = (_canonical_json(value) + "\n").encode("utf-8")
     path.write_bytes(data)

@@ -111,6 +111,7 @@ def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch,
     assert forbidden == []
 
 
+@pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize(("source", "change"), [
     (None, "valid"),
     *((source, change) for source in ("batch-runner/core/needs_files.py", "batch-runner/core/repo_bootstrapper.py")
@@ -147,6 +148,7 @@ def test_step0_manifest_canonical_readers_are_pinned_without_launch_waiver(sourc
     assert forbidden == []
 
 
+@pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize(
     "change",
     [
@@ -326,7 +328,7 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
     "compiled_sources", "compiled_controls", "compiled_workspace", "compiled_launch",
 ])
 def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
-    change, monkeypatch, tmp_path, capsys,
+    change, monkeypatch, tmp_path, capsys, historical_comparison_source,
 ):
     """Compile real pinned templates, not a second dispatcher or a paid rehearsal."""
     def forbidden(*args, **kwargs):
@@ -362,7 +364,7 @@ def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
         read_bytes = Path.read_bytes
         monkeypatch.setattr(Path, "read_bytes", lambda path: (
             read_bytes(path) + b"\n# drift"
-            if path == ROOT / compiler_source else read_bytes(path)
+            if path == historical_comparison_source / compiler_source else read_bytes(path)
         ))
     elif change == "missing_manifest":
         manifest = None
@@ -537,7 +539,7 @@ def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
     "compiled_missing_run", "compiled_null_config", "compiled_launch",
 ])
 def test_gpt54_pinned_grading_plan_is_bound_and_non_executing(
-    change, monkeypatch, tmp_path, capsys,
+    change, monkeypatch, tmp_path, capsys, historical_comparison_source,
 ):
     """Bind four inert recipes to real step8 readers without constructing a judge."""
     forbidden_calls = []
@@ -598,7 +600,7 @@ def test_gpt54_pinned_grading_plan_is_bound_and_non_executing(
             with monkeypatch.context() as patch:
                 patch.setattr(Path, "read_bytes", lambda path: (
                     read_bytes(path) + b"\n# drift"
-                    if path == ROOT / source else read_bytes(path)
+                    if path == historical_comparison_source / source else read_bytes(path)
                 ))
                 assert_refused(manifest)
         return
@@ -696,12 +698,14 @@ def test_gpt54_pinned_grading_plan_is_bound_and_non_executing(
     for field in ("grade_path_template", "ledger_sqlite_path_template", "ledger_jsonl_path_template"):
         assert len({f"{run.checkout_directory}/{getattr(run.output, field)}" for run in compiled.runs}) == 4
 
-    template = load_plan(ROOT / GRADER)
+    template_path = historical_comparison_source / GRADER
+    template = load_plan(template_path)
     with monkeypatch.context() as patch:
-        patch.chdir(ROOT / "batch-runner")
+        patch.chdir(historical_comparison_source / "batch-runner")
         # The optional root does not change the existing default hash behavior.
-        assert grading.compute_grader_source_hash(ROOT / GRADER, template) == grading.compute_grader_source_hash(
-            ROOT / GRADER, template, batch_root=ROOT / "batch-runner",
+        assert grading.compute_grader_source_hash(template_path, template) == grading.compute_grader_source_hash(
+            template_path, template,
+            batch_root=historical_comparison_source / "batch-runner",
         ) == manifest["shared"]["grading"]["template_source_sha256"]
         grading.validate_grading_config(template)
 

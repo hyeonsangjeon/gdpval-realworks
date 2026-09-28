@@ -123,6 +123,7 @@ def _fixture(tmp_path, manifest, plan, run, *, failures=0):
     }
 
 
+@pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize("case", [
     "valid_r1", "valid_r2", "terminal_error", "all_terminal_errors", "native_rename_boundary",
     "missing_identity", "null_identity", "unapproved_identity", "approval_mismatch", "duplicate_json_key",

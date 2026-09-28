@@ -72,7 +72,8 @@ def _no_execution(_offline, monkeypatch, offline_only):
 
 
 @pytest.fixture
-def plan():
+def plan(historical_foundry_source):
+    assert pilot.ROOT == historical_foundry_source
     return pilot.load_plan(pilot.PLAN)
 
 

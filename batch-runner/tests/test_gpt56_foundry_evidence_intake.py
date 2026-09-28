@@ -64,17 +64,6 @@ def _tree(root):
 
 
 @pytest.fixture(scope="module")
-def historical_foundry_source(approved_pilot_source):
-    """Retain the approved source context through publication and verification."""
-    plan = approved_pilot_source / pilot.PLAN.relative_to(pilot.ROOT)
-    assert plan.read_bytes() == pilot.PLAN.read_bytes()
-    with pytest.MonkeyPatch.context() as source:
-        source.setattr(pilot, "ROOT", approved_pilot_source)
-        source.setattr(pilot, "PLAN", plan)
-        yield approved_pilot_source
-
-
-@pytest.fixture(scope="module")
 def _seed():
     """Only immutable small bytes are shared, not trees or validator verdicts."""
     plan = pilot.load_plan(pilot.PLAN)

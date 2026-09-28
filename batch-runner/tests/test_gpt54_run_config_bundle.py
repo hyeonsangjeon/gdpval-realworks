@@ -190,6 +190,7 @@ def _runtime_rejection(case, tmp_path, monkeypatch):
     assert _tree_snapshot(root) == before
 
 
+@pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize("case", [
     "v2_r1", "codex_r1", "codex_r2", "v2_r2", "relocated_v2", "relocated_codex",
     "dispatch_type", "grading_type", "dispatch_run", "dispatch_condition", "dispatch_model",

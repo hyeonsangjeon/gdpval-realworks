@@ -33,3 +33,35 @@ def approved_pilot_source(tmp_path_factory):
         )
         snapshot.extractall(source)
     return source
+
+
+@pytest.fixture
+def historical_comparison_source(approved_pilot_source, monkeypatch):
+    """Keep current-source refusal separate from explicitly requested legacy cases."""
+    import gpt54_comparison_preflight as comparison
+
+    current = comparison.inspect_plan(comparison.load_plan())
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/core/codex_task_deadline.py",
+    ]
+    plan = approved_pilot_source / comparison.PLAN.relative_to(comparison.ROOT)
+    assert plan.read_bytes() == comparison.PLAN.read_bytes()
+    monkeypatch.setattr(comparison, "ROOT", approved_pilot_source)
+    monkeypatch.setattr(comparison, "PLAN", plan)
+    return approved_pilot_source
+
+
+@pytest.fixture(scope="module")
+def historical_foundry_source(approved_pilot_source):
+    """Keep one explicit source context discoverable by imported seed consumers."""
+    import gpt56_sol_codex_pilot_preflight as pilot
+
+    plan = approved_pilot_source / pilot.PLAN.relative_to(pilot.ROOT)
+    assert plan.read_bytes() == pilot.PLAN.read_bytes()
+    with pytest.MonkeyPatch.context() as source:
+        source.setattr(pilot, "ROOT", approved_pilot_source)
+        source.setattr(pilot, "PLAN", plan)
+        yield approved_pilot_source
