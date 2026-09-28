@@ -1,6 +1,70 @@
 # Latest task result
 
-## PROJECT5-FINALIZE-TASK4-BUDGET-REPORT
+## PROJECT5-FINALIZE-TASK5-BUDGET-REPORT
+
+Finalized all six leader-verified Task5 budget observations in one report change on
+`b/codex-task5-budget-observation-draft-20260928` in
+`/ai-work/copilot/worktrees/codex-task5-budget-observation-draft-20260928`,
+from exact base `81c822374674fdcad2a53ebf9fd9435b97182be4`. Only
+`tasks/codex_budget_pilot/REPORT.md`, `CHANGELOG.md` [Unreleased] and this
+current record change. The merged branch and preserved checkout are untouched.
+
+The [Task5 section](../codex_budget_pilot/REPORT.md#task5-budget-observations-a1-b1-c1-c2-b2-and-a2)
+records six leader-supplied historical observations, with exact snapshots
+and bindings in the report:
+
+- A1 readout `36374230672`, attempt 1, job `108776666366`, compared with
+  original readout `36328361091`; no deliverable, UNGRADED and score `NULL`.
+- B1 readout `36367827061`, attempt 1, job `108757672505`, compared with
+  original readout `36330288675`; no deliverable, UNGRADED and score `NULL`.
+- C1 readout `36369921653`, attempt 1, job `108763885287`, compared with
+  original readout `36332199214`; deliverable and 8.23% included/full unchanged.
+- C2 readout `36371859882`, attempt 1, job `108769715884`, compared with
+  original readout `36334062307`; no deliverable, UNGRADED and score `NULL`.
+- B2 readout `36373805651`, attempt 1, job `108775418822`, compared with
+  original readout `36335885361`; deliverable and 28.44% included/full unchanged.
+- A2 readout `36376002130`, attempt 1, job `108781859651`, compared with
+  original readout `36337865696`; no deliverable, UNGRADED and score `NULL`.
+
+B1/C1 ran on prior observer `8e188db9cb4e937f33ba8723d88ffd2b52b359cc`, not
+the branch base. A1/C2/B2/A2 ran on documentation-only observer
+`81c822374674fdcad2a53ebf9fd9435b97182be4`. The writer/producer bindings and
+original accounting/proof fields are unchanged. Six Task4 plus six Task5
+observations cover 12 of 24 epoch04 budget snapshots. The remaining 12
+Task2/Task3 snapshots are unobserved here, not zero or `not_recorded`. These
+are observations of old cells, not new trials or grades. The report identifies
+the leader-local six-cell bundle and supplied SHA-256 without claiming a
+worktree copy or independent fetch.
+
+The leader supplied reviewed report head
+`36fc0caff9c1dadf344abe219e8fcd972b71eeb0`, review `5333361607` and all nine
+passing checks. The base tree matches that reviewed tree; this new report head has
+not been reviewed. The catalog was checked once; `experiment-report-en`
+followed by protected `im-not-ai-en` preserved the measurement meanings and
+non-causal scope. No new design or UI skill applies.
+
+The accepted B1/C1 55-check, C2 40-check and A1/B2 58-check reconciliations
+remain separate. Final A2/six-row reconciliation passed 46 scoped checks and
+the protected copyediting gate without warnings. All 24 outcome rows,
+pre-existing table bytes, Task4 and prior five Task5 passages, and historical
+evidence remain byte-identical; only A2 was added to the accepted Task5 table.
+No test/build or live observation query ran, and no grade or cost was
+recomputed. Earlier validation results below remain separate historical evidence.
+
+No Task4/Task5 budget snapshot remains pending. One ordinary branch push and
+one new draft PR are authorized for these three Markdown files. The new report
+head awaits leader review and normal checks; its final SHA and PR are reported
+in the handoff. No future merge SHA/time/state is asserted. The unobserved
+Task2/Task3 budgets and other measurement limits remain, without new execution
+authority. No CI polling, manual rerun or expansion is authorized.
+Service variation, limited repeats, unknown failure cause, unvalidated
+independent judge calibration, missing prices/accounting, source histories,
+exclusion uncertainty and A/B retry-plus-retention confounding remain limits.
+NG inference costs are not compared directly with graded judge costs. No
+causal recovery/quality effect, complete bill or new execution authority is
+claimed. Project and merge decisions remain with the leader.
+
+## Prior PROJECT5-FINALIZE-TASK4-BUDGET-REPORT
 
 Finalized all six leader-verified Task4 retained budget observations in one
 documentation-only report change in the existing worktree
