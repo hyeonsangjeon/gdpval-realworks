@@ -66,7 +66,7 @@ class SourceOnly(pilot.LocalTransport):
 
 
 @pytest.fixture
-def case(monkeypatch, caplog):
+def case(monkeypatch, caplog, historical_budget_source):
     excluded_calls = []
 
     def blocked(*args, **kwargs):
@@ -156,7 +156,7 @@ def case(monkeypatch, caplog):
 
     monkeypatch.setattr(HfApi, "repo_info", repo_info)
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", request)
-    with tempfile.TemporaryDirectory(prefix=".output-target-offline-", dir=pilot.ROOT.parent) as scratch:
+    with tempfile.TemporaryDirectory(prefix=".output-target-offline-", dir=Path(__file__).resolve().parents[3]) as scratch:
         state.root = Path(scratch)
         monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(state.root / "unrelated-native"))
         yield state

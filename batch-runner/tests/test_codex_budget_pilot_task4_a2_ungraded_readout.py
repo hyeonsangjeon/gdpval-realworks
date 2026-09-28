@@ -44,7 +44,7 @@ VARIANTS = ("ungraded", "partial_cost", "missing_receipt", "price_missing")
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _variants=VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _variants=VARIANTS):
     assert grading.TASK4_A2_CELL == CELL and grading.TASK4_RETAINED[CELL] == ("36245490377", REQUEST)
     assert ungraded.A2_POLICY == "recorded_task4_failed_a2_no_judge"
     assert readout.TASK4_A2_WRITER_RUN == RUN and CELL not in readout.TASK4_SUCCESSOR_READOUTS
@@ -58,7 +58,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
     # Do not reclassify a successful row or supply a fabricated child receipt.
     prototype = grading.compile_request("pilot/" + CELL, PRODUCER, TERMINAL)
     error_row, native_ledger = failed._failed_row(prototype)
-    prefix = ordinary_reader.history.__wrapped__(tmp_path_factory, _variants=("graded",))
+    prefix = ordinary_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("graded",))
     initial = next(prefix)["B_r2"]
     directory = tmp_path_factory.mktemp("task4-a2-reader-history")
     capture = _Capture()

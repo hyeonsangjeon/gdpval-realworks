@@ -65,3 +65,33 @@ def historical_foundry_source(approved_pilot_source):
         source.setattr(pilot, "ROOT", approved_pilot_source)
         source.setattr(pilot, "PLAN", plan)
         yield approved_pilot_source
+
+
+@pytest.fixture(scope="module")
+def historical_budget_source(approved_pilot_source):
+    """Bind legacy compilers before shared histories, never via an autouse override."""
+    import codex_budget_pilot as pilot
+    import codex_budget_pilot_ci as ci
+    import gpt54_comparison_preflight as comparison
+
+    current = comparison.inspect_plan(comparison.load_plan())
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/core/codex_task_deadline.py",
+    ]
+    # Derive each path while ROOT still names its owning tree.
+    plan = approved_pilot_source / comparison.PLAN.relative_to(comparison.ROOT)
+    registration = approved_pilot_source / pilot.REGISTRATION.relative_to(pilot.ROOT)
+    ci_registration = approved_pilot_source / ci.REGISTRATION.relative_to(pilot.ROOT)
+    assert plan.read_bytes() == comparison.PLAN.read_bytes()
+    assert registration.read_bytes() == pilot.REGISTRATION.read_bytes()
+    assert ci_registration.read_bytes() == ci.REGISTRATION.read_bytes()
+    with pytest.MonkeyPatch.context() as source:
+        source.setattr(comparison, "ROOT", approved_pilot_source)
+        source.setattr(comparison, "PLAN", plan)
+        source.setattr(pilot, "ROOT", approved_pilot_source)
+        source.setattr(pilot, "REGISTRATION", registration)
+        source.setattr(ci, "REGISTRATION", ci_registration)
+        yield approved_pilot_source

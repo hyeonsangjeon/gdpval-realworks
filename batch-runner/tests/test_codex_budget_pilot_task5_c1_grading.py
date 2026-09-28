@@ -49,9 +49,9 @@ def _select(history, api, directory, patch, *, controller=failed.FUTURE_CONTROLL
 
 
 @pytest.fixture(scope="module")
-def c1_history(tmp_path_factory):
+def c1_history(tmp_path_factory, historical_budget_source):
     assert grading.TASK5_C1_CELL == CELL and grading.TASK5_RETAINED[CELL] == RECORDED
-    histories = b1.task5_b1_history.__wrapped__(tmp_path_factory)
+    histories = b1.task5_b1_history.__wrapped__(tmp_path_factory, historical_budget_source)
     history = next(histories)  # Reuse writers only, never the prior test selector.
     try:
         with pytest.MonkeyPatch.context() as patch:

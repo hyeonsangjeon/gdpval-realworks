@@ -66,12 +66,12 @@ def _approved_digest(workflow, tmp_path, monkeypatch, *, inputs=None):
 
 
 @pytest.fixture(scope="module")
-def compilations():
+def compilations(historical_budget_source):
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source) for source in (PRODUCER, CONTROLLER)}
 
 
 @pytest.fixture(scope="module")
-def compiled_cells():
+def compiled_cells(historical_budget_source):
     return lru_cache(maxsize=16)(adapter.compile_cell_grading_plan)
 
 

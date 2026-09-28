@@ -54,10 +54,10 @@ def _invoke(current, capture, phase="plan", **changes):
 
 
 @pytest.fixture(scope="module")
-def recorded_pair(tmp_path_factory):
+def recorded_pair(tmp_path_factory, historical_budget_source):
     assert list(grading.TASK4_RETAINED)[:2] == [failed.PREFIX + suffix for suffix in failed.RECORDED]
     assert all(grading.TASK4_RETAINED[failed.PREFIX + suffix] == row for suffix, row in failed.RECORDED.items())
-    history_generator = failed.failed_pair.__wrapped__(tmp_path_factory)
+    history_generator = failed.failed_pair.__wrapped__(tmp_path_factory, historical_budget_source)
     history = next(history_generator)
     try:
         with pytest.MonkeyPatch.context() as patch:

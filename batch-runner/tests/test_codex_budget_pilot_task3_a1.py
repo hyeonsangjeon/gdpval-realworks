@@ -29,12 +29,12 @@ RECORDED_RUN = {"id": "36202190875", "job": "cell", "attempt": 1}
 
 
 @pytest.fixture(scope="module")
-def compiled_contracts():
+def compiled_contracts(historical_budget_source):
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source) for source in (PRODUCER, SOURCE)}
 
 
 @pytest.fixture(scope="module")
-def retained_history(compiled_contracts):
+def retained_history(compiled_contracts, historical_budget_source):
     # Generate the same immutable fake history once; each case clones only its
     # fake server. Keep the genuine old local state alive for mutation checks.
     real_compile = pilot.compile_pilot
@@ -48,7 +48,7 @@ def retained_history(compiled_contracts):
         base.offline.__wrapped__(patch)
         patch.setattr(pilot, "compile_pilot", compile_contract)
         patch.setattr(base, "SOURCE", PRODUCER)
-        scenarios = base.scenario.__wrapped__(patch)
+        scenarios = base.scenario.__wrapped__(patch, historical_budget_source)
         s = base.case.__wrapped__(next(scenarios), patch)
         s.argv[s.argv.index("--reviewed-source-sha") + 1] = PRODUCER
         s.old_local = {}

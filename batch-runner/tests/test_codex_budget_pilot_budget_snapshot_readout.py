@@ -25,7 +25,6 @@ from . import test_codex_budget_pilot_grade_readout as writer
 from . import test_codex_budget_pilot_grading as base
 from . import test_codex_budget_pilot_task3_a1_readout as controls
 from . import test_codex_budget_pilot_task4_a1_ungraded_readout as ng
-from .test_codex_budget_pilot_grade_readout import historical_budget_source  # noqa: F401
 from .test_codex_budget_pilot_grading import boundaries  # noqa: F401 — forbid live execution
 from .test_codex_budget_pilot_task3_grading_chain import _Capture
 
@@ -58,7 +57,7 @@ def history(tmp_path_factory, historical_budget_source):
                                  revision=revision, path=path, terminal=terminal)
     # This fixture constructs its genuine failure before installing constructor
     # guards, then retains the actual ordinary predecessor and native NG record.
-    source = ng.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
+    source = ng.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("partial_cost",))
     shared = next(source)
     try:
         record = shared.rows["partial_cost"]

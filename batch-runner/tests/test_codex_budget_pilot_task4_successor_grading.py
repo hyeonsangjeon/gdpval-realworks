@@ -70,11 +70,11 @@ def _unchanged(api, frozen):
 
 
 @pytest.fixture(scope="module")
-def successor_history(tmp_path_factory):
+def successor_history(tmp_path_factory, historical_budget_source):
     assert set(grading.TASK4_RETAINED) == {failed.PREFIX + suffix for suffix in (*SEQUENCE, "A_r2")}
     assert dict(list(grading.TASK4_RETAINED.items())[:5]) == {
         failed.PREFIX + suffix: row for suffix, row in {**failed.RECORDED, **RECORDED}.items()}
-    histories = policy.recorded_pair.__wrapped__(tmp_path_factory)
+    histories = policy.recorded_pair.__wrapped__(tmp_path_factory, historical_budget_source)
     pair = next(histories)  # Genuine failed A1 recorder then ordinary B1, built only once.
     try:
         with pytest.MonkeyPatch.context() as patch:

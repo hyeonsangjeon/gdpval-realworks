@@ -1566,7 +1566,10 @@ def test_native_resume_content_filter_is_terminal_across_restart(host, monkeypat
 
 
 @pytest.mark.parametrize("stale", [False, True], ids=["current", "pre_resume"])
-def test_native_resume_active_grader_template_source_bindings(stale):
+def test_native_resume_active_grader_template_source_bindings(
+        stale, historical_comparison_source, historical_foundry_source):
+    frozen_source = historical_comparison_source
+    assert frozen_source == historical_foundry_source
     # The actual pre-resume identities are populated from the immutable baseline,
     # never from the closure under test.
     previous = (
@@ -1574,8 +1577,8 @@ def test_native_resume_active_grader_template_source_bindings(stale):
         "ec77798f9c2fba1043bc1015c855f3f75a96920e78e6b64c007e33785f2e2170",
     )
     for index, (module, plan) in enumerate(((comparison, comparison.load_plan()), (pilot, pilot.load_plan(pilot.PLAN)))):
-        template = ROOT / module.GRADER
-        current = step8.compute_grader_source_hash(template, yaml.safe_load(template.read_bytes()), batch_root=ROOT / "batch-runner")
+        template = frozen_source / module.GRADER
+        current = step8.compute_grader_source_hash(template, yaml.safe_load(template.read_bytes()), batch_root=frozen_source / "batch-runner")
         assert current != previous[index]
         if module is comparison:
             assert plan["shared"]["grading"]["template_source_sha256"] == current
@@ -1594,11 +1597,11 @@ def test_native_resume_active_grader_template_source_bindings(stale):
         assert report["configuration_valid"] is not stale
         assert report["launch_allowed"] is report["full_220_allowed"] is False
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)
-    assert hashlib.sha256((ROOT / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
-    assert hashlib.sha256((ROOT / WORKFLOW).read_bytes()).hexdigest() == WORKFLOW_SHA256
+    assert hashlib.sha256((frozen_source / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
+    assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == WORKFLOW_SHA256
     gate_plan = ghcp_gate.load_plan()
     reference_source = "batch-runner/core/reference_integrity.py"
-    current_reference = hashlib.sha256((ROOT / reference_source).read_bytes()).hexdigest()
+    current_reference = hashlib.sha256((frozen_source / reference_source).read_bytes()).hexdigest()
     assert gate_plan["source_pins"][reference_source] == ghcp_gate.PINNED_SOURCES[reference_source] == current_reference
     if stale:
         gate_plan["source_pins"][reference_source] = "13198897c189a9276494b78ea3359fc2e623211ab2f32554b81ab9b12d9cf19e"

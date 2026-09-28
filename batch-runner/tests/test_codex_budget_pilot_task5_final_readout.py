@@ -54,7 +54,7 @@ NAMES = ("step2_inference_results.json", Path(pilot.LEDGER).name)
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, historical_budget_source):
     assert len({WRITER, PRODUCER, OBSERVER}) == 3
     for profile, (ordinal, run_id, inference_run, request) in PROFILES.items():
         context = readout._writer_context(request)
@@ -73,7 +73,7 @@ def history(tmp_path_factory):
     prototype = grading.compile_request("pilot/" + CELLS["a2"], PRODUCER, REVISIONS["a2"][2])
     error_row, native_ledger = failed._failed_row(prototype)
     # Reuse genuine C2 writer construction only, not the old 406 test cases.
-    prefix = c2_reader.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
+    prefix = c2_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("partial_cost",))
     initial = next(prefix)
     directory = tmp_path_factory.mktemp("task5-final-readout-history")
     capture = _Capture()

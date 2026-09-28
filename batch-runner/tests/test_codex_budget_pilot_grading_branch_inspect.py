@@ -60,7 +60,7 @@ class SourceOnly(pilot.LocalTransport):
 
 
 @pytest.fixture(scope="module")
-def compilation():
+def compilation(historical_budget_source):
     # Cache only a genuine deterministic compile. No original payloads are read.
     return pilot.compile_pilot(ci.CAMPAIGN, SOURCE)
 

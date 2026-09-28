@@ -47,7 +47,7 @@ def _failed_row(context):
     """Real native error -> Step2 row/public serializer -> ledger; fake turn only."""
     config = json.loads(context.grading.dispatch.runs[0].config_json)
     captured = io.StringIO()
-    with tempfile.TemporaryDirectory(prefix=".task4-error-writer-", dir=pilot.ROOT.parent) as directory, \
+    with tempfile.TemporaryDirectory(prefix=".task4-error-writer-", dir=Path(__file__).resolve().parents[3]) as directory, \
             pytest.MonkeyPatch.context() as patch, redirect_stdout(captured), redirect_stderr(captured):
         native.no_runtime_auth_or_publication.__wrapped__(patch)
         host = Path(directory)
@@ -96,12 +96,12 @@ def _failed_row(context):
 
 
 @pytest.fixture(scope="module")
-def failed_pair(tmp_path_factory):
+def failed_pair(tmp_path_factory, historical_budget_source):
     # Build the error before the shared grading fixture blocks runner creation.
     # No successful A1 is produced and then relabeled as a failure.
     prototype = grading.compile_request("pilot/" + PREFIX + "A_r1", PRODUCER, "8" * 40)
     row, ledger = _failed_row(prototype)
-    histories = chain.history.__wrapped__(tmp_path_factory)
+    histories = chain.history.__wrapped__(tmp_path_factory, historical_budget_source)
     history = next(histories)  # Genuine historical writers once, not prior test selectors.
     try:
         with pytest.MonkeyPatch.context() as patch:

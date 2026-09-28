@@ -39,7 +39,7 @@ PRIVATE = "PRIVATE https://private.invalid/path?token=PRIVATE"
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _scenarios=(
+def history(tmp_path_factory, historical_budget_source, *, _scenarios=(
         "graded", "partial", "failed", "ungraded", "missing_ledger", "partial_cost", "price_missing")):
     assert readout.TASK3_B1_CELL == CELL
     assert readout.TASK3_B1_WRITER_RUN == {"id": "36283710283", "job": "pilot-live", "attempt": 1}
@@ -65,9 +65,9 @@ def history(tmp_path_factory, *, _scenarios=(
     with pytest.MonkeyPatch.context() as patch:
         base.boundaries.__wrapped__(patch)
         patch.setattr(a1, "CONTROLLER", WRITER)
-        compilations = a1.compilations.__wrapped__()
+        compilations = a1.compilations.__wrapped__(historical_budget_source)
         compilations[OBSERVER] = pilot.compile_pilot(ci.CAMPAIGN, OBSERVER)
-        compiled_cells = a1.compiled_cells.__wrapped__()
+        compiled_cells = a1.compiled_cells.__wrapped__(historical_budget_source)
         with redirect_stdout(capture.out), redirect_stderr(capture.err):
             first = a1.case.__wrapped__(directory, patch, capture, compilations, compiled_cells)
             local = directory / "a1-writer"

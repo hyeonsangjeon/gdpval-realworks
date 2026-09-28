@@ -148,7 +148,7 @@ class GradeHF(MemoryHF):
 
 
 @pytest.fixture(scope="module")
-def compilation():
+def compilation(historical_budget_source):
     return pilot.compile_pilot(ci.CAMPAIGN, SOURCE)
 
 
@@ -182,7 +182,7 @@ def boundaries(monkeypatch):
 
 
 @pytest.fixture(scope="module")
-def compiled_cache():
+def compiled_cache(historical_budget_source):
     # Cache only genuine deterministic compiles, to keep this family bounded.
     return lru_cache(maxsize=32)(adapter.compile_cell_grading_plan)
 

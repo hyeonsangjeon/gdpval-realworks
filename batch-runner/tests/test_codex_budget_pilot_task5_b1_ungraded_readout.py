@@ -42,7 +42,7 @@ VARIANTS = ("ungraded", "partial_cost", "missing_receipt", "price_missing")
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _variants=VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _variants=VARIANTS):
     assert grading.TASK5_B1_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36248894311", REQUEST)
     assert ungraded.TASK5_B1_POLICY == "task5-b1-model-free-ungraded" and readout.TASK5_B1_WRITER_RUN == RUN
     actual = readout._writer_context(REQUEST)
@@ -53,7 +53,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
     assert hashlib.sha256(actual.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
     prototype = grading.compile_request("pilot/" + CELL, PRODUCER, TERMINAL)
     error_row, native_ledger = failed._failed_row(prototype)
-    prefix = a1_reader.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
+    prefix = a1_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("partial_cost",))
     initial = next(prefix)
     directory = tmp_path_factory.mktemp("task5-b1-reader-history")
     capture = _Capture()

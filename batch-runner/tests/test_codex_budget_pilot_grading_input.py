@@ -115,7 +115,7 @@ def _seal(payload, identity, inputs):
 
 
 @pytest.fixture(scope="module")
-def compiled():
+def compiled(historical_budget_source):
     return pilot.compile_pilot(ci.CAMPAIGN, SOURCE)
 
 
