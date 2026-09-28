@@ -13,6 +13,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Complete explicit historical-source fixture wiring across the six comparison
+  modules and both pilot consumers identified in CI run `36455260095`.
+  Tested fixture HEAD `3fdc5a95853619135d4165063392144eb6fea540` passed the
+  single authorized invocation: **8 passed in 26.06s**, exit 0. Each exact
+  selector came from the two failed job logs; none was an earlier passing
+  representative. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-complete-fixture-wiring)
+  records the command, complete callsite inventory and separate SHA-specific
+  observations. The existing `conftest.py` now owns one non-autouse provider
+  each for historical comparison and Foundry source contexts, using genuine
+  immutable `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` bytes. Comparison tests
+  still assert the exact three current-source pin refusals before rebinding;
+  downstream plan and seed consumers retain coherent source lifetimes.
+  Twelve test files changed. All production bytes, including the Step2 fix,
+  remain identical to `d35029843ef902c71a6095ffe2b2f3709b3299e8`; frozen
+  registrations, YAML, workflows, validators, guards and business assertions
+  are unchanged. Earlier `b1854e5`, `91ffae5`, `6710299`, `6665c18`, `7bbe61f`
+  and `88b8a62` results remain separate in the historical records below.
+  Reviewed baseline `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` carries reviewed
+  tree `4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`; it does
+  not approve the modified runtime. New-head CI and full source review of
+  existing draft [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698)
+  remain required. No full suite, CI rerun, polling or live execution occurred.
+  Historical fixture success adds no campaign or launch authority.
+
+### Prior remaining frozen-fixture validation (historical)
+
 - Bind the remaining proven historical-source fixtures to the existing immutable
   `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` archive. Tested fixture HEAD
   `88b8a62b4b5f4802f6fc22c25b9348d78a931f65` passed the one authorized combined

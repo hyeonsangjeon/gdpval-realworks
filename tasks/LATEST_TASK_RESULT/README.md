@@ -1,5 +1,113 @@
 # Latest task result
 
+## PROJECT5-COMPLETE-FIXTURE-WIRING
+
+The single authorized eight-node invocation passed at fixture HEAD
+`3fdc5a95853619135d4165063392144eb6fea540`: **8 passed in 26.06s**, exit 0.
+Twelve test files changed. All production bytes remain identical to
+`d35029843ef902c71a6095ffe2b2f3709b3299e8`, including the Step2 optional-runner
+fix. Frozen registrations, YAML, workflows, source-pin validators, HF and grader
+production code, skip markers and timeouts are unchanged.
+
+The two authorized logs from CI run `36455260095` were inventoried once.
+Comparison job `109040094781` reported 448 failed and 497 passed in 244.20s.
+All failed nodes belong to the six modules below and encounter the three
+modified-runtime source pins. Pilot job `109040094079` reported 6 failed,
+729 passed and 182 setup errors in 418.81s. The setup errors identify the
+missing `historical_foundry_source` provider; the six additional identity
+failures use the previously unbound `plan` fixture. Their assertions remain
+unchanged. These are prior CI observations, not results of the local run.
+
+The existing `conftest.py` now owns the single implementations of
+`historical_comparison_source` and `historical_foundry_source`. Both reuse
+`approved_pilot_source` and genuine immutable Git object
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce`. Their former module-local
+definitions were removed from `test_gpt54_codex_grading_input.py` and
+`test_gpt56_foundry_evidence_intake.py`; the evidence gate no longer imports
+the latter provider from a test module. Source contexts are explicitly
+requested, never autouse, and restored at teardown. Plan-byte equality and
+coherent `ROOT`/`PLAN` bindings remain enforced. The existing budget fixture's
+`ROOT`/`REGISTRATION` bindings and frozen registration-byte checks are untouched.
+
+All demonstrated callsites were wired, not just the eight representatives:
+
+| Module under `batch-runner/tests/` | Covered callsites | Nodes in the failed logs |
+| --- | --- | --- |
+| `test_gpt54_codex_input_capture.py` | The capture selector explicitly requests the context for `_runtime_fixture`, its nested `_fixture` and grading-plan compilation. | 77 failed |
+| `test_gpt54_comparison_preflight.py` | `test_step0_manifest_canonical_readers_are_pinned_without_launch_waiver`, `test_gpt54_comparison_is_fixed_and_fails_closed`, `test_gpt54_offline_dispatch_plan_is_bound_and_non_executing` and `test_gpt54_pinned_grading_plan_is_bound_and_non_executing`. Byte-drift injections and the pinned grader hash use the same historical source root. | 34 failed |
+| `test_gpt54_prepared_input_attestation.py` | The attestation selector explicitly requests the context through `_fixture` and `_bundle_fixture`. | 86 failed |
+| `test_gpt54_run_config_bundle.py` | The bundle selector covers direct grading-plan compilation, `_runtime_rejection` through both runtime fixtures, and the direct Codex/V2 regression calls. | 99 failed |
+| `test_gpt54_v2_grading_input.py` | The grading-input selector covers compilation and its existing Codex-grading caller without changing the direct-call signature. | 79 failed |
+| `test_gpt54_v2_input_capture.py` | The capture selector covers `_runtime_fixture`, grading-plan compilation and its direct Codex regression call. | 73 failed |
+| `test_gpt56_pilot_config_bundle.py` | `plan` explicitly requests the shared provider; imported `published_seed`, `identity_seeds` and `config_seeds` resolve it through `conftest.py`. | 124 setup errors |
+| `test_gpt56_pilot_identity_plan.py` | `plan` explicitly requests the shared provider; `published_seed` and `identity_seeds` retain it through publication and verification. | 58 setup errors, 6 failed |
+
+Before each comparison source binding, the shared fixture still requires the
+exact current-source refusal list:
+
+```text
+source_pin:batch-runner/core/codex_runner.py
+source_pin:batch-runner/step2_run_inference.py
+source_pin:batch-runner/core/codex_task_deadline.py
+```
+
+No compiler, identity, permission, network, process, no-launch or atomicity
+assertion was weakened. Existing direct regression calls retain their
+signatures. The byte-only `_seed` helper, its `__wrapped__` consumers and the
+budget helpers' `__wrapped__` interfaces are unchanged. A historical fixture
+pass does not attest the current modified runtime for the old 30-cell campaign.
+
+Each selector below was matched to an actual failure in the two downloaded
+logs before execution. One invocation ran from the worktree's `batch-runner`
+directory. It excluded earlier passing representatives, Step2 cases, the native
+42 plus 5 cases, full files and suites:
+
+```bash
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short \
+  'tests/test_gpt54_codex_input_capture.py::test_codex_comparison_capture_gates_real_step1_and_step2[r1]' \
+  'tests/test_gpt54_comparison_preflight.py::test_gpt54_pinned_grading_plan_is_bound_and_non_executing[unchanged]' \
+  'tests/test_gpt54_prepared_input_attestation.py::test_prepared_input_attestation_binds_actual_bytes_without_execution[identical]' \
+  'tests/test_gpt54_run_config_bundle.py::test_run_config_bundle_is_exact_atomic_and_gates_execution[v2_r1]' \
+  'tests/test_gpt54_v2_grading_input.py::test_v2_grading_input_is_bound_atomic_and_offline[valid_r1]' \
+  'tests/test_gpt54_v2_input_capture.py::test_v2_comparison_capture_gates_stage_before_provider[r1]' \
+  'tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[True]' \
+  'tests/test_gpt56_pilot_identity_plan.py::test_cli_and_real_publication_are_deterministic_and_ready_last[publish]'
+```
+
+All eight selected nodes passed. The validation observations remain separate:
+
+| Tested source | Selected scope | Actual result |
+| --- | --- | --- |
+| `b1854e5b50eda9c25c9db5bc2627acf35022e70d` | Original 47-case native-resume selector | 5 failed, 42 passed in 334.92s; exit 1 |
+| `91ffae589b240dd9d31978af0dd2cf19532e96c7` | Only the five failed native-resume nodes | 5 passed in 24.02s; exit 0 |
+| `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` | Four frozen-source fixture representatives | 3 passed, 1 setup error in 93.52s; exit 1 |
+| `6665c183c215aa6594622eb9fe92ca55633c7013` | Only the budget snapshot `recorded-ordinary` node | 1 setup error in 8.44s; exit 1 |
+| `7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27` | Two Step2 regressions and the budget snapshot `recorded-ordinary` node | 3 passed in 49.11s; exit 0 |
+| `88b8a62b4b5f4802f6fc22c25b9348d78a931f65` | Three remaining historical-fixture representatives | 3 passed in 9.04s; exit 0 |
+| `3fdc5a95853619135d4165063392144eb6fea540` | Eight comparison/pilot representatives above | 8 passed in 26.06s; exit 0 |
+
+The same branch and worktree remain `b/codex-retention-runtime-20260928` and
+`/ai-work/copilot/worktrees/codex-retention-runtime-20260928`. Reviewed baseline
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce` has leader-reviewed tree
+`4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`. That baseline
+and the leader's partial Step2 review do not approve the whole PR. Only
+`CHANGELOG.md` and this record change after validation. Protected `im-not-ai-en`
+applies only to these new current passages; earlier records remain intact.
+
+Publication is limited to one ordinary owner-account push to existing draft
+[PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698), whose
+published head before this task was `d35029843ef902c71a6095ffe2b2f3709b3299e8`.
+New-head CI and full source review remain outstanding. The eight local passes
+do not establish a fully passing CI run. The experimental campaign remains
+unregistered and live-unverified; no new campaign or launch authority is added.
+No live model, readout, observation, Azure, OIDC, HF or paid execution ran.
+No new PR, merge, CI rerun or polling is part of this handoff.
+
+## Prior remaining frozen-fixture result (historical)
+
+The following records retain their original source, validation, publication
+and byte-equivalence statements as historical facts.
+
 ## PROJECT5-REMAINING-FROZEN-FIXTURES
 
 The single authorized three-node invocation passed at fixture HEAD
