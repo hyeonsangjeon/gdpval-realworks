@@ -13,6 +13,29 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Complete the six-cell [Task2 budget report](tasks/codex_budget_pilot/REPORT.md#task2-budget-observations-a1-b1-c1-c2-b2-and-a2)
+  with A2 readout `36407670686`, attempt 1, job `108880187086`, compared with
+  original `36220575848`. Coverage is 24 of 24 retained epoch04 budget snapshots,
+  six each for Task2/3/4/5, with none pending. The six frozen epoch03 Task1 failures
+  remain separate; all 30 original outcome records are unchanged, not 30 budget observations.
+  Exact bindings, actual per-cell observers/writers/producers, the typed legacy A1
+  terminal and both leader-local bundle hashes are in the report. Selected grades
+  are unchanged despite the advanced observed branch tip. All 24 outcome rows,
+  prior five Task2 evidence passages, old tables, Task3/4/5 evidence and history
+  are preserved apart from necessary coverage wording and the new Task2 A2 row.
+  Final reconciliation passed 59 scoped report checks and protected copyediting
+  without warnings. Prior A1/B1/C1 observations of 25 checked values and 29 remaining
+  checks, C2's 44 checks and B2's 46 checks stay separate, not combined or rerun.
+  Reviewed source `bc3d8f909ee854dd0795c1a3a1369eb0256ad553`, review `5335614283`
+  and nine passing checks are leader-supplied provenance, not validation of this
+  new report head. Only the report and two current records change; no tests,
+  builds or live observation queries ran. The combined report is finalized for
+  one draft PR and awaits new-head leader review. Exact elapsed time, total
+  recovery/downtime, complete costs and causal/retention-only conclusions remain
+  unresolved; full retained-field coverage does not complete the whole card.
+
+### Prior Task3 budget report (historical)
+
 - Complete the [Task3 budget report](tasks/codex_budget_pilot/REPORT.md#task3-budget-observations-a1-b1-c1-c2-b2-and-a2)
   with six leader-verified snapshots in original cell order. Final A2 readout
   `36389511000`, attempt 1, job `108822001086`, compares with original
