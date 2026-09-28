@@ -30,19 +30,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   paths, shared compilation/history lifetimes and direct `__wrapped__`
   consumers. Grader-binding positives use that same tree. Current-source and
   mutated-source refusals remain meaningful; historical fixture success does
-  not authorize the modified runtime for the old campaign. The latest local
-  correction changes 49 test files, with all production bytes and the image
-  guard frozen at `de3e0401b9c0ae9d2d142c25e14d1f4dab768383`.
-- Record the corrected eight-node invocation at
-  `3188e27a2eac24fd7ed3f3e074c9a088ad7d79e0`: **8 passed in 139.10s**, exit 0.
-  Only the approval-input selector's owning module changed; no code or fixture
-  edits were needed. The earlier attempt at the same SHA remains separate:
-  7 collected, 0 executed in 5.49s, exit 4, because the selector was not found.
-  The passing result permits one ordinary push to existing draft PR698. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-correct-test-owner)
-  contains the exact command/results, complete fixture-family scope, one
+  not authorize the modified runtime for the old campaign. Ledger-note host
+  directories now use the stable `__file__`-derived worktree parent, and the
+  Task2 final readout explicitly requests its module-scoped historical source
+  before the function-scoped subprocess guard. Dynamic case setup and all
+  guard/assertion bodies remain unchanged, with production and the image guard
+  frozen at `de3e0401b9c0ae9d2d142c25e14d1f4dab768383`.
+- Record the single three-node invocation at
+  `93e96b342386482cb9e7f60805781f0009620629`: **3 passed in 16.55s**, exit 0.
+  This covers the ledger positive, its byte-identity guard negative and Task2
+  final readout `C_r1-graded`; it is not a full-family or CI result. The earlier
+  eight-node pass and exit-4 selection attempt at
+  `3188e27a2eac24fd7ed3f3e074c9a088ad7d79e0` remain separate. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-last-two-fixture-boundaries)
+  contains the exact command/result, both fixture changes, one
   table of separate SHA-specific results and immutable links to prior handoffs
-  and the 54-module inventory. Leader review `5343801391` is conditional on CI;
+  and the 54-module inventory. Leader review `5344462942` is conditional on all CI;
   new-HEAD delta review and CI remain required for draft
   [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
   The capability remains unregistered and live-unverified, with no new
