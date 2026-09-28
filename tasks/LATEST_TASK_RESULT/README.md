@@ -1,6 +1,52 @@
 # Latest task result
 
-## PROJECT5-FINALIZE-TASK3-BUDGET-REPORT
+## PROJECT5-FINALIZE-TASK2-BUDGET-REPORT
+
+Finalized the combined Task2 report on
+`b/codex-task2-budget-observation-draft-20260928`, from exact base
+`a1abb7cd328f77baa6c4764889a457020e4d2064`, in the existing
+`/ai-work/copilot/worktrees/codex-task2-budget-observation-draft-20260928` worktree.
+Only `tasks/codex_budget_pilot/REPORT.md`, `CHANGELOG.md` [Unreleased] and
+this current record change. The merged Task3 branch and old checkout are preserved.
+
+The [Task2 section](../codex_budget_pilot/REPORT.md#task2-budget-observations-a1-b1-c1-c2-b2-and-a2)
+now contains all six supplied observations. Final A2 readout `36407670686`,
+attempt 1, job `108880187086`, completed its read at `2026-09-28T10:10:19Z`
+and succeeded at `2026-09-28T10:10:21Z`; it compares with original `36220575848`.
+B2/A2 used observer `a1abb7cd328f77baa6c4764889a457020e4d2064`; A1/B1/C1/C2
+retain observer `d7c70e05440162eaecd7121ed3a50d04d39cbf53`. The report holds
+exact bindings, clocks, per-cell writers/producers and both leader-local bundle
+identities/hashes; no worktree copies or independent fetches are claimed. A1's
+40-character legacy terminal and the observed-tip/selected-grade distinction remain intact.
+Coverage is 24 of 24 retained epoch04 budgets, six each for Task2/3/4/5, with none
+pending. Six frozen epoch03 Task1 failures remain separate; all 30 original outcome
+records are unchanged. No grade, cost, trial or original-cell count changed.
+
+Reviewed source `bc3d8f909ee854dd0795c1a3a1369eb0256ad553`, review `5335614283`
+and nine passing checks are leader-supplied provenance; the base has the
+same reviewed tree. Only the cancelled 45-minute readout check was retried once;
+successful job `108850468290` finished at `09:04:29 UTC`. This is not a runtime
+test performed here or validation of the new report head.
+
+The catalog was checked once. `experiment-report-en`, then protected
+`im-not-ai-en`, preserved the measurement/provenance and non-causal boundaries;
+no new design or UI skill applies. Final reconciliation passed 59 scoped report
+checks and protected copyediting without warnings. Prior A1/B1/C1 observations of
+25 checked values and 29 remaining checks, C2's 44 checks and B2's 46 checks stay
+separate, not combined or rerun. The earlier checker-only quoting and history-selector
+corrections required no report-value changes. All 24 outcome rows, prior five Task2
+evidence passages, old tables, Task3/4/5 evidence and history are byte-preserved
+except necessary coverage wording and the new A2 row.
+
+The report is finalized for one authorized three-file commit, ordinary branch push
+and draft PR; new-head leader review remains. No tests, builds, live observation
+queries, inference or grading ran. Full retained-field coverage is not whole-card
+completion or authority for further execution. Exact uncapped elapsed time, total
+recovery/downtime and complete costs remain unmeasured; causal/retention-only,
+source/epoch, service-variation, small-sample, judge, exclusion, missing-price and
+partial-cost limits remain. A/B still changes retry policy and retention together.
+
+## Prior PROJECT5-FINALIZE-TASK3-BUDGET-REPORT
 
 Finalized all six leader-verified Task3 budget observations on
 `b/codex-task3-budget-observation-draft-20260928` in
