@@ -36,17 +36,23 @@ entries land under a fresh dated heading the day they merge to `main`.
   before the function-scoped subprocess guard. Dynamic case setup and all
   guard/assertion bodies remain unchanged, with production and the image guard
   frozen at `de3e0401b9c0ae9d2d142c25e14d1f4dab768383`.
-- Record the single three-node invocation at
-  `93e96b342386482cb9e7f60805781f0009620629`: **3 passed in 16.55s**, exit 0.
-  This covers the ledger positive, its byte-identity guard negative and Task2
-  final readout `C_r1-graded`; it is not a full-family or CI result. The earlier
-  eight-node pass and exit-4 selection attempt at
-  `3188e27a2eac24fd7ed3f3e074c9a088ad7d79e0` remain separate. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-last-two-fixture-boundaries)
-  contains the exact command/result, both fixture changes, one
+- Bind the first-boot stand-in's immutable birth to the fake jailer launch,
+  using synthetic ticks after the floor and before PID publication. One
+  deterministic regression reproduces the former lazy probe's exact late-birth
+  refusal through the unchanged ownership predicate and checks the fixed path.
+  At `eb9971b1b8ce94e559481d56dd6cdbe1ca854c61`, one offline invocation reported
+  **4 passed in 1.02s**, exit 0, covering that regression, the original timeout
+  positive and two existing refusals. Only the test file and current records
+  change; production bytes remain identical to
+  `dac0421ca5b05d35eae85a9b666eb351a9f84744`. The original CI cause remains
+  unknown because its teardown record is missing. The earlier unchanged
+  **1 passed in 0.67s** diagnostic remains separate; neither observation proves
+  the original CI cause or justifies a nondeterminism claim. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-deterministic-birth-edge)
+  contains the exact command/result and safe refusal reason, one
   table of separate SHA-specific results and immutable links to prior handoffs
-  and the 54-module inventory. Leader review `5344462942` is conditional on all CI;
-  new-HEAD delta review and CI remain required for draft
+  and the 54-module inventory. Leader review `5345028254` is conditional on all CI;
+  new-HEAD delta review and CI remain gates for draft
   [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
   The capability remains unregistered and live-unverified, with no new
   campaign, paid-run, merge or launch authority.
