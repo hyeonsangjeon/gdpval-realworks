@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+import io
 import json
 import os
 import socket
 import subprocess
+import sys
+import tarfile
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -226,6 +230,31 @@ def executor_for(store, ledger=None, settings=SETTINGS):
 RATE = "HTTP 429 Too Many Requests"
 
 
+@pytest.fixture(scope="module")
+def approved_pilot_source(tmp_path_factory):
+    """Read immutable local Git data before the function-scoped process guard.
+
+    Only fixture materialization uses Git. Compilation below runs with every
+    existing process, network and credential guard installed.
+    """
+    approved_sha = "8ac891e3e0e4752fe15a00139a2691ddf9df7dce"
+    archived = subprocess.run(
+        ["git", "archive", "--format=tar", approved_sha, "batch-runner", ".github/workflows"],
+        cwd=ROOT, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30,
+        env={"PATH": os.defpath, "LANG": "C.UTF-8", "GIT_CONFIG_NOSYSTEM": "1",
+             "GIT_CONFIG_GLOBAL": os.devnull, "GIT_NO_LAZY_FETCH": "1"},
+    ).stdout
+    source = tmp_path_factory.mktemp("native-approved-source")
+    with tarfile.open(fileobj=io.BytesIO(archived), mode="r:") as snapshot:
+        assert snapshot.pax_headers["comment"] == approved_sha
+        assert all(
+            not Path(member.name).is_absolute() and ".." not in Path(member.name).parts
+            and (member.isdir() or member.isfile()) for member in snapshot.getmembers()
+        )
+        snapshot.extractall(source)
+    return source
+
+
 @pytest.mark.parametrize("condition,scenario", [
     ("B", "original"), ("C", "original"), ("A", "original_cap"),
     ("keep", "registration"),
@@ -240,12 +269,13 @@ RATE = "HTTP 429 Too Many Requests"
     "unowned_output", "linked_output", "replaced_output", "cleanup_interruption", "retired_reappears",
 )])
 def test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage(
-    host, monkeypatch, condition, scenario, request,
+    host, monkeypatch, condition, scenario, request, approved_pilot_source,
 ):
     assert codex_runtime_config.require_pinned_runtime() == ("0.147.0", "0.147.0")
     if scenario != "original":
         return _exercise_retention_bundle(
             host, monkeypatch, request.getfixturevalue("reference_task"), condition, scenario,
+            approved_pilot_source,
         )
     clock = Clock()
     store = store_at(host, clock, condition=condition)
@@ -300,7 +330,7 @@ def test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_c
         ledger.close()
 
 
-def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenario):
+def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenario, approved_pilot_source):
     """One selected regression group; only transport, clocks and crash edges are synthetic."""
     if scenario == "registration":
         import codex_budget_pilot as campaign
@@ -317,12 +347,40 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
                 })
         with pytest.raises(TaskDeadlineRefused):
             CodexTaskDeadlineControl.from_mapping({"condition": RETENTION_BUNDLE_CONDITION, "repetition": 1})
-        plan, _, specs = campaign.compile_pilot("offline-frozen-matrix", "8ac891e3e0e4752fe15a00139a2691ddf9df7dce")
+        approved_sha = "8ac891e3e0e4752fe15a00139a2691ddf9df7dce"
+        with pytest.raises(comparison.DispatchPlanRefused) as changed_source:
+            campaign.compile_pilot("offline-frozen-matrix", approved_sha)
+        assert str(changed_source.value) == (
+            "comparison refused: source_pin:batch-runner/core/codex_runner.py, "
+            "source_pin:batch-runner/step2_run_inference.py, "
+            "source_pin:batch-runner/core/codex_task_deadline.py"
+        )
+
+        # Load the unmodified production compilers at their real baseline paths.
+        # Only import routing changes; no pin, policy or validator is replaced.
+        with monkeypatch.context() as imports:
+            def load_compiler(name):
+                path = approved_pilot_source / "batch-runner" / f"{name}.py"
+                assert path.read_bytes() == (ROOT / "batch-runner" / path.name).read_bytes()
+                spec = importlib.util.spec_from_file_location(name, path)
+                assert spec is not None and spec.loader is not None
+                module = importlib.util.module_from_spec(spec)
+                imports.setitem(sys.modules, name, module)
+                spec.loader.exec_module(module)
+                return module
+
+            frozen_comparison = load_compiler("gpt54_comparison_preflight")
+            campaign = load_compiler("codex_budget_pilot")
+            assert frozen_comparison.ROOT == campaign.ROOT == approved_pilot_source
+            plan, _, specs = campaign.compile_pilot("offline-frozen-matrix", approved_sha)
         assert len(plan["cells"]) == len(specs) == 30
         assert campaign.ORDER == (("A", 1), ("B", 1), ("C", 1), ("C", 2), ("B", 2), ("A", 2))
         assert all(json.loads(spec.config_json)["execution"]["codex"]["task_deadline"] in [
             {"condition": arm, "repetition": repeat} for arm, repeat in campaign.ORDER
         ] for spec in specs.values())
+        assert {cell["condition"] for cell in plan["cells"]} == {"A", "B", "C"}
+        assert all(cell["condition"] != RETENTION_BUNDLE_CONDITION for cell in plan["cells"])
+        assert plan["launch_authorized_by_plan"] is False
         return
 
     control = (CodexTaskDeadlineControl("A", 1) if bundle == "A" else
@@ -539,7 +597,9 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
         if scenario in {"completed", "content_filter", "filter_start", "expired", "permanent", "turn_timeout", "lost_thread_start"}:
             if scenario == "turn_timeout":
                 assert first["observability"]["error_category"] == "timeout"
-                assert transport.joins == [ATTEMPT_SECONDS]
+                native_wait, shutdown_join = transport.joins
+                assert native_wait == ATTEMPT_SECONDS == 1800.0
+                assert shutdown_join == codex_runner.CODEX_INTERRUPT_GRACE_SECONDS == 20.0
             if scenario == "filter_start":
                 assert first["observability"]["error_category"] == "content_filtered"
             reopen(TOTAL_SECONDS if scenario == "expired" else 300)
@@ -557,7 +617,11 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
             clock.advance(expiry - clock.now - 7)
             result = retry()
             assert result["observability"]["error_category"] == EXHAUSTED
-            assert transport.joins == [ATTEMPT_SECONDS, 7] and clock.waits == []
+            native_wait, shrinking_wait, shutdown_join = transport.joins
+            assert native_wait == ATTEMPT_SECONDS and shrinking_wait == 7.0
+            assert shutdown_join == 0.0 and clock.waits == []
+            assert clock.now == expiry
+            assert result["observability"]["task_deadline"]["remaining_seconds"] == 0.0
             assert result["observability"]["task_deadline"]["expires_unix"] == expiry
             assert result["observability"]["task_deadline"]["attempts_admitted"] == 2
             return
