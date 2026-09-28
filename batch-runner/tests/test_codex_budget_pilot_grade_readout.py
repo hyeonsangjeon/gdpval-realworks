@@ -33,13 +33,35 @@ PRIVATE = "PRIVATE-canary https://private.invalid/path?token=PRIVATE"
 
 
 @pytest.fixture(scope="module")
-def compilations():
+def historical_budget_source(approved_pilot_source):
+    """Keep direct readers and wrapped writer consumers on the same frozen tree."""
+    import gpt54_comparison_preflight as comparison
+
+    # Derive both registration paths while ROOT still names their owning tree.
+    registration_path = pilot.REGISTRATION.relative_to(pilot.ROOT)
+    ci_registration_path = ci.REGISTRATION.relative_to(pilot.ROOT)
+    registration = approved_pilot_source / registration_path
+    ci_registration = approved_pilot_source / ci_registration_path
+    assert registration.read_bytes() == pilot.REGISTRATION.read_bytes()
+    assert ci_registration.read_bytes() == ci.REGISTRATION.read_bytes()
+    with pytest.MonkeyPatch.context() as source:
+        source.setattr(comparison, "ROOT", approved_pilot_source)
+        source.setattr(pilot, "ROOT", approved_pilot_source)
+        source.setattr(pilot, "REGISTRATION", registration)
+        source.setattr(ci, "REGISTRATION", ci_registration)
+        yield approved_pilot_source
+
+
+@pytest.fixture(scope="module")
+def compilations(historical_budget_source):
+    assert pilot.ROOT == historical_budget_source
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source)
             for source in (grading.RETAINED_PRODUCER_SOURCE, readout.WRITER_SOURCE, OBSERVER)}
 
 
 @pytest.fixture(scope="module")
-def compiled_cells():
+def compiled_cells(historical_budget_source):
+    assert pilot.ROOT == historical_budget_source
     return lru_cache(maxsize=8)(adapter.compile_cell_grading_plan)
 
 

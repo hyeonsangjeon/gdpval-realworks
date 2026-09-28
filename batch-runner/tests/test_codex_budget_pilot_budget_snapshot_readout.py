@@ -13,7 +13,6 @@ from types import SimpleNamespace
 import pytest
 
 import codex_budget_pilot as pilot
-import codex_budget_pilot_ci as ci
 import codex_budget_pilot_grade_readout as readout
 import codex_budget_pilot_grading as grading
 import codex_budget_pilot_grading_input as adapter
@@ -26,6 +25,7 @@ from . import test_codex_budget_pilot_grade_readout as writer
 from . import test_codex_budget_pilot_grading as base
 from . import test_codex_budget_pilot_task3_a1_readout as controls
 from . import test_codex_budget_pilot_task4_a1_ungraded_readout as ng
+from .test_codex_budget_pilot_grade_readout import historical_budget_source  # noqa: F401
 from .test_codex_budget_pilot_grading import boundaries  # noqa: F401 — forbid live execution
 from .test_codex_budget_pilot_task3_grading_chain import _Capture
 
@@ -42,26 +42,6 @@ INVALID = ("bool_seconds", "string_seconds", "negative_seconds", "zero_total", "
 
 
 @pytest.fixture(scope="module")
-def historical_budget_source(approved_pilot_source):
-    """Compile and copy the retained writer's real frozen source, not this runtime."""
-    import gpt54_comparison_preflight as comparison
-
-    # Derive both registration paths while ROOT still names their owning tree.
-    registration_path = pilot.REGISTRATION.relative_to(pilot.ROOT)
-    ci_registration_path = ci.REGISTRATION.relative_to(pilot.ROOT)
-    registration = approved_pilot_source / registration_path
-    ci_registration = approved_pilot_source / ci_registration_path
-    assert registration.read_bytes() == pilot.REGISTRATION.read_bytes()
-    assert ci_registration.read_bytes() == ci.REGISTRATION.read_bytes()
-    with pytest.MonkeyPatch.context() as source:
-        source.setattr(comparison, "ROOT", approved_pilot_source)
-        source.setattr(pilot, "ROOT", approved_pilot_source)
-        source.setattr(pilot, "REGISTRATION", registration)
-        source.setattr(ci, "REGISTRATION", ci_registration)
-        yield
-
-
-@pytest.fixture(scope="module")
 def history(tmp_path_factory, historical_budget_source):
     # Build the legacy fixed-revision case before entering the inherited
     # history's constructor guards. No old test function is executed.
@@ -69,8 +49,9 @@ def history(tmp_path_factory, historical_budget_source):
     local = tmp_path_factory.mktemp("budget-legacy-writer")
     with pytest.MonkeyPatch.context() as patch:
         base.boundaries.__wrapped__(patch)
-        current = writer.case.__wrapped__(local, patch, writer.compilations.__wrapped__(),
-                                          writer.compiled_cells.__wrapped__())
+        current = writer.case.__wrapped__(local, patch,
+            writer.compilations.__wrapped__(historical_budget_source),
+            writer.compiled_cells.__wrapped__(historical_budget_source))
         with redirect_stdout(capture.out), redirect_stderr(capture.err):
             revision, path, terminal = writer._writer(current, capture, local, patch, "graded")
         legacy = SimpleNamespace(api=copy.deepcopy(current.api), context=copy.deepcopy(current.context),

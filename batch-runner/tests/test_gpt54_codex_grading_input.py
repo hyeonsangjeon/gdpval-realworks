@@ -24,6 +24,24 @@ from gpt54_comparison_preflight import REQUIRED_SOURCES, ROOT, _canonical_json, 
 from .test_gpt54_v2_grading_input import test_v2_grading_input_is_bound_atomic_and_offline as _check_v2
 
 
+@pytest.fixture
+def historical_comparison_source(approved_pilot_source, monkeypatch):
+    import gpt54_comparison_preflight as comparison
+
+    current = inspect_plan(load_plan())
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/core/codex_task_deadline.py",
+    ]
+    plan = approved_pilot_source / comparison.PLAN.relative_to(comparison.ROOT)
+    assert plan.read_bytes() == comparison.PLAN.read_bytes()
+    monkeypatch.setattr(comparison, "ROOT", approved_pilot_source)
+    monkeypatch.setattr(comparison, "PLAN", plan)
+    return approved_pilot_source
+
+
 def _write_json(path, value):
     data = (_canonical_json(value) + "\n").encode("utf-8")
     path.write_bytes(data)
@@ -135,7 +153,9 @@ def _fixture(tmp_path, manifest, plan, run, *, failures=0, runtime_lineage=None)
         "parent_replaced_at_staging", "parent_replaced_during_write",
     )],
 ])
-def test_codex_grading_input_preserves_source_and_v2_boundary(case, tmp_path, monkeypatch, capsys):
+def test_codex_grading_input_preserves_source_and_v2_boundary(
+    case, tmp_path, monkeypatch, capsys, historical_comparison_source,
+):
     if case.startswith("v2:"):
         # Keep the original V2 assertions: no rewritten or weakened regression.
         _check_v2(case.split(":", 1)[1], tmp_path, monkeypatch, capsys)
