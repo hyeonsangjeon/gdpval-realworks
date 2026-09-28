@@ -1238,6 +1238,7 @@ def _build_execution_observability(
                 "remaining_seconds", "attempts_admitted", "wait_seconds",
                 "retained_attempts", "model_call_accounting", "invoice_accounting",
                 "session_policy", "native_resumes", "terminal_reason",
+                "retention_bundle", "retired_attempts",
             ) if key in deadline
         }
     budget_metrics = _bounded_budget_metrics((result or {}).get("budget_metrics"))
@@ -2507,6 +2508,7 @@ def _execute_single_task(
     preprocessor_observations: list[dict] = []
     reference_stage = None
     reference_stage_entered = False
+    fresh_bundle_request = False
     try:
         if abs_ref_files and not strict_inputs:
             reference_stage = stage_verified_references(abs_ref_files)
@@ -2575,6 +2577,25 @@ def _execute_single_task(
             }
 
         # Executor mode (code_interpreter / subprocess / json_renderer)
+        if execution_mode == "codex_foundry":
+            deadline_store = getattr(executor.runner, "task_deadline_store", None)
+            if deadline_store is not None and deadline_store.control.retention_bundle == "fresh":
+                fresh_bundle_request = True
+                executor.runner.reconcile_task_accounting(
+                    task_prompt=instruction, model=model, reference_files=abs_ref_files,
+                    occupation=task_info.get("occupation", "professional"),
+                    experiment_prompt=experiment_prompt, perception_text=perception_text,
+                    run_id=run_id, condition_name=condition_name, task_id=task_id,
+                )
+                # Only bind here. The runner first reconciles the exact request
+                # and receipts, then checks terminal/expiry gates before cleanup.
+                try:
+                    output_dir = ensure_task_deliverable_dir(
+                        Path(upload_root) if upload_root is not None else Path(UPLOAD_DIR), task_id,
+                    )
+                    deadline_store.for_task(task_id).bind_fresh_output_directory(output_dir)
+                except (OSError, ValueError):
+                    raise TaskDeadlineRefused("fresh output ownership could not be established") from None
         result = executor.execute(
             task_prompt=instruction,
             model=model,
@@ -2716,7 +2737,9 @@ def _execute_single_task(
             "model": model,
             "usage": None,
             "observability": _build_execution_observability(
-                None, preprocessor_observations
+                {"error_category": STATE_REFUSED}
+                if fresh_bundle_request and isinstance(exc, TaskDeadlineRefused) else None,
+                preprocessor_observations,
             ),
             "latency_ms": None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -4254,8 +4277,9 @@ def _run_inference_impl(
 
         def _clear_task_files():
             if task_deadline is not None:
-                # Budgeted attempts keep their partials; no deletion on retry
-                # or resume. Their private Codex workspaces are also retained.
+                # Legacy budgeted attempts keep partials. Experimental fresh
+                # cleanup happens only after the runner validates its bound
+                # request, receipts, exact ownership and permission to compute.
                 ensure_task_deliverable_dir(condition_upload_root, task_id)
             elif pilot_native_result_host is not None:
                 pilot_native_result_host.require_absent_task_output(task_id, condition_upload_root)

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
-from openai_codex import Codex, Sandbox
+from openai_codex import ApprovalMode, Codex, Sandbox
 from openai_codex._sandbox import _sandbox_policy
 from openai_codex.client import CodexClient
 from openai_codex.generated.v2_all import (
@@ -32,8 +32,9 @@ import ghcp_vm_gate_preflight as ghcp_gate
 from core import azure_ai_clients, codex_azure_token, codex_runner, codex_runtime_config
 from core import reference_integrity
 from core.codex_task_deadline import (
-    ATTEMPT_SECONDS, EXHAUSTED, STATE_REFUSED, TOTAL_SECONDS,
-    CodexTaskDeadline, TaskDeadlineRefused,
+    ATTEMPT_SECONDS, ATTEMPTS_EXHAUSTED, EXHAUSTED, STATE_REFUSED, TOTAL_SECONDS,
+    RETENTION_BUNDLE_CONDITION, CodexTaskDeadline, CodexTaskDeadlineControl,
+    TaskDeadlineRefused, validate_deadline_execution,
 )
 from core.cost_receipts import BUCKET_PROBLEM_SOLVING, CallUsage, CostReceiptLedger
 from core.executor import TaskExecutor
@@ -225,9 +226,27 @@ def executor_for(store, ledger=None, settings=SETTINGS):
 RATE = "HTTP 429 Too Many Requests"
 
 
-@pytest.mark.parametrize("condition", ["B", "C"])
-def test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage(host, monkeypatch, condition):
+@pytest.mark.parametrize("condition,scenario", [
+    ("B", "original"), ("C", "original"), ("A", "original_cap"),
+    ("keep", "registration"),
+] + [
+    (bundle, scenario) for bundle in ("keep", "fresh") for scenario in (
+        "retry_restore", "lost_response", "missing_usage", "settle_before", "settle_after",
+        "completed", "content_filter", "filter_start", "expired", "permanent",
+        "turn_timeout", "in_turn_expiry", "request_change", "input_change",
+        "cross_cell", "policy_change", "corrupt", "linked_workspace", "lost_thread_start",
+    )
+] + [("fresh", scenario) for scenario in (
+    "unowned_output", "linked_output", "replaced_output", "cleanup_interruption", "retired_reappears",
+)])
+def test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage(
+    host, monkeypatch, condition, scenario, request,
+):
     assert codex_runtime_config.require_pinned_runtime() == ("0.147.0", "0.147.0")
+    if scenario != "original":
+        return _exercise_retention_bundle(
+            host, monkeypatch, request.getfixturevalue("reference_task"), condition, scenario,
+        )
     clock = Clock()
     store = store_at(host, clock, condition=condition)
     ledger = CostReceiptLedger(host / "cost.sqlite", run_id="offline-cell-run")
@@ -275,6 +294,333 @@ def test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_c
         calls = ledger.calls_for(TASK, bucket=BUCKET_PROBLEM_SOLVING)
         assert len(calls) == len({row["call_id"] for row in calls}) == 3
         assert sorted(row["input_tokens"] for row in calls) == [35, 35, 100]
+        assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+    finally:
+        store.close()
+        ledger.close()
+
+
+def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenario):
+    """One selected regression group; only transport, clocks and crash edges are synthetic."""
+    if scenario == "registration":
+        import codex_budget_pilot as campaign
+
+        for legacy in ("A", "B", "C"):
+            old = {"condition": legacy, "repetition": 1}
+            assert CodexTaskDeadlineControl.from_mapping(old).as_dict() == old
+            with pytest.raises(TaskDeadlineRefused):
+                CodexTaskDeadlineControl.from_mapping({**old, "retention_bundle": "fresh"})
+        for invalid in ("unknown", None, True):
+            with pytest.raises(TaskDeadlineRefused):
+                CodexTaskDeadlineControl.from_mapping({
+                    "condition": RETENTION_BUNDLE_CONDITION, "repetition": 1, "retention_bundle": invalid,
+                })
+        with pytest.raises(TaskDeadlineRefused):
+            CodexTaskDeadlineControl.from_mapping({"condition": RETENTION_BUNDLE_CONDITION, "repetition": 1})
+        plan, _, specs = campaign.compile_pilot("offline-frozen-matrix", "8ac891e3e0e4752fe15a00139a2691ddf9df7dce")
+        assert len(plan["cells"]) == len(specs) == 30
+        assert campaign.ORDER == (("A", 1), ("B", 1), ("C", 1), ("C", 2), ("B", 2), ("A", 2))
+        assert all(json.loads(spec.config_json)["execution"]["codex"]["task_deadline"] in [
+            {"condition": arm, "repetition": repeat} for arm, repeat in campaign.ORDER
+        ] for spec in specs.values())
+        return
+
+    control = (CodexTaskDeadlineControl("A", 1) if bundle == "A" else
+               CodexTaskDeadlineControl.from_mapping({
+                   "condition": RETENTION_BUNDLE_CONDITION, "repetition": 1, "retention_bundle": bundle,
+               }))
+    assert validate_deadline_execution({
+        "mode": "codex_foundry", "timeout": ATTEMPT_SECONDS, "max_retries": 3,
+        "codex": {"task_deadline": control.as_dict()},
+    }, CONDITION) == control
+    clock = Clock()
+    store = store_at(host, clock, control=control)
+    ledger_path = host / "cost.sqlite"
+    ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+    fresh = bundle == "fresh"
+    scripts = [{"tokens": 100, "error": RATE}, {"tokens": 35 if fresh else 135}]
+    if scenario == "original_cap":
+        scripts = [{"tokens": 100, "error": RATE}] * 5
+    elif scenario == "retry_restore":
+        totals = [100, 35, 25, 25, 25, 30] if fresh else [100, 135, 160, 185, 210, 240]
+        scripts = [{"tokens": count, "seconds": seconds, **({"error": RATE} if i < 5 else {})}
+                   for i, (count, seconds) in enumerate(zip(totals, [10, 20, 5, 5, 5, 5], strict=True))]
+    elif scenario in {"lost_response", "missing_usage"}:
+        scripts = [({"turn_error": "synthetic lost turn/start response"} if scenario == "lost_response" else
+                    {"error": RATE}), {"tokens": 25 if fresh else 200, "error": RATE},
+                   {"tokens": 30 if fresh else 230}]
+    elif scenario in {"completed", "content_filter", "filter_start", "permanent", "turn_timeout"}:
+        scripts = [{"tokens": 100}]
+        if scenario == "content_filter":
+            scripts[0]["error"] = "reason: content_filter"
+        elif scenario == "filter_start":
+            scripts = [{"turn_error": "reason: content_filter"}]
+        elif scenario == "permanent":
+            scripts[0]["error"] = "HTTP 401 Unauthorized"
+        elif scenario == "turn_timeout":
+            scripts[0]["seconds"] = ATTEMPT_SECONDS + 7
+    elif scenario == "in_turn_expiry":
+        scripts[1]["seconds"] = 20
+    elif scenario == "retired_reappears":
+        scripts = [{"tokens": 100, "error": RATE}, {"tokens": 35, "error": RATE}, {"tokens": 25}]
+    transport = SDKTransport(monkeypatch, clock, scripts)
+    output_dir = host / "upload" / "deliverable_files" / TASK
+
+    def execute_current():
+        return _execute_reference_task(executor_for(store, ledger), host, reference_task)
+
+    def reopen(downtime=300):
+        nonlocal store, ledger
+        store.close()
+        ledger.close()
+        clock.advance(downtime)
+        store = store_at(host, clock, control=control, initialize=False)
+        ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+
+    def retry():
+        return step2.run_with_infra_retries(
+            lambda _: execute_current(), max_attempts=4,
+            task_deadline=store.for_task(TASK), sleep=clock.sleep,
+        )
+
+    try:
+        if scenario == "original_cap":
+            result = retry()
+            assert result["observability"]["error_category"] == ATTEMPTS_EXHAUSTED
+            assert store.control.max_attempts == 4 and transport.count("thread/start") == 4
+            assert transport.count("thread/resume") == 0 and transport.stage_calls == 4
+            assert len({workspace.root for workspace in transport.workspaces}) == 4
+            assert all(workspace.root.exists() for workspace in transport.workspaces)
+            assert store._read()["cells"][TASK]["continuation"] is None
+            assert result["observability"]["task_deadline"]["session_policy"] == "fresh_session"
+            return
+
+        assert store.control.max_attempts is None and store.for_task(TASK).attempts_remaining()
+        if scenario == "unowned_output":
+            output_dir.mkdir(parents=True)
+            (output_dir / "unowned.txt").write_bytes(b"do not adopt or remove")
+            result = execute_current()
+            assert result["observability"]["error_category"] == STATE_REFUSED
+            assert (output_dir / "unowned.txt").read_bytes() == b"do not adopt or remove"
+            assert not transport.requests and not transport.workspaces
+            return
+
+        if scenario == "retry_restore":
+            outside = host / "unrelated-state.txt"
+            outside.write_bytes(b"not owned by a native bundle")
+
+            def observed_turn(thread_id):
+                workspace = transport.workspace
+                current = store._read()["cells"][TASK]["continuation"]
+                assert current["thread_id"] == thread_id
+                assert all(turn["recovery_context"] is None for turn in current["turns"])
+                runner = executor_for(store, ledger).runner
+                env = runner._build_environment(workspace)
+                assert env["HOME"] == str(workspace.home) and env["CODEX_HOME"] == str(workspace.codex_home)
+                redirected = {"HOME", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"}
+                assert all(env[name] == "" for name in codex_runtime_config.NEUTRALISED_ENV_NAMES if name not in redirected)
+                assert all(Path(env[name]).is_relative_to(workspace.home) for name in redirected - {"HOME", "CODEX_HOME"})
+                assert runner._sandbox_preset() == Sandbox.workspace_write
+                assert runner._approval_mode() == ApprovalMode.deny_all
+                assert (workspace.workspace / "terms.txt").read_bytes() == b"approved"
+                assert (workspace.workspace / "terms.txt").stat().st_mode & 0o777 == 0o400
+                if transport.count("turn/start") == 1:
+                    (workspace.workspace / "prior-only.txt").write_bytes(b"first attempt intermediate")
+                    (workspace.home / "private-marker").write_bytes(b"first home")
+                    (workspace.workspace / "outside-link").symlink_to(outside)
+                elif fresh:
+                    assert not (workspace.workspace / "prior-only.txt").exists()
+                    assert not (workspace.home / "private-marker").exists()
+                    assert all(not old.root.exists() for old in transport.workspaces[:-1])
+                    assert not (output_dir / "stale.txt").exists()
+                else:
+                    assert (workspace.workspace / "prior-only.txt").read_bytes() == b"first attempt intermediate"
+                    assert (workspace.home / "private-marker").read_bytes() == b"first home"
+
+            transport.on_turn = observed_turn
+
+            def first_process(index):
+                if index == 2:
+                    raise InterruptedError("synthetic host restart")
+                result = execute_current()
+                if fresh:
+                    (output_dir / "stale.txt").write_bytes(b"interrupted host save")
+                return result
+
+            with pytest.raises(InterruptedError):
+                step2.run_with_infra_retries(first_process, max_attempts=4,
+                                            task_deadline=store.for_task(TASK), sleep=clock.sleep)
+            expiry = store.for_task(TASK).as_record()["expires_unix"]
+            first_binding = store._read()["cells"][TASK]["continuation"]["workspace"]
+            reopen()
+            result = retry()
+            assert result["status"] == "success"
+            record = result["observability"]["task_deadline"]
+            assert record["condition"] == RETENTION_BUNDLE_CONDITION and record["retention_bundle"] == bundle
+            assert record["attempts_admitted"] == 6 and record["native_resumes"] == (0 if fresh else 5)
+            assert record["retained_attempts"] == (1 if fresh else 6)
+            assert record.get("retired_attempts", 0) == (5 if fresh else 0)
+            assert record["expires_unix"] == expiry and record["remaining_seconds"] == TOTAL_SECONDS - 950
+            assert record["wait_seconds"] == 600 and clock.waits == [60, 120, 60, 120, 240]
+            assert transport.joins == [ATTEMPT_SECONDS] * 6
+            assert transport.count("thread/start") == (6 if fresh else 1)
+            assert transport.count("thread/resume") == (0 if fresh else 5)
+            assert transport.stage_calls == (6 if fresh else 1)
+            assert len({workspace.root for workspace in transport.workspaces}) == (6 if fresh else 1)
+            if not fresh:
+                assert all(workspace.continuation_binding() == first_binding for workspace in transport.workspaces)
+            assert (transport.workspace.workspace / "partial.txt").read_bytes() == b"synthetic partial\n" * (1 if fresh else 6)
+            names = {Path(name).name for name in result["deliverable_files"]}
+            assert names == ({"partial.txt"} if fresh else {"partial.txt", "prior-only.txt"})
+            step2.validate_local_deliverables([result], host / "upload")
+            assert (reference_task.root / reference_task.info["reference_files"][0]).read_bytes() == b"approved"
+            assert outside.read_bytes() == b"not owned by a native bundle"
+            assert all(not Path(paths[0]).parent.exists() for paths in reference_task.staged)
+            calls = ledger.calls_for(TASK)
+            assert len(calls) == len({row["call_id"] for row in calls}) == 6
+            assert sorted(row["input_tokens"] for row in calls) == [25, 25, 25, 30, 35, 100]
+            assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+            cell = store._read()["cells"][TASK]
+            assert len(cell.get("retired_continuations", [])) == (5 if fresh else 0)
+            assert str(host) not in json.dumps(record)
+            for method, params in transport.requests:
+                if method in {"thread/start", "thread/resume"}:
+                    assert params["approvalPolicy"] == "never" and params["sandbox"] == "workspace-write"
+                if method == "turn/start":
+                    assert "[HOST RECOVERY CONTEXT]" not in json.dumps(params)
+            return
+
+        if scenario == "lost_thread_start":
+            transport.start_error = True
+        if scenario in {"settle_before", "settle_after", "completed", "content_filter", "expired"}:
+            real_settle = ledger.settle
+
+            def interrupted_settlement(*args, **kwargs):
+                if scenario == "settle_after":
+                    real_settle(*args, **kwargs)
+                raise SystemExit("synthetic ledger boundary interruption")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(ledger, "settle", interrupted_settlement)
+                with pytest.raises(SystemExit):
+                    execute_current()
+            assert store._read()["cells"][TASK]["continuation"]["turns"][0]["phase"] == "observed"
+            first_receipt = ledger.calls_for(TASK)[0]
+            assert first_receipt["state"] == ("settled" if scenario == "settle_after" else "reserved")
+        else:
+            first = execute_current()
+            assert first["status"] == "error"
+
+        expiry = store._read()["cells"][TASK]["expires_unix"]
+        workspace = transport.workspaces[0]
+        requests_before = list(transport.requests)
+        if scenario in {"lost_response", "missing_usage", "settle_before", "settle_after"}:
+            reopen()
+            result = retry()
+            assert result["status"] == "success"
+            calls = ledger.calls_for(TASK)
+            if scenario.startswith("settle_"):
+                assert len(calls) == 2 and sorted(row["input_tokens"] for row in calls) == [35, 100]
+                if scenario == "settle_after":
+                    assert next(row for row in calls if row["call_id"] == first_receipt["call_id"]) == first_receipt
+            else:
+                assert len(calls) == 3
+                assert sum(row["input_tokens"] is None for row in calls) == (1 if fresh else 2)
+                assert sorted(row["input_tokens"] for row in calls if row["input_tokens"] is not None) == (
+                    [25, 30] if fresh else [30])
+                if scenario == "lost_response":
+                    assert sum(row["state"] == "reserved" for row in calls) == 1
+            assert len(calls) == len({row["call_id"] for row in calls})
+            assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+            assert store.for_task(TASK).as_record()["expires_unix"] == expiry
+            assert transport.count("thread/start") == (len(calls) if fresh else 1)
+            return
+
+        if scenario in {"completed", "content_filter", "filter_start", "expired", "permanent", "turn_timeout", "lost_thread_start"}:
+            if scenario == "turn_timeout":
+                assert first["observability"]["error_category"] == "timeout"
+                assert transport.joins == [ATTEMPT_SECONDS]
+            if scenario == "filter_start":
+                assert first["observability"]["error_category"] == "content_filtered"
+            reopen(TOTAL_SECONDS if scenario == "expired" else 300)
+            result = _restore_through_retry(executor_for(store, ledger), host, clock, store,
+                                            task_info=reference_task.info)
+            assert result["observability"]["error_category"] == (EXHAUSTED if scenario == "expired" else STATE_REFUSED)
+            assert transport.requests == requests_before and clock.waits == []
+            assert len(store._read()["cells"][TASK]["attempts"]) == 1 and workspace.root.exists()
+            if scenario in {"completed", "content_filter", "expired"}:
+                calls = ledger.calls_for(TASK)
+                assert len(calls) == 1 and calls[0]["state"] == "settled" and calls[0]["input_tokens"] == 100
+            return
+
+        if scenario == "in_turn_expiry":
+            clock.advance(expiry - clock.now - 7)
+            result = retry()
+            assert result["observability"]["error_category"] == EXHAUSTED
+            assert transport.joins == [ATTEMPT_SECONDS, 7] and clock.waits == []
+            assert result["observability"]["task_deadline"]["expires_unix"] == expiry
+            assert result["observability"]["task_deadline"]["attempts_admitted"] == 2
+            return
+
+        if scenario == "policy_change":
+            store.close()
+            changed = CodexTaskDeadlineControl(RETENTION_BUNDLE_CONDITION, 1, "keep" if fresh else "fresh")
+            with pytest.raises(TaskDeadlineRefused):
+                store_at(host, clock, initialize=False, control=changed)
+            assert transport.requests == requests_before and workspace.root.exists()
+            return
+        if scenario == "request_change":
+            reference_task.info["instruction"] += " changed"
+        elif scenario == "input_change":
+            (reference_task.root / reference_task.info["reference_files"][0]).write_bytes(b"changed verified source")
+        elif scenario == "cross_cell":
+            data = store._read()
+            data["cells"][TASK2] = data["cells"][TASK]
+            store._write(data)
+            reference_task.info["task_id"] = TASK2
+        elif scenario == "corrupt":
+            with store.path.open("ab") as stream:
+                stream.write(b"corrupt state")
+        elif scenario == "linked_workspace":
+            workspace.home.rename(workspace.root / "original-home")
+            workspace.home.symlink_to(workspace.root / "original-home", target_is_directory=True)
+        elif scenario in {"linked_output", "replaced_output"}:
+            output_dir.rename(output_dir.with_name("original-output"))
+            if scenario == "linked_output":
+                output_dir.symlink_to(output_dir.with_name("original-output"), target_is_directory=True)
+            else:
+                output_dir.mkdir()
+        elif scenario == "cleanup_interruption":
+            real_remove = codex_runner.shutil.rmtree
+
+            def interrupted_remove(path, *args, **kwargs):
+                real_remove(path, *args, **kwargs)
+                if Path(path) == workspace.root:
+                    raise SystemExit("synthetic interruption after owned cleanup")
+
+            interrupted_remove.avoids_symlink_attacks = real_remove.avoids_symlink_attacks
+            with monkeypatch.context() as patch:
+                patch.setattr(codex_runner.shutil, "rmtree", interrupted_remove)
+                with pytest.raises(SystemExit):
+                    execute_current()
+            assert not workspace.root.exists()
+            reopen()
+        elif scenario == "retired_reappears":
+            assert execute_current()["observability"]["error_category"] == "rate_limited"
+            assert not workspace.root.exists()
+            workspace.root.mkdir()
+            (workspace.root / "unowned-marker").write_bytes(b"do not delete")
+            requests_before = list(transport.requests)
+        else:
+            pytest.fail(f"unhandled retention scenario: {scenario}")
+        result = execute_current()
+        if scenario == "input_change":
+            assert result["error"].startswith("reference_input_integrity_failed")
+        else:
+            assert result["observability"]["error_category"] == STATE_REFUSED
+        assert transport.requests == requests_before
+        if scenario not in {"cleanup_interruption", "retired_reappears"}:
+            assert (workspace.workspace / "partial.txt").read_bytes() == b"synthetic partial\n"
         assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
     finally:
         store.close()
