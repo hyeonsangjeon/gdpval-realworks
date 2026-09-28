@@ -1,6 +1,47 @@
 # Latest task result
 
-## PROJECT5-FINALIZE-TASK5-BUDGET-REPORT
+## PROJECT5-FINALIZE-TASK3-BUDGET-REPORT
+
+Finalized all six leader-verified Task3 budget observations on
+`b/codex-task3-budget-observation-draft-20260928` in
+`/ai-work/copilot/worktrees/codex-task3-budget-observation-draft-20260928`,
+from base `d7c70e05440162eaecd7121ed3a50d04d39cbf53`. Only
+`tasks/codex_budget_pilot/REPORT.md`, `CHANGELOG.md` [Unreleased] and this
+current record change. The merged Task5 branch and old checkout are preserved.
+
+The [Task3 section](../codex_budget_pilot/REPORT.md#task3-budget-observations-a1-b1-c1-c2-b2-and-a2)
+contains all six readout identities, exact snapshots and bindings in original
+cell order. Final A2 readout `36389511000`, attempt 1, job `108822001086`,
+compares with original `36312822662` and ran on observer
+`d7c70e05440162eaecd7121ed3a50d04d39cbf53`. A1/B1 retain their actual observer
+`81c822374674fdcad2a53ebf9fd9435b97182be4`; C1/C2/B2/A2 use `d7c70e0`.
+The report identifies the leader-local six-cell bundle and supplied SHA-256
+without claiming a worktree copy or independent fetch. Original deliverables,
+grades, accounting and proof fields are unchanged. Coverage is 18 of 24 epoch04
+budgets (6 each for Task3/Task4/Task5); the remaining 6 Task2 snapshots are
+unobserved here, not zero or `not_recorded`. Task3 budget evidence is complete,
+not the whole card or 30 budget snapshots; historical Task1 failures stay separate.
+
+Reviewed source `f41135e634c9f5b92e6a082b22e987ee59af51bb`, review `5334192517`
+and all nine passing checks are leader-supplied provenance, not validation of
+this new report head. The base tree matches that reviewed tree. The catalog was
+checked once; `experiment-report-en` followed by protected `im-not-ai-en`
+preserved measurement meanings and non-causal scope. No design or UI skill applies.
+Final A2/six-cell reconciliation passed 47 scoped checks and protected copyediting
+without warnings. A1/B1 53-check, C1/C2 53-check and B2 41-check observations
+remain separate, not a combined check run. All 24 outcome rows, prior table rows,
+five accepted Task3 passages, Task4/Task5 evidence and history are preserved,
+except necessary coverage/scope wording and the final A2 row.
+
+One ordinary owner-account branch push and one new draft PR are authorized
+for these three Markdown files. The new head awaits leader review and normal
+checks; final SHA and PR are reported in the handoff. No future merge facts are
+asserted. No tests, builds or live observation queries ran, and no grade or cost
+was recomputed. The six unobserved Task2 budgets and all causal, measurement,
+source/epoch, small-sample, unknown-failure-cause, judge, price and A/B
+retry-plus-retention limits remain, without new execution authority.
+
+## Prior PROJECT5-FINALIZE-TASK5-BUDGET-REPORT
 
 Finalized all six leader-verified Task5 budget observations in one report change on
 `b/codex-task5-budget-observation-draft-20260928` in

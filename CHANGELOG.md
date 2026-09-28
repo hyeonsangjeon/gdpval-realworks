@@ -13,6 +13,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Complete the [Task3 budget report](tasks/codex_budget_pilot/REPORT.md#task3-budget-observations-a1-b1-c1-c2-b2-and-a2)
+  with six leader-verified snapshots in original cell order. Final A2 readout
+  `36389511000`, attempt 1, job `108822001086`, compares with original
+  `36312822662` and ran on observer `d7c70e05440162eaecd7121ed3a50d04d39cbf53`.
+  A1/B1 retain their actual observer `81c822374674fdcad2a53ebf9fd9435b97182be4`.
+  Coverage is 18 of 24 epoch04 budgets (6 each for Task3/Task4/Task5); the
+  remaining 6 Task2 snapshots are unobserved here, not zero or `not_recorded`.
+  Exact bindings and the leader-local bundle reference/SHA-256 are in the report;
+  no worktree copy or independent fetch of that bundle is claimed.
+  Final A2/six-cell reconciliation passed 47 scoped checks and protected
+  copyediting without warnings. A1/B1 53-check, C1/C2 53-check and B2 41-check
+  observations remain separate. All 24 outcome rows, prior table rows, five
+  accepted Task3 passages, Task4/Task5 evidence and history are preserved,
+  except necessary coverage/scope wording and the final A2 row.
+  Reviewed source `f41135e634c9f5b92e6a082b22e987ee59af51bb`, review `5334192517`
+  and nine passing checks are leader-supplied provenance, not new validation.
+  Only the report and two current records change. One ordinary owner-account
+  push and one draft PR are authorized; the new head requires leader review
+  and normal checks. No future merge facts are asserted. No tests, builds or
+  live observation queries ran; no grades or costs were recomputed. Task3
+  budget evidence is complete, not the whole card. Measurement, causal,
+  source/epoch, judge, price and A/B retry-plus-retention limits remain.
+
+### Prior Task5 budget report (historical)
+
 - Complete the [Task5 budget-observation report](tasks/codex_budget_pilot/REPORT.md#task5-budget-observations-a1-b1-c1-c2-b2-and-a2)
   with all six leader-verified snapshots in original cell order. Final A2
   readout `36376002130`, attempt 1, job `108781859651`, compares with original
