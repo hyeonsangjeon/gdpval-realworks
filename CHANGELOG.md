@@ -13,6 +13,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Remove the execution-layer import from deadline retirement. The existing
+  deadline module now owns the shared native workspace layout and removed-root
+  checks used by `CodexWorkspace` and `retire_fresh_bundle`. Tested HEAD
+  `1fa84f2b2cff4d51a323aabd2051130fd8b119c8` passed the single authorized offline
+  invocation: **3 passed in 61.92s**, exit 0. It selected the grading import
+  guard, `fresh-retry_restore` and `fresh-retired_reappears`; the
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-metadata-import-boundary)
+  records the exact command. Only `core/codex_task_deadline.py` and
+  `core/codex_runner.py` change in production; all other production bytes remain
+  identical to `a2f16328946c71c2f3511d3c85cb411e57af1d8a`. Layout, inode,
+  parent, symlink, absence, reappeared-root and cleanup-interruption checks
+  retain their semantics. No test, AST walker, binary allowlist, image,
+  dependency, workflow, frozen registration or source pin changed. The prior
+  stop record, complete 54-module failed-node inventory and separate
+  SHA-specific results remain below. Legacy fixture completion is still
+  needed for the leader-reported `pytest`, `pilot-contracts` and
+  `budget-readout` failures; this local pass is not a CI result. Reviewed
+  baseline `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` remains fixed, and leader
+  review `5342606812` was conditional on CI. New-head delta review and CI
+  remain required for existing draft
+  [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
+  No legacy-fixture sweep, CI polling, merge, live operation or launch occurred.
+
+### Prior legacy-fixture boundary stop (historical)
+
+- Stop `PROJECT5-FINAL-LEGACY-FIXTURES` before fixture edits or a local pytest
+  invocation. Inventory of the three authorized logs from CI run `36458595611`
+  found a different safeguard failure in
+  `tests/test_grading_image.py::test_grading_path_shells_out_only_to_known_binaries`.
+  Its static import-closure scan reports `git` in
+  `batch-runner/core/agentic_authorization.py` and `docker` in
+  `batch-runner/core/sandbox_runner.py` outside `ALLOWED_SHELL_OUTS`.
+  This is not a source-pin refusal. No allowlist, source binding, production
+  code or test changed. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-final-legacy-fixtures)
+  records the exact diagnostic and complete failed-node/module inventory.
+  Local and published HEAD remain `a2f16328946c71c2f3511d3c85cb411e57af1d8a`.
+  There is no new tested HEAD or local test result; the previous
+  `3fdc5a95853619135d4165063392144eb6fea540` observation remains 8 passed in
+  26.06s, separate from every earlier result. Only these two current records
+  change locally; no commit or push is authorized by this stopped handoff.
+  Leader review `5342606812` is conditional on CI, not a failure waiver or
+  campaign approval. Resolution of the distinct shell-out guard, the remaining
+  fixture wiring, CI and subsequent delta review remain outstanding. No test
+  rerun, CI polling, live operation, merge or launch occurred.
+
+### Prior complete fixture-wiring validation (historical)
+
 - Complete explicit historical-source fixture wiring across the six comparison
   modules and both pilot consumers identified in CI run `36455260095`.
   Tested fixture HEAD `3fdc5a95853619135d4165063392144eb6fea540` passed the

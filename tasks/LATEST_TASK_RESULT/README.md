@@ -1,5 +1,235 @@
 # Latest task result
 
+## PROJECT5-METADATA-IMPORT-BOUNDARY
+
+The single authorized offline invocation passed at tested HEAD
+`1fa84f2b2cff4d51a323aabd2051130fd8b119c8`: **3 passed in 61.92s**, exit 0.
+The branch remains `b/codex-retention-runtime-20260928`, for existing draft
+[PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
+
+The removed static import path was `step8_grade` → `core.experiment_config` →
+`core.codex_task_deadline.retire_fresh_bundle` → `core.codex_runner.CodexWorkspace`.
+The final edge made execution-layer imports reachable to the grading guard,
+including the reported `git` and `docker` call sites. Static reachability did
+not establish that those commands executed during grading or that packages
+were missing from the image.
+
+The existing deadline module now owns `_native_workspace_layout` and
+`_require_native_workspace_removed`. Both deadline retirement and
+`CodexWorkspace` use this shared metadata validation, with no runner import
+from deadline metadata. The extracted checks retain the binding shape,
+stored directory-identity fields, parent and symlink restrictions, required
+root absence and reappeared-root refusal. Existing directory-mode/inode validation in
+`continuation_binding` and `restore`, descriptor-safe owned cleanup,
+cleanup-interruption refusal and durable retirement ordering are unchanged.
+No boolean substitutes for removed-root validation, weaker duplicate check or
+hidden import was introduced.
+
+Only `batch-runner/core/codex_task_deadline.py` and
+`batch-runner/core/codex_runner.py` changed in production. This authorized
+refactor intentionally changes their bytes from
+`a2f16328946c71c2f3511d3c85cb411e57af1d8a`; all other production bytes,
+including the Step2 optional-runner fix, remain identical to that HEAD.
+The AST guard, all tests, binary allowlist, Dockerfile, dependencies,
+workflows, frozen source pins/registrations and original 30-cell results are
+unchanged. No policy, timing, accounting, permission or identity guard changed.
+
+The exact invocation, from `batch-runner`, was:
+
+```bash
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short \
+  'tests/test_grading_image.py::test_grading_path_shells_out_only_to_known_binaries' \
+  'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage[fresh-retry_restore]' \
+  'tests/test_codex_native_resume.py::test_native_resume_failure_retry_and_process_restore_keep_thread_workspace_clock_and_usage[fresh-retired_reappears]'
+```
+
+The two fresh cases were specifically reauthorized for this metadata/absence
+refactor. No other native case, earlier representative, full file or suite was
+rerun. The fake SDK, clock, process and network guards remained in place.
+
+The [prior stop record](#project5-final-legacy-fixtures), its complete
+54-module failed-node inventory and all earlier SHA-specific observations
+are preserved below. That stop produced no additional local test result.
+The `b1854e5`, `91ffae5`, `6710299`, `6665c18`, `7bbe61f`, `88b8a62` and
+`3fdc5a9` invocations remain separate; this result does not combine or rerun
+them. The earlier inventory still covers direct pilot/CI/epoch/retention/output
+plans, OIDC/shared grading compilations, Task3–5 history/readout chains and
+Task2 final readout, HF originals, and native-resume/recovery-feedback/deadline
+historical grader bindings. No legacy fixture was changed in this task.
+
+The last leader-supplied CI state was 11 passing and 3 failing checks
+(`pytest`, `pilot-contracts`, `budget-readout`). The local import-guard pass
+does not establish that those CI checks pass. Reviewed baseline
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce` remains fixed; leader review
+`5342606812` was conditional on CI and does not cover this new delta or
+authorize the changed runtime for the old campaign. Legacy fixture completion,
+new-head delta review and CI remain required. There was no CI polling, real
+Docker/model/Azure/HF/OIDC operation, source-pin refresh, merge, paid run or
+new campaign. Protected `im-not-ai-en` applies only to the new current English
+passages; older histories and values remain unchanged.
+
+## Prior legacy-fixture boundary stop (historical)
+
+The following stop record and inventory describe the previous handoff. Its
+source, test and publication statements remain historically scoped.
+
+## PROJECT5-FINAL-LEGACY-FIXTURES
+
+Stopped at the requested different-cause boundary before any fixture edit,
+new commit or local pytest invocation. Local and published HEAD remain
+`a2f16328946c71c2f3511d3c85cb411e57af1d8a` on
+`b/codex-retention-runtime-20260928`. Only `CHANGELOG.md` and this current record
+change locally. Production and tests remain byte-identical to that HEAD.
+
+The full inventory of the three authorized logs from CI run `36458595611`
+revealed this additional failure in pytest job `109051645390`:
+
+```text
+tests/test_grading_image.py::test_grading_path_shells_out_only_to_known_binaries
+tests/test_grading_image.py:524: assert not unexpected
+AssertionError: new external binary on the grading path; confirm the image carries it and add it to ALLOWED_SHELL_OUTS: {'git': 'batch-runner/core/agentic_authorization.py', 'docker': 'batch-runner/core/sandbox_runner.py'}
+```
+
+The test walks the current `step8_grade` import closure and scans reachable
+source for literal external-binary calls. Its failure is a shell-out allowlist
+assertion, not one of the frozen runtime source-pin refusals. The diagnostic
+does not establish whether those binaries execute during grading or are present
+in the image. The scanner was not redirected to archived source, and
+`ALLOWED_SHELL_OUTS` was not extended. Fixing or changing this safeguard is
+outside the authorized historical-fixture wiring, so the stop condition applies.
+
+No targeted selectors were executed and no new tested SHA was produced. The
+eight-family invocation was not launched. The exact blocking selector above
+is a prior CI failure, not a new local result. The three logs identify their
+synthetic PR checkout as `4da230d4d0e3c73355b36845204d53206dc91c9f`; this is
+CI provenance, not a merge of PR698 or its published branch HEAD.
+
+The logs were downloaded once each and every failure/setup-error node was
+inventoried. These results describe separate existing CI invocations:
+
+| Job | Existing invocation result |
+| --- | --- |
+| pytest `109051645390` | 9 failed, 13276 passed, 61 skipped, 46 deselected in 1458.05s |
+| pilot `109051645156`, first invocation | 917 passed in 340.92s |
+| pilot `109051645156`, budget-contract invocation | 330 failed, 92 passed, 1115 setup errors in 174.94s |
+| readout `109051645081` | 44 failed, 84 passed, 2801 setup errors in 663.47s |
+
+The legacy families remain unresolved. The reported first compiler boundaries
+are OIDC `compilations` at line 70 through `compile_pilot`, and Task3 A1
+`history` at line 43 through `_writer_context` and `compile_request`.
+The latter wraps the same source pins as `registered_cell_controls_refused`.
+HF originals reach `_registered` through `_hf_origins`. Native-resume,
+recovery-feedback and deadline positives compare frozen grader/runtime pins
+with the current tree. All module-level history/compilation lifetimes, direct
+`__wrapped__` consumers, genuine failed-row construction order and downstream
+receipt/native validators still need the authorized coherent fixture repair.
+The source-callsite work stopped when this different safeguard failure was
+identified. No successful repair is claimed.
+
+The complete affected-module inventory follows. Each name is relative to
+`batch-runner/tests/`; counts are from the named log, not new validation.
+
+| Log | Module | Failed | Setup errors |
+| --- | --- | --- | --- |
+| pytest | `test_codex_ci_hf_originals.py` | 1 | 0 |
+| pytest | `test_codex_native_resume.py` | 2 | 0 |
+| pytest | `test_codex_recovery_feedback.py` | 2 | 0 |
+| pytest | `test_codex_task_deadline.py` | 3 | 0 |
+| pytest | `test_grading_image.py` | 1 | 0 |
+| pilot | `test_codex_budget_pilot.py` | 26 | 0 |
+| pilot | `test_codex_budget_pilot_ci.py` | 14 | 0 |
+| pilot | `test_codex_budget_pilot_epoch02.py` | 24 | 0 |
+| pilot | `test_codex_budget_pilot_epoch03_gate.py` | 9 | 0 |
+| pilot | `test_codex_budget_pilot_epoch04_gate.py` | 18 | 0 |
+| pilot | `test_codex_budget_pilot_failed_retention.py` | 25 | 0 |
+| pilot | `test_codex_budget_pilot_failure_category.py` | 28 | 0 |
+| pilot | `test_codex_budget_pilot_output_setup.py` | 58 | 0 |
+| pilot | `test_codex_budget_pilot_output_target.py` | 39 | 0 |
+| pilot | `test_codex_budget_pilot_retention.py` | 63 | 0 |
+| pilot | `test_codex_budget_pilot_success_retention.py` | 25 | 0 |
+| pilot | `test_codex_budget_pilot_grading_oidc.py` | 0 | 64 |
+| pilot | `test_codex_budget_pilot_b1_grading.py` | 0 | 23 |
+| pilot | `test_codex_budget_pilot_grading.py` | 0 | 63 |
+| pilot | `test_codex_budget_pilot_grading_branch_inspect.py` | 0 | 28 |
+| pilot | `test_codex_budget_pilot_grading_input.py` | 0 | 46 |
+| pilot | `test_codex_budget_pilot_grading_source.py` | 0 | 28 |
+| pilot | `test_codex_budget_pilot_output.py` | 0 | 93 |
+| pilot | `test_codex_budget_pilot_next_b1.py` | 0 | 19 |
+| pilot | `test_codex_budget_pilot_results.py` | 1 | 30 |
+| pilot | `test_codex_budget_pilot_task2_grade_completion.py` | 0 | 29 |
+| pilot | `test_codex_budget_pilot_task3_a1.py` | 0 | 23 |
+| pilot | `test_codex_budget_pilot_task3_a1_grading.py` | 0 | 31 |
+| pilot | `test_codex_budget_pilot_task3_grading_chain.py` | 0 | 59 |
+| pilot | `test_codex_budget_pilot_task4_failed_a2.py` | 0 | 46 |
+| pilot | `test_codex_budget_pilot_task4_failed_grading.py` | 0 | 16 |
+| pilot | `test_codex_budget_pilot_task4_successor_grading.py` | 0 | 40 |
+| pilot | `test_codex_budget_pilot_task5_b2_grading.py` | 0 | 78 |
+| pilot | `test_codex_budget_pilot_task5_c1_grading.py` | 0 | 69 |
+| pilot | `test_codex_budget_pilot_task5_failed_a1.py` | 0 | 52 |
+| pilot | `test_codex_budget_pilot_task5_failed_a2.py` | 0 | 84 |
+| pilot | `test_codex_budget_pilot_task5_failed_b1.py` | 0 | 66 |
+| pilot | `test_codex_budget_pilot_task5_failed_c2.py` | 0 | 78 |
+| pilot | `test_codex_budget_pilot_ungraded.py` | 0 | 50 |
+| readout | `test_codex_budget_pilot_task2_final_readout.py` | 44 | 0 |
+| readout | `test_codex_budget_pilot_task3_a1_readout.py` | 0 | 78 |
+| readout | `test_codex_budget_pilot_task3_a2_readout.py` | 0 | 99 |
+| readout | `test_codex_budget_pilot_task3_b1_readout.py` | 0 | 89 |
+| readout | `test_codex_budget_pilot_task3_b2_readout.py` | 0 | 99 |
+| readout | `test_codex_budget_pilot_task3_c_readout.py` | 0 | 198 |
+| readout | `test_codex_budget_pilot_task4_a1_ungraded_readout.py` | 0 | 95 |
+| readout | `test_codex_budget_pilot_task4_a2_ungraded_readout.py` | 0 | 105 |
+| readout | `test_codex_budget_pilot_task4_b1_readout.py` | 0 | 118 |
+| readout | `test_codex_budget_pilot_task4_ordinary_readout.py` | 0 | 374 |
+| readout | `test_codex_budget_pilot_task5_a1_ungraded_readout.py` | 0 | 149 |
+| readout | `test_codex_budget_pilot_task5_b1_ungraded_readout.py` | 0 | 206 |
+| readout | `test_codex_budget_pilot_task5_c1_readout.py` | 0 | 269 |
+| readout | `test_codex_budget_pilot_task5_c2_ungraded_readout.py` | 0 | 406 |
+| readout | `test_codex_budget_pilot_task5_final_readout.py` | 0 | 516 |
+
+The eight other failures in the main pytest log have these exact IDs:
+
+```text
+tests/test_codex_ci_hf_originals.py::test_hf_originals_real_registered_origins_keep_submission_parquet_out
+tests/test_codex_native_resume.py::test_native_resume_active_grader_template_source_bindings[current]
+tests/test_codex_native_resume.py::test_native_resume_active_grader_template_source_bindings[pre_resume]
+tests/test_codex_recovery_feedback.py::test_recovery_feedback_active_grader_template_source_bindings[current]
+tests/test_codex_recovery_feedback.py::test_recovery_feedback_active_grader_template_source_bindings[pre_feedback]
+tests/test_codex_task_deadline.py::test_cumulative_task_deadline_active_grader_bindings[current]
+tests/test_codex_task_deadline.py::test_cumulative_task_deadline_active_grader_bindings[selector_only]
+tests/test_codex_task_deadline.py::test_cumulative_task_deadline_active_grader_bindings[deadline_only]
+```
+
+Earlier local evidence remains separate and is preserved verbatim below:
+
+| Tested source | Actual local result |
+| --- | --- |
+| `b1854e5b50eda9c25c9db5bc2627acf35022e70d` | 5 failed, 42 passed in 334.92s; exit 1 |
+| `91ffae589b240dd9d31978af0dd2cf19532e96c7` | 5 passed in 24.02s; exit 0 |
+| `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` | 3 passed, 1 setup error in 93.52s; exit 1 |
+| `6665c183c215aa6594622eb9fe92ca55633c7013` | 1 setup error in 8.44s; exit 1 |
+| `7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27` | 3 passed in 49.11s; exit 0 |
+| `88b8a62b4b5f4802f6fc22c25b9348d78a931f65` | 3 passed in 9.04s; exit 0 |
+| `3fdc5a95853619135d4165063392144eb6fea540` | 8 passed in 26.06s; exit 0 |
+
+The leader reports 11 passing and 3 failing checks and source review
+`5342606812` conditional on CI. No status was polled or check rerun here.
+That review does not waive failures, authorize the changed runtime for the
+old 30-cell campaign or approve a new launch. The immutable reviewed baseline
+remains `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`.
+
+The shell-out safeguard needs a separate bounded scope decision before work
+can continue. The remaining legacy wiring, its authorized validation, CI and
+subsequent HEAD/delta review are still outstanding. There was no commit, push,
+new PR, merge, live model, readout, Azure, OIDC, HF credential or paid operation.
+Existing draft [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698)
+is unchanged. Protected `im-not-ai-en` applies only to these new current
+passages; older histories and values are preserved.
+
+## Prior complete fixture-wiring result (historical)
+
+The following records describe their original source, validation and publication
+states. They are not claims about this stopped task.
+
 ## PROJECT5-COMPLETE-FIXTURE-WIRING
 
 The single authorized eight-node invocation passed at fixture HEAD
