@@ -13,6 +13,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Bind the remaining proven historical-source fixtures to the existing immutable
+  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce` archive. Tested fixture HEAD
+  `88b8a62b4b5f4802f6fc22c25b9348d78a931f65` passed the one authorized combined
+  invocation: **3 passed in 9.04s**, exit 0. It selected comparison input
+  `valid_r1`, retained grade readout `graded`, and the evidence gate's
+  `2026-09-20T03:00:00Z-library` case. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-remaining-frozen-fixtures)
+  records the exact command and all six separate validation observations.
+  Prior results remain distinct: `b1854e5` had 5 failed/42 passed in 334.92s;
+  `91ffae5` had 5 passed in 24.02s; `6710299` had 3 passed/1 setup error in
+  93.52s; `6665c18` had 1 setup error in 8.44s; and `7bbe61f` had 3 passed in
+  49.11s. No earlier passing selector was rerun or combined into this result.
+  The grade-readout module now owns the shared source context used by its direct
+  fixtures and the budget snapshot's `__wrapped__` consumers. Registration-byte
+  checks and the coherent root/registration bindings are preserved. Comparison
+  and evidence-intake fixtures use explicit, non-autouse source contexts; the
+  comparison still asserts the exact three modified-current-source refusals.
+  Bounded inspection traced the evidence-intake refusal to the same frozen
+  runtime hashes. All production bytes remain identical to
+  `bebcff243563a7ec852be3ec9f210da1e92f7814`, including the Step2 correction.
+  Leader-supplied CI run `36450978366` reported wire-contracts passing and the
+  three remaining failure paths addressed here; no CI state was queried.
+  The leader's Step2 review is partial, not whole-PR approval. This handoff is
+  for one ordinary push to existing draft
+  [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
+  New-head CI and full source review remain required. Frozen fixture success
+  does not authorize the modified runtime for the old 30-cell campaign.
+  No live operation, campaign launch, CI rerun or polling occurred.
+
+### Prior Step2 optional-runner validation (historical)
+
 - Preserve Step2 compatibility with execute-only adapters that have no `runner`.
   Optional capability probes use the existing normalized deadline control;
   explicit fresh/accounting requests still refuse missing runner/store

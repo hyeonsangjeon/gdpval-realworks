@@ -1,5 +1,95 @@
 # Latest task result
 
+## PROJECT5-REMAINING-FROZEN-FIXTURES
+
+The single authorized three-node invocation passed at fixture HEAD
+`88b8a62b4b5f4802f6fc22c25b9348d78a931f65`: **3 passed in 9.04s**, exit 0.
+Five test files changed. All production bytes remain identical to
+`bebcff243563a7ec852be3ec9f210da1e92f7814`, including the Step2 optional-runner
+correction. No source pins, validators, registrations, YAML, workflows, HF or
+grader production code, skip markers or timeouts changed.
+
+The fixture changes reuse `approved_pilot_source` from the existing `conftest.py`:
+
+- `test_gpt54_codex_grading_input.py` adds a requested historical comparison
+  context. It first asserts the exact current-source pin failures for
+  `core/codex_runner.py`, `step2_run_inference.py` and `core/codex_task_deadline.py`,
+  then binds `comparison.ROOT` and `comparison.PLAN` to the genuine immutable
+  archive after checking the plan bytes.
+- `test_codex_budget_pilot_grade_readout.py` now owns `historical_budget_source`.
+  Its module-scoped `compilations` and `compiled_cells` depend on that context,
+  so it remains active during direct readers and writer helpers. The root and
+  both registration paths are bound together, with frozen-byte checks intact.
+  `test_codex_budget_pilot_budget_snapshot_readout.py` imports the same fixture
+  and passes its context explicitly to the two `__wrapped__` consumers. This
+  preserves the legitimate `6665` path repair while moving it to the shared owner.
+- `test_gpt56_foundry_evidence_intake.py` adds a requested historical source
+  context used by its source fixture. `test_gpt56_evidence_preflight_gate.py`
+  requests it for both `published_seed` and `plan`, keeping `pilot.ROOT` and
+  `pilot.PLAN` coherent through publication and verification. The byte-only
+  `_seed` helper and its `__wrapped__` interface are unchanged.
+
+Each source context is explicitly requested and restored at fixture teardown;
+none is autouse. The shared archive still comes from immutable local Git object
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce`; no policy, compiler or source-pin
+validator is replaced. Existing permission, network, process, identity and
+source-drift assertions remain in place.
+
+The bounded evidence-intake inspection traced `_active_plan()` to its pinned-file
+reads through `_read_bytes()`. The current three runtime digests differ from the
+frozen plan's hashes. The resulting `ReferenceIntegrityError`, a `ValueError`,
+is wrapped by `compile_foundry_evidence()` as
+`evidence_read_or_validation_refused`. This is the same historical-source
+mismatch, not a newly assumed failure cause or a reason to relax validation.
+
+One pytest invocation ran from the worktree's `batch-runner` directory:
+
+```bash
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider 'tests/test_gpt54_codex_grading_input.py::test_codex_grading_input_preserves_source_and_v2_boundary[valid_r1]' 'tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout[graded]' 'tests/test_gpt56_evidence_preflight_gate.py::test_complete_bundle_clears_exactly_three_local_evidence_requirements[2026-09-20T03:00:00Z-library]'
+```
+
+All three selected nodes passed. No passed wire/Step2 representatives, native
+42 plus 5 cases, earlier three passing representatives, full file or suite was
+rerun. These remain separate observations, not an aggregated passing invocation:
+
+| Tested source | Selected scope | Actual result |
+| --- | --- | --- |
+| `b1854e5b50eda9c25c9db5bc2627acf35022e70d` | Original 47-case native-resume selector | 5 failed, 42 passed in 334.92s; exit 1 |
+| `91ffae589b240dd9d31978af0dd2cf19532e96c7` | Only the five failed native-resume nodes | 5 passed in 24.02s; exit 0 |
+| `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` | Four frozen-source fixture representatives | 3 passed, 1 setup error in 93.52s; exit 1 |
+| `6665c183c215aa6594622eb9fe92ca55633c7013` | Only the budget snapshot `recorded-ordinary` node | 1 setup error in 8.44s; exit 1 |
+| `7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27` | Two Step2 regressions and the budget snapshot `recorded-ordinary` node | 3 passed in 49.11s; exit 0 |
+| `88b8a62b4b5f4802f6fc22c25b9348d78a931f65` | The three remaining historical-fixture representatives above | 3 passed in 9.04s; exit 0 |
+
+The leader supplied the new CI evidence from run `36450978366`: wire-contracts
+passed; comparison job `109025355251` refused the three runtime source pins;
+budget-readout job `109025355177` hit the same pins during direct compilations;
+and pilot job `109025355061` reported the evidence-intake refusal traced above.
+No CI state was queried or refreshed here. The leader reviewed the Step2 probe,
+normalized-control forwarding and explicit fresh/accounting refusals, but this
+was partial review, not approval of the whole PR.
+
+The same branch and worktree remain `b/codex-retention-runtime-20260928` and
+`/ai-work/copilot/worktrees/codex-retention-runtime-20260928`. The approved baseline
+remains `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`, with leader-reviewed tree
+`4445964f12cbbc085df7ab243d31fd1ee5968193`, review `5337639288`. That provenance
+does not validate the modified runtime. Only `CHANGELOG.md` and this record
+change after validation. Protected `im-not-ai-en` applies only to the new
+current passages; earlier records and their distinct outcomes are preserved.
+
+Publication is limited to one ordinary owner-account push to existing draft
+[PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698). Its published
+head before this task was `bebcff243563a7ec852be3ec9f210da1e92f7814`.
+New-head CI and full source review remain required; these three local passes
+do not establish a fully passing CI run. Frozen fixture success does not approve
+the changed runtime for the old 30-cell campaign. The experimental campaign
+remains unregistered and live-unverified. No live model, readout, observation,
+Azure, OIDC, HF or paid execution ran, and no launch authority is added.
+No new PR, merge, CI rerun or polling is part of this handoff.
+
+The following sections preserve earlier handoffs. Their source, validation,
+publication and byte-equivalence statements describe their historical states.
+
 ## PROJECT5-STEP2-OPTIONAL-RUNNER
 
 The single authorized three-node invocation passed at tested HEAD
