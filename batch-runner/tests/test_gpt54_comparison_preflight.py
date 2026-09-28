@@ -38,17 +38,26 @@ from gpt54_comparison_preflight import (
 
 
 @pytest.mark.parametrize("change", ["current", "stale_expected_hash", "selector_source_drift"])
-def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch):
+def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch, approved_pilot_source):
     import gpt54_comparison_preflight as comparison
     import step8_grade as grading
     from .test_gpt54_run_config_bundle import _guards
 
     forbidden = _guards(monkeypatch)
+    current = inspect_plan(load_plan())
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/core/codex_task_deadline.py",
+    ]
+    # Only the known-valid legacy fixture reads the approved immutable source.
+    monkeypatch.setattr(comparison, "ROOT", approved_pilot_source)
     manifest = load_plan()
-    template = load_plan(ROOT / GRADER)
+    template = load_plan(approved_pilot_source / GRADER)
     expected = manifest["shared"]["grading"]["template_source_sha256"]
     assert grading.compute_grader_source_hash(
-        ROOT / GRADER, template, batch_root=ROOT / "batch-runner",
+        approved_pilot_source / GRADER, template, batch_root=approved_pilot_source / "batch-runner",
     ) == expected
     assert all(condition["controls"]["grading"]["template_source_sha256"] == expected
                for condition in manifest["conditions"].values())
@@ -61,8 +70,8 @@ def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch)
     elif change == "selector_source_drift":
         # Change real bytes only in a private test source tree. Keep every
         # relative source/config role and every expected pin unchanged.
-        batch = ROOT / "batch-runner"
-        sources = {ROOT / name for name in REQUIRED_SOURCES}
+        batch = approved_pilot_source / "batch-runner"
+        sources = {approved_pilot_source / name for name in REQUIRED_SOURCES}
         sources.update((batch / "core").rglob("*.py"))
         sources.update(grading._requirements_closure(batch, batch / "requirements.txt"))
         sources.update({
@@ -72,7 +81,7 @@ def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch)
         })
         root = tmp_path / "source"
         for source in sources:
-            target = root / source.relative_to(ROOT)
+            target = root / source.relative_to(approved_pilot_source)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(source.read_bytes())
         selector = root / "batch-runner/core/deliverable_selector.py"

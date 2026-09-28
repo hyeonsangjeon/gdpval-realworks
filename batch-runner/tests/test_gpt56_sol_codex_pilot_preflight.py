@@ -75,11 +75,22 @@ def offline_only(monkeypatch):
 
 
 @pytest.mark.parametrize("change", ["current", "stale_expected_hash"])
-def test_active_grader_template_source_foundry_preflight(change, offline_only):
-    plan = load_plan(PLAN)
+def test_active_grader_template_source_foundry_preflight(
+    change, offline_only, monkeypatch, approved_pilot_source,
+):
+    # Current modified source remains ineligible for the frozen registration.
+    current = inspect_plan(load_plan(PLAN))
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/core/codex_task_deadline.py",
+    ]
+    monkeypatch.setattr(preflight, "ROOT", approved_pilot_source)
+    plan = load_plan(approved_pilot_source / ACTIVE_PLAN)
     expected = compute_grader_source_hash(
-        ROOT / preflight.GRADER, load_plan(ROOT / preflight.GRADER),
-        batch_root=ROOT / "batch-runner",
+        approved_pilot_source / preflight.GRADER, load_plan(approved_pilot_source / preflight.GRADER),
+        batch_root=approved_pilot_source / "batch-runner",
     )
     assert plan["dispatch_grading_identity"]["grader_template_source_hash"] == expected
     assert preflight.DISPATCH_GRADING_IDENTITY["grader_template_source_hash"] == expected
@@ -201,8 +212,10 @@ def test_active_grader_template_source_foundry_preflight(change, offline_only):
     ],
 )
 def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
-    path, value, tmp_path, capsys, monkeypatch, offline_only
+    path, value, tmp_path, capsys, monkeypatch, offline_only, approved_pilot_source,
 ):
+    # Keep real pin/registration validation; change only the historical fixture's source.
+    monkeypatch.setattr(preflight, "ROOT", approved_pilot_source)
     plan = load_plan(PLAN)
     if path == ("historical_plan",):
         plan = load_plan(ROOT / HISTORICAL_PLAN)
@@ -214,7 +227,7 @@ def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
                 continue
             target = repository / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / name, target)
+            shutil.copyfile(approved_pilot_source / name, target)
         if path[1] == "duplicate_active":
             shutil.copyfile(repository / ACTIVE_PLAN,
                             repository / ENVELOPE / "gpt56_sol_duplicate_codex_pilot.yaml")
@@ -348,13 +361,13 @@ def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
 
 
 @pytest.fixture(scope="module")
-def runtime_caps_usage_seed(tmp_path_factory):
+def runtime_caps_usage_seed(tmp_path_factory, approved_pilot_source):
     # Late imports avoid the existing fixture modules' plan-reader cycle.
     # Only immutable byte tuples are shared; every case copies fresh files.
     from . import test_gpt56_pilot_wire_receipt as wire_cases
 
     evidence_bytes = wire_cases._seed.__wrapped__()
-    source_bytes = wire_cases.source_seed.__wrapped__()
+    source_bytes = wire_cases.source_seed.__wrapped__(approved_pilot_source)
     input_factory = wire_cases.input_seeds.__wrapped__(tmp_path_factory, source_bytes, evidence_bytes)
     deployment_factory = wire_cases.deployment_seeds.__wrapped__(tmp_path_factory, input_factory, evidence_bytes)
     return wire_cases.capture_seed.__wrapped__(tmp_path_factory, deployment_factory)

@@ -42,7 +42,18 @@ INVALID = ("bool_seconds", "string_seconds", "negative_seconds", "zero_total", "
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def historical_budget_source(approved_pilot_source):
+    """Compile and copy the retained writer's real frozen source, not this runtime."""
+    import gpt54_comparison_preflight as comparison
+
+    with pytest.MonkeyPatch.context() as source:
+        source.setattr(comparison, "ROOT", approved_pilot_source)
+        source.setattr(pilot, "ROOT", approved_pilot_source)
+        yield
+
+
+@pytest.fixture(scope="module")
+def history(tmp_path_factory, historical_budget_source):
     # Build the legacy fixed-revision case before entering the inherited
     # history's constructor guards. No old test function is executed.
     capture = _Capture()
