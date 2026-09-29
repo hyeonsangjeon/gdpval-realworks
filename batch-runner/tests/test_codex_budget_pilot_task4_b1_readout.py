@@ -40,7 +40,7 @@ VARIANTS = c_reader.VARIANTS
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _variants=VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _variants=VARIANTS):
     assert grading.TASK4_B1_CELL == CELL
     assert grading.TASK4_RETAINED[CELL] == ("36235926112", REQUEST)
     assert readout.TASK4_B1_WRITER_RUN == RUN and CELL not in readout.TASK3_SUCCESSOR_READOUTS
@@ -57,7 +57,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
 
     # Build the backing history once and only one A1 accounting variant.
     # No previous reader test body runs, and no success-shaped A1 is substituted.
-    prefix = ng_reader.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
+    prefix = ng_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("partial_cost",))
     initial = next(prefix)
     directory = tmp_path_factory.mktemp("task4-b1-readout-history")
     capture = _Capture()

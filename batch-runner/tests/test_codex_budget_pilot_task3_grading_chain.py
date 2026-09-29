@@ -75,14 +75,14 @@ def _invoke(current, capture, phase="plan", **changes):
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, historical_budget_source):
     assert grading.TASK3_SUCCESSORS == {PREFIX + suffix: value for suffix, value in RECORDED.items()}
     directory = tmp_path_factory.mktemp("task3-shared-history")
     capture = _Capture()
     with pytest.MonkeyPatch.context() as patch:
         base.boundaries.__wrapped__(patch)
-        compilations = a1.compilations.__wrapped__()
-        compiled_cells = a1.compiled_cells.__wrapped__()
+        compilations = a1.compilations.__wrapped__(historical_budget_source)
+        compiled_cells = a1.compiled_cells.__wrapped__(historical_budget_source)
         with redirect_stdout(capture.out), redirect_stderr(capture.err):
             first = a1.case.__wrapped__(directory, patch, capture, compilations, compiled_cells)
             api = first.api

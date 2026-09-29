@@ -367,7 +367,7 @@ def _copy_files(root, files):
 
 
 @pytest.fixture(scope="module")
-def _input_bundle_seed(tmp_path_factory):
+def _input_bundle_seed(tmp_path_factory, approved_pilot_source):
     """Build the independent five-task oracle and four config bundles once.
 
     Only immutable bytes and frozen typed plans cross case boundaries. The
@@ -378,6 +378,8 @@ def _input_bundle_seed(tmp_path_factory):
     oracle = root / "oracle"
     oracle.mkdir()
     with pytest.MonkeyPatch.context() as setup:
+        # The oracle's registered source pins must bind real historical bytes.
+        setup.setattr(preflight, "ROOT", approved_pilot_source)
         forbidden = _guards(setup)
         install_cache = _compiler_cache()
         install_cache(setup)
@@ -441,6 +443,8 @@ def _input_bundle_seed(tmp_path_factory):
         return json.loads(config_markers[run.run_id])
 
     def install(monkeypatch):
+        # Consumers recompile against the same historical source as this seed.
+        monkeypatch.setattr(preflight, "ROOT", approved_pilot_source)
         install_cache(monkeypatch)
         # These are fixture suppliers, not runtime/compiler validators. Other
         # selectors get their unmodified helpers back at each case's teardown.

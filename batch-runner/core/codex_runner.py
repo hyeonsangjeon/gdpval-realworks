@@ -64,6 +64,7 @@ from core.codex_task_deadline import (
     CodexTaskDeadline, CodexTaskDeadlineStore,
     TaskDeadlineExhausted, TaskDeadlineRefused,
     _digest as _deadline_identity_digest,
+    _native_workspace_layout, _require_native_workspace_removed,
 )
 from core.cost_receipts import STAGE_GENERATION, RETRY_NONE, make_call_id
 from core.execution_envelope_observed import (
@@ -75,7 +76,7 @@ from core.execution_environment_readiness import (
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY,
 )
 from core.experiment_config import PilotInputCapture
-from core.reference_integrity import ReferenceIntegrityError, copy_verified_reference
+from core.reference_integrity import ReferenceIntegrityError, VerifiedReferencePath, copy_verified_reference
 
 #: Wall-clock limit for one task's turn. Longer than the subprocess mode's
 #: limit because an agent's turn covers planning, several model requests and
@@ -398,26 +399,37 @@ class CodexWorkspace:
             raise TaskDeadlineRefused("retained native workspace is missing, linked or unsafe") from None
 
     @classmethod
+    def _bound_layout(cls, binding: dict) -> "CodexWorkspace":
+        """Parse host metadata without treating missing directories as usable."""
+        return cls(*_native_workspace_layout(binding))
+
+    @classmethod
     def restore(cls, binding: dict) -> "CodexWorkspace":
         """Adopt exactly the bound directories; never recreate or restage them."""
         try:
-            if (type(binding) is not dict or set(binding) != {
-                "root", "directories", "staged_reference_names",
-            } or type(binding["root"]) is not str
-                    or not Path(binding["root"]).is_absolute()
-                    or type(binding["staged_reference_names"]) is not list
-                    or any(type(name) is not str or Path(name).name != name or name in {"", ".", ".."}
-                           for name in binding["staged_reference_names"])
-                    or len(set(binding["staged_reference_names"])) != len(binding["staged_reference_names"])):
-                raise ValueError("invalid retained layout")
-            root = Path(binding["root"])
-            workspace = cls(root, root / "workspace", root / "codex_home", root / "home",
-                            tuple(binding["staged_reference_names"]))
+            workspace = cls._bound_layout(binding)
             if workspace.continuation_binding() != binding:
                 raise ValueError("replaced retained directory")
             return workspace
         except (KeyError, TypeError, OSError, ValueError):
             raise TaskDeadlineRefused("retained native workspace binding differs from current directories") from None
+
+    @classmethod
+    def require_removed(cls, binding: dict) -> "CodexWorkspace":
+        """Only a retired bundle may be absent; it must not reappear or be linked."""
+        return cls(*_require_native_workspace_removed(binding))
+
+    @classmethod
+    def remove_owned_bundle(cls, binding: dict) -> None:
+        """Remove only the verified root; never chmod/follow an external link."""
+        workspace = cls.restore(binding)
+        if not shutil.rmtree.avoids_symlink_attacks:
+            raise TaskDeadlineRefused("fresh cleanup requires descriptor-safe directory removal")
+        try:
+            shutil.rmtree(workspace.root)
+        except OSError:
+            raise TaskDeadlineRefused("owned bundle cleanup was interrupted; retain host accounting") from None
+        cls.require_removed(binding)
 
     def is_deliverable(self, relative: Path) -> bool:
         """Return whether a relative name is output rather than input or litter.
@@ -1112,6 +1124,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         """Hash declared settings/input identity, not credentials or transcripts."""
         if self.codex_bin is not None:
             raise TaskDeadlineRefused("native continuation requires the pinned companion, not a binary override")
+        if deadline.store.control.retention_bundle is not None and any(
+            not isinstance(path, VerifiedReferencePath) for path in reference_files or ()
+        ):
+            raise TaskDeadlineRefused("retention bundles require the same verified reference inputs")
         try:
             payload = {
                 "cell": deadline.store.identity, "task_id": deadline.task_id,
@@ -1179,7 +1195,15 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             deadline, task_prompt=task_prompt, reference_files=reference_files,
             occupation=occupation, experiment_prompt=experiment_prompt,
             perception_text=perception_text,
-        ) if deadline.retains_thread else None
+        ) if deadline.binds_native_state else None
+        if deadline.fresh_bundle:
+            for retired in deadline.retired_continuations(identity):
+                workspace = CodexWorkspace.require_removed(retired["workspace"])
+                task_text = self.build_task_text(
+                    task_prompt, workspace, occupation=occupation, perception_text=perception_text,
+                )
+                self._validate_continuation_inputs(retired, task_text, experiment_prompt)
+                self._settle_continuation_observations(deadline, retired)
         binding = deadline.accounting_continuation(identity)
         if binding is None:
             return
@@ -1305,7 +1329,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         condition_name: Optional[str] = None,
         task_id: Optional[str] = None,
     ) -> dict:
-        """Run one task; only opted-in B/C cells resume their native session.
+        """Run one task with its identity-bound native bundle policy.
 
         ``model`` is accepted for signature compatibility with the other run
         places, but it must match the deployment the provider was configured
@@ -1391,13 +1415,24 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         continuation = None
         continuation_identity = None
         try:
-            if deadline is not None and deadline.retains_thread:
+            if deadline is not None and deadline.binds_native_state:
                 continuation_identity = self._continuation_identity(
                     deadline, task_prompt=task_prompt, reference_files=reference_files,
                     occupation=occupation, experiment_prompt=experiment_prompt,
                     perception_text=perception_text,
                 )
                 continuation = deadline.continuation(continuation_identity)
+                if continuation is not None and deadline.fresh_bundle:
+                    deadline.require_fresh_retirement(continuation)
+                if deadline.fresh_bundle:
+                    deadline.clear_fresh_outputs()
+                if continuation is not None and deadline.fresh_bundle:
+                    # Reconciliation preserved observations and unknown receipts.
+                    # No prior cumulative total or owned state enters the next
+                    # fresh binding. Interrupted cleanup fails closed on restore.
+                    CodexWorkspace.remove_owned_bundle(continuation["workspace"])
+                    deadline.retire_fresh_bundle(continuation)
+                    continuation = None
             workspace = (CodexWorkspace.restore(continuation["workspace"]) if continuation is not None
                          else CodexWorkspace.create(task_id=task_id or "task"))
         except TaskDeadlineRefused as exc:
@@ -1570,9 +1605,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         before_pids = _descendant_pids(os.getpid())
         call_id: str | None = None
         codex: Any = None
-        retains_thread = task_deadline is not None and task_deadline.retains_thread
+        binds_native_state = task_deadline is not None and task_deadline.binds_native_state
         try:
-            continuation = task_deadline.continuation() if retains_thread else None
+            continuation = task_deadline.continuation() if binds_native_state else None
             if continuation is not None:
                 self._validate_continuation_inputs(continuation, task_text, experiment_prompt)
             if task_deadline is not None:
@@ -1614,23 +1649,25 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 )
             try:
                 resumed = continuation is not None and continuation["phase"] == "bound"
+                if resumed and not task_deadline.retains_thread:
+                    raise TaskDeadlineRefused("fresh bundle cannot resume a prior native thread")
                 if resumed:
                     thread = self.resume_thread(
                         codex, workspace, continuation["thread_id"],
                         developer_instructions=developer_instructions,
                     )
                 else:
-                    if retains_thread:
+                    if binds_native_state:
                         task_deadline.thread_starting()
                     thread = self.start_thread(
                         codex, workspace, developer_instructions=developer_instructions,
                     )
-                if retains_thread:
+                if binds_native_state:
                     task_deadline.bind_thread(getattr(thread, "id", None), resumed=resumed)
             except TaskDeadlineRefused:
                 raise
             except Exception as exc:  # noqa: BLE001
-                if retains_thread:
+                if binds_native_state:
                     raise TaskDeadlineRefused(
                         "native resume refused; retained binding was not replaced" if resumed else
                         "native thread start was not confirmed; retain the uncertain binding"
@@ -1656,7 +1693,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     call_id = None
                     raise
             turn_input = task_text
-            if retains_thread:
+            if binds_native_state:
                 recovery_context = task_deadline.recovery_context(attempt_index)
                 turn_input = self._native_turn_input(task_text, recovery_context)
                 before_totals = CodexTokenTotals(**task_deadline.begin_turn(
@@ -1674,7 +1711,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     if _turn_failure_category(exc) == "content_filtered":
                         category = "content_filtered"
                         task_deadline.stop_content_filter()
-                    elif retains_thread:
+                    elif binds_native_state:
                         task_deadline.observe_turn_start_failure(attempt_index)
                 else:
                     # Preserve the legacy pre-turn accounting boundary.
@@ -1719,7 +1756,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 ) == "content_filtered" else None)
                 if task_deadline is not None and terminal is not None:
                     task_deadline.stop_content_filter()
-                if retains_thread:
+                if binds_native_state:
                     # Only host-classified fields enter C's feedback. The pinned
                     # SDK has no typed retry guidance; do not parse instructions
                     # or Retry-After values out of its free-form error strings.
@@ -1738,10 +1775,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         failure_observation=failure_observation,
                     )
                 measured = turn_usage_delta(before_totals, after)
-                if measured.is_empty and not retains_thread:
+                if measured.is_empty and not binds_native_state:
                     return measured
                 self._settle_call(call_id, measured)
-                if retains_thread:
+                if binds_native_state:
                     task_deadline.acknowledge_usage(attempt_index)
                 call_id = None
                 return measured
@@ -1800,11 +1837,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 )
 
             after_totals = read_thread_totals(getattr(result, "usage", None))
-            if retains_thread:
+            if binds_native_state:
                 task_deadline.observe_turn(attempt_index, asdict(after_totals), terminal_reason="completed")
             delta = turn_usage_delta(before_totals, after_totals)
             self._settle_call(call_id, delta)
-            if retains_thread:
+            if binds_native_state:
                 task_deadline.acknowledge_usage(attempt_index)
             call_id = None
 

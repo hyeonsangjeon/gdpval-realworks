@@ -130,7 +130,10 @@ def change_header(data, index, **changes):
     return data[:member.offset] + header + data[member.offset + tarfile.BLOCKSIZE:]
 
 
-def test_ci_input_bundle_real_registration_matches_approved_pins():
+def test_ci_input_bundle_real_registration_matches_approved_pins(approved_pilot_source, monkeypatch):
+    import gpt54_comparison_preflight as comparison
+
+    monkeypatch.setattr(comparison, "ROOT", approved_pilot_source)
     _, revision, specs = bundle._registered()
     assert revision == "11e7900cdcac61bc4daf59e65feb238acda98fbf"
     assert len(specs) == 4

@@ -57,7 +57,7 @@ def offline(monkeypatch):
 
 
 @pytest.fixture
-def source(tmp_path, monkeypatch):
+def source(tmp_path, monkeypatch, historical_budget_source):
     # Reuse the existing bounded/process-isolated temporary-Git guard. Inject
     # the real Git ownership test switch only AFTER that guard checks the exact
     # production environment. Production itself must never inherit the switch.

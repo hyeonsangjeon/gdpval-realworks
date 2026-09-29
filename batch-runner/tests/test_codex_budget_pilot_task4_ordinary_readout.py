@@ -47,7 +47,7 @@ RECORDED = {
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _variants=VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _variants=VARIANTS):
     # Assert actual pins before substituting any synthetic completion checksum.
     expected = {}
     for suffix, (ordinal, grade_run, inference_run, request, parent) in RECORDED.items():
@@ -71,7 +71,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
 
     # One B1 variant, including genuine NG A1 and ordinary task3 A2 backing.
     # No previous test body or old parametrized reader family runs.
-    prefix = b1_reader.history.__wrapped__(tmp_path_factory, _variants=("graded",))
+    prefix = b1_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("graded",))
     initial = next(prefix)
     directory = tmp_path_factory.mktemp("task4-ordinary-readout-history")
     workflow = yaml.safe_load((pilot.ROOT / grading.WORKFLOW).read_bytes())

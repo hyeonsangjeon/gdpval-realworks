@@ -72,7 +72,8 @@ def _no_execution(_offline, monkeypatch, offline_only):
 
 
 @pytest.fixture
-def plan():
+def plan(historical_foundry_source):
+    assert pilot.ROOT == historical_foundry_source
     return pilot.load_plan(pilot.PLAN)
 
 
@@ -370,8 +371,9 @@ def test_forged_matching_markers_cannot_bypass_recompilation(plan, sealed, keys,
 
 
 @pytest.fixture(scope="module")
-def source_seed():
-    root = pilot.ROOT
+def source_seed(approved_pilot_source):
+    # These seeds attest the frozen legacy contract, not the modified runtime.
+    root = approved_pilot_source
     names = set(pilot.REQUIRED_SOURCES) | {pilot.ACTIVE_PLAN, "batch-runner/scripts/download_inference_from_hf.py"}
     names.update(path.relative_to(root).as_posix() for path in (root / "batch-runner/core").rglob("*.py"))
     names.update(path.relative_to(root).as_posix()
@@ -381,8 +383,9 @@ def source_seed():
 
 @pytest.mark.parametrize("change", ["current", "stale_expected_hash", "selector_source_drift"])
 def test_active_grader_template_source_foundry_identity(
-    plan, change, tmp_path, source_seed, monkeypatch,
+    plan, change, tmp_path, source_seed, monkeypatch, approved_pilot_source,
 ):
+    monkeypatch.setattr(pilot, "ROOT", approved_pilot_source)
     expected = plan["dispatch_grading_identity"]["grader_template_source_hash"]
     template = pilot.load_plan(pilot.ROOT / pilot.GRADER)
     assert step8.compute_grader_source_hash(

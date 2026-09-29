@@ -44,7 +44,7 @@ VARIANTS = c_reader.VARIANTS
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _variants=VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _variants=VARIANTS):
     assert grading.TASK5_C1_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36259780431", REQUEST)
     assert readout.TASK5_C1_WRITER_RUN == RUN
     actual, parent = readout._writer_context(REQUEST), readout._writer_context(b1_reader.REQUEST)
@@ -58,7 +58,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
     assert not grading._model_free_context(actual) and grading._model_free_context(parent)
 
     # One genuine failed-parent history, not any previous selector or test body.
-    prefix = b1_reader.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
+    prefix = b1_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("partial_cost",))
     initial = next(prefix)
     directory = tmp_path_factory.mktemp("task5-c1-readout-history")
     capture = _Capture()

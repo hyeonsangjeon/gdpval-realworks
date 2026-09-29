@@ -13,6 +13,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
+  identity-bound keep/fresh modes use B's existing recovery policy and one
+  durable 10,800-second deadline without a fixed admission cap or C feedback.
+  Fresh thread/workspace/HOME/CODEX_HOME state and output selection preserve
+  host accounting and fail-closed ownership checks. Legacy A/B/C behavior,
+  frozen 30-cell registrations and original outcomes remain unchanged; the
+  original campaign compiler does not admit the new controls.
+- Preserve execute-only Step2 adapters through optional runner/store probes,
+  while explicit fresh/accounting requests still require their capabilities.
+  Share native workspace layout and removed-root checks in deadline metadata
+  without a runner import from the grading path. Keep permission, timing,
+  accounting, cleanup, source validation and the grading-image guard intact.
+- Use explicit historical-source fixtures backed by immutable
+  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`, including coherent plan/registration
+  paths, shared compilation/history lifetimes and direct `__wrapped__`
+  consumers. Grader-binding positives use that same tree. Current-source and
+  mutated-source refusals remain meaningful; historical fixture success does
+  not authorize the modified runtime for the old campaign. Ledger-note host
+  directories now use the stable `__file__`-derived worktree parent, and the
+  Task2 final readout explicitly requests its module-scoped historical source
+  before the function-scoped subprocess guard. Dynamic case setup and all
+  guard/assertion bodies remain unchanged, with production and the image guard
+  frozen at `de3e0401b9c0ae9d2d142c25e14d1f4dab768383`.
+- Bind the first-boot stand-in's immutable birth to the fake jailer launch,
+  using synthetic ticks after the floor and before PID publication. One
+  deterministic regression reproduces the former lazy probe's exact late-birth
+  refusal through the unchanged ownership predicate and checks the fixed path.
+  At `eb9971b1b8ce94e559481d56dd6cdbe1ca854c61`, one offline invocation reported
+  **4 passed in 1.02s**, exit 0, covering that regression, the original timeout
+  positive and two existing refusals. Only the test file and current records
+  change; production bytes remain identical to
+  `dac0421ca5b05d35eae85a9b666eb351a9f84744`. The original CI cause remains
+  unknown because its teardown record is missing. The earlier unchanged
+  **1 passed in 0.67s** diagnostic remains separate; neither observation proves
+  the original CI cause or justifies a nondeterminism claim. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-deterministic-birth-edge)
+  contains the exact command/result and safe refusal reason, one
+  table of separate SHA-specific results and immutable links to prior handoffs
+  and the 54-module inventory. Leader review `5345028254` is conditional on all CI;
+  new-HEAD delta review and CI remain gates for draft
+  [PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698).
+  The capability remains unregistered and live-unverified, with no new
+  campaign, paid-run, merge or launch authority.
+
+### Prior Task2 budget report (historical)
+
 - Complete the six-cell [Task2 budget report](tasks/codex_budget_pilot/REPORT.md#task2-budget-observations-a1-b1-c1-c2-b2-and-a2)
   with A2 readout `36407670686`, attempt 1, job `108880187086`, compared with
   original `36220575848`. Coverage is 24 of 24 retained epoch04 budget snapshots,

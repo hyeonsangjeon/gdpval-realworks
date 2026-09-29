@@ -148,7 +148,8 @@ def _offline(monkeypatch, offline_only, _parse_cache):
 
 
 @pytest.fixture
-def source(tmp_path, _seed):
+def source(tmp_path, _seed, historical_foundry_source):
+    assert pilot.ROOT == historical_foundry_source
     root = tmp_path / "source"
     for name, data in _seed:
         path = root / name

@@ -40,7 +40,7 @@ def _no_judge(patch, current):
 
 
 @pytest.fixture(scope="module")
-def failed_a2_history(tmp_path_factory):
+def failed_a2_history(tmp_path_factory, historical_budget_source):
     assert grading.TASK4_A2_CELL == CELL and grading.TASK4_RETAINED[CELL] == RECORDED
     assert grading.TASK4_RETAINED == {
         **{failed.PREFIX + suffix: row for suffix, row in {**failed.RECORDED, **successors.RECORDED}.items()},
@@ -49,7 +49,7 @@ def failed_a2_history(tmp_path_factory):
     # Build an actual error row before the shared history blocks runner creation.
     prototype = grading.compile_request("pilot/" + CELL, failed.PRODUCER, "8" * 40)
     error_row, ledger = failed._failed_row(prototype)
-    histories = successors.successor_history.__wrapped__(tmp_path_factory)
+    histories = successors.successor_history.__wrapped__(tmp_path_factory, historical_budget_source)
     history = next(histories)  # Existing writers once; no previous test selector runs.
     try:
         with pytest.MonkeyPatch.context() as patch:

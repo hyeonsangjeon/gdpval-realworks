@@ -44,7 +44,7 @@ REAL_COMPILE = pilot.compile_pilot
 
 
 @pytest.fixture(scope="module")
-def compiled():
+def compiled(historical_budget_source):
     # Cache genuine, deterministic compiles only; each caller gets its own copy.
     return lru_cache(maxsize=8)(REAL_COMPILE)
 

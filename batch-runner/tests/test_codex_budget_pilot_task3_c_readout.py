@@ -45,7 +45,7 @@ PRIVATE = "PRIVATE https://private.invalid/path?token=PRIVATE"
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _scenarios=VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _scenarios=VARIANTS):
     expected = {b1_reader.CELL: (13, grading.TASK3_A1_CELL, readout.TASK3_B1_WRITER_RUN),
                 readout.TASK3_B2_CELL: (16, readout.TASK3_C2_CELL,
                                       {"id": "36288201352", "job": "pilot-live", "attempt": 1}),
@@ -72,7 +72,7 @@ def history(tmp_path_factory, *, _scenarios=VARIANTS):
     assert readout.TASK3_A1_GRADER_SOURCE_HASH == "0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe990242e7df"
 
     # Build only B1's graded prefix, not its seven variants or any old test node.
-    prefix = b1_reader.history.__wrapped__(tmp_path_factory, _scenarios=("graded",))
+    prefix = b1_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _scenarios=("graded",))
     initial = next(prefix)
     directory = tmp_path_factory.mktemp("task3-c-readout-history")
     workflow = yaml.safe_load((pilot.ROOT / grading.WORKFLOW).read_bytes())

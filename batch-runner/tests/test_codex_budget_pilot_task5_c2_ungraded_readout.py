@@ -49,7 +49,7 @@ NAMES = ("step2_inference_results.json", Path(pilot.LEDGER).name)
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _variants=VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _variants=VARIANTS):
     assert grading.TASK5_C2_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36265102718", REQUEST)
     assert ungraded.TASK5_C2_POLICY == "task5-c2-model-free-ungraded" and readout.TASK5_C2_WRITER_RUN == RUN
     actual = readout._writer_context(REQUEST)
@@ -62,7 +62,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
     prototype = grading.compile_request("pilot/" + CELL, PRODUCER, TERMINAL)
     error_row, native_ledger = failed._failed_row(prototype)
     # Reuse only genuine writer construction, narrowed to one ordinary parent.
-    prefix = c1_reader.history.__wrapped__(tmp_path_factory, _variants=("graded",))
+    prefix = c1_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("graded",))
     initial = next(prefix)
     directory = tmp_path_factory.mktemp("task5-c2-reader-history")
     capture = _Capture()

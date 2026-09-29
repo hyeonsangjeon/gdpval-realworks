@@ -84,6 +84,7 @@ def _final_output_bytes(linkage):
     return _json(result)
 
 
+@pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize("case", [
     "r1", "r2", "default_absent_and_null", "relocated",
     "control_empty", "control_bool", "control_list", "control_extra", "control_version", "control_run",

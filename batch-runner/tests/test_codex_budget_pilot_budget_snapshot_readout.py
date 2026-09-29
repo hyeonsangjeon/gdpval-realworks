@@ -13,7 +13,6 @@ from types import SimpleNamespace
 import pytest
 
 import codex_budget_pilot as pilot
-import codex_budget_pilot_ci as ci
 import codex_budget_pilot_grade_readout as readout
 import codex_budget_pilot_grading as grading
 import codex_budget_pilot_grading_input as adapter
@@ -42,22 +41,23 @@ INVALID = ("bool_seconds", "string_seconds", "negative_seconds", "zero_total", "
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, historical_budget_source):
     # Build the legacy fixed-revision case before entering the inherited
     # history's constructor guards. No old test function is executed.
     capture = _Capture()
     local = tmp_path_factory.mktemp("budget-legacy-writer")
     with pytest.MonkeyPatch.context() as patch:
         base.boundaries.__wrapped__(patch)
-        current = writer.case.__wrapped__(local, patch, writer.compilations.__wrapped__(),
-                                          writer.compiled_cells.__wrapped__())
+        current = writer.case.__wrapped__(local, patch,
+            writer.compilations.__wrapped__(historical_budget_source),
+            writer.compiled_cells.__wrapped__(historical_budget_source))
         with redirect_stdout(capture.out), redirect_stderr(capture.err):
             revision, path, terminal = writer._writer(current, capture, local, patch, "graded")
         legacy = SimpleNamespace(api=copy.deepcopy(current.api), context=copy.deepcopy(current.context),
                                  revision=revision, path=path, terminal=terminal)
     # This fixture constructs its genuine failure before installing constructor
     # guards, then retains the actual ordinary predecessor and native NG record.
-    source = ng.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
+    source = ng.history.__wrapped__(tmp_path_factory, historical_budget_source, _variants=("partial_cost",))
     shared = next(source)
     try:
         record = shared.rows["partial_cost"]

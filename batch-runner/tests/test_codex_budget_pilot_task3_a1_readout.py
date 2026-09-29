@@ -36,7 +36,7 @@ PREVIOUS_CELL = "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, historical_budget_source):
     assert readout.TASK3_A1_WRITER_SOURCE == WRITER
     assert readout.TASK3_A1_WRITER_RUN == {"id": "36282221138", "job": "pilot-live", "attempt": 1}
     assert grading.TASK3_A1_COMPLETION_SHA256 == REQUEST
@@ -61,9 +61,9 @@ def history(tmp_path_factory):
     with pytest.MonkeyPatch.context() as patch:
         base.boundaries.__wrapped__(patch)
         patch.setattr(a1, "CONTROLLER", WRITER)
-        compilations = a1.compilations.__wrapped__()
+        compilations = a1.compilations.__wrapped__(historical_budget_source)
         compilations[OBSERVER] = pilot.compile_pilot(ci.CAMPAIGN, OBSERVER)
-        compiled_cells = a1.compiled_cells.__wrapped__()
+        compiled_cells = a1.compiled_cells.__wrapped__(historical_budget_source)
         with redirect_stdout(capture.out), redirect_stderr(capture.err):
             first = a1.case.__wrapped__(directory, patch, capture, compilations, compiled_cells)
             shared = SimpleNamespace(rows={}, request=first.request, context=first.context,

@@ -135,7 +135,9 @@ def _fixture(tmp_path, manifest, plan, run, *, failures=0, runtime_lineage=None)
         "parent_replaced_at_staging", "parent_replaced_during_write",
     )],
 ])
-def test_codex_grading_input_preserves_source_and_v2_boundary(case, tmp_path, monkeypatch, capsys):
+def test_codex_grading_input_preserves_source_and_v2_boundary(
+    case, tmp_path, monkeypatch, capsys, historical_comparison_source,
+):
     if case.startswith("v2:"):
         # Keep the original V2 assertions: no rewritten or weakened regression.
         _check_v2(case.split(":", 1)[1], tmp_path, monkeypatch, capsys)

@@ -46,7 +46,7 @@ class FixedPredecessorHF(base.MemoryHF):
 
 
 @pytest.fixture(scope="module")
-def compiled_contracts():
+def compiled_contracts(historical_budget_source):
     # Cache genuine compilation, not validators or an invented plan. Each
     # caller gets a deep copy, including the unchanged 30-cell specifications.
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source) for source in (PRODUCER, CONTROLLER)}

@@ -107,7 +107,7 @@ class FakeHF:
 
 
 @pytest.fixture
-def cell(tmp_path):
+def cell(tmp_path, historical_budget_source):
     # Real canonical compiler. Only finalized execution/input/instance evidence
     # is synthetic; this fixture does not run even a fake pipeline child.
     plan, _, specs = pilot.compile_pilot(ci.CAMPAIGN, SOURCE)

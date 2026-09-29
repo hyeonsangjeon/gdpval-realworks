@@ -37,14 +37,14 @@ RECORDED = {
 
 
 @pytest.fixture(scope="module")
-def compilations():
+def compilations(historical_budget_source):
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source) for source in (
         grading.RETAINED_PRODUCER_SOURCE, readout.WRITER_SOURCE, grading.B1_PRODUCER_SOURCE,
         readout.B1_WRITER_SOURCE, CONTROLLER, FOREIGN)}
 
 
 @pytest.fixture(scope="module")
-def compiled_cells():
+def compiled_cells(historical_budget_source):
     return lru_cache(maxsize=32)(adapter.compile_cell_grading_plan)
 
 

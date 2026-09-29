@@ -56,7 +56,7 @@ from core.agentic_authorization import task_request_sha256
 from core.codex_runner import RATE_LIMIT_KINDS
 from core.codex_task_deadline import (
     ATTEMPTS_EXHAUSTED, EXHAUSTED, STATE_REFUSED,
-    CodexTaskDeadline, CodexTaskDeadlineStore,
+    CodexTaskDeadline, CodexTaskDeadlineControl, CodexTaskDeadlineStore,
     TaskDeadlineExhausted, TaskDeadlineRefused, validate_deadline_execution,
 )
 from core.executor import TaskExecutor
@@ -1238,6 +1238,7 @@ def _build_execution_observability(
                 "remaining_seconds", "attempts_admitted", "wait_seconds",
                 "retained_attempts", "model_call_accounting", "invoice_accounting",
                 "session_policy", "native_resumes", "terminal_reason",
+                "retention_bundle", "retired_attempts",
             ) if key in deadline
         }
     budget_metrics = _bounded_budget_metrics((result or {}).get("budget_metrics"))
@@ -2394,13 +2395,20 @@ def _execute_single_task(
     pilot_wire_receipts=None,
     pilot_attempt_index: int = 0,
     accounting_only: bool = False,
+    deadline_control: CodexTaskDeadlineControl | None = None,
 ) -> dict | None:
     """Execute a task, or reconcile only its opt-in host accounting at restore."""
     task_id = task_info["task_id"]
+    runner = getattr(executor, "runner", None) if execution_mode == "codex_foundry" else None
+    deadline_store = getattr(runner, "task_deadline_store", None)
+    stored_control = getattr(deadline_store, "control", None)
+    reconcile_accounting = getattr(runner, "reconcile_task_accounting", None)
     if accounting_only and (
         execution_mode != "codex_foundry" or condition.get("preprocessors")
         or pilot_wire_receipts is not None or run_id == PilotInputCapture.RUN_ID
-        or getattr(executor.runner, "task_deadline_store", None) is None
+        or deadline_store is None or not callable(reconcile_accounting)
+        or not callable(getattr(deadline_store, "for_task", None))
+        or (deadline_control is not None and stored_control != deadline_control)
     ):
         raise TaskDeadlineRefused("host accounting requires the budgeted Codex path without preprocessing")
     pilot_host = None
@@ -2507,14 +2515,25 @@ def _execute_single_task(
     preprocessor_observations: list[dict] = []
     reference_stage = None
     reference_stage_entered = False
+    fresh_bundle_request = (
+        getattr(deadline_control, "retention_bundle", None) == "fresh"
+        or getattr(stored_control, "retention_bundle", None) == "fresh"
+    )
     try:
+        if fresh_bundle_request and (
+            execution_mode != "codex_foundry" or deadline_store is None
+            or not callable(reconcile_accounting)
+            or not callable(getattr(deadline_store, "for_task", None))
+            or (deadline_control is not None and stored_control != deadline_control)
+        ):
+            raise TaskDeadlineRefused("fresh retention requires the matching budgeted Codex runner")
         if abs_ref_files and not strict_inputs:
             reference_stage = stage_verified_references(abs_ref_files)
             abs_ref_files = reference_stage.__enter__()
             reference_stage_entered = True
 
         if accounting_only:
-            executor.runner.reconcile_task_accounting(
+            reconcile_accounting(
                 task_prompt=instruction, model=model, reference_files=abs_ref_files,
                 occupation=task_info.get("occupation", "professional"),
                 experiment_prompt=experiment_prompt, run_id=run_id,
@@ -2575,6 +2594,22 @@ def _execute_single_task(
             }
 
         # Executor mode (code_interpreter / subprocess / json_renderer)
+        if fresh_bundle_request:
+            reconcile_accounting(
+                task_prompt=instruction, model=model, reference_files=abs_ref_files,
+                occupation=task_info.get("occupation", "professional"),
+                experiment_prompt=experiment_prompt, perception_text=perception_text,
+                run_id=run_id, condition_name=condition_name, task_id=task_id,
+            )
+            # Only bind here. The runner first reconciles the exact request
+            # and receipts, then checks terminal/expiry gates before cleanup.
+            try:
+                output_dir = ensure_task_deliverable_dir(
+                    Path(upload_root) if upload_root is not None else Path(UPLOAD_DIR), task_id,
+                )
+                deadline_store.for_task(task_id).bind_fresh_output_directory(output_dir)
+            except (OSError, ValueError):
+                raise TaskDeadlineRefused("fresh output ownership could not be established") from None
         result = executor.execute(
             task_prompt=instruction,
             model=model,
@@ -2716,7 +2751,9 @@ def _execute_single_task(
             "model": model,
             "usage": None,
             "observability": _build_execution_observability(
-                None, preprocessor_observations
+                {"error_category": STATE_REFUSED}
+                if fresh_bundle_request and isinstance(exc, TaskDeadlineRefused) else None,
+                preprocessor_observations,
             ),
             "latency_ms": None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -4254,8 +4291,9 @@ def _run_inference_impl(
 
         def _clear_task_files():
             if task_deadline is not None:
-                # Budgeted attempts keep their partials; no deletion on retry
-                # or resume. Their private Codex workspaces are also retained.
+                # Legacy budgeted attempts keep partials. Experimental fresh
+                # cleanup happens only after the runner validates its bound
+                # request, receipts, exact ownership and permission to compute.
                 ensure_task_deliverable_dir(condition_upload_root, task_id)
             elif pilot_native_result_host is not None:
                 pilot_native_result_host.require_absent_task_output(task_id, condition_upload_root)
@@ -4412,6 +4450,7 @@ def _run_inference_impl(
                         **({"pilot_wire_receipts": pilot_wire_receipts, "pilot_attempt_index": infra_attempt}
                            if pilot_wire_receipts is not None else {}),
                         **({"accounting_only": True} if accounting_only else {}),
+                        **({"deadline_control": deadline_control} if deadline_control is not None else {}),
                     )
 
                 def _attempt(infra_attempt: int) -> dict:

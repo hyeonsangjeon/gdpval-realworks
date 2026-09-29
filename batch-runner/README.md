@@ -251,6 +251,60 @@ by this setting. Running the pilot requires separate leader direction after
 review and technical readiness. With the block absent, exp035 and other modes
 retain their existing retry, timeout and cleanup behavior.
 
+#### Experimental retention bundle capability
+
+`CodexTaskDeadlineControl` also accepts the separate identity
+`condition: retention_bundle_v1`, `retention_bundle: keep` or `fresh`, and
+`repetition: 1` or `2`. These are new diagnostic modes, not overrides of A/B/C.
+Both use B's existing retry eligibility and backoff, unlimited admissions within
+the same durable 10,800-second deadline, and no C recovery context. The frozen
+30-cell compiler still accepts only its original A/B/C registration. This
+capability supplies no runnable eight-cell registration or launch authority.
+
+Keep uses B's verified native resume, workspace, `HOME`, `CODEX_HOME` and
+cumulative usage boundaries. Fresh reconciles receipts before removing the
+exact, identity-bound native bundle and clearing its owned Step 2 output
+directory. Each new admission gets a new thread and new workspace/home roots
+staged from the same verified inputs. Prior partial outputs cannot become the
+next attempt's deliverables. The host keeps the original deadline, admissions,
+completed waits and retired receipt metadata outside that reset. Unknown usage
+stays unknown; a new thread starts its usage baseline at zero, never at the
+previous thread's cumulative total. Path-free observations identify the bundle
+choice and fresh retirement count. Existing A/B/C identities and records retain
+their original shapes.
+
+Changed policies, requests, input identities or directory ownership refuse.
+Only a confirmed eligible recovery can retire a fresh bundle. An ambiguous
+thread start, permanent failure, content-filter stop or completed cell cannot
+gain another admission. Interrupted native-directory cleanup fails closed on
+restore; it does not create a new clock. Cleanup cannot follow links outside the
+owned roots. `workspace_write`, `deny_all`, credential isolation and process
+cleanup remain in force. This resets the owned bundle, not the whole host:
+shared temporary carve-outs and other sandbox permissions are unchanged.
+
+The 30-minute limit still bounds native-turn waiting, not all startup and cleanup.
+The outer retry function still restarts its backoff index on process re-entry
+for both modes; downtime and all waits consume the original cumulative budget.
+Admission/resume counts are not HTTP/model-call or successful-attempt counts,
+and recorded backoff is not total recovery time. Partial usage and missing
+prices do not establish a complete bill.
+
+The prospective study remains a post-selected diagnostic of Task4 and Task5,
+with two bundle states and two repeats per task, eight new cells in total.
+Task4's proposed pair order is keep/fresh then fresh/keep; Task5's is fresh/keep
+then keep/fresh. Model, deployment, effort, SDK, verified inputs and grader stay
+fixed, with one active inference and one grade per produced result. A keep-only
+deliverable advantage repeated twice within a predeclared task, with no reverse
+pair, is a preliminary signal for considering a larger study. Otherwise benefit
+is not established. Cells without a recovery opportunity are uninformative
+about retention, not retention failures; all eight still count. Two repeats,
+service variation, post-selection and uncalibrated judge quality limit causal
+claims. The intervention is the thread-and-owned-files bundle, not attribution
+to thread versus files. No forced online faults, automatic extra repeats or
+automatic monetary cutoff are added. Exact source, campaign, bounds and paid-run
+approval remain separate leader decisions after review; no live result is
+claimed by this offline capability.
+
 ### Step 3: Format Results (`step3_format_results.py`)
 
 Converts inference output into structured JSON + Markdown report under `results/<exp_id>/`.

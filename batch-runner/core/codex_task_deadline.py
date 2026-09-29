@@ -23,6 +23,7 @@ CONTINUATION_FORMAT = "codex-native-continuation-v2"
 RECOVERY_CONTEXT_FORMAT = "codex-host-recovery-context-v1"
 # The existing Step 2 infra-retry policy, not a broader retry permission.
 RECOVERY_FAILURE_CATEGORIES = frozenset({"rate_limited", "turn_start_failed"})
+RETENTION_BUNDLE_CONDITION = "retention_bundle_v1"
 _USAGE_FIELDS = frozenset({
     "input_tokens", "cached_input_tokens", "cache_write_input_tokens",
     "output_tokens", "reasoning_output_tokens",
@@ -42,16 +43,63 @@ class TaskDeadlineExhausted(TimeoutError):
     """No time remains for another provider call."""
 
 
+def _native_workspace_layout(binding: dict) -> tuple[Path, Path, Path, Path, tuple[str, ...]]:
+    """Parse host metadata without treating missing directories as usable."""
+    from core.codex_runtime_config import resolve_run_root_base
+    from core.hf_publication import _assert_no_symlink_ancestors
+
+    try:
+        if (type(binding) is not dict or set(binding) != {
+            "root", "directories", "staged_reference_names",
+        } or type(binding["root"]) is not str
+                or not Path(binding["root"]).is_absolute()
+                or type(binding["directories"]) is not dict
+                or set(binding["directories"]) != {"root", "workspace", "codex_home", "home"}
+                or any(type(item) is not dict or set(item) != {"device", "inode"}
+                       or any(type(value) is not int or value < 0 for value in item.values())
+                       for item in binding["directories"].values())
+                or type(binding["staged_reference_names"]) is not list
+                or any(type(name) is not str or Path(name).name != name or name in {"", ".", ".."}
+                       for name in binding["staged_reference_names"])
+                or len(set(binding["staged_reference_names"])) != len(binding["staged_reference_names"])):
+            raise ValueError("invalid retained layout")
+        root = _assert_no_symlink_ancestors(Path(binding["root"]))
+        if root.parent != resolve_run_root_base().absolute():
+            raise ValueError("different run root")
+        return (root, root / "workspace", root / "codex_home", root / "home",
+                tuple(binding["staged_reference_names"]))
+    except (KeyError, TypeError, OSError, ValueError):
+        raise TaskDeadlineRefused("native workspace ownership binding is invalid") from None
+
+
+def _require_native_workspace_removed(binding: dict) -> tuple[Path, Path, Path, Path, tuple[str, ...]]:
+    """Only a retired bundle may be absent; it must not reappear or be linked."""
+    layout = _native_workspace_layout(binding)
+    try:
+        layout[0].lstat()
+    except FileNotFoundError:
+        return layout
+    except OSError:
+        pass
+    raise TaskDeadlineRefused("retired native workspace is still present or unsafe")
+
+
 @dataclass(frozen=True)
 class CodexTaskDeadlineControl:
-    """The one opt-in block; timings and A/B/C attempt policy are fixed."""
+    """Fixed legacy policies or the separately identified retention diagnostic."""
 
     condition: str
     repetition: int
+    retention_bundle: str | None = None
 
     def __post_init__(self) -> None:
-        if type(self.condition) is not str or self.condition not in {"A", "B", "C"}:
-            raise TaskDeadlineRefused("task_deadline requires condition A, B or C")
+        if type(self.condition) is not str or self.condition not in {"A", "B", "C", RETENTION_BUNDLE_CONDITION}:
+            raise TaskDeadlineRefused("task_deadline condition is not supported")
+        if self.condition == RETENTION_BUNDLE_CONDITION:
+            if type(self.retention_bundle) is not str or self.retention_bundle not in {"keep", "fresh"}:
+                raise TaskDeadlineRefused("retention_bundle_v1 requires exactly keep or fresh")
+        elif self.retention_bundle is not None:
+            raise TaskDeadlineRefused("legacy A/B/C cannot override their retention policy")
         if type(self.repetition) is not int or self.repetition not in {1, 2}:
             raise TaskDeadlineRefused("task_deadline requires repetition 1 or 2")
 
@@ -59,8 +107,13 @@ class CodexTaskDeadlineControl:
     def from_mapping(cls, value: Any) -> CodexTaskDeadlineControl | None:
         if value is None:
             return None
-        if type(value) is not dict or set(value) != {"condition", "repetition"}:
-            raise TaskDeadlineRefused("task_deadline requires only condition and repetition")
+        if type(value) is not dict:
+            raise TaskDeadlineRefused("task_deadline requires a declared control mapping")
+        keys = {"condition", "repetition"}
+        if value.get("condition") == RETENTION_BUNDLE_CONDITION:
+            keys.add("retention_bundle")
+        if set(value) != keys:
+            raise TaskDeadlineRefused("task_deadline control fields differ from its policy")
         return cls(**value)
 
     @property
@@ -68,7 +121,11 @@ class CodexTaskDeadlineControl:
         return 4 if self.condition == "A" else None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"condition": self.condition, "repetition": self.repetition}
+        # Preserve the original A/B/C identity bytes, including omitted fields.
+        result = {"condition": self.condition, "repetition": self.repetition}
+        if self.retention_bundle is not None:
+            result["retention_bundle"] = self.retention_bundle
+        return result
 
 
 def validate_deadline_execution(execution: dict, condition: dict) -> CodexTaskDeadlineControl | None:
@@ -164,6 +221,7 @@ def _validate_failure_observation(value: Any, phase: str) -> None:
 
 def _validate_continuation(
     value: Any, attempts: list[dict], *, condition: str, expires_unix: float | None,
+    first_attempt: int = 0, end_attempt: int | None = None,
 ) -> None:
     """Validate host metadata, never open an agent transcript or auth store."""
     if value is None:
@@ -184,8 +242,10 @@ def _validate_continuation(
             or type(value["native_resumes"]) is not int or value["native_resumes"] < 0
             or value["terminal_reason"] not in {None, "completed", "content_filter"}):
         raise TaskDeadlineRefused("native continuation binding is invalid")
-    if not attempts or any(attempt["workspace_root"] != value["workspace"].get("root")
-                           for attempt in attempts):
+    end_attempt = len(attempts) if end_attempt is None else end_attempt
+    admitted = attempts[first_attempt:end_attempt]
+    if not admitted or any(attempt["workspace_root"] != value["workspace"].get("root")
+                           for attempt in admitted):
         raise TaskDeadlineRefused("native continuation workspace differs from its admissions")
     if value["phase"] == "bound":
         if type(value["thread_id"]) is not str or not value["thread_id"].strip():
@@ -193,14 +253,14 @@ def _validate_continuation(
     elif (value["thread_id"] is not None or value["turns"]
           or value["native_resumes"] or value["terminal_reason"] is not None):
         raise TaskDeadlineRefused("pre-thread continuation has bound activity")
-    prior = -1
+    prior = first_attempt - 1
     previous_turn = None
     for turn in value["turns"]:
         if (type(turn) is not dict or set(turn) != {
             "attempt_index", "call_id", "before", "after", "phase",
             "input_sha256", "recovery_context", "failure_observation",
         } or type(turn["attempt_index"]) is not int
-                or not prior < turn["attempt_index"] < len(attempts)
+                or not prior < turn["attempt_index"] < end_attempt
                 or (turn["call_id"] is not None
                     and (type(turn["call_id"]) is not str or not turn["call_id"]))
                 or not _valid_totals(turn["before"])
@@ -226,6 +286,17 @@ def _validate_continuation(
         boundary = last["after"] or dict.fromkeys(_USAGE_FIELDS)
         if value["usage_boundary"] != boundary:
             raise TaskDeadlineRefused("native continuation usage boundary differs from its turn")
+
+
+def _require_fresh_recovery(binding: dict) -> None:
+    """Discard only a confirmed B-eligible recovery, never an ambiguous start."""
+    turns = binding["turns"]
+    if (binding["phase"] != "bound" or binding["terminal_reason"] is not None
+            or len(turns) != 1 or binding["native_resumes"] != 0
+            or turns[0]["before"] != dict.fromkeys(_USAGE_FIELDS, 0)
+            or turns[0]["failure_observation"] is None
+            or turns[0]["phase"] not in {"settled", "unmetered", "in_flight"}):
+        raise TaskDeadlineRefused("fresh bundle lacks a reconciled eligible recovery")
 
 
 class CodexTaskDeadlineStore:
@@ -302,6 +373,8 @@ class CodexTaskDeadlineStore:
                         "started_unix": None, "expires_unix": None,
                         "attempts": [], "wait_seconds": 0.0,
                         "continuation": None, "terminal_reason": None,
+                        **({"retired_continuations": [], "deliverable_directory": None}
+                           if control.retention_bundle == "fresh" else {}),
                     } for task in task_ids},
                 })
             self._read()
@@ -336,7 +409,11 @@ class CodexTaskDeadlineStore:
             if type(last) not in {int, float} or not math.isfinite(last) or self._now() < last:
                 raise TaskDeadlineRefused("deadline clock moved backwards")
             for cell in data["cells"].values():
-                if set(cell) != {"started_unix", "expires_unix", "attempts", "wait_seconds", "continuation", "terminal_reason"}:
+                keys = {"started_unix", "expires_unix", "attempts", "wait_seconds", "continuation", "terminal_reason"}
+                fresh = self.control.retention_bundle == "fresh"
+                if fresh:
+                    keys.update({"retired_continuations", "deliverable_directory"})
+                if set(cell) != keys:
                     raise TaskDeadlineRefused("deadline cell shape mismatch")
                 if cell["terminal_reason"] not in {None, "content_filtered"}:
                     raise TaskDeadlineRefused("deadline terminal reason is invalid")
@@ -362,8 +439,37 @@ class CodexTaskDeadlineStore:
                             or not start <= attempt["admitted_unix"] < expiry
                             or type(attempt["workspace_root"]) is not str):
                         raise TaskDeadlineRefused("deadline attempt record is invalid")
+                retired = cell.get("retired_continuations", [])
+                if fresh:
+                    if type(retired) is not list or len(retired) > len(cell["attempts"]):
+                        raise TaskDeadlineRefused("fresh bundle history is invalid")
+                    roots = [attempt["workspace_root"] for attempt in cell["attempts"]]
+                    if len(set(roots)) != len(roots):
+                        raise TaskDeadlineRefused("fresh admissions cannot reuse a prior workspace")
+                    for index, binding in enumerate(retired):
+                        if binding is None:
+                            raise TaskDeadlineRefused("fresh bundle history is missing")
+                        _validate_continuation(binding, cell["attempts"], condition=self.control.condition,
+                                               expires_unix=expiry, first_attempt=index, end_attempt=index + 1)
+                        _require_fresh_recovery(binding)
+                    if len(cell["attempts"]) - len(retired) not in {0, 1}:
+                        raise TaskDeadlineRefused("fresh bundle admission history is incomplete")
+                    directory = cell["deliverable_directory"]
+                    if directory is not None and (
+                        type(directory) is not dict or set(directory) != {"path", "device", "inode"}
+                        or type(directory["path"]) is not str or not Path(directory["path"]).is_absolute()
+                        or any(type(directory[key]) is not int or directory[key] < 0 for key in ("device", "inode"))
+                    ):
+                        raise TaskDeadlineRefused("fresh output directory binding is invalid")
                 _validate_continuation(cell["continuation"], cell["attempts"],
-                                       condition=self.control.condition, expires_unix=expiry)
+                                       condition=self.control.condition, expires_unix=expiry,
+                                       first_attempt=len(retired) if fresh else 0)
+                if fresh and cell["continuation"] is not None and (
+                    cell["continuation"]["native_resumes"] != 0 or len(cell["continuation"]["turns"]) > 1
+                    or any(turn["before"] != dict.fromkeys(_USAGE_FIELDS, 0)
+                           for turn in cell["continuation"]["turns"])
+                ):
+                    raise TaskDeadlineRefused("fresh bundle cannot contain a resumed native thread")
                 if self.control.condition == "A" and cell["continuation"] is not None:
                     raise TaskDeadlineRefused("A requires fresh native sessions")
             return data
@@ -400,7 +506,16 @@ class CodexTaskDeadline:
     @property
     def retains_thread(self) -> bool:
         """B/C share one continuation mechanism; A never adopts a thread."""
-        return self.store.control.condition in {"B", "C"}
+        return self.store.control.condition in {"B", "C"} or self.store.control.retention_bundle == "keep"
+
+    @property
+    def fresh_bundle(self) -> bool:
+        return self.store.control.retention_bundle == "fresh"
+
+    @property
+    def binds_native_state(self) -> bool:
+        """Fresh experimental threads still require durable identity/usage bindings."""
+        return self.retains_thread or self.fresh_bundle
 
     def _state(self, *, start: bool = False) -> tuple[dict, dict, float]:
         data = self.store._read()
@@ -439,6 +554,10 @@ class CodexTaskDeadline:
         binding = cell["continuation"]
         if binding is not None and binding["terminal_reason"] is not None:
             raise TaskDeadlineRefused("native continuation is terminal: " + binding["terminal_reason"])
+        if self.store.control.retention_bundle is not None and binding is not None:
+            if (binding["phase"] != "bound" or not binding["turns"]
+                    or binding["turns"][-1]["failure_observation"] is None):
+                raise TaskDeadlineRefused("experimental bundle has no confirmed eligible recovery")
 
     def admit_attempt(self, workspace_root: Path) -> int:
         from core.codex_runtime_config import path_is_within
@@ -467,10 +586,10 @@ class CodexTaskDeadline:
         """
         _, cell, _ = self._state()
         binding = cell["continuation"]
-        if not self.retains_thread:
+        if not self.binds_native_state:
             return None
         if binding is None:
-            if cell["attempts"]:
+            if len(cell["attempts"]) != len(cell.get("retired_continuations", [])):
                 raise TaskDeadlineRefused("admitted cell is missing its native continuation binding")
             return None
         if identity_sha256 is not None and binding["identity_sha256"] != identity_sha256:
@@ -478,6 +597,90 @@ class CodexTaskDeadline:
         if binding["phase"] == "starting":
             raise TaskDeadlineRefused("native thread creation was interrupted before its identifier was bound")
         return binding
+
+    def retired_continuations(self, identity_sha256: str) -> list[dict]:
+        """Host-only receipts outlive fresh bundles, including unknown usage gaps."""
+        _, cell, _ = self._state()
+        retired = cell.get("retired_continuations", [])
+        if any(binding["identity_sha256"] != identity_sha256 for binding in retired):
+            raise TaskDeadlineRefused("retired bundle request/runtime identity mismatch")
+        return retired
+
+    def require_fresh_retirement(self, expected: dict) -> None:
+        _, cell, _ = self._state()
+        if not self.fresh_bundle or cell["continuation"] != expected:
+            raise TaskDeadlineRefused("fresh retirement binding changed")
+        _require_fresh_recovery(expected)
+
+    def retire_fresh_bundle(self, expected: dict) -> None:
+        """Commit retirement only after exact owned cleanup; interrupted cleanup refuses."""
+        data, cell, _ = self._state()
+        if not self.fresh_bundle or cell["continuation"] != expected:
+            raise TaskDeadlineRefused("fresh retirement binding changed")
+        _require_fresh_recovery(expected)
+        _require_native_workspace_removed(expected["workspace"])
+        cell["retired_continuations"].append(expected)
+        cell["continuation"] = None
+        self.store._write(data)
+
+    def bind_fresh_output_directory(self, path: Path) -> None:
+        """Bind one empty Step 2 directory before the first fresh admission."""
+        from core.hf_publication import _assert_no_symlink_ancestors
+        from core.codex_runtime_config import path_is_within, resolve_run_root_base, system_temporary_directory
+
+        data, cell, _ = self._state()
+        if not self.fresh_bundle:
+            raise TaskDeadlineRefused("output reset requires the fresh bundle identity")
+        try:
+            path = _assert_no_symlink_ancestors(path)
+            if path.name != self.task_id or path.parent.name != "deliverable_files":
+                raise ValueError("not this task's output directory")
+            if any(path_is_within(path, writable) for writable in (
+                resolve_run_root_base(), system_temporary_directory(), Path("/tmp"),
+            )):
+                raise ValueError("output directory is agent-writable")
+            metadata = path.lstat()
+            if not stat.S_ISDIR(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) & 0o022:
+                raise ValueError("unsafe output directory")
+            actual = {"path": str(path), "device": metadata.st_dev, "inode": metadata.st_ino}
+            existing = cell["deliverable_directory"]
+            if existing is None:
+                if cell["attempts"] or any(path.iterdir()):
+                    raise ValueError("cannot adopt prior outputs")
+                cell["deliverable_directory"] = actual
+                self.store._write(data)
+            elif existing != actual:
+                raise ValueError("output directory changed")
+        except (OSError, ValueError):
+            raise TaskDeadlineRefused("fresh output directory is unowned, replaced or unsafe") from None
+
+    def clear_fresh_outputs(self) -> None:
+        """Clear only the bound directory's contents, retaining its ownership inode."""
+        import shutil
+
+        _, cell, _ = self._state()
+        if not self.fresh_bundle:
+            raise TaskDeadlineRefused("output reset requires the fresh bundle identity")
+        binding = cell["deliverable_directory"]
+        if binding is None:
+            # Direct runner callers return bytes; only Step 2 owns saved outputs.
+            return
+        path = Path(binding["path"])
+        self.bind_fresh_output_directory(path)
+        if not shutil.rmtree.avoids_symlink_attacks:
+            raise TaskDeadlineRefused("fresh cleanup requires descriptor-safe directory removal")
+        try:
+            for child in path.iterdir():
+                if stat.S_ISDIR(child.lstat().st_mode):
+                    shutil.rmtree(child)
+                else:
+                    # Unlink a symlink itself, never the file/directory it names.
+                    child.unlink()
+            self.bind_fresh_output_directory(path)
+            if any(path.iterdir()):
+                raise ValueError("output cleanup is incomplete")
+        except (OSError, ValueError):
+            raise TaskDeadlineRefused("owned output cleanup refused before native execution") from None
 
     def continuation(self, identity_sha256: str | None = None) -> dict | None:
         """Get a resumable binding; terminal cells remain terminal after replay."""
@@ -489,8 +692,9 @@ class CodexTaskDeadline:
     def bind_workspace(self, identity_sha256: str, request_sha256: str, workspace: dict) -> None:
         """Seal the initial staged layout before any runtime can be opened."""
         data, cell, _ = self._state()
-        if (not self.retains_thread or cell["continuation"] is not None
-                or len(cell["attempts"]) != 1):
+        retired_count = len(cell.get("retired_continuations", []))
+        if (not self.binds_native_state or cell["continuation"] is not None
+                or len(cell["attempts"]) != retired_count + 1):
             raise TaskDeadlineRefused("native continuation cannot replace an admitted workspace")
         cell["continuation"] = {
             "format": CONTINUATION_FORMAT, "identity_sha256": identity_sha256,
@@ -500,7 +704,8 @@ class CodexTaskDeadline:
             "native_resumes": 0, "terminal_reason": None,
         }
         _validate_continuation(cell["continuation"], cell["attempts"],
-                               condition=self.store.control.condition, expires_unix=cell["expires_unix"])
+                               condition=self.store.control.condition, expires_unix=cell["expires_unix"],
+                               first_attempt=retired_count)
         self.store._write(data)
 
     def thread_starting(self) -> None:
@@ -564,7 +769,8 @@ class CodexTaskDeadline:
         # observation from the next turn and attribute the unseen gap to it.
         binding["usage_boundary"] = dict.fromkeys(_USAGE_FIELDS)
         _validate_continuation(binding, cell["attempts"], condition=self.store.control.condition,
-                               expires_unix=cell["expires_unix"])
+                               expires_unix=cell["expires_unix"],
+                               first_attempt=len(cell.get("retired_continuations", [])))
         self.store._write(data)
         return before
 
@@ -604,7 +810,8 @@ class CodexTaskDeadline:
         binding["usage_boundary"] = after
         binding["terminal_reason"] = terminal_reason
         _validate_continuation(binding, cell["attempts"], condition=self.store.control.condition,
-                               expires_unix=cell["expires_unix"])
+                               expires_unix=cell["expires_unix"],
+                               first_attempt=len(cell.get("retired_continuations", [])))
         self.store._write(data)
 
     def acknowledge_usage(self, attempt_index: int) -> None:
@@ -652,8 +859,10 @@ class CodexTaskDeadline:
             "remaining_seconds": (None if cell["expires_unix"] is None else max(0.0, cell["expires_unix"] - now)),
             "attempts_admitted": len(cell["attempts"]),
             "wait_seconds": cell["wait_seconds"],
-            "retained_attempts": len(cell["attempts"]),
-            "session_policy": "retained_native_thread" if self.retains_thread else "fresh_session",
+            "retained_attempts": len(cell["attempts"]) - len(cell.get("retired_continuations", [])),
+            **({"retired_attempts": len(cell["retired_continuations"])} if self.fresh_bundle else {}),
+            "session_policy": ("retained_native_thread" if self.retains_thread else
+                               "fresh_owned_bundle" if self.fresh_bundle else "fresh_session"),
             "native_resumes": (cell["continuation"] or {}).get("native_resumes", 0),
             "terminal_reason": cell["terminal_reason"],
             "model_call_accounting": "not_complete", "invoice_accounting": "unavailable",

@@ -32,14 +32,14 @@ PRIVATE = "PRIVATE https://private.invalid/path?token=PRIVATE"
 
 
 @pytest.fixture(scope="module")
-def compilations():
+def compilations(historical_budget_source):
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source) for source in (
         grading.RETAINED_PRODUCER_SOURCE, readout.WRITER_SOURCE, grading.B1_PRODUCER_SOURCE,
         readout.B1_WRITER_SOURCE, readout.TASK2_WRITER_SOURCE, OBSERVER)}
 
 
 @pytest.fixture(scope="module")
-def compiled_cells():
+def compiled_cells(historical_budget_source):
     return lru_cache(maxsize=32)(adapter.compile_cell_grading_plan)
 
 
@@ -59,6 +59,8 @@ def _selected(case, suffix, tmp_path, monkeypatch):
     return current
 
 
+# Materialize immutable source before the function-scoped subprocess guard.
+@pytest.mark.usefixtures("historical_budget_source")
 @pytest.mark.parametrize("suffix,scenario", [
     ("C_r1", "graded"), ("C_r2", "graded"), ("C_r1", "partial"), ("C_r2", "failed"),
     ("C_r1", "ungraded"), ("C_r2", "missing_ledger"), ("C_r1", "partial_cost"),

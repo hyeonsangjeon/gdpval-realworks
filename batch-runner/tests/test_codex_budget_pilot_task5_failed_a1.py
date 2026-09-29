@@ -65,13 +65,13 @@ def _store_record(api, cell, revision, terminal, claim):
 
 
 @pytest.fixture(scope="module")
-def task5_history(tmp_path_factory):
+def task5_history(tmp_path_factory, historical_budget_source):
     assert grading.TASK5_A1_CELL == CELL and grading.TASK5_RETAINED[CELL] == RECORDED
     assert list(grading.TASK5_RETAINED) == [CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL,
                                          grading.TASK5_C2_CELL, grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
     prototype = grading.compile_request("pilot/" + CELL, failed.PRODUCER, "8" * 40)
     error_row, ledger = failed._failed_row(prototype)
-    histories = a2.failed_a2_history.__wrapped__(tmp_path_factory)
+    histories = a2.failed_a2_history.__wrapped__(tmp_path_factory, historical_budget_source)
     history = next(histories)  # Reuse writers, never invoke the prior test selectors.
     try:
         with pytest.MonkeyPatch.context() as patch:

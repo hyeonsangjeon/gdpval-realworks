@@ -443,7 +443,10 @@ def test_recovery_feedback_closed_boundary_never_sends_context(host, monkeypatch
 
 
 @pytest.mark.parametrize("stale", [False, True], ids=["current", "pre_feedback"])
-def test_recovery_feedback_active_grader_template_source_bindings(stale):
+def test_recovery_feedback_active_grader_template_source_bindings(
+        stale, historical_comparison_source, historical_foundry_source):
+    frozen_source = historical_comparison_source
+    assert frozen_source == historical_foundry_source
     previous = (
         "ec325c4715e739700006c8f33dc9b503162120dc9a5882bb6aad524ca2634e6d",
         "65427741a0c8f6370ce49befe31fde8ef9e9c4bc8ecb6f150d0eadb1a37c753c",
@@ -451,13 +454,13 @@ def test_recovery_feedback_active_grader_template_source_bindings(stale):
     for index, (module, plan, count) in enumerate((
         (comparison, comparison.load_plan(), 37), (pilot, pilot.load_plan(pilot.PLAN), 58),
     )):
-        template = ROOT / module.GRADER
-        current = step8.compute_grader_source_hash(template, yaml.safe_load(template.read_bytes()), batch_root=ROOT / "batch-runner")
+        template = frozen_source / module.GRADER
+        current = step8.compute_grader_source_hash(template, yaml.safe_load(template.read_bytes()), batch_root=frozen_source / "batch-runner")
         assert current != previous[index]
         assert len(plan["source_pins"]) == count
         assert set(plan["source_pins"]) == module.REQUIRED_SOURCES
         for relative in ("batch-runner/core/codex_runner.py", "batch-runner/core/codex_task_deadline.py"):
-            assert plan["source_pins"][relative] == hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+            assert plan["source_pins"][relative] == hashlib.sha256((frozen_source / relative).read_bytes()).hexdigest()
         if module is comparison:
             assert plan["shared"]["grading"]["template_source_sha256"] == current
             if stale:
@@ -475,5 +478,5 @@ def test_recovery_feedback_active_grader_template_source_bindings(stale):
         assert report["configuration_valid"] is not stale
         assert report["launch_allowed"] is report["full_220_allowed"] is False
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)
-    assert hashlib.sha256((ROOT / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
-    assert hashlib.sha256((ROOT / WORKFLOW).read_bytes()).hexdigest() == WORKFLOW_SHA256
+    assert hashlib.sha256((frozen_source / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
+    assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == WORKFLOW_SHA256

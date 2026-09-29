@@ -30,7 +30,7 @@ CLAIM, OUTPUT, TERMINAL, ADVANCED = (f"{60_000 + offset:040x}" for offset in ran
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _scenarios=c_reader.VARIANTS):
+def history(tmp_path_factory, historical_budget_source, *, _scenarios=c_reader.VARIANTS):
     ordinal, grade_run, inference_run, original_request, prior = RECORDED
     run = {"id": grade_run, "job": "pilot-live", "attempt": 1}
     assert readout.TASK3_B2_CELL == CELL
@@ -49,7 +49,7 @@ def history(tmp_path_factory, *, _scenarios=c_reader.VARIANTS):
     assert readout._writer_run(actual_parent) == {"id": "36286719528", "job": "pilot-live", "attempt": 1}
 
     # Only graded C1/C2 prefix states are constructed; no old test node runs.
-    prefix = c_reader.history.__wrapped__(tmp_path_factory, _scenarios=("graded",))
+    prefix = c_reader.history.__wrapped__(tmp_path_factory, historical_budget_source, _scenarios=("graded",))
     initial = next(prefix)[prior]
     directory = tmp_path_factory.mktemp("task3-b2-readout-history")
     workflow = yaml.safe_load((pilot.ROOT / grading.WORKFLOW).read_bytes())

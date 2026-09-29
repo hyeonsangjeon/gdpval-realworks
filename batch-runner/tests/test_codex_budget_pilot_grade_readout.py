@@ -33,13 +33,15 @@ PRIVATE = "PRIVATE-canary https://private.invalid/path?token=PRIVATE"
 
 
 @pytest.fixture(scope="module")
-def compilations():
+def compilations(historical_budget_source):
+    assert pilot.ROOT == historical_budget_source
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source)
             for source in (grading.RETAINED_PRODUCER_SOURCE, readout.WRITER_SOURCE, OBSERVER)}
 
 
 @pytest.fixture(scope="module")
-def compiled_cells():
+def compiled_cells(historical_budget_source):
+    assert pilot.ROOT == historical_budget_source
     return lru_cache(maxsize=8)(adapter.compile_cell_grading_plan)
 
 

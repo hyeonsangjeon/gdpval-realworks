@@ -244,12 +244,12 @@ class FakeChildren(pilot.LocalTransport):
 
 
 @pytest.fixture
-def scenario(monkeypatch):
+def scenario(monkeypatch, historical_budget_source):
     from core.execution_envelope_tasks import load_task_catalog, select_advance_check_tasks
 
     task_ids = list(select_advance_check_tasks(load_task_catalog()).task_ids)
     # Synthetic host state must not be inside /tmp (a real native writable carve-out).
-    with tempfile.TemporaryDirectory(prefix=".pilot-dispatch-test-", dir=pilot.ROOT.parent) as directory:
+    with tempfile.TemporaryDirectory(prefix=".pilot-dispatch-test-", dir=Path(__file__).resolve().parents[3]) as directory:
         host = Path(directory)
         monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(host / "unrelated-native-root"))
         monkeypatch.setenv("TMPDIR", str(host / "agent-temp"))

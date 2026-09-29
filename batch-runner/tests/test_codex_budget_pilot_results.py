@@ -41,7 +41,7 @@ def offline(monkeypatch):
 
 
 @pytest.fixture
-def records(tmp_path):
+def records(tmp_path, historical_budget_source):
     # The compiler really checks registered cohort/config/source pins. Only the
     # observation/host-instance/input fingerprints below are synthetic, never
     # real data, native execution, credentials or a fabricated live receipt.

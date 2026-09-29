@@ -122,7 +122,7 @@ def assert_refused(case, caplog, capsys, code):
     assert not (case.installed / bundle.READY).exists()
 
 
-def test_hf_originals_real_registered_origins_keep_submission_parquet_out():
+def test_hf_originals_real_registered_origins_keep_submission_parquet_out(historical_budget_source):
     revision, specs, origins = intake._hf_origins()
     assert revision == "11e7900cdcac61bc4daf59e65feb238acda98fbf"
     assert [row[4] for row in origins] == list(intake.HFRole)

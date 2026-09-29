@@ -520,7 +520,10 @@ def test_cumulative_task_deadline_lazy_persistence_helpers_initialize_and_restor
 
 @pytest.mark.parametrize("stale", [None, "selector", "deadline"],
                          ids=["current", "selector_only", "deadline_only"])
-def test_cumulative_task_deadline_active_grader_bindings(stale):
+def test_cumulative_task_deadline_active_grader_bindings(
+        stale, historical_comparison_source, historical_foundry_source):
+    frozen_source = historical_comparison_source
+    assert frozen_source == historical_foundry_source
     previous = {
         "selector": ("c92bf13696fa506c84dbee649d5ba3c03fb33244810f30e2be4a05630ca204e1",
                      "785352daa052b105f0dfce08d8de7b3f41633a8e6b312111bec5bdbc8806144b"),
@@ -529,8 +532,8 @@ def test_cumulative_task_deadline_active_grader_bindings(stale):
     }
     plans = [(comparison, comparison.load_plan()), (pilot, pilot.load_plan(pilot.PLAN))]
     for index, (module, plan) in enumerate(plans):
-        template = ROOT / module.GRADER
-        current = step8.compute_grader_source_hash(template, yaml.safe_load(template.read_bytes()), batch_root=ROOT / "batch-runner")
+        template = frozen_source / module.GRADER
+        current = step8.compute_grader_source_hash(template, yaml.safe_load(template.read_bytes()), batch_root=frozen_source / "batch-runner")
         assert all(current != hashes[index] for hashes in previous.values())
         old_hash = previous[stale][index] if stale else None
         if module is comparison:

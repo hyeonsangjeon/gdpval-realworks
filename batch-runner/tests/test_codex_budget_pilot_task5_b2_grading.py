@@ -49,12 +49,12 @@ def _select(history, api, directory, patch, *, controller=failed.FUTURE_CONTROLL
 
 
 @pytest.fixture(scope="module")
-def b2_history(tmp_path_factory):
+def b2_history(tmp_path_factory, historical_budget_source):
     assert grading.TASK5_B2_CELL == CELL and grading.TASK5_RETAINED[CELL] == RECORDED
     prototype = grading.compile_request("pilot/" + CELL, failed.FUTURE_CONTROLLER, RECORDED[1],
                                         producer_source_sha=failed.PRODUCER)
     assert prototype.cell["config_sha256"] == CONFIG and prototype.plan["order"][28] == CELL
-    histories = c2.c2_history.__wrapped__(tmp_path_factory)
+    histories = c2.c2_history.__wrapped__(tmp_path_factory, historical_budget_source)
     history = next(histories)  # Existing genuine writers, never previous test functions.
     try:
         with pytest.MonkeyPatch.context() as patch:

@@ -40,8 +40,9 @@ SENTINEL = "private-evidence-value-DO-NOT-ECHO"
 
 
 @pytest.fixture(scope="module")
-def published_seed(tmp_path_factory, _seed):
+def published_seed(tmp_path_factory, _seed, historical_foundry_source):
     """Prepare once under the requesting case's offline guards; share bytes only."""
+    assert pilot.ROOT == historical_foundry_source
     @lru_cache(maxsize=1)
     def prepare():
         parent = tmp_path_factory.mktemp("foundry-gate-seed")
@@ -69,7 +70,8 @@ def bundle(tmp_path, _offline, published_seed):
 
 
 @pytest.fixture
-def plan():
+def plan(historical_foundry_source):
+    assert pilot.ROOT == historical_foundry_source
     return pilot.load_plan(pilot.PLAN)
 
 
