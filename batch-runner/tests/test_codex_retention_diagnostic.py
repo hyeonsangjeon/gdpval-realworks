@@ -13,7 +13,7 @@ from core.codex_task_deadline import CodexTaskDeadlineControl
 from core.experiment_config import ExperimentConfig
 from gpt54_comparison_preflight import _canonical_json, load_plan
 from gpt54_prepared_input_attestation import PreparedInputRefused
-from test_codex_budget_pilot import offline  # noqa: F401; genuine process/network/client guards
+from .test_codex_budget_pilot import offline  # noqa: F401; genuine process/network/client guards
 
 
 def test_retention_registration_is_exact_closed_and_inert(
