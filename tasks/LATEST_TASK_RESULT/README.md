@@ -1,162 +1,103 @@
 # Latest task result
 
-## PROJECT5-REGISTRATION-RECORD-CATEGORY
+## PROJECT5-PREPARE-CALLER-HELD-WRITER
 
-This follow-up only moves the unchanged registration bullets into the existing
-Unreleased `Added` section and updates this completion record. No pytest or
-other runtime validation ran; all prior test observations remain separate.
+At `2d206b032f2236310b119a831303d57152323b1a`, the single authorized offline
+selector collected 1 test and reported **1 passed in 6.62s**, exit 0, not
+skipped. It exercised real preparation/readback and both deterministic output
+directory swaps with the existing private fixture. No intake or recovery was
+replayed. Preparation reserved no slot and started no deadline.
 
-The leader completed the full 913-line implementation review of PR699 at
-`d9ab8db744ab7912834633db896d675b87d3daf4` in
-[review 5347175617](https://github.com/hyeonsangjeon/gdpval-realworks/pull/699#pullrequestreview-5347175617),
-with no code-correctness findings. The leader reported 11 applicable CI checks
-`SUCCESS` and one deploy check `SKIPPED` on that draft HEAD. These facts do not
-approve the new records-only HEAD or establish its CI result.
+### Review scope and publication boundary
 
-## PROJECT5-REGISTRATION-COMPILE-REFUSAL
+[Review 5348128931](https://github.com/hyeonsangjeon/gdpval-realworks/pull/700#pullrequestreview-5348128931)
+requested changes at `a3362bbe484debd8c5b78263198a1dd84f6d04b8`: the old writer
+reopened the output pathname after the preparer's outer check, so a replacement
+could receive bytes before a later refusal. The earlier local pass remains
+valid but did not cover this gap. The new delta is not yet reviewed or approved.
 
-The config-assembly repair is pinned at
-`510bb8246f40e999c3c1f603dc94bd67051e5141`. The sole authorized pytest invocation
-reported 1 passed in 5.01s, exit 0. It checked the closed eight-cell offline
-plan, drift refusals, legacy-campaign refusal and inert CLI. This is one contract
-test, not eight experiment executions or live-runtime validation.
+The [preparer](../../batch-runner/codex_retention_prepare_packet.py) now reuses
+`ghcp_vm_input_bundle._publication_parents` and `_write_no_clobber` unchanged.
+After exclusive creation, it retains `directory_fd(output)` and passes that
+same descriptor as `parent_fd` to every member write and final `preparation.json`
+write. The helper checks the path against the caller-held inode before any
+temporary-file allocation and uses that FD for temporary bytes, no-clobber
+linking and temporary-link removal. It never reopens or adopts a replacement
+parent. Existing fsync, no-link/path checks and outer identity checks remain.
+The new preparer source identity includes the reused helper's actual bytes;
+no shared helper, compiler, runtime, config, registration, grader algorithm,
+workflow or frozen source pin changed.
 
-### Scope and reviewed base
+The two test-owned swaps occur after the outer checks, immediately before the
+first member write and final marker write. Each reached the real helper's
+`ghcp_input_bundle_refused` predicate before any temporary allocation. Assertions
+checked parent identity/bytes, the replacement's exact sentinel-only contents,
+the original held inode and partial bytes, absence of both markers and refusal
+to reuse either directory. The first original stayed empty; the final original
+retained its three payload files. Original five-task input bytes and all
+network/model/credential/process/admission guards remained intact.
 
-Branch `b/codex-retention-registration-20260929` continues in the same worktree
-`/ai-work/copilot/worktrees/codex-retention-registration-20260929`, created from
-exact main `18bc942b97114cca3b9f6ed913b9841dda3a5874`. Its tree is
-`062d668f967bb9e772f0de353dbef27e99987479`, matching reviewed
-`610d39c2744be8b8879f884fa0a43abb053ecd44` and
-[review 5345799305](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698#pullrequestreview-5345799305).
-The leader reported all 14 checks passing and delivery of PR698. Those are
-reviewed-base facts, not approval or validation of this new compiler. Old
-branches, checkouts and WIP are preserved; no PR698 test or check was replayed.
+Interrupted publication **retains partial output and refuses reuse**. Only a
+writer's private temporary link is cleaned up; partial production outputs are
+not deleted. This corrects the earlier record's "cleanup after interrupted
+writing" wording.
 
-The draft adds only the [registration](../../batch-runner/experiments/execution_envelope/codex_retention_diagnostic.yaml),
-[offline compiler](../../batch-runner/codex_retention_diagnostic.py) and
-[focused test](../../batch-runner/tests/test_codex_retention_diagnostic.py), plus
-these two current records. Existing runtime, grader, workflow, source-pin and
-original 30-cell registration/outcome bytes are unchanged from the base.
+### Exact validation and identities
 
-The bounded pre-test diagnosis captured the real validator's sole error:
-`experiment.id must be a safe identifier`. The first keep ID was a string of
-102 characters; `core.repository_identity.validate_experiment_id` permits at
-most 100. The old assembly redundantly included the policy label after the
-campaign namespace. The field-by-field template comparison found no other
-validation error; deadline controls were not the cause.
-
-The compiler now uses the existing identifier validator for
-`<campaign>__<task>_<keep|fresh>_r<repeat>`, while preserving all eight full cell
-IDs and their controls. The test verifies unique valid experiment IDs and the
-real validator's refusal of the original 102/103-character forms. Compilation
-refusals now include the validator's structural errors. Only the new compiler,
-its actual registration source hash and the focused test changed in this fix.
-The compiler SHA-256 is
-`c8ac9d0ec3eca0d4251c345f733009f506d366d312c5357836e6c67332a76c53`;
-it is a byte binding, not approval. The earlier relative-import correction and
-the existing offline guards remain intact; no validator or runtime was changed.
-
-The prospective scope is eight new Task4/Task5 cells: keep/fresh, two repeats,
-with Task4 ordered keep1/fresh1/fresh2/keep2 and Task5 fresh1/keep1/keep2/fresh2.
-Both modes use `retention_bundle_v1`, B recovery, one global inference slot,
-one durable 10,800-second budget, no fixed admission cap and no C feedback.
-The 1,800-second native-turn wait is not an all-in attempt ceiling. The draft
-separates reviewed runtime pins, the compiler's own byte binding and the actual
-grader-template closure; no future materialized grader fingerprint is claimed.
-It binds public input provenance for dataset revision
-`11e7900cdcac61bc4daf59e65feb238acda98fbf`, without fetching private payloads.
-It contains no scheduler or dispatch path and explicitly denies launch authority.
-
-### Exact invocation and result
-
-After the bounded diagnosis and static comparison with the canonical config
-helpers, at `510bb8246f40e999c3c1f603dc94bd67051e5141`, from `batch-runner`,
-the sole pytest invocation was:
+The invocation ran once from `batch-runner` with the same explicit locator and
+a new private receipt path. Only those two path values are symbolic below;
+their exact values are retained privately. The selected test was not skipped;
+this turn used one invocation.
 
 ```bash
-env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short \
-  tests/test_codex_retention_diagnostic.py::test_retention_registration_is_exact_closed_and_inert
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 GDPVAL_RETENTION_PREPARED_HANDOFF="$RETAINED_INPUT_HANDOFF" GDPVAL_RETENTION_TEST_RECEIPT="$PRIVATE_TEST_RECEIPT" /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short -s tests/test_codex_retention_prepare_packet.py::test_retention_preparation_packet_is_verified_closed_and_no_launch
 ```
 
-```text
-collected 1 item
-tests/test_codex_retention_diagnostic.py::test_retention_registration_is_exact_closed_and_inert PASSED [100%]
-============================== 1 passed in 5.01s ===============================
-pytest exit status: 0
-```
+The selected cell remains
+`0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1`.
+Actual identities from the new receipt and source-byte checks are below; none
+confers source approval or launch authority.
 
-The complete log is `/tmp/project5-registration-compile-refusal.I4pDWM/pytest.log`.
-No second pytest invocation, old suite, CI replay or CI polling ran in this follow-up.
-All tracked files outside the three new registration-unit files and these two
-records were byte-compared with the reviewed base and are unchanged. This includes
-runtime, validators, frozen 30-cell registrations/pins, graders and workflows.
+| Identity role | SHA-256 |
+| --- | --- |
+| Verified original-input roles | `40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38` |
+| Preparer file bytes | `c0cbc6e332d6ebf3a48b58094c4bffc1e2f032b48ac61ee6a771f474ba11633a` |
+| Preparer and helper source identity | `39cc0a553aa5a47778ea303d198cbf7775c55003b0e144fec279653521095103` |
+| Unchanged caller-held-FD helper | `f6b57eacdcb93715bb286dc7bc979599d5c5a14a948f5b14a1c8561631780d39` |
+| Actual materialized grader for this packet | `b948e1e50dcd6031749464cbf2f8d5362933191361371f98b51dc9b3fad8a3f9` |
+| Read-back preparation packet | `3c39313149d902db6b6c8d05139cdf343cd8c5184a8721d255c4461b3ff4eb41` |
 
-The import-corrected attempt at `38e4a4b5422641a16e61209fc741a44621c06732`
-remains separate: 1 collected, 1 failed in 2.47s, exit 1, at the first
-`compile_plan` call with `RetentionRegistrationRefused: compiled_config_refused`,
-before contract assertions. Its log is
-`/tmp/project5-registration-fixture-import.CEPTWc/pytest.log`; that invocation
-did not expose the underlying identifier error diagnosed in this follow-up.
+The grader fingerprint binds this packet's materialized config location and
+bytes. It is not a template hash, an executed grade or the earlier packet's
+identity. The new log is 1,377 bytes, SHA-256
+`3bce963792a209895ddbbb0f44acd5b700d4ca59fd59a6761788fdecf58d1b76`.
 
-The earlier attempt at `0fe972e2814b3eb5f256ecf8516d6f531583f3f3` remains separate:
-`ModuleNotFoundError: No module named 'test_codex_budget_pilot'`, 1 collection
-error in 1.21s, exit 4, with 0 tests collected or executed. Its preserved log is
-`/tmp/project5-retention-registration.bxAJKE/pytest.log`.
+| Separate observation | Actual result |
+| --- | --- |
+| Earlier static fixture finding | The tracked 4,142-byte fixture was not canonical Step0; no test ran at that stop. |
+| `e224a750dbdbabe74490ff9c87459d14d5e01d40` | 1 collected; **1 failed in 2.06s**, exit 1, during guard installation before compiler/preparer execution. |
+| `45ef631d76d2c92a1d0263e5dab9c36680939ef7` | 1 collected; **1 passed in 5.69s**, exit 0, not skipped; valid original packet observation, without the new swap cases. |
+| `2d206b032f2236310b119a831303d57152323b1a` | 1 collected; **1 passed in 6.62s**, exit 0, not skipped; both exact-gap swaps refused with unchanged replacement bytes and zero temporary allocations after swapping. |
 
-### Separate local validation observations
-
-The historical PR698 runs and these registration attempts are separate
-observations, not combined totals. Stops without an invocation add no result.
-
-| Tested SHA | Actual result | Exit |
-| --- | --- | --- |
-| `b1854e5b50eda9c25c9db5bc2627acf35022e70d` | 5 failed, 42 passed in 334.92s | 1 |
-| `91ffae589b240dd9d31978af0dd2cf19532e96c7` | 5 passed in 24.02s | 0 |
-| `6710299c5776c30ccf3927a1f8a54c6ee4ffab09` | 3 passed, 1 setup error in 93.52s | 1 |
-| `6665c183c215aa6594622eb9fe92ca55633c7013` | 1 setup error in 8.44s | 1 |
-| `7bbe61f7880ce0bdb3a130fbf8f89856cb8efc27` | 3 passed in 49.11s | 0 |
-| `88b8a62b4b5f4802f6fc22c25b9348d78a931f65` | 3 passed in 9.04s | 0 |
-| `3fdc5a95853619135d4165063392144eb6fea540` | 8 passed in 26.06s | 0 |
-| `1fa84f2b2cff4d51a323aabd2051130fd8b119c8` | 3 passed in 61.92s | 0 |
-| `3188e27a2eac24fd7ed3f3e074c9a088ad7d79e0` | No tests ran; selector not found; 7 collected; 5.49s | 4 |
-| `3188e27a2eac24fd7ed3f3e074c9a088ad7d79e0` | Corrected owner: 8 passed in 139.10s | 0 |
-| `93e96b342386482cb9e7f60805781f0009620629` | 3 passed in 16.55s | 0 |
-| `dac0421ca5b05d35eae85a9b666eb351a9f84744` | Unchanged node, read-only diagnostic profiling: 1 passed in 0.67s | 0 |
-| `eb9971b1b8ce94e559481d56dd6cdbe1ca854c61` | Deterministic edge and fixed paths: 4 passed in 1.02s | 0 |
-| `0fe972e2814b3eb5f256ecf8516d6f531583f3f3` | Registration test: 0 collected, 0 executed; 1 collection/import error in 1.21s | 4 |
-| `38e4a4b5422641a16e61209fc741a44621c06732` | Relative-import correction: 1 collected, 1 failed in 2.47s; `compiled_config_refused` before contract assertions | 1 |
-| `510bb8246f40e999c3c1f603dc94bd67051e5141` | Bounded experiment-ID assembly and offline plan contract: 1 passed in 5.01s | 0 |
-
-The [final PR698 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/610d39c2744be8b8879f884fa0a43abb053ecd44/tasks/LATEST_TASK_RESULT/README.md)
-preserves the prior deterministic reproduction, original CI-cause uncertainty
-and unchanged local diagnostic separately.
-
-The [two-boundary fixture result and preceding CI evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/dac0421ca5b05d35eae85a9b666eb351a9f84744/tasks/LATEST_TASK_RESULT/README.md),
-[49-file fixture scope and both selector attempts](https://github.com/hyeonsangjeon/gdpval-realworks/blob/5d35dc440cdf7cdf2b53cc61ebd6a55ff9549350/tasks/LATEST_TASK_RESULT/README.md),
-[complete prior handoffs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/de3e0401b9c0ae9d2d142c25e14d1f4dab768383/tasks/LATEST_TASK_RESULT/README.md),
-[54-module inventory and prior CI results](https://github.com/hyeonsangjeon/gdpval-realworks/blob/de3e0401b9c0ae9d2d142c25e14d1f4dab768383/tasks/LATEST_TASK_RESULT/README.md#project5-final-legacy-fixtures)
-and [prior changelog](https://github.com/hyeonsangjeon/gdpval-realworks/blob/de3e0401b9c0ae9d2d142c25e14d1f4dab768383/CHANGELOG.md)
-remain immutable Git evidence. Session artifacts, including
-`/tmp/project5-final-legacy-fixtures.S8DFVq/failed-nodes.tsv`, were preserved.
-Historical handoffs are linked here rather than copied into this current record.
+The accepted original byte pins, old log hashes, original materialized grader
+`15d11db5e00cca1fa6e98b9805c52d8d0e543198f16ff90066c235f332bf4e19` and packet
+`4f11ec470b33334bc7e3e073946fc58bd8e92037a82182b598c4941af483520b` remain in the
+[immutable prior handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a3362bbe484debd8c5b78263198a1dd84f6d04b8/tasks/LATEST_TASK_RESULT/README.md).
+Earlier registration observations remain linked there. Counts and outcomes
+are separate; no combined test total is claimed.
 
 ### Remaining gates
 
-New-HEAD record-delta review and CI remain required. The completed implementation
-review and reported checks cover only `d9ab8db744ab7912834633db896d675b87d3daf4`.
-They do not authorize launch or the modified runtime for the original campaign.
-Input staging and byte verification,
-the serial execution/reservation controller, any materialized grader identity,
-live-runtime verification and explicit paid-run direction remain outside this unit.
+Branch `b/codex-retention-prepare-packet-20260929` retains base
+`1c777374af6fcbd2b5a07c94585e35899dc5847e`. Its prior review `5347346570` is not
+approval of this new source. Only the preparer, its existing test and two
+completion records differ from the old PR head; only records change after the
+tested SHA. Protected English checks preserve exact evidence and these limits.
 
-The decision remains whether to consider a larger bundle-retention study, with
-only a preliminary within-task signal from two keep-only pair advantages and
-no reverse pair. Otherwise benefit is not established. No-recovery cells stay
-in the denominator of eight but are uninformative about retention. Post-selection,
-two repeats, service variation and an uncalibrated judge limit the claim; no
-thread-versus-files attribution, model superiority or complete bill is established.
-There are no forced faults, extra repeats or automatic monetary cap. Known
-usage, partial costs, missing prices and NG/null grades must stay distinct.
-No live execution, private payload fetch, storage setup, credentials,
-infrastructure change, Azure/OIDC/HF/model call, paid run or merge occurred.
+New-head delta review and CI, serial reservation/execution, runtime-input
+staging, live-source/deployment verification and separate launch direction
+remain required. The packet retains `launch_authorized=false`, `commands=[]`,
+`inference_slot_reserved=false`, `deadline_started=false` and
+`runtime_inputs_staged=false`. No grading, live model, paid run, Azure/OIDC/HF
+operation, VM, CI replay or infrastructure change ran. Preparation is not
+admission.

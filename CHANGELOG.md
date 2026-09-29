@@ -681,6 +681,30 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a no-launch single-cell retention preparation packet and one opt-in
+  offline contract selector. Reuse real source/schema4/prepared-input checks,
+  materialize only into a new owned ignored-workspace directory, bind actual
+  emitted config/packet/grader identities and preserve the original five-task
+  bundle. The retained handoff supplies input-role fingerprint
+  `40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38`; no intake
+  or recovery was replayed. Address request-changes review `5348128931` at
+  `a3362bbe484debd8c5b78263198a1dd84f6d04b8` by reusing the unchanged
+  caller-held-FD publication helpers for every member and final marker. Bind
+  their actual source bytes without changing old callers, runtime, compiler,
+  configs, registrations, grader algorithms, workflows or frozen pins. At
+  `2d206b032f2236310b119a831303d57152323b1a`, one selector reported **1 passed in
+  6.62s**, exit 0, not skipped. Both exact-gap directory swaps reached the real
+  refusal before any temporary allocation, preserving parent/replacement bytes
+  and original partials. Interrupted publication retains partial output and
+  refuses reuse; only private temporary links are cleaned up. Keep the earlier
+  static finding, `e224a750dbdbabe74490ff9c87459d14d5e01d40` guard failure
+  (**1 failed in 2.06s**, exit 1) and
+  `45ef631d76d2c92a1d0263e5dab9c36680939ef7` original packet pass
+  (**1 passed in 5.69s**, exit 0) separate. Preparation reserves no slot, starts
+  no budget and authorizes no launch. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-prepare-caller-held-writer)
+  records exact source/packet identities and outstanding new-head review/CI,
+  serial-execution, runtime-input-staging and live-launch gates.
+
 - Add a separate inert Task4/Task5 keep/fresh registration for eight new cells,
   an offline canonical compiler and one focused contract selector. Runtime base
   `18bc942b97114cca3b9f6ed913b9841dda3a5874` contains reviewed
