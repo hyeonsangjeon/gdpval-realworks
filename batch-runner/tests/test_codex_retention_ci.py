@@ -13,7 +13,6 @@ import io
 import json
 import os
 from pathlib import Path
-import select
 import subprocess
 import sys
 import tempfile
@@ -43,24 +42,9 @@ from .test_codex_ci_input_intake import Response
 
 REAL_POPEN = subprocess.Popen
 REAL_RUN = subprocess.run
-
-
-class MetadataProcess(REAL_POPEN):
-    """Reap only allowlisted metadata children without weakening the sleep guard."""
-
-    def _wait(self, timeout):
-        if timeout is None:
-            return super()._wait(timeout)
-        until = time.monotonic() + max(0.0, timeout)
-        if self.poll() is not None:
-            return self.returncode
-        descriptor = os.pidfd_open(self.pid)
-        try:
-            if not select.select([descriptor], [], [], max(0.0, until - time.monotonic()))[0]:
-                raise subprocess.TimeoutExpired(self.args, timeout)
-            return super()._wait(0)
-        finally:
-            os.close(descriptor)
+REAL_SLEEP = time.sleep
+REAL_WAIT_CODES = tuple(method.__code__ for method in (
+    REAL_POPEN._wait, REAL_POPEN.wait, REAL_POPEN._communicate, REAL_POPEN.communicate))
 
 
 def positive(phase, call):
@@ -308,6 +292,45 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
     transports = []
     archive, rematerialized = immutable_archives
     signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    metadata_children = {}
+    denied_sleep = time.sleep
+    git_metadata = {
+        ("rev-parse", "HEAD"), ("rev-parse", "HEAD^{tree}"),
+        ("rev-parse", "--show-toplevel"),
+        ("rev-parse", "--path-format=absolute", "--git-common-dir"),
+        ("status", "--porcelain", "--untracked-files=normal"),
+        ("config", "--name-only", "--get-regexp",
+         r"^(filter\.|include\.|includeif\.|extensions\.partialclone$|remote\..*\.promisor$|core\.alternaterefscommand$)"),
+        ("archive", "--format=tar", historical.SOURCE, "batch-runner", ".github/workflows"),
+    }
+
+    def metadata_wait_sleep(delay):
+        frame = sys._getframe(1)
+        process = frame.f_locals.get("self")
+        if type(process) is not REAL_POPEN or process not in metadata_children:
+            return denied_sleep(delay)
+        command, cwd, runner = metadata_children[process]
+        frames = []
+        for code in REAL_WAIT_CODES:
+            if frame is None or frame.f_code is not code or frame.f_locals.get("self") is not process:
+                return denied_sleep(delay)
+            frames.append(frame)
+            frame = frame.f_back
+        waiting, _, exchange, communication = (item.f_locals for item in frames)
+        # The exact active run frame also excludes other threads and later waits
+        # on this object. Only this owned Git child's original timed reap qualifies.
+        if not (frame is runner and runner.f_locals.get("process") is process
+                and tuple(process.args) == command == tuple(runner.f_locals["popenargs"][0])
+                and runner.f_locals["kwargs"].get("cwd") is None and Path.cwd() == cwd
+                and runner.f_locals["timeout"] == communication["timeout"] == exchange["orig_timeout"] == 60
+                and communication["endtime"] == exchange["endtime"]
+                and 0 < waiting["timeout"] <= 60 and delay == waiting["delay"] and 0 < delay <= 0.05):
+            return denied_sleep(delay)
+        remaining = communication["endtime"] - time.monotonic()
+        if remaining > 0:
+            return REAL_SLEEP(min(delay, remaining))
+        # Let the unchanged stdlib loop raise TimeoutExpired and run reap its own
+        # child; do not sleep beyond the original communicate deadline.
 
     def metadata_or_harmless_only(command, **options):
         # Narrow subprocess TRANSPORT allowlist. All source/identity validators
@@ -320,6 +343,17 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
             if verb == "archive":
                 assert command[index + 2:] == ["archive", "--format=tar", historical.SOURCE, "batch-runner", ".github/workflows"]
             assert options["env"]["GIT_NO_LAZY_FETCH"] == "1" and options["env"]["GIT_ALLOW_PROTOCOL"] == ""
+            assert tuple(command[index + 2:]) in git_metadata
+            runner = sys._getframe(1)
+            assert runner.f_code is REAL_RUN.__code__ and runner.f_back.f_code is owned._git.__code__
+            assert runner.f_locals["timeout"] == 60
+            assert options == {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE,
+                               "stderr": subprocess.PIPE, "env": runner.f_back.f_locals["environment"]}
+            cwd = Path.cwd()
+            assert cwd == controller.ROOT / "batch-runner"
+            process = REAL_POPEN(command, **options)
+            metadata_children[process] = (tuple(command), cwd, runner)
+            return process
         elif command[:2] == [sys.executable, "-c"]:
             assert command[2] in {historical.SAFE_ERROR + historical.OBSERVE, historical.SAFE_ERROR + historical.MATERIALIZE}
             assert options["cwd"] in {root / "batch-runner" for root in (archive, rematerialized)}
@@ -334,18 +368,20 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
             assert command[5:] == [sys.executable, "-c", "pass"]
             assert options["start_new_session"] is True
             return REAL_POPEN(command, **options)
-        # Verifiers re-read the real archive and execute fixed offline metadata
-        # scripts after fixture setup. Their bounded reap must not call the
-        # globally forbidden time.sleep. The owned supervisor stays unchanged.
-        return MetadataProcess(command, **options)
+        # Fixed historical Python scripts receive no sleep exception. All
+        # children retain normal communicate/wait and subprocess.run cleanup.
+        return REAL_POPEN(command, **options)
 
     # subprocess.run itself is left real only for the Popen-allowlisted metadata
     # commands. A shell, model command, credential query or other PID is refused.
     monkeypatch.setattr(subprocess, "run", REAL_RUN)
     monkeypatch.setattr(subprocess, "Popen", metadata_or_harmless_only)
+    monkeypatch.setattr(time, "sleep", metadata_wait_sleep)
     guarded_sleep = time.sleep
     with pytest.raises(AssertionError, match="^dispatcher regression crossed a live boundary$"):
         time.sleep(0)
+    with pytest.raises(AssertionError):
+        subprocess.run([sys.executable, "-c", "pass"], timeout=60)
     host_parent = Path(tempfile.mkdtemp(prefix=".retention-ci-test-host-", dir=Path(__file__).resolve().parents[3]))
     monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(host_parent / "agent-native"))
     monkeypatch.setenv("TMPDIR", str(host_parent / "agent-temp"))

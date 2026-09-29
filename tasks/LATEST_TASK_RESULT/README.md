@@ -1,57 +1,62 @@
 # Latest task result
 
-## PROJECT5-RETENTION-CI-CAS-INTEGRATION
+## PROJECT5-ARCHIVE-GUARD-ROOT-FIX
 
-The single authorized offline invocation failed during guarded historical
-archive preparation, before the integration assertions were reached. The
-implementation remains unvalidated. No correction, rerun, push or new PR
-followed. The implementation is pinned at
-`6038eb0cf01b372c874e0c824a3750e118f9ac35`; these two completion-record updates
-remain uncommitted.
+The authorized follow-up selector failed at
+`3be7160b08969689035aa886f975c43b89a1dbe6`: 1 collected, 1 failed in 60.80s,
+exit 1. Code work stopped after that invocation. There was no further retry,
+push or new PR. These two completion-record updates remain uncommitted.
 
 Branch `b/codex-retention-ci-cas-20260929` starts at exact base
 `6aa34a2f393f877da7b8f95e1dcd7bb00077a3fb`, tree
 `d571030bbb04fe82726d39d6876982e0ca97bcc8`. The leader reported 10 passing
 checks at reviewed `71b3a8274bc6282e8cbc6842303cdb76df54cadb` /
 [review 5349547201](https://github.com/hyeonsangjeon/gdpval-realworks/pull/701#pullrequestreview-5349547201).
-That review covers the base, not this adapter. The prior 26.20s and 6.62s
-observations remain separate in the
+That review covers the base, not this adapter or fixture correction. The prior
+26.20s and 6.62s observations remain separate in the
 [immutable controller handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/6aa34a2f393f877da7b8f95e1dcd7bb00077a3fb/tasks/LATEST_TASK_RESULT/README.md).
 Neither selector was replayed.
 
-### Scope
+### Cause and test-only correction
 
-Only `3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1`,
-ordinal 0 of the unchanged eight-cell registration, is supported. The new
-adapter and workflow connect the existing first-cell controller to same-run
-owner environment review, signed GitHub job-origin evidence and the existing
-one-use serial CAS branch. The request binds source, plan, cell, current
-input/staging/config/grader identities, hosted job and finite scope. The host
-witness relies on GitHub's job-scoped issuance credential, not hardware
-attestation. Default planning and preparation request no execution authority.
+The original log identified only `immutable_historical_archive` and the shared
+guard at `test_codex_budget_pilot.py:52:forbidden`. Static inspection narrowed
+the call chain, then the one authorized archive-only probe identified guarded
+`time.sleep` at `subprocess.py:1953:_wait`. Its callers were
+`gpt54_disposable_checkout.py:97:_git`,
+`codex_retention_historical.py:115:archive_bytes` and
+`codex_retention_historical.py:123:materialize_archive`; the executable was
+`git`. The guard raised before sleeping. This separate diagnostic used no
+private inputs and was not a validation pass or a GitHub CI result.
 
-The separate retention prefix uses existing branch
-`pilot-inference-20260925-04`. The historical observer uses immutable source
-`8ac891e3e0e4752fe15a00139a2691ddf9df7dce` for input serialization and the
-last old producer's metadata, never its Step2 runtime. Admission requires
-verification of the last old terminal at one captured HEAD and a claim with
-that exact CAS parent. No old claim, registration, result or setup receipt is
-reinterpreted. The code has no parent refresh, replay, grading, scheduler or
-cross-runner native-state migration. Unresolved ownership and acknowledgments
-remain blocking.
+Only `tests/test_codex_retention_ci.py` changed beyond the two records. An
+explicit fixture dependency constructs both genuine immutable
+`8ac891e3e0e4752fe15a00139a2691ddf9df7dce` archives before installing the
+unchanged shared offline guard. Later production verifiers still read the
+real archives through Git. Because those reads also use a timed reap, the
+already-allowlisted metadata transport now uses a bounded pidfd wait. It does
+not restore `time.sleep` or change the real owned supervisor. The correction
+remains unvalidated because the fresh invocation failed in this guarded
+re-verification path.
 
-The mandatory bounded extreme-reasoner decision preceded workflow editing.
-Its conditions included deterministic input lineage, a closed historical
-source namespace, signed job-origin evidence and exclusive execution-job
-OIDC issuance. Static syntax, fixture/guard ownership and workflow-permission
-checks passed; they are not integration results. Experiment-design retained
-the registered study without adding an axis.
+Static checks confirmed the selector/import/guard owners and preserved all
+93 original assert/refusal nodes. No validator verdict, source identity,
+signature, rematerialization, CAS ambiguity or cleanup assertion was replaced.
+Production adapter/controller/runtime, workflow, HF/auth code, registrations,
+frozen 30-cell pins and old validators remain byte-identical to `6038eb0c`.
+The earlier conditional shared-branch/OIDC design decision was not reopened.
 
-### Validation
+### Separate observations
 
-| Tested source | Invocation | Actual result |
+| Source | Operation | Actual result |
 | --- | --- | --- |
-| `6038eb0cf01b372c874e0c824a3750e118f9ac35` | The exact single selector below | 1 collected, 1 failed in 2.65s; exit 1 |
+| `6038eb0cf01b372c874e0c824a3750e118f9ac35` | Original single selector | 1 collected, 1 failed in 2.65s; exit 1. Later integration assertions were not reached. |
+| `6038eb0cf01b372c874e0c824a3750e118f9ac35` plus a diagnostic guard wrapper | One archive-only probe, not pytest | First refusal was `time.sleep` in `_wait`; exit 2. No input verification or integration result. |
+| `3be7160b08969689035aa886f975c43b89a1dbe6` | Authorized fresh single selector | 1 collected, 1 failed in 60.80s; exit 1. Guarded archive re-verification failed. |
+
+The previously uncommitted stopped-integration record is preserved in local
+commit `3be7160b08969689035aa886f975c43b89a1dbe6` at this same record path.
+It preserves the original failure log identity and the limits known then.
 
 Run from `batch-runner` with the existing isolated environment. Only the
 private handoff value is redacted below; the known locator was present.
@@ -66,37 +71,36 @@ env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
   tests/test_codex_retention_ci.py::test_retention_ci_grant_cas_and_owned_runtime_are_bound
 ```
 
-The exact safe diagnostic was:
+The fresh invocation reported:
 
 ```text
-dispatcher regression crossed a live boundary
-immutable_historical_archive: AssertionError at test_codex_budget_pilot.py:52:forbidden
+[Errno 38] Function not implemented
+bounded local Git command failed
+guarded_immutable_historical_archive: DisposableCheckoutRefused at test_codex_retention_ci.py:68:positive -> test_codex_retention_ci.py:374:<lambda> -> codex_retention_historical.py:145:verify_archive -> codex_retention_historical.py:115:archive_bytes -> gpt54_disposable_checkout.py:102:_git
 ```
 
-The existing offline guard produced the failure. This diagnostic identifies
-the archive-preparation phase and guard, but not which guarded operation
-triggered it. No root cause beyond that boundary is established. The preserved
-local log has SHA256
-`62003b2fa5da67e9fd66121a79f5a250c2f896ae2dc7739c6367a04325827a10`.
+The test-only `MetadataProcess._wait` calls `os.pidfd_open` at line 57; the new
+path encountered `ENOSYS`. No second probe, fallback or guard relaxation was
+attempted. The diagnostic log has SHA256
+`c34f505382f5a3a27cb75907965854ce849f62a08f16a56caeeeaec5d5f42b94`;
+the fresh pytest log has SHA256
+`4a0dd8930e599c3f15a56100ad5534f8619759fdea03be59ce63173be1835d43`.
 
-The run reached neither real packet/staging verification nor the simulated
-approval, CAS, clock, cleanup or publication cases. The planned test-owned
-Python `pass` payload was not reached. No new prepared-input or materialized
-grader identity was verified, and no model, live provider, claim or inference
-was invoked. Prior input evidence is not a result of this invocation.
+Both immutable archive fixtures were constructed. Real packet/staging/input
+attestation and materialized-grader verification were not reached. Neither
+were the simulated approval/CAS/clock/cleanup/publication cases or the planned
+test-owned Python `pass` payload. Prior input evidence is not a new result.
 
 ### Remaining gates
 
-The guarded archive failure needs a separately authorized diagnosis before
-validation can resume. The adapter, workflow and test remain unvalidated and
-need full new-head review and CI. Existing runtime, registration, compiler,
-preparer, grader and old-workflow bytes remain equal to the base; only the
-first-cell controller, new adapter/helper/test/workflow and two records differ.
+The test-only metadata reaping boundary needs a bounded compatibility repair
+before integration validation can resume. Full new-source review and CI remain
+required; neither prior base review nor the diagnostic probe approves this
+adapter. The leader must separately bind reviewed source, host/runtime, inputs,
+spend scope and the registered ordinal-0 cell before any launch.
 
-The leader must separately bind the reviewed source, intended host, actual
-inputs and first cell before launch. This turn grants no workflow dispatch,
-environment review, token exchange, HF write/setup, inference, grade or paid
-call. The same-branch protocol needs no new storage ref or setup, but live
-target access, predecessor state and provider token interfaces remain
-unverified. Protected im-not-ai-en was applied only to the current English
-records, preserving the failed result and these limits.
+No workflow dispatch, external environment approval, live CAS, HF/OIDC/Azure,
+model, grade or paid operation occurred. The same-branch protocol and unchanged
+eight-cell design remain unvalidated for live use. Protected im-not-ai-en was
+applied only to the current English records, preserving the distinct failed
+observations, diagnostic status and limits.

@@ -17,13 +17,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   existing one-use serial CAS branch. Owner environment review and signed
   job-origin evidence bind the current source, prepared inputs, runtime and
   finite cell scope before admission. The new workflow defaults to planning.
-  The single focused selector at `6038eb0cf01b372c874e0c824a3750e118f9ac35`
-  failed during guarded historical archive preparation: 1 failed in 2.65s,
-  exit 1. Integration assertions remain unvalidated; no retry or publication
-  followed. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-ci-cas-integration)
-  distinguishes this unreviewed integration from the reviewed base and prior
-  controller evidence. No live execution or storage setup is authorized here.
+  The original selector at `6038eb0cf01b372c874e0c824a3750e118f9ac35` failed
+  before integration assertions: 1 failed in 2.65s, exit 1. A separate guarded
+  archive probe identified `time.sleep` in local Git's timed reap. The test-only
+  fixture/reaping correction at `3be7160b08969689035aa886f975c43b89a1dbe6`
+  also failed: 1 failed in 60.80s, exit 1, with `ENOSYS` during guarded archive
+  re-verification. No further retry or publication followed. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-archive-guard-root-fix)
+  keeps these observations separate; packet/staging, authority/CAS and
+  owned-child assertions remain unvalidated. No live execution or storage setup
+  is authorized here.
 - Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
   identity-bound keep/fresh modes use B's existing recovery policy and one
   durable 10,800-second deadline without a fixed admission cap or C feedback.
