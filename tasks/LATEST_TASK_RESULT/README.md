@@ -1,91 +1,113 @@
 # Latest task result
 
-## PROJECT5-DETERMINISTIC-BIRTH-EDGE
+## PROJECT5-REGISTRATION-RECORD-CATEGORY
 
-One combined offline invocation at
-`eb9971b1b8ce94e559481d56dd6cdbe1ca854c61` passed all four selected nodes
-in 1.02s, exit 0. The new regression reproduces a defect in the former test
-double and checks the corrected ordinary-launch path. The existing positive
-checks the fake `TimeoutExpired` path; two existing negatives preserve the
-pre-existing-PID and missing-PID refusals. The original CI cause remains
-unknown. This deterministic reproduction does not recover its missing evidence.
+This follow-up only moves the unchanged registration bullets into the existing
+Unreleased `Added` section and updates this completion record. No pytest or
+other runtime validation ran; all prior test observations remain separate.
 
-### Scope and deterministic evidence
+The leader completed the full 913-line implementation review of PR699 at
+`d9ab8db744ab7912834633db896d675b87d3daf4` in
+[review 5347175617](https://github.com/hyeonsangjeon/gdpval-realworks/pull/699#pullrequestreview-5347175617),
+with no code-correctness findings. The leader reported 11 applicable CI checks
+`SUCCESS` and one deploy check `SKIPPED` on that draft HEAD. These facts do not
+approve the new records-only HEAD or establish its CI result.
 
-Only `batch-runner/tests/test_agentic_v2_first_boot.py` and the two current
-records change relative to `dac0421ca5b05d35eae85a9b666eb351a9f84744`.
-`_Clock.host_reading` supplies synthetic ticks. `_boot` stamps each known
-stand-in's immutable birth during the fake jailer call, after the launch floor
-and before PID publication, including when the jailer raises `TimeoutExpired`.
-Ordinary and pinned-reference probes return that same birth without sampling
-the real host clock. The elapsed wait clock and both signal spies are unchanged.
+## PROJECT5-REGISTRATION-COMPILE-REFUSAL
 
-The regression captures floor `100`, fake launch `101` and PID-read ceiling
-`102` before the former lazy probe has invented a birth. The unchanged
-`_started_during_this_runs_launch` reads boot identity at tick `103`, then the
-lazy probe stamps birth `104`. Its exact refusal is:
+The config-assembly repair is pinned at
+`510bb8246f40e999c3c1f603dc94bd67051e5141`. The sole authorized pytest invocation
+reported 1 passed in 5.01s, exit 0. It checked the closed eight-cell offline
+plan, drift refusals, legacy-campaign refusal and inert CLI. This is one contract
+test, not eight experiment executions or live-runtime validation.
 
-```text
-process 4242 began 2 clock ticks after this run already had that number in hand, so it is not what the number was published for
-```
+### Scope and reviewed base
 
-The fixed ordinary and timeout paths keep birth `101` between floor `100` and
-ceiling `102`; later ordinary and pinned-reference probes still agree. The
-timeout assertion still requires exactly `[(4242, SIGKILL)]`, with `pidfd`,
-verdict `taken`, target `4242` and null `left_alone_because`. It now includes
-safe interval/handle/refusal details if the signal assertion fails.
-All production, ownership, anti-PID-reuse, confinement, handle, cutoff, guard,
-image, workflow, pin and registration bytes remain identical to `dac0421ca5b05d35eae85a9b666eb351a9f84744`.
-No real PID was signalled, and no guest process or VM was launched.
+Branch `b/codex-retention-registration-20260929` continues in the same worktree
+`/ai-work/copilot/worktrees/codex-retention-registration-20260929`, created from
+exact main `18bc942b97114cca3b9f6ed913b9841dda3a5874`. Its tree is
+`062d668f967bb9e772f0de353dbef27e99987479`, matching reviewed
+`610d39c2744be8b8879f884fa0a43abb053ecd44` and
+[review 5345799305](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698#pullrequestreview-5345799305).
+The leader reported all 14 checks passing and delivery of PR698. Those are
+reviewed-base facts, not approval or validation of this new compiler. Old
+branches, checkouts and WIP are preserved; no PR698 test or check was replayed.
+
+The draft adds only the [registration](../../batch-runner/experiments/execution_envelope/codex_retention_diagnostic.yaml),
+[offline compiler](../../batch-runner/codex_retention_diagnostic.py) and
+[focused test](../../batch-runner/tests/test_codex_retention_diagnostic.py), plus
+these two current records. Existing runtime, grader, workflow, source-pin and
+original 30-cell registration/outcome bytes are unchanged from the base.
+
+The bounded pre-test diagnosis captured the real validator's sole error:
+`experiment.id must be a safe identifier`. The first keep ID was a string of
+102 characters; `core.repository_identity.validate_experiment_id` permits at
+most 100. The old assembly redundantly included the policy label after the
+campaign namespace. The field-by-field template comparison found no other
+validation error; deadline controls were not the cause.
+
+The compiler now uses the existing identifier validator for
+`<campaign>__<task>_<keep|fresh>_r<repeat>`, while preserving all eight full cell
+IDs and their controls. The test verifies unique valid experiment IDs and the
+real validator's refusal of the original 102/103-character forms. Compilation
+refusals now include the validator's structural errors. Only the new compiler,
+its actual registration source hash and the focused test changed in this fix.
+The compiler SHA-256 is
+`c8ac9d0ec3eca0d4251c345f733009f506d366d312c5357836e6c67332a76c53`;
+it is a byte binding, not approval. The earlier relative-import correction and
+the existing offline guards remain intact; no validator or runtime was changed.
+
+The prospective scope is eight new Task4/Task5 cells: keep/fresh, two repeats,
+with Task4 ordered keep1/fresh1/fresh2/keep2 and Task5 fresh1/keep1/keep2/fresh2.
+Both modes use `retention_bundle_v1`, B recovery, one global inference slot,
+one durable 10,800-second budget, no fixed admission cap and no C feedback.
+The 1,800-second native-turn wait is not an all-in attempt ceiling. The draft
+separates reviewed runtime pins, the compiler's own byte binding and the actual
+grader-template closure; no future materialized grader fingerprint is claimed.
+It binds public input provenance for dataset revision
+`11e7900cdcac61bc4daf59e65feb238acda98fbf`, without fetching private payloads.
+It contains no scheduler or dispatch path and explicitly denies launch authority.
 
 ### Exact invocation and result
 
-All four owning definitions were checked statically. From `batch-runner`, the
-sole invocation was:
+After the bounded diagnosis and static comparison with the canonical config
+helpers, at `510bb8246f40e999c3c1f603dc94bd67051e5141`, from `batch-runner`,
+the sole pytest invocation was:
 
 ```bash
 env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short \
-  tests/test_agentic_v2_first_boot.py::test_synthetic_birth_tick_edge_refuses_lazy_identity_and_accepts_launch_birth \
-  tests/test_agentic_v2_first_boot.py::test_this_runs_own_machine_is_stopped_when_it_is_still_running \
-  tests/test_agentic_v2_first_boot.py::test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill \
-  tests/test_agentic_v2_first_boot.py::test_a_launcher_that_times_out_leaves_the_jail_and_says_why
+  tests/test_codex_retention_diagnostic.py::test_retention_registration_is_exact_closed_and_inert
 ```
 
 ```text
-collected 4 items
-============================== 4 passed in 1.02s ===============================
+collected 1 item
+tests/test_codex_retention_diagnostic.py::test_retention_registration_is_exact_closed_and_inert PASSED [100%]
+============================== 1 passed in 5.01s ===============================
 pytest exit status: 0
 ```
 
-The new log is `/tmp/project5-deterministic-birth.M3m9ws/pytest.log`. No other
-pytest invocation ran in this task. No passing CI check was rerun or polled.
+The complete log is `/tmp/project5-registration-compile-refusal.I4pDWM/pytest.log`.
+No second pytest invocation, old suite, CI replay or CI polling ran in this follow-up.
+All tracked files outside the three new registration-unit files and these two
+records were byte-compared with the reviewed base and are unchanged. This includes
+runtime, validators, frozen 30-cell registrations/pins, graders and workflows.
 
-### Original CI and unchanged local observation
+The import-corrected attempt at `38e4a4b5422641a16e61209fc741a44621c06732`
+remains separate: 1 collected, 1 failed in 2.47s, exit 1, at the first
+`compile_plan` call with `RetentionRegistrationRefused: compiled_config_refused`,
+before contract assertions. Its log is
+`/tmp/project5-registration-fixture-import.CEPTWc/pytest.log`; that invocation
+did not expose the underlying identifier error diagnosed in this follow-up.
 
-At `dac0421ca5b05d35eae85a9b666eb351a9f84744`, the leader reported 13 passing
-checks and only pytest failing. CI run
-[36486057815](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36486057815),
-job `109143110210`, reported 1 failed, 13284 passed, 61 skipped and 46 deselected
-in 1445.06s. The owned-machine positive expected `[(4242, SIGKILL)]` but saw
-`[]`. CI omitted `caught.value.teardown["process"]`, so the exact refusal and
-original cause remain unknown.
-
-The earlier unchanged local observation passed once in 0.67s, exit 0, with
-read-only profiling at that same SHA. Floor, ceiling, birth and pinned birth
-were all `361895512`; jail/confinement checks passed and `pidfd` was `taken`
-for `4242`, with `signalled=True` and null `left_alone_because`.
-`confirmed_stopped=False` matched the deliberate `_still_running=True` fixture.
-That diagnostic task made no code change, commit or push. Its observer,
-`/tmp/project5-owned-process-boundary.PtI0GO/observe_once.py`, used the same
-offline environment to profile only the owned-machine positive; its SHA-256 is
-`6ec80bee0e704c55d7617c7e6b642097ab3db4e84c63ed6c06d1f2d48f73d8a6`.
-The observer, safe diagnostic and CI log remain in that session directory.
-Neither this prior pass nor the new reproduction proves nondeterminism in CI.
+The earlier attempt at `0fe972e2814b3eb5f256ecf8516d6f531583f3f3` remains separate:
+`ModuleNotFoundError: No module named 'test_codex_budget_pilot'`, 1 collection
+error in 1.21s, exit 4, with 0 tests collected or executed. Its preserved log is
+`/tmp/project5-retention-registration.bxAJKE/pytest.log`.
 
 ### Separate local validation observations
 
-These are distinct PR698 invocations, not combined totals or a claim that a
-single full selector passed. Earlier stops without an invocation add no result.
+The historical PR698 runs and these registration attempts are separate
+observations, not combined totals. Stops without an invocation add no result.
 
 | Tested SHA | Actual result | Exit |
 | --- | --- | --- |
@@ -102,6 +124,13 @@ single full selector passed. Earlier stops without an invocation add no result.
 | `93e96b342386482cb9e7f60805781f0009620629` | 3 passed in 16.55s | 0 |
 | `dac0421ca5b05d35eae85a9b666eb351a9f84744` | Unchanged node, read-only diagnostic profiling: 1 passed in 0.67s | 0 |
 | `eb9971b1b8ce94e559481d56dd6cdbe1ca854c61` | Deterministic edge and fixed paths: 4 passed in 1.02s | 0 |
+| `0fe972e2814b3eb5f256ecf8516d6f531583f3f3` | Registration test: 0 collected, 0 executed; 1 collection/import error in 1.21s | 4 |
+| `38e4a4b5422641a16e61209fc741a44621c06732` | Relative-import correction: 1 collected, 1 failed in 2.47s; `compiled_config_refused` before contract assertions | 1 |
+| `510bb8246f40e999c3c1f603dc94bd67051e5141` | Bounded experiment-ID assembly and offline plan contract: 1 passed in 5.01s | 0 |
+
+The [final PR698 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/610d39c2744be8b8879f884fa0a43abb053ecd44/tasks/LATEST_TASK_RESULT/README.md)
+preserves the prior deterministic reproduction, original CI-cause uncertainty
+and unchanged local diagnostic separately.
 
 The [two-boundary fixture result and preceding CI evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/dac0421ca5b05d35eae85a9b666eb351a9f84744/tasks/LATEST_TASK_RESULT/README.md),
 [49-file fixture scope and both selector attempts](https://github.com/hyeonsangjeon/gdpval-realworks/blob/5d35dc440cdf7cdf2b53cc61ebd6a55ff9549350/tasks/LATEST_TASK_RESULT/README.md),
@@ -114,14 +143,20 @@ Historical handoffs are linked here rather than copied into this current record.
 
 ### Remaining gates
 
-The original CI refusal category remains unavailable. The reproducible fixture
-defect justifies this test-only correction, not a claim of recovered CI
-forensics or a blind CI replay. Leader
-[review 5345028254](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698#pullrequestreview-5345028254)
-is conditional on all CI, not a waiver, approval of a future delta,
-authorization of modified runtime for the old campaign, or launch authority.
-The new HEAD for draft
-[PR698](https://github.com/hyeonsangjeon/gdpval-realworks/pull/698) still requires
-delta review and CI. The capability remains unregistered and live-unverified.
-No model, live readout, Azure, OIDC, HF credential or paid operation, VM,
-infrastructure change, new campaign, CI rerun/poll or merge occurred.
+New-HEAD record-delta review and CI remain required. The completed implementation
+review and reported checks cover only `d9ab8db744ab7912834633db896d675b87d3daf4`.
+They do not authorize launch or the modified runtime for the original campaign.
+Input staging and byte verification,
+the serial execution/reservation controller, any materialized grader identity,
+live-runtime verification and explicit paid-run direction remain outside this unit.
+
+The decision remains whether to consider a larger bundle-retention study, with
+only a preliminary within-task signal from two keep-only pair advantages and
+no reverse pair. Otherwise benefit is not established. No-recovery cells stay
+in the denominator of eight but are uninformative about retention. Post-selection,
+two repeats, service variation and an uncalibrated judge limit the claim; no
+thread-versus-files attribution, model superiority or complete bill is established.
+There are no forced faults, extra repeats or automatic monetary cap. Known
+usage, partial costs, missing prices and NG/null grades must stay distinct.
+No live execution, private payload fetch, storage setup, credentials,
+infrastructure change, Azure/OIDC/HF/model call, paid run or merge occurred.
