@@ -92,6 +92,88 @@ SCOPE = {
 class RetentionCIRefused(ValueError):
     """Safe structural diagnostics; never a provider body or private path."""
 
+    issuance_locator = None
+
+
+_LOCATOR_CHECKS = frozenset({
+    "length_within_limit", "url_parsed", "query_parsed", "https", "hostname_only_authority",
+    "no_fragment", "allowed_host_pattern", "not_oidc_issuer", "registered_route", "known_api_query",
+})
+_LOCATOR_COUNTS = frozenset({
+    "host_labels", "route_segments", "query_pairs", "api_version_parameters", "audience_parameters",
+    "other_query_parameters",
+})
+_LOCATOR_ROUTE_WORDS = frozenset({"_apis", "distributedtask", "hubs", "build", "plans", "jobs", "idtoken"})
+_LOCATOR_ROUTE_TOKENS = _LOCATOR_ROUTE_WORDS | {"{uuid}", "{number}", "{opaque}", "{empty}"}
+
+
+def _job_locator_diagnostic(locator, address, query):
+    """Explain only an existing refusal; never choose an accepted endpoint."""
+    checks = {"length_within_limit": len(locator) <= 4096, "url_parsed": address is not None,
+              "query_parsed": query is not None}
+    diagnostic = {"checks": checks, "counts": {}, "route_skeleton": [], "truncated": len(locator) > 4096}
+    if not checks["length_within_limit"] or address is None:
+        return diagnostic
+    checks.update({
+        "https": address.scheme == "https",
+        "hostname_only_authority": address.netloc == address.hostname,
+        "no_fragment": not address.fragment,
+        "allowed_host_pattern": re.fullmatch(
+            r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+actions\.githubusercontent\.com", address.netloc) is not None,
+        "not_oidc_issuer": address.hostname != "token.actions.githubusercontent.com",
+        "registered_route": re.fullmatch("/" + UUID + "/_apis/distributedtask/hubs/build/plans/" + UUID
+                                         + "/jobs/" + UUID + "/idtoken", address.path) is not None,
+    })
+    segments = address.path.split("/")[1:] if address.path.startswith("/") else address.path.split("/")
+    if not address.path:
+        segments = []
+    counts = {"host_labels": len(address.netloc.split(".")), "route_segments": len(segments)}
+    if query is not None:
+        checks["known_api_query"] = query == [("api-version", "2.0")]
+        counts.update({"query_pairs": len(query),
+            "api_version_parameters": sum(key == "api-version" for key, _ in query),
+            "audience_parameters": sum(key == "audience" for key, _ in query),
+            "other_query_parameters": sum(key not in {"api-version", "audience"} for key, _ in query)})
+    diagnostic["counts"] = {key: min(value, 16) for key, value in counts.items()}
+    diagnostic["truncated"] = any(value > 16 for value in counts.values())
+    diagnostic["route_skeleton"] = [
+        part if part in _LOCATOR_ROUTE_WORDS else "{uuid}" if re.fullmatch(UUID, part) else
+        "{number}" if re.fullmatch(r"[0-9]+", part) else "{opaque}" if part else "{empty}"
+        for part in segments[:16]
+    ]
+    return diagnostic
+
+
+def _closed_locator_diagnostic(error):
+    """Project only this refusal's fixed schema, never arbitrary exception data."""
+    if type(error) is not RetentionCIRefused or str(error) != "github_job_issuance_locator_refused":
+        return None
+    data = error.issuance_locator
+    if type(data) is not dict or set(data) != {"checks", "counts", "route_skeleton", "truncated"}:
+        return None
+    checks, counts, route = data["checks"], data["counts"], data["route_skeleton"]
+    if (type(checks) is not dict or not set(checks) <= _LOCATOR_CHECKS
+            or any(type(value) is not bool for value in checks.values())
+            or type(counts) is not dict or not set(counts) <= _LOCATOR_COUNTS
+            or any(type(value) is not int or not 0 <= value <= 16 for value in counts.values())
+            or type(route) is not list or len(route) > 16
+            or any(type(part) is not str or part not in _LOCATOR_ROUTE_TOKENS for part in route)
+            or type(data["truncated"]) is not bool):
+        return None
+    return {"checks": dict(checks), "counts": dict(counts), "route_skeleton": list(route),
+            "truncated": data["truncated"]}
+
+
+def _refusal_payload(error):
+    reason = str(error) if isinstance(error, (RetentionCIRefused, controller.RetentionControllerRefused,
+        preparation.RetentionPreparationRefused, registration.RetentionRegistrationRefused,
+        historical.HistoricalSourceRefused)) else "retention_ci_verification_refused:" + type(error).__name__
+    payload = {"reason": reason, "launch_authorized": False, "grading_launched": False}
+    diagnostic = _closed_locator_diagnostic(error)
+    if diagnostic is not None:
+        payload["issuance_locator"] = diagnostic
+    return payload
+
 
 def require(condition, reason):
     if not condition:
@@ -221,6 +303,7 @@ class LocalTransport(owned.LocalTransport):
         require(token and len(token) <= 16384 and all(33 <= ord(char) <= 126 for char in token),
                 "github_job_issuance_credential_required")
         locator = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+        address = query = None
         try:
             address = urllib.parse.urlsplit(locator)
             query = urllib.parse.parse_qsl(address.query, keep_blank_values=True, strict_parsing=True)
@@ -233,7 +316,13 @@ class LocalTransport(owned.LocalTransport):
                                      + "/jobs/" + UUID + "/idtoken", address.path) is not None
                     and query == [("api-version", "2.0")], "github_job_issuance_locator_refused")
         except ValueError:
-            raise RetentionCIRefused("github_job_issuance_locator_refused") from None
+            refusal = RetentionCIRefused("github_job_issuance_locator_refused")
+            try:
+                refusal.issuance_locator = _job_locator_diagnostic(locator, address, query)
+            except (AttributeError, TypeError, ValueError, OverflowError):
+                # Diagnostic extraction cannot change the original closed refusal.
+                pass
+            raise refusal from None
         url = urllib.parse.urlunsplit(address._replace(query=urllib.parse.urlencode(
             [*query, ("audience", audience)])))
         deadline = time.monotonic() + intake.TRANSFER_TIMEOUT_SECONDS
@@ -774,10 +863,7 @@ def main(argv=None):
             print(owned._canonical_json(result))
         return 0
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
-        reason = str(error) if isinstance(error, (RetentionCIRefused, controller.RetentionControllerRefused,
-            preparation.RetentionPreparationRefused, registration.RetentionRegistrationRefused,
-            historical.HistoricalSourceRefused)) else "retention_ci_verification_refused:" + type(error).__name__
-        print(owned._canonical_json({"reason": reason, "launch_authorized": False, "grading_launched": False}))
+        print(owned._canonical_json(_refusal_payload(error)))
         return 2
 
 
