@@ -11,6 +11,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Retention diagnostic registration (offline draft)
+
+- Add a separate inert Task4/Task5 keep/fresh registration for eight new cells,
+  an offline canonical compiler and one focused contract selector. Runtime base
+  `18bc942b97114cca3b9f6ed913b9841dda3a5874` contains reviewed
+  `610d39c2744be8b8879f884fa0a43abb053ecd44` / review `5345799305`; the leader's
+  14 passing checks cover that base, not the new compiler. Preserve the old
+  30 cells, runtime, registrations, pins, graders and workflows. Bind actual
+  prospective source/input/grader-template identities with no launch authority.
+- Fix the new compiler's experiment-ID assembly: the first keep ID had 102
+  characters, exceeding the unchanged validator's 100-character limit. Use the
+  existing validator with a campaign/task/bundle/repetition ID, preserving the
+  eight registered cell IDs and controls, and expose structural validation errors.
+  Bind the compiler's actual new hash; no reviewed runtime or frozen pin changed.
+  At `510bb8246f40e999c3c1f603dc94bd67051e5141`, the single offline selector
+  reported **1 passed in 5.01s**, exit 0. It also preserves rejection of the old
+  102/103-character forms. Keep the earlier `0fe972e2814b3eb5f256ecf8516d6f531583f3f3`
+  collection error (**1 error in 1.21s**, exit 4, 0 executed) and
+  `38e4a4b5422641a16e61209fc741a44621c06732` compilation failure
+  (**1 failed in 2.47s**, exit 1) separate. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-registration-compile-refusal)
+  records the exact command, cause and remaining source-review, CI, input-staging,
+  execution-controller and grader-identity gates. This was not eight experiment
+  executions; the diagnostic remains preliminary, with no launch or paid-run approval.
+
 ### Changed
 
 - Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
