@@ -1,103 +1,103 @@
 # Latest task result
 
-## PROJECT5-PREPARE-CALLER-HELD-WRITER
+## PROJECT5-RETENTION-FIRST-CELL-CONTROLLER
 
-At `2d206b032f2236310b119a831303d57152323b1a`, the single authorized offline
-selector collected 1 test and reported **1 passed in 6.62s**, exit 0, not
-skipped. It exercised real preparation/readback and both deterministic output
-directory swaps with the existing private fixture. No intake or recovery was
-replayed. Preparation reserved no slot and started no deadline.
+At `8db003867a39c5a84bb5a544d0526c2128467e59`, the one authorized offline
+selector collected 1 test and reported **1 passed in 26.20s**, exit 0, not
+skipped. It verified real retained originals, a new Task4 preparation packet
+and the actual Step2 runtime layout. Local admission, ownership and deadline
+checks used an injected process transport and synthetic clock. No child,
+model request, inference, grade or live admission ran.
 
-### Review scope and publication boundary
+Branch `b/codex-retention-first-cell-controller-20260929` starts at exact main
+`1b4c28abdb74d196f97d968a27cd59d76d701107`, tree
+`c1827f99f9534e69eb8101845cb07147755f177b`. The leader reported 10 passing
+checks for delivered PR700 at `e8cd03b5b3d539cdb2369ac7cfd815626dd56da4` /
+[review 5348364806](https://github.com/hyeonsangjeon/gdpval-realworks/pull/700#pullrequestreview-5348364806).
+That review covers the base, not this new controller. Earlier preparation
+failures, passes and identities remain separate in the
+[immutable prior handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/1b4c28abdb74d196f97d968a27cd59d76d701107/tasks/LATEST_TASK_RESULT/README.md);
+none was replayed or combined with this result.
 
-[Review 5348128931](https://github.com/hyeonsangjeon/gdpval-realworks/pull/700#pullrequestreview-5348128931)
-requested changes at `a3362bbe484debd8c5b78263198a1dd84f6d04b8`: the old writer
-reopened the output pathname after the preparer's outer check, so a replacement
-could receive bytes before a later refusal. The earlier local pass remains
-valid but did not cover this gap. The new delta is not yet reviewed or approved.
+### Scope and evidence
 
-The [preparer](../../batch-runner/codex_retention_prepare_packet.py) now reuses
-`ghcp_vm_input_bundle._publication_parents` and `_write_no_clobber` unchanged.
-After exclusive creation, it retains `directory_fd(output)` and passes that
-same descriptor as `parent_fd` to every member write and final `preparation.json`
-write. The helper checks the path against the caller-held inode before any
-temporary-file allocation and uses that FD for temporary bytes, no-clobber
-linking and temporary-link removal. It never reopens or adopts a replacement
-parent. Existing fsync, no-link/path checks and outer identity checks remain.
-The new preparer source identity includes the reused helper's actual bytes;
-no shared helper, compiler, runtime, config, registration, grader algorithm,
-workflow or frozen source pin changed.
+The [controller](../../batch-runner/codex_retention_first_cell.py) accepts only
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1`, ordinal 0
+of the unchanged eight-cell registration. It reuses the real plan compiler,
+packet verifier, prepared/config serializers, schema4/reference readers,
+caller-held-FD publication helpers, owned-child primitives and deadline store.
+The selected row, unchanged canonical manifest and required references are
+staged in this dedicated checkout's actual Step2 paths. Original five-task
+inputs remain unchanged. The actual materialized grader is recomputed and
+bound to its config bytes and location; copying an old hash is not evidence.
 
-The two test-owned swaps occur after the outer checks, immediately before the
-first member write and final marker write. Each reached the real helper's
-`ghcp_input_bundle_refused` predicate before any temporary allocation. Assertions
-checked parent identity/bytes, the replacement's exact sentinel-only contents,
-the original held inode and partial bytes, absence of both markers and refusal
-to reuse either directory. The first original stayed empty; the final original
-retained its three payload files. Original five-task input bytes and all
-network/model/credential/process/admission guards remained intact.
+Default planning is read-only. Explicit staging reserves file publication
+only, not an inference slot. Both public execution and the internal protocol
+refuse the real child transport before a reservation, clock or child. A
+no-launch packet, caller boolean or caller-provided receipt cannot grant
+authority. Partial staging is retained and cannot be overwritten or adopted.
 
-Interrupted publication **retains partial output and refuses reuse**. Only a
-writer's private temporary link is cleaned up; partial production outputs are
-not deleted. This corrects the earlier record's "cleanup after interrupted
-writing" wording.
+The [focused test](../../batch-runner/tests/test_codex_retention_first_cell.py)
+used genuine inputs and validators for source/cell/input refusals, staging,
+readback and grader identity. Its separate simulated control cases exercised
+the real host-state checksum, local flock, one-use reservation, unresolved-owner
+refusal, ambiguous start/completion refusal and durable clock/expiry checks.
+A zero-exit transport without a result stayed `missing_result`, with missing
+accounting; it was not promoted to inference success. No policy or validator
+was replaced with an always-true result. Process/network/SDK/credential guards
+remained active. Only synthetic test-owned deadline stores started clocks.
 
-### Exact validation and identities
+The local lock covers one explicit host-state root, not other runners. The
+10,800-second cumulative deadline includes recovery/downtime and is never
+reset on re-entry. The native-turn wait remains 1,800 seconds, not an all-in
+attempt ceiling. B recovery, keep/fresh semantics, filtering stops and the
+absence of C feedback are unchanged; this slice introduces no experimental axis.
 
-The invocation ran once from `batch-runner` with the same explicit locator and
-a new private receipt path. Only those two path values are symbolic below;
-their exact values are retained privately. The selected test was not skipped;
-this turn used one invocation.
+### Exact validation
+
+The invocation ran once from `batch-runner`. Only the two private path values
+are symbolic below; their exact values and the new artifact locations are
+retained in the private receipt. This was one software contract test, not an
+experiment execution.
 
 ```bash
-env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 GDPVAL_RETENTION_PREPARED_HANDOFF="$RETAINED_INPUT_HANDOFF" GDPVAL_RETENTION_TEST_RECEIPT="$PRIVATE_TEST_RECEIPT" /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short -s tests/test_codex_retention_prepare_packet.py::test_retention_preparation_packet_is_verified_closed_and_no_launch
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 GDPVAL_RETENTION_PREPARED_HANDOFF="$RETAINED_INPUT_HANDOFF" GDPVAL_RETENTION_CONTROLLER_TEST_RECEIPT="$PRIVATE_TEST_RECEIPT" /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short -s tests/test_codex_retention_first_cell.py::test_first_retention_cell_staging_and_serial_control_are_closed
 ```
 
-The selected cell remains
-`0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1`.
-Actual identities from the new receipt and source-byte checks are below; none
-confers source approval or launch authority.
-
-| Identity role | SHA-256 |
+| Identity from this invocation | SHA-256 |
 | --- | --- |
 | Verified original-input roles | `40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38` |
-| Preparer file bytes | `c0cbc6e332d6ebf3a48b58094c4bffc1e2f032b48ac61ee6a771f474ba11633a` |
-| Preparer and helper source identity | `39cc0a553aa5a47778ea303d198cbf7775c55003b0e144fec279653521095103` |
-| Unchanged caller-held-FD helper | `f6b57eacdcb93715bb286dc7bc979599d5c5a14a948f5b14a1c8561631780d39` |
-| Actual materialized grader for this packet | `b948e1e50dcd6031749464cbf2f8d5362933191361371f98b51dc9b3fad8a3f9` |
-| Read-back preparation packet | `3c39313149d902db6b6c8d05139cdf343cd8c5184a8721d255c4461b3ff4eb41` |
+| Controller file | `ca50d1c8845fc2cdb8be1baf6ae9b846ab3d30ef1b9c5bac2fc661398b64a50d` |
+| Additional controller/helper source identity, not approval | `8eab122ac20b51847252064eb497323d43897c7dc0eeaa9c3bb84c9bb993ff36` |
+| Registered plan | `412d25ddc91f62a8c22a035d26eda7d980c8df95c7645ff5933a9ec96ae51b5c` |
+| New Task4 preparation packet | `1170122d8820fc11c81e1e7aeb47303e5edf3b2bca58e45682297879fe077270` |
+| Staged prepared-task fingerprint | `e9ffd87a8da6f06e26449b7f8d68468e674ea241e787a84568dace72774a2247` |
+| Reconciled staging record | `648e4523ffb1db21686d7474a074a816b8525896356f56dfd23db7d3b195bb8a` |
+| Actual path-bound materialized grader | `7cdb83558959a767e18a3103cd62ffa0a8d2a5f9eb33a0a433a7a93b97d09cb9` |
 
-The grader fingerprint binds this packet's materialized config location and
-bytes. It is not a template hash, an executed grade or the earlier packet's
-identity. The new log is 1,377 bytes, SHA-256
-`3bce963792a209895ddbbb0f44acd5b700d4ca59fd59a6761788fdecf58d1b76`.
+The local log is 2,343 bytes, SHA-256
+`a41c1c7f5624afe6c78d13e6c580b9f259117f2a962ea44eb42e4f05d0f97df2`.
+Only the new controller and its test differ from the base at the tested SHA;
+only these two completion records change afterward. Existing tracked runtime,
+compiler, preparer, eight-cell and original 30-cell registrations/pins, graders,
+workflows, original outcomes and upload code are byte-identical to the base.
 
-| Separate observation | Actual result |
-| --- | --- |
-| Earlier static fixture finding | The tracked 4,142-byte fixture was not canonical Step0; no test ran at that stop. |
-| `e224a750dbdbabe74490ff9c87459d14d5e01d40` | 1 collected; **1 failed in 2.06s**, exit 1, during guard installation before compiler/preparer execution. |
-| `45ef631d76d2c92a1d0263e5dab9c36680939ef7` | 1 collected; **1 passed in 5.69s**, exit 0, not skipped; valid original packet observation, without the new swap cases. |
-| `2d206b032f2236310b119a831303d57152323b1a` | 1 collected; **1 passed in 6.62s**, exit 0, not skipped; both exact-gap swaps refused with unchanged replacement bytes and zero temporary allocations after swapping. |
+### Next live-path blocker
 
-The accepted original byte pins, old log hashes, original materialized grader
-`15d11db5e00cca1fa6e98b9805c52d8d0e543198f16ff90066c235f332bf4e19` and packet
-`4f11ec470b33334bc7e3e073946fc58bd8e92037a82182b598c4941af483520b` remain in the
-[immutable prior handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a3362bbe484debd8c5b78263198a1dd84f6d04b8/tasks/LATEST_TASK_RESULT/README.md).
-Earlier registration observations remain linked there. Counts and outcomes
-are separate; no combined test total is claimed.
+`codex_budget_pilot_retention._binding` / `require_admission` and
+`codex_budget_pilot_ci.compile_ci_cell` bind the original campaign and CI claim,
+not this retention cell. `LocalTransport.require_execution` also binds that
+campaign's parent/source and C-feedback capability. A separately reviewed
+retention-aware integration must connect the existing source/cell/host/runtime/
+input/spend boundaries to a real one-use serial CAS claim and terminal
+reconciliation. No old registration, claim validator or approval is repurposed.
+The current refusal is
+`retention_ci_cas_and_execution_approval_adapter_not_registered`.
 
-### Remaining gates
-
-Branch `b/codex-retention-prepare-packet-20260929` retains base
-`1c777374af6fcbd2b5a07c94585e35899dc5847e`. Its prior review `5347346570` is not
-approval of this new source. Only the preparer, its existing test and two
-completion records differ from the old PR head; only records change after the
-tested SHA. Protected English checks preserve exact evidence and these limits.
-
-New-head delta review and CI, serial reservation/execution, runtime-input
-staging, live-source/deployment verification and separate launch direction
-remain required. The packet retains `launch_authorized=false`, `commands=[]`,
-`inference_slot_reserved=false`, `deadline_started=false` and
-`runtime_inputs_staged=false`. No grading, live model, paid run, Azure/OIDC/HF
-operation, VM, CI replay or infrastructure change ran. Preparation is not
-admission.
+New-head controller/record review and CI remain required, along with that
+CI/CAS integration, live source/deployment consumption checks and separate
+paid-cell direction. The local packet and staging record retain `launch_authorized=false`
+and `commands=[]`. There was no input recovery/intake, HF/Azure/OIDC operation,
+storage setup, VM, paid call, CI replay or infrastructure change. No inference
+slot or live budget was consumed. Preparation and simulated control evidence
+are not admission authority.
