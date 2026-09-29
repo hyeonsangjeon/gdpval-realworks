@@ -17,21 +17,20 @@ entries land under a fresh dated heading the day they merge to `main`.
   existing one-use serial CAS branch. Owner environment review and signed
   job-origin evidence bind the current source, prepared inputs, runtime and
   finite cell scope before admission. The new workflow defaults to planning.
-  The original selector at `6038eb0cf01b372c874e0c824a3750e118f9ac35` failed
-  before integration assertions: 1 failed in 2.65s, exit 1. A separate guarded
-  archive probe identified `time.sleep` in local Git's timed reap. The test-only
-  fixture/reaping correction at `3be7160b08969689035aa886f975c43b89a1dbe6`
-  also failed: 1 failed in 60.80s, exit 1, with `ENOSYS` during guarded archive
-  re-verification. The next test-only correction removes pidfd and permits
-  stdlib timed-reap sleep only for an exactly bound, owned Git metadata child.
-  Its selector at `933d07573d997af43ba6427ce323a329ebe40dc7` failed: 1 failed
-  in 64.15s, exit 1. Git re-verification completed, but the historical Python
-  serializer's timed reap hit the retained sleep guard. No retry or publication
-  followed. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-metadata-reap-compat)
-  keeps all observations separate; packet/staging, authority/CAS and owned-child
-  assertions remain unvalidated. Production bytes remain unchanged from
-  `6038eb0cf01b372c874e0c824a3750e118f9ac35`. No live execution or storage setup
-  is authorized here.
+  One test-local registry now binds each exact existing Git, historical
+  metadata/serialization and harmless-payload supervisor command to its owned
+  process and caller, with its unchanged timeout. Standard-library reap sleep is allowed
+  only within those bindings; general sleep and command denials remain active.
+  The selector at
+  `6c33c2bd960574d827bb4983c2b904ff049f6210` failed: 1 failed in 168.90s,
+  exit 1. Real preparation, staging and independent rematerialization checks
+  completed; the redirect negative exposed an authority-response refusal-category
+  conversion. CAS, deadline/replay, terminal cleanup and the harmless owned child
+  were not reached. No retry, push or PR followed. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-allowlisted-child-wait-coverage)
+  preserves all four earlier observations separately. Production bytes remain
+  unchanged from `6038eb0cf01b372c874e0c824a3750e118f9ac35`; new-source review
+  and CI remain required. No live execution or storage setup is authorized here.
 - Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
   identity-bound keep/fresh modes use B's existing recovery policy and one
   durable 10,800-second deadline without a fixed admission cap or C feedback.

@@ -185,12 +185,19 @@ class LocalTransport(owned.LocalTransport):
         return urllib.request.build_opener(urllib.request.ProxyHandler({}), intake._NoRedirect())
 
     def _authority_json(self, url, *, token, deadline, limit=OIDC_MAX_BYTES):
+        refusal = None
         with intake._response(self.authority_opener(), url, token=token, accept="application/json",
                 deadline=deadline, stage=intake.GitHubStage.RELEASE_METADATA) as response:
-            require(response.geturl() == url and response.status == 200,
-                    "github_authority_origin_or_status_refused")
-            require(intake._header(response, "Link") is None, "github_authority_pagination_refused")
-            data = intake._body(response, limit=limit, types={"application/json"}, deadline=deadline)
+            if response.geturl() != url or response.status != 200:
+                refusal = "github_authority_origin_or_status_refused"
+            elif intake._header(response, "Link") is not None:
+                refusal = "github_authority_pagination_refused"
+            else:
+                data = intake._body(response, limit=limit, types={"application/json"}, deadline=deadline)
+        # Domain refusals must not cross the shared transport's ValueError guard.
+        # A read/close failure still belongs to that guard, including on refusal.
+        if refusal is not None:
+            raise RetentionCIRefused(refusal)
         try:
             return json.loads(data, object_pairs_hook=_object)
         except (ValueError, TypeError, UnicodeError):

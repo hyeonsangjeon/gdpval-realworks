@@ -38,7 +38,7 @@ from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from . import test_codex_budget_pilot as pilot_fixture
 from .test_codex_budget_pilot import Clock
 from .test_codex_budget_pilot_retention import MemoryHF, TOKEN
-from .test_codex_ci_input_intake import Response
+from .test_codex_ci_input_intake import GitHub, Response
 
 REAL_POPEN = subprocess.Popen
 REAL_RUN = subprocess.run
@@ -159,6 +159,7 @@ class Transport(adapter.LocalTransport):
         self.github_calls, self.azure_calls, self.children = 0, 0, []
         self.harmless = False
         self.oidc_calls, self.oidc_fault = 0, None
+        self.authority_responses = []
 
     def authority_opener(self):
         return self
@@ -221,8 +222,10 @@ class Transport(adapter.LocalTransport):
             if self.oidc_fault == "signature":
                 signature = bytes([signature[0] ^ 1]) + signature[1:]
             data = json.dumps({"value": signed + "." + self.encoded(signature)}).encode()
-        return Response(data, url=url, content_type="application/json",
-                        status=302 if self.oidc_fault == "redirect" else 200)
+        response = Response(data, url=url, content_type="application/json",
+                            status=302 if self.oidc_fault == "redirect" else 200)
+        self.authority_responses.append(response)
+        return response
 
     @staticmethod
     def encoded(data):
@@ -562,11 +565,67 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
             ("redirect", "github_authority_origin_or_status_refused"),
         ):
             transport.oidc_fault = fault
+            response_start = len(transport.authority_responses)
             with pytest.raises(adapter.RetentionCIRefused, match="^" + reason + "$"):
                 controller.execute_first_cell(request, host_state=refused_host, grant=grant,
                                                _test_transport=transport, _test_api=api)
             assert not refused_host.exists() and api.commits == [] and transport.children == []
+            responses = transport.authority_responses[response_start:]
+            assert responses and all(response.closed for response in responses)
+            if fault == "redirect":
+                assert len(responses) == 1 and responses[0].status == 302 and responses[0].reads == []
         transport.oidc_fault = None
+        # Only raw external responses are substituted. The shared transport
+        # guard and adapter's status/header/body/JSON predicates remain real.
+        authority_url = adapter.API + environment["GITHUB_RUN_ID"]
+        read_authority = lambda: transport._authority_json(authority_url, token=None,
+            deadline=time.monotonic() + adapter.intake.TRANSFER_TIMEOUT_SECONDS)
+        for response, reason, body_read in (
+            (Response(b"{}", url=authority_url, content_type="application/json"), None, True),
+            (Response(b"unread foreign body", url="https://example.invalid/authority"),
+             "github_authority_origin_or_status_refused", False),
+            (Response(b"unread paginated body", url=authority_url, headers=[("Link", "synthetic-next")]),
+             "github_authority_pagination_refused", False),
+            (Response(b"{", url=authority_url, content_type="application/json"),
+             "github_authority_json_refused", True),
+        ):
+            opener = GitHub([response])
+            with monkeypatch.context() as response_transport:
+                response_transport.setattr(transport, "authority_opener", lambda: opener)
+                if reason is None:
+                    assert read_authority() == {}
+                else:
+                    with pytest.raises(adapter.RetentionCIRefused, match="^" + reason + "$"):
+                        read_authority()
+            assert response.closed and bool(response.reads) is body_read
+            assert len(opener.calls) == 1
+            assert not refused_host.exists() and api.commits == [] and transport.children == []
+        for failure in ("open", "read", "close", "redirect_close"):
+            response = None if failure == "open" else Response(b"{}", url=authority_url,
+                content_type="application/json", status=302 if failure == "redirect_close" else 200)
+            opener = GitHub([OSError("synthetic acquisition detail") if response is None else response])
+
+            def failed_io(*args, **kwargs):
+                raise OSError("synthetic response detail")
+
+            def failed_close():
+                Response.close(response)
+                failed_io()
+
+            with monkeypatch.context() as response_transport:
+                response_transport.setattr(transport, "authority_opener", lambda: opener)
+                if failure == "read":
+                    response_transport.setattr(response, "read1", failed_io)
+                elif failure in {"close", "redirect_close"}:
+                    response_transport.setattr(response, "close", failed_close)
+                with pytest.raises(adapter.intake.InputIntakeRefused,
+                                   match="^private_input_verification_or_transport_failed$"):
+                    read_authority()
+            assert response is None or response.closed
+            if failure == "redirect_close":
+                assert response.reads == []
+            assert len(opener.calls) == 1
+            assert not refused_host.exists() and api.commits == [] and transport.children == []
         with monkeypatch.context() as missing_credential:
             missing_credential.delenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
             previous = transport.oidc_calls
