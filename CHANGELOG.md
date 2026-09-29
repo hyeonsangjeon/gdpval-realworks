@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Connect the first retention cell to a separate CI approval adapter and the
+  existing one-use serial CAS branch. Owner environment review and signed
+  job-origin evidence bind the current source, prepared inputs, runtime and
+  finite cell scope before admission. The new workflow defaults to planning;
+  its focused offline validation is pending. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-ci-cas-integration)
+  distinguishes this unreviewed integration from the reviewed base and prior
+  controller evidence. No live execution or storage setup is authorized here.
 - Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
   identity-bound keep/fresh modes use B's existing recovery policy and one
   durable 10,800-second deadline without a fixed admission cap or C feedback.
