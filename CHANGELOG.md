@@ -13,6 +13,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add closed structural diagnostics for the retention issuance-locator refusal;
+  preserve the existing acceptance predicate and exact
+  `github_job_issuance_locator_refused` reason. Fixed flags, bounded counts and
+  a redacted route skeleton can identify a failed constraint without exposing
+  the URL, host, job identifiers, query values or credentials. The authoritative
+  runner/toolkit comparison did not establish the rejected provider form, so
+  this is diagnostic-only, not a proven compatibility fix. In leader-supplied
+  [run 36582068074 / job 109477606197](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36582068074/job/109477606197)
+  at `f3c86f50b63120446cf80ea4ff31bda5578241e9`, step 11 refused before
+  sandbox, Azure login or claim; steps 12–14 were skipped. This was not a task
+  failure, zero score or paid model result. At
+  `d4011844a0ee1efacd56304718f66c9bc038c32f`, the single offline locator
+  selector reported 1 collected, 1 passed in 2.17s, exit 0, using real predicates
+  and simulated HTTP. Prior private and gate results remain separate and were
+  not replayed. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-first-locator-compatibility)
+  records the exact command, evidence, source identities and immutable history.
+  Workflows, runtime, registrations/pins, grading and all other production
+  surfaces are unchanged. New-head review/CI and a separately authorized
+  model-free observation remain gates; no new launch authority is granted.
 - Connect the first retention cell to a separate CI approval adapter and the
   existing one-use serial CAS branch. Owner environment review and signed
   job-origin evidence bind the current source, prepared inputs, runtime and
