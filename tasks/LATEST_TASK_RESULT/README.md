@@ -1,103 +1,112 @@
 # Latest task result
 
-## PROJECT5-RETENTION-FIRST-CELL-CONTROLLER
+## PROJECT5-PR702-GATE-MESSAGE-FIX
 
-At `8db003867a39c5a84bb5a544d0526c2128467e59`, the one authorized offline
-selector collected 1 test and reported **1 passed in 26.20s**, exit 0, not
-skipped. It verified real retained originals, a new Task4 preparation packet
-and the actual Step2 runtime layout. Local admission, ownership and deadline
-checks used an injected process transport and synthetic clock. No child,
-model request, inference, grade or live admission ran.
+The one authorized fresh gate-regression invocation passed at tested HEAD
+`d784da0d3da283ea7a396c05431ea85103513d4a`: 4 collected, 4 passed in 2.49s,
+exit 0. All four cases reached their no-effects assertions. This is public-safe
+gating evidence, not a private integration pass. These records were updated
+after validation on the same `b/codex-retention-ci-cas-20260929` branch.
 
-Branch `b/codex-retention-first-cell-controller-20260929` starts at exact main
-`1b4c28abdb74d196f97d968a27cd59d76d701107`, tree
-`c1827f99f9534e69eb8101845cb07147755f177b`. The leader reported 10 passing
-checks for delivered PR700 at `e8cd03b5b3d539cdb2369ac7cfd815626dd56da4` /
-[review 5348364806](https://github.com/hyeonsangjeon/gdpval-realworks/pull/700#pullrequestreview-5348364806).
-That review covers the base, not this new controller. Earlier preparation
-failures, passes and identities remain separate in the
-[immutable prior handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/1b4c28abdb74d196f97d968a27cd59d76d701107/tasks/LATEST_TASK_RESULT/README.md);
-none was replayed or combined with this result.
+The leader reviewed the full 2460-line implementation at previously published
+`de39967d5995b2cf5b2e66c0a165de4de38ecb9e` and requested this gating correction
+in [review 5352771329](https://github.com/hyeonsangjeon/gdpval-realworks/pull/702#pullrequestreview-5352771329).
+The ordinary public pytest job had no `GDPVAL_RETENTION_PREPARED_HANDOFF`.
+At `tests/test_codex_retention_ci.py:281`, its locator assertion failed with
+`locator is None`. The leader supplied the complete
+[run 36565851754 / job 109397436268](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36565851754/job/109397436268)
+result below; no CI query or rerun was made in this task.
 
-### Scope and evidence
+### One-site correction and actual gate outcomes
 
-The [controller](../../batch-runner/codex_retention_first_cell.py) accepts only
-`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1`, ordinal 0
-of the unchanged eight-cell registration. It reuses the real plan compiler,
-packet verifier, prepared/config serializers, schema4/reference readers,
-caller-held-FD publication helpers, owned-child primitives and deadline store.
-The selected row, unchanged canonical manifest and required references are
-staged in this dedicated checkout's actual Step2 paths. Original five-task
-inputs remain unchanged. The actual materialized grader is recomputed and
-bound to its config bytes and location; copying an old hash is not evidence.
+Only the exception-check block in `tests/test_codex_retention_ci_opt_in.py`
+changed from `a74413ae08d960c2f6fc97717abe53dcc01734ac`. It now catches the
+expected exception, checks `type(caught.value) is outcome`, and requires
+`str(caught.value).splitlines()[0] == reason` before the unchanged
+`assert calls == []`. Exact reason strings and exception classes are preserved;
+only pytest's explanation suffix is excluded from the reason comparison.
 
-Default planning is read-only. Explicit staging reserves file publication
-only, not an inference slot. Both public execution and the internal protocol
-refuse the real child transport before a reservation, clock or child. A
-no-launch packet, caller boolean or caller-provided receipt cannot grant
-authority. Partial staging is retained and cannot be overwritten or adopted.
+The `private_retention_opt_in` prerequisite is unchanged: absence skips before
+`immutable_archives`; an explicit empty, directory or missing-file locator
+fails before archive construction. The regression resolves that real fixture
+dependency with the unchanged fail-before-effects spies for archive construction,
+preparation reads and subprocess creation. No private locator or original input
+was read. The integration body, wait registry, shared offline fixture and all
+127 existing assertion/refusal nodes are unchanged; this is a static comparison,
+not 127 runtime passes.
 
-The [focused test](../../batch-runner/tests/test_codex_retention_first_cell.py)
-used genuine inputs and validators for source/cell/input refusals, staging,
-readback and grader identity. Its separate simulated control cases exercised
-the real host-state checksum, local flock, one-use reservation, unresolved-owner
-refusal, ambiguous start/completion refusal and durable clock/expiry checks.
-A zero-exit transport without a result stayed `missing_result`, with missing
-accounting; it was not promoted to inference success. No policy or validator
-was replaced with an always-true result. Process/network/SDK/credential guards
-remained active. Only synthetic test-owned deadline stores started clocks.
+| Gate case | Expected boundary | Actual regression outcome |
+| --- | --- | --- |
+| `absent` | Skip before archive setup | Passed: exact `pytest.skip.Exception` class, exact first-line reason and no effect calls. The skip was caught by the regression; no private integration ran. |
+| `empty` | Hard `AssertionError` | Passed: exact class, exact first-line reason and no effect calls. |
+| `directory` | Hard `AssertionError` | Passed: exact class, exact first-line reason and no effect calls. |
+| `missing-file` | Hard `AssertionError` | Passed: exact class, exact first-line reason and no effect calls. |
 
-The local lock covers one explicit host-state root, not other runners. The
-10,800-second cumulative deadline includes recovery/downtime and is never
-reset on re-entry. The native-turn wait remains 1,800 seconds, not an all-in
-attempt ceiling. B recovery, keep/fresh semantics, filtering stops and the
-absence of C feedback are unchanged; this slice introduces no experimental axis.
+The earlier `a74413ae08d960c2f6fc97717abe53dcc01734ac` failure remains separate.
+Its absent case passed; all three invalid cases raised the intended refusal,
+but the anchored regex at line 39 rejected pytest's appended explanation.
+Their final no-effects assertions were not reached. That turn stopped without
+a retry or push; this correction and fresh invocation were separately authorized.
+Neither gate invocation ran the private source/input/authority/CAS/owned-child
+integration assertions.
 
-### Exact validation
+### Separate validation observations
 
-The invocation ran once from `batch-runner`. Only the two private path values
-are symbolic below; their exact values and the new artifact locations are
-retained in the private receipt. This was one software contract test, not an
-experiment execution.
+| Tested source | Operation | Actual result |
+| --- | --- | --- |
+| `6038eb0cf01b372c874e0c824a3750e118f9ac35` | Original private selector | 1 collected, 1 failed in 2.65s; exit 1. Archive guard failure; later integration assertions not reached. |
+| `6038eb0cf01b372c874e0c824a3750e118f9ac35` plus a diagnostic wrapper | Archive-only probe, not pytest | Exit 2. Identified guarded stdlib `time.sleep` during Git reaping; no validation pass. |
+| `3be7160b08969689035aa886f975c43b89a1dbe6` | Private selector | 1 collected, 1 failed in 60.80s; exit 1. `ENOSYS` during archive re-verification; later integration assertions not reached. |
+| `933d07573d997af43ba6427ce323a329ebe40dc7` | Private selector | 1 collected, 1 failed in 64.15s; exit 1. Historical serialization hit the then-Git-only sleep guard; packet and later assertions not reached. |
+| `6c33c2bd960574d827bb4983c2b904ff049f6210` | Private selector | 1 collected, 1 failed in 168.90s; exit 1. Preparation/staging and preceding approval negatives completed; the 302 refusal was reclassified by transport. CAS and later assertions not reached. |
+| `da0fb6bea28826c9287adaff95e6d4daf8996642` | Genuine private integration | 1 collected, 1 passed in 295.37s; exit 0, not skipped. Not repeated. |
+| `de39967d5995b2cf5b2e66c0a165de4de38ecb9e` | Public CI run/job linked above | 1 failed, 13288 passed, 63 skipped, 46 deselected in 998.43s. Absent private opt-in; leader-supplied evidence, not a local rerun. |
+| `a74413ae08d960c2f6fc97717abe53dcc01734ac` | New public-safe gate regression | 4 collected, 1 passed, 3 failed in 2.64s; exit 1. No private integration validation. |
+| `d784da0d3da283ea7a396c05431ea85103513d4a` | First-line reason correction | 4 collected, 4 passed in 2.49s; exit 0. Exact exception/reason and no-effects assertions completed for all four gate cases. |
+
+The [immutable prior handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/de39967d5995b2cf5b2e66c0a165de4de38ecb9e/tasks/LATEST_TASK_RESULT/README.md)
+preserves the complete earlier commands, byte identities and reached/unreached
+boundaries. In the 295.37s pass, genuine local originals, preparation/readback
+and real validators were exercised; GitHub/Azure/HF/CAS responses were simulated.
+The actual owned supervisor launched only the test-owned Python `pass` payload;
+model invocations were 0. None of that private work was replayed here.
+
+The fresh gate command ran once from `batch-runner` with the private opt-in
+variable absent from the isolated environment:
 
 ```bash
-env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 GDPVAL_RETENTION_PREPARED_HANDOFF="$RETAINED_INPUT_HANDOFF" GDPVAL_RETENTION_CONTROLLER_TEST_RECEIPT="$PRIVATE_TEST_RECEIPT" /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p no:cacheprovider --tb=short -s tests/test_codex_retention_first_cell.py::test_first_retention_cell_staging_and_serial_control_are_closed
+env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
+  LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest \
+  -p no:cacheprovider --tb=short -s \
+  tests/test_codex_retention_ci_opt_in.py::test_private_retention_opt_in_precedes_archive_setup
 ```
 
-| Identity from this invocation | SHA-256 |
-| --- | --- |
-| Verified original-input roles | `40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38` |
-| Controller file | `ca50d1c8845fc2cdb8be1baf6ae9b846ab3d30ef1b9c5bac2fc661398b64a50d` |
-| Additional controller/helper source identity, not approval | `8eab122ac20b51847252064eb497323d43897c7dc0eeaa9c3bb84c9bb993ff36` |
-| Registered plan | `412d25ddc91f62a8c22a035d26eda7d980c8df95c7645ff5933a9ec96ae51b5c` |
-| New Task4 preparation packet | `1170122d8820fc11c81e1e7aeb47303e5edf3b2bca58e45682297879fe077270` |
-| Staged prepared-task fingerprint | `e9ffd87a8da6f06e26449b7f8d68468e674ea241e787a84568dace72774a2247` |
-| Reconciled staging record | `648e4523ffb1db21686d7474a074a816b8525896356f56dfd23db7d3b195bb8a` |
-| Actual path-bound materialized grader | `7cdb83558959a767e18a3103cd62ffa0a8d2a5f9eb33a0a433a7a93b97d09cb9` |
+The fresh gate log has SHA256
+`2d02ab47b85e9c534ed6c08448fe1bc6964dc98f4c68f2af06b073eb56222eef`.
+The prior failed gate log remains intact with SHA256
+`e9b61fad9d79753ebb963a4da5f4898f33a9714dd23f389c7ba53a0f3facc87e`.
 
-The local log is 2,343 bytes, SHA-256
-`a41c1c7f5624afe6c78d13e6c580b9f259117f2a962ea44eb42e4f05d0f97df2`.
-Only the new controller and its test differ from the base at the tested SHA;
-only these two completion records change afterward. Existing tracked runtime,
-compiler, preparer, eight-cell and original 30-cell registrations/pins, graders,
-workflows, original outcomes and upload code are byte-identical to the base.
+### Byte scope and remaining gates
 
-### Next live-path blocker
+Only the existing private test, its new public-safe gate regression and these
+two records differ from `de39967d5995b2cf5b2e66c0a165de4de38ecb9e`. All other
+tracked bytes, including production, workflow, shared fixtures, runtime,
+compiler/preparer, registrations and frozen pins, are unchanged. Static
+comparison also preserves the integration body and its existing assertion/refusal
+nodes; that is not a runtime pass count. The prior adapter source identity
+`3490cb63af1cf078965768d93b972f3218353e78574175a837afe248e2a47e03`
+is unchanged, not newly approved. The unrelated changelog tail is preserved.
 
-`codex_budget_pilot_retention._binding` / `require_admission` and
-`codex_budget_pilot_ci.compile_ci_cell` bind the original campaign and CI claim,
-not this retention cell. `LocalTransport.require_execution` also binds that
-campaign's parent/source and C-feedback capability. A separately reviewed
-retention-aware integration must connect the existing source/cell/host/runtime/
-input/spend boundaries to a real one-use serial CAS claim and terminal
-reconciliation. No old registration, claim validator or approval is repurposed.
-The current refusal is
-`retention_ci_cas_and_execution_approval_adapter_not_registered`.
+The new test and records delta still needs leader review and CI; review
+5352771329 does not approve this new HEAD. The known public CI failure above
+has not been rerun or reclassified. A launch would require separate
+reviewed-source/cell/host/runtime/input/spend approval, real protected-job
+authority, same-deployment serial CAS consumption and verified live cleanup
+and terminal reconciliation. This task grants no launch authority.
 
-New-head controller/record review and CI remain required, along with that
-CI/CAS integration, live source/deployment consumption checks and separate
-paid-cell direction. The local packet and staging record retain `launch_authorized=false`
-and `commands=[]`. There was no input recovery/intake, HF/Azure/OIDC operation,
-storage setup, VM, paid call, CI replay or infrastructure change. No inference
-slot or live budget was consumed. Preparation and simulated control evidence
-are not admission authority.
+No private input materialization, child process, network/HF/OIDC/Azure request,
+credential operation, model, grade, paid operation or workflow dispatch was
+performed by the gate regression. Protected im-not-ai-en copyediting applies
+only to these English records and preserves the separate evidence and limits.

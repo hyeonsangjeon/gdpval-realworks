@@ -13,6 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Connect the first retention cell to a separate CI approval adapter and the
+  existing one-use serial CAS branch. Owner environment review and signed
+  job-origin evidence bind the current source, prepared inputs, runtime and
+  finite cell scope before admission. The new workflow defaults to planning.
+  The adapter raises its origin/status and pagination refusals after response
+  closure without reading refused bodies or changing the shared privacy guard.
+  Leader [review 5352771329](https://github.com/hyeonsangjeon/gdpval-realworks/pull/702#pullrequestreview-5352771329)
+  at `de39967d5995b2cf5b2e66c0a165de4de38ecb9e` requested an explicit opt-in
+  gate for the private integration. Public pytest
+  [run 36565851754 / job 109397436268](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36565851754/job/109397436268)
+  reported 1 failed, 13288 passed, 63 skipped, 46 deselected in 998.43s because
+  the private locator was absent. The new prerequisite skips only absence
+  before archive setup and retains hard failures for explicitly invalid input.
+  At `a74413ae08d960c2f6fc97717abe53dcc01734ac`, the single public-safe
+  regression collected 4 cases: 1 passed and 3 failed in 2.64s, exit 1.
+  The absent case confirmed the early skip; the invalid cases refused, but
+  their exact-message regex rejected pytest's appended assertion explanation.
+  That turn stopped without a retry or push. The separately authorized
+  one-site correction checks the exact exception class and exact first-line
+  reason, retaining all no-effects assertions. At
+  `d784da0d3da283ea7a396c05431ea85103513d4a`, one fresh gate invocation
+  reported 4 collected, 4 passed in 2.49s, exit 0. All four cases confirmed no
+  archive, preparation or subprocess effects. This is gating evidence only.
+  The genuine private
+  `da0fb6bea28826c9287adaff95e6d4daf8996642` result remains separate:
+  1 collected, 1 passed in 295.37s, exit 0, not skipped or repeated. Its real
+  preparation/readback and simulated external-service checks did not authorize
+  live execution; model invocations were 0. Production, workflow, shared guards,
+  wait registry, runtime, registrations and frozen pins remain unchanged from
+  `de39967d5995b2cf5b2e66c0a165de4de38ecb9e`. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-pr702-gate-message-fix)
+  preserves the separate observations and immutable prior handoff. New-delta
+  review and CI remain required; no launch or storage-setup
+  authority is granted.
 - Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
   identity-bound keep/fresh modes use B's existing recovery policy and one
   durable 10,800-second deadline without a fixed admission cap or C feedback.

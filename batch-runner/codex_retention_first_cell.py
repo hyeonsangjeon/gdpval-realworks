@@ -4,13 +4,11 @@ Default use verifies a no-launch packet and describes the selected cell. An
 explicit staging call publishes the real Step2 layout in this dedicated source
 checkout. Neither operation creates a host slot or starts a deadline.
 
-Real execution is CLOSED. The existing remote claim/CI adapter binds the old
-30-cell campaign, not this registration. No caller-supplied approval, receipt,
-boolean or transport can open the public execution entrypoint. The private
-post-authority protocol is exercised with an injected child transport offline;
-it is not a substitute for reviewed-source/host/runtime/input/spend approval or
-the remote CAS claim. Its flock covers only one explicit host-state directory,
-never other runners. There is no campaign scheduler or automatic replay here.
+Default execution is closed. The separate retention CI adapter verifies an
+external same-run grant and remote serial claim before this owned-child path.
+No packet, caller boolean or copied receipt is authority. The local flock covers
+only one explicit host-state directory, never other runners. There is no
+campaign scheduler, automatic replay or cross-runner native-state restoration.
 """
 
 from __future__ import annotations
@@ -53,7 +51,7 @@ STAGED = WORKSPACE_DIR / "retention-first-cell-staged.json"
 STAGING = WORKSPACE_DIR / "retention-first-cell-staging.json"
 PREPARED = ROOT / owned.PREPARED
 MANIFEST = ROOT / STEP0_MANIFEST_PATH
-LIVE_GATE = "retention_ci_cas_and_execution_approval_adapter_not_registered"
+LIVE_GATE = "retention_execution_grant_required"
 LIVE_BLOCKERS = [
     LIVE_GATE, "exact_controller_source_review_and_paid_cell_direction_required",
     "same_live_host_runtime_deployment_and_spend_approval_required",
@@ -287,18 +285,16 @@ def stage_runtime(request: Request) -> dict:
         return record
 
 
-def execute_first_cell(request: Request, *, host_state: Path) -> dict:
-    """Closed before any slot, clock or child, even with a genuine packet.
-
-    codex_budget_pilot_retention._binding/require_admission and
-    codex_budget_pilot_ci.compile_ci_cell admit only their original campaign.
-    LocalTransport.require_execution also binds that campaign's parent/C
-    capability. None can currently attest this controller, cell or spend scope.
-    Wiring those real contracts is a separate reviewed integration, not a bool
-    or caller-provided receipt accepted by this library.
-    """
+def execute_first_cell(request: Request, *, host_state: Path, grant=None,
+                       _test_transport=None, _test_api=None) -> dict:
+    """Verify external authority; a locator alone never authorizes execution."""
     _context(request)
-    raise RetentionControllerRefused(LIVE_GATE)
+    if grant is None:
+        raise RetentionControllerRefused(LIVE_GATE)
+    import codex_retention_ci
+
+    return codex_retention_ci.execute(request, host_state=host_state, grant=grant,
+                                     _test_transport=_test_transport, _test_api=_test_api)
 
 
 def _deadline(host: Path, context: dict, stage: dict, transport: owned.LocalTransport,
@@ -312,21 +308,33 @@ def _deadline(host: Path, context: dict, stage: dict, transport: owned.LocalTran
     )
 
 
-def _run_post_authority_cell(request: Request, *, host_state: Path,
-                             _test_transport: owned.LocalTransport | None = None) -> dict:
-    """Private local protocol, NOT an authority entrypoint or CLI test override.
+def _adapted_cell(cell: dict) -> dict:
+    return {**cell, "run_id": cell["config"]["experiment"]["id"], "roles": {
+        "checkout": str(ROOT), "native_workspaces": "native-workspaces", "deadline": "deadline",
+        "result": str(ROOT / owned.RESULT), "ledger": str(ROOT / owned.LEDGER),
+    }}
 
-    The real transport is refused here too, before any slot or clock. The
-    library-only test seam follows the existing dispatcher convention: it must
-    replace process transport while retaining the real child/command builder.
-    It grants no authority and cannot open execute_first_cell. No validator is
-    substituted. State/checksums, flock, owner checks and deadlines remain real.
+
+def _run_post_authority_cell(request: Request, *, host_state: Path,
+                             _test_transport: owned.LocalTransport | None = None, _admission=None) -> dict:
+    """Existing owned lifecycle after verification, never a public grant API.
+
+    The old offline seam remains transport-only. Real execution reaches here
+    only from the separate verifier and must consume its remote claim before
+    the real durable clock. All local ownership/refusal semantics are shared.
     """
-    if (_test_transport is None or not isinstance(_test_transport, owned.LocalTransport)
-            or type(_test_transport).child is not owned.LocalTransport.child
-            or type(_test_transport).process is owned.LocalTransport.process):
-        raise RetentionControllerRefused(LIVE_GATE)
-    transport = _test_transport
+    if _admission is None:
+        if (_test_transport is None or not isinstance(_test_transport, owned.LocalTransport)
+                or type(_test_transport).child is not owned.LocalTransport.child
+                or type(_test_transport).process is owned.LocalTransport.process):
+            raise RetentionControllerRefused(LIVE_GATE)
+        transport = _test_transport
+    else:
+        from codex_retention_ci import _Admission
+
+        if type(_admission) is not _Admission or _test_transport is not None or _admission.request != request:
+            raise RetentionControllerRefused(LIVE_GATE)
+        transport = _admission.transport
     context = _context(request)
     stage = verify_staged_runtime(request)
     plan, cell = context["plan"], context["cell"]
@@ -354,6 +362,8 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
             raise RetentionControllerRefused("local_serial_slot_busy") from None
         binding = {"stage_sha256": registration.seal(stage), "cell_id": FIRST_CELL_ID,
                    "plan_sha256": registration.seal(plan), "scope": "local_one_use_not_remote_claim"}
+        if _admission is not None:
+            binding.update(_admission.binding)
         if not new:
             _same("local_slot_binding_mismatch", owned._load(host / "binding.json"), binding)
             owned._require_quiet_owner(host, plan)
@@ -364,10 +374,7 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
         owned._save(host / "owned-child.json", owned._owner_state(registration.seal(plan)))
         (host / "cells").mkdir(mode=0o700)
         (host / "cells" / FIRST_CELL_ID).mkdir(mode=0o700)
-        adapted = {**cell, "run_id": cell["config"]["experiment"]["id"], "roles": {
-            "checkout": str(ROOT), "native_workspaces": "native-workspaces", "deadline": "deadline",
-            "result": str(ROOT / owned.RESULT), "ledger": str(ROOT / owned.LEDGER),
-        }}
+        adapted = _adapted_cell(cell)
         state = owned._cell_state(plan, adapted)
         state.update(status="running", phase="prepared", prepared={
             "prepared_fingerprint": stage["prepared_fingerprint"], "publication_generation": adapted["run_id"],
@@ -380,6 +387,10 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
         with _publication_parents(host) as (_, _, directory_fd):
             _write_no_clobber(host / "reservation.json", _encoded(binding), parent_fd=directory_fd(host))
             os.fsync(directory_fd(host))
+        owned._save(host / "cell.json", state)
+        if _admission is not None:
+            _admission.admit(host)
+            _admission.require_admission(host)
         store = _deadline(host, context, stage, transport, initialize=True)
         try:
             state["deadline_identity"] = store.identity
@@ -424,7 +435,7 @@ def main(argv: list[str] | None = None) -> int:
         group = parser.add_mutually_exclusive_group()
         group.add_argument("--stage-runtime", action="store_true")
         group.add_argument("--verify-stage", action="store_true")
-        group.add_argument("--execute", action="store_true", help="Closed until the separate admission integration")
+        group.add_argument("--execute", action="store_true", help="Requires the separately verified CI grant")
         parser.add_argument("--host-state", type=Path)
         args = parser.parse_args(argv)
         request = Request(args.cell_id, preparation.PreparedInputs(args.prepared_root, args.dataset_parquet,
