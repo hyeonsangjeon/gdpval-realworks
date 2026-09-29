@@ -13,6 +13,7 @@ import io
 import json
 import os
 from pathlib import Path
+import select
 import subprocess
 import sys
 import tempfile
@@ -35,12 +36,64 @@ import codex_retention_first_cell as controller
 import codex_retention_historical as historical
 import codex_retention_prepare_packet as preparation
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
-from .test_codex_budget_pilot import Clock, offline  # noqa: F401
+from . import test_codex_budget_pilot as pilot_fixture
+from .test_codex_budget_pilot import Clock
 from .test_codex_budget_pilot_retention import MemoryHF, TOKEN
 from .test_codex_ci_input_intake import Response
 
 REAL_POPEN = subprocess.Popen
 REAL_RUN = subprocess.run
+
+
+class MetadataProcess(REAL_POPEN):
+    """Reap only allowlisted metadata children without weakening the sleep guard."""
+
+    def _wait(self, timeout):
+        if timeout is None:
+            return super()._wait(timeout)
+        until = time.monotonic() + max(0.0, timeout)
+        if self.poll() is not None:
+            return self.returncode
+        descriptor = os.pidfd_open(self.pid)
+        try:
+            if not select.select([descriptor], [], [], max(0.0, until - time.monotonic()))[0]:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            return super()._wait(0)
+        finally:
+            os.close(descriptor)
+
+
+def positive(phase, call):
+    try:
+        return call()
+    except Exception as error:
+        frames = []
+        frame = error.__traceback__
+        while frame is not None:
+            frames.append(Path(frame.tb_frame.f_code.co_filename).name + ":" + str(frame.tb_lineno)
+                          + ":" + frame.tb_frame.f_code.co_name)
+            frame = frame.tb_next
+        safe = str(error) if isinstance(error, (adapter.RetentionCIRefused, controller.RetentionControllerRefused,
+            historical.HistoricalSourceRefused, preparation.RetentionPreparationRefused,
+            registration.RetentionRegistrationRefused)) else type(error).__name__
+        pytest.fail(phase + ": " + safe + " at " + " -> ".join(frames), pytrace=False)
+
+
+@pytest.fixture
+def immutable_archives(tmp_path):
+    """Only local immutable fixture construction precedes the shared guards."""
+    archive, rematerialized = (tmp_path / name for name in (
+        "immutable-input-observer", "independent-input-observer"))
+    positive("immutable_historical_archive", lambda: historical.materialize_archive(archive))
+    positive("independent_historical_archive", lambda: historical.materialize_archive(rematerialized))
+    return archive, rematerialized
+
+
+@pytest.fixture(autouse=True)
+def offline(monkeypatch, immutable_archives):
+    # Explicit dependency ordering, with the actual shared guard unchanged.
+    # Production preparation/verifiers and the whole test still run guarded.
+    pilot_fixture.offline.__wrapped__(monkeypatch)
 
 
 class RetentionHF(MemoryHF):
@@ -235,7 +288,7 @@ class Transport(adapter.LocalTransport):
         return subprocess.CompletedProcess(command, 0)
 
 
-def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatch, capsys):
+def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatch, capsys, immutable_archives):
     locator = os.environ.get("GDPVAL_RETENTION_PREPARED_HANDOFF")
     assert locator and Path(locator).is_file(), "required explicit private original-input handoff unavailable"
     handoff = preparation._json_object(preparation._read(Path(locator), "private_fixture_handoff"))
@@ -253,8 +306,7 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
         monkeypatch.setattr(name, forbidden)
     monkeypatch.setattr(CodexTaskDeadline, "admit_attempt", forbidden)
     transports = []
-    archive = tmp_path / "immutable-input-observer"
-    rematerialized = tmp_path / "independent-input-observer"
+    archive, rematerialized = immutable_archives
     signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     def metadata_or_harmless_only(command, **options):
@@ -281,12 +333,19 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
             assert command[:3] == [sys.executable, str(Path(owned.__file__).absolute()), owned.OWNED_CHILD_ARG]
             assert command[5:] == [sys.executable, "-c", "pass"]
             assert options["start_new_session"] is True
-        return REAL_POPEN(command, **options)
+            return REAL_POPEN(command, **options)
+        # Verifiers re-read the real archive and execute fixed offline metadata
+        # scripts after fixture setup. Their bounded reap must not call the
+        # globally forbidden time.sleep. The owned supervisor stays unchanged.
+        return MetadataProcess(command, **options)
 
     # subprocess.run itself is left real only for the Popen-allowlisted metadata
     # commands. A shell, model command, credential query or other PID is refused.
     monkeypatch.setattr(subprocess, "run", REAL_RUN)
     monkeypatch.setattr(subprocess, "Popen", metadata_or_harmless_only)
+    guarded_sleep = time.sleep
+    with pytest.raises(AssertionError, match="^dispatcher regression crossed a live boundary$"):
+        time.sleep(0)
     host_parent = Path(tempfile.mkdtemp(prefix=".retention-ci-test-host-", dir=Path(__file__).resolve().parents[3]))
     monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(host_parent / "agent-native"))
     monkeypatch.setenv("TMPDIR", str(host_parent / "agent-temp"))
@@ -309,23 +368,10 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
 
-    def positive(phase, call):
-        try:
-            return call()
-        except Exception as error:
-            frame = error.__traceback__
-            while frame.tb_next is not None:
-                frame = frame.tb_next
-            safe = str(error) if isinstance(error, (adapter.RetentionCIRefused, controller.RetentionControllerRefused,
-                historical.HistoricalSourceRefused, preparation.RetentionPreparationRefused,
-                registration.RetentionRegistrationRefused)) else type(error).__name__
-            pytest.fail(phase + ": " + safe + " at " + Path(frame.tb_frame.f_code.co_filename).name
-                        + ":" + str(frame.tb_lineno) + ":" + frame.tb_frame.f_code.co_name, pytrace=False)
-
     with monkeypatch.context() as no_admission:
         no_admission.setattr(CodexTaskDeadlineStore, "__init__", forbidden)
         no_admission.setattr(CodexTaskDeadline, "admit_attempt", forbidden)
-        positive("immutable_historical_archive", lambda: historical.materialize_archive(archive))
+        positive("guarded_immutable_historical_archive", lambda: historical.verify_archive(archive))
         unexpected = archive / "batch-runner/json.py"
         unexpected.write_bytes(b'raise AssertionError("unexpected code must never run")\n')
         try:
@@ -343,7 +389,7 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
         positive("real_current_step2_stage", lambda: controller.stage_runtime(request))
         document, observation = positive("real_request_and_old_compiler", lambda: adapter.canonical_request(
             request, reviewed_source_sha=source, run_id=environment["GITHUB_RUN_ID"], historical_root=archive))
-        positive("independent_historical_archive", lambda: historical.materialize_archive(rematerialized))
+        positive("guarded_independent_historical_archive", lambda: historical.verify_archive(rematerialized))
         positive("independent_original_five_serializer", lambda: historical.materialize_originals(rematerialized, originals))
         positive("independent_prepared_byte_equality", lambda: preparation._same(
             "independent_prepared_bytes_changed", (archive / preparation.PREPARED_PATH).read_bytes(),
@@ -559,6 +605,7 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
     assert set(executable["env"]) == {"GITHUB_TOKEN", "HF_TOKEN", "AZURE_AI_ROUTE_PROFILE",
                                      "FOUNDRY_PROJECT_ENDPOINT", "CODEX_FOUNDRY_CONNECTION_CONFIRMED"}
     assert not forbidden_calls
+    assert time.sleep is guarded_sleep
     capsys.readouterr()
     print(json.dumps({"original_input_roles_sha256": document["input_roles_sha256"],
         "materialized_grader_source_sha256": document["grading"]["materialized_grader_source_sha256"],

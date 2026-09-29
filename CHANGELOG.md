@@ -16,8 +16,11 @@ entries land under a fresh dated heading the day they merge to `main`.
 - Connect the first retention cell to a separate CI approval adapter and the
   existing one-use serial CAS branch. Owner environment review and signed
   job-origin evidence bind the current source, prepared inputs, runtime and
-  finite cell scope before admission. The new workflow defaults to planning;
-  its focused offline validation is pending. The
+  finite cell scope before admission. The new workflow defaults to planning.
+  The single focused selector at `6038eb0cf01b372c874e0c824a3750e118f9ac35`
+  failed during guarded historical archive preparation: 1 failed in 2.65s,
+  exit 1. Integration assertions remain unvalidated; no retry or publication
+  followed. The
   [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-ci-cas-integration)
   distinguishes this unreviewed integration from the reviewed base and prior
   controller evidence. No live execution or storage setup is authorized here.
