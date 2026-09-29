@@ -1,13 +1,25 @@
 # Latest task result
 
+## PROJECT5-REGISTRATION-RECORD-CATEGORY
+
+This follow-up only moves the unchanged registration bullets into the existing
+Unreleased `Added` section and updates this completion record. No pytest or
+other runtime validation ran; all prior test observations remain separate.
+
+The leader completed the full 913-line implementation review of PR699 at
+`d9ab8db744ab7912834633db896d675b87d3daf4` in
+[review 5347175617](https://github.com/hyeonsangjeon/gdpval-realworks/pull/699#pullrequestreview-5347175617),
+with no code-correctness findings. The leader reported 11 applicable CI checks
+`SUCCESS` and one deploy check `SKIPPED` on that draft HEAD. These facts do not
+approve the new records-only HEAD or establish its CI result.
+
 ## PROJECT5-REGISTRATION-COMPILE-REFUSAL
 
 The config-assembly repair is pinned at
 `510bb8246f40e999c3c1f603dc94bd67051e5141`. The sole authorized pytest invocation
 reported 1 passed in 5.01s, exit 0. It checked the closed eight-cell offline
 plan, drift refusals, legacy-campaign refusal and inert CLI. This is one contract
-test, not eight experiment executions or live-runtime validation. These records
-precede the authorized push and new draft PR; no source approval or merge is claimed.
+test, not eight experiment executions or live-runtime validation.
 
 ### Scope and reviewed base
 
@@ -50,7 +62,7 @@ with Task4 ordered keep1/fresh1/fresh2/keep2 and Task5 fresh1/keep1/keep2/fresh2
 Both modes use `retention_bundle_v1`, B recovery, one global inference slot,
 one durable 10,800-second budget, no fixed admission cap and no C feedback.
 The 1,800-second native-turn wait is not an all-in attempt ceiling. The draft
-separates reviewed runtime pins, unreviewed compiler bytes and the actual
+separates reviewed runtime pins, the compiler's own byte binding and the actual
 grader-template closure; no future materialized grader fingerprint is claimed.
 It binds public input provenance for dataset revision
 `11e7900cdcac61bc4daf59e65feb238acda98fbf`, without fetching private payloads.
@@ -131,9 +143,10 @@ Historical handoffs are linked here rather than copied into this current record.
 
 ### Remaining gates
 
-New compiler/source review and new-HEAD CI remain required. The reviewed runtime
-base and this offline pass do not approve the new compiler/controller or authorize
-launch or the modified runtime for the original campaign. Input staging and byte verification,
+New-HEAD record-delta review and CI remain required. The completed implementation
+review and reported checks cover only `d9ab8db744ab7912834633db896d675b87d3daf4`.
+They do not authorize launch or the modified runtime for the original campaign.
+Input staging and byte verification,
 the serial execution/reservation controller, any materialized grader identity,
 live-runtime verification and explicit paid-run direction remain outside this unit.
 
