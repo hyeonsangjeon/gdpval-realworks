@@ -31,14 +31,15 @@ from core.execution_envelope_tasks import catalog_sha256, load_task_catalog, sel
 from core.experiment_config import ExperimentConfig
 from core.inference_manifest import _assert_no_symlink_ancestors
 from core.source_identity import source_task_projection_sha256
-from gpt54_codex_input_capture import CONFIG_PATH, PREPARED_PATH, _write_no_clobber
+from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
+from gpt54_codex_input_capture import CONFIG_PATH, PREPARED_PATH
 from gpt54_comparison_preflight import _canonical_json, load_plan
 from gpt54_prepared_input_attestation import (
     _SourceSnapshot, _check_prepared, _dataset_tasks, _identity, _json_object,
     _reference_snapshot,
 )
 from gpt54_run_config_bundle import _held_parents
-from gpt54_run_input_bundle import _file_identities, _publication_parents, _step0_bytes
+from gpt54_run_input_bundle import _file_identities, _step0_bytes
 from gpt54_v2_grading_input import _read_bytes
 from step8_grade import compute_grader_source_hash, validate_grading_config
 
@@ -47,6 +48,7 @@ OUTPUT_SCOPE = ROOT / "batch-runner/workspace"
 PREPARER = "batch-runner/codex_retention_prepare_packet.py"
 SOURCE_PATHS = (
     PREPARER,
+    "batch-runner/ghcp_vm_input_bundle.py",
     "batch-runner/gpt54_prepared_input_attestation.py",
     "batch-runner/gpt54_run_input_bundle.py",
     "batch-runner/gpt54_run_config_bundle.py",
@@ -272,14 +274,17 @@ def prepare_packet(*, cell_id: str, sources: PreparedInputs, output: Path,
     """
     output = _output(output, sources, new=True)
     context = _context(plan, cell_id, sources, expected_preparer_sha256)
-    with _publication_parents(output.parent) as (check_parent, mkdir, _):
+    with _publication_parents(output.parent) as (check_parent, mkdir, directory_fd):
         _output(output, sources, new=True)
         mkdir(output)
+        # Use the descriptor held at exclusive creation, never a writer's
+        # fresh lookup of a pathname that could now name a replacement.
+        output_fd = directory_fd(output)
         with _held_parents(output, MEMBERS) as check:
             for name, data in _files(context[1], context[0], context[4]).items():
                 check_parent()
                 check()
-                _write_no_clobber(output / name, data)
+                _write_no_clobber(output / name, data, parent_fd=output_fd)
             # Recheck held inputs and source after publication, before the final
             # packet. Original five-task bytes are never changed or reissued.
             fresh = _context(context[0], cell_id, sources, expected_preparer_sha256)
@@ -289,7 +294,7 @@ def prepare_packet(*, cell_id: str, sources: PreparedInputs, output: Path,
             packet = _packet(output, fresh)
             check_parent()
             check()
-            _write_no_clobber(output / PACKET, _canonical_json(packet).encode())
+            _write_no_clobber(output / PACKET, _canonical_json(packet).encode(), parent_fd=output_fd)
             _same("packet_readback_mismatch", _read(output / PACKET, "packet"), _canonical_json(packet).encode())
             _same("unexpected_packet_members", sorted(path.name for path in output.iterdir()), sorted(MEMBERS))
             check_parent()

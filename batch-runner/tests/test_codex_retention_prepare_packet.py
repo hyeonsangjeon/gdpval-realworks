@@ -17,6 +17,7 @@ import pytest
 import codex_retention_diagnostic as registration
 import codex_retention_prepare_packet as packet
 from core.prepared_fingerprint import prepared_fingerprint
+from ghcp_vm_input_bundle import GHCPInputBundleRefused
 from gpt54_prepared_input_attestation import _identity, _json_object
 from gpt54_v2_grading_input import _read_bytes
 from step8_grade import compute_grader_source_hash
@@ -188,16 +189,94 @@ def test_retention_preparation_packet_is_verified_closed_and_no_launch(tmp_path,
 
     write = packet._write_no_clobber
     with monkeypatch.context() as interruption:
-        def fail_second(path, data):
+        def fail_second(path, data, *, parent_fd):
             if path.name == packet.GRADER:
                 raise OSError("synthetic_owned_write_interruption")
-            return write(path, data)
+            return write(path, data, parent_fd=parent_fd)
         interruption.setattr(packet, "_write_no_clobber", fail_second)
         with pytest.raises(OSError, match="^synthetic_owned_write_interruption$"):
             packet.prepare_packet(output=owned / "partial", **options)
     assert not (owned / "partial" / packet.PACKET).exists()
     with pytest.raises(packet.RetentionPreparationRefused, match="^output_collision_or_missing_parent$"):
         packet.prepare_packet(output=owned / "partial", **options)
+
+    swap_evidence = []
+    for phase, trigger, prior_members in (
+        ("first_member", packet.INFERENCE, ()),
+        ("final_marker", packet.PACKET, (packet.INFERENCE, packet.GRADER, packet.TASK)),
+    ):
+        # Each namespace is fresh and test-owned. Rename only this invocation's
+        # output; retain both the original partial and its unowned replacement.
+        parent = owned / ("swap-before-" + phase)
+        parent.mkdir(mode=0o700)
+        parent_note = parent / "parent-sentinel.txt"
+        parent_note.write_bytes(b"test-owned parent: unchanged\n")
+        destination, retained = parent / "packet", parent / "retained-original"
+        parent_identity = (parent.stat().st_dev, parent.stat().st_ino)
+        parent_bytes = parent_note.read_bytes()
+        replacement_bytes = {"replacement-sentinel.txt": b"test-owned replacement: unchanged\n"}
+        observed = {}
+        temporary_after_swap = []
+        make_temporary = tempfile.mkstemp
+
+        def snapshot(directory):
+            return {path.name: _read_bytes(path) for path in directory.iterdir()}
+
+        def track_temporary(*args, **kwargs):
+            if observed:
+                temporary_after_swap.append(True)
+            return make_temporary(*args, **kwargs)
+
+        def swap_before_write(path, data, *, parent_fd):
+            if path.name == trigger:
+                assert not observed, "namespace_swap_triggered_more_than_once"
+                assert path.parent == destination and not retained.exists()
+                before = destination.stat()
+                pinned = os.fstat(parent_fd)
+                assert (before.st_dev, before.st_ino) == (pinned.st_dev, pinned.st_ino)
+                before_bytes = snapshot(destination)
+                assert sorted(before_bytes) == sorted(prior_members)
+                prior_bytes_match = before_bytes == {name: held[name] for name in prior_members}
+                assert prior_bytes_match, "unexpected_owned_partial_before_namespace_swap"
+                observed.update(identity=(before.st_dev, before.st_ino), files=before_bytes)
+                # This is the exact gap after the preparer's outer checks and
+                # before the real writer can create any temporary/payload file.
+                destination.rename(retained)
+                destination.mkdir(mode=0o700)
+                for name, content in replacement_bytes.items():
+                    (destination / name).write_bytes(content)
+                replacement = destination.stat()
+                assert (replacement.st_dev, replacement.st_ino) != observed["identity"]
+                still_pinned = os.fstat(parent_fd)
+                assert (still_pinned.st_dev, still_pinned.st_ino) == observed["identity"]
+            return write(path, data, parent_fd=parent_fd)
+
+        with monkeypatch.context() as namespace_swap:
+            namespace_swap.setattr(packet, "_write_no_clobber", swap_before_write)
+            namespace_swap.setattr(tempfile, "mkstemp", track_temporary)
+            with pytest.raises(GHCPInputBundleRefused, match="^ghcp_input_bundle_refused$"):
+                packet.prepare_packet(output=destination, **options)
+        assert observed, "namespace_swap_gap_not_reached"
+        assert temporary_after_swap == [], "namespace_swap_started_temporary_payload_write"
+        assert (parent.stat().st_dev, parent.stat().st_ino) == parent_identity
+        assert parent_note.read_bytes() == parent_bytes
+        assert sorted(path.name for path in parent.iterdir()) == [
+            "packet", "parent-sentinel.txt", "retained-original",
+        ]
+        replacement_unchanged = snapshot(destination) == replacement_bytes
+        assert replacement_unchanged, "namespace_swap_wrote_to_replacement"
+        retained_unchanged = snapshot(retained) == observed["files"]
+        assert retained_unchanged, "namespace_swap_changed_owned_partial"
+        assert (retained.stat().st_dev, retained.stat().st_ino) == observed["identity"]
+        assert not (destination / packet.PACKET).exists()
+        assert not (retained / packet.PACKET).exists()
+        for no_reuse in (destination, retained):
+            with pytest.raises(packet.RetentionPreparationRefused, match="^output_collision_or_missing_parent$"):
+                packet.prepare_packet(output=no_reuse, **options)
+        swap_evidence.append({"phase": phase, "refusal": "ghcp_input_bundle_refused",
+                              "replacement_unchanged": True, "original_partial_retained": True,
+                              "temporary_writes_after_swap": 0})
+
     assert packet.verify_packet(output=output, **options) == result
     assert all(packet._read(path, "private_fixture_original") == data for path, data in original_bytes.items()), "original_input_bytes_changed"
     assert calls == []
@@ -221,5 +300,7 @@ def test_retention_preparation_packet_is_verified_closed_and_no_launch(tmp_path,
     if receipt:
         with Path(receipt).open("x", encoding="utf-8") as stream:
             json.dump({"output": str(output), "owned_test_root": str(owned), "summary": summary,
-                       "preparer_source": identity, "input_roles": result["input_verification"]["original_files"]}, stream)
-    print(json.dumps({"evidence": "offline_private_original_packet_test", **summary}, sort_keys=True))
+                       "preparer_source": identity, "input_roles": result["input_verification"]["original_files"],
+                       "namespace_swap_probes": swap_evidence}, stream)
+    print(json.dumps({"evidence": "offline_private_original_packet_test", **summary,
+                      "namespace_swap_probes": swap_evidence}, sort_keys=True))
