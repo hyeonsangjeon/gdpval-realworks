@@ -44,7 +44,8 @@ REAL_POPEN = subprocess.Popen
 REAL_RUN = subprocess.run
 REAL_SLEEP = time.sleep
 REAL_WAIT_CODES = tuple(method.__code__ for method in (
-    REAL_POPEN._wait, REAL_POPEN.wait, REAL_POPEN._communicate, REAL_POPEN.communicate))
+    REAL_POPEN._wait, REAL_POPEN.wait, REAL_POPEN._communicate, REAL_POPEN.communicate,
+    REAL_POPEN.__exit__))
 
 
 def positive(phase, call):
@@ -292,7 +293,7 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
     transports = []
     archive, rematerialized = immutable_archives
     signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    metadata_children = {}
+    allowed_children, allowed_waits = {}, set()
     denied_sleep = time.sleep
     git_metadata = {
         ("rev-parse", "HEAD"), ("rev-parse", "HEAD^{tree}"),
@@ -304,37 +305,59 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
         ("archive", "--format=tar", historical.SOURCE, "batch-runner", ".github/workflows"),
     }
 
-    def metadata_wait_sleep(delay):
+    def allowlisted_wait_sleep(delay):
         frame = sys._getframe(1)
+        if frame.f_code is not REAL_WAIT_CODES[0]:
+            return denied_sleep(delay)
         process = frame.f_locals.get("self")
-        if type(process) is not REAL_POPEN or process not in metadata_children:
+        if type(process) is not REAL_POPEN or process not in allowed_children:
             return denied_sleep(delay)
-        command, cwd, runner = metadata_children[process]
-        frames = []
-        for code in REAL_WAIT_CODES:
-            if frame is None or frame.f_code is not code or frame.f_locals.get("self") is not process:
+        bound, waiting, frames = allowed_children[process], frame.f_locals, {}
+        # Both communicate wait sites and stdlib exception/context cleanup must
+        # lead to this exact still-active owner frame, never an unrelated thread.
+        while frame is not bound["owner"]:
+            if (frame is None or not any(frame.f_code is code for code in REAL_WAIT_CODES)
+                    or frame.f_locals.get("self") is not process):
                 return denied_sleep(delay)
-            frames.append(frame)
+            frames[frame.f_code] = frame.f_locals
             frame = frame.f_back
-        waiting, _, exchange, communication = (item.f_locals for item in frames)
-        # The exact active run frame also excludes other threads and later waits
-        # on this object. Only this owned Git child's original timed reap qualifies.
-        if not (frame is runner and runner.f_locals.get("process") is process
-                and tuple(process.args) == command == tuple(runner.f_locals["popenargs"][0])
-                and runner.f_locals["kwargs"].get("cwd") is None and Path.cwd() == cwd
-                and runner.f_locals["timeout"] == communication["timeout"] == exchange["orig_timeout"] == 60
-                and communication["endtime"] == exchange["endtime"]
-                and 0 < waiting["timeout"] <= 60 and delay == waiting["delay"] and 0 < delay <= 0.05):
+        owner = frame.f_locals
+        if not (owner.get("process") is process and tuple(process.args) == bound["command"]
+                and 0 < waiting["timeout"] <= bound["timeout"]
+                and delay == waiting["delay"] and 0 < delay <= 0.05
+                and (bound["cwd"] is not None or Path.cwd() == bound["inherited_cwd"])):
             return denied_sleep(delay)
-        remaining = communication["endtime"] - time.monotonic()
+        if frame.f_code is REAL_RUN.__code__:
+            if not (owner["timeout"] == bound["timeout"]
+                    and tuple(owner["popenargs"][0]) == bound["command"]
+                    and owner["kwargs"].get("cwd") == bound["cwd"]):
+                return denied_sleep(delay)
+            communication, exchange = (frames.get(code) for code in (REAL_WAIT_CODES[3], REAL_WAIT_CODES[2]))
+            if communication is not None:
+                if not (communication["timeout"] == bound["timeout"] and communication["endtime"] is not None
+                        and bound["deadline"] in (None, communication["endtime"])
+                        and (exchange is None or (exchange["orig_timeout"] == bound["timeout"]
+                             and exchange["endtime"] == communication["endtime"]))):
+                    return denied_sleep(delay)
+                bound["deadline"] = communication["endtime"]
+        elif not (frame.f_code is owned.LocalTransport.process.__code__
+                  and owner["timeout"] == bound["timeout"] and owner["until"] == bound["deadline"]
+                  and owner["options"].get("cwd") == bound["cwd"]):
+            return denied_sleep(delay)
+        if bound["deadline"] is None:
+            return denied_sleep(delay)
+        remaining = bound["deadline"] - time.monotonic()
         if remaining > 0:
+            allowed_waits.add(bound["kind"])
             return REAL_SLEEP(min(delay, remaining))
         # Let the unchanged stdlib loop raise TimeoutExpired and run reap its own
-        # child; do not sleep beyond the original communicate deadline.
+        # child; no unbounded cleanup wait requires this sleep exception.
 
     def metadata_or_harmless_only(command, **options):
         # Narrow subprocess TRANSPORT allowlist. All source/identity validators
         # still run, including actual Git cleanliness and immutable archive data.
+        runner = sys._getframe(1)
+        deadline = None
         if command[0] == "/usr/bin/git":
             index = command.index("-C")
             assert Path(command[index + 1]) == controller.ROOT
@@ -344,16 +367,13 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
                 assert command[index + 2:] == ["archive", "--format=tar", historical.SOURCE, "batch-runner", ".github/workflows"]
             assert options["env"]["GIT_NO_LAZY_FETCH"] == "1" and options["env"]["GIT_ALLOW_PROTOCOL"] == ""
             assert tuple(command[index + 2:]) in git_metadata
-            runner = sys._getframe(1)
             assert runner.f_code is REAL_RUN.__code__ and runner.f_back.f_code is owned._git.__code__
             assert runner.f_locals["timeout"] == 60
             assert options == {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE,
                                "stderr": subprocess.PIPE, "env": runner.f_back.f_locals["environment"]}
             cwd = Path.cwd()
             assert cwd == controller.ROOT / "batch-runner"
-            process = REAL_POPEN(command, **options)
-            metadata_children[process] = (tuple(command), cwd, runner)
-            return process
+            kind, timeout = "git", 60
         elif command[:2] == [sys.executable, "-c"]:
             assert command[2] in {historical.SAFE_ERROR + historical.OBSERVE, historical.SAFE_ERROR + historical.MATERIALIZE}
             assert options["cwd"] in {root / "batch-runner" for root in (archive, rematerialized)}
@@ -362,26 +382,56 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
                                             "HF_DATASETS_OFFLINE", "TRANSFORMERS_OFFLINE", "PYTHONNOUSERSITE",
                                             "GDPVAL_RELAY_LINEAGE_ID"}
             assert options["env"]["GDPVAL_RELAY_LINEAGE_ID"] == historical.INPUT_LINEAGE
+            assert runner.f_code is REAL_RUN.__code__ and runner.f_back.f_code is historical._command.__code__
+            assert runner.f_locals["timeout"] == 90
+            assert options == {"cwd": runner.f_back.f_locals["root"] / "batch-runner",
+                               "env": runner.f_back.f_locals["environment"],
+                               "stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
+            kind = "historical_observe" if command[2] == historical.SAFE_ERROR + historical.OBSERVE else "historical_materialize"
+            timeout = 90
         else:
             assert any(transport.harmless for transport in transports)
             assert command[:3] == [sys.executable, str(Path(owned.__file__).absolute()), owned.OWNED_CHILD_ARG]
             assert command[5:] == [sys.executable, "-c", "pass"]
             assert options["start_new_session"] is True
-            return REAL_POPEN(command, **options)
-        # Fixed historical Python scripts receive no sleep exception. All
-        # children retain normal communicate/wait and subprocess.run cleanup.
-        return REAL_POPEN(command, **options)
+            assert runner.f_code is owned.LocalTransport.process.__code__
+            assert runner.f_back.f_code is Transport.owned_process.__code__
+            lifecycle = runner.f_locals
+            assert any(transport is lifecycle["self"] and transport.harmless for transport in transports)
+            assert lifecycle["command"] == [sys.executable, "-c", "pass"]
+            assert command[3:5] == [str(lifecycle["inherited"].fileno()), str(lifecycle["lock"])]
+            assert options == {**lifecycle["options"], "start_new_session": True,
+                               "pass_fds": (lifecycle["lock"], lifecycle["inherited"].fileno())}
+            assert options["cwd"] == controller.ROOT / "batch-runner" and lifecycle["timeout"] == 10860
+            kind, timeout, deadline = "owned_supervisor", lifecycle["timeout"], lifecycle["until"]
+        # One registration path; no alternate wait/reaper or child implementation.
+        # The supervisor's existing poll/wakeup reap and its exact pass payload
+        # do not call timed stdlib wait, but retain their real lifecycle binding.
+        binding = {"command": tuple(command), "cwd": options.get("cwd"),
+            "inherited_cwd": Path.cwd(), "owner": runner, "timeout": timeout, "deadline": deadline, "kind": kind}
+        process = REAL_POPEN(command, **options)
+        allowed_children[process] = binding
+        return process
 
     # subprocess.run itself is left real only for the Popen-allowlisted metadata
     # commands. A shell, model command, credential query or other PID is refused.
     monkeypatch.setattr(subprocess, "run", REAL_RUN)
     monkeypatch.setattr(subprocess, "Popen", metadata_or_harmless_only)
-    monkeypatch.setattr(time, "sleep", metadata_wait_sleep)
+    monkeypatch.setattr(time, "sleep", allowlisted_wait_sleep)
     guarded_sleep = time.sleep
     with pytest.raises(AssertionError, match="^dispatcher regression crossed a live boundary$"):
         time.sleep(0)
     with pytest.raises(AssertionError):
         subprocess.run([sys.executable, "-c", "pass"], timeout=60)
+    for lookalike in (
+        [sys.executable, "-c", historical.SAFE_ERROR + historical.OBSERVE + "\n# unregistered"],
+        [sys.executable, str(Path(owned.__file__).absolute()), owned.OWNED_CHILD_ARG,
+         "0", "0", sys.executable, "-c", "pass"],
+        [sys.executable, "step2_run_inference.py", "--condition", "condition_a"],
+    ):
+        with pytest.raises(AssertionError):
+            subprocess.run(lookalike, timeout=60)
+    assert not allowed_children
     host_parent = Path(tempfile.mkdtemp(prefix=".retention-ci-test-host-", dir=Path(__file__).resolve().parents[3]))
     monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(host_parent / "agent-native"))
     monkeypatch.setenv("TMPDIR", str(host_parent / "agent-temp"))
@@ -642,11 +692,16 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
                                      "FOUNDRY_PROJECT_ENDPOINT", "CODEX_FOUNDRY_CONNECTION_CONFIRMED"}
     assert not forbidden_calls
     assert time.sleep is guarded_sleep
+    assert {binding["kind"] for binding in allowed_children.values()} == {
+        "git", "historical_observe", "historical_materialize", "owned_supervisor"}
+    assert all(process.returncode is not None for process in allowed_children)
     capsys.readouterr()
     print(json.dumps({"original_input_roles_sha256": document["input_roles_sha256"],
         "materialized_grader_source_sha256": document["grading"]["materialized_grader_source_sha256"],
         "adapter_source_sha256": document["source"]["adapter"]["sha256"],
         "request_sha256": owned._digest(document), "simulated_provider_cases": observed,
         "independent_original_serializations_equal": True, "signed_job_origin": "synthetic_rsa_raw_http_verified",
+        "registered_local_child_kinds": sorted({binding["kind"] for binding in allowed_children.values()}),
+        "stdlib_wait_sleep_kinds": sorted(allowed_waits),
         "real_payload": "test_owned_python_pass_only", "model_invocations": 0,
         "historical_observer_source": historical.SOURCE, "tested_source": source}, sort_keys=True))

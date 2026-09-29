@@ -22,10 +22,15 @@ entries land under a fresh dated heading the day they merge to `main`.
   archive probe identified `time.sleep` in local Git's timed reap. The test-only
   fixture/reaping correction at `3be7160b08969689035aa886f975c43b89a1dbe6`
   also failed: 1 failed in 60.80s, exit 1, with `ENOSYS` during guarded archive
-  re-verification. No further retry or publication followed. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-archive-guard-root-fix)
-  keeps these observations separate; packet/staging, authority/CAS and
-  owned-child assertions remain unvalidated. No live execution or storage setup
+  re-verification. The next test-only correction removes pidfd and permits
+  stdlib timed-reap sleep only for an exactly bound, owned Git metadata child.
+  Its selector at `933d07573d997af43ba6427ce323a329ebe40dc7` failed: 1 failed
+  in 64.15s, exit 1. Git re-verification completed, but the historical Python
+  serializer's timed reap hit the retained sleep guard. No retry or publication
+  followed. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-metadata-reap-compat)
+  keeps all observations separate; packet/staging, authority/CAS and owned-child
+  assertions remain unvalidated. Production bytes remain unchanged from
+  `6038eb0cf01b372c874e0c824a3750e118f9ac35`. No live execution or storage setup
   is authorized here.
 - Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
   identity-bound keep/fresh modes use B's existing recovery policy and one
