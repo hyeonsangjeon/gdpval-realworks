@@ -65,7 +65,16 @@ def positive(phase, call):
 
 
 @pytest.fixture
-def immutable_archives(tmp_path):
+def private_retention_opt_in():
+    """Skip only absent opt-in, before any historical archive construction."""
+    locator = os.environ.get("GDPVAL_RETENTION_PREPARED_HANDOFF")
+    if locator is None:
+        pytest.skip("explicit retained original-input handoff required; no fetch or synthetic pins")
+    assert locator and Path(locator).is_file(), "required explicit private original-input handoff unavailable"
+
+
+@pytest.fixture
+def immutable_archives(private_retention_opt_in, tmp_path):
     """Only local immutable fixture construction precedes the shared guards."""
     archive, rematerialized = (tmp_path / name for name in (
         "immutable-input-observer", "independent-input-observer"))
