@@ -101,7 +101,7 @@ source_pins:
     batch-runner/step1_prepare_tasks.py: 5f3419596655aa5860abc4a8cd776212f8d1c3ba4bc38545f7aab62a06160ae9
     batch-runner/step2_run_inference.py: 9ae6e0c809be498fd96c25ad16b83302c567fe95bdd7dc587451c4029b8c24bc
   compiler:
-    batch-runner/codex_retention_diagnostic.py: ca19bd1190b14e190f4a742ee0e5eea3c062c6cb0e3ca6d54c93eed62bf537e2
+    batch-runner/codex_retention_diagnostic.py: c8ac9d0ec3eca0d4251c345f733009f506d366d312c5357836e6c67332a76c53
     batch-runner/gpt54_comparison_preflight.py: 82f37bbea62a5b0ee70ae20d36376440763f2474afd0ad17cc8389eba291dc29
     batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
     batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0

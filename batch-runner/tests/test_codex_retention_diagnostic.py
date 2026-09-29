@@ -38,6 +38,7 @@ def test_retention_registration_is_exact_closed_and_inert(
     expected_ids = [f"{task}_retention_bundle_v1_{bundle}_r{repeat}"
                     for task, bundle, repeat in expected]
     assert len(set(plan["order"])) == len(plan["cells"]) == plan["cell_count"] == 8
+    assert len({cell["config"]["experiment"]["id"] for cell in plan["cells"]}) == 8
     assert plan["order"] == expected_ids
     assert plan["runtime_baseline"] == {
         "source_sha": "18bc942b97114cca3b9f6ed913b9841dda3a5874",
@@ -71,6 +72,15 @@ def test_retention_registration_is_exact_closed_and_inert(
         }
         config = cell["config"]
         assert ExperimentConfig.from_dict(config).validate() == []
+        # The old assembly repeated the policy label and exceeded the real
+        # identifier limit. The real validator must still refuse that ID shape.
+        overlong = deepcopy(config)
+        overlong["experiment"]["id"] = f"{diagnostic.CAMPAIGN}__{cell['cell_id']}"
+        assert len(overlong["experiment"]["id"]) in {102, 103}
+        assert ExperimentConfig.from_dict(overlong).validate() == [
+            "experiment.id must be a safe identifier",
+        ]
+        assert len(config["experiment"]["id"]) <= 100
         assert config["data"]["filter"]["task_ids"] == [task]
         assert config["execution"]["max_retries"] == 3
         assert config["execution"]["timeout"] == 1800
@@ -80,7 +90,7 @@ def test_retention_registration_is_exact_closed_and_inert(
         assert config["condition_a"]["qa"]["enabled"] is False
         assert config["output"] == {"publish_to_hf": False, "submit_to_evals": False}
         same = deepcopy(config)
-        assert same["experiment"].pop("id") == f"{diagnostic.CAMPAIGN}__{cell['cell_id']}"
+        assert same["experiment"].pop("id") == f"{diagnostic.CAMPAIGN}__{task}_{bundle}_r{repeat}"
         same["data"]["filter"].pop("task_ids")
         same["execution"]["codex"]["task_deadline"].pop("repetition")
         same["execution"]["codex"]["task_deadline"].pop("retention_bundle")

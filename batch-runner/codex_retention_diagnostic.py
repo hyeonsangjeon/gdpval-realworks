@@ -22,6 +22,7 @@ from core.codex_task_deadline import (
 )
 from core.execution_envelope_tasks import catalog_sha256, load_task_catalog
 from core.experiment_config import ExperimentConfig
+from core.repository_identity import validate_experiment_id
 from gpt54_comparison_preflight import CODEX_TEMPLATE, GRADER, _canonical_json, load_plan
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -236,8 +237,11 @@ def compile_plan(registration: dict | None = None) -> dict:
         }).as_dict()
         cell_id = f"{task_id}_{RETENTION_BUNDLE_CONDITION}_{bundle}_r{repeat}"
         config = load_plan(ROOT / CODEX_TEMPLATE)
+        # Keep the full registered cell identity above. Its runtime experiment
+        # ID needs no repeated policy label within this fixed campaign namespace.
         config["experiment"].update(
-            id=f"{CAMPAIGN}__{cell_id}", name="GPT-5.4 retention bundle diagnostic",
+            id=validate_experiment_id(f"{CAMPAIGN}__{task_id}_{bundle}_r{repeat}"),
+            name="GPT-5.4 retention bundle diagnostic",
             description="Inert prospective recipe; no launch authority or new result.",
         )
         model = registration["common"]["model"]
@@ -255,8 +259,9 @@ def compile_plan(registration: dict | None = None) -> dict:
         # Preserve B's existing compatibility settings. The identity-bound
         # deadline policy, not this legacy retry setting, admits these cells.
         config["execution"].update(timeout=ATTEMPT_SECONDS, max_retries=3, resume_max_rounds=0)
-        if ExperimentConfig.from_dict(config).validate():
-            raise RetentionRegistrationRefused("compiled_config_refused")
+        errors = ExperimentConfig.from_dict(config).validate()
+        if errors:
+            raise RetentionRegistrationRefused("compiled_config_refused: " + "; ".join(errors))
         cells.append({
             "index": len(cells), "cell_id": cell_id, "task_id": task_id,
             "control": control, "config": config, "config_sha256": seal(config),
