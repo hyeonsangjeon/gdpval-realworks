@@ -42,7 +42,7 @@ def test_retention_preparation_packet_is_verified_closed_and_no_launch(tmp_path,
     for name in (
         "core.codex_runner.CodexAgentRunner.__init__",
         "core.codex_task_deadline.CodexTaskDeadlineStore.__init__",
-        "core.codex_task_deadline.CodexTaskDeadlineStore.admit_attempt",
+        "core.codex_task_deadline.CodexTaskDeadline.admit_attempt",
         "core.executor.TaskExecutor.__init__",
         "prepare_dataset.snapshot_download", "prepare_dataset.load_dataset",
         "step8_grade.RubricLoader.__init__",
