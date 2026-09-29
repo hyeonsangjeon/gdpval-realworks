@@ -36,6 +36,8 @@ def test_private_retention_opt_in_precedes_archive_setup(supplied, tmp_path, mon
     monkeypatch.setattr(subprocess, "Popen", forbidden)
     # Resolve the actual archive fixture and its prerequisite through pytest.
     # No substitute archive or prepared input is supplied, even on absence.
-    with pytest.raises(outcome, match="^" + reason + "$"):
+    with pytest.raises(outcome) as caught:
         request.getfixturevalue("immutable_archives")
+    assert type(caught.value) is outcome
+    assert str(caught.value).splitlines()[0] == reason
     assert calls == []
