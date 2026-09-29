@@ -681,6 +681,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a no-launch single-cell retention preparation packet and one opt-in
+  offline contract selector. Reuse real source/schema4/prepared-input checks,
+  materialize only into a new owned ignored-workspace directory, bind actual
+  emitted config/packet/grader identities and preserve the original five-task
+  bundle. The named handoff supplied all four original byte pins and role
+  fingerprint `40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38`
+  without HF intake or credential access. Correct only the test guard owner
+  from `CodexTaskDeadlineStore.admit_attempt` to `CodexTaskDeadline.admit_attempt`.
+  At `45ef631d76d2c92a1d0263e5dab9c36680939ef7`, the sole selector reported
+  **1 passed in 5.69s**, exit 0, not skipped, with real preparation/readback and
+  materialized-grader hashing. Keep the earlier static fixture mismatch and
+  `e224a750dbdbabe74490ff9c87459d14d5e01d40` guard failure (**1 failed in 2.06s**,
+  exit 1, before compiler/preparer calls) separate. Preserve all existing
+  runtime/compiler/grader, registration/pin/workflow and original-result bytes;
+  the preparer is unchanged by the guard correction. Preparation reserves no
+  slot, starts no budget and authorizes no launch. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-prepare-guard-owner)
+  records exact evidence and outstanding source-review, CI, serial-execution,
+  runtime-input-staging and live-launch gates.
+
 - Add a separate inert Task4/Task5 keep/fresh registration for eight new cells,
   an offline canonical compiler and one focused contract selector. Runtime base
   `18bc942b97114cca3b9f6ed913b9841dda3a5874` contains reviewed
