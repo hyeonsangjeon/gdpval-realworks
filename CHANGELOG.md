@@ -17,20 +17,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   existing one-use serial CAS branch. Owner environment review and signed
   job-origin evidence bind the current source, prepared inputs, runtime and
   finite cell scope before admission. The new workflow defaults to planning.
-  One test-local registry now binds each exact existing Git, historical
-  metadata/serialization and harmless-payload supervisor command to its owned
-  process and caller, with its unchanged timeout. Standard-library reap sleep is allowed
-  only within those bindings; general sleep and command denials remain active.
-  The selector at
-  `6c33c2bd960574d827bb4983c2b904ff049f6210` failed: 1 failed in 168.90s,
-  exit 1. Real preparation, staging and independent rematerialization checks
-  completed; the redirect negative exposed an authority-response refusal-category
-  conversion. CAS, deadline/replay, terminal cleanup and the harmless owned child
-  were not reached. No retry, push or PR followed. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-allowlisted-child-wait-coverage)
-  preserves all four earlier observations separately. Production bytes remain
-  unchanged from `6038eb0cf01b372c874e0c824a3750e118f9ac35`; new-source review
-  and CI remain required. No live execution or storage setup is authorized here.
+  The new adapter now raises its fixed origin/status and pagination refusals
+  after response closure, without reading refused bodies or changing the
+  shared transport privacy guard. The existing exact-command wait registry
+  and general sleep/command denials remain unchanged. At
+  `da0fb6bea28826c9287adaff95e6d4daf8996642`, one offline selector reported
+  1 collected, 1 passed in 295.37s, exit 0. Real preparation/readback and the
+  later CAS, deadline/replay and cleanup checks completed with simulated
+  external services; the only actual payload was test-owned Python `pass`.
+  Model invocations were 0. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-authority-refusal-boundary)
+  preserves all five prior observations separately. Only the new adapter's
+  response method changed in production from
+  `6038eb0cf01b372c874e0c824a3750e118f9ac35`; runtime, shared validators,
+  workflows, registrations and frozen pins remain unchanged. New-source review
+  and CI remain required. This local result grants no live execution or
+  storage-setup authority.
 - Add the [experimental retention bundle capability](batch-runner/README.md#experimental-retention-bundle-capability):
   identity-bound keep/fresh modes use B's existing recovery policy and one
   durable 10,800-second deadline without a fixed admission cap or C feedback.

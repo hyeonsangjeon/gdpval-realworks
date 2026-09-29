@@ -1,83 +1,72 @@
 # Latest task result
 
-## PROJECT5-ALLOWLISTED-CHILD-WAIT-COVERAGE
+## PROJECT5-AUTHORITY-REFUSAL-BOUNDARY
 
-The one authorized selector failed at
-`6c33c2bd960574d827bb4983c2b904ff049f6210`: 1 collected, 1 failed in 168.90s,
-exit 1. Code work stopped after that invocation. There was no diagnostic
-rerun, retry, push or new PR. These two completion-record updates remain
-uncommitted.
+The single authorized offline selector passed at
+`da0fb6bea28826c9287adaff95e6d4daf8996642`: 1 collected, 1 passed in 295.37s,
+exit 0. No retry, additional selector or live authority request was run. This is local
+integration evidence, not external source approval or launch authority.
 
 Branch `b/codex-retention-ci-cas-20260929` starts at exact base
 `6aa34a2f393f877da7b8f95e1dcd7bb00077a3fb`, tree
 `d571030bbb04fe82726d39d6876982e0ca97bcc8`. The leader reported 10 passing
 checks at reviewed `71b3a8274bc6282e8cbc6842303cdb76df54cadb` /
 [review 5349547201](https://github.com/hyeonsangjeon/gdpval-realworks/pull/701#pullrequestreview-5349547201).
-That review covers the base, not this adapter or fixture correction. The prior
+That review covers the base, not this adapter. The prior
 26.20s and 6.62s observations remain separate in the
 [immutable controller handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/6aa34a2f393f877da7b8f95e1dcd7bb00077a3fb/tasks/LATEST_TASK_RESULT/README.md).
 Neither selector was replayed.
 
-### Test-only correction and observed boundary
+### Correction and retained guards
 
-Only `tests/test_codex_retention_ci.py` changed beyond the two records. The
-existing sleep guard now uses one child-registration path for the complete
-previously allowlisted catalog. The catalog and its constructor, communicate,
-wait, context-manager and timeout-cleanup paths were inspected before editing.
+A bounded auth review approved the exception-lifetime correction with
+conditions before editing. It did not reopen the architecture or approve a
+live source. Only `LocalTransport._authority_json` changed in production.
+It now records the existing origin/status or pagination refusal inside the
+transport context, leaves the refused body unread, and raises
+`RetentionCIRefused` after successful closure. Acquisition, header, bounded-read
+and close failures still pass through the unchanged intake privacy guard.
+JSON parsing remains outside the context.
 
-| Existing command category | Unchanged bound and wait path |
-| --- | --- |
-| Seven exact local Git metadata/archive forms | 60 seconds; `run → communicate → wait/_wait` |
-| `SAFE_ERROR + OBSERVE` and `SAFE_ERROR + MATERIALIZE`, with the original input roles and exact immutable archive cwd | 90 seconds; the same stdlib paths, including communicate's second wait |
-| Exact owned-supervisor argv carrying only `[sys.executable, "-c", "pass"]` | Direct `Popen`; the actual `LocalTransport.process` frame and its 10,860-second lifecycle deadline, with the existing control-channel/poll/wakeup cleanup unchanged |
+The original HTTP 302 negative now preserves
+`github_authority_origin_or_status_refused` before claim, clock or child creation.
+The focused regression also checks closure without reads for foreign-origin
+and pagination refusals, closure on success and malformed JSON, and exact
+`private_input_verification_or_transport_failed` refusals for acquisition,
+read and close failures. A close failure on a refused redirect remains a
+transport failure; no domain decision masks it.
 
-Captured real sleep is available only from the actual stdlib `_wait` code for
-the matching tracked `Popen`, active owner frame, argv, cwd and original
-deadline. Requested sleep is capped at the remaining bound. The supervisor
-and its fixed payload use existing owned reaping, not a new stdlib-wait path.
-Normal subprocess failure/timeout cleanup is unchanged. There is no pidfd,
-custom reaper, new command or timeout extension, and `time.sleep` is never
-globally restored. Other threads and untracked processes remain outside the
-exception.
+The shared intake helper, all legacy callers/validators, workflow, runtime,
+compiler/preparer, registrations and frozen 30-cell pins remain byte-identical
+to `6038eb0cf01b372c874e0c824a3750e118f9ac35`. The completed exact-command
+wait registry and guard bodies remain unchanged from `6c33c2bd`. Static
+comparison preserves all 93 original assertion/refusal nodes and all 115
+nodes from the preceding test version; these are not runtime pass counts.
+The existing eight-cell study and ordinal-0-only execution scope are unchanged.
 
-The guard refused direct sleep, bare Python, an altered historical script,
-a forged supervisor call and a direct Step2 command before any tracked child
-was created.
-Explicit fixture ordering still constructs both genuine immutable
-`8ac891e3e0e4752fe15a00139a2691ddf9df7dce` archives before the unchanged
-shared offline guard; production verifiers still reread them.
+### Validation and separate observations
 
-Static checks confirmed the selector/import/guard owners and preserved all
-93 original assert/refusal nodes; this is not a claim that all ran. No validator
-verdict, source identity, signature, rematerialization, CAS ambiguity or cleanup
-assertion was replaced. Production adapter/controller/runtime, workflow,
-HF/auth code, registrations,
-frozen 30-cell pins and old validators remain byte-identical to `6038eb0c`.
-The earlier conditional shared-branch/OIDC design decision was not reopened.
-
-### Separate observations
-
-| Source | Operation | Actual result |
+| Tested source | Operation | Actual result |
 | --- | --- | --- |
-| `6038eb0cf01b372c874e0c824a3750e118f9ac35` | Original single selector | 1 collected, 1 failed in 2.65s; exit 1. Later integration assertions were not reached. |
-| `6038eb0cf01b372c874e0c824a3750e118f9ac35` plus a diagnostic guard wrapper | One archive-only probe, not pytest | First refusal was `time.sleep` in `_wait`; exit 2. No input verification or integration result. |
-| `3be7160b08969689035aa886f975c43b89a1dbe6` | Authorized fresh single selector | 1 collected, 1 failed in 60.80s; exit 1. Guarded archive re-verification failed. |
-| `933d07573d997af43ba6427ce323a329ebe40dc7` | Metadata-reap compatibility selector | 1 collected, 1 failed in 64.15s; exit 1. Git re-verification completed; the historical Python serializer's timed reap hit the retained sleep guard. |
-| `6c33c2bd960574d827bb4983c2b904ff049f6210` | Complete allowlisted-wait selector | 1 collected, 1 failed in 168.90s; exit 1. Preparation/staging completed; an authority-response refusal was converted to a different exception category. |
+| `6038eb0cf01b372c874e0c824a3750e118f9ac35` | Original single selector | 1 collected, 1 failed in 2.65s; exit 1. Archive guard failure; later integration assertions not reached. |
+| `6038eb0cf01b372c874e0c824a3750e118f9ac35` plus a diagnostic guard wrapper | One archive-only probe, not pytest | Exit 2. Identified `time.sleep` in `subprocess.py:1953:_wait` through `_git`, `archive_bytes` and `materialize_archive`; raised before sleeping. No validation pass. |
+| `3be7160b08969689035aa886f975c43b89a1dbe6` | Fresh single selector | 1 collected, 1 failed in 60.80s; exit 1. Introduced pidfd path raised `ENOSYS` during archive re-verification. Later integration assertions not reached. |
+| `933d07573d997af43ba6427ce323a329ebe40dc7` | Metadata-reap compatibility selector | 1 collected, 1 failed in 64.15s; exit 1. Git verification and unexpected-module refusal completed; historical serialization hit the then-Git-only sleep guard. Packet and later assertions not reached. |
+| `6c33c2bd960574d827bb4983c2b904ff049f6210` | Allowlisted-wait selector | 1 collected, 1 failed in 168.90s; exit 1. Real preparation, staging, independent rematerialization and preceding approval/job-origin negatives completed. The 302 domain refusal became an intake transport refusal. CAS, deadline/replay, terminal cleanup and harmless owned child not reached. |
+| `da0fb6bea28826c9287adaff95e6d4daf8996642` | Authority-response boundary selector | 1 collected, 1 passed in 295.37s; exit 0. New closure/refusal regressions and the later integration assertions completed. |
 
-The prior stopped handoffs remain at this same record path in local commits
-`3be7160b08969689035aa886f975c43b89a1dbe6`,
-`933d07573d997af43ba6427ce323a329ebe40dc7` and
-`6c33c2bd960574d827bb4983c2b904ff049f6210`. Their log identities and session
-artifacts are preserved. All three earlier pytest invocations stopped before
-packet/staging, approval, CAS or owned-child assertions. The cause of the prior
-`ENOSYS` beyond the pidfd call remains undetermined; no kernel or container
-investigation was performed. The separate archive-only probe identified
-`time.sleep` in `subprocess.py:1953:_wait` through `_git`, `archive_bytes` and
-`materialize_archive`; it raised before sleeping and was not a validation pass.
+The five prior observations, log identities and reached/unreached boundaries
+remain in the
+[immutable preceding handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/da0fb6bea28826c9287adaff95e6d4daf8996642/tasks/LATEST_TASK_RESULT/README.md)
+and its earlier commit references. No historical result was reclassified. The
+cause of `ENOSYS` beyond the pidfd call remains undetermined; no infrastructure
+investigation was performed. Session artifacts remain intact. The six exact
+ignored output roles left by the preceding test were moved to private session
+storage before the fresh no-clobber run; nothing was deleted or reused as new
+verification evidence.
 
-Run from `batch-runner` with the existing isolated environment. Only the
-private handoff value is redacted below; the known locator was present.
+Run once from `batch-runner` in the existing isolated environment. Only the
+private handoff value is redacted; it was present and the test did not skip.
 
 ```bash
 env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
@@ -89,52 +78,41 @@ env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
   tests/test_codex_retention_ci.py::test_retention_ci_grant_cas_and_owned_runtime_are_bound
 ```
 
-The new invocation stopped in the approval/OIDC refusal loop at
-`test_codex_retention_ci.py:566`. Its safe traceback ends with:
+### Real evidence and simulated boundaries
+
+Real archive/source verification, original-input serialization, schema4
+attestation, packet/config/grader readback, Step2 staging and independent
+rematerialization completed. The run and retained log have these identities:
 
 ```text
-codex_retention_ci.py:700:execute -> codex_retention_ci.py:333:verify_approval -> codex_retention_ci.py:207:github -> codex_retention_ci.py:188:_authority_json -> contextlib.py:153:__exit__ -> codex_ci_input_intake.py:117:_response
-codex_ci_input_intake.InputIntakeRefused: private_input_verification_or_transport_failed
+original_input_roles_sha256=40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38
+materialized_grader_source_sha256=c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320
+adapter_source_sha256=3490cb63af1cf078965768d93b972f3218353e78574175a837afe248e2a47e03
+request_sha256=30ebe664643bd180fe9f46a4e3a5d8a052d6f774d2b6422f2b597b118da9b5df
+pytest_log_sha256=b218de2e44bd421409805cb0a715009c669832fea4d6c87427fa03d7104a90dc
 ```
 
-Static tracing identifies the `redirect` negative. The fixture at line 225
-returns HTTP 302, including for the GitHub metadata response. The real
-`_authority_json` predicate at lines 190–191 requires the same URL and status
-200, and raises `RetentionCIRefused("github_authority_origin_or_status_refused")`.
-That class inherits `ValueError`; the enclosing `_response` context catches
-it at lines 112–117 and converts it to the generic `InputIntakeRefused` above.
-The test expects the original adapter category. This is a different boundary
-from child reaping; no production change or assertion relaxation was made.
-The new pytest log has SHA256
-`a106b811aa3a63ac9aab7c9fbb025171347504647f476b27aafd115bf9c4ba78`.
-
-Real archive verification, original-input serialization, schema4 packet and
-materialized-grader verification, Step2 staging, independent rematerialization
-and request equality checks completed. The input-role fingerprint assertion
-matched `40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38`.
-No final materialized-grader digest was emitted by this failed invocation.
-Missing/wrong authority, source/cell/input/staging and preceding
-approval/job-origin negative checks completed using real validators and
-simulated service responses.
-
-Later issuance-credential/origin checks, CAS conflicts/ambiguity, deadline and
-replay checks, terminal reconciliation, cleanup and the harmless owned child
-were not reached. Neither were the final child-category/reaped assertions or
-legacy-refusal checks. Supervisor wait coverage is therefore static only.
-No first-cell inference slot was reserved or durable cell clock started. No
-post-failure output cleanup or reuse was attempted.
+GitHub/Azure/HF responses, RSA provider keys and remote CAS were simulated;
+the signature, source, approval, claim/history and cleanup validators were real.
+CAS conflict/unknown-ack, duplicate/replay, ambiguous-start, unconfirmed-cleanup,
+output/terminal-ack and terminal-reconciliation checks completed. Durable clock
+restart behavior used the real store with an injected test clock. The real
+owned supervisor launched only the fixed test-owned Python `pass` payload.
+Its missing result remained failed with a null grade, and model invocations
+were 0. These facts do not attest a live provider or reserve a live cell.
+The final assertions also checked legacy refusals, retained general-sleep and
+command guards, and reaping of every registered local child.
 
 ### Remaining gates
 
-The authority-response exception-category boundary needs separate direction;
-production remains frozen at `6038eb0c`. Full integration validation, new-source
-review and CI remain required. Neither prior base review nor the diagnostic
-probe approves this adapter. The leader must separately bind reviewed source,
-host/runtime, inputs, spend scope and the registered ordinal-0 cell before any
-launch.
+The new source and records delta still need leader review and CI. The adapter
+identity above is a byte identity, not approval. Before any launch, the leader
+must separately bind reviewed source, host/runtime/deployment, verified inputs,
+finite time/spend scope and the registered ordinal-0 cell. Real protected-job
+approval, same-deployment serial CAS consumption and live cleanup/terminal
+reconciliation remain unverified. Original inputs and outcomes remain untouched.
 
-No workflow dispatch, external environment approval, live CAS, HF/OIDC/Azure,
-model, grade or paid operation occurred. The same-branch protocol and unchanged
-eight-cell design remain unvalidated for live use. Protected im-not-ai-en was
-applied only to the current English records, preserving the separate failed
-observations, diagnostic status and limits.
+No workflow dispatch, external environment approval, live CAS, HF/OIDC/Azure
+request, credential operation, model, grade or paid operation occurred. Protected
+im-not-ai-en applies only to the current English records and preserves every
+separate observation and limitation.
