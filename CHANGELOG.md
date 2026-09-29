@@ -681,6 +681,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an inert first-cell retention controller for Task4 keep r1, ordinal 0
+  of the unchanged eight-cell registration. Reverify the real preparation
+  packet and stage its selected row, canonical manifest and required references
+  in the actual Step2 layout with caller-held-FD publication. Reuse local
+  reservation, owned-child and deadline primitives without a new retry loop.
+  Default planning and staging consume no inference slot or live budget;
+  the real child transport remains closed pending retention-aware CI/CAS and
+  source/cell/host/runtime/input/spend approval integration. At
+  `8db003867a39c5a84bb5a544d0526c2128467e59`, the single offline selector
+  reported **1 passed in 26.20s**, exit 0, not skipped. Real original-input,
+  runtime-staging and materialized-grader evidence is separate from simulated
+  locking, one-use, ambiguous-start/completion, cleanup and clock checks.
+  No child, inference or grade ran. Existing runtime, compiler/preparer,
+  registrations, pins, graders, workflows and original outcomes remain
+  byte-identical to base `1b4c28abdb74d196f97d968a27cd59d76d701107`.
+  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-first-cell-controller)
+  records exact identities and the remaining new-head review/CI, cross-runner
+  claim and live-execution gates. A local lock is not cross-runner exclusivity.
+
 - Add a no-launch single-cell retention preparation packet and one opt-in
   offline contract selector. Reuse real source/schema4/prepared-input checks,
   materialize only into a new owned ignored-workspace directory, bind actual
