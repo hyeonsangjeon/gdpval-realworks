@@ -109,6 +109,14 @@ class OutputPublicationRefused(ValueError):
         self.http_status = http_status
 
 
+@dataclass(frozen=True)
+class RetentionFirstCellLedgerBinding:
+    """Rederived prepared-entry hashes, not authority to grade or publish."""
+
+    config_hash: str
+    grader_source_hash: str
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise OutputPublicationRefused("invalid_arguments")
@@ -178,12 +186,30 @@ def _receipt_fields(value: object) -> None:
             _require(set(raw) <= set(checked), "unsafe_receipt_fields")
 
 
-def _ledger(data: bytes, cell: dict, *, grading_run_id: str | None = None) -> None:
+def _ledger(data: bytes, cell: dict, *, grading_run_id: str | None = None,
+            retention_first_cell_binding: RetentionFirstCellLedgerBinding | None = None) -> None:
     # A grading caller supplies Step8's exact derived cost run ID; its '|'
     # separators and one config-directory slash are not arbitrary ledger text.
     # Ordinary inference publication retains its existing lexical contract.
     expected_run = cell["run_id"] if grading_run_id is None else grading_run_id
-    if grading_run_id is not None:
+    if retention_first_cell_binding is not None:
+        binding = retention_first_cell_binding
+        task = "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+        _require(type(binding) is RetentionFirstCellLedgerBinding and type(cell) is dict
+                 and type(cell.get("index")) is int and cell["index"] == 0
+                 and cell.get("task_id") == task
+                 and cell.get("cell_id") == task + "_retention_bundle_v1_keep_r1"
+                 and cell.get("run_id") == "retention_bundle_diagnostic_20260929__" + task + "_keep_r1",
+                 "fixed_retention_grading_ledger_binding_required")
+        control = cell.get("control")
+        _require(type(control) is dict and type(control.get("repetition")) is int
+                 and control == {"condition": "retention_bundle_v1", "retention_bundle": "keep", "repetition": 1}
+                 and _hash(binding.config_hash, 16) and _hash(binding.grader_source_hash),
+                 "fixed_retention_grading_ledger_binding_required")
+        _require(type(grading_run_id) is str and grading_run_id ==
+                 f"retention/first-cell|{binding.config_hash}|{binding.grader_source_hash}",
+                 "fixed_retention_grading_ledger_run_required")
+    elif grading_run_id is not None:
         _require(type(grading_run_id) is str and re.fullmatch(
             re.escape(f"pilot/cell-{cell['index']:02d}") + r"\|[0-9a-f]{16}\|[0-9a-f]{64}", grading_run_id) is not None,
             "fixed_grading_ledger_run_required")

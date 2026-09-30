@@ -1,173 +1,162 @@
 # Latest task result
 
-## PROJECT5-RETENTION-INTAKE-EXISTING-CI-CREDENTIAL
+## PROJECT5-PR709-ROUTING-AND-RECONCILIATION
 
-The single focused offline invocation passed at
-`a650e5ebb07c2902a3d06b519c351a891fe1fa69`: 2 collected, 2 passed in 2.40s,
-exit 0, no skips. The existing first-cell workflow now has an explicit
-`read_result` mode confined to its contents-read preparation job. This is
-offline routing/parser evidence, not a CI dispatch, credential-access check,
-successful retained-byte intake or grade. The earlier NAS refusal and consumed
-producer success remain separate below.
+The two scoped PR709 corrections passed one offline invocation:
+**2 collected, 2 passed in 1.52s, exit 0**. Tested HEAD is
+`120ff70f382d54eef97452099ede06fa6bbb242c`, tree
+`f446d162fc0c9d964cba5e932c3381896723848c`. The exact Step8 routing test and all
+ten publication-path scenarios completed. This is workflow-routing evidence,
+not live publication, a paid grade, provider authentication or an invoice.
 
-### Source, review and fixed boundary
+### Exact corrections and unchanged boundaries
 
-The new branch `b/codex-retention-ci-result-intake-20260930` starts from exact
-reader/main `b3a2fb61c3e44bbdc58933ef1c79adcfb6f3fde7`, tree
-`3f257f1d263512782a7eb4580476837f6c99edbd`. The leader supplied all 10 passing
-checks at PR707 head `c787d5819eb52fa733bab4529d3a3c6dcbd9cb6a`,
-[review 5366662713](https://github.com/hyeonsangjeon/gdpval-realworks/pull/707#pullrequestreview-5366662713).
-That review covers the unchanged reader, not this new workflow delta.
+Seven exact expressions in
+`test_grade_workflow_rc7_requires_valid_committed_partial` now match the existing
+retention exclusions and fixed routes. Equality checks remain exact. Static
+comparison preserved all 138 existing assertions, including approval inheritance,
+permissions, source, published-commit and failure checks. This is a static count,
+not 138 runtime test passes. No production exclusion was removed.
 
-A read-only extreme-reasoner CI/auth decision, `APPROVE-WITH-CONDITIONS`,
-preceded workflow edits. Its conditions require a secret-free source/hash
-preflight, the existing preparation-job HF secret only, fixed reader arguments,
-private output capture, preserved failure exit status and exclusion from both
-downstream jobs. The decision covers only this implementation, not dispatch or intake.
+After the required bounded pre-edit CI/auth `APPROVE-WITH-CONDITIONS` decision,
+only the existing publication step's shell body changed in `grade-run.yml`.
+It captures the actual publication exit under `bash -e`. Only the exact
+`retention/first-cell` selector, a nonzero publication exit and a regular,
+non-symlink, current-user-owned `publication-reserved.json` at the fixed private
+root permit one call to the existing read-only reconcile phase. Source, selector,
+producer, terminal, root and step-scoped HF credential remain identical.
 
-The workflow adds `read_result=false` and rejects a read combined with prepare,
-observe or execute in the first source gate, before checkout or credentials.
-Read-only mode skips the closed plan, historical-original transfer, serialization
-and packet preparation. Approval and execution jobs explicitly exclude it, so
-it cannot reach protected execution approval, token verification, sandbox setup,
-Azure login, CAS/admission, a cell clock, model or grader. The same three jobs,
-permissions, concurrency, protected environment and source/main/attempt/cell
-gates remain. When `read_result=false`, existing mode bodies remain unchanged.
+The original `publication-receipt.json` is not rewritten. The step emits the
+CLI's separate safe server observation and fixed numeric exit labels, then exits
+with the original publication status even if reconciliation succeeds.
+`verified_server_state` retains `writer_acknowledgment=not_established`; it is
+not a writer acknowledgement. Missing/unsafe reservations do not reconcile;
+refused or ambiguous reconciliation remains explicit. There is no second
+publication, polling, claim/judge re-entry, new request or raw artifact upload.
 
-Before the read step receives its existing step-scoped `secrets.HF_TOKEN`, a
-separate step requires clean checkout HEAD = reviewed source = dispatch SHA =
-workflow SHA and checks both unchanged file SHA256 values:
+Job/step guards, permissions, credential scope and the five-minute step limit
+are unchanged. All production Python bytes remain unchanged, including canonical
+dispatch, authority, real receipt/terminal validators, typed ledger binding,
+`root/original-upload` materialization, prepared-input revalidation, CAS,
+deadline, owned cleanup and no-replay gates. The existing
+`batch-runner/comparison-grading.json` config path, original pilot routes,
+registrations, judge/model/rubric and budgets were not reopened. A read-only
+conformance check found no unmet bounded-review conditions; it does not approve
+the new immutable head or authorize a live grade.
 
-- Reader: `df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196`.
-- Terminal-verifier module: `8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c`.
+### Single validation and evidence limits
 
-The reader command removes `GITHUB_TOKEN`, `GH_TOKEN`, both Actions issuance
-variables and `ACTIONS_RUNTIME_TOKEN` from its environment. The HF token stays
-in the step environment, never argv. Existing offline defaults remain unchanged;
-the reviewed HF session already scopes its authorized online reads.
+From `batch-runner`, the one invocation selected only:
 
-A fresh mode-0700 parent under trusted `RUNNER_TEMP`, created with umask 077,
-holds an absent payload child and separate receipt/stderr files. Owner and
-no-symlink checks precede the read. The outer limit is 180 seconds; internal
-120-second transfer, 30-second request and object/count/128 MiB aggregate limits
-are unchanged. Only the reader's safe stdout receipt reaches logs/summary;
-stderr and partial payloads remain private. Refusal/timeout exits are preserved,
-with no upload, cleanup, reuse or retry. This relies on the isolated trusted
-runner, not resistance to hostile same-owner namespace replacement. A future
-workflow would use network for checkout/setup and authorized HF reads; it is
-model-free, not network-free.
-
-The new workflow SHA256 is
-`877e3c67e61fdbb4af3c0bbab55a8c8584a44f4480ce0ac7025595154a4fafc3`.
-Reader, terminal verifier, runtime, grader, original 30 registrations, registered
-8-cell study, pins, budget and model settings remain byte-identical to the base.
-The two tests are the new read-route contract and the directly coupled exact
-observation/workflow-shape assertions. The shared offline fixture and existing
-test guards are unchanged.
-
-### One offline validation
-
-Static AST/import/guard-owner checks passed before pytest. The three changed
-Bash snippets passed syntax-only checks. Removing only the declared new routing
-fields/steps from the parsed workflow reproduced the base workflow exactly.
-The tested commit was clean; only completion records changed after this run.
-
-From `batch-runner`, the existing Python 3.10.12 environment ran once:
-
-```bash
-env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
-  LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-  /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest \
-  -p no:cacheprovider --tb=short -s \
-  tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free \
-  tests/test_codex_retention_ci_observation.py::test_retention_locator_observation_is_closed_and_separate
+```text
+python3 -B -m pytest -q -p no:cacheprovider --tb=short -x tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial tests/test_codex_retention_grade_publication_workflow.py::test_retention_publication_workflow_reconciles_once_without_replay
 ```
 
-Result: 2 collected, 2 passed in 2.40s, exit 0, no skips. Log SHA256:
-`a769e460558533687bcac159fe4424d82810c9f85ab55e3f1b0523f6ad377d13`.
-All 16 mode combinations were checked against parsed workflow/source-gate
-expressions, including read exclusion despite a spuriously nonempty request
-output. Exact permissions, source/hash preflight, fixed argv, credential removal,
-private paths and receipt/exit handling were checked statically. The unchanged
-reader's real parser and byte/registration bindings reached its real
-`explicit_hf_token_required` refusal with an empty test environment, before
-transport or clock entry. The existing observation selector retained real
-closed formatting and refusal checks with synthetic locators and no effects.
-No successful remote intake was simulated or claimed. No credentials, private
-originals, model/grade calls or live services were used. Neither the 8.03s payload
-selector nor the 295.37s private integration was rerun.
+Python 3.10.12 / pytest 9.1.1 ran with `env -i`, disabled plugin autoload,
+bytecode/cache, offline HF/datasets/transformers flags and single-thread limits.
+The 180-second outer limit did not fire. Log SHA256 is
+`91975eb26d5b651a861e4f02cbb8d294cbf94d794fe099e8f4e53df95b0d5adc`.
 
-### Separate preserved observations
+The new test parses the real YAML and executes its unmodified publication body
+with real Bash. Only the external CLI process boundary is simulated, with no
+executable available through its isolated PATH and no credential in that test
+environment. No production validator is replaced with a successful verdict.
+The scenarios cover successful publish/no reconciliation; reserved failure/one
+reconciliation; pre-reservation refusal; refused and ambiguous reconciliation;
+symlink/directory reservations; legacy success/failure; and a selector lookalike.
+Exact arguments and call counts, original exits/receipt bytes, separate safe
+observations, private-file preservation and final file inventories were checked.
 
-The prior NAS invocation at the reviewed base ran once from
-`2026-09-30T13:51:08Z` to `2026-09-30T13:51:10Z`. It returned
-`explicit_hf_token_required`, exit 2, with 210-byte stdout and empty stderr;
-the outer timeout did not fire. Receipt SHA256:
-`7fe9d0cc4db0538879ebbe0f97b1a6d4ee8b98bdc7d2ef99a3a607e2d31191d5`.
-Its fields were `intake_verified=false`, `launch_authorized=false`,
-`grading_launched=false`, `admission_attempted=false`, `grade=null`,
-`invoice_complete=false` and `commands=[]`. This is an unsatisfied explicit-token
-prerequisite, not invalid credentials, a remote 403, missing retained data or
-failed inference. Token validity and remote access were not established.
-No immutable terminal/claim/output revisions, result/intake
-fingerprints, declared-file counts or retained accounting evidence were returned.
-The NAS parent had mode 0700, its separate receipt mode 0600, and a local
-directory lock was held through that invocation; parent identity checks passed.
-No prior payload bytes or credentials were read in this implementation. The
-original private parent, partial payload and receipt were not changed, deleted
-or reused. Both uncommitted NAS records remain unchanged; these facts are folded
-into this substantive handoff.
+No selected assertion phase remained unreached. This invocation does not repeat
+the full bridge's validator proof. No unchanged ledger/14.58s selector bundle,
+private 295.37s integration, full suite or CI workflow was rerun. No live
+HF/OIDC/Azure/model/grade call, workflow dispatch, permission change, inference
+replay, Project edit or merge occurred.
 
-The producer remains the successful consumed cell at
-`e355faf9a6212175a288e8473968915ffb2408d0`,
-[run 36696961231, attempt 1](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36696961231/attempts/1),
-[job 109837605787](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36696961231/job/109837605787).
-The leader's receipt at `2026-09-30T10:58:12.8033229Z` reported `status=succeeded`,
-`cleanup_confirmed=true`, `remote_terminal=acknowledged`, `grade=null`,
-`grading_launched=false` and `invoice_complete=false`; the job and workflow
-succeeded. The reader supports only cell
-`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1` and request
-`ed8b51f6d80e641922013eba9e19d7d3e145d84ae15fb8d7d9509e643c975c68`.
-Producer, later reader and historical observer identities remain distinct.
-This produced outcome is not a score or independent retained-byte verification.
+### Reviewed head and separate previous observations
 
-Prior offline evidence remains separate in the
-[immutable PR707 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c787d5819eb52fa733bab4529d3a3c6dcbd9cb6a/tasks/LATEST_TASK_RESULT/README.md):
+The owner's REQUEST-CHANGES
+[review 5371296460](https://github.com/hyeonsangjeon/gdpval-realworks/pull/709#pullrequestreview-5371296460)
+was at `a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95`. The leader directly read
+[CI run 36764747855 / job 110055972491](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36764747855/job/110055972491):
+**1 failed, 13298 passed, 64 skipped, 46 deselected in 933.35s**. Its sole failure
+was the stale exact route expectation at `test_step8_grade.py:3489`; the later
+coupled expressions in that test were not reached. Those reported CI counts
+were not polled or rerun, and this local pass is not a new CI result.
 
-- `9c34db608209a084b61b18fdbeea067634028e36`: 1 collected, 1 failed in 2.75s,
-  exit 1. Initial binding/refusal and valid synthetic intake checks completed;
-  raw partial accounting hit `retention_accounting_mismatch` before later cases.
-- `fdfb9b2757da9b164caf6985bd6155a48aaa6c0b`: 1 collected, 1 failed in 6.58s,
-  exit 1. Projected partial accounting, empty-ledger, corruption and path checks
-  completed; the omitted `ReferenceIntegrityError` stopped member post-refusal
-  and subsequent marker/readback/fsync assertions.
-- `e1206a704d649aac18d029670029def4c70fc18e`: 1 collected, 1 passed in 8.03s,
-  exit 0, no skip. Real validators with synthetic retained records/transport
-  completed the remaining publication and no-effect checks, not live intake.
+The earlier **2 collected, 2 passed in 14.58s, exit 0** at
+`117d0ded256fde2794b4be02bbb0cef78c38c6dd` remains a separate observation. Its
+[immutable ledger/bridge handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95/tasks/LATEST_TASK_RESULT/README.md#project5-retention-grade-ledger-binding)
+preserves the tested tree/log identity, exact non-authorizing ledger binding,
+103 preserved plus 22 added static assertion/refusal nodes, and real validators
+with synthetic input/transport/child boundaries through publication,
+lost-acknowledgement reconciliation and final no-effects. It did not prove the
+workflow wiring corrected here. No earlier pass or failure was replayed.
 
-### Remaining gates and future dispatch form
+### Earlier failures remain separate
 
-New-head immutable owner review and CI remain, followed by one separately
-authorized CI read at an exact reviewed main/workflow SHA. The form below is
-not a dispatch or permission to run it. `REVIEWED_MAIN_SHA` must equal that
-later approved main HEAD and workflow source; the producer/request stay fixed
-inside the reviewed reader and workflow.
+The prior full handoffs and both then-uncommitted records were preserved
+unchanged at `117d0ded256fde2794b4be02bbb0cef78c38c6dd`. Their
+[immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md)
+retains the exact safe traces and then-current pending work.
 
-```bash
-gh workflow run codex-retention-first-cell.yml \
-  --repo hyeonsangjeon/gdpval-realworks --ref main \
-  -f reviewed_source_sha="$REVIEWED_MAIN_SHA" \
-  -f cell_id=3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 \
-  -f read_result=true -f prepare=false -f observe_locator=false -f execute=false
-```
+| Tested HEAD | Separate result | Reached / not reached at that time |
+| --- | --- | --- |
+| `ef2708ccf85ffdea04cbaa7e94909cf84a361b94` | 1 collected, 1 failed in 2.96s, exit 1 | Workflow/config/CLI and synthetic intake completed; nonexistent `grade.TERMINAL_FORMAT` stopped predecessor-fixture construction before preparation, predecessor verification, claim, judge or publication. |
+| `e1d20767c93bd057504ac5568c5a7e4b2708c1b3` | 1 collected, 1 failed in 7.15s, exit 1 | Fixture construction and approval/source negatives completed; the real materializer refused the complete intake root before prepared/grader, predecessor-verification, claim/judge or publication assertions. |
+| `be0761cdeca4d9e15bbd676f1112dd73a23a8c66` | 1 collected, 1 failed in 14.54s, exit 1 | Real materialization/readiness, synthetic predecessor checks, simulated claim/judge and duplicate refusals completed; `fixed_grading_ledger_run_required` stopped before publication reservation/output transport, reconciliation and final assertions. |
 
-A successful hash-bound intake receipt may support the separately directed
-one-fixed-grade handoff; it grants neither grading nor execution authority.
-Input/config/materialized-grader/source binding remains required for that grade.
-No independent live retained-byte verification has completed. Missing or partial
-accounting is not zero or an invoice; HTTP requests are not model-call counts.
-No credential-store search, CI secret export, permission change, HF/OIDC/Azure/
-model/grade call, dispatch, inference replay or successor cell occurred here.
-Earlier worktrees, branches and `wip/local-main-preserved-20260719` are preserved.
-The leader's unavailable M4 files were not updated.
+The new pass does not retroactively change any of those failures into a pass.
+Earlier NAS prerequisite refusal, intake-fixture failures and their later
+synthetic passes remain distinct in the
+[immutable PR708 evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ece7057a838e6a97d0c7441b2b2617f503a5adc2/tasks/LATEST_TASK_RESULT/README.md).
+None was rerun.
+
+### Actual producer/intake evidence and remaining gates
+
+The successful producer remains `e355faf9a6212175a288e8473968915ffb2408d0`,
+[run 36696961231 / job 109837605787](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36696961231/job/109837605787).
+The leader's actual verified intake remains
+[run 36739260150 / job 109969006748](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36739260150/job/109969006748)
+at `2026-09-30T15:48:51.8896422Z`, with intake SHA256
+`dbdb64c0ea4769c37b1954c972823777dbd90bf6dbde77ddbcef2e169eb4eb32`.
+Its original-input stages 6–10 and approval/execution jobs were skipped;
+source/hash step 11 and read step 12 succeeded. No inference or grader ran in
+that read. Terminal `de50ff0aa6037c0ef6e3b713da519359abd1d08d`, claim
+`3fc283087a020caec574e8c9b8e9bc3ca593e88a` and output
+`43cbf8e265297813857172ecee51256cc17f2d36` remain fixed. Full object hashes,
+request/cell/result fingerprints and the separately verified historical grading
+parent remain in the
+[preserved identity record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-verified-grading-predecessor).
+The completed model-free UNGRADED predecessor is neither an unfinished claim
+nor a score; its historical observation does not establish today's branch head.
+
+Actual accounting is still partial: 10 recorded model calls, known cost USD
+`0.409894`, `runtime_cost_usd=null` and
+`missing_reasons=[call_reachability_unknown]`. These are not HTTP request counts,
+zero cost or an invoice; top-level `missing=[]` does not make accounting complete.
+`grade=null`, `grading_launched=false` and `invoice_complete=false` remain.
+Successful inference and retained intake are consumed and were not replayed.
+
+The approved base remains `5b05c4617902491bd180a78365f00df4e5584895`, PR708
+reviewed head `ece7057a838e6a97d0c7441b2b2617f503a5adc2`,
+[review 5368244291](https://github.com/hyeonsangjeon/gdpval-realworks/pull/708#pullrequestreview-5368244291),
+with the leader-reported 10 passing checks. Those checks were not polled or
+rerun. New-head immutable review and CI remain pending for this bridge. Later
+exact-source/input direction must still bind the pinned terminal/result,
+receipt/marker/readback, original Task4 inputs and rubric
+`11e7900cdcac61bc4daf59e65feb238acda98fbf`, and the actual materialized grader
+`c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`
+before the serial one-use claim or judge. Same-run protected owner approval
+remains mandatory. The fixed judge remains `default_v2_sol_max.yaml`,
+GPT-5.6 Sol / max, Ubuntu 24.04 / Python 3.11,
+with the existing 240-minute ceiling. Producer, reader, historical observer and
+grading-source identities stay distinct; parent drift, force/resume/shards,
+regrade and ambiguous cleanup still refuse. Budget authority remains delegated.
+
+Only completion records changed after this 1.52s pass. Author and committer remain
+`hyeonsangjeon <wingnut0310@gmail.com>`, with no attribution trailers. The
+authorized publication is one ordinary push to the existing PR709 branch, not a
+new PR or live grade. Prior worktrees/branches, `wip/local-main-preserved-20260719`, uncommitted
+NAS refusal records and `/ai-work/copilot/retention-intake-private-20260930-2239`
+remain unchanged. The leader's unavailable M4 files were not updated.

@@ -88,7 +88,7 @@ concurrency:
 
 jobs:
   validate-request:
-    if: ${{ !startsWith(inputs.experiment_yaml, 'pilot/') }}
+    if: ${{ !startsWith(inputs.experiment_yaml, 'pilot/') && !startsWith(inputs.experiment_yaml, 'retention/') }}
     runs-on: ubuntu-24.04
     outputs:
       approval_inherited: ${{ steps.inherit.outputs.approval_inherited }}
@@ -381,6 +381,7 @@ jobs:
     if: >-
       ${{
         !startsWith(inputs.experiment_yaml, 'pilot/') &&
+        !startsWith(inputs.experiment_yaml, 'retention/') &&
         inputs.dry_run == false &&
         inputs.paid_approval == true &&
         needs.validate-request.outputs.approval_inherited != 'true'
@@ -462,7 +463,7 @@ jobs:
   # ---------------------------------------------------------------------------
   grade-dry-run:
     needs: validate-request
-    if: ${{ !startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true }}
+    if: ${{ !startsWith(inputs.experiment_yaml, 'pilot/') && !startsWith(inputs.experiment_yaml, 'retention/') && inputs.dry_run == true }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
@@ -665,6 +666,7 @@ jobs:
       ${{
         !cancelled() &&
         !startsWith(inputs.experiment_yaml, 'pilot/') &&
+        !startsWith(inputs.experiment_yaml, 'retention/') &&
         inputs.dry_run == false &&
         inputs.paid_approval == true &&
         needs.validate-request.result == 'success' &&
@@ -1822,10 +1824,14 @@ jobs:
             ${{ steps.analysis.outputs.analysis_file }}
           retention-days: 30
 
-  # Reserved pilot selectors never enter the generic paid/resume/publication
+  # Reserved pilot/ and retention/ selectors never enter generic paid/resume/publication
   # jobs above. These jobs leave inference completion-v1 and HF main unchanged.
   pilot-plan:
-    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == true }}
+    # Unknown retention selectors refuse here, without a protected approval or credentials.
+    if: >-
+      ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || startsWith(inputs.experiment_yaml, 'retention/')) &&
+          inputs.experiment_yaml != 'pilot/grade-readout' &&
+          (inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && inputs.experiment_yaml != 'retention/first-cell')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -1833,7 +1839,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'retention/first-cell' && 'e355faf9a6212175a288e8473968915ffb2408d0' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -1868,7 +1874,7 @@ jobs:
   pilot-approve-paid:
     name: Approve paid pilot grading
     if: >-
-      ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true &&
+      ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true &&
           github.repository == 'hyeonsangjeon/gdpval-realworks' && github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' && github.sha == github.workflow_sha && github.run_attempt == '1' }}
     runs-on: ubuntu-24.04
@@ -1952,6 +1958,19 @@ jobs:
               "inference_branch": "pilot-inference-20260925-04", "grading_branch": "pilot-grades-20260925-04",
               "github_run_id": os.environ["GITHUB_RUN_ID"], "github_run_attempt": 1, "inputs": inputs,
           }
+          if selector == "retention/first-cell":
+              # This one retained result is not an original pilot producer.
+              expected = {"experiment_yaml": selector,
+                  "inference_revision": "de50ff0aa6037c0ef6e3b713da519359abd1d08d",
+                  "grading_config": "default_v2_sol_max.yaml", "force": False, "tasks_limit": 0,
+                  "tasks": "", "dry_run": False, "paid_approval": True, "resume": False,
+                  "resume_chunk": 0, "shard_count": 1, "shard_index": 0, "run_ordinal": 1}
+              if inputs != expected:
+                  raise SystemExit("fixed_retention_grade_inputs_refused")
+              request.update(producer_source_sha="e355faf9a6212175a288e8473968915ffb2408d0",
+                  cell_id="3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1",
+                  campaign_id="retention_bundle_diagnostic_20260929",
+                  retention_evidence_sha256="1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d")
           encoded = json.dumps(request, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               stream.write("request_sha256=" + hashlib.sha256(encoded).hexdigest() + "\n")
@@ -1959,7 +1978,7 @@ jobs:
 
   pilot-live:
     needs: [pilot-approve-paid]
-    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true && needs.pilot-approve-paid.result == 'success' }}
+    if: ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true && needs.pilot-approve-paid.result == 'success' }}
     runs-on: ubuntu-24.04
     # Approval is a mandatory same-run dependency above. This execution job
     # retains the main-ref OIDC subject, not the grading-environment subject.
@@ -1979,7 +1998,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'retention/first-cell' && 'e355faf9a6212175a288e8473968915ffb2408d0' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -2157,10 +2176,29 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           umask 077
+          publication_status=0
           python batch-runner/codex_budget_pilot_grading.py --phase publish \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
             --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
-            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade" || publication_status=$?
+          if [[ "$GRADE_SELECTOR" == "retention/first-cell" && "$publication_status" -ne 0 ]]; then
+            printf 'retention_publication_exit_code=%s\n' "$publication_status"
+            if [[ -f "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" &&
+                  ! -L "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" &&
+                  -O "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" ]]; then
+              # Observe this same owner's reservation once; never repair the writer receipt.
+              reconciliation_status=0
+              python batch-runner/codex_budget_pilot_grading.py --phase reconcile \
+                --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+                --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
+                --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade" || reconciliation_status=$?
+              printf 'retention_reconciliation_exit_code=%s\n' "$reconciliation_status"
+            else
+              printf '%s\n' 'retention_reconciliation=not_attempted_no_owned_reservation'
+            fi
+          fi
+          # A verified server observation does not establish writer acknowledgment.
+          exit "$publication_status"
       # No Actions artifact or generic completion-envelope step: all grade,
       # source-identity, ledger, payload and child-log files stay private.
 
@@ -2252,7 +2290,7 @@ jobs:
     # Not `success()`. A run that pushed its grade and then died at a later
     # step is exactly the run whose published commit is unverified, and gating
     # on the paid job's overall result would skip precisely that case.
-    if: ${{ always() && !startsWith(inputs.experiment_yaml, 'pilot/') && needs.grade.outputs.published_commits != '' }}
+    if: ${{ always() && !startsWith(inputs.experiment_yaml, 'pilot/') && !startsWith(inputs.experiment_yaml, 'retention/') && needs.grade.outputs.published_commits != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Strictly narrower than the job it follows. This one reads the tree and

@@ -660,14 +660,15 @@ def _cwd(path: Path):
         os.chdir(previous)
 
 
-def _stage_rubric(context: Context, checkout: Path, api, cache: Path, token: str, deadline: float) -> dict:
+def _stage_rubric(context: Context, checkout: Path, api, cache: Path, token: str, deadline: float,
+                  *, original_origins=None) -> dict:
     """Only registered parquet and this task's pinned references; no Step0/gold."""
     from codex_ci_input_intake import _hf_origins, HFRole
     from core.rubric_loader import RubricLoader
 
     config = json.loads(context.run.grader_config_json)
     rubric = config["rubric"]
-    revision, specs, origins = _hf_origins()
+    revision, specs, origins = _hf_origins() if original_origins is None else original_origins
     require(rubric["revision"] == revision and rubric["repo_id"] == "openai/gdpval",
             "fixed_rubric_identity_mismatch")
     data_root = (checkout / "batch-runner" / rubric["cache_dir"]).resolve()
@@ -735,8 +736,9 @@ def _entry_contract(context: Context, checkout: Path, revision: str) -> dict:
         step8.validate_local_deliverables(tasks, Path("workspace/upload"))
         require(experiment.name == json.loads(run.experiment_config_json)["experiment"]["name"],
                 "materialized_experiment_mismatch")
-        config_hash = step8.hash_config("comparison-grading.json")
-        source_hash = step8.compute_grader_source_hash("comparison-grading.json", config)
+        config_path = Path(run.grader_config_path).relative_to("batch-runner").as_posix()
+        config_hash = step8.hash_config(config_path)
+        source_hash = step8.compute_grader_source_hash(config_path, config)
         path = _grade_path(context, config_hash, source_hash, revision)
         from core.task_checkpoint import checkpoint_path
         names = [path.name, path.stem + ".cost_ledger.jsonl", checkpoint_path(path, context.cell["task_id"]).name]
@@ -1206,38 +1208,43 @@ def judge(context: Context, root: Path, *, _test_transport=None) -> dict:
     with _lock(root) as descriptor:
         prepared = _ready(context, root)
         admitted = _admission(context, root, prepared)
-        # The local reservation is additional to, not a substitute for, CAS.
-        _record(root / "judge-reserved.json", {"claim_commit": admitted["returned_commit"],
-                                              "claim_identity": admitted["claim_identity"]})
-        checkout = root / "source"
-        grade_path = checkout / prepared["entry"]["grade_path"]
-        from core.task_checkpoint import checkpoint_path
-        forbidden = [grade_path, checkpoint_path(grade_path, context.cell["task_id"])]
-        forbidden += [grade_path.with_name(grade_path.stem + ".cost_ledger." + suffix) for suffix in ("jsonl", "sqlite3")]
-        require(not any(os.path.lexists(path) for path in forbidden), "existing_grade_or_ledger_refused")
-        result = {"entry_invoked": False, "exit_code": None, "timed_out": False, "cleanup_confirmed": False}
-        owner_binding = {"plan_sha256": hashlib.sha256(context.grading.canonical_bytes()).hexdigest(),
-                         "cell_id": context.cell["cell_id"], "stage": "fixed_grading", "attempt": 1}
-        transport = _test_transport or pilot.LocalTransport()
-        for name in ("judge.stdout", "judge.stderr"):
-            output._write_no_clobber(root / name, b"")
-        with (root / "judge.stdout").open("ab") as stdout, (root / "judge.stderr").open("ab") as stderr:
-            try:
-                result["entry_invoked"] = True
-                completed = transport.process(list(context.run.command), ownership=(root / "judge-owner.json", owner_binding),
-                    cwd=checkout / "batch-runner", env=_judge_environment(root), stdout=stdout, stderr=stderr,
-                    timeout=CHILD_SECONDS, check=False, pass_fds=(descriptor,))
-                result["exit_code"] = completed.returncode
-            except subprocess.TimeoutExpired:
-                result["timed_out"] = True
-            except (Exception, KeyboardInterrupt):
-                pass  # Owned cleanup state below is authoritative; never retry.
-        if (root / "judge-owner.json").exists():
-            owner = output._checkpoint(root / "judge-owner.json")
-            result["cleanup_confirmed"] = all(owner.get(key) == value for key, value in owner_binding.items()) and (
-                owner.get("phase") == "reaped" and owner.get("tree_reaped") is True and owner.get("owner_reaped") is True)
-        _record(root / "judge-receipt.json", result)
-        return result
+        return _owned_judge(context, root, prepared, admitted, descriptor, _test_transport=_test_transport)
+
+
+def _owned_judge(context, root, prepared, admitted, descriptor, *, _test_transport=None):
+    """Existing one-use child body; callers must retain their ready/admission gates."""
+    # The local reservation is additional to, not a substitute for, CAS.
+    _record(root / "judge-reserved.json", {"claim_commit": admitted["returned_commit"],
+                                          "claim_identity": admitted["claim_identity"]})
+    checkout = root / "source"
+    grade_path = checkout / prepared["entry"]["grade_path"]
+    from core.task_checkpoint import checkpoint_path
+    forbidden = [grade_path, checkpoint_path(grade_path, context.cell["task_id"])]
+    forbidden += [grade_path.with_name(grade_path.stem + ".cost_ledger." + suffix) for suffix in ("jsonl", "sqlite3")]
+    require(not any(os.path.lexists(path) for path in forbidden), "existing_grade_or_ledger_refused")
+    result = {"entry_invoked": False, "exit_code": None, "timed_out": False, "cleanup_confirmed": False}
+    owner_binding = {"plan_sha256": hashlib.sha256(context.grading.canonical_bytes()).hexdigest(),
+                     "cell_id": context.cell["cell_id"], "stage": "fixed_grading", "attempt": 1}
+    transport = _test_transport or pilot.LocalTransport()
+    for name in ("judge.stdout", "judge.stderr"):
+        output._write_no_clobber(root / name, b"")
+    with (root / "judge.stdout").open("ab") as stdout, (root / "judge.stderr").open("ab") as stderr:
+        try:
+            result["entry_invoked"] = True
+            completed = transport.process(list(context.run.command), ownership=(root / "judge-owner.json", owner_binding),
+                cwd=checkout / "batch-runner", env=_judge_environment(root), stdout=stdout, stderr=stderr,
+                timeout=CHILD_SECONDS, check=False, pass_fds=(descriptor,))
+            result["exit_code"] = completed.returncode
+        except subprocess.TimeoutExpired:
+            result["timed_out"] = True
+        except (Exception, KeyboardInterrupt):
+            pass  # Owned cleanup state below is authoritative; never retry.
+    if (root / "judge-owner.json").exists():
+        owner = output._checkpoint(root / "judge-owner.json")
+        result["cleanup_confirmed"] = all(owner.get(key) == value for key, value in owner_binding.items()) and (
+            owner.get("phase") == "reaped" and owner.get("tree_reaped") is True and owner.get("owner_reaped") is True)
+    _record(root / "judge-receipt.json", result)
+    return result
 
 
 def _no_raw_grade(value, depth=0) -> None:
@@ -1315,7 +1322,9 @@ def _grade_outcome(payload: dict | None, child: dict, *, progress: bool) -> str:
     return outcome
 
 
-def _grade_files(context: Context, root: Path, prepared: dict, child: dict) -> tuple[dict[str, bytes], dict[str, str], str]:
+def _grade_files(context: Context, root: Path, prepared: dict, child: dict, *,
+                 retention_first_cell_binding: output.RetentionFirstCellLedgerBinding | None = None
+                 ) -> tuple[dict[str, bytes], dict[str, str], str]:
     from core.task_checkpoint import checkpoint_path, load_checkpoint
 
     checkout = root / "source"
@@ -1331,7 +1340,8 @@ def _grade_files(context: Context, root: Path, prepared: dict, child: dict) -> t
     ledger_path = path.with_name(path.stem + ".cost_ledger.jsonl")
     if os.path.lexists(ledger_path):
         data = output._bytes(ledger_path, limit=output.MAX_RECORD_BYTES)
-        output._ledger(data, context.cell, grading_run_id=prepared["entry"]["cost_run_id"])
+        output._ledger(data, context.cell, grading_run_id=prepared["entry"]["cost_run_id"],
+                       retention_first_cell_binding=retention_first_cell_binding)
         relative = str(ledger_path.relative_to(checkout))
         if payload is not None and payload.get("cost_ledger") is not None:
             from core.cost_receipts import ledger_reference
@@ -1453,6 +1463,9 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
     args = None
     try:
         args = parser.parse_args(argv)
+        if args.selector.startswith("retention/"):
+            from codex_retention_fixed_grade import main as retention_main
+            return retention_main(argv, _test_api=_test_api, _test_transport=_test_transport)
         from codex_budget_pilot_grade_readout import SELECTOR as READOUT_SELECTOR, main as readout_main
         if args.selector == READOUT_SELECTOR:
             return readout_main(args, _test_api=_test_api, _test_transport=_test_transport)

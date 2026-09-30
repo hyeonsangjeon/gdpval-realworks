@@ -13,6 +13,107 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Reconcile a reserved `retention/first-cell` publication at most once in its
+  existing owning job, after the bounded CI/auth decision. Only a nonzero
+  publish exit and an owned regular non-symlink reservation permit the same
+  canonical read-only command with unchanged binding arguments and credential
+  scope. Preserve `publication-receipt.json` and the original nonzero exit;
+  emit the separate safe server observation with
+  `writer_acknowledgment=not_established`. No pre-reservation/success/legacy
+  reconciliation, republish, claim/judge re-entry or permission change is added.
+  Synchronize all seven directly coupled exact expressions in the Step8 route
+  test, preserving its 138 assertions. At
+  `120ff70f382d54eef97452099ede06fa6bbb242c`, one isolated invocation collected
+  2 and passed 2 in 1.52s, exit 0: the exact Step8 test and ten executable-shell
+  routing scenarios, with only external CLI responses simulated. Keep the
+  earlier 2PASS/14.58s below separate from the leader-read CI run36764747855 /
+  job110055972491, 1failed/13298passed/64skipped/46deselected in933.35s, whose
+  sole failure was the stale route expectation. Owner review5371296460 was
+  REQUEST-CHANGES at `a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95`; new-head
+  immutable review/CI and later exact-source one-grade authorization remain.
+  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-pr709-routing-and-reconciliation)
+  records the distinct evidence and unchanged producer/intake, null grade and
+  partial accounting. No live grade, invoice, CI rerun, inference replay or
+  leader M4 update is implied.
+- Bind the first retention grade's ledger to its actual Step8-derived
+  `retention/first-cell|<16 lowercase hex>|<64 lowercase hex>` identity after
+  bounded auth/storage review. A frozen, non-authorizing config/source binding
+  passes only from the revalidated fixed Task4 keep-r1 bridge after admission
+  and cleanup; inference/pilot defaults, row validation and pointer/hash checks
+  remain unchanged. No ledger bytes are rewritten or priced. At
+  `117d0ded256fde2794b4be02bbb0cef78c38c6dd`, one isolated invocation collected
+  2 and passed 2 in 14.58s, exit 0, covering exact retention/legacy contracts and
+  the full synthetic bridge through publication, lost-acknowledgement
+  reconciliation, duplicate refusal and final no-effect assertions. Preserve
+  the distinct 2.96s, 7.15s and 14.54s failures below. The
+  [ledger-validation result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95/tasks/LATEST_TASK_RESULT/README.md#project5-retention-grade-ledger-binding)
+  separates offline proof from the consumed successful producer/intake, null
+  grade and partial accounting. New-head review/CI and later exact-source
+  one-grade authorization remain; no live grade, invoice, inference replay or
+  leader M4 update is implied.
+- Stage only verified retained deliverables in a fresh private `original-upload`
+  directory before materialization, following the bounded auth/storage decision.
+  The production bridge had passed the complete intake root; result JSON and its
+  adjacent ledger now remain outside `source_upload`, with all evidence and
+  validators intact. At `be0761cdeca4d9e15bbd676f1112dd73a23a8c66`, the one offline
+  selector collected 1 and failed 1 in 14.54s, exit 1. Handoff/materialization,
+  readiness, predecessor checks, simulated claim/judge and cleanup negatives
+  completed; publication validation refused `fixed_grading_ledger_run_required`
+  before output/reconciliation/final-effect assertions. This is not an integration
+  pass or a live grade. Preserve the distinct 2.96s and 7.15s failures below and
+  genuine producer/intake success, null grade and partial accounting. The
+  [then-current follow-up](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-grade-deliverable-source-boundary)
+  records exact scope, unchanged controls and remaining ledger-boundary work,
+  immutable review/CI and exact-source one-grade gates. No repair, retry, push or
+  new PR followed in that attempt. The completion records were left uncommitted
+  then and were later preserved in the linked immutable handoff. Leader M4
+  files were not updated.
+- Correct only the graded synthetic predecessor terminal reference to
+  `codex_budget_pilot_grading.RESULT_FORMAT`; model-free records keep their
+  existing owners and UNGRADED meaning. At
+  `e1d20767c93bd057504ac5568c5a7e4b2708c1b3`, one offline selector collected 1
+  and failed 1 in 7.15s, exit 1. Fixture construction and early approval/source
+  refusals completed; `bridge.prepare` then raised `CodexGradingInputRefused`:
+  `Codex grading input refused: source root must contain only deliverable_files`.
+  Prepared/grader, predecessor-verification, claim, judge, cleanup/publication
+  and final no-effect assertions were not reached. Preserve the separate
+  `ef2708ccf85ffdea04cbaa7e94909cf84a361b94` 2.96s failure below and actual
+  producer/intake success; no live grade or complete invoice is implied.
+  Production/workflow bytes and all assertions are unchanged. The
+  [follow-up result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-grade-fixture-format-owner)
+  records the new boundary and remaining correction/validation, immutable
+  review/CI and exact-source one-grade gates. No repair, rerun, push or new PR
+  followed in that attempt. The completion records were left uncommitted then
+  and were later preserved in the linked immutable handoff. Unavailable leader
+  M4 files were not updated.
+- Implement the local `retention/first-cell` fixed-grade bridge after the bounded
+  CI/auth/storage decision. The leader's saved verified readout `36337865696`
+  resolves the prior missing local provenance: final Task5 A2 model-free
+  UNGRADED terminal `b057ed17849c0ab31b0adfb8c28109d4d34a50f7` is the exact grading
+  parent, distinct from retention inference terminal
+  `de50ff0aa6037c0ef6e3b713da519359abd1d08d`. This is historical evidence, not a new
+  live read or permission grant. The bridge reuses the fixed reader, materializer,
+  seven-pair history check, protected approval, owned judge and add-only CAS;
+  existing job permissions and old pilot routes remain. Unknown `retention/`
+  selectors cannot enter generic grading. At local tested HEAD
+  `ef2708ccf85ffdea04cbaa7e94909cf84a361b94`, the single offline invocation collected
+  1 and failed 1 in 2.96s, exit 1: test `_seed_parent` line 136 referenced the
+  nonexistent `codex_budget_pilot_grading.TERMINAL_FORMAT`. Workflow/approval,
+  inert CLI and synthetic retained intake checks completed first; bridge
+  preparation, predecessor verification, claim, judge, cleanup, publication and
+  final no-effect assertions were not reached. No repair, retry, push or new PR
+  followed in that attempt. Preserve actual intake run `36739260150` / job `109969006748`, its
+  verified bytes and skipped inference/grading routes, separately from this
+  failure, the NAS prerequisite refusal and earlier synthetic outcomes. Accounting
+  stays partial at 10 recorded model calls, known cost USD `0.409894`, null
+  runtime cost and grade, `call_reachability_unknown`, and an incomplete invoice.
+  The [then-current result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-verified-grading-predecessor)
+  records exact immutable identities, the PR708 base/review, unchanged
+  reader/verifier/grader controls and reached/unreached boundaries. Fixture
+  correction/validation, new-source review/CI and separately directed one-grade
+  authorization remained at that point. These post-validation records were
+  left uncommitted then and were later preserved in the linked immutable handoff;
+  prior NAS records/destination and unavailable leader M4 files were not changed.
 - Add an explicit, default-false `read_result` mode to the existing retention
   first-cell workflow after a bounded CI/auth review. Only the contents-read
   preparation job can use the existing step-scoped HF secret for the fixed

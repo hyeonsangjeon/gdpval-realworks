@@ -3486,12 +3486,16 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     approval_job = parsed["jobs"]["approve-paid"]
     dry_run_job = parsed["jobs"]["grade-dry-run"]
     grade_job = parsed["jobs"]["grade"]
-    assert _gh_expr(validate_job["if"]) == "!startsWith(inputs.experiment_yaml, 'pilot/')"
+    assert _gh_expr(validate_job["if"]) == (
+        "!startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "!startsWith(inputs.experiment_yaml, 'retention/')"
+    )
     assert approval_job["needs"] == "validate-request"
     # A paid request goes to the protected environment unless validate-request
     # proved the run inherits the approval already given for this shard.
     assert _gh_expr(approval_job["if"]) == (
         "!startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "!startsWith(inputs.experiment_yaml, 'retention/') && "
         "inputs.dry_run == false && "
         "inputs.paid_approval == true && "
         "needs.validate-request.outputs.approval_inherited != 'true'"
@@ -3500,7 +3504,8 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "permissions" not in approval_job
     assert dry_run_job["needs"] == "validate-request"
     assert _gh_expr(dry_run_job["if"]) == (
-        "!startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true"
+        "!startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "!startsWith(inputs.experiment_yaml, 'retention/') && inputs.dry_run == true"
     )
     assert dry_run_job["permissions"] == {"contents": "read"}
     assert "environment" not in dry_run_job
@@ -3529,6 +3534,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert _gh_expr(grade_job["if"]) == (
         "!cancelled() && "
         "!startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "!startsWith(inputs.experiment_yaml, 'retention/') && "
         "inputs.dry_run == false && "
         "inputs.paid_approval == true && "
         "needs.validate-request.result == 'success' && "
@@ -3580,11 +3586,13 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     pilot_approval = parsed["jobs"]["pilot-approve-paid"]
     pilot_live = parsed["jobs"]["pilot-live"]
     assert _gh_expr(pilot_plan["if"]) == (
-        "startsWith(inputs.experiment_yaml, 'pilot/') && "
-        "inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == true"
+        "(startsWith(inputs.experiment_yaml, 'pilot/') || startsWith(inputs.experiment_yaml, 'retention/')) && "
+        "inputs.experiment_yaml != 'pilot/grade-readout' && "
+        "(inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && "
+        "inputs.experiment_yaml != 'retention/first-cell'))"
     )
     assert _gh_expr(pilot_live["if"]) == (
-        "startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "(startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell') && "
         "inputs.experiment_yaml != 'pilot/grade-readout' && "
         "inputs.dry_run == false && inputs.paid_approval == true && "
         "needs.pilot-approve-paid.result == 'success'"
@@ -3638,6 +3646,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     # the condition cannot be "simplified" back into skipping it.
     assert _gh_expr(verify_job["if"]) == (
         "always() && !startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "!startsWith(inputs.experiment_yaml, 'retention/') && "
         "needs.grade.outputs.published_commits != ''"
     )
     # Strictly narrower than the job it follows, and asserted rather than
