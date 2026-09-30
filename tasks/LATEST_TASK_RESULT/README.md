@@ -1,68 +1,58 @@
 # Latest task result
 
-## PROJECT5-OBSERVED-LOCATOR-ROUTE-FIX
+## PROJECT5-RETENTION-CANONICAL-ENTRYPOINT
 
-The issuance predicate and closed diagnostics now share one exact matcher for
-the unchanged legacy route and `/<digits>//idtoken/<UUID>/<UUID>`. At
-`0fab70ea73cd1fe8ede065db5ef42bc5a84781e0`, the extended offline locator
-selector reported 1 collected, 1 passed in 2.25s, exit 0. This verifies support
-for the observed structure, not successful live authentication or admission.
+The script footer now delegates to canonical `codex_retention_ci.main`, keeping
+the CLI, controller dispatch and authority classes in one module namespace.
+At `2833511e5a00a88ea442e85968c3dc742e8730a5`, the single offline regression
+reported 1 collected, 1 passed in 2.13s, exit 0. This verifies entrypoint and
+refusal behavior, not private preparation, live authentication or admission.
 
-Branch `b/codex-retention-observed-locator-route-20260930` starts at exact
-main `bbf6f8b98f7783f448ee2da5a7ef589c65f61fd3`, tree
-`7da0dcf9f25b0e4cb650f2b6f3d4391aee2a981c`. The leader supplied all 10 passing
-checks at prior PR704 head `bbf5454254ebded6cbcb94b7773bcf7f284044dd`,
-[review 5361514862](https://github.com/hyeonsangjeon/gdpval-realworks/pull/704#pullrequestreview-5361514862).
-That review does not approve this new source. Prior branches/worktrees and
+Branch `b/codex-retention-canonical-entrypoint-20260930` starts at exact main
+`cea5fae1d1c975cfda079263cb552dad7ef46bed`, tree
+`6443916ea56431b734a0c8c3e363956864c29303`. The leader supplied all 10 passing
+checks at PR705 head `8d352b0585d1e82e2ecfa37db9cd9a7fa9a35a21`,
+[review 5362287830](https://github.com/hyeonsangjeon/gdpval-realworks/pull/705#pullrequestreview-5362287830).
+That review does not approve this new source. Earlier branches/worktrees and
 `wip/local-main-preserved-20260719` remain untouched.
 
-### Actual observation supplied by the leader
+### Supplied live evidence and source trace
 
-In completed [run 36669478415, attempt 1](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36669478415/attempts/1),
-[execution job 109754018823](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36669478415/job/109754018823)
-reported the following at `2026-09-30T05:33:53.5678235Z`:
-
-- Reason `github_job_issuance_locator_observation_only`; `launch_authorized=false`,
-  `grading_launched=false`, `truncated=false`.
-- `registered_route=false`. All other checks were true: `allowed_host_pattern`,
-  `hostname_only_authority`, `https`, `known_api_query`, `length_within_limit`,
-  `no_fragment`, `not_oidc_issuer`, `query_parsed`, `url_parsed`.
-- Counts: `api_version_parameters=1`, `audience_parameters=0`, `host_labels=4`,
-  `other_query_parameters=0`, `query_pairs=1`, `route_segments=5`.
-- Route skeleton `["{number}","{empty}","idtoken","{uuid}","{uuid}"]`.
-
-Observation step 11 succeeded. Signed-token verification 12, sandbox 13,
-Azure login 14 and claim/run/reconcile 15 were skipped. This establishes the
-current run's route mismatch, not the old run's exact URL or a model result.
-No bearer, raw URL or identifier was supplied in the evidence, and no hostname
-or UUID meaning is inferred. The observation was not repeated here.
-
-[Preparation job 109741183729](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36669478415/job/109741183729)
-succeeded. Execution preparation reproduced request SHA256
-`c9651a51284b0ea71a0e8858f330b8e11ad0a3bba1e17c6ddf008b7c8e23abbf`
+The leader read [run 36681464982, attempt 1](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36681464982/attempts/1),
+[execution job 109786614084](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36681464982/job/109786614084).
+At `2026-09-30T07:36:23.5257322Z`, preparation repeated the same request SHA256
+`0d29d245677ce2f7900aa888d595c0eddbdab29ee6c174846be8dca77e62af0c`
 and materialized-grader SHA256
 `c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`.
-The owner observation-only approval persisted once in `grading18744914306`,
-deployment `6751627582`; [approval job 109741872495](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36669478415/job/109741872495)
-succeeded. Those facts are not an execution grant. They are preserved in this
-substantive repository change; the leader's unavailable local M4 volume was
-not accessed or updated.
+The exact owner approval persisted once, deployment `6753601005`;
+[approval job 109778536686](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36681464982/job/109778536686)
+succeeded. These are supplied run observations, not new local materialization.
 
-### Exact change and offline evidence
+Step 12 signed approval/job-origin verification succeeded at
+`2026-09-30T07:36:31.8798539Z` with `approval_verified=true` and
+`admission_attempted=false`. Sandbox 13 and Azure login 14 succeeded. Step 15
+failed at `2026-09-30T07:36:55.5792115Z`, exit 2, with
+`retention_ci_verification_refused:RetentionCIRefused`,
+`launch_authorized=false` and `grading_launched=false`. No model result or
+grade exists from this failure; it is not poor model performance or zero.
+The run was not re-investigated or replayed. These facts are preserved here;
+the leader's unavailable local M4 volume was not accessed or updated.
 
-The mandatory bounded auth/extreme-reasoner decision approved the design with
-conditions before editing, then found those conditions satisfied in the diff.
-This is an implementation decision, not immutable owner approval of the new
-head or live authority. Production changes are limited to one compiled union
-and its two full-match uses. The new alternative uses ASCII `[0-9]+`, a literal
-empty segment, exact `idtoken` and the existing UUID syntax. It adds no numeric
-magnitude limit, decoding, slash normalization, optional segment or suffix.
+The workflow invokes `python3 batch-runner/codex_retention_ci.py`. Previously,
+that script's `main` constructed an `__main__.ExecutionGrantRequest`; controller
+dispatch imported canonical `codex_retention_ci.execute`. Its exact grant-type
+check rejects the distinct script class before canonical request/transport/CAS.
+The canonical `RetentionCIRefused` is also foreign to the old script formatter,
+which emits the observed generic category. This concrete source trace is
+consistent with the supplied failure; it does not reopen locator authentication.
 
-The 4096-character bound, HTTPS/host/authority/fragment constraints, sole parsed
-`api-version=2.0`, single appended audience, credential isolation and bounded
-response closure remain unchanged. Signed RS256 issuer/audience/job/source/
-request/boot/freshness verification, owner review, serial CAS, deadline and
-no-replay gates are unchanged.
+### Change and offline validation
+
+The mandatory bounded auth/extreme-reasoner decision approved footer-only
+delegation before editing and confirmed conformance afterward. It is not owner
+approval of the new head or execution authority. All definitions, exact type
+checks, request construction, validators, refusal policy and workflow bytes
+remain unchanged; no production module alias or new adapter layer was added.
 
 From `batch-runner`, exactly once in the existing isolated environment:
 
@@ -72,43 +62,46 @@ env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
   HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest \
   -p no:cacheprovider --tb=short -s \
-  tests/test_codex_retention_ci_locator.py::test_retention_job_issuance_locator_diagnostics_are_closed
+  tests/test_codex_retention_ci_entrypoint.py::test_retention_script_entrypoint_uses_canonical_authority_types
 ```
 
-The result was 1 collected, 1 passed in 2.25s, exit 0. Log SHA256:
-`0c30ba4348154d2fc769035e3a28649ab52979ff23f12904552dce7cc28346b2`.
-The real parser, matcher, issuance method, transport guards, CLI and closed
-formatter ran with synthetic locators and simulated HTTP responses only.
-Coverage includes both exact routes, numeric zero, a 4096-character locator,
-4097 refusal, missing/extra/encoded segments, nonnumeric/non-ASCII numbers,
-malformed UUIDs, host/query refusals, response closure and credential separation.
-All original refusal, redaction and no-effect checks remain. Observation of
-accepted shapes runs without credentials, with transport and source verification
-guarded to fail; it reports the matching classification and both authorization
-flags false. No validator verdict was substituted.
-This selector does not execute signed job verification, private preparation
-or admission.
+The result was 1 collected, 1 passed in 2.13s, exit 0, with no skips. Log SHA256:
+`e76664dfe019298af9748129681b18d81311a45e2251bb178a98f49c5565da8c`.
+The test undoes only the footer in memory to reproduce the actual old class
+definitions and generic formatting of a real canonical refusal. It isolates
+the unique unchanged grant-check AST statement with real canonical bindings:
+the canonical grant passes only that predicate; script grants, subclasses and
+invalid objects retain `retention_execution_grant_required`. This is not a full
+`execute` call or a successful private-context/authentication verdict.
 
-The separate 2.04s observation-path pass and earlier 2.17s local pass,
-malformed-URL CI failure, 2.22s corrected-fixture pass, old live refusal and
-genuine private 295.37s pass remain linked through the
-[immutable PR704 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/bbf5454254ebded6cbcb94b7773bcf7f284044dd/tasks/LATEST_TASK_RESULT/README.md).
-None was replayed or combined with this result.
+Actual `runpy.run_path(..., run_name="__main__")` calls through to real canonical
+`main`; imported and script modes produce identical safe source refusals and
+redacted observation output. Real controller checks reject the old `_Admission`
+type; the canonical instance reaches only the real context refusal for an invalid
+request. Temporary module registration is restored. Shared offline guards and
+fail-on-effect spies confirm no transport, preparation, reservation, deadline,
+child, model or grader activity and no output files. No validator was replaced
+with a success verdict; no external transport or harmless child was needed.
+
+The prior 2.25s locator result and separate observation, CI, corrected-fixture,
+old live-refusal and genuine private 295.37s results remain linked through the
+[immutable PR705 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/8d352b0585d1e82e2ecfa37db9cd9a7fa9a35a21/tasks/LATEST_TASK_RESULT/README.md).
+None was replayed or combined with this entrypoint result.
 
 ### Byte scope and remaining gates
 
-Only `codex_retention_ci.py`, its existing locator test and these two completion
+Only `codex_retention_ci.py`, its new entrypoint test and these two completion
 records differ from the base. All other tracked bytes match, including the
 workflow, runtime, registrations/pins, shared fixtures and input/grading code.
 The unrelated changelog tail is unchanged. Adapter file SHA256 is
-`130294b798a42f55b170bde48c3d57efc71f17941cb55d093b47dc071d99f130`;
+`0b8f2f45859d20da64b733729c045c25c7081f1072379d8a4b67043f9623c82a`;
 this is its new byte identity, not source approval.
 
 New-head immutable owner review and CI remain required. Any later execution
 needs separate leader authorization bound to the reviewed source, exact cell,
 current request/input/config/grader identities, host/deployment and spend scope,
 plus the existing authenticated owner-review/job-origin and CAS/deadline/
-cleanup/no-replay gates. Observation-only approval cannot be reused as that
-grant. No live issuance, token/HTTP/HF/OIDC/Azure/model/grade call, workflow
-dispatch, CI polling or paid operation occurred in this task. No live success
-is claimed for this compatibility change.
+cleanup/no-replay gates. The old run's approval does not authorize this source
+or a retry. No live issuance, token/HTTP/HF/OIDC/Azure/model/grade call, workflow
+dispatch, CI polling or paid operation occurred in this task. The failed cell
+was not relaunched; this result grants no live authority.

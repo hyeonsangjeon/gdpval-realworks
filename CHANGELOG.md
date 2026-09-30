@@ -13,6 +13,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Delegate the retention script entrypoint to canonical `codex_retention_ci.main`
+  so controller dispatch shares `ExecutionGrantRequest`, `RetentionCIRefused`
+  and `_Admission` definitions. Only the production footer changes; exact type
+  checks, validators, workflows and admission gates remain unchanged. In the
+  leader-supplied [run 36681464982 / job 109786614084](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36681464982/job/109786614084),
+  signed approval/job-origin verification, sandbox and Azure login succeeded;
+  step 15 then returned `retention_ci_verification_refused:RetentionCIRefused`,
+  exit 2. This was not a model result or grade. At
+  `2833511e5a00a88ea442e85968c3dc742e8730a5`, one offline entrypoint selector
+  reported 1 collected, 1 passed in 2.13s, exit 0. It reproduces the old class
+  mismatch in memory and verifies real canonical script dispatch, isolated
+  exact-type refusals, safe formatting, observation behavior and no protected
+  effects. It does not validate a private packet or authorize admission. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-canonical-entrypoint)
+  preserves the supplied request/grader and approval facts, exact command and
+  evidence limits; prior observations remain in the
+  [immutable PR705 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/8d352b0585d1e82e2ecfa37db9cd9a7fa9a35a21/tasks/LATEST_TASK_RESULT/README.md).
+  New-head review/CI and separately authorized exact-source execution remain
+  required. No live execution, dispatch or replay occurred.
 - Support only the observed `/<digits>//idtoken/<UUID>/<UUID>` issuance route
   alongside the unchanged exact legacy route, using one exact matcher for
   acceptance and closed diagnostics. Preserve the literal empty segment,
