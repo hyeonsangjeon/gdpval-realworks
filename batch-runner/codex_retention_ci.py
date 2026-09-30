@@ -618,17 +618,36 @@ def _snapshot(host, request, document, state):
     return summary, files
 
 
-def verify_terminal(api, repo, head, document, cache, token, deadline):
+@dataclass(frozen=True)
+class TerminalExpectation:
+    """An observer's explicit byte binding, never a request or execution grant."""
+
+    request_sha256: str
+    source_sha: str
+    cell_id: str
+
+
+def verify_terminal(api, repo, head, document, cache, token, deadline, *,
+                    expectation: TerminalExpectation | None = None):
     """Read an immutable terminal after an ambiguous response; never replay.
 
     This is an observer, not admission or a claim adopter. A later cell is not
     implemented here. Observation cannot release an unconfirmed live child.
     """
+    if document is not None:
+        require(expectation is None, "retention_terminal_expectation_conflict")
+        request_sha256, source_sha = owned._digest(document), document["source"]["head"]
+    else:
+        require(type(expectation) is TerminalExpectation, "retention_terminal_expectation_required")
+        require(output._hash(expectation.request_sha256) and output._hash(expectation.source_sha, 40)
+                and type(expectation.cell_id) is str and expectation.cell_id == controller.FIRST_CELL_ID,
+                "retention_terminal_expectation_refused")
+        request_sha256, source_sha = expectation.request_sha256, expectation.source_sha
     terminal, _ = retained._control(api, repo, head, TERMINAL, cache, token, deadline, written_at=head)
     require(set(terminal) == {"format", "request_sha256", "authority", "scope", "claim_commit", "claim_identity",
             "output_commit", "output_objects", "completion", "publication_acknowledged"}
             and terminal["format"] == TERMINAL_FORMAT and terminal["publication_acknowledged"] is True
-            and terminal["request_sha256"] == owned._digest(document)
+            and terminal["request_sha256"] == request_sha256
             and terminal["scope"] == "existing_inference_branch_one_use_remote_cas"
             and all(output._hash(terminal[key], 40) for key in ("claim_commit", "output_commit"))
             and len({head, terminal["claim_commit"], terminal["output_commit"]}) == 3,
@@ -655,7 +674,7 @@ def verify_terminal(api, repo, head, document, cache, token, deadline):
     require(set(summary) == {"format", "request_sha256", "source_sha", "cell_id", "status", "exit_code",
         "cleanup_confirmed", "accounting", "receipt", "grade", "grading_launched", "invoice_complete", "missing", "files"}
         and summary["format"] == "retention-first-cell-output-v1"
-        and summary["request_sha256"] == owned._digest(document) and summary["source_sha"] == document["source"]["head"]
+        and summary["request_sha256"] == request_sha256 and summary["source_sha"] == source_sha
         and summary["cell_id"] == controller.FIRST_CELL_ID and summary["status"] in owned.TERMINAL
         and summary["cleanup_confirmed"] is True and summary["grade"] is None
         and summary["grading_launched"] is False and summary["invoice_complete"] is False
@@ -694,7 +713,7 @@ def verify_terminal(api, repo, head, document, cache, token, deadline):
         retained._objects(api, repo, revision, objects, token, deadline, written_at=terminal["output_commit"])
     retained._objects(api, repo, head, [retained._object(CLAIM, claim_bytes)], token, deadline,
                       written_at=terminal["claim_commit"])
-    return {"request_sha256": owned._digest(document), "terminal_commit": head, "completion": summary,
+    return {"request_sha256": request_sha256, "terminal_commit": head, "completion": summary,
             "observation_only": True, "replay_authorized": False}
 
 

@@ -1,60 +1,100 @@
 # Latest task result
 
-## PROJECT5-RETENTION-CANONICAL-ENTRYPOINT
+## PROJECT5-FIRST-RETENTION-RESULT-INTAKE
 
-The script footer now delegates to canonical `codex_retention_ci.main`, keeping
-the CLI, controller dispatch and authority classes in one module namespace.
-At `2833511e5a00a88ea442e85968c3dc742e8730a5`, the single offline regression
-reported 1 collected, 1 passed in 2.13s, exit 0. This verifies entrypoint and
-refusal behavior, not private preparation, live authentication or admission.
+The offline result-intake contract passed at
+`e1206a704d649aac18d029670029def4c70fc18e`: 1 collected, 1 passed in 8.03s,
+exit 0, with no skipped case. The fixture-only correction recognizes the real
+path guard's refusal in the member/marker namespace-swap cases; production code
+is unchanged. This pass uses real validators with synthetic retained records
+and transport, not independently verified live result bytes. The earlier 2.75s
+and 6.58s failures remain separate below. Neither was a failed inference, a
+grade, or evidence that the actual retained result is invalid. Only these
+completion records changed after the new invocation.
 
-Branch `b/codex-retention-canonical-entrypoint-20260930` starts at exact main
-`cea5fae1d1c975cfda079263cb552dad7ef46bed`, tree
-`6443916ea56431b734a0c8c3e363956864c29303`. The leader supplied all 10 passing
-checks at PR705 head `8d352b0585d1e82e2ecfa37db9cd9a7fa9a35a21`,
-[review 5362287830](https://github.com/hyeonsangjeon/gdpval-realworks/pull/705#pullrequestreview-5362287830).
-That review does not approve this new source. Earlier branches/worktrees and
-`wip/local-main-preserved-20260719` remain untouched.
+Branch `b/codex-retention-result-intake-20260930` starts at exact producer/main
+`e355faf9a6212175a288e8473968915ffb2408d0`, tree
+`5e031758a309af635c3ac6aeaec33d16a9da98ec`. The leader supplied all 10 passing
+checks at PR706 head `67b08ba1ab302525dedf1a2fb01cbe97bc5330fe`,
+[review 5363998321](https://github.com/hyeonsangjeon/gdpval-realworks/pull/706#pullrequestreview-5363998321).
+That review does not approve the new reader. Earlier branches/worktrees and
+`wip/local-main-preserved-20260719` remain untouched. Previous failures and the
+separate entrypoint regression remain in the
+[immutable PR706 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/67b08ba1ab302525dedf1a2fb01cbe97bc5330fe/tasks/LATEST_TASK_RESULT/README.md).
 
-### Supplied live evidence and source trace
+### Supplied successful producer observation
 
-The leader read [run 36681464982, attempt 1](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36681464982/attempts/1),
-[execution job 109786614084](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36681464982/job/109786614084).
-At `2026-09-30T07:36:23.5257322Z`, preparation repeated the same request SHA256
-`0d29d245677ce2f7900aa888d595c0eddbdab29ee6c174846be8dca77e62af0c`
-and materialized-grader SHA256
-`c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`.
-The exact owner approval persisted once, deployment `6753601005`;
-[approval job 109778536686](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36681464982/job/109778536686)
-succeeded. These are supplied run observations, not new local materialization.
+The leader directly read [run 36696961231, attempt 1](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36696961231/attempts/1),
+[execution job 109837605787](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36696961231/job/109837605787).
+At `2026-09-30T10:58:12.8033229Z`, its final receipt reported `status=succeeded`
+for `3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1`, request
+SHA256 `ed8b51f6d80e641922013eba9e19d7d3e145d84ae15fb8d7d9509e643c975c68`,
+with `cleanup_confirmed=true`, `remote_terminal=acknowledged`, `grade=null`,
+`grading_launched=false` and `invoice_complete=false`. The job and workflow
+succeeded at the producer source above.
 
-Step 12 signed approval/job-origin verification succeeded at
-`2026-09-30T07:36:31.8798539Z` with `approval_verified=true` and
-`admission_attempted=false`. Sandbox 13 and Azure login 14 succeeded. Step 15
-failed at `2026-09-30T07:36:55.5792115Z`, exit 2, with
-`retention_ci_verification_refused:RetentionCIRefused`,
-`launch_authorized=false` and `grading_launched=false`. No model result or
-grade exists from this failure; it is not poor model performance or zero.
-The run was not re-investigated or replayed. These facts are preserved here;
-the leader's unavailable local M4 volume was not accessed or updated.
+This is a produced inference outcome, not a score or independent verification
+of retained bytes. No actual terminal/output revision or payload was read in
+this task. The producer, this later reader and any historical input observer
+have distinct identities; the historical observer was not invoked, and original
+inputs were not reattested. The supplied facts are recorded here, not on the
+leader's unavailable local M4 volume. Inference was not replayed or reapproved.
 
-The workflow invokes `python3 batch-runner/codex_retention_ci.py`. Previously,
-that script's `main` constructed an `__main__.ExecutionGrantRequest`; controller
-dispatch imported canonical `codex_retention_ci.execute`. Its exact grant-type
-check rejects the distinct script class before canonical request/transport/CAS.
-The canonical `RetentionCIRefused` is also foreign to the old script formatter,
-which emits the observed generic category. This concrete source trace is
-consistent with the supplied failure; it does not reopen locator authentication.
+### Implemented contract and limits
 
-### Change and offline validation
+The new `batch-runner/codex_retention_result_intake.py` has an inert default and
+an explicit read mode for only this producer/request/cell/run/job. A bounded
+auth/extreme-reasoner decision preceded the small `verify_terminal` extension:
+an exact frozen `TerminalExpectation` may be supplied only with `document=None`.
+It grants no authority. Original callers still hash the whole document and use
+its source head. Static AST comparison preserved every existing terminal
+predicate and return field, plus the producer snapshot, admission and CLI code.
 
-The mandatory bounded auth/extreme-reasoner decision approved footer-only
-delegation before editing and confirmed conformance afterward. It is not owner
-approval of the new head or execution authority. All definitions, exact type
-checks, request construction, validators, refusal policy and workflow bytes
-remain unchanged; no production module alias or new adapter layer was added.
+Discovery uses only the fixed terminal path on the existing inference ref and
+pins its `last_commit.oid`. An explicitly supplied immutable terminal SHA is
+also supported. Control/object readers then verify terminal, claim, output,
+hashes, sizes and write history at immutable revisions. Retained authority must
+match the fixed request/run/job/reviewer/environment and hash-only job-origin
+schema; that consistency check is not fresh signed-token authentication.
 
-From `batch-runner`, exactly once in the existing isolated environment:
+Supported payload roles are `step2_inference_results.json` up to 8 MiB,
+at most 128 selected-task `deliverable_files/<task-id>/...` files up to 64 MiB
+each, and optional `cost_ledger_condition_a.jsonl` up to 8 MiB and 10000 rows.
+An empty bound ledger is allowed; it does not establish zero cost. Aggregate
+payloads are limited to 128 MiB, each control record to 128 KiB. Existing
+120-second transfer and 30-second request limits remain unchanged. The reader
+uses the real result fingerprint, deliverable-byte and ledger validators.
+Missing or partial accounting stays distinct; grade remains null and invoice
+completion remains false. No grader or live execution path is added.
+
+Publication requires a fresh private directory, rejects collisions and unsafe
+paths, and writes through caller-held directory descriptors. Readback precedes
+the final evidence-only record. That record requires consumer readback and does
+not assert readiness. A separate hash-bound successful receipt is returned only
+after final readback, fsync and identity checks. An ambiguous post-link failure
+retains partial evidence and refuses reuse. The reused SDK caches have fresh,
+held roots and containment checks; they are pathname-based, not FD-confined
+against hostile concurrent directory replacement. These are implemented rules,
+not a claim that every regression below completed.
+
+Production SHA256 values are identical at all three tested heads:
+
+- Reader: `df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196`.
+- Terminal-verifier module: `8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c`.
+
+These identify new bytes, not source approval. Workflows, runtime, grader,
+model/budget settings, compiler/preparer, the registered 8 cells, the original
+30 cells and their pins remain unchanged. No real credentials or original
+private payloads were used. Every tracked byte outside the test and two completion
+records still matches `9c34db608209a084b61b18fdbeea067634028e36`. The corrected test
+SHA256 at `fdfb9b2757da9b164caf6985bd6155a48aaa6c0b` was
+`14a2e3ecd89c16e4fee4a3e89dc078a54243cf4d841bff6fae9d952fdd119053`;
+at the new tested head it is
+`aae70721d354bb921a2f60c869440567e45b2eb35ed580d58c9112a08477eacd`.
+
+### Three separate offline validation observations
+
+From `batch-runner`, the same isolated command ran once at each tested head:
 
 ```bash
 env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
@@ -62,46 +102,107 @@ env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
   HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest \
   -p no:cacheprovider --tb=short -s \
-  tests/test_codex_retention_ci_entrypoint.py::test_retention_script_entrypoint_uses_canonical_authority_types
+  tests/test_codex_retention_result_intake.py::test_first_retention_result_intake_is_immutable_bound_and_read_only
 ```
 
-The result was 1 collected, 1 passed in 2.13s, exit 0, with no skips. Log SHA256:
-`e76664dfe019298af9748129681b18d81311a45e2251bb178a98f49c5565da8c`.
-The test undoes only the footer in memory to reproduce the actual old class
-definitions and generic formatting of a real canonical refusal. It isolates
-the unique unchanged grant-check AST statement with real canonical bindings:
-the canonical grant passes only that predicate; script grants, subclasses and
-invalid objects retain `retention_execution_grant_required`. This is not a full
-`execute` call or a successful private-context/authentication verdict.
+At `9c34db608209a084b61b18fdbeea067634028e36`, the initial result was 1 collected,
+1 failed in 2.75s, exit 1; no skipped case. Log SHA256:
+`cd94b1a1d5b7b906722801e9bcb179a0f9237198d4d6bd7d307b0ef5d0ed516f`.
+Static syntax and import checks confirmed that all 22 added guard targets were
+present before the run.
 
-Actual `runpy.run_path(..., run_name="__main__")` calls through to real canonical
-`main`; imported and script modes produce identical safe source refusals and
-redacted observation output. Real controller checks reject the old `_Admission`
-type; the canonical instance reaches only the real context refusal for an invalid
-request. Temporary module registration is restored. Shared offline guards and
-fail-on-effect spies confirm no transport, preparation, reservation, deadline,
-child, model or grader activity and no output files. No validator was replaced
-with a success verdict; no external transport or harmless child was needed.
+The selector reached whole-document/expectation equivalence, exact-type and
+early binding refusals, inert default behavior, and a valid missing-accounting
+intake with final readback and a hash-bound receipt. The terminal/object/result
+and deliverable validators were real; retained producer records and transport
+were synthetic. This was not a read of the actual successful producer's bytes.
+The reached no-effect checks confirmed no remote writes or protected execution.
 
-The prior 2.25s locator result and separate observation, CI, corrected-fixture,
-old live-refusal and genuine private 295.37s results remain linked through the
-[immutable PR705 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/8d352b0585d1e82e2ecfa37db9cd9a7fa9a35a21/tasks/LATEST_TASK_RESULT/README.md).
-None was replayed or combined with this entrypoint result.
+The next case failed at test line 277 while `verify_terminal` line 683 required
+canonical equality between the stored receipt and `project_cost_receipt`.
+The safe refusal is `retention_accounting_mismatch`. Static source inspection
+identifies the differing field: raw `CostReceipt.as_dict()` supplies
+`runtime_cost_usd=0.0`; `_measured_amount` projects that placeholder under
+`partial` to `null`. The real producer `_snapshot` already stores the projected
+receipt, whereas this synthetic fixture stored the raw one. The validator was
+not weakened.
 
-### Byte scope and remaining gates
+Partial-accounting completion, empty-ledger, absent-terminal discovery,
+corrupted-source/request/cell/object, authority/history, path/private-state,
+cache-escape, collision/symlink, readback-tamper and interrupted-publication
+assertions after that line were not reached in the initial invocation. Their
+presence was not runtime evidence, and that failed partial run was not an
+integration pass.
 
-Only `codex_retention_ci.py`, its new entrypoint test and these two completion
-records differ from the base. All other tracked bytes match, including the
-workflow, runtime, registrations/pins, shared fixtures and input/grading code.
-The unrelated changelog tail is unchanged. Adapter file SHA256 is
-`0b8f2f45859d20da64b733729c045c25c7081f1072379d8a4b67043f9623c82a`;
-this is its new byte identity, not source approval.
+The follow-up adds only `partial = ci.project_cost_receipt(partial)` after the
+positive `CostReceipt.as_dict()` construction and before `ResultHF` stores it.
+It uses the same real projector as `_snapshot`; canonical equality, measured-zero
+semantics, negative-case construction, guards and all production code are unchanged.
 
-New-head immutable owner review and CI remain required. Any later execution
-needs separate leader authorization bound to the reviewed source, exact cell,
-current request/input/config/grader identities, host/deployment and spend scope,
-plus the existing authenticated owner-review/job-origin and CAS/deadline/
-cleanup/no-replay gates. The old run's approval does not authorize this source
-or a retry. No live issuance, token/HTTP/HF/OIDC/Azure/model/grade call, workflow
-dispatch, CI polling or paid operation occurred in this task. The failed cell
-was not relaunched; this result grants no live authority.
+At `fdfb9b2757da9b164caf6985bd6155a48aaa6c0b`, the one authorized follow-up reported
+1 collected, 1 failed in 6.58s, exit 1; no skipped case. Log SHA256:
+`79335f1d3ba605f9012f6013494a81c0a7e09ba688ec3a3eb0b17bfd879b62a0`.
+All earlier assertions completed, followed by projected partial-accounting,
+empty-ledger, missing-terminal discovery, source/request/cell/object corruption,
+authority/history/origin, private-state/path/cache-escape, role-bound and
+collision/symlink/traversal assertions. These used real validators with synthetic
+retained records and transport, not the actual producer's retained bytes.
+
+At that head, the first `member` namespace-swap read at test line 396 raised
+`core.reference_integrity.ReferenceIntegrityError` through
+`ghcp_vm_input_bundle._write_no_clobber` / `check_parent` /
+`_reject_symlink_components` (lines 237, 229 and 78). The test had moved its own
+output directory aside and created an empty replacement, so the nested parent
+was missing. The path guard wraps `FileNotFoundError` in `ReferenceIntegrityError`;
+the expected exception tuple at test line 395 does not include that class.
+Static ordering places this refusal before the writer's temporary-file creation.
+The member case's post-refusal byte/no-marker/reuse checks were not reached;
+neither were marker-swap, altered-readback, post-link fsync/readback or final
+no-effect assertions. Work stopped after that failure; the correction below
+was separately authorized. No push or PR followed either failed invocation.
+
+This follow-up imports `ReferenceIntegrityError` from `core.reference_integrity`
+and adds it to the existing refusal tuple only for `member` and `marker`, which
+both use the same path guard. The `altered-readback` tuple and the distinct
+post-link fsync/readback expectations are unchanged. Every post-refusal and
+no-effect assertion remains, as does `partial = ci.project_cost_receipt(partial)`.
+
+At `e1206a704d649aac18d029670029def4c70fc18e`, the one authorized invocation
+reported 1 collected, 1 passed in 8.03s, exit 0; no skipped case. Log SHA256:
+`ad50b9106f95457a826444617164d4372885bdb19a54928a0f979b170f95c701`.
+It completed all earlier assertions and the member/marker namespace-swap checks:
+empty replacement directories, retained original partials, no marker in either
+namespace, original marker-phase deliverable bytes and refusal to reuse the
+destination. Altered-readback and post-link fsync/readback checks also completed,
+including evidence-only markers without success fields, retained deliverables
+and reuse refusal. The final assertions confirmed the untouched outside sentinel,
+no unauthorized outside files, no remote commits and no protected execution
+effects. The validators and publication helpers were real; retained objects,
+transport and injected failure conditions were synthetic. This is an offline
+contract pass, not a read of the successful producer's actual retained bytes or
+an inference, grade or invoice result.
+
+### Remaining gates and provisional readout form
+
+Immutable owner review and CI of the new source remain. The prior PR706 review
+does not approve this reader or its expectation extension. Actual retained
+intake requires separate live-read direction using the existing selected
+credential. The form below is blocked now, not permission to run it; the output
+must be an explicitly selected fresh directory under an existing private parent.
+
+```bash
+python3 batch-runner/codex_retention_result_intake.py --read --discover-terminal \
+  --expected-producer-source e355faf9a6212175a288e8473968915ffb2408d0 \
+  --expected-request-sha256 ed8b51f6d80e641922013eba9e19d7d3e145d84ae15fb8d7d9509e643c975c68 \
+  --cell-id 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 \
+  --expected-reader-sha256 df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196 \
+  --output "${RETENTION_RESULT_NEW_DIRECTORY}"
+```
+
+Even a future successful read grants no admission, replay or grading authority.
+The subsequent fixed grader must separately verify the intake and its own
+input/config/materialized-grader/source binding for one authorized grade.
+No live intake, grade, HF/token/OIDC/Azure/model/paid call, workflow dispatch,
+permission change, CI poll or successor cell occurred. The successful producer
+cell remains consumed. Both failed tested heads remain distinct from this
+offline pass; the source handoff grants no live-read, replay or grading authority.
