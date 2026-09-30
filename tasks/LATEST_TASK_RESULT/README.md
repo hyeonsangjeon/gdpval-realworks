@@ -1,45 +1,62 @@
 # Latest task result
 
-## PROJECT5-PR703-MALFORMED-URL-FIX
+## PROJECT5-CLOSED-LOCATOR-OBSERVATION
 
-The one authorized locator selector passed at tested HEAD
-`b6415a2066fd341ea913cadaa7422b029ca21c60`: 1 collected, 1 passed in 2.22s,
-exit 0. This follow-up changes one synthetic test value and the two completion
-records on `b/codex-retention-first-locator-20260929`. Production authentication
-and all test assertions are unchanged.
+The explicit observation-only CLI and workflow route passed one focused offline
+selector at `fede773394b97690a1146a50c022972d47f16d49`: 1 collected, 1 passed
+in 2.04s, exit 0. No real provider locator was observed. This remains a
+diagnostic path, not a proven provider compatibility fix or launch authority.
 
-The correction addresses leader [review 5356074537](https://github.com/hyeonsangjeon/gdpval-realworks/pull/703#pullrequestreview-5356074537)
-at prior PR703 HEAD `b19d7a0d218ce1bd1d18307f77b0346b68016f94`.
-Only the `malformed-url` value in
-`batch-runner/tests/test_codex_retention_ci_locator.py` changes:
+The new branch `b/codex-retention-locator-observation-20260930` starts at exact
+main `944c490ad2d1d172fffd18dc71a07caad6bb2425`, tree
+`953ae15903d352fd8eafcb07b8a47fe7d5e815bc`. The leader supplied all 10 passing
+checks at prior reviewed `dfab2edc3e9ce57bed492ffdabc586e31ed20ba4`,
+[owner review 5360812285](https://github.com/hyeonsangjeon/gdpval-realworks/pull/703#pullrequestreview-5360812285).
+That review does not approve this new source. The old PR703 worktree and
+`wip/local-main-preserved-20260719` remain untouched.
 
-```diff
--        ("malformed-url", "https://[" + private + "]/" + private, "url_parsed"),
-+        ("malformed-url", "https://[" + private, "url_parsed"),
-```
+### Observation and authority boundaries
 
-The unmatched opening bracket replaces the balanced non-IP bracketed host.
-Exact `url_parsed=False`, an empty route skeleton, redaction, the primary
-refusal and all no-effects assertions remain required. No parser or acceptance
-predicate changed, and no new production-auth review was needed.
+The mandatory bounded CI/auth review approved the approach with conditions
+before editing, then found no concrete blocker in the implemented delta.
+No new permission or protected-environment policy was needed.
 
-### Separate observations
+`--observe-locator` is mutually exclusive with preparation, approval verification
+and execution. It rejects all input/request/output/host-state arguments before
+reading the locator. Its cell and SHA syntax checks do not attest source or
+job identity. It returns before source-verifier Git calls, plan compilation,
+preparation, transport construction, CAS, clocks, children or grading.
 
-| Source | Observation | Actual result |
-| --- | --- | --- |
-| `d4011844a0ee1efacd56304718f66c9bc038c32f` | Prior local locator selector | 1 collected, 1 passed in 2.17s; exit 0. Preserved, not replayed unchanged. |
-| `b19d7a0d218ce1bd1d18307f77b0346b68016f94` | Leader-supplied [CI run 36599503878 / job 109512928743](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36599503878/job/109512928743), CPython 3.10.12 | 1 failed, 13292 passed, 64 skipped, 46 deselected in 1471.63s. The malformed-URL flag assertion failed at line 108. |
-| `b6415a2066fd341ea913cadaa7422b029ca21c60` | Fresh local selector with the one-value correction | 1 collected, 1 passed in 2.22s; exit 0. All unchanged assertions completed. |
+The observer reads only the URL into memory, bounds parsing at 4096 characters
+and reuses the existing closed diagnostic formatter/schema. The output contains
+only fixed flags, capped counts and a redacted route skeleton inside the fixed
+non-authorizing envelope. Its reason is
+`github_job_issuance_locator_observation_only`, with `launch_authorized=false`
+and `grading_launched=false`, including for a normally accepted locator shape.
+No bearer, raw URL, host, identifier or arbitrary path/query value is emitted.
 
-In the CI failure, `url_parsed` was `True` where the malformed-URL case expected
-`False`. The primary refusal and no-opener/HTTP assertions passed before that
-failure; later assertions for that case were not reached. No version cause is
-inferred, and no CI query, rerun or environment investigation was performed.
+The existing workflow adds `observe_locator=false` by default. Observation
+conflicts with both user-supplied `prepare` and `execute`, checked before
+credentials. It retains exact source/main/attempt/cell checks, prepared-request
+availability and the `grading` protected review before the existing execution
+job. That job remains the only job with `id-token: write`; permissions,
+environment placement, concurrency and normal execution gates are unchanged.
+The observation command strips `ACTIONS_ID_TOKEN_REQUEST_TOKEN` and
+`GITHUB_TOKEN` before Python starts. Approval verification, sandbox setup,
+Azure login and claim/run/reconcile each independently require
+`inputs.execute && !inputs.observe_locator`.
 
-### Exact fresh validation
+A future observation retains the existing preparation/input-transfer stages
+in both preparation and execution jobs. Those stages install dependencies,
+transfer original inputs and materialize request context; the whole workflow
+is not network-free. Only the locator diagnostic step is network-free and
+cannot launch another process. Protected observation review is not authenticated
+execution approval. No token or signed job-origin verification is attempted
+by observation; the normal execution path still requires both.
 
-The command ran once from `batch-runner` in the existing isolated environment,
-without a private-input locator or real credential:
+### Exact offline validation
+
+From `batch-runner`, once in the existing isolated environment:
 
 ```bash
 env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
@@ -47,38 +64,52 @@ env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
   HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest \
   -p no:cacheprovider --tb=short -s \
-  tests/test_codex_retention_ci_locator.py::test_retention_job_issuance_locator_diagnostics_are_closed
+  tests/test_codex_retention_ci_observation.py::test_retention_locator_observation_is_closed_and_separate
 ```
 
-The log SHA256 is
-`21e3d2f9e6e8cef4081815106b957e5538f5633047063808c47fdc904863265c`.
-The real parser, predicates and closed diagnostic formatter ran with simulated
-HTTP only. All 23 refusal cases and both previously accepted synthetic forms
-remain within one pytest test, not separate test totals or real provider URLs.
-The shared offline guards and fail-before-effects assertions remained active.
-No private preparation, child, model, grade or live authority operation ran.
+The result was 1 collected, 1 passed in 2.04s, exit 0. Log SHA256:
+`bee414ab1ef4a1e3cbebf52534f3568f6e5412438e234365377adfaf7cabb0c8`.
+The test parses the real workflow command and invokes the real CLI/formatter
+with synthetic accepted, malformed, foreign, oversized and absent locators.
+It checks redaction, credential non-access, refusal before effects, contradictory
+arguments, normal-source rejection and every workflow exclusion. Workflow
+routing is checked statically, not by dispatch. No external transport response
+or validator verdict was substituted; transport and effect-capable calls were
+guarded to fail. No private preparation, token, HTTP, child, model or grade ran.
 
-The [immutable prior handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b19d7a0d218ce1bd1d18307f77b0346b68016f94/tasks/LATEST_TASK_RESULT/README.md)
-preserves the original diagnostic implementation, authoritative source links,
-live pre-admission refusal, source/input identities and earlier observations.
-The genuine private `da0fb6bea28826c9287adaff95e6d4daf8996642` result remains
-1 passed in 295.37s, not skipped, repeated or combined with this validation.
+The prior 2.17s local pass, malformed-URL CI failure and corrected 2.22s pass
+remain separate in the [immutable prior handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/944c490ad2d1d172fffd18dc71a07caad6bb2425/tasks/LATEST_TASK_RESULT/README.md).
+Its links preserve the earlier live pre-admission refusal, exact source/input
+identities and genuine private 295.37s pass. None was replayed or combined
+with this result; the actual provider locator remains unknown.
 
 ### Byte scope and remaining gates
 
-Only the one test line and these two records differ from
-`b19d7a0d218ce1bd1d18307f77b0346b68016f94`. All production, workflows,
-shared fixtures, runtime, registrations/pins, grading and original private
-integration/wait-registry bytes are unchanged. The adapter file SHA256 remains
-`ed5dbc4e7140ff5899c17b4f13bfc3a9871119bf7c994b43777b25ca333f3713`.
-The unrelated changelog tail is preserved. Protected im-not-ai-en copyediting
-retains the separate results, literals and limits.
+Only the existing workflow, `codex_retention_ci.py`, the new observation test
+and the two completion records differ from the base. Static comparison confirms
+that the original authentication predicates, transport, normal CLI body and
+live-step bodies remain unchanged. All other tracked bytes, including runtime,
+registrations/pins, shared guards, inputs/grading code and prior tests, match
+the base. The unrelated changelog tail is preserved. Actual file SHA256 values:
 
-New-head delta review and CI remain required; review 5356074537 is not approval
-of this follow-up. The actual provider locator and failed live constraint remain
-unknown. The production patch is still diagnostic-only, not a proven provider
-compatibility fix. A model-free observation requires separate leader
-authorization. No token exchange, workflow rerun/dispatch, environment approval,
-live CAS/HF/OIDC/Azure/model/grade or paid operation occurred. Existing source,
-cell, host, runtime, input, spend, serial-admission and cleanup gates remain in
-force; no new launch authority is granted.
+- Adapter: `153cb666df279ecf68ce9a86259812814a9247ac78b8aa523b2a3014292f2f37`.
+- Workflow: `b1839f8df86649ab50fcc0c85bef8108e2035b7334f7b77676ed710f4cb4e933`.
+
+These are new byte identities, not approval. New-head immutable review and CI
+remain required, followed by separate leader authorization for one observation.
+The following is the later dispatch form only; it was not run. The leader must
+first bind the exact reviewed main/workflow SHA in
+`RETENTION_OBSERVATION_REVIEWED_MAIN_SHA`:
+
+```bash
+gh workflow run codex-retention-first-cell.yml \
+  --repo hyeonsangjeon/gdpval-realworks --ref main \
+  -f reviewed_source_sha="${RETENTION_OBSERVATION_REVIEWED_MAIN_SHA:?leader-approved immutable main SHA required}" \
+  -f cell_id=3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 \
+  -f observe_locator=true -f prepare=false -f execute=false
+```
+
+No workflow dispatch, token exchange, environment approval, live CAS/HF/OIDC/
+Azure/model/grade or paid operation occurred. Live source/input/owner-review/
+job-origin, spend, CAS/deadline, cleanup and no-replay gates remain in force.
+Protected im-not-ai-en copyediting preserves these facts and limitations.

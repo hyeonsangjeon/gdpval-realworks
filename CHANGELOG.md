@@ -13,6 +13,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add an explicit protected observation-only route to the existing retention
+  workflow and CLI. It reuses closed locator diagnostics, never reads the bearer
+  or requests a token, and returns before source-verifier subprocesses,
+  preparation, CAS, clocks, children or grading. The workflow strips bearer
+  variables for the observer and explicitly excludes approval verification,
+  sandbox setup, Azure login and execution when observation is selected.
+  Normal defaults, permissions, protected review, source and admission gates
+  remain unchanged. Existing surrounding input-transfer/preparation stages
+  remain; only the diagnostic step is network-free. At
+  `fede773394b97690a1146a50c022972d47f16d49`, one new offline selector reported
+  1 collected, 1 passed in 2.04s, exit 0, using the real CLI/formatter, synthetic
+  locators and static workflow routing checks. No live observation ran, and
+  provider compatibility remains unproven. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-closed-locator-observation)
+  records the exact command, byte/authority boundaries, later observation-only
+  dispatch form and [immutable prior observations](https://github.com/hyeonsangjeon/gdpval-realworks/blob/944c490ad2d1d172fffd18dc71a07caad6bb2425/tasks/LATEST_TASK_RESULT/README.md).
+  Prior 2.17s, failed CI and 2.22s observations remain separate. New-head review,
+  CI and separately authorized observation remain required; no launch authority
+  is granted.
 - Add closed structural diagnostics for the retention issuance-locator refusal;
   preserve the existing acceptance predicate and exact
   `github_job_issuance_locator_refused` reason. Fixed flags, bounded counts and
