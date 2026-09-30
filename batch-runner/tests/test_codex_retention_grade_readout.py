@@ -287,9 +287,58 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
     git_state["dirty"] = b""
 
     before = deepcopy((api.trees, api.writers, api.branches))
-    status, result = invoke()
+    payload_refusals = []
+    fixed_reasons = frozenset({
+        "bounded_immutable_file_required", "unsafe_retained_member", "grading_download_cache_escape",
+        "retained_file_identity_mismatch", "payload_file_or_size_refused", "payload_file_changed",
+        "payload_identity_mismatch", "grade_readout_download_refused",
+        "fixed_retention_grade_projection_binding_required", "canonical_retention_grade_context_required",
+        "retention_grade_context_changed", "unsafe_grade_structure", "unsafe_grade_fields",
+        "raw_judge_response_refused", "fixed_grade_schema_refused", "grade_scope_identity_mismatch",
+        "grade_task_set_mismatch", "fixed_judge_identity_mismatch",
+        "fixed_retention_grading_ledger_binding_required", "fixed_retention_grading_ledger_run_required",
+        "fixed_grading_ledger_run_required", "ledger_schema_refused", "ledger_cell_mismatch",
+        "ledger_duplicate_or_missing_identity", "ledger_rows_exceeded", "ledger_reasons_refused",
+        "ledger_state_refused", "ledger_stage_refused", "ledger_hash_refused", "ledger_runtime_refused",
+        "ledger_usage_refused", "ledger_amount_refused", "ledger_identity_refused", "unsafe_ledger_note",
+        "grade_ledger_pointer_mismatch", "bound_grade_ledger_missing", "unsafe_receipt_fields",
+        "grade_readout_accounting_refused", "grade_readout_outcome_mismatch", "completed_grade_has_partial_checkpoint",
+    })
+    fixed_classes = (output.OutputPublicationRefused, ValueError, KeyError, AttributeError, TypeError,
+        OSError, FileNotFoundError, FileExistsError, PermissionError, NotADirectoryError, IsADirectoryError,
+        RecursionError, step8.SchemaError, step8.ValidationError)
+
+    def observe_payload(function_name, real_helper):
+        def observed(*args, **kwargs):
+            try:
+                return real_helper(*args, **kwargs)
+            except Exception as error:
+                # Never stringify the error: schema/identity errors can contain
+                # private values. Record only fixed symbols, then re-raise it.
+                payload_refusals.append({"function": function_name,
+                    "exception": next((kind.__name__ for kind in fixed_classes if type(error) is kind), "Exception"),
+                    "reason": next((reason for reason in fixed_reasons
+                        if type(error) is output.OutputPublicationRefused and error.args == (reason,)), None)})
+                raise
+        return observed
+
+    # Observe only the intended-success payload path. These are the real
+    # helpers, with unchanged arguments, results, exceptions and validators.
+    with monkeypatch.context() as diagnostics:
+        for target, name, function_name in (
+            (grade, "_fetch", "codex_budget_pilot_grading._fetch"),
+            (reader.readout, "_recorded_projection", "codex_budget_pilot_grade_readout._recorded_projection"),
+            (grade, "_validate_grade_identity", "codex_budget_pilot_grading._validate_grade_identity"),
+            (step8, "_validate_schema", "step8_grade._validate_schema"),
+            (step8, "_validate_grade_resume_identity", "step8_grade._validate_grade_resume_identity"),
+            (output, "_ledger", "codex_budget_pilot_output._ledger"),
+            (reader.readout, "_receipt", "codex_budget_pilot_grade_readout._receipt"),
+        ):
+            diagnostics.setattr(target, name, observe_payload(function_name, getattr(target, name)))
+        status, result = invoke()
     safe_refusal = {key: result[key] for key in ("reason", "stage")}
-    assert status == 0 and result["outcome"] == "verified_writer_recorded_grade", safe_refusal
+    safe_refusal["payload_helpers"] = payload_refusals
+    assert status == 0 and result["outcome"] == "verified_writer_recorded_grade", json.dumps(safe_refusal, sort_keys=True)
     assert result["grade_state"] == "graded" and result["record_kind"] == "writer_recorded_grade"
     assert result["score"] == {"earned": 2, "possible": 4, "pct": 50,
         "tasks_with_excluded_items": 1, "excluded_items": 1, "excluded_max_score": 2.0,
