@@ -5,6 +5,7 @@ must reverify a same-run, owner-authored GitHub environment review of the exact
 request, the actual execution job/runner, source, inputs, route and Azure session.
 Only then can it attempt one CAS write and one owned child. No retry, setup,
 scheduler, grading, old-campaign reinterpretation or cross-runner restore exists.
+Explicit locator observation returns only closed diagnostics, never authority.
 """
 
 from __future__ import annotations
@@ -108,7 +109,7 @@ _LOCATOR_ROUTE_TOKENS = _LOCATOR_ROUTE_WORDS | {"{uuid}", "{number}", "{opaque}"
 
 
 def _job_locator_diagnostic(locator, address, query):
-    """Explain only an existing refusal; never choose an accepted endpoint."""
+    """Describe structure without authority; never choose an accepted endpoint."""
     checks = {"length_within_limit": len(locator) <= 4096, "url_parsed": address is not None,
               "query_parsed": query is not None}
     diagnostic = {"checks": checks, "counts": {}, "route_skeleton": [], "truncated": len(locator) > 4096}
@@ -172,6 +173,25 @@ def _refusal_payload(error):
     diagnostic = _closed_locator_diagnostic(error)
     if diagnostic is not None:
         payload["issuance_locator"] = diagnostic
+    return payload
+
+
+def _observe_job_locator():
+    """Read only the URL in memory; no credential, transport or source claims."""
+    locator = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+    address = query = None
+    if len(locator) <= 4096:
+        try:
+            address = urllib.parse.urlsplit(locator)
+            query = urllib.parse.parse_qsl(address.query, keep_blank_values=True, strict_parsing=True)
+        except ValueError:
+            pass  # The existing diagnostic records which parse phase completed.
+    refusal = RetentionCIRefused("github_job_issuance_locator_refused")
+    refusal.issuance_locator = _job_locator_diagnostic(locator, address, query)
+    payload = _refusal_payload(refusal)
+    require("issuance_locator" in payload, "github_job_issuance_locator_diagnostic_refused")
+    # Reusing the closed projection does not mean an accepted shape was refused.
+    payload["reason"] = "github_job_issuance_locator_observation_only"
     return payload
 
 
@@ -825,9 +845,17 @@ def main(argv=None):
     mode.add_argument("--prepare", action="store_true")
     mode.add_argument("--verify-approval", action="store_true")
     mode.add_argument("--execute", action="store_true")
+    mode.add_argument("--observe-locator", action="store_true")
     try:
         args = parser.parse_args(argv)
         require(args.cell == controller.FIRST_CELL_ID, "only_registered_ordinal_zero_supported")
+        if args.observe_locator:
+            require(all(value is None for value in (args.historical_root, args.original_root,
+                args.request_sha256, args.request_out, args.host_state)), "locator_observation_inputs_refused")
+            # Syntax only, not reviewed-source verification or an execution grant.
+            require(output._hash(args.reviewed_source_sha, 40), "exact_reviewed_source_required")
+            print(owned._canonical_json(_observe_job_locator()))
+            return 0
         source = require_source(args.reviewed_source_sha)
         registration.compile_plan()
         if not (args.prepare or args.verify_approval or args.execute):
