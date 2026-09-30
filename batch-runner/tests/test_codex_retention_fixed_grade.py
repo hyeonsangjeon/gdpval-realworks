@@ -133,7 +133,7 @@ def _seed_parent(api, monkeypatch):
                  "binding": binding, "expected_parent": previous, "predecessor": link}
         raw = retained._encoded(claim)
         api.seed(claim_revision, previous, {claim_path: raw})
-        terminal = {"format": grade.TERMINAL_FORMAT if index in {0, 2, 6} else bridge.ungraded.TERMINAL_FORMAT,
+        terminal = {"format": grade.RESULT_FORMAT if index in {0, 2, 6} else bridge.ungraded.TERMINAL_FORMAT,
                     "binding": binding, "claim_commit": claim_revision, "claim_identity": pilot._identity(raw)}
         raw = retained._encoded(terminal)
         api.seed(terminal_revision, claim_revision, {terminal_path: raw})
