@@ -168,6 +168,87 @@ class OwnedJudge(base.Child):
             shutil.copyfile(bridge.ROOT / "batch-runner" / name, destination / "batch-runner" / name)
 
 
+def test_retention_grade_ledger_binding_is_exact_and_legacy_defaults_stay_closed():
+    cell = bridge.compile_request(SOURCE).cell
+    binding = output.RetentionFirstCellLedgerBinding("a" * 16, "b" * 64)
+    run_id = base.step8.make_cost_run_id(experiment_yaml_name=bridge.SELECTOR,
+        config_hash=binding.config_hash, grader_source_hash=binding.grader_source_hash)
+    assert run_id == "retention/first-cell|" + "a" * 16 + "|" + "b" * 64
+    row = json.loads(base._ledger(run_id, cell["task_id"], "grading"))
+    runtime = {name: None for name in output._RUNTIME_COLUMNS}
+    runtime.update(record_type="runtime", entry_id="synthetic-runtime", run_id=run_id, task_id=None,
+        bucket="grading_cost", runtime_kind="synthetic", attribution="unknown",
+        runtime_cost_usd=None, missing_reasons=["runtime_cost_unpriced"])
+    data = retained._encoded(row) + retained._encoded(runtime)
+    options = {"grading_run_id": run_id, "retention_first_cell_binding": binding}
+    assert output._ledger(data, cell, **options) is None
+    assert output._ledger(b"", cell, **options) is None
+
+    # A binding does not select a family or task, and it cannot create a run.
+    for bad_run in (None, run_id + "|run2", run_id.replace("first-cell", "first-cell-extra"),
+                    run_id.replace("retention/first-cell", "arbitrary/family"),
+                    run_id.replace("retention/first-cell", "pilot/cell-00")):
+        with pytest.raises(output.OutputPublicationRefused, match="^fixed_retention_grading_ledger_run_required$"):
+            output._ledger(b"", cell, grading_run_id=bad_run, retention_first_cell_binding=binding)
+    for changed in (replace(binding, config_hash="c" * 16), replace(binding, grader_source_hash="c" * 64)):
+        with pytest.raises(output.OutputPublicationRefused, match="^fixed_retention_grading_ledger_run_required$"):
+            output._ledger(data, cell, grading_run_id=run_id, retention_first_cell_binding=changed)
+    for changed in (SimpleNamespace(**binding.__dict__), replace(binding, config_hash="A" * 16),
+                    replace(binding, config_hash="a" * 15), replace(binding, grader_source_hash="B" * 64),
+                    replace(binding, grader_source_hash="b" * 63)):
+        with pytest.raises(output.OutputPublicationRefused, match="^fixed_retention_grading_ledger_binding_required$"):
+            output._ledger(b"", cell, grading_run_id=run_id, retention_first_cell_binding=changed)
+    for key, value in (("task_id", "other-task"), ("cell_id", cell["cell_id"] + "-other"),
+                       ("run_id", cell["run_id"] + "-other"), ("index", False), ("index", 1),
+                       ("control", {**cell["control"], "retention_bundle": "fresh"}),
+                       ("control", {**cell["control"], "repetition": True}),
+                       ("control", {**cell["control"], "repetition": 2})):
+        with pytest.raises(output.OutputPublicationRefused, match="^fixed_retention_grading_ledger_binding_required$"):
+            output._ledger(b"", {**cell, key: value}, **options)
+
+    # The same row checks apply after exact family/entry binding, without pricing.
+    for key, value, reason in (
+        ("run_id", run_id.replace("a" * 16, "c" * 16), "ledger_cell_mismatch"),
+        ("run_id", run_id.replace("b" * 64, "c" * 64), "ledger_cell_mismatch"),
+        ("task_id", "other-task", "ledger_cell_mismatch"),
+        ("record_type", "raw_event", "ledger_schema_refused"),
+        ("extra", "field", "ledger_schema_refused"),
+        ("state", "unknown", "ledger_state_refused"),
+        ("stage", "unknown", "ledger_stage_refused"),
+        ("retry_kind", "unknown", "ledger_stage_refused"),
+        ("request_sha256", "not-a-hash", "ledger_hash_refused"),
+        ("input_tokens", True, "ledger_usage_refused"),
+        ("model_cost_usd", "NaN", "ledger_amount_refused"),
+        ("model_cost_usd", "-0.01", "ledger_amount_refused"),
+        ("note", "private/path?token=value", "unsafe_ledger_note"),
+        ("provider", "private/path", "ledger_identity_refused"),
+    ):
+        with pytest.raises(output.OutputPublicationRefused, match="^" + reason + "$"):
+            output._ledger(retained._encoded({**row, key: value}), cell, **options)
+    with pytest.raises(output.OutputPublicationRefused, match="^ledger_duplicate_or_missing_identity$"):
+        output._ledger(data + retained._encoded(row), cell, **options)
+    with pytest.raises(output.OutputPublicationRefused, match="^ledger_rows_exceeded$"):
+        output._ledger(b"\n" * (output.MAX_LEDGER_ROWS + 1), cell, **options)
+
+    # The opt-in does not widen the original inference or pilot grammar.
+    legacy = {"index": 7, "run_id": "synthetic-pilot-inference", "task_id": "synthetic-pilot-task"}
+    assert output._ledger(base._ledger(legacy["run_id"], legacy["task_id"]), legacy) is None
+    pilot_run = base.step8.make_cost_run_id(experiment_yaml_name="pilot/cell-07",
+        config_hash=binding.config_hash, grader_source_hash=binding.grader_source_hash)
+    assert output._ledger(base._ledger(pilot_run, legacy["task_id"], "grading"), legacy,
+                          grading_run_id=pilot_run) is None
+    for bad_run in (run_id, pilot_run.replace("cell-07", "cell-08"), pilot_run + "|run2",
+                    pilot_run.replace("a" * 16, "A" * 16), pilot_run.replace("b" * 64, "b" * 63)):
+        with pytest.raises(output.OutputPublicationRefused, match="^fixed_grading_ledger_run_required$"):
+            output._ledger(b"", legacy, grading_run_id=bad_run)
+    with pytest.raises(output.OutputPublicationRefused, match="^ledger_cell_mismatch$"):
+        output._ledger(base._ledger("foreign", legacy["task_id"]), legacy)
+    with pytest.raises(output.OutputPublicationRefused, match="^ledger_identity_refused$"):
+        output._ledger(base._ledger(run_id, legacy["task_id"]), {**legacy, "run_id": run_id})
+    with pytest.raises(output.OutputPublicationRefused, match="^fixed_retention_grading_ledger_binding_required$"):
+        output._ledger(b"", legacy, grading_run_id=run_id, retention_first_cell_binding=binding)
+
+
 def test_first_retention_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch, capsys):
     # These are production expectations. Fixture-only identities below do not
     # change the registered configuration, reader/verifier or actual closure.
@@ -321,6 +402,9 @@ def test_first_retention_fixed_grade_is_bound_one_use_and_private(tmp_path, monk
     prepared = bridge.prepare(context, root, _test_api=api, _test_transport=transport)
     assert materialization_calls == [root / "original-upload"]
     assert prepared["judge_ready"] is True and prepared["entry"]["grader_source_hash"] == bridge.GRADER_SHA256
+    assert prepared["entry"]["cost_run_id"] == base.step8.make_cost_run_id(
+        experiment_yaml_name=bridge.SELECTOR, config_hash=prepared["entry"]["config_hash"],
+        grader_source_hash=prepared["entry"]["grader_source_hash"])
     assert prepared["materialization"]["task_status"] == "success" and transport.calls == 0
     assert bridge._ready(context, root) == prepared
     assert not any(name == "commit" for name, _ in api.calls)
@@ -397,6 +481,17 @@ def test_first_retention_fixed_grade_is_bound_one_use_and_private(tmp_path, monk
         bridge.publish(context, root, _test_api=api)
     assert not (root / "publication-reserved.json").exists()
     grade_path.write_bytes(grade_bytes)
+    ledger_path = grade_path.with_name(grade_path.stem + ".cost_ledger.jsonl")
+    ledger_bytes = ledger_path.read_bytes()
+    assert all(json.loads(line)["run_id"] == prepared["entry"]["cost_run_id"] for line in ledger_bytes.splitlines())
+    bad_pointer = json.loads(grade_bytes)
+    bad_pointer["cost_ledger"]["sha256"] = "0" * 64
+    grade_path.write_bytes(retained._encoded(bad_pointer))
+    with pytest.raises(output.OutputPublicationRefused, match="^grade_ledger_pointer_mismatch$"):
+        bridge.publish(context, root, _test_api=api)
+    assert not (root / "publication-reserved.json").exists() and api.events == ["grade_claim", "judge"]
+    grade_path.write_bytes(grade_bytes)
+    assert ledger_path.read_bytes() == ledger_bytes
     api.lost = "grade_output"
     publication = bridge.publish(context, root, _test_api=api)
     assert publication["outcome"] == "unresolved" and publication["reason"] == "hf_transport_failed"
@@ -410,6 +505,7 @@ def test_first_retention_fixed_grade_is_bound_one_use_and_private(tmp_path, monk
     assert all(ref == grade.BRANCH for name, ref in api.calls if name == "commit")
     written = set(api.trees[api.branches[grade.BRANCH]]) - set(api.trees[bridge.PARENT["revision"]])
     assert written and all(name.startswith(bridge.PREFIX + "/") for name in written)
+    assert api.trees[api.branches[grade.BRANCH]][bridge.PREFIX + "/" + ledger_path.relative_to(root / "source").as_posix()] == ledger_bytes
     assert all(not any(private in name for private in ("sqlite", "transcript", "judge.stdout", "judge.stderr")) for name in written)
     with pytest.raises(AssertionError):
         subprocess.run(["python", "-c", "pass"])

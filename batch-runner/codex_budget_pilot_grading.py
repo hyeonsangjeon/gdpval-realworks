@@ -1322,7 +1322,9 @@ def _grade_outcome(payload: dict | None, child: dict, *, progress: bool) -> str:
     return outcome
 
 
-def _grade_files(context: Context, root: Path, prepared: dict, child: dict) -> tuple[dict[str, bytes], dict[str, str], str]:
+def _grade_files(context: Context, root: Path, prepared: dict, child: dict, *,
+                 retention_first_cell_binding: output.RetentionFirstCellLedgerBinding | None = None
+                 ) -> tuple[dict[str, bytes], dict[str, str], str]:
     from core.task_checkpoint import checkpoint_path, load_checkpoint
 
     checkout = root / "source"
@@ -1338,7 +1340,8 @@ def _grade_files(context: Context, root: Path, prepared: dict, child: dict) -> t
     ledger_path = path.with_name(path.stem + ".cost_ledger.jsonl")
     if os.path.lexists(ledger_path):
         data = output._bytes(ledger_path, limit=output.MAX_RECORD_BYTES)
-        output._ledger(data, context.cell, grading_run_id=prepared["entry"]["cost_run_id"])
+        output._ledger(data, context.cell, grading_run_id=prepared["entry"]["cost_run_id"],
+                       retention_first_cell_binding=retention_first_cell_binding)
         relative = str(ledger_path.relative_to(checkout))
         if payload is not None and payload.get("cost_ledger") is not None:
             from core.cost_receipts import ledger_reference

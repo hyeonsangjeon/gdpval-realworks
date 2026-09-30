@@ -520,7 +520,10 @@ def publish(context, root, *, _test_api=None):
                     "plan_sha256": hashlib.sha256(context.grading.canonical_bytes()).hexdigest(),
                     "cell_id": CELL, "stage": "fixed_grading", "attempt": 1, "phase": "reaped",
                     "tree_reaped": True, "owner_reaped": True}.items()), "grade_cleanup_unconfirmed")
-        files, roles, outcome = grade._grade_files(context, root, prepared, child)
+        files, roles, outcome = grade._grade_files(context, root, prepared, child,
+            retention_first_cell_binding=output.RetentionFirstCellLedgerBinding(
+                config_hash=prepared["entry"]["config_hash"],
+                grader_source_hash=prepared["entry"]["grader_source_hash"]))
         terminal = {"format": TERMINAL_FORMAT, "binding": admitted["claim"]["binding"],
             "claim_commit": admitted["returned_commit"], "claim_identity": admitted["claim_identity"],
             "outcome": outcome, "child": child,
