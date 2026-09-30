@@ -22,6 +22,10 @@ on:
         description: Separately directed first cell; still needs exact same-run owner environment review
         default: false
         type: boolean
+      observe_locator:
+        description: Protected locator observation only; conflicts with prepare/execute and never requests a token
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -56,9 +60,14 @@ jobs:
     steps:
       - &source_gate
         name: Refuse source, cell or rerun drift before credentials
+        env:
+          OBSERVE_LOCATOR_ONLY: ${{ inputs.observe_locator }}
+          PREPARE_REQUESTED: ${{ inputs.prepare }}
+          EXECUTE_REQUESTED: ${{ inputs.execute }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]
           [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]
@@ -83,13 +92,13 @@ jobs:
           --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL"
       - &archive
         name: Materialize the exact historical input observer, never its runtime
-        if: inputs.prepare || inputs.execute
+        if: inputs.prepare || inputs.execute || inputs.observe_locator
         run: >-
           python3 batch-runner/codex_retention_historical.py archive
           --historical-root "$RUNNER_TEMP/retention-historical"
       - &intake
         name: Read only the four original registered immutable input roles
-        if: inputs.prepare || inputs.execute
+        if: inputs.prepare || inputs.execute || inputs.observe_locator
         timeout-minutes: 3
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -107,7 +116,7 @@ jobs:
               --bundle-out "$RUNNER_TEMP/retention-originals.tar" --out "$RUNNER_TEMP/retention-originals"
       - &originals
         name: Serialize the original five tasks offline with the unchanged helpers
-        if: inputs.prepare || inputs.execute
+        if: inputs.prepare || inputs.execute || inputs.observe_locator
         run: >-
           python3 batch-runner/codex_retention_historical.py materialize
           --historical-root "$RUNNER_TEMP/retention-historical"
@@ -115,7 +124,9 @@ jobs:
       - &packet
         name: Reverify and materialize the current runtime packet; no admission
         id: packet
-        if: inputs.prepare || inputs.execute
+        if: inputs.prepare || inputs.execute || inputs.observe_locator
+        env:
+          OBSERVE_LOCATOR_ONLY: ${{ inputs.observe_locator }}
         shell: bash
         run: |
           set -euo pipefail
@@ -138,13 +149,17 @@ jobs:
           # paths/payloads, tokens, native state or private target names.
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
               stream.write('Preparation is not admission. Review the exact request below.\n\n')
-              stream.write('Owner approval comment must be exactly:\n\n`approve-retention-first-cell sha256:' + digest + '`\n\n')
+              if os.environ['OBSERVE_LOCATOR_ONLY'] == 'true':
+                  stream.write('Observation only. Protected review permits redacted locator observation, not execution.\n\n')
+                  stream.write('This request is context only; no token, signed approval verification or admission follows.\n\n')
+              else:
+                  stream.write('Owner approval comment must be exactly:\n\n`approve-retention-first-cell sha256:' + digest + '`\n\n')
               stream.write('```json\n' + json.dumps(value, sort_keys=True, indent=2) + '\n```\n')
           PY
 
   retention-approve:
     needs: retention-prepare
-    if: inputs.execute && needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''
+    if: (inputs.execute || inputs.observe_locator) && !(inputs.observe_locator && (inputs.prepare || inputs.execute)) && needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     permissions: {}
@@ -154,13 +169,18 @@ jobs:
       - name: Same-run protected review boundary; no checkout, secret or OIDC
         env:
           REQUEST_SHA256: ${{ needs.retention-prepare.outputs.request_sha256 }}
+          OBSERVE_LOCATOR_ONLY: ${{ inputs.observe_locator }}
         run: |
           [[ "$REQUEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
-          echo "Protected job finished; execution independently authenticates the owner's exact review comment."
+          if [[ "$OBSERVE_LOCATOR_ONLY" == true ]]; then
+            echo "Protected observation review finished; this is not authenticated execution approval."
+          else
+            echo "Protected job finished; execution independently authenticates the owner's exact review comment."
+          fi
 
   retention-execute:
     needs: [retention-prepare, retention-approve]
-    if: inputs.execute && needs.retention-prepare.result == 'success' && needs.retention-approve.result == 'success'
+    if: (inputs.execute || inputs.observe_locator) && !(inputs.observe_locator && (inputs.prepare || inputs.execute)) && needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != '' && needs.retention-approve.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 240
     # No environment here: preserve the established main-ref Azure OIDC subject.
@@ -180,7 +200,14 @@ jobs:
       - *intake
       - *originals
       - *packet
+      - name: Observe only the closed execution-job locator; no token or admission
+        if: inputs.observe_locator && !inputs.prepare && !inputs.execute
+        run: >-
+          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u GITHUB_TOKEN
+          python3 batch-runner/codex_retention_ci.py --observe-locator
+          --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL"
       - name: Authenticate the owner review and signed job origin before Azure login or claim
+        if: inputs.execute && !inputs.observe_locator
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
@@ -190,6 +217,7 @@ jobs:
           --original-root "$RUNNER_TEMP/retention-originals"
           --request-sha256 "$APPROVED_REQUEST_SHA256"
       - name: Require the existing native sandbox on the approved host
+        if: inputs.execute && !inputs.observe_locator
         timeout-minutes: 12
         shell: bash
         run: |
@@ -201,12 +229,14 @@ jobs:
           fi
           python3 batch-runner/scripts/diagnose_codex_sandbox_host.py
       - name: Azure Login (existing main-ref OIDC route)
+        if: inputs.execute && !inputs.observe_locator
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Reverify grant and session, claim once, run one owned cell, reconcile once
+        if: inputs.execute && !inputs.observe_locator
         env:
           GITHUB_TOKEN: ${{ github.token }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
