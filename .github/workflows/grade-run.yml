@@ -2176,10 +2176,29 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           umask 077
+          publication_status=0
           python batch-runner/codex_budget_pilot_grading.py --phase publish \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
             --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
-            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade" || publication_status=$?
+          if [[ "$GRADE_SELECTOR" == "retention/first-cell" && "$publication_status" -ne 0 ]]; then
+            printf 'retention_publication_exit_code=%s\n' "$publication_status"
+            if [[ -f "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" &&
+                  ! -L "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" &&
+                  -O "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" ]]; then
+              # Observe this same owner's reservation once; never repair the writer receipt.
+              reconciliation_status=0
+              python batch-runner/codex_budget_pilot_grading.py --phase reconcile \
+                --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+                --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
+                --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade" || reconciliation_status=$?
+              printf 'retention_reconciliation_exit_code=%s\n' "$reconciliation_status"
+            else
+              printf '%s\n' 'retention_reconciliation=not_attempted_no_owned_reservation'
+            fi
+          fi
+          # A verified server observation does not establish writer acknowledgment.
+          exit "$publication_status"
       # No Actions artifact or generic completion-envelope step: all grade,
       # source-identity, ledger, payload and child-log files stay private.
 
