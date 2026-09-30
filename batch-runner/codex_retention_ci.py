@@ -898,4 +898,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from codex_retention_ci import main as canonical_main
+
+    raise SystemExit(canonical_main())
