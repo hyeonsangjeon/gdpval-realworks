@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 import codex_retention_grade_readout as reader
+import gpt54_disposable_checkout as source_checkout
 import step8_grade as step8
 from core.cost_projection import project_cost_receipt
 from core.cost_receipts import build_receipt, ledger_reference
@@ -220,6 +221,9 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
         assert command in answers, "only source metadata is simulated"
         return SimpleNamespace(stdout=answers[command], returncode=0)
 
+    # Imported repository validators resolve Git in their defining module.
+    # Simulate the same transport there; keep both validators themselves real.
+    monkeypatch.setattr(source_checkout, "_git", git)
     monkeypatch.setattr(pilot, "_git", git)
     roots = []
 
@@ -284,7 +288,8 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
 
     before = deepcopy((api.trees, api.writers, api.branches))
     status, result = invoke()
-    assert status == 0 and result["outcome"] == "verified_writer_recorded_grade"
+    safe_refusal = {key: result[key] for key in ("reason", "stage")}
+    assert status == 0 and result["outcome"] == "verified_writer_recorded_grade", safe_refusal
     assert result["grade_state"] == "graded" and result["record_kind"] == "writer_recorded_grade"
     assert result["score"] == {"earned": 2, "possible": 4, "pct": 50,
         "tasks_with_excluded_items": 1, "excluded_items": 1, "excluded_max_score": 2.0,
