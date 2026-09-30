@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Bind the first retention grade's ledger to its actual Step8-derived
+  `retention/first-cell|<16 lowercase hex>|<64 lowercase hex>` identity after
+  bounded auth/storage review. A frozen, non-authorizing config/source binding
+  passes only from the revalidated fixed Task4 keep-r1 bridge after admission
+  and cleanup; inference/pilot defaults, row validation and pointer/hash checks
+  remain unchanged. No ledger bytes are rewritten or priced. At
+  `117d0ded256fde2794b4be02bbb0cef78c38c6dd`, one isolated invocation collected
+  2 and passed 2 in 14.58s, exit 0, covering exact retention/legacy contracts and
+  the full synthetic bridge through publication, lost-acknowledgement
+  reconciliation, duplicate refusal and final no-effect assertions. Preserve
+  the distinct 2.96s, 7.15s and 14.54s failures below. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-grade-ledger-binding)
+  separates offline proof from the consumed successful producer/intake, null
+  grade and partial accounting. New-head review/CI and later exact-source
+  one-grade authorization remain; no live grade, invoice, inference replay or
+  leader M4 update is implied.
 - Stage only verified retained deliverables in a fresh private `original-upload`
   directory before materialization, following the bounded auth/storage decision.
   The production bridge had passed the complete intake root; result JSON and its
@@ -24,7 +40,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   before output/reconciliation/final-effect assertions. This is not an integration
   pass or a live grade. Preserve the distinct 2.96s and 7.15s failures below and
   genuine producer/intake success, null grade and partial accounting. The
-  [current follow-up](tasks/LATEST_TASK_RESULT/README.md#project5-grade-deliverable-source-boundary)
+  [then-current follow-up](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-grade-deliverable-source-boundary)
   records exact scope, unchanged controls and remaining ledger-boundary work,
   immutable review/CI and exact-source one-grade gates. No repair, retry, push or
   new PR followed; completion records remain uncommitted and leader M4 files
@@ -41,7 +57,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   `ef2708ccf85ffdea04cbaa7e94909cf84a361b94` 2.96s failure below and actual
   producer/intake success; no live grade or complete invoice is implied.
   Production/workflow bytes and all assertions are unchanged. The
-  [follow-up result](tasks/LATEST_TASK_RESULT/README.md#project5-grade-fixture-format-owner)
+  [follow-up result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-grade-fixture-format-owner)
   records the new boundary and remaining correction/validation, immutable
   review/CI and exact-source one-grade gates. No repair, rerun, push or new PR
   followed this failure; completion records remain uncommitted and unavailable
@@ -67,7 +83,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   failure, the NAS prerequisite refusal and earlier synthetic outcomes. Accounting
   stays partial at 10 recorded model calls, known cost USD `0.409894`, null
   runtime cost and grade, `call_reachability_unknown`, and an incomplete invoice.
-  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-verified-grading-predecessor)
+  The [then-current result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-verified-grading-predecessor)
   records exact immutable identities, the PR708 base/review, unchanged
   reader/verifier/grader controls and reached/unreached boundaries. Fixture
   correction/validation, new-source review/CI and separately directed one-grade
