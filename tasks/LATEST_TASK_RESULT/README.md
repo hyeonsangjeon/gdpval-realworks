@@ -1,162 +1,309 @@
 # Latest task result
 
-## PROJECT5-PR709-ROUTING-AND-RECONCILIATION
+## PROJECT5-READOUT-EXACT-SCHEMA-PREDICATE
 
-The two scoped PR709 corrections passed one offline invocation:
-**2 collected, 2 passed in 1.52s, exit 0**. Tested HEAD is
-`120ff70f382d54eef97452099ede06fa6bbb242c`, tree
-`f446d162fc0c9d964cba5e932c3381896723848c`. The exact Step8 routing test and all
-ten publication-path scenarios completed. This is workflow-routing evidence,
-not live publication, a paid grade, provider authentication or an invoice.
+The fixture-only correction passed the complete targeted offline invocation.
+Tested HEAD is `969a944895877e92b665af792d87efece68a9942`: 2 tests collected,
+2 passed in 40.06s, exit 0, CPython 3.10.12 / pytest 9.1.1. The readout selector
+completed its positive projection, corruption, optional-ledger, legacy and
+final no-effect assertions; the coupled Step8 workflow test also passed. The
+180-second outer timeout did not fire. No second invocation followed.
 
-### Exact corrections and unchanged boundaries
+The defect was in the synthetic grade builder, not a reader transformation.
+It put a read-side projected receipt into the stored Step8 grade. For partial
+accounting that projection turns numeric placeholders into null, while the
+public grade schema requires numbers at those fields. The fixture now uses
+the actual producer's `build_receipt(...).as_dict()` form. Schemas, validators,
+production and workflow bytes are unchanged. This offline pass is not a live
+score readout, a grade rerun or an invoice; the actual numeric score remains
+unread. Only the completion records were updated after the tested commit for
+the authorized owner commit, one push and one new draft PR. The final handoff
+identifies the published HEAD; new-head owner review and CI are still required.
 
-Seven exact expressions in
-`test_grade_workflow_rc7_requires_valid_committed_partial` now match the existing
-retention exclusions and fixed routes. Equality checks remain exact. Static
-comparison preserved all 138 existing assertions, including approval inheritance,
-permissions, source, published-commit and failure checks. This is a static count,
-not 138 runtime test passes. No production exclusion was removed.
+Work continued in the same `b/codex-retention-grade-readout-20260930` worktree
+from approved source `29e0353f1539265b1741e71be894fedf9be32a8b`, tree
+`22c513bf561c1ea8828a95f07a69a0ea26f71a98`. The leader reported all 10 checks
+passing at prior reviewed head `4245b3f66d6cd341be197f0f1d38bd58a6cdfebd`,
+[review 5371600958](https://github.com/hyeonsangjeon/gdpval-realworks/pull/709#pullrequestreview-5371600958).
+Those checks were not polled or replayed. The same bounded CI/auth/storage
+reviewer returned `APPROVE-WITH-CONDITIONS` on the corrected contract before
+code or workflow edits. This decision is not immutable-head owner approval.
 
-After the required bounded pre-edit CI/auth `APPROVE-WITH-CONDITIONS` decision,
-only the existing publication step's shell body changed in `grade-run.yml`.
-It captures the actual publication exit under `bash -e`. Only the exact
-`retention/first-cell` selector, a nonzero publication exit and a regular,
-non-symlink, current-user-owned `publication-reserved.json` at the fixed private
-root permit one call to the existing read-only reconcile phase. Source, selector,
-producer, terminal, root and step-scoped HF credential remain identical.
+### Existing implementation and fixture-only schema correction
 
-The original `publication-receipt.json` is not rewritten. The step emits the
-CLI's separate safe server observation and fixed numeric exit labels, then exits
-with the original publication status even if reconciliation succeeds.
-`verified_server_state` retains `writer_acknowledgment=not_established`; it is
-not a writer acknowledgement. Missing/unsafe reservations do not reconcile;
-refused or ambiguous reconciliation remains explicit. There is no second
-publication, polling, claim/judge re-entry, new request or raw artifact upload.
+Six implementation/test files were pinned at the previous tested HEAD
+`98951a5b0d4c25d79f4f245de9dd32d2ba1a5c44`: the new
+`codex_retention_grade_readout.py` and its regression, the canonical grading
+router, the existing grade-readout projector, `grade-run.yml` and the directly
+coupled Step8 workflow test. The exact `retention/grade-readout` selector accepts
+only inert `plan` or unpaid `readout`, through the existing protected
+contents-read `pilot-readout` job and final-step HF credential scope. It is
+excluded from unknown-selector planning, generic and paid writer routes.
 
-Job/step guards, permissions, credential scope and the five-minute step limit
-are unchanged. All production Python bytes remain unchanged, including canonical
-dispatch, authority, real receipt/terminal validators, typed ledger binding,
-`root/original-upload` materialization, prepared-input revalidation, CAS,
-deadline, owned cleanup and no-replay gates. The existing
-`batch-runner/comparison-grading.json` config path, original pilot routes,
-registrations, judge/model/rubric and budgets were not reopened. A read-only
-conformance check found no unmet bounded-review conditions; it does not approve
-the new immutable head or authorize a live grade.
+The implementation permits one metadata check at the pinned grade revision,
+then exact terminal/claim controls and at most `grade_result` plus optional
+`grade_cost_ledger`, each bounded to 8 MiB, within the existing 128 MiB aggregate,
+120-second transfer and 30-second request limits. It reuses real byte/hash/history,
+recorded-entry, schema, outcome, typed-ledger and safe projection checks. It adds
+no branch discovery, ancestor/input reads, uploads, permission or execution
+authority. Writer/admission/runtime/grader/intake bytes and validations remain
+unchanged. The intended complete readout has now passed its offline regression,
+not a live private-grade read.
 
-### Single validation and evidence limits
+The saved 7.20s failure log did not contain the captured JSON. The previous
+continuation's static trace found a concrete transport-seam defect: it replaced
+`pilot._git`, but the imported repository/configuration validators resolve
+`_git` in their defining module, `gpt54_disposable_checkout`. That call reaches
+the existing offline `subprocess.run` guard, whose `AssertionError` is wrapped
+as `_EntryRefused` at `source_preflight`. This is a test-fixture defect, not a
+malformed grade record or an established production-validator defect.
 
-From `batch-runner`, the one invocation selected only:
+That test-only correction imported the defining module, applied the same
+allowlisted Git-metadata simulation to its `_git`, and captured the existing
+safe CLI `reason` and `stage`. Both Git simulations and all assertions remain.
+The source-preflight diagnosis was not repeated in this continuation.
 
-```text
-python3 -B -m pytest -q -p no:cacheprovider --tb=short -x tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial tests/test_codex_retention_grade_publication_workflow.py::test_retention_publication_workflow_reconciles_once_without_replay
-```
+The preceding bounded trace checked only payload fetch/projection and the positive
+fixture against the writer schema. The adapter already supplies the fixed
+inference-output revision to `_recorded_projection` and the canonical
+`RetentionFirstCellLedgerBinding` derived from the checked config/grader entry.
+It does not enter the historical wrapper's `binding.retained.output_commit`
+lookup or omit the retention binding. Neither compatibility assumption was
+established as this failure's cause; no fingerprint operand was added.
 
-Python 3.10.12 / pytest 9.1.1 ran with `env -i`, disabled plugin autoload,
-bytecode/cache, offline HF/datasets/transformers flags and single-thread limits.
-The 180-second outer limit did not fire. Log SHA256 is
-`91975eb26d5b651a861e4f02cbb8d294cbf94d794fe099e8f4e53df95b0d5adc`.
+At `663423bbc7290233b6e818be8fcb14d20ec7e9b6`, only
+`tests/test_codex_retention_grade_readout.py` changed, with 51 insertions
+and 2 deletions. Test-local observers surround the intended-success fetch,
+projection, schema/identity, ledger and receipt helpers. They call the real
+functions with unchanged arguments and results and re-raise the same caught
+exception. Assertion diagnostics add only fixed allowlisted function/class/
+reason names, never raw exception text, private values or paths. Fixture data,
+production diagnostics, validators and workflow bytes were unchanged in that
+diagnostic-only edit, which did not require a production-boundary review.
 
-The new test parses the real YAML and executes its unmodified publication body
-with real Bash. Only the external CLI process boundary is simulated, with no
-executable available through its isolated PATH and no credential in that test
-environment. No production validator is replaced with a successful verdict.
-The scenarios cover successful publish/no reconciliation; reserved failure/one
-reconciliation; pre-reservation refusal; refused and ambiguous reconciliation;
-symlink/directory reservations; legacy success/failure; and a selector lookalike.
-Exact arguments and call counts, original exits/receipt bytes, separate safe
-observations, private-file preservation and final file inventories were checked.
+This continuation traced only that fixture, the schema and the writer's Step8
+serialization. `_recorded_projection` decodes the hash-verified grade bytes and
+passes that object unchanged to `_validate_grade_identity`; the actual schema
+validator runs before receipt projection. The writer's `grading_receipt` and
+the fixed-grade regression's base `_judge_output` store producer `.as_dict()`
+receipts. The readout fixture already uses the same real `TaskGrade`,
+`_task_to_dict` and `_build_grade_payload` construction.
 
-No selected assertion phase remained unreached. This invocation does not repeat
-the full bridge's validator proof. No unchanged ledger/14.58s selector bundle,
-private 295.37s integration, full suite or CI workflow was rerun. No live
-HF/OIDC/Azure/model/grade call, workflow dispatch, permission change, inference
-replay, Project edit or merge occurred.
+The static mismatch is the schema's `type` keyword requiring `number` at these
+public locations:
 
-### Reviewed head and separate previous observations
+- `#/$defs/costReceipt/properties/known_cost_usd/type`
+- `#/$defs/costReceipt/properties/model_cost_usd/type`
+- `#/$defs/costReceipt/properties/runtime_cost_usd/type`
+- `#/$defs/costComponent/properties/known_cost_usd/type`
 
-The owner's REQUEST-CHANGES
-[review 5371296460](https://github.com/hyeonsangjeon/gdpval-realworks/pull/709#pullrequestreview-5371296460)
-was at `a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95`. The leader directly read
-[CI run 36764747855 / job 110055972491](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36764747855/job/110055972491):
-**1 failed, 13298 passed, 64 skipped, 46 deselected in 933.35s**. Its sole failure
-was the stale exact route expectation at `test_step8_grade.py:3489`; the later
-coupled expressions in that test were not reached. Those reported CI counts
-were not polled or rerun, and this local pass is not a new CI result.
+The synthetic reserved call produces a partial receipt with numeric amount
+placeholders. Premature projection changed those fields to null in the task's
+`grading_cost` and its component. These are statically established violations;
+the 7.82s log did not record which one the validator selected at runtime.
+Keeping the raw producer receipt fixes that layer without changing the synthetic
+ledger, pricing, schema acceptance or missing-evidence semantics. The safe readout
+still projects the partial runtime placeholder to null, and a new assertion
+requires that result. No zero cost is inferred from the stored placeholder.
 
-The earlier **2 collected, 2 passed in 14.58s, exit 0** at
-`117d0ded256fde2794b4be02bbb0cef78c38c6dd` remains a separate observation. Its
-[immutable ledger/bridge handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95/tasks/LATEST_TASK_RESULT/README.md#project5-retention-grade-ledger-binding)
-preserves the tested tree/log identity, exact non-authorizing ledger binding,
-103 preserved plus 22 added static assertion/refusal nodes, and real validators
-with synthetic input/transport/child boundaries through publication,
-lost-acknowledgement reconciliation and final no-effects. It did not prove the
-workflow wiring corrected here. No earlier pass or failure was replayed.
+The current correction changes only the regression: 15 insertions and
+5 deletions. All original assertions, both defining-module Git simulations and
+real-helper observers remain. The observers now add `ValidationError.validator`
+and `absolute_schema_path`, which describes the public schema; for `required`
+they derive only missing names from the schema's required list. They never emit
+instance values, raw exception text, grade bodies, credentials or filesystem
+paths, and still call the real helper unchanged and re-raise the same exception.
+No production validation/provenance boundary changed, so no new auth/storage
+review was needed for this test-only correction.
 
-### Earlier failures remain separate
+### Four separate offline observations
 
-The prior full handoffs and both then-uncommitted records were preserved
-unchanged at `117d0ded256fde2794b4be02bbb0cef78c38c6dd`. Their
-[immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md)
-retains the exact safe traces and then-current pending work.
+The single changed invocation selected the same two tests as the earlier runs:
 
-| Tested HEAD | Separate result | Reached / not reached at that time |
-| --- | --- | --- |
-| `ef2708ccf85ffdea04cbaa7e94909cf84a361b94` | 1 collected, 1 failed in 2.96s, exit 1 | Workflow/config/CLI and synthetic intake completed; nonexistent `grade.TERMINAL_FORMAT` stopped predecessor-fixture construction before preparation, predecessor verification, claim, judge or publication. |
-| `e1d20767c93bd057504ac5568c5a7e4b2708c1b3` | 1 collected, 1 failed in 7.15s, exit 1 | Fixture construction and approval/source negatives completed; the real materializer refused the complete intake root before prepared/grader, predecessor-verification, claim/judge or publication assertions. |
-| `be0761cdeca4d9e15bbd676f1112dd73a23a8c66` | 1 collected, 1 failed in 14.54s, exit 1 | Real materialization/readiness, synthetic predecessor checks, simulated claim/judge and duplicate refusals completed; `fixed_grading_ledger_run_required` stopped before publication reservation/output transport, reconciliation and final assertions. |
+- `tests/test_codex_retention_grade_readout.py::test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid`
+- `tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial`
 
-The new pass does not retroactively change any of those failures into a pass.
-Earlier NAS prerequisite refusal, intake-fixture failures and their later
-synthetic passes remain distinct in the
-[immutable PR708 evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ece7057a838e6a97d0c7441b2b2617f503a5adc2/tasks/LATEST_TASK_RESULT/README.md).
-None was rerun.
+All used the existing isolated offline environment and external-boundary guards,
+with an outer 180-second limit, synthetic records/transport and simulated Git
+metadata. No validator was replaced with a success verdict. Production-pin and
+workflow-shape assertions, real compilation/fixture serialization, noncanonical
+context refusal, the actual script's inert default, local-read refusal, mode and
+authority/override negatives, and wrong/dirty source refusal assertions completed
+in each invocation.
 
-### Actual producer/intake evidence and remaining gates
+At `98951a5b0d4c25d79f4f245de9dd32d2ba1a5c44`, 2 tests were collected and
+1 failed in 7.20s, exit 1. At `tests/test_codex_retention_grade_readout.py:287`,
+the intended-success call failed `assert status == 0 ...` with `assert (2 == 0)`.
+Its common safe-output, unavailable-comparison and forbidden-effect checks ran
+before that assertion. The short log did not expose the captured refusal stage
+or underlying cause; the source-preflight explanation above came from the
+previous continuation's static trace, not a recovered receipt. No repair or
+second run followed in that earlier task, and no push or PR occurred.
 
-The successful producer remains `e355faf9a6212175a288e8473968915ffb2408d0`,
+At `d32e519f074e3ca182338bc7e489aa43b2c796e2`, the single changed invocation
+collected 2 tests and failed 1 in 7.60s, exit 1. The assertion at
+`tests/test_codex_retention_grade_readout.py:292` exposed reader exit 2 with
+`reason=retention_grade_readout_contract_refused` and `stage=grade_payload`.
+Source preflight and private-cache creation completed.
+Real validators then accepted the synthetic terminal/claim bytes, bindings and
+history, including declared-file metadata/history, before `grade_payload`.
+The stage covers payload cache/downloads and canonical projection; its safe refusal does not
+identify the inner exception or failed predicate. No payload-layer diagnosis,
+repair or second invocation followed in that earlier task.
+That invocation's common safe-output, unavailable-comparison and
+forbidden-effect checks completed before its failing assertion.
+
+At `663423bbc7290233b6e818be8fcb14d20ec7e9b6`, the one diagnostic invocation
+collected 2 tests and failed 1 in 7.82s, exit 1, at
+`tests/test_codex_retention_grade_readout.py:341`. The captured helper evidence
+was `ValidationError` from `step8_grade._validate_schema`, then
+`OutputPublicationRefused` with `fixed_grade_schema_refused` from
+`codex_budget_pilot_grading._validate_grade_identity` and
+`codex_budget_pilot_grade_readout._recorded_projection`. Reader exit 2 and the
+safe CLI reason/stage remained unchanged from the preceding invocation.
+Payload fetch/hash checks, the typed retention projection
+binding and raw-grade privacy checks completed before the real schema refusal.
+The precise schema field, value and predicate were not exposed or diagnosed
+in that task. No production fix, fixture-data repair or second invocation followed
+at that stopping boundary.
+This diagnostic invocation's common safe-output, unavailable-comparison and
+forbidden-effect checks also completed before its failing assertion.
+Nothing was pushed, no PR or new published HEAD existed, and both completion
+records were left uncommitted at that handoff.
+
+That diagnostic run stopped before payload resume/source/config/task/run identity
+comparisons, ledger-row/pointer validation and numeric/accounting projection.
+Earlier terminal-record identity checks remain a distinct completed boundary.
+
+Positive score/accounting/object-read assertions, the later immutable-object and
+recorded-identity corruption matrix, optional-ledger and legacy-projection cases,
+and final no-effect assertions were not reached in those three failed runs. `-x`
+also left the collected Step8 test unexecuted each time. None of those runs is a
+readout/projection pass, a numeric-score observation, a live grade or an invoice.
+No passed selector, full suite or private 295.37s integration was replayed.
+
+At `969a944895877e92b665af792d87efece68a9942`, one changed invocation collected
+2 tests and passed both in 40.06s, exit 0. The valid synthetic CLI readout
+returned `verified_writer_recorded_grade` and exit 0. Real schema, recorded
+source/config/task/run identity, ledger-row/pointer, immutable-object/history
+and safe numeric/accounting projection checks completed. Included versus full
+denominators, exclusions, pass counts, partial/missing accounting, unavailable
+materialized-input comparison and separate producer/writer/reader identities
+were asserted. The later corruption matrix, optional missing ledger, legacy
+wrapper refusal, no-clobber and final no-write/model/grader-effect assertions
+all completed, as did the coupled Step8 exact-route test. No validation verdict
+was replaced with success. These are synthetic offline results, not the real
+grade's still-unread score or usage/cost. This pass does not rewrite any earlier
+failure as a pass.
+
+### Original evidence-contract blocker and accepted narrower contract
+
+The earlier pre-edit review returned `REJECT`, with no implementation or test
+run: the requested materialized-input comparison had no recorded operand.
+The writer's `_derived_inputs` recomputes that fingerprint, but `_binding`,
+`_entry_contract` and the retained Step8 grade do not record it. They retain
+the fixed-evidence and preparation digests and canonical grade entry instead.
+The user then explicitly accepted a writer-recorded readout. That corrected the
+work order; it did not relax an implemented writer/admission/identity validator.
+
+The new receipt marks `materialized_input_fingerprint` as `status=unavailable`,
+`value=null`, `comparison=null`, with fixed reason
+`materialized_input_fingerprint_not_recorded`. The original fingerprint
+`3441f200e6e4c53faf1b36f216283c80eee68e5d3e7d827587ba6c3135c7d200`
+and writer preparation digest keep their separate meanings. Available hash,
+source/config/task/run/schema/privacy checks remain required. A verified pinned
+publication would support only what the writer recorded, not independent
+intermediate-input reconstruction, rubric revalidation or fresh provider
+authentication. It would not supply the unavailable fingerprint comparison.
+
+### Actual completed grade, separate from offline reader validation
+
+The leader directly read
+[run 36776393736 / attempt 1 / job 110095775811](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36776393736/job/110095775811)
+at writer source `29e0353f1539265b1741e71be894fedf9be32a8b`, workflow
+`grade-run.yml`, workflow ID `280490256`. Protected owner approval job
+`110095273640` and `pilot-live` both succeeded. Preparation, renderer, source and
+model-connection gates passed; claim step 18, judge step 19 and publication step
+20 succeeded. Generic, setup, inspect and model-free-record routes were skipped.
+
+The safe receipts, all on 2026-09-30 UTC, were:
+
+- `21:03:19.9625631Z`: prepared, `judge_ready=true`, intake SHA256
+  `dbdb64c0ea4769c37b1954c972823777dbd90bf6dbde77ddbcef2e169eb4eb32`.
+- `21:03:33.5124503Z`: acknowledged `retention_grade_claim`, revision
+  `dec305d669e3ca2e53c7f7b9ebfbe7974d661350`.
+- `21:09:49.8824967Z`: child reaped, `entry_invoked=true`, `exit_code=0`,
+  `timed_out=false`, `cleanup_confirmed=true`.
+- `21:09:56.1203808Z`: acknowledged `retention_grade_publication`,
+  `grading_state=graded`, terminal revision
+  `40712e0980cc05c31688fdbb98c693774fb90c0d`, SHA256
+  `11eb15cd4cb783d35fcfda62b458f14d34bfb3742e60d949c6671a56399c9234`,
+  size 3119 bytes.
+
+The fixed selector is `retention/first-cell`; the cell is
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1`.
+The grading branch is `pilot-grades-20260925-04`, and the terminal path is
+`retention-cell-grades/retention_bundle_diagnostic_20260929/3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1/terminal.json`.
+The grade writer run is `{id:36776393736,job:pilot-live,attempt:1}`.
+`invoice_complete=false`, `inference_launched=false` and `automatic_retry=false`
+remain. The listed safe receipts emitted no numeric score. The numeric score is
+still unread; a successful workflow or `graded` terminal does not establish it.
+
+### Preserved producer, intake and historical evidence
+
+The original producer `e355faf9a6212175a288e8473968915ffb2408d0` succeeded in
 [run 36696961231 / job 109837605787](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36696961231/job/109837605787).
-The leader's actual verified intake remains
+The leader's verified retained intake in
 [run 36739260150 / job 109969006748](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36739260150/job/109969006748)
-at `2026-09-30T15:48:51.8896422Z`, with intake SHA256
-`dbdb64c0ea4769c37b1954c972823777dbd90bf6dbde77ddbcef2e169eb4eb32`.
-Its original-input stages 6–10 and approval/execution jobs were skipped;
-source/hash step 11 and read step 12 succeeded. No inference or grader ran in
-that read. Terminal `de50ff0aa6037c0ef6e3b713da519359abd1d08d`, claim
-`3fc283087a020caec574e8c9b8e9bc3ca593e88a` and output
-`43cbf8e265297813857172ecee51256cc17f2d36` remain fixed. Full object hashes,
-request/cell/result fingerprints and the separately verified historical grading
-parent remain in the
-[preserved identity record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-verified-grading-predecessor).
-The completed model-free UNGRADED predecessor is neither an unfinished claim
-nor a score; its historical observation does not establish today's branch head.
+at `2026-09-30T15:48:51.8896422Z` remains separate from this grade. Inference
+terminal `de50ff0aa6037c0ef6e3b713da519359abd1d08d`, inference claim
+`3fc283087a020caec574e8c9b8e9bc3ca593e88a` and inference output
+`43cbf8e265297813857172ecee51256cc17f2d36` are distinct from the grade revisions.
+The historical model-free UNGRADED grading parent is
+`b057ed17849c0ab31b0adfb8c28109d4d34a50f7`, not a score or an unfinished claim.
 
-Actual accounting is still partial: 10 recorded model calls, known cost USD
-`0.409894`, `runtime_cost_usd=null` and
-`missing_reasons=[call_reachability_unknown]`. These are not HTTP request counts,
-zero cost or an invoice; top-level `missing=[]` does not make accounting complete.
-`grade=null`, `grading_launched=false` and `invoice_complete=false` remain.
-Successful inference and retained intake are consumed and were not replayed.
+The fixed materialized grader remains
+`c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`, with
+`default_v2_sol_max.yaml`, GPT-5.6 Sol / max, original Task4 inputs and rubric
+`11e7900cdcac61bc4daf59e65feb238acda98fbf`. No grader setting, registration,
+240-minute judge ceiling, claim, publication or inference byte was changed.
+Producer, grade writer and prospective reader identities remain distinct.
 
-The approved base remains `5b05c4617902491bd180a78365f00df4e5584895`, PR708
-reviewed head `ece7057a838e6a97d0c7441b2b2617f503a5adc2`,
-[review 5368244291](https://github.com/hyeonsangjeon/gdpval-realworks/pull/708#pullrequestreview-5368244291),
-with the leader-reported 10 passing checks. Those checks were not polled or
-rerun. New-head immutable review and CI remain pending for this bridge. Later
-exact-source/input direction must still bind the pinned terminal/result,
-receipt/marker/readback, original Task4 inputs and rubric
-`11e7900cdcac61bc4daf59e65feb238acda98fbf`, and the actual materialized grader
-`c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`
-before the serial one-use claim or judge. Same-run protected owner approval
-remains mandatory. The fixed judge remains `default_v2_sol_max.yaml`,
-GPT-5.6 Sol / max, Ubuntu 24.04 / Python 3.11,
-with the existing 240-minute ceiling. Producer, reader, historical observer and
-grading-source identities stay distinct; parent drift, force/resume/shards,
-regrade and ambiguous cleanup still refuse. Budget authority remains delegated.
+The inference receipt's partial accounting remains 10 recorded model calls,
+known cost USD `0.409894`, `runtime_cost_usd=null` and
+`missing_reasons=[call_reachability_unknown]`. It is not grader accounting, an
+HTTP request count or an invoice. Its original `grade=null` and
+`grading_launched=false` receipt was not rewritten by the later grade.
+Actual grader usage/cost and numeric score remain unread.
 
-Only completion records changed after this 1.52s pass. Author and committer remain
-`hyeonsangjeon <wingnut0310@gmail.com>`, with no attribution trailers. The
-authorized publication is one ordinary push to the existing PR709 branch, not a
-new PR or live grade. Prior worktrees/branches, `wip/local-main-preserved-20260719`, uncommitted
+The [immutable PR709 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/4245b3f66d6cd341be197f0f1d38bd58a6cdfebd/tasks/LATEST_TASK_RESULT/README.md)
+preserves the separate 2PASS/1.52s routing result, 2PASS/14.58s bridge result,
+CI run36764747855/job110055972491 with 1failed/13298passed/64skipped/46deselected
+in933.35s, and the exact reached/unreached boundaries of `ef2708` FAIL2.96s,
+`e1d2076` FAIL7.15s and `be0761` FAIL14.54s. The
+[immutable PR708 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ece7057a838e6a97d0c7441b2b2617f503a5adc2/tasks/LATEST_TASK_RESULT/README.md)
+preserves the NAS explicit-token prerequisite refusal and prior intake-fixture
+failures separately. No earlier test or actual operation was replayed.
+
+### Remaining gates and preservation
+
+The accepted evidence contract is unchanged. The fixture's Git transport seam
+remains corrected, and the producer-receipt schema correction now has complete
+targeted offline validation. The readout implementation still needs immutable
+new-head owner review and CI, then one separately directed exact-source live
+readout. The offline pass and fixed command shape authorize neither dispatch
+nor a stronger materialized-input comparison or provider-authentication claim.
+The consumed inference and grade must not be rerun to create missing evidence.
+During diagnosis and offline validation, no live HF/token/OIDC/Azure/model/grade
+call, dispatch, CI polling, remote mutation, permission change, Project edit or
+merge occurred. The authorized owner Git push and draft-PR creation are separate
+publication actions; neither authorizes a retained-data read or grade.
+
+All earlier branches/worktrees, `wip/local-main-preserved-20260719`, uncommitted
 NAS refusal records and `/ai-work/copilot/retention-intake-private-20260930-2239`
-remain unchanged. The leader's unavailable M4 files were not updated.
+remain unchanged. The leader's unavailable M4 files were not updated. Git
+author and committer remain `hyeonsangjeon <wingnut0310@gmail.com>` on the earlier
+implementation/correction commits and this fixture/diagnostic test commit; no
+attribution trailer was added. The earlier blocker and failure records were
+preserved and updated only after the single changed validation. No subsequent
+code edit was made.
