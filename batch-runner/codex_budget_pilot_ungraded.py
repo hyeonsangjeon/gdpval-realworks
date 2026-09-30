@@ -356,12 +356,25 @@ def _task5_a2_predecessor(api, repo, revision, context, entry, cache, token, dea
                 "revision": backing["revision"], **backing["identity"]}
             and evidence["claim"]["predecessor"] == backing["terminal"]["binding"]["retained"],
             "model_free_task5_a2_backing_changed")
+    _task5_a2_history(api, repo, revision, verified["identity"], cache, token, deadline,
+                      record_revisions=record_revisions)
+    return verified
+
+
+def _task5_a2_history(api, repo, revision, identity, cache, token, deadline, *, record_revisions=()):
+    """Fixed object/history rule, not a replacement for the old semantic proof.
+
+    The original caller verifies its full backing above. The retention bridge
+    may reuse this rule only behind its separately pinned verified A2 receipt.
+    """
+    require(type(record_revisions) is tuple and len(record_revisions) in {0, 2},
+            "model_free_task5_a2_chain_revision_changed")
     # These seven pairs and their formats are fixed locally. C2's existing
     # semantic verifier above remains authoritative for its bounded backing.
     cells = (grading.TASK5_B2_CELL, grading.TASK5_C2_CELL, grading.TASK5_C1_CELL,
              grading.TASK5_B1_CELL, grading.TASK5_A1_CELL, grading.TASK4_A2_CELL,
              "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2")
-    revisions, expected = list(record_revisions), verified["identity"]
+    revisions, expected = list(record_revisions), identity
     for index, cell_id in enumerate(cells):
         claim_path, terminal_path = grading._paths({"cell_id": cell_id, "run_id": ci.CAMPAIGN + "__" + cell_id})
         terminal, _ = retained._control(api, repo, revision, terminal_path,
@@ -383,7 +396,6 @@ def _task5_a2_predecessor(api, repo, revision, context, entry, cache, token, dea
                     and output._hash(link["sha256"]), "fixed_model_free_task5_a2_predecessor_required")
             revision, expected = linked["expected_parent"], {key: link[key] for key in ("size", "sha256")}
     require(len(revisions) == 14 + len(record_revisions), "model_free_task5_a2_chain_revision_changed")
-    return verified
 
 
 def verify_terminal(api, repo, revision, context, entry, cache, token, deadline):

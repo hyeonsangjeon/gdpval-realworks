@@ -13,6 +13,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record the leader-verified first retention intake from run `36739260150`,
+  attempt 1, job `109969006748`, at `2026-09-30T15:48:51.8896422Z`:
+  `intake_verified=true`, `status=succeeded`, confirmed cleanup and acknowledged
+  terminal. Original-input stages 6–10 and approval/execution jobs were skipped;
+  source/hash 11 and read 12 succeeded. No inference or grader ran in that read.
+  Intake SHA256 is
+  `dbdb64c0ea4769c37b1954c972823777dbd90bf6dbde77ddbcef2e169eb4eb32`;
+  recorded accounting remains partial at 10 model calls and known cost USD
+  `0.409894`, runtime cost null, `call_reachability_unknown`, null grade and
+  incomplete invoice. This does not erase the earlier NAS prerequisite refusal
+  or synthetic failures. Stop the fixed-grade bridge before implementation:
+  the pre-edit bounded CI/auth/storage review conditionally approved helper
+  reuse but requires the immutable completed grading-branch predecessor.
+  Existing local records establish final Task5 A2 run `36306339791` completion,
+  not its private terminal revision/byte identity. The supplied retention
+  inference terminal is not that grading parent. No unchecked parent, new
+  historical credential path or unconditional live gate was added. The new
+  worktree remains at approved base `5b05c4617902491bd180a78365f00df4e5584895`;
+  production/workflows are unchanged, no selector ran, and no new tested or
+  published HEAD, commit, push or PR exists. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-first-retention-fixed-grade-bridge)
+  preserves all supplied immutable intake identities, the PR708 review boundary,
+  separate prior failures/passes and the exact missing contract. Only these two
+  records changed locally and remain uncommitted. New implementation/validation,
+  immutable review/CI and one separately source-bound fixed grade remain gated;
+  the original NAS destination/records and unavailable leader M4 files were not changed.
 - Add an explicit, default-false `read_result` mode to the existing retention
   first-cell workflow after a bounded CI/auth review. Only the contents-read
   preparation job can use the existing step-scoped HF secret for the fixed
