@@ -291,7 +291,35 @@ def test_first_retention_fixed_grade_is_bound_one_use_and_private(tmp_path, monk
     git_state["head"] = SOURCE
     assert len(api.calls) == before and not root.exists()
 
+    real_materialize = bridge._materialize_bound_codex_grading_input
+    materialization_calls = []
+
+    def inspect_upload(run_spec, **arguments):
+        upload = arguments["source_upload"]
+        assert upload == root / "original-upload" and upload.stat().st_mode & 0o777 == 0o700
+        assert {path.name for path in upload.iterdir()} == {"deliverable_files"}
+        members = list(upload.rglob("*"))
+        assert not any(path.is_symlink() for path in members)
+        staged = {path.relative_to(upload).as_posix(): path.read_bytes() for path in members if path.is_file()}
+        declared = {item["path"]: {key: item[key] for key in ("sha256", "size")}
+                    for item in record["files"] if item["path"].startswith("deliverable_files/")}
+        assert {name: pilot._identity(data) for name, data in staged.items()} == declared
+        assert staged == {name: (tmp_path / "synthetic-pin" / name).read_bytes() for name in declared}
+        assert arguments["inference_results"] == root / "retained" / reader.RESULT
+        assert arguments["inference_identity"] == root / "inference-identity.json"
+        assert arguments["destination"] == root / "inputs"
+        retained_files = bridge._intake(record, root / "retained")
+        payload = json.loads(retained_files[reader.RESULT])
+        ledger = payload["cost_ledger"]
+        assert ledger["path"] == reader.LEDGER and ledger["path"] not in staged
+        assert pilot._identity(retained_files[ledger["path"]])["sha256"] == ledger["sha256"]
+        assert (arguments["inference_results"].parent / ledger["path"]).read_bytes() == retained_files[ledger["path"]]
+        materialization_calls.append(upload)
+        return real_materialize(run_spec, **arguments)
+
+    monkeypatch.setattr(bridge, "_materialize_bound_codex_grading_input", inspect_upload)
     prepared = bridge.prepare(context, root, _test_api=api, _test_transport=transport)
+    assert materialization_calls == [root / "original-upload"]
     assert prepared["judge_ready"] is True and prepared["entry"]["grader_source_hash"] == bridge.GRADER_SHA256
     assert prepared["materialization"]["task_status"] == "success" and transport.calls == 0
     assert bridge._ready(context, root) == prepared

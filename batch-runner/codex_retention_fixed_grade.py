@@ -306,9 +306,13 @@ def prepare(context, root, *, _test_api=None, _test_transport=None):
         identity = grade._inference_identity(context, evidence, files, retained._target())
         grade._record(root / "inference-identity.json", identity)
         identity_sha = pilot._identity(retained._encoded(identity))["sha256"]
+        upload = grade._cache(root, "original-upload")
+        for name, data in files.items():
+            if name.startswith("deliverable_files/"):
+                grade._put(configs._path(upload, name), data)
         materialized_path = _materialize_bound_codex_grading_input(context.run, plan=context.grading,
             manifest=load_plan(ROOT / registration.ORIGINAL_PROFILE), inference_results=root / "retained" / reader.RESULT,
-            source_upload=root / "retained", inference_identity=root / "inference-identity.json",
+            source_upload=upload, inference_identity=root / "inference-identity.json",
             approved_identity_sha256=identity_sha, destination=root / "inputs")
         members, materialized = _derived_inputs(context, files, identity)
         require(materialized_path == root / "inputs" / context.run.inference_results_path,
