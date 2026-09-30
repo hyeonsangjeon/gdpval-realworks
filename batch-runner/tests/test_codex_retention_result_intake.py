@@ -273,6 +273,7 @@ def test_first_retention_result_intake_is_immutable_bound_and_read_only(tmp_path
     partial = CostReceipt(status="partial", known_cost_usd=Decimal("0.01"), model_cost_usd=Decimal("0.01"),
                           model_calls=1, usage={"input_tokens": 12, "output_tokens": 3, "reasoning_tokens": 2},
                           missing_reasons=("synthetic_missing_cost",)).as_dict()
+    partial = ci.project_cost_receipt(partial)
     partial_api = ResultHF(plan, receipt=partial, with_ledger=True)
     partial_record = read(partial_api, "partial-accounting")
     assert partial_record["accounting"] == "partial" and partial_record["receipt"] == partial
