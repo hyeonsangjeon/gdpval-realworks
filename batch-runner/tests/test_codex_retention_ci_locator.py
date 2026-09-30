@@ -79,7 +79,7 @@ def test_retention_job_issuance_locator_diagnostics_are_closed(monkeypatch, caps
         ("supplied-audience", locator + "&audience=" + private, "known_api_query"),
         ("unknown-query", locator + "&" + private + "=" + private, "known_api_query"),
         ("malformed-query", locator + "&" + private, "query_parsed"),
-        ("malformed-url", "https://[" + private + "]/" + private, "url_parsed"),
+        ("malformed-url", "https://[" + private, "url_parsed"),
         ("many-segments", origin + "/" + "/".join([private] * 32) + "?api-version=2.0", "registered_route"),
         ("many-query-pairs", locator + "&" + "&".join([private + "=" + private] * 32), "known_api_query"),
         ("oversized", origin + "/" + private * 512 + "?api-version=2.0", "length_within_limit"),
