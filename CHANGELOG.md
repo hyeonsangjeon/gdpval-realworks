@@ -13,6 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add a local read-only intake for the first retained diagnostic result, using
+  the existing immutable terminal/object validators and held-directory output
+  writer. The small non-authorizing `TerminalExpectation` extension preserves
+  original document callers; workflows, registrations, runtime and grader stay
+  unchanged. At `9c34db608209a084b61b18fdbeea067634028e36`, the one offline
+  selector reported 1 collected, 1 failed in 2.75s, exit 1. A valid synthetic
+  missing-accounting intake completed before the synthetic partial receipt hit
+  `retention_accounting_mismatch`: its raw `runtime_cost_usd=0.0` differs from
+  the existing projection's `null`. Later negative/publication cases were not
+  reached in that invocation. The fixture-only follow-up at
+  `fdfb9b2757da9b164caf6985bd6155a48aaa6c0b` projects the positive partial receipt
+  with the same real helper as the producer; production and negative cases are
+  unchanged. Its one authorized selector reported 1 collected, 1 failed in 6.58s,
+  exit 1. Partial-accounting, empty-ledger, corruption and path/collision checks
+  completed before the member namespace swap raised `ReferenceIntegrityError`,
+  which the test's expected exception tuple does not include. Post-refusal and
+  later publication assertions were not reached. No push or PR followed either
+  failure. The separately authorized expectation correction at
+  `e1206a704d649aac18d029670029def4c70fc18e` imports the real guard exception and
+  adds it only for member/marker swaps, preserving all assertions and the distinct
+  readback/fsync expectations. Its one offline selector reported 1 collected,
+  1 passed in 8.03s, exit 0, with no skip. The post-refusal, marker-swap,
+  readback/fsync and final no-effect assertions completed with real validators
+  and synthetic records/transport. No live retained bytes were read. The leader-supplied
+  [run 36696961231 / job 109837605787](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36696961231/job/109837605787)
+  succeeded at producer `e355faf9a6212175a288e8473968915ffb2408d0` with confirmed
+  cleanup and acknowledged terminal, but `grade=null` and `invoice_complete=false`.
+  That inference outcome is not an independently verified retained payload.
+  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-first-retention-result-intake)
+  records the exact receipt, selector, both failures and the later offline pass,
+  source distinctions, role bounds and remaining immutable review, CI, live-intake
+  and fixed-grade gates.
+  Prior observations remain separate in the
+  [immutable PR706 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/67b08ba1ab302525dedf1a2fb01cbe97bc5330fe/tasks/LATEST_TASK_RESULT/README.md).
 - Delegate the retention script entrypoint to canonical `codex_retention_ci.main`
   so controller dispatch shares `ExecutionGrantRequest`, `RetentionCIRefused`
   and `_Admission` definitions. Only the production footer changes; exact type
