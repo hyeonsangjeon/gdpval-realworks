@@ -20,7 +20,6 @@ import yaml
 import codex_retention_grade_readout as reader
 import gpt54_disposable_checkout as source_checkout
 import step8_grade as step8
-from core.cost_projection import project_cost_receipt
 from core.cost_receipts import build_receipt, ledger_reference
 from core.grader import ItemGrade, TaskGrade
 from core.rubric_loader import RubricLoader
@@ -71,7 +70,9 @@ def _fixture(context):
         "cost_run_id": step8.make_cost_run_id(experiment_yaml_name=bridge.SELECTOR,
             config_hash=config_hash, grader_source_hash=bridge.GRADER_SHA256)}
     ledger = base._ledger(entry["cost_run_id"], context.cell["task_id"], "grading")
-    receipt = project_cost_receipt(build_receipt([json.loads(ledger)], []).as_dict())
+    # Step8 persists the producer receipt; safe readout projection happens only
+    # after schema validation and may turn partial-accounting placeholders null.
+    receipt = build_receipt([json.loads(ledger)], []).as_dict()
     items = [ItemGrade(rubric_item_id=f"synthetic-{index}", criterion=PRIVATE, max_score=2,
         awarded_score=2 if index == 0 else 0, verdict=verdict,
         decided_by="judge" if index == 2 else "precheck", required=None, evidence=PRIVATE,
@@ -314,11 +315,19 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
                 return real_helper(*args, **kwargs)
             except Exception as error:
                 # Never stringify the error: schema/identity errors can contain
-                # private values. Record only fixed symbols, then re-raise it.
-                payload_refusals.append({"function": function_name,
+                # private values. Record only fixed symbols and public schema
+                # details, then re-raise the same exception.
+                refusal = {"function": function_name,
                     "exception": next((kind.__name__ for kind in fixed_classes if type(error) is kind), "Exception"),
                     "reason": next((reason for reason in fixed_reasons
-                        if type(error) is output.OutputPublicationRefused and error.args == (reason,)), None)})
+                        if type(error) is output.OutputPublicationRefused and error.args == (reason,)), None)}
+                if type(error) is step8.ValidationError:
+                    refusal["validator"] = error.validator
+                    refusal["absolute_schema_path"] = list(error.absolute_schema_path)
+                    if error.validator == "required":
+                        refusal["missing_properties"] = [name for name in error.schema["required"]
+                            if name not in error.instance]
+                payload_refusals.append(refusal)
                 raise
         return observed
 
@@ -345,6 +354,7 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
         "avg_score_pct_full_denominator": 33.33, "avg_score_pct_lift": 16.67}
     assert result["coverage"]["passed_items"] == 1 and result["coverage"]["rubric_item_coverage"] == 0.5
     assert result["recorded_task_cost"]["model_calls"] == 1 and result["recorded_task_cost"]["missing_reasons"]
+    assert result["recorded_task_cost"]["runtime_cost_usd"] is None
     assert result["recorded_task_cost"]["invoice_complete"] is False
     assert result["recorded_task_cost"]["http_request_count"] is None
     assert result["original_result_fingerprint"] == bridge.RESULT["result"]["result_fingerprint"]
