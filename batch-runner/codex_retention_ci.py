@@ -72,6 +72,10 @@ OIDC_MAX_BYTES = 64 * 1024
 OIDC_MAX_AGE_SECONDS = 600
 OIDC_SKEW_SECONDS = 30
 UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+_JOB_ISSUANCE_ROUTE = re.compile(
+    "(?:/" + UUID + "/_apis/distributedtask/hubs/build/plans/" + UUID + "/jobs/" + UUID + "/idtoken"
+    + "|/[0-9]+//idtoken/" + UUID + "/" + UUID + ")"
+)
 SOURCE_PATHS = (
     "batch-runner/codex_retention_ci.py", "batch-runner/codex_retention_historical.py", WORKFLOW,
     "batch-runner/codex_budget_pilot_ci.py", "batch-runner/codex_budget_pilot_retention.py",
@@ -122,8 +126,7 @@ def _job_locator_diagnostic(locator, address, query):
         "allowed_host_pattern": re.fullmatch(
             r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+actions\.githubusercontent\.com", address.netloc) is not None,
         "not_oidc_issuer": address.hostname != "token.actions.githubusercontent.com",
-        "registered_route": re.fullmatch("/" + UUID + "/_apis/distributedtask/hubs/build/plans/" + UUID
-                                         + "/jobs/" + UUID + "/idtoken", address.path) is not None,
+        "registered_route": _JOB_ISSUANCE_ROUTE.fullmatch(address.path) is not None,
     })
     segments = address.path.split("/")[1:] if address.path.startswith("/") else address.path.split("/")
     if not address.path:
@@ -332,8 +335,7 @@ class LocalTransport(owned.LocalTransport):
                     and re.fullmatch(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+actions\.githubusercontent\.com",
                                      address.netloc) is not None
                     and address.hostname != "token.actions.githubusercontent.com"
-                    and re.fullmatch("/" + UUID + "/_apis/distributedtask/hubs/build/plans/" + UUID
-                                     + "/jobs/" + UUID + "/idtoken", address.path) is not None
+                    and _JOB_ISSUANCE_ROUTE.fullmatch(address.path) is not None
                     and query == [("api-version", "2.0")], "github_job_issuance_locator_refused")
         except ValueError:
             refusal = RetentionCIRefused("github_job_issuance_locator_refused")

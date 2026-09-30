@@ -21,6 +21,12 @@ def test_retention_job_issuance_locator_diagnostics_are_closed(monkeypatch, caps
     origin = "https://pipelines.actions.githubusercontent.com"
     route = f"/{tenant}/_apis/distributedtask/hubs/build/plans/{plan}/jobs/{job}/idtoken"
     locator = origin + route + "?api-version=2.0"
+    number = "98765432123456789"
+    observed_route = f"/{number}//idtoken/{plan}/{job}"
+    observed_locator = origin + observed_route + "?api-version=2.0"
+    limit_route = observed_route.replace(number, "9" * (4096 - len(observed_locator) + len(number)))
+    limit_locator = origin + limit_route + "?api-version=2.0"
+    assert len(limit_locator) == 4096
     base_refusal = {"reason": reason, "launch_authorized": False, "grading_launched": False}
     effects = []
 
@@ -35,8 +41,12 @@ def test_retention_job_issuance_locator_diagnostics_are_closed(monkeypatch, caps
         monkeypatch.setattr(owner, name, forbidden)
     monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", token)
 
-    # These are the pre-existing synthetic accepted forms, not a recovered live URL.
-    for accepted in (locator, locator.replace("api-version", "api%2Dversion")):
+    # All values are synthetic; only the new route's structure was observed live.
+    for accepted, expected_route in (
+            (locator, route), (locator.replace("api-version", "api%2Dversion"), route),
+            (observed_locator, observed_route),
+            (observed_locator.replace(number, "0"), observed_route.replace(number, "0")),
+            (limit_locator, limit_route)):
         monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", accepted)
         issued, keys = {"value": "synthetic-not-a-signed-job-token"}, {"keys": []}
         responses = [Response(json.dumps(value).encode(), content_type="application/json")
@@ -49,13 +59,41 @@ def test_retention_job_issuance_locator_diagnostics_are_closed(monkeypatch, caps
         request, timeout = http.calls[0]
         address = urllib.parse.urlsplit(request.full_url)
         assert address.scheme == "https" and address.netloc == "pipelines.actions.githubusercontent.com"
-        assert address.path == route and not address.fragment
+        assert address.path == expected_route and not address.fragment
         assert urllib.parse.parse_qsl(address.query) == [("api-version", "2.0"), ("audience", audience)]
         assert request.get_header("Authorization") == "Bearer " + token
         assert 0 < timeout <= adapter.intake.REQUEST_TIMEOUT_SECONDS
         assert http.calls[1][0].full_url == adapter.OIDC_JWKS
         assert http.calls[1][0].get_header("Authorization") is None
         assert effects == []
+
+        # A matching diagnostic is still observation only, without credentials or transport.
+        with monkeypatch.context() as observation:
+            observation.setattr(adapter.os, "environ", {"ACTIONS_ID_TOKEN_REQUEST_URL": accepted})
+            for owner, name in ((adapter.LocalTransport, "__init__"),
+                                (adapter.LocalTransport, "github_job_token"),
+                                (adapter.LocalTransport, "authority_opener"),
+                                (adapter.intake, "_response"), (adapter, "require_source")):
+                observation.setattr(owner, name, forbidden)
+            assert adapter.main(["--observe-locator", "--reviewed-source-sha", "a" * 40]) == 0
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert {key: value for key, value in payload.items() if key != "issuance_locator"} == {
+            **base_refusal, "reason": "github_job_issuance_locator_observation_only"}
+        diagnostic = payload["issuance_locator"]
+        assert diagnostic["checks"]["registered_route"] is True
+        assert all(diagnostic["checks"].values()) and not diagnostic["truncated"]
+        expected_skeleton = (
+            ["{uuid}", "_apis", "distributedtask", "hubs", "build", "plans", "{uuid}", "jobs", "{uuid}", "idtoken"]
+            if expected_route == route else ["{number}", "{empty}", "idtoken", "{uuid}", "{uuid}"])
+        assert diagnostic["route_skeleton"] == expected_skeleton
+        assert diagnostic["counts"] == {
+            "host_labels": 4, "route_segments": len(expected_skeleton), "query_pairs": 1,
+            "api_version_parameters": 1, "audience_parameters": 0, "other_query_parameters": 0}
+        for secret in (token, private, tenant, plan, job, audience, origin, number, accepted, expected_route):
+            assert secret not in captured.out
+        assert len(captured.out) <= 2048 and captured.err == "" and effects == []
+        assert len(http.calls) == 2
 
     cases = (
         ("absent", "", "https"),
@@ -83,6 +121,36 @@ def test_retention_job_issuance_locator_diagnostics_are_closed(monkeypatch, caps
         ("many-segments", origin + "/" + "/".join([private] * 32) + "?api-version=2.0", "registered_route"),
         ("many-query-pairs", locator + "&" + "&".join([private + "=" + private] * 32), "known_api_query"),
         ("oversized", origin + "/" + private * 512 + "?api-version=2.0", "length_within_limit"),
+    )
+    cases += tuple(("observed-" + name, origin + path + "?api-version=2.0", "registered_route")
+                   for name, path in (
+        ("missing-empty", observed_route.replace("//idtoken/", "/idtoken/")),
+        ("extra-empty", observed_route.replace("//idtoken/", "///idtoken/")),
+        ("missing-number", observed_route.replace(number, "")),
+        ("nonnumeric", observed_route.replace(number, private)),
+        ("signed-number", observed_route.replace(number, "-" + number)),
+        ("non-ascii-number", observed_route.replace(number, "\u0661")),
+        ("encoded-number", observed_route.replace(number, "%39" + number[1:])),
+        ("encoded-empty", observed_route.replace("//idtoken/", "/%2Fidtoken/")),
+        ("encoded-separator", observed_route.replace("/" + job, "%2f" + job)),
+        ("encoded-word", observed_route.replace("idtoken", "id%74oken")),
+        ("encoded-uuid", observed_route.replace(plan, "%30" + plan[1:])),
+        ("missing-word", observed_route.replace("idtoken/", "")),
+        ("word-case", observed_route.replace("idtoken", "idToken")),
+        ("missing-first-uuid", observed_route.replace("/" + plan, "")),
+        ("missing-second-uuid", observed_route.replace("/" + job, "")),
+        ("short-first-uuid", observed_route.replace(plan, plan[:-1])),
+        ("nonhex-second-uuid", observed_route.replace(job, job[:-1] + "g")),
+        ("compact-uuid", observed_route.replace(plan, plan.replace("-", ""))),
+        ("extra-prefix", "/" + private + observed_route),
+        ("extra-suffix", observed_route + "/" + private),
+        ("trailing-slash", observed_route + "/"),
+    ))
+    cases += (
+        ("observed-oversized", origin + "/9" + limit_route[1:] + "?api-version=2.0", "length_within_limit"),
+        ("observed-suffix-spoof", observed_locator.replace(origin, origin + ".example.invalid"), "allowed_host_pattern"),
+        ("observed-api-version", observed_locator.replace("2.0", private), "known_api_query"),
+        ("observed-supplied-audience", observed_locator + "&audience=" + private, "known_api_query"),
     )
     observed = {}
     for name, refused_locator, failed_check in cases:
