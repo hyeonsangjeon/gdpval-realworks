@@ -13,6 +13,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add an explicit, default-false `read_result` mode to the existing retention
+  first-cell workflow after a bounded CI/auth review. Only the contents-read
+  preparation job can use the existing step-scoped HF secret for the fixed
+  successful producer/request/cell. Conflicting modes fail before credentials;
+  a clean exact-source/hash preflight precedes the unchanged reader. The same
+  three jobs, permissions, protected environment and normal routes remain.
+  Reads use fresh private runner output, a 180-second outer limit and unchanged
+  internal bounds; only the safe receipt reaches logs/summary, with failure
+  exits preserved. No original preparation, approval, OIDC/Azure, admission,
+  model, grader, upload or retry is reachable through read-only mode. At
+  `a650e5ebb07c2902a3d06b519c351a891fe1fa69`, one focused offline invocation
+  reported 2 collected, 2 passed in 2.40s, exit 0, no skips: all 16 mode
+  combinations, exact workflow contracts and real closed parser/refusal checks.
+  This is not live retained-byte verification. Preserve the prior NAS attempt
+  at `b3a2fb61c3e44bbdc58933ef1c79adcfb6f3fde7`,
+  `2026-09-30T13:51:08Z`–`2026-09-30T13:51:10Z`: `explicit_hf_token_required`,
+  exit 2, 210-byte stdout with SHA256
+  `7fe9d0cc4db0538879ebbe0f97b1a6d4ee8b98bdc7d2ef99a3a607e2d31191d5`,
+  empty stderr and no timeout. Its original partial destination/receipt and
+  uncommitted NAS records remain untouched. That prerequisite refusal does not
+  change the successful consumed producer run 36696961231 / job 109837605787,
+  null grade or incomplete invoice. The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-intake-existing-ci-credential)
+  keeps the earlier 2.75s/6.58s failures and 8.03s offline pass separate, records
+  the reviewed PR707 base and unchanged reader/verifier hashes, and leaves
+  new-head review/CI, one separately directed CI read and the fixed grade gated.
+  No live intake or execution dispatch occurred; the leader's M4 files were not updated.
 - Add a local read-only intake for the first retained diagnostic result, using
   the existing immutable terminal/object validators and held-directory output
   writer. The small non-authorizing `TerminalExpectation` extension preserves

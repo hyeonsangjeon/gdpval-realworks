@@ -13,9 +13,10 @@ from .test_codex_budget_pilot import offline  # noqa: F401; unchanged live-bound
 def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsys):
     workflow = yaml.safe_load((adapter.ROOT / adapter.WORKFLOW).read_bytes())
     dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
-    assert set(dispatch) == {"reviewed_source_sha", "cell_id", "prepare", "execute", "observe_locator"}
-    assert all(dispatch[name]["default"] is False for name in ("prepare", "execute", "observe_locator"))
+    assert set(dispatch) == {"reviewed_source_sha", "cell_id", "prepare", "execute", "observe_locator", "read_result"}
+    assert all(dispatch[name]["default"] is False for name in ("prepare", "execute", "observe_locator", "read_result"))
     assert dispatch["observe_locator"]["type"] == "boolean"
+    assert dispatch["read_result"]["type"] == "boolean"
     jobs = workflow["jobs"]
     assert set(jobs) == {adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB}
     prepare, approve, execute = (jobs[name] for name in (adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB))
@@ -29,26 +30,30 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
     gate = prepare["steps"][0]
     assert gate == execute["steps"][0]
     assert gate["env"] == {"OBSERVE_LOCATOR_ONLY": "${{ inputs.observe_locator }}",
-                           "PREPARE_REQUESTED": "${{ inputs.prepare }}", "EXECUTE_REQUESTED": "${{ inputs.execute }}"}
+                           "PREPARE_REQUESTED": "${{ inputs.prepare }}", "EXECUTE_REQUESTED": "${{ inputs.execute }}",
+                           "READ_RESULT_ONLY": "${{ inputs.read_result }}"}
     assert gate["run"].splitlines() == [
         "set -euo pipefail",
+        '[[ "$READ_RESULT_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]',
         '[[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
         '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
     ]
-    modes = "(inputs.execute || inputs.observe_locator) && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
+    modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
     prepared = "needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''"
     assert approve["needs"] == adapter.PREPARE_JOB and approve["if"] == modes + " && " + prepared
     assert execute["needs"] == [adapter.PREPARE_JOB, adapter.APPROVE_JOB]
     assert execute["if"] == modes + " && " + prepared + " && needs.retention-approve.result == 'success'"
     assert "this is not authenticated execution approval" in approve["steps"][0]["run"]
-    assert execute["steps"][:9] == prepare["steps"]
+    assert len(prepare["steps"]) == 11
+    assert execute["steps"][:9] == prepare["steps"][:9]
+    assert prepare["steps"][4]["if"] == "inputs.read_result == false"
     for step in prepare["steps"][5:9]:
         assert step["if"] == "inputs.prepare || inputs.execute || inputs.observe_locator"
-    assert "no token, signed approval verification or admission follows" in prepare["steps"][-1]["run"]
-    assert "approve-retention-first-cell sha256:" in prepare["steps"][-1]["run"]
+    assert "no token, signed approval verification or admission follows" in prepare["steps"][8]["run"]
+    assert "approve-retention-first-cell sha256:" in prepare["steps"][8]["run"]
 
     observation, *live_steps = execute["steps"][9:]
     assert observation["if"] == "inputs.observe_locator && !inputs.prepare && !inputs.execute"
