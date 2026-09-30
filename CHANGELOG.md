@@ -13,6 +13,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Support only the observed `/<digits>//idtoken/<UUID>/<UUID>` issuance route
+  alongside the unchanged exact legacy route, using one exact matcher for
+  acceptance and closed diagnostics. Preserve the literal empty segment,
+  existing UUID syntax, 4096-character bound and all other authentication,
+  workflow and admission gates. The leader's completed
+  [run 36669478415 / job 109754018823](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36669478415/job/109754018823)
+  observed only `registered_route=false`; all other checks passed. Observation
+  step 11 succeeded, while signed-token verification, sandbox, Azure login and
+  claim/run/reconcile steps 12–15 were skipped. Its once-persisted owner
+  observation approval is not an execution grant. The
+  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-observed-locator-route-fix)
+  preserves the supplied preparation/approval facts and exact request/grader
+  hashes; the leader's unavailable local M4 volume was not updated. At
+  `0fab70ea73cd1fe8ede065db5ef42bc5a84781e0`, the single extended offline
+  locator selector reported 1 collected, 1 passed in 2.25s, exit 0. Real
+  predicates and simulated HTTP cover both routes, 4096/4097 bounds, malformed
+  variants, redaction and observation without transport. Prior results remain
+  separate in the [immutable PR704 handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/bbf5454254ebded6cbcb94b7773bcf7f284044dd/tasks/LATEST_TASK_RESULT/README.md).
+  Prior [review 5361514862](https://github.com/hyeonsangjeon/gdpval-realworks/pull/704#pullrequestreview-5361514862)
+  and its 10 passing checks do not approve the new source. New-head review/CI
+  and separately source-bound execution authority remain required; no live
+  authentication, admission or model success is claimed.
 - Add an explicit protected observation-only route to the existing retention
   workflow and CLI. It reuses closed locator diagnostics, never reads the bearer
   or requests a token, and returns before source-verifier subprocesses,
