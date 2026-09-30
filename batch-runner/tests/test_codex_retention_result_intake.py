@@ -11,6 +11,7 @@ import pytest
 import codex_retention_result_intake as reader
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from core.cost_receipts import CostReceipt
+from core.reference_integrity import ReferenceIntegrityError
 from core.result_fingerprint import inference_result_fingerprint
 from ghcp_vm_input_bundle import GHCPInputBundleRefused
 from .test_codex_budget_pilot_retention import MemoryHF, TOKEN, offline  # noqa: F401
@@ -392,7 +393,10 @@ def test_first_retention_result_intake_is_immutable_bound_and_read_only(tmp_path
 
         with monkeypatch.context() as writing:
             writing.setattr(reader, "_write_no_clobber", interrupted)
-            with pytest.raises((GHCPInputBundleRefused, FileNotFoundError, output.OutputPublicationRefused)):
+            expected_refusals = (GHCPInputBundleRefused, FileNotFoundError, output.OutputPublicationRefused)
+            if phase in ("member", "marker"):
+                expected_refusals += (ReferenceIntegrityError,)
+            with pytest.raises(expected_refusals):
                 read(ResultHF(plan), phase)
         assert not (destination / reader.MARKER).exists()
         if phase != "altered-readback":
