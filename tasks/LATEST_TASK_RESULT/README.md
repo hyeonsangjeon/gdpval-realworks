@@ -1,89 +1,102 @@
 # Latest task result
 
-## PROJECT5-RETENTION-GRADE-LEDGER-BINDING
+## PROJECT5-PR709-ROUTING-AND-RECONCILIATION
 
-The fixed retention bridge and its focused ledger-contract check passed in one
-offline invocation: **2 collected, 2 passed in 14.58s, exit 0**. Tested HEAD is
-`117d0ded256fde2794b4be02bbb0cef78c38c6dd`, tree
-`b4a418f2441e607e36b88c7b1269a1444379a0d3`. Publication validation, simulated
-lost-acknowledgement reconciliation, duplicate-publication refusal and final
-no-effect/private-namespace assertions were reached. This is offline integration
-evidence, not a paid grade, provider authentication or an invoice.
+The two scoped PR709 corrections passed one offline invocation:
+**2 collected, 2 passed in 1.52s, exit 0**. Tested HEAD is
+`120ff70f382d54eef97452099ede06fa6bbb242c`, tree
+`f446d162fc0c9d964cba5e932c3381896723848c`. The exact Step8 routing test and all
+ten publication-path scenarios completed. This is workflow-routing evidence,
+not live publication, a paid grade, provider authentication or an invoice.
 
-### Responsible layer and exact correction
+### Exact corrections and unchanged boundaries
 
-The compiler and synthetic judge already agreed. The real Step8 constructor
-derives `retention/first-cell|<config_hash>|<grader_source_hash>` at run ordinal 1.
-The config hash is the first 16 lowercase hexadecimal characters of SHA256 over
-the actual materialized config bytes; the grader-source hash has 64 lowercase
-hexadecimal characters. The fixture uses that prepared entry without rewriting
-its ledger. The production publication validator previously accepted only
-`pilot/cell-{index:02d}|<16 lowercase hex>|<64 lowercase hex>` for grading.
+Seven exact expressions in
+`test_grade_workflow_rc7_requires_valid_committed_partial` now match the existing
+retention exclusions and fixed routes. Equality checks remain exact. Static
+comparison preserved all 138 existing assertions, including approval inheritance,
+permissions, source, published-commit and failure checks. This is a static count,
+not 138 runtime test passes. No production exclusion was removed.
 
-After the bounded pre-edit auth/storage `APPROVE-WITH-CONDITIONS` decision,
-`codex_budget_pilot_output.RetentionFirstCellLedgerBinding` carries only the
-config and grader-source hashes. It is frozen, requires its canonical type and
-grants no grading or publication authority. The optional binding defaults to
-None in `_ledger` and `_grade_files`. The nondefault path requires the literal
-Task4 keep-r1 cell/task, integer cell index 0, exact adapted inference run ID,
-exact keep/r1 control, hash widths/case and equality to the derived retention
-run ID. Alternate families, repeat suffixes, wrong task/run/hash and lookalikes
-refuse, including with an empty ledger.
+After the required bounded pre-edit CI/auth `APPROVE-WITH-CONDITIONS` decision,
+only the existing publication step's shell body changed in `grade-run.yml`.
+It captures the actual publication exit under `bash -e`. Only the exact
+`retention/first-cell` selector, a nonzero publication exit and a regular,
+non-symlink, current-user-owned `publication-reserved.json` at the fixed private
+root permit one call to the existing read-only reconcile phase. Source, selector,
+producer, terminal, root and step-scoped HF credential remain identical.
 
-`bridge.publish` constructs the binding from the rederived prepared entry only
-after unchanged `_ready`, `_admission` and owned-cleanup checks. The shared
-row-validator body, default inference/pilot predicate, pointer/hash linkage,
-record schema, unique IDs, row/file/aggregate bounds and safe amount/text checks
-are unchanged. No ledger is rewritten, priced, aggregated or reconstructed.
-The production delta is limited to that type and the three-function handoff;
-the focused test is the fourth code file changed in this correction.
+The original `publication-receipt.json` is not rewritten. The step emits the
+CLI's separate safe server observation and fixed numeric exit labels, then exits
+with the original publication status even if reconciliation succeeds.
+`verified_server_state` retains `writer_acknowledgment=not_established`; it is
+not a writer acknowledgement. Missing/unsafe reservations do not reconcile;
+refused or ambiguous reconciliation remains explicit. There is no second
+publication, polling, claim/judge re-entry, new request or raw artifact upload.
 
-The reviewed `root/original-upload` deliverables-only handoff and
-`grade.RESULT_FORMAT` fixture correction remain. Static comparison preserved
-all 103 existing assertion/refusal nodes and added 22 focused nodes. These are
-static counts, not separate runtime passes. A read-only conformance check found
-no unmet review condition; it is not immutable-head approval or live authority.
-Workflows, reader/verifier, runtime, grader/config/rubric, registrations, source
-pins, budgets, original routes/claims and grade namespaces were not changed by
-this correction.
+Job/step guards, permissions, credential scope and the five-minute step limit
+are unchanged. All production Python bytes remain unchanged, including canonical
+dispatch, authority, real receipt/terminal validators, typed ledger binding,
+`root/original-upload` materialization, prepared-input revalidation, CAS,
+deadline, owned cleanup and no-replay gates. The existing
+`batch-runner/comparison-grading.json` config path, original pilot routes,
+registrations, judge/model/rubric and budgets were not reopened. A read-only
+conformance check found no unmet bounded-review conditions; it does not approve
+the new immutable head or authorize a live grade.
 
 ### Single validation and evidence limits
 
 From `batch-runner`, the one invocation selected only:
 
 ```text
-python3 -B -m pytest -q -p no:cacheprovider --tb=short -x tests/test_codex_retention_fixed_grade.py::test_retention_grade_ledger_binding_is_exact_and_legacy_defaults_stay_closed tests/test_codex_retention_fixed_grade.py::test_first_retention_fixed_grade_is_bound_one_use_and_private
+python3 -B -m pytest -q -p no:cacheprovider --tb=short -x tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial tests/test_codex_retention_grade_publication_workflow.py::test_retention_publication_workflow_reconciles_once_without_replay
 ```
 
 Python 3.10.12 / pytest 9.1.1 ran with `env -i`, disabled plugin autoload,
-bytecode/cache, offline HF/datasets/transformers flags, single-thread limits and
-the unchanged shared process/network/credential/model guards. The 180-second
-outer limit did not fire. No second test invocation or post-test code edit
-occurred. Log SHA256 is
-`1813545d68730574aaa5f58e4175cf768a2f9ad0b2441aae9202eca8fb908adb`.
+bytecode/cache, offline HF/datasets/transformers flags and single-thread limits.
+The 180-second outer limit did not fire. Log SHA256 is
+`91975eb26d5b651a861e4f02cbb8d294cbf94d794fe099e8f4e53df95b0d5adc`.
 
-The focused contract check exercised real Step8 derivation and ledger validation:
-exact retention acceptance, wrong binding/run/hash/task and arbitrary-family
-refusals, noncanonical binding and missing grading-run refusal, row corruption,
-duplicate/row-limit refusals, and unchanged positive/negative inference/pilot
-defaults. The bridge selector completed its workflow/legacy-request and inert
-CLI checks, real registration/config validation, synthetic intake/readback,
-deliverables-only materialization and grader/readiness validation, authority and
-source negatives, fixed-parent verification/drift/corruption cases, simulated
-one-use claim/judge and duplicate refusals, cleanup/grade/pointer negatives,
-publication, lost-acknowledgement reconciliation and final no-effect checks.
-It also verified that published synthetic ledger bytes were unchanged.
+The new test parses the real YAML and executes its unmodified publication body
+with real Bash. Only the external CLI process boundary is simulated, with no
+executable available through its isolated PATH and no credential in that test
+environment. No production validator is replaced with a successful verdict.
+The scenarios cover successful publish/no reconciliation; reserved failure/one
+reconciliation; pre-reservation refusal; refused and ambiguous reconciliation;
+symlink/directory reservations; legacy success/failure; and a selector lookalike.
+Exact arguments and call counts, original exits/receipt bytes, separate safe
+observations, private-file preservation and final file inventories were checked.
 
-No assertion phase in either selected test remained unreached. Validators were
-real; original inputs, Git metadata, HF, renderer/native-rename and owned-judge
-transport boundaries were synthetic or simulated. No validation verdict was
-replaced with success. No live HF/OIDC/Azure/model/grade call, workflow dispatch,
-permission change, inference replay, Project edit or merge occurred.
+No selected assertion phase remained unreached. This invocation does not repeat
+the full bridge's validator proof. No unchanged ledger/14.58s selector bundle,
+private 295.37s integration, full suite or CI workflow was rerun. No live
+HF/OIDC/Azure/model/grade call, workflow dispatch, permission change, inference
+replay, Project edit or merge occurred.
+
+### Reviewed head and separate previous observations
+
+The owner's REQUEST-CHANGES
+[review 5371296460](https://github.com/hyeonsangjeon/gdpval-realworks/pull/709#pullrequestreview-5371296460)
+was at `a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95`. The leader directly read
+[CI run 36764747855 / job 110055972491](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36764747855/job/110055972491):
+**1 failed, 13298 passed, 64 skipped, 46 deselected in 933.35s**. Its sole failure
+was the stale exact route expectation at `test_step8_grade.py:3489`; the later
+coupled expressions in that test were not reached. Those reported CI counts
+were not polled or rerun, and this local pass is not a new CI result.
+
+The earlier **2 collected, 2 passed in 14.58s, exit 0** at
+`117d0ded256fde2794b4be02bbb0cef78c38c6dd` remains a separate observation. Its
+[immutable ledger/bridge handoff](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95/tasks/LATEST_TASK_RESULT/README.md#project5-retention-grade-ledger-binding)
+preserves the tested tree/log identity, exact non-authorizing ledger binding,
+103 preserved plus 22 added static assertion/refusal nodes, and real validators
+with synthetic input/transport/child boundaries through publication,
+lost-acknowledgement reconciliation and final no-effects. It did not prove the
+workflow wiring corrected here. No earlier pass or failure was replayed.
 
 ### Earlier failures remain separate
 
-The prior full handoffs and both previously uncommitted records were preserved
-unchanged in the tested commit before this validation. Their
+The prior full handoffs and both then-uncommitted records were preserved
+unchanged at `117d0ded256fde2794b4be02bbb0cef78c38c6dd`. Their
 [immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md)
 retains the exact safe traces and then-current pending work.
 
@@ -141,9 +154,9 @@ with the existing 240-minute ceiling. Producer, reader, historical observer and
 grading-source identities stay distinct; parent drift, force/resume/shards,
 regrade and ambiguous cleanup still refuse. Budget authority remains delegated.
 
-Only completion records changed after the pass. Author and committer remain
+Only completion records changed after this 1.52s pass. Author and committer remain
 `hyeonsangjeon <wingnut0310@gmail.com>`, with no attribution trailers. The
-authorized publication is one ordinary push and one new draft PR, not a live
-grade. Prior worktrees/branches, `wip/local-main-preserved-20260719`, uncommitted
+authorized publication is one ordinary push to the existing PR709 branch, not a
+new PR or live grade. Prior worktrees/branches, `wip/local-main-preserved-20260719`, uncommitted
 NAS refusal records and `/ai-work/copilot/retention-intake-private-20260930-2239`
 remain unchanged. The leader's unavailable M4 files were not updated.

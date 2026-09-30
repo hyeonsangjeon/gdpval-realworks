@@ -13,6 +13,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Reconcile a reserved `retention/first-cell` publication at most once in its
+  existing owning job, after the bounded CI/auth decision. Only a nonzero
+  publish exit and an owned regular non-symlink reservation permit the same
+  canonical read-only command with unchanged binding arguments and credential
+  scope. Preserve `publication-receipt.json` and the original nonzero exit;
+  emit the separate safe server observation with
+  `writer_acknowledgment=not_established`. No pre-reservation/success/legacy
+  reconciliation, republish, claim/judge re-entry or permission change is added.
+  Synchronize all seven directly coupled exact expressions in the Step8 route
+  test, preserving its 138 assertions. At
+  `120ff70f382d54eef97452099ede06fa6bbb242c`, one isolated invocation collected
+  2 and passed 2 in 1.52s, exit 0: the exact Step8 test and ten executable-shell
+  routing scenarios, with only external CLI responses simulated. Keep the
+  earlier 2PASS/14.58s below separate from the leader-read CI run36764747855 /
+  job110055972491, 1failed/13298passed/64skipped/46deselected in933.35s, whose
+  sole failure was the stale route expectation. Owner review5371296460 was
+  REQUEST-CHANGES at `a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95`; new-head
+  immutable review/CI and later exact-source one-grade authorization remain.
+  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-pr709-routing-and-reconciliation)
+  records the distinct evidence and unchanged producer/intake, null grade and
+  partial accounting. No live grade, invoice, CI rerun, inference replay or
+  leader M4 update is implied.
 - Bind the first retention grade's ledger to its actual Step8-derived
   `retention/first-cell|<16 lowercase hex>|<64 lowercase hex>` identity after
   bounded auth/storage review. A frozen, non-authorizing config/source binding
@@ -24,7 +46,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   the full synthetic bridge through publication, lost-acknowledgement
   reconciliation, duplicate refusal and final no-effect assertions. Preserve
   the distinct 2.96s, 7.15s and 14.54s failures below. The
-  [current result](tasks/LATEST_TASK_RESULT/README.md#project5-retention-grade-ledger-binding)
+  [ledger-validation result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95/tasks/LATEST_TASK_RESULT/README.md#project5-retention-grade-ledger-binding)
   separates offline proof from the consumed successful producer/intake, null
   grade and partial accounting. New-head review/CI and later exact-source
   one-grade authorization remain; no live grade, invoice, inference replay or
@@ -43,8 +65,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   [then-current follow-up](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-grade-deliverable-source-boundary)
   records exact scope, unchanged controls and remaining ledger-boundary work,
   immutable review/CI and exact-source one-grade gates. No repair, retry, push or
-  new PR followed; completion records remain uncommitted and leader M4 files
-  were not updated.
+  new PR followed in that attempt. The completion records were left uncommitted
+  then and were later preserved in the linked immutable handoff. Leader M4
+  files were not updated.
 - Correct only the graded synthetic predecessor terminal reference to
   `codex_budget_pilot_grading.RESULT_FORMAT`; model-free records keep their
   existing owners and UNGRADED meaning. At
@@ -60,8 +83,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   [follow-up result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/117d0ded256fde2794b4be02bbb0cef78c38c6dd/tasks/LATEST_TASK_RESULT/README.md#project5-grade-fixture-format-owner)
   records the new boundary and remaining correction/validation, immutable
   review/CI and exact-source one-grade gates. No repair, rerun, push or new PR
-  followed this failure; completion records remain uncommitted and unavailable
-  leader M4 files were not updated.
+  followed in that attempt. The completion records were left uncommitted then
+  and were later preserved in the linked immutable handoff. Unavailable leader
+  M4 files were not updated.
 - Implement the local `retention/first-cell` fixed-grade bridge after the bounded
   CI/auth/storage decision. The leader's saved verified readout `36337865696`
   resolves the prior missing local provenance: final Task5 A2 model-free
@@ -78,7 +102,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   inert CLI and synthetic retained intake checks completed first; bridge
   preparation, predecessor verification, claim, judge, cleanup, publication and
   final no-effect assertions were not reached. No repair, retry, push or new PR
-  followed. Preserve actual intake run `36739260150` / job `109969006748`, its
+  followed in that attempt. Preserve actual intake run `36739260150` / job `109969006748`, its
   verified bytes and skipped inference/grading routes, separately from this
   failure, the NAS prerequisite refusal and earlier synthetic outcomes. Accounting
   stays partial at 10 recorded model calls, known cost USD `0.409894`, null
@@ -87,8 +111,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   records exact immutable identities, the PR708 base/review, unchanged
   reader/verifier/grader controls and reached/unreached boundaries. Fixture
   correction/validation, new-source review/CI and separately directed one-grade
-  authorization remain. These post-validation records are uncommitted; prior
-  NAS records/destination and unavailable leader M4 files were not changed.
+  authorization remained at that point. These post-validation records were
+  left uncommitted then and were later preserved in the linked immutable handoff;
+  prior NAS records/destination and unavailable leader M4 files were not changed.
 - Add an explicit, default-false `read_result` mode to the existing retention
   first-cell workflow after a bounded CI/auth review. Only the contents-read
   preparation job can use the existing step-scoped HF secret for the fixed
