@@ -7,6 +7,7 @@ import shlex
 
 import yaml
 
+import codex_retention_fresh_r1_result_intake as fresh_reader
 import codex_retention_result_intake as reader
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from .test_codex_budget_pilot import offline  # noqa: F401; unchanged live-boundary guards
@@ -47,49 +48,65 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     assert workflow["env"]["HF_HUB_DISABLE_IMPLICIT_TOKEN"] == "1"
     assert not any("TOKEN" in name for name in workflow["env"] if name != "HF_HUB_DISABLE_IMPLICIT_TOKEN")
     steps = prepare["steps"]
-    assert len(steps) == 11 and execute["steps"][:9] == steps[:9]
+    assert len(steps) == 13 and execute["steps"][:9] == steps[:9]
     gate, checkout = steps[:2]
     assert not any("secret" in value or "token" in value for value in gate["env"].values())
     assert checkout["with"] == {"ref": "${{ inputs.reviewed_source_sha }}", "fetch-depth": 0, "persist-credentials": False}
-    preflight, read = steps[9:]
+    fresh_preflight, fresh_read, preflight, read = steps[9:]
     read_condition = "inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
-    assert preflight["if"] == read["if"] == read_condition
+    assert preflight["if"] == read["if"] == read_condition + " && inputs.cell_id == '" + reader.controller.FIRST_CELL_ID + "'"
+    assert fresh_preflight["if"] == fresh_read["if"] == read_condition + " && inputs.cell_id == '" + fresh_reader.fresh.CELL_ID + "'"
     assert set(preflight) == {"name", "if", "shell", "run"} and preflight["shell"] == "bash"
     assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert set(read) == {"name", "if", "timeout-minutes", "env", "shell", "run"}
     assert read["shell"] == "bash" and read["timeout-minutes"] == 4
-    assert all("codex_retention_result_intake.py" not in step.get("run", "")
-               for job in (approve, execute) for step in job["steps"])
+    assert set(fresh_preflight) == set(preflight) and fresh_preflight["shell"] == "bash"
+    assert set(fresh_read) == set(read) and fresh_read["env"] == read["env"]
+    assert fresh_read["shell"] == "bash" and fresh_read["timeout-minutes"] == 4
+    assert all(module not in step.get("run", "") for module in (
+        "codex_retention_result_intake.py", "codex_retention_fresh_r1_result_intake.py")
+        for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # All 16 combinations, using the actual YAML and source-gate expressions.
+    # Both exact cells and unsupported selectors, with all 16 mode combinations,
+    # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.
-    for values in itertools.product((False, True), repeat=4):
-        modes = dict(zip(mode_names, values))
-        prepared, observed, executed, reading = values
-        replacements = {"inputs." + name: value for name, value in modes.items()}
-        gate_values = {'"$' + name + '"': modes[value.removeprefix("${{ inputs.").removesuffix(" }}")]
-                       for name, value in gate["env"].items()}
-        admitted_route = all(_boolean(line.removeprefix("[[ ").removesuffix(" ]]"), gate_values)
-                             for line in gate["run"].splitlines()[1:3])
-        expected = not (reading and (prepared or observed or executed)) and not (observed and (prepared or executed))
-        assert admitted_route is expected
-        reachable = [index for index, step in enumerate(steps)
-                     if admitted_route and _boolean(step.get("if", "true"), replacements)]
-        if not expected:
-            assert reachable == []  # First-step refusal precedes checkout and every secret.
-        elif reading:
-            assert reachable == [0, 1, 2, 3, 9, 10]  # No closed plan or original-input preparation.
-            assert [steps[index].get("env") for index in reachable if "HF_TOKEN" in steps[index].get("env", {})] == [read["env"]]
-        elif prepared or observed or executed:
-            assert reachable == list(range(9))
-        else:
-            assert reachable == list(range(5))  # Unchanged inert plan default.
-        ready = {**replacements, "needs.retention-prepare.result == 'success'": True,
-                 "needs.retention-prepare.outputs.request_sha256 != ''": True,
-                 "needs.retention-approve.result == 'success'": True}
-        assert _boolean(approve["if"], ready) is (expected and not reading and (executed or observed))
-        assert _boolean(execute["if"], ready) is (expected and not reading and (executed or observed))
+    cells = (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID)
+    assert gate["run"].splitlines()[-2:] == [
+        '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' ]]',
+        '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + cells[0] + ' ]]',
+    ]
+    for selected in (*cells, "unregistered", reader.registration.TASK4 + "_retention_bundle_v1_fresh_r2"):
+        for values in itertools.product((False, True), repeat=4):
+            modes = dict(zip(mode_names, values))
+            prepared, observed, executed, reading = values
+            replacements = {"inputs." + name: value for name, value in modes.items()}
+            replacements.update({"inputs.cell_id == '" + cell + "'": selected == cell for cell in cells})
+            gate_values = {'"$' + name + '"': modes[value.removeprefix("${{ inputs.").removesuffix(" }}")]
+                           for name, value in gate["env"].items()}
+            gate_values.update({'"$SELECTED_CELL" == ' + cell: selected == cell for cell in cells})
+            admitted_route = all(_boolean(line.removeprefix("[[ ").removesuffix(" ]]"), gate_values)
+                for line in [*gate["run"].splitlines()[1:3], *gate["run"].splitlines()[-2:]])
+            expected = (selected in cells and not (reading and (prepared or observed or executed))
+                and not (observed and (prepared or executed)) and (not observed or selected == cells[0]))
+            assert admitted_route is expected
+            reachable = [index for index, step in enumerate(steps)
+                         if admitted_route and _boolean(step.get("if", "true"), replacements)]
+            if not expected:
+                assert reachable == []  # First-step refusal precedes checkout and every secret.
+            elif reading:
+                assert reachable == [0, 1, 2, 3, *( (11, 12) if selected == cells[0] else (9, 10))]
+                assert [steps[index].get("env") for index in reachable
+                        if "HF_TOKEN" in steps[index].get("env", {})] == [read["env"]]
+            elif prepared or observed or executed:
+                assert reachable == list(range(9))
+            else:
+                assert reachable == list(range(5))  # Unchanged inert plan default.
+            ready = {**replacements, "needs.retention-prepare.result == 'success'": admitted_route,
+                     "needs.retention-prepare.outputs.request_sha256 != ''": True,
+                     "needs.retention-approve.result == 'success'": True}
+            assert _boolean(approve["if"], ready) is (expected and not reading and (executed or observed))
+            assert _boolean(execute["if"], ready) is (expected and not reading and (executed or observed))
 
     module_hash = "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196"
     verifier_hash = "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c"
@@ -139,6 +156,28 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     assert reader.output.PUBLICATION_SECONDS == 120 and reader.output.REQUEST_SECONDS == 30
     assert reader.output.MAX_TOTAL_BYTES == 128 * 1024 * 1024
 
+    fresh_hash = fresh_reader.reader_identity()["module_sha256"]
+    assert fresh_preflight["run"].splitlines() == [
+        *preflight["run"].splitlines()[:5],
+        "  '" + fresh_hash + "  batch-runner/codex_retention_fresh_r1_result_intake.py' \\",
+        *["  '" + digest + "  batch-runner/" + name + "' \\" for name, digest in (
+            ("codex_retention_result_intake.py", module_hash), ("codex_retention_ci.py", verifier_hash),
+            ("codex_retention_task4_fresh_r1.py", "0cf9fdabd985ba4b5c838c3b661317efd1eb6ee6163463b49585a720b7ae6d76"),
+            ("codex_retention_first_cell.py", "57f463c7e1e079b2e87248af87885ffb7d927f13ec32a107f0f3da41a9971fab"))],
+        "  | sha256sum --check --status",
+    ]
+    fresh_script = read["run"].replace("codex_retention_result_intake.py", "codex_retention_fresh_r1_result_intake.py")
+    for old, new in (("retention-result.XXXXXXXX", "retention-fresh-r1-result.XXXXXXXX"),
+                     (reader.PRODUCER_SOURCE, fresh_reader.PRODUCER_SOURCE), (reader.REQUEST_SHA256, fresh_reader.REQUEST_SHA256),
+                     (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID), (module_hash, fresh_hash)):
+        fresh_script = fresh_script.replace(old, new)
+    assert fresh_read["run"] == fresh_script  # Same private destination, bounds, redaction and nonzero exits.
+    fresh_argv = argv.copy()
+    for index, arg in enumerate(fresh_argv):
+        fresh_argv[index] = {reader.PRODUCER_SOURCE: fresh_reader.PRODUCER_SOURCE,
+            reader.REQUEST_SHA256: fresh_reader.REQUEST_SHA256, reader.controller.FIRST_CELL_ID: fresh_reader.fresh.CELL_ID,
+            module_hash: fresh_hash}.get(arg, arg)
+
     effects = []
 
     def forbidden(*args, **kwargs):
@@ -162,3 +201,14 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "grade": None, "invoice_complete": False, "commands": []}
     assert captured.err == "" and str(destination) not in captured.out
     assert not (destination / reader.MARKER).exists() and effects == []
+    fresh_destination = tmp_path / "fresh-result"
+    with monkeypatch.context() as context:
+        context.setattr(reader.os, "environ", {})
+        assert fresh_reader.main([str(fresh_destination) if arg == "$retention_result_parent/payload"
+                                  else arg for arg in fresh_argv]) == 2
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"intake_verified": False, "reason": "explicit_hf_token_required",
+        "launch_authorized": False, "grading_launched": False, "admission_attempted": False, "replay_authorized": False,
+        "grade": None, "invoice_complete": False, "commands": []}
+    assert captured.err == "" and str(fresh_destination) not in captured.out
+    assert not (fresh_destination / fresh_reader.MARKER).exists() and effects == []

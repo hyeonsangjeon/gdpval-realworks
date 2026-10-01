@@ -42,7 +42,7 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
         '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' ]]',
-        '[[ ( "$READ_RESULT_ONLY" != true && "$OBSERVE_LOCATOR_ONLY" != true ) || "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
+        '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
     ]
     # Evaluate the exact changed cell/mode expressions, not a substring route.
     for selected in (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID,
@@ -57,7 +57,7 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
             expected = (selected in (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID)
                 and not (reading and (preparing or executing or observing))
                 and not (observing and (preparing or executing))
-                and (selected == adapter.controller.FIRST_CELL_ID or not (reading or observing)))
+                and (selected == adapter.controller.FIRST_CELL_ID or not observing))
             assert allowed is expected
     facade = "python3 batch-runner/codex_retention_task4_fresh_r1.py"
     assert prepare["steps"][4]["run"].startswith(facade + " ")
@@ -73,7 +73,7 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
     assert execute["needs"] == [adapter.PREPARE_JOB, adapter.APPROVE_JOB]
     assert execute["if"] == modes + " && " + prepared + " && needs.retention-approve.result == 'success'"
     assert "this is not authenticated execution approval" in approve["steps"][0]["run"]
-    assert len(prepare["steps"]) == 11
+    assert len(prepare["steps"]) == 13
     assert execute["steps"][:9] == prepare["steps"][:9]
     assert prepare["steps"][4]["if"] == "inputs.read_result == false"
     for step in prepare["steps"][5:9]:
