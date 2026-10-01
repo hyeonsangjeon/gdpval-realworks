@@ -369,9 +369,13 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
         from codex_retention_ci import _Admission
         from codex_retention_task4_fresh_r1 import _FreshAdmission
 
-        if ((type(_admission), request.cell_id) not in
-                ((_Admission, FIRST_CELL_ID), (_FreshAdmission, FRESH_CELL_ID))
+        if (type(_admission) not in (_Admission, _FreshAdmission)
                 or _test_transport is not None or _admission.request != request):
+            raise RetentionControllerRefused(LIVE_GATE)
+        if type(request) is not Request:
+            raise RetentionControllerRefused("explicit_retention_request_required")
+        if (type(_admission), request.cell_id) not in (
+                (_Admission, FIRST_CELL_ID), (_FreshAdmission, FRESH_CELL_ID)):
             raise RetentionControllerRefused(LIVE_GATE)
         transport = _admission.transport
     context = _context(request)
