@@ -1,5 +1,76 @@
 # Latest task result
 
+## PROJECT5-PR710-LOCAL-CI-TEST-ISOLATION
+
+The test-only isolation correction passed the one authorized offline invocation
+under a token-free, CI-shaped ambient environment. Tested HEAD is
+`d644fab1d08278300d44eae4904c9b9463804693`: 2 tests collected, 2 passed in
+43.19s, exit 0, CPython 3.10.12 / pytest 9.1.1. Both the complete readout
+regression and coupled Step8 workflow-route test finished. The 180-second
+outer timeout did not fire. No second invocation followed.
+
+Work continued only in the existing PR710 branch/worktree
+`b/codex-retention-grade-readout-20260930`, from published source
+`e2dc103de4269491a8c47ea964034ef8c798710e`.
+[Owner review 5373552195](https://github.com/hyeonsangjeon/gdpval-realworks/pull/710#pullrequestreview-5373552195)
+records the CI blocker. The leader directly read
+[run 36793228751 / job 110150692589](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36793228751/job/110150692589):
+1 failed, 13300 passed, 64 skipped and 46 deselected in 1487.18s. Its sole
+failure was `test_codex_retention_grade_readout.py:261`, the inert real-script
+assertion before `_environment` installed the synthetic CI envelope. With
+inherited `GITHUB_ACTIONS=true`, the unchanged authority correctly required
+the workflow-dispatch/main/readout identity that the pytest job did not have.
+This was a local-test isolation defect, not the earlier schema or ledger issue,
+a production-validator defect or evidence against the acknowledged grade.
+[Source review 5373356557](https://github.com/hyeonsangjeon/gdpval-realworks/pull/710#pullrequestreview-5373356557)
+remains conditional on passing CI. These are leader-supplied CI/review facts,
+not a fresh service read or approval of the corrected HEAD.
+
+The only code change is in `tests/test_codex_retention_grade_readout.py`:
+6 insertions and 4 deletions wrap the inert real-script and no-local-read-authority
+assertions in `monkeypatch.context()`, removing `GITHUB_ACTIONS` with
+`raising=False` only inside that scope. Scope exit restores the ambient
+environment before the existing complete `_environment(monkeypatch)` setup.
+All assertions and expected exits, real-script routing, both defining-module
+Git simulations, safe helper/schema diagnostics and process/network/credential
+guards remain. Production authority, schema, workflow, readout, writer and the
+accepted writer-recorded evidence contract did not change.
+
+The single validation used the same two exact selectors listed in the previous
+record below. A cleared process environment removed real credentials, then
+explicit ambient metadata supplied `GITHUB_ACTIONS=true`,
+`GITHUB_EVENT_NAME=pull_request`, `GITHUB_JOB=pytest`,
+`GITHUB_REF=refs/pull/710/merge` and synthetic
+`GITHUB_SHA=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee`. Offline flags and the
+existing guards remained enabled. The test itself isolated its local cases
+and then installed its deliberate synthetic readout envelope; no successful
+validator verdict was substituted. Positive projection, immutable identities,
+corruption, optional-ledger, legacy, final no-effect and exact workflow-route
+assertions all completed. No live service, readout, model, grader, dispatch or
+inference replay occurred.
+
+The earlier tested HEAD `969a944895877e92b665af792d87efece68a9942` still records
+2 passed in 40.06s, exit 0, in the token-free empty ambient environment. That
+pass did not cover inherited `GITHUB_ACTIONS=true`. It, the actual 1487.18s CI
+failure and the corrected 43.19s offline pass are distinct observations. The
+earlier 7.20s, 7.60s and diagnostic 7.82s failures retain their separate
+reached/unreached boundaries below; none is rewritten as a pass.
+
+The real grade remains acknowledged and consumed. Numeric score and grader
+accounting remain unread. Writer-recorded proof, the unavailable/null
+materialized-input-fingerprint comparison, actual producer/intake success,
+partial inference accounting and the NAS token-prerequisite refusal remain
+unchanged. Only the two completion records changed after the tested commit
+for the authorized owner commit and one push to existing PR710; the final
+handoff identifies the published HEAD. New-head immutable owner review and
+CI, followed by a separately directed live read, remain required. No new PR,
+CI polling, permission change, Project edit or merge is part of this task.
+The unavailable leader M4 files were not updated, and prior worktrees and the
+private NAS refusal directory were left untouched.
+
+The following completion record is preserved as the historical schema-fixture
+task record. Its handoff statements refer to that earlier task.
+
 ## PROJECT5-READOUT-EXACT-SCHEMA-PREDICATE
 
 The fixture-only correction passed the complete targeted offline invocation.
