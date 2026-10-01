@@ -58,13 +58,37 @@ def _write(path, data):
         stream.write(data)
 
 
-def _originals(tmp_path, monkeypatch):
+def _originals(tmp_path, monkeypatch, approved_pilot_source):
     """Change synthetic input pins at loading seams, never a validation verdict."""
     load = registration.load_plan
     registered = load(registration.ROOT / registration.REGISTRATION)
     real_manifest_loader = NeedsFilesManifest.__dict__["load"]
-    with redirect_stdout(io.StringIO()):
-        inputs, captures, _, _, references = original_fixture._fixture(tmp_path, monkeypatch, "valid")
+    comparison = original_fixture.preflight
+    current_root, current_plan = comparison.ROOT, comparison.PLAN
+    assert current_root == REAL_ROOT
+    current = comparison.inspect_plan(comparison.load_plan())
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/core/codex_task_deadline.py",
+    ]
+    archived_plan = approved_pilot_source / current_plan.relative_to(current_root)
+    assert archived_plan.read_bytes() == current_plan.read_bytes()
+    runtime_modules = (fresh, ci, controller, preparation, registration, owned)
+    runtime_roots = tuple(module.ROOT for module in runtime_modules)
+    assert all(root == REAL_ROOT for root in runtime_roots)
+    try:
+        # Bind only the original serializer/compiler to its immutable source.
+        # Its synthetic data suppliers still serve the successor fixture.
+        with monkeypatch.context() as source:
+            source.setattr(comparison, "ROOT", approved_pilot_source)
+            source.setattr(comparison, "PLAN", archived_plan)
+            with redirect_stdout(io.StringIO()):
+                inputs, captures, _, _, references = original_fixture._fixture(tmp_path, monkeypatch, "valid")
+    finally:
+        assert (comparison.ROOT, comparison.PLAN) == (current_root, current_plan)
+        assert tuple(module.ROOT for module in runtime_modules) == runtime_roots
     monkeypatch.setattr(NeedsFilesManifest, "load", real_manifest_loader)
     catalog, catalog_digest = attester.load_task_catalog(), attester.catalog_sha256()
     profile = inputs["manifest"]
@@ -180,7 +204,8 @@ class FreshTransport(Transport):
         return subprocess.CompletedProcess(command, 0)
 
 
-def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(tmp_path, monkeypatch, capsys):
+def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
+        tmp_path, monkeypatch, capsys, approved_pilot_source):
     production_plan = registration.compile_plan()
     pins = deepcopy(fresh.PREDECESSOR)
     assert pins == {"cell_id": controller.FIRST_CELL_ID,
@@ -211,7 +236,7 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(tmp_path, monk
                  "prepare_dataset.snapshot_download", "prepare_dataset.load_dataset"):
         monkeypatch.setattr(name, forbidden)
     inputs, captures, original_run, manifest, roles = positive("synthetic_original_serializer",
-        lambda: _originals(tmp_path, monkeypatch))
+        lambda: _originals(tmp_path, monkeypatch, approved_pilot_source))
     plan = positive("real_registered_synthetic_input_bindings", registration.compile_plan)
     source_root = tmp_path / "runtime-source"
     positive("source_fixture", lambda: _source_tree(source_root))
