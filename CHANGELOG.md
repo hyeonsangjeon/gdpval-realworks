@@ -13,6 +13,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Fix the fixed retention-grade reader's config-validation working directory.
+  `_entry` now wraps only its unchanged real validator call in the existing
+  restoring `grade._cwd(pilot.ROOT / "batch-runner")` helper, after bounded
+  CI/auth/path review. The compiled config retains its relative prompt paths;
+  the workflow starts at repository root, while the prompt files live under
+  `batch-runner`. Hashing and entry construction stay outside the cwd scope.
+  Configuration bytes, prompt checks, immutable identities, closed diagnostics,
+  workflow/credential scope and writer controls are unchanged.
+
+  At tested HEAD `5dd54709a3cbb1d0c7703503c1315babfcce6451`, one focused
+  offline invocation from repository root collected 1 test and passed in
+  2.82s, exit 0, CPython 3.10.12 / pytest 9.1.1, with token-free CI-shaped
+  ambient metadata and existing guards. Real validators and the existing
+  synthetic writer fixture proved equal entry identities and terminal/claim
+  checks from repository-root and `batch-runner` callers, exact missing-template
+  refusals, recorded-hash refusal and cwd restoration on success and failure.
+  No payload read or write/admission/model/grader effect occurred. The
+  180-second timeout did not fire, and no second invocation followed.
+
+  The leader directly read
+  [diagnostic run 36811186015 / attempt 1 / job 110206383067](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36811186015/job/110206383067)
+  at source `f2f62d7a01430b986d4d2e1b127695dd69ea39e0`: plan step 5 passed,
+  read step 6 failed. The `2026-10-01T03:38:32.2423099Z` receipt retained
+  `retention_grade_readout_contract_refused` / `grade_terminal`, with
+  `verification_substage=terminal_binding`,
+  `verification_reason=unclassified_verification_error`, `http_status=null`.
+  It does not name `ValueError` or establish claim verification, score or usage.
+  The separately demonstrated cwd defect is consistent with it, not a field
+  recovered from the receipt. Prior PR711 `974e6aa48eb0c97c13bf17612d3e397e9a20ed31`,
+  [review 5374283415](https://github.com/hyeonsangjeon/gdpval-realworks/pull/711#pullrequestreview-5374283415),
+  passed all 10 checks as reported by the leader. Its diagnostic-only 8.85s
+  pass, earlier live failure and older evidence remain separate in the
+  [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/974e6aa48eb0c97c13bf17612d3e397e9a20ed31/tasks/LATEST_TASK_RESULT/README.md).
+  The actual grade remains consumed, numeric score/grader accounting unread
+  and materialized-input comparison unavailable/null. Only completion records
+  changed after testing. New-head immutable review/CI and later source-bound
+  leader read direction remain gates; no live operation, replay or M4 update.
+
 - Add diagnostic-only, closed refusal fields to the fixed retention-grade
   reader's terminal-verification boundary after bounded CI/auth/privacy review.
   `verification_reason` accepts only enumerated constant codes from the exact

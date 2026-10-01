@@ -86,7 +86,8 @@ def _entry(context, recorded):
         "grade_readout_renderer_identity_refused")
     # The writer checked the actual materialized closure. Its fixed hash is an
     # expectation here; this reader never re-renders or materializes inputs.
-    step8.validate_grading_config(json.loads(context.run.grader_config_json))
+    with grade._cwd(pilot.ROOT / "batch-runner"):
+        step8.validate_grading_config(json.loads(context.run.grader_config_json))
     config_hash = hashlib.sha256(context.run.grader_config_json.encode()).hexdigest()[:16]
     path = grade._grade_path(context, config_hash, bridge.GRADER_SHA256, bridge.RESULT["output_commit"])
     expected = {"grade_path": str(path), "config_hash": config_hash,
