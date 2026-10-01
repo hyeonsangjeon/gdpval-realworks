@@ -258,10 +258,12 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
         assert not effects
         return status, receipt
 
-    assert invoke(phase=None, script=True)[0] == 0  # Actual canonical script/router; inert default.
-    assert not api.calls and not git_calls and not roots[-1].exists()
-    assert invoke()[0] == 2  # No local read authority.
-    assert not api.calls and not roots[-1].exists()
+    with monkeypatch.context() as local:
+        local.delenv("GITHUB_ACTIONS", raising=False)
+        assert invoke(phase=None, script=True)[0] == 0  # Actual canonical script/router; inert default.
+        assert not api.calls and not git_calls and not roots[-1].exists()
+        assert invoke()[0] == 2  # No local read authority.
+        assert not api.calls and not roots[-1].exists()
     _environment(monkeypatch)
     for changes in ({"phase": phase} for phase in ("inspect", "setup", "prepare", "claim", "judge", "publish", "reconcile", "record-ungraded")):
         assert invoke(**changes)[0] == 2
