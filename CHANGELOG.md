@@ -13,52 +13,64 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Implement only the predeclared Task4 fresh/r2 ordinal-two/repetition-two path
-  from verified base `910cbdbc49da764a76932bab3af4af231a0b6771`. The original
-  bounded review returned REJECT before any implementation or test because the
-  frozen shared controller supported only ordinals 0/1 and repetition 1. That
-  static dependency conflict was not a failed inference or offline test. The
-  leader's explicit compatibility exception and the same reviewer's limited
-  pre-edit approval resolved it without replacing the controller.
+- Extend the existing fresh reader to exactly two fixed r1/r2 profiles for
+  successful-result intake and explicit failed/stopped terminal-only observation.
+  Defaults and omitted bindings remain r1, including the frozen r2 producer's
+  failed-r1 predecessor check. Keep/r1 commands are unchanged. The existing
+  contents-read preparation job selects the exact cell; mode exclusions, three
+  jobs, permissions, step-scoped secret and precredential checks remain intact.
+  No read route can reach preparation, protected approval, execution, model or
+  grade paths. Terminal mode reads only control bodies and object metadata/history,
+  not payloads or grading input; missing controls refuse without retry or fallback.
 
-  The fixed adapter uses the existing source/runtime/same-run owner approval,
-  serial CAS, owned-child/clock/cleanup and add-only publication machinery. The
-  controller adds only the exact r2 binding, namespace and canonical
-  admission-type/cell pair. A reviewed publication-only extraction preserves
-  old facade wrappers, request/output schemas and behavior. Other unimplemented
-  ordinals remain refused; old cells remain non-replayable. R2 revalidates the
-  independently pinned failed fresh/r1 controls and object history without
-  payload-body downloads, then requires the actual branch parent to be the
-  pinned terminal before CAS. Existing jobs, permissions, secrets and concurrency
-  are unchanged; old observation routes reject r2 before credentials.
+  Verified base/producer `5a9614ac04464c4e0a5e80297f54c3a5c9443bae` follows prior
+  reviewed PR716 source `a3bb5e066b2ad842c98b1f85c91eb54e37c17d96`, owner review
+  [5383384460](https://github.com/hyeonsangjeon/gdpval-realworks/pull/716#pullrequestreview-5383384460)
+  and all 10 checks. The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a3bb5e066b2ad842c98b1f85c91eb54e37c17d96/tasks/LATEST_TASK_RESULT/README.md)
+  preserves the original compatibility decision and separate 49.90s/2.61s proofs;
+  neither was repeated or relabeled as this reader's evidence.
 
-  Current SHA256 pins are explicitly migrated together: controller
-  `a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58`, fresh/r1
-  facade/shared publication helper
-  `a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3`, and fresh
-  reader `c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9`.
-  The [completion record](tasks/LATEST_TASK_RESULT/README.md) maps old to new
-  hashes. Precredential exact-hash refusals remain; historical observer
-  source 910 / reader `bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa`
-  is not rewritten. The CI verifier, original intake, core/runtime/model/input/
-  grader/registration bytes and budget policy remain unchanged.
+  Leader evidence fixes r2 run `36907894862` / attempt 1 / workflow `370228282`.
+  Preparation job `110522963099` reported `prepared_not_admitted` at
+  `2026-10-01T18:37:35.5826822Z`, with request
+  `4798c119ea2d06c7c902ae51638bdba25c5bfaf683a2223d286fd7e652d3b317`, fresh
+  materialized grader `4860a408791b7b313e2c06c2863b4a1ddbae467c8425365af8908be7a3c032d6`
+  and four original roles from bundle
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  One owner approval bound that request in `grading` `18744914306`, deployment
+  `6792272908`; approval job `110524083305` was queued. The single authorized
+  jobs-metadata projection bound execution job `110535767415` to
+  the exact source/run/attempt. No logs, status polling or live reader call ran.
+  Model admission, outcome, terminal revision, usage, cost and grade remain
+  unobserved. This is not a retry of failed fresh/r1.
 
-  One token-free CI-shaped CPython 3.10.12 / pytest 9.1.1 invocation at tested HEAD
-  `f7d11ae4c8ac225b4027086df07771adfb96d78e` collected 2 tests; both passed in
-  49.90s, exit 0, without the 180-second timeout firing. The new
-  `test_task4_fresh_r2_advances_only_the_fixed_failed_predecessor` selector and
-  directly coupled `test_retention_result_read_workflow_is_fixed_and_model_free`
-  selector each passed. Real validators with synthetic transport/owned child
-  reached exact fresh staging, failed-predecessor/current-parent CAS,
-  claim/child/output/terminal, reconciliation, 18 predecessor/admission refusals,
-  type/source/cell guard ordering, duplicate/ambiguous/no-replay behavior,
-  timeout/cleanup, old schemas and current-pin reader compatibility, wrong-hash
-  refusal before credentials, and all 32 workflow mode combinations. Full node
-  IDs are in the completion record. Log SHA256:
-  `1eb2e3b6509e50f31039868e4b4ec12aefb4156b9fefb2cba5350f3082f5e145`.
-  No full suite, delivered reader suite or second invocation ran. This proof is
-  synthetic offline evidence, not live execution or model usage. The bounded
-  production/workflow and test reviews approved this scope.
+  Only the current reader hash migrates from
+  `c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9` to
+  `5bfba1a2cb4d4f5190b0d146fd7b2b890c72ecf3904974d37babfea9ed8661f0`, in both
+  fresh preflights and CLI expectations. R2 additionally checks unchanged producer
+  `8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f` before
+  import/credentials. Controller, fresh/r1 facade, r2 producer, CI verifier,
+  original intake and runtime/model/input/grader/registration bytes are unchanged.
+  The [completion record](tasks/LATEST_TASK_RESULT/README.md) lists exact hashes;
+  historical observer source 910 / reader `bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa`
+  and the observation below are not replaced by current pins.
+
+  Tested HEAD `d92cac628490baf40ceb8c0a76e38fb6cfd6e985` ran one token-free,
+  CI-shaped CPython 3.10.12 / pytest 9.1.1 invocation: 2 collected, 2 passed in
+  14.64s, exit 0, with no 180-second timeout. The new
+  `tests/test_codex_retention_fresh_r2_read.py::test_fresh_r2_reads_only_its_fixed_result_or_terminal`
+  and directly coupled
+  `tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free`
+  each passed. Real validators with synthetic transport covered both read modes,
+  source/run/request/cell/job/predecessor and type/hash/history/role/privacy/bounds
+  refusals, missing controls, no payload downloads in terminal mode, default-r1
+  compatibility, no-clobber/readback, redaction and all 32 routing combinations.
+  No model, remote write or grade effects occurred. Log SHA256:
+  `bd2129ca0fd2bb111207e7659472ef33e17e05aaff2d565f72a716cd8ddafe37`.
+  The bounded auth/storage/workflow review closed with APPROVE after inspecting
+  the saved proof. No second invocation, delivered reader suite, private
+  integration or full suite ran. These are offline test results, not model usage
+  or a live r2 outcome.
 
   Separately, the leader read successful terminal-only observation run
   `36884357472` / job `110443771878` at source
@@ -96,9 +108,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   exclusions, partial/null cost and study limits below remain unchanged. Two of
   eight outcomes are recorded; six cells remain outstanding. Fresh/r2 is the next
   predeclared cell, not a fresh/r1 retry; one pair establishes no retention benefit.
-  New immutable-HEAD owner review and CI must precede separately
-  source/run/input/budget-bound leader execution direction. No live read/run,
-  dispatch/polling, replay, grading,
+  New immutable-HEAD owner review and CI must precede explicit leader direction
+  for a source/producer/run/attempt/request/cell/job-bound read. The existing r2
+  execution was separately approved; this task neither follows it nor creates
+  launch authority. No live read/run, dispatch/polling, replay, grading,
   Project edit, merge or leader M4 update occurred.
 
 ### Fixed
