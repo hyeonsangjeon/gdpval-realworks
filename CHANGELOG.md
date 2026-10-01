@@ -103,6 +103,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct PR716's stale workflow-test expectation from
+  `codex_retention_task4_fresh_r1.py --execute` to
+  `codex_retention_task4_fresh_r2.py --execute`. Extract only the existing pure
+  YAML assertion block into a shared test helper, called at the same integration
+  stage and by one cheap selector in the guarded observation module. All job,
+  default-boolean, protected-environment, permission, concurrency, explicit
+  request-digest and credential assertions remain intact; private fixture
+  dependencies are unchanged and were not activated by the helper import.
+
+  Owner source review [5383071826](https://github.com/hyeonsangjeon/gdpval-realworks/pull/716#pullrequestreview-5383071826)
+  at `43d1beeb9e965687bbe5424d79f29523f330e438` identified this missed surface.
+  It was not an observed CI or model failure. Production, workflow and current
+  controller/facade/reader pin bytes remain identical to that reviewed HEAD.
+
+  Tested HEAD `04c203b9e8bd5a0ac61cd8b7a6e5ac462712f682` ran one token-free,
+  CI-shaped invocation of
+  `tests/test_codex_retention_ci_observation.py::test_retention_execution_workflow_contract_is_shared`:
+  1 collected, 1 passed in 2.61s, exit 0, CPython 3.10.12 / pytest 9.1.1.
+  The 180-second timeout did not fire. Existing offline guards stayed active;
+  the helper parsed current YAML and completed all shared assertions. Log SHA256:
+  `735029bdbfd2e052c51c1675c1285f1ba7f8167bebe7f0a3c5878e8e317111d2`.
+  The bounded test-only review closed with APPROVE. The separate
+  `f7d11ae4c8ac225b4027086df07771adfb96d78e` proof remains 2 passed in 49.90s;
+  it did not execute this opt-in workflow assertion and was not rerun. No private
+  integration, old reader suite, full suite or live operation ran. This is
+  offline test evidence, not model usage or a live fresh/r2 result. Corrective-head
+  owner review and CI must precede separate source/run/input/budget-bound leader
+  execution direction. Existing outcome, accounting and study limits are unchanged.
+
 - Correct PR713's retention admission guard order. Unknown/noncanonical,
   mixed-transport and mismatched admissions now receive the existing
   `retention_execution_grant_required` refusal before `request.cell_id` is

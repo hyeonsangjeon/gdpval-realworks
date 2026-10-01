@@ -1,12 +1,37 @@
 # Latest task result
 
-## PROJECT5-R2-COMPATIBILITY-EXCEPTION-20261002-0125
+## PROJECT5-PR716-COUPLED-WORKFLOW-ASSERTION-20261002-0227
 
-The closed Task4 fresh/r2 path is implemented at tested HEAD
-`f7d11ae4c8ac225b4027086df07771adfb96d78e`. The single guarded offline invocation
-collected 2 tests and both passed in 49.90s, exit 0, without an outer timeout.
-This is implementation evidence, not a live admission or a new inference result.
-New-head owner review, CI and separate leader execution direction remain required.
+The test-only workflow assertion correction passed at tested HEAD
+`04c203b9e8bd5a0ac61cd8b7a6e5ac462712f682`: 1 collected, 1 passed in 2.61s,
+exit 0. The 180-second outer timeout did not fire. Production, workflow and
+current-helper pin bytes remain identical to reviewed HEAD
+`43d1beeb9e965687bbe5424d79f29523f330e438`.
+
+Owner review [5383071826](https://github.com/hyeonsangjeon/gdpval-realworks/pull/716#pullrequestreview-5383071826)
+at that HEAD found a stale expectation for
+`codex_retention_task4_fresh_r1.py --execute`; the reviewed workflow already
+uses `codex_retention_task4_fresh_r2.py --execute`. This was a source-review
+finding, not an observed CI failure or model failure. Only the two test files
+changed: the original pure YAML assertions now share one helper, called at the
+same integration stage and by one cheap observation-module selector. Job,
+default-boolean, protected-environment, permission, concurrency, explicit
+request-digest and credential assertions remain intact. The private integration's
+fixture dependencies are unchanged and were not activated by the helper import.
+
+The one new invocation ran
+`tests/test_codex_retention_ci_observation.py::test_retention_execution_workflow_contract_is_shared`
+under CPython 3.10.12 / pytest 9.1.1, with token-free CI-shaped ambient metadata
+and the existing network, process and credential guards. It parsed current YAML
+and completed every shared assertion. Log SHA256:
+`735029bdbfd2e052c51c1675c1285f1ba7f8167bebe7f0a3c5878e8e317111d2`.
+The bounded test-only reviewer closed this correction with APPROVE after reading
+the saved result. The prior 49.90s proof below remains separate; it did not execute
+this opt-in workflow assertion. Neither that pair nor the private integration,
+old reader suites or a full suite ran in this task. These durations are offline
+test evidence, not model usage or a live fresh/r2 result. Corrective-head owner
+review and CI remain required before separate source/run/input/budget-bound
+leader execution direction.
 
 The cell remains the predeclared ordinal 2,
 `3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2`,
@@ -65,7 +90,7 @@ and the original intake remains
 Core/runtime/model/input/grader/registration bytes are unchanged. These new
 current pins do not replace the historical producer or observer identities below.
 
-### One targeted offline invocation
+### Prior ordinal-two proof
 
 Tested HEAD `f7d11ae4c8ac225b4027086df07771adfb96d78e` ran under CPython 3.10.12 /
 pytest 9.1.1 with a token-free CI-shaped ambient envelope, existing network,
@@ -95,8 +120,9 @@ reader suite, live integration or second invocation ran.
 The same bounded reviewer approved the production/workflow delta and the test
 scope before the invocation, then closed the narrow diff review with APPROVE at
 tested HEAD `f7d11ae4c8ac225b4027086df07771adfb96d78e` after inspecting the saved
-result. No review blocker remains for a draft PR. This local review and synthetic
-proof do not replace new-head owner review, CI or live approval.
+result. That review supported the original draft PR; the subsequent owner review
+found the stale workflow assertion corrected above. This prior local review and
+synthetic proof do not replace corrective-head owner review, CI or live approval.
 
 Prior observer HEAD `ea8e7d36693678cedb54fbe277af5cc874360061` and owner review
 [5381096406](https://github.com/hyeonsangjeon/gdpval-realworks/pull/715#pullrequestreview-5381096406)
