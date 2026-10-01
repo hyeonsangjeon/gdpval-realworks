@@ -1,109 +1,127 @@
 # Latest task result
 
-## PROJECT5-FRESH-R1-RESULT-READER-20261001-1913
+## PROJECT5-FRESH-FAILED-TERMINAL-20261001-2250
 
-The fixed Task4 fresh/r1 result intake passed its one offline invocation at
-tested HEAD `56bb86a7cdca02c7f0f9ef8055d3e44f8df8aaaf`: 2 collected, 2 passed
-in 11.06s, exit 0. Both the new immutable-reader selector and the directly
-coupled read-result routing selector completed. This is synthetic offline
-proof, not a live read, fresh inference result, execution approval or grade.
+The opt-in Task4 fresh/r1 terminal-only observer passed its single offline
+invocation at tested HEAD `386390b8db59df92f8b297d21d0b99a712887da9`:
+2 collected, 2 passed in 14.86s, exit 0, with no outer timeout. Both the new
+control-only selector and the changed mode-routing selector completed. This
+is synthetic offline proof, not a live observation or a new inference/grade.
 
-### Closed reader and review boundary
+Separately, the leader supplied the completed inference's acknowledged
+`status=failed` receipt. The inference is consumed and must not be replayed.
+Its detailed cause, immutable revisions, artifact declarations and accounting
+remain unread. A green workflow is not model success; `grade=null` is not zero.
 
-The new `codex_retention_fresh_r1_result_intake.py` binds only ordinal 1,
-`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1`, in campaign
-`retention_bundle_diagnostic_20260929`. It discovers that cell's terminal path
-once on the registered inference branch, then reads only immutable claim,
-manifest and declared result/ledger/deliverable roles. Missing or unfinished
-terminals refuse with nonzero status; there is no polling or latest fallback.
+### Closed terminal observation and review boundary
 
-Independent fixed expectations constrain the recorded source, request, run,
-cell and predecessor. Real canonical-byte, role, hash, object-history,
-fingerprint, accounting and privacy checks precede private no-clobber
-publication and readback. The safe receipt excludes model text and private
-paths. An ambiguous local completion retains private evidence but does not
-return successful intake or authorize its adoption.
+`codex_retention_fresh_r1_result_intake.py --observe-terminal` binds only
+ordinal 1, `3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1`,
+in campaign `retention_bundle_diagnostic_20260929`. After one discovery of its
+fixed terminal path, it downloads only the immutable terminal, hash-bound
+claim and output manifest. Declared result, ledger and deliverable objects
+receive metadata/history checks only. No payload bodies, original inputs,
+predecessor payloads or native state are read.
 
-The proof is publication-derived, not independent provider authentication or
-Git-parent/CAS execution-history verification. The reader checks the entire
-fixed predecessor reference and immutable file history without fetching old
-inputs or predecessor payloads. Expected workflow/attempt and supplied
-request-associated grader/input digests are labeled separately from recorded
-execution-job evidence. Original inputs are not independently reverified.
+Independent fixed expectations constrain the source/run/request/cell,
+preceding inference reference and supplied execution job `110323708382`.
+The failed/stopped validator retains their distinction, exact exit-code types,
+cleanup and false grading fields, normalized recorded accounting, canonical
+bytes, role/privacy/size bounds and immutable object history. Missing result
+declarations require an empty file list under the writer's existing contract.
+The default successful-result intake and its refusals remain unchanged; there
+is no fallback from `--read` to terminal observation.
+
+A distinct `retention-task4-fresh-r1-terminal-observation-v1` record and
+`retention-fresh-r1-terminal-observation.json` marker support private
+no-clobber publication/readback. Only final local acknowledgment returns
+`outcome=terminal_verified`. An ambiguous marker remains private and cannot
+be adopted as success. The receipt reports immutable identities, recorded
+status/exit/cleanup, declared-role counts and recorded receipt/missing fields.
+It never reports successful intake or grading readiness. Detailed failure,
+budget and recovery exposure are unavailable/null with reason
+`not_recorded_in_terminal_controls`; it does not infer a cause or absence of
+deliverables from an empty declaration.
+
+The proof is publication-derived, not independent provider authentication,
+original-input revalidation or Git-parent/CAS ancestry verification. Expected
+workflow/attempt and supplied grader/input digests remain separate from
+recorded fields. `payload_bodies_verified=false`, `grading_input_ready=false`,
 `writer_acknowledgment=not_established`, `grade=null`, HTTP request count null
-and `invoice_complete=false` remain explicit. Missing usage/cost is not zero;
-known partial cost is not an invoice. This intake cannot execute or grade.
+and `invoice_complete=false` remain explicit. Recorded calls are not HTTP
+requests; partial known cost is not a total or invoice.
 
-The existing contents-read preparation job has a fresh-only preflight/read
-pair. Clean source/workflow equality and reader/helper hashes are checked
-before the existing step-scoped HF secret. Original keep/r1 read command
-bodies remain byte-for-byte unchanged. Both read routes exclude preparation,
-locator, approval and paid execution; fresh locator remains unsupported.
-No job, permission, credential, runtime, registration, model or grader changed.
-The CI verifier, first-result reader, producer facade and controller remain
-byte-identical. The new reader SHA256 is
-`e64ba8c12e0d1982b58cfe010e9b5887db890dbb4d45480b2f7e39e885447613`.
+The existing contents-read preparation job has an observe-only preflight/step
+pair. Source/workflow equality and reader/helper hashes precede the same
+step-scoped HF secret. `observe_terminal` defaults false and conflicts with
+`read_result`, `prepare`, `execute` and `observe_locator`; only fresh/r1 is
+allowed. Plan/preparation, protected approval and execution paths are excluded.
+Keep/r1 command bodies and all frozen CI/intake/producer/controller/runtime/
+model/input/grader/registration bytes are unchanged. No job, permission or
+credential was added. Reader SHA256:
+`bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa`.
 
-The required bounded CI/auth/storage/workflow decision preceded the edits.
-Its narrow diff review identified Python-equality type coercion in the new
-reader; canonical-byte comparisons and four resealed negative fixtures fixed
-that issue before the single invocation. The reviewer then approved the
-bounded correction. This is not immutable owner review or CI for the new HEAD.
+The worktree began from verified main
+`0f8a1c6a8330c51761d7cd1099b5ef084a33e254`. The mandatory bounded
+CI/auth/storage/workflow decision preceded edits; the narrow diff review
+approved the implementation later pinned as the tested HEAD. Prior reader
+HEAD `710860be12f26bcf5b60312974c31aff7499eda4`, owner review
+[5378531408](https://github.com/hyeonsangjeon/gdpval-realworks/pull/714#pullrequestreview-5378531408)
+and its all-10-check result remain prior evidence, not approval of this delta.
+The delivered reader's 1553-line review and 11.06s selector were not repeated.
 
-### Supplied producer preparation and approval, not an observed result
+### Actual failed inference, separate from offline proof
 
-The worktree began from verified latest main
-`e39d8d1aadcb816d09588829a5ec4929b33083e6`. The leader's prior source review
-[5377303231](https://github.com/hyeonsangjeon/gdpval-realworks/pull/713#pullrequestreview-5377303231)
-and all 10 source-gate checks covered
-`2308b3fe8248d927e7f96f321963caebdc475a62`; neither was reopened or transferred
-to this new reader.
-
-The fixed producer is source `e39d8d1aadcb816d09588829a5ec4929b33083e6`,
-workflow `370228282`, `.github/workflows/codex-retention-first-cell.yml`,
-[run 36845127347](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36845127347),
-attempt 1. Preparation job `110313331439` succeeded. The supplied receipt at
-`2026-10-01T09:51:41.9510199Z` says `prepared_not_admitted` with the exact fresh
-scope and request SHA256
+The leader directly read
+[run 36845127347 / attempt 1 / execution job 110323708382](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36845127347/job/110323708382)
+at producer `e39d8d1aadcb816d09588829a5ec4929b33083e6`, workflow `370228282`,
+`.github/workflows/codex-retention-first-cell.yml`. All workflow jobs completed
+successfully. The actual final CLI receipt at `2026-10-01T13:22:50.8088344Z`
+reported the exact fresh cell, `status=failed`, `remote_terminal=acknowledged`,
+`cleanup_confirmed=true`, `grade=null`, `grading_launched=false` and
+`invoice_complete=false`, with request SHA256
 `5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02`.
-Four original input roles were verified from bundle
-`757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+The roughly 180-minute step does not establish timeout, rate limiting or
+another failure cause. Terminal/claim/output revisions, declared artifact
+counts, usage/cost, detailed reason and recovery exposure have not been read.
 
-The supplied fresh path-specific materialized grader source is
-`298da1d3a36482cf87e7f896d47c8c6c64bf5e1df91dd244847640d9d00a3689`,
-not the consumed keep/r1 identity
-`c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`.
-It remains request-associated evidence, not a new result or grader measurement.
-Readback confirmed exactly one owner approval in environment `grading`
-`18744914306`, deployment `6781320183`, using the existing
-`approve-retention-first-cell sha256:` prefix. Approval job `110314366065`
-was queued afterward. No fresh model admission, output or terminal revision
-has been observed in the supplied evidence. This task did not follow that run.
+Execution-side preparation reproduced that request digest and fresh materialized
+grader source `298da1d3a36482cf87e7f896d47c8c6c64bf5e1df91dd244847640d9d00a3689`;
+signed approval verification succeeded. This is not the consumed keep/r1 grader
+identity `c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`.
+Earlier preparation job `110313331439` reported `prepared_not_admitted` at
+`2026-10-01T09:51:41.9510199Z`, verifying four original input roles from bundle
+`757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+Exactly one owner approval was confirmed in environment `grading`
+`18744914306`, deployment `6781320183`, using
+`approve-retention-first-cell sha256:`; approval job `110314366065` was queued
+afterward. Those preparation/approval facts remain distinct from the later
+failed receipt. This coding task did not follow, poll or read that run.
 
 ### Exact offline validation
 
 ```text
-tests/test_codex_retention_fresh_r1_result_intake.py::test_fresh_r1_result_intake_is_fixed_immutable_and_model_free
+tests/test_codex_retention_fresh_r1_terminal_observation.py::test_fresh_r1_terminal_observation_is_controls_only_and_non_authorizing
 tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free
 ```
 
-Each selector passed in the single 11.06s invocation under CPython 3.10.12 /
+Each selector passed in the single 14.86s invocation under CPython 3.10.12 /
 pytest 9.1.1, `-v --tb=short -p no:cacheprovider`, plugin autoload disabled,
 token-free `GITHUB_ACTIONS=true` and synthetic `pull_request`/`pytest` metadata.
 Existing process/network/credential guards remained active. The 180-second
 outer timeout did not fire. Log SHA256:
-`eabc583e6f50aa61211cfc28aefc132c0326892b923eedcbe6989bb0f15c037e`.
+`d9f7c3217cb1f1d843e47f6854e5fd2bd832eb0fd7568b6f5a98b0148318a128`.
 
-The reader passed terminal-to-payload verification, fresh private readback,
-optional/missing/empty ledger cases, partial accounting, wrong source/run/
-request/cell/predecessor refusals, corruption/history/type-coercion/extra-role/
-privacy/bounds refusals, missing terminal, no-clobber and ambiguous local
-completion checks, safe error redaction and final no-effects assertions. The
-routing selector passed both exact cells and unsupported selectors across all
-16 mode combinations, exclusive read credentials, paid-route exclusion,
-unchanged keep commands and real token-free refusals. No selected assertion
-remained unreached. Transport/server records were synthetic; no validator
-success was substituted. No unrelated selector or previous proof was replayed.
+Real validators with synthetic controls/transport reached failed/stopped
+observation with absent, result-only and partial-payload declarations; exact
+identity/proof limits; source/run/request/cell/predecessor and job refusals;
+corruption/history/type-coercion/role/privacy/bounds refusals; missing controls;
+no-clobber and ambiguous acknowledgment; safe error redaction; default success
+isolation; and final no-effects assertions. Payload downloads were forbidden.
+The coupled routing selector covered all 32 mode combinations, unchanged keep
+command bodies, exclusive read credentials and paid-route exclusion. No
+selected assertion remained unreached. No successful validator verdict was
+substituted, and no prior reader selector or live integration was replayed.
 
 ### Actual verified keep/r1 readout, separate from offline proof
 
@@ -156,8 +174,9 @@ terminal `de50ff0aa6037c0ef6e3b713da519359abd1d08d`, SHA256
 reference, never adopts the predecessor as the fresh result or replays it.
 
 The registered order remains Task4 keep1/fresh1/fresh2/keep2, then Task5
-fresh1/keep1/keep2/fresh2. The supplied evidence has not yet established outcomes
-for the other seven cells. The original
+fresh1/keep1/keep2/fresh2. Fresh/r1 is consumed with an acknowledged failed
+status; its detailed control evidence remains unread. The other six cells
+remain outstanding. The original
 30-cell pilot is complete and is not reopened. This eight-cell study is
 post-selected and not representative; one score is not evidence of benefit.
 Two repetitions, service variation and an uncalibrated judge remain registered
@@ -175,15 +194,23 @@ are unchanged. The 10800-second cumulative clock includes waits, recovery and
 downtime without reset; 1800 seconds is the native-turn wait, not an all-in
 attempt ceiling. There is no fixed admission count or automatic monetary cutoff.
 
-Immutable new-HEAD owner review and CI remain required. Only the leader follows
-run `36845127347`. A later live intake needs a separate source-bound direction
-at the then-reviewed main reader/workflow SHA, with the exact fresh cell,
-`read_result=true`, `prepare=false`, `execute=false`, `observe_locator=false`.
-The producer source/run/request above remain fixed and separate from the reader
-source. Missing or ambiguous results refuse; there is no automatic retry,
-inference replay, regrading or authority for another cell.
+The failed fresh receipt does not establish retention benefit from this pair
+or explain the failure. Immutable new-HEAD owner review and CI remain required.
+A later terminal-only observation needs separate leader direction at the
+then-reviewed main reader/workflow SHA: exact fresh cell, `observe_terminal=true`,
+`read_result=false`, `prepare=false`, `execute=false`, `observe_locator=false`.
+The producer source/run/request/job above remain fixed and separate from the
+reader source. Missing, ambiguous or corrupt controls refuse; there is no
+automatic retry, inference replay, regrading or authority for another cell.
 
 ### Preserved history and reporting scope
+
+The [immutable prior reader record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/710860be12f26bcf5b60312974c31aff7499eda4/tasks/LATEST_TASK_RESULT/README.md)
+retains the separate `56bb86a7cdca02c7f0f9ef8055d3e44f8df8aaaf` proof:
+2 collected, 2 passed in 11.06s, exit 0, no timeout; log SHA256
+`eabc583e6f50aa61211cfc28aefc132c0326892b923eedcbe6989bb0f15c037e`.
+Its successful-result intake, type-coercion review correction and prior source
+review `5377303231` are not this terminal-only observation's validation.
 
 The [immutable prior completion record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e39d8d1aadcb816d09588829a5ec4929b33083e6/tasks/LATEST_TASK_RESULT/README.md)
 retains the exact reached/unreached boundaries and logs for `c291670`'s 2.68s
@@ -209,7 +236,7 @@ bounded current-result update; unchanged score/accounting/limit paragraphs
 were not broadly rewritten. UI/animation, new-study and generic-framework
 skills were not applicable.
 
-The old PR713 worktree, other records, `wip/local-main-preserved-20260719` and
+The old PR713/PR714 worktrees, other records, `wip/local-main-preserved-20260719` and
 private NAS refusal directory remain untouched. The existing Git identity is
 `hyeonsangjeon <wingnut0310@gmail.com>`, without attribution/session trailers.
 The leader's local M4 checkout is unavailable and was not updated. No workflow

@@ -15,10 +15,11 @@ from .test_codex_retention_ci_read_result import _boolean
 def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsys):
     workflow = yaml.safe_load((adapter.ROOT / adapter.WORKFLOW).read_bytes())
     dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
-    assert set(dispatch) == {"reviewed_source_sha", "cell_id", "prepare", "execute", "observe_locator", "read_result"}
-    assert all(dispatch[name]["default"] is False for name in ("prepare", "execute", "observe_locator", "read_result"))
+    assert set(dispatch) == {"reviewed_source_sha", "cell_id", "prepare", "execute", "observe_locator", "read_result", "observe_terminal"}
+    assert all(dispatch[name]["default"] is False for name in ("prepare", "execute", "observe_locator", "read_result", "observe_terminal"))
     assert dispatch["observe_locator"]["type"] == "boolean"
     assert dispatch["read_result"]["type"] == "boolean"
+    assert dispatch["observe_terminal"]["type"] == "boolean"
     jobs = workflow["jobs"]
     assert set(jobs) == {adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB}
     prepare, approve, execute = (jobs[name] for name in (adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB))
@@ -33,31 +34,36 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
     assert gate == execute["steps"][0]
     assert gate["env"] == {"OBSERVE_LOCATOR_ONLY": "${{ inputs.observe_locator }}",
                            "PREPARE_REQUESTED": "${{ inputs.prepare }}", "EXECUTE_REQUESTED": "${{ inputs.execute }}",
-                           "READ_RESULT_ONLY": "${{ inputs.read_result }}"}
+                           "READ_RESULT_ONLY": "${{ inputs.read_result }}", "OBSERVE_TERMINAL_ONLY": "${{ inputs.observe_terminal }}"}
     assert gate["run"].splitlines() == [
         "set -euo pipefail",
-        '[[ "$READ_RESULT_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false ) ]]',
+        '[[ "$READ_RESULT_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]',
+        '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]',
         '[[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
         '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
+        '[[ "$OBSERVE_TERMINAL_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' ]]',
     ]
     # Evaluate the exact changed cell/mode expressions, not a substring route.
     for selected in (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID,
                      "unregistered", adapter.registration.TASK4 + "_retention_bundle_v1_fresh_r2"):
-        for preparing, executing, observing, reading in itertools.product((False, True), repeat=4):
+        for preparing, executing, observing, reading, terminal in itertools.product((False, True), repeat=5):
             values = {'"$PREPARE_REQUESTED"': preparing, '"$EXECUTE_REQUESTED"': executing,
                 '"$OBSERVE_LOCATOR_ONLY"': observing, '"$READ_RESULT_ONLY"': reading,
+                '"$OBSERVE_TERMINAL_ONLY"': terminal,
                 '"$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID: selected == adapter.controller.FIRST_CELL_ID,
                 '"$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID: selected == adapter.controller.FRESH_CELL_ID}
             allowed = all(_boolean(line.removeprefix("[[ ").removesuffix(" ]]"), values)
-                for line in [*gate["run"].splitlines()[1:3], *gate["run"].splitlines()[-2:]])
+                for line in [*gate["run"].splitlines()[1:4], *gate["run"].splitlines()[-3:]])
             expected = (selected in (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID)
-                and not (reading and (preparing or executing or observing))
+                and not (reading and (preparing or executing or observing or terminal))
+                and not (terminal and (preparing or executing or observing or reading))
                 and not (observing and (preparing or executing))
-                and (selected == adapter.controller.FIRST_CELL_ID or not observing))
+                and (selected == adapter.controller.FIRST_CELL_ID or not observing)
+                and (selected == adapter.controller.FRESH_CELL_ID or not terminal))
             assert allowed is expected
     facade = "python3 batch-runner/codex_retention_task4_fresh_r1.py"
     assert prepare["steps"][4]["run"].startswith(facade + " ")
@@ -66,16 +72,16 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
     assert facade + " --execute" in execute["steps"][-1]["run"]
     assert "retention-task4-fresh-r1-host" in execute["steps"][-1]["run"]
     assert "retention-first-cell-host" in execute["steps"][-1]["run"]
-    assert "codex_retention_result_intake.py --read --discover-terminal" in prepare["steps"][-1]["run"]
-    modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
+    assert "codex_retention_result_intake.py --read --discover-terminal" in prepare["steps"][12]["run"]
+    modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
     prepared = "needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''"
     assert approve["needs"] == adapter.PREPARE_JOB and approve["if"] == modes + " && " + prepared
     assert execute["needs"] == [adapter.PREPARE_JOB, adapter.APPROVE_JOB]
     assert execute["if"] == modes + " && " + prepared + " && needs.retention-approve.result == 'success'"
     assert "this is not authenticated execution approval" in approve["steps"][0]["run"]
-    assert len(prepare["steps"]) == 13
+    assert len(prepare["steps"]) == 15
     assert execute["steps"][:9] == prepare["steps"][:9]
-    assert prepare["steps"][4]["if"] == "inputs.read_result == false"
+    assert prepare["steps"][4]["if"] == "inputs.read_result == false && inputs.observe_terminal == false"
     for step in prepare["steps"][5:9]:
         assert step["if"] == "inputs.prepare || inputs.execute || inputs.observe_locator"
     assert "no token, signed approval verification or admission follows" in prepare["steps"][8]["run"]

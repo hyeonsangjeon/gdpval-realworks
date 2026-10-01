@@ -36,6 +36,9 @@ FROZEN = {
 }
 FORMAT = "retention-task4-fresh-r1-result-intake-v1"
 MARKER = "retention-fresh-r1-result-intake.json"
+TERMINAL_FORMAT = "retention-task4-fresh-r1-terminal-observation-v1"
+TERMINAL_MARKER = "retention-fresh-r1-terminal-observation.json"
+EXPECTED_EXECUTION_JOB_ID = 110323708382
 require = output._require
 
 
@@ -103,7 +106,7 @@ def _authority(authority):
             and origin["host_instance_sha256"] == authority["host_instance_sha256"], "fresh_result_origin_mismatch")
 
 
-def _summary(summary):
+def _summary_identity(summary):
     require(type(summary) is dict and set(summary) == {"format", "request_sha256", "source_sha", "cell_id",
         "status", "exit_code", "cleanup_confirmed", "accounting", "receipt", "grade", "grading_launched",
         "invoice_complete", "missing", "files"}
@@ -112,8 +115,9 @@ def _summary(summary):
         and summary["cleanup_confirmed"] is True and summary["grade"] is None
         and summary["grading_launched"] is False and summary["invoice_complete"] is False,
         "fresh_result_completion_mismatch")
-    require(summary["status"] == "succeeded" and (summary["exit_code"] is None
-            or (type(summary["exit_code"]) is int and summary["exit_code"] == 0)), "fresh_result_success_required")
+
+
+def _summary_files(summary):
     receipt = ci.project_cost_receipt(summary["receipt"])
     require(owned._canonical_json(summary["receipt"]) == owned._canonical_json(receipt) and summary["accounting"] == (
         "missing" if receipt is None else receipt["status"]), "fresh_result_accounting_mismatch")
@@ -127,6 +131,14 @@ def _summary(summary):
     names = [record["path"] for record in files]
     require(names == sorted(set(names)) and sum(item["size"] for item in files) <= output.MAX_TOTAL_BYTES,
             "fresh_result_output_bounds_exceeded")
+    return receipt, names
+
+
+def _summary(summary):
+    _summary_identity(summary)
+    require(summary["status"] == "succeeded" and (summary["exit_code"] is None
+            or (type(summary["exit_code"]) is int and summary["exit_code"] == 0)), "fresh_result_success_required")
+    receipt, names = _summary_files(summary)
     roles, deliverables = intake._roles(summary)
     missing = ([] if intake.LEDGER in names else ["bound_ledger_export"])
     missing += ([] if receipt is not None and receipt["usage"] is not None else ["usage"])
@@ -134,8 +146,37 @@ def _summary(summary):
     return roles, deliverables
 
 
-def _verify_terminal(api, repo, head, cache, token, deadline):
+def _terminal_summary(summary):
+    """Validate unsuccessful declarations, never the contents of their payloads."""
+    _summary_identity(summary)
+    require(summary["status"] in {"failed", "stopped"} and (summary["exit_code"] is None
+            or type(summary["exit_code"]) is int), "fresh_terminal_unsuccessful_required")
+    receipt, names = _summary_files(summary)
+    roles = {item["path"]: item for item in summary["files"]}
+    deliverables = []
+    for name, record in roles.items():
+        if name in (intake.RESULT, intake.LEDGER):
+            require((1 if name == intake.RESULT else 0) <= record["size"] <= output.MAX_RECORD_BYTES,
+                    "retention_result_record_bounds_exceeded")
+        else:
+            require(intake.canonical_deliverable_path(intake.registration.TASK4, name) == name,
+                    "retention_result_role_refused")
+            require(not {part.lower() for part in Path(name).parts} & intake.PRIVATE_PARTS
+                    and Path(name).suffix.lower() not in {".sqlite", ".sqlite3", ".db"},
+                    "retention_result_private_state_refused")
+            deliverables.append(name)
+    require(len(deliverables) <= output.MAX_FILES, "retention_result_deliverable_count_exceeded")
+    missing = [] if intake.RESULT in roles else ["bound_inference_result", "validated_deliverables"]
+    require(not missing or not roles, "fresh_terminal_missing_result_roles")
+    missing += ([] if intake.LEDGER in names else ["bound_ledger_export"])
+    missing += ([] if receipt is not None and receipt["usage"] is not None else ["usage"])
+    require(summary["missing"] == missing, "fresh_result_missing_accounting_mismatch")
+    return roles, deliverables
+
+
+def _verify_terminal(api, repo, head, cache, token, deadline, *, terminal_only=False):
     """Independent fixed-record checks, not the writer's expected-byte verifier."""
+    require(type(terminal_only) is bool, "explicit_terminal_observation_required")
     terminal, terminal_bytes = retained._control(api, repo, head, fresh.TERMINAL, cache, token, deadline,
                                                  written_at=head)
     require(set(terminal) == {"format", "request_sha256", "authority", "scope", "claim_commit", "claim_identity",
@@ -144,7 +185,12 @@ def _verify_terminal(api, repo, head, cache, token, deadline):
         and terminal["scope"] == "existing_inference_branch_one_use_remote_cas"
         and terminal["publication_acknowledged"] is True, "fresh_result_terminal_binding_mismatch")
     _authority(terminal["authority"])
-    roles, deliverables = _summary(terminal["completion"])
+    if terminal_only:
+        require(terminal["authority"]["provider_job_id"] == EXPECTED_EXECUTION_JOB_ID,
+                "fresh_terminal_execution_job_mismatch")
+        roles, deliverables = _terminal_summary(terminal["completion"])
+    else:
+        roles, deliverables = _summary(terminal["completion"])
     claim_head, output_head = terminal["claim_commit"], terminal["output_commit"]
     require(all(output._hash(value, 40) for value in (claim_head, output_head))
             and len({head, claim_head, output_head, fresh.PREDECESSOR["terminal_commit"]}) == 4,
@@ -263,10 +309,79 @@ def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expec
         return {**record, "intake_verified": True, "intake_sha256": owned._identity(encoded)["sha256"]}
 
 
+def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, expected_reader_sha256: str,
+                     terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None) -> dict:
+    """Read three control bodies and declared-object metadata; no payload intake."""
+    source, _, _ = _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal)
+    require(isinstance(destination, Path) and destination.is_absolute(), "explicit_absolute_destination_required")
+    destination, _ = _destination(destination)
+    require(not os.path.lexists(destination), "new_result_destination_required")
+    with _publication_parents(destination.parent) as (check, mkdir, directory_fd):
+        mkdir(destination)
+        cache = destination / intake.CACHE
+        mkdir(cache)
+        mkdir(cache / "controls")
+        with retained._session(_test_api, response_bytes_limit=output.MAX_MANIFEST_BYTES) as (api, token, deadline):
+            repo = retained._target()
+            head = _terminal_revision(api, repo, terminal_revision, discover_terminal, token, deadline)
+            check()
+            terminal, terminal_bytes, roles, deliverables = _verify_terminal(
+                api, repo, head, cache / "controls", token, deadline, terminal_only=True)
+            check()
+            output._remaining(deadline)
+        require(reader_identity() == source, "fresh_result_reader_changed")
+        summary = terminal["completion"]
+        record = {
+            "format": TERMINAL_FORMAT, "evidence_only": True, "observation_only": True,
+            "campaign": intake.registration.CAMPAIGN, "ordinal": 1, "cell_id": fresh.CELL_ID,
+            "producer_source_sha": PRODUCER_SOURCE, "request_sha256": REQUEST_SHA256, "reader": source,
+            "expected_provider": EXPECTED_PROVIDER, "expected_execution_job_id": EXPECTED_EXECUTION_JOB_ID,
+            "supplied_request_binding": SUPPLIED_REQUEST_BINDING,
+            "recorded_provider_run_id": terminal["authority"]["provider_run_id"],
+            "recorded_provider_job_id": terminal["authority"]["provider_job_id"],
+            "terminal_commit": head, "terminal_identity": owned._identity(terminal_bytes),
+            "claim_commit": terminal["claim_commit"], "claim_identity": terminal["claim_identity"],
+            "output_commit": terminal["output_commit"],
+            "output_manifest_identity": owned._identity(retained._encoded(summary)),
+            "output_objects_sha256": owned._digest(terminal["output_objects"]),
+            "retained_authority_sha256": owned._digest(terminal["authority"]), "predecessor": fresh.PREDECESSOR,
+            "proof": "verified_publication_derived_not_independent_provider_authentication",
+            "fresh_origin_authentication": False, "prepared_input_independently_verified": False,
+            "git_parent_cas_independently_verified": False, "writer_acknowledgment": "not_established",
+            "recorded_publication_acknowledged": True, "cleanup_confirmed": True,
+            "status": summary["status"], "exit_code": summary["exit_code"],
+            "declared_payload_roles": {"inference_result": int(intake.RESULT in roles),
+                "ledger": int(intake.LEDGER in roles), "deliverables": len(deliverables)},
+            "declared_output_object_count": len(terminal["output_objects"]),
+            "payload_bodies_verified": False, "grading_input_ready": False,
+            "accounting": summary["accounting"], "receipt": summary["receipt"], "missing": summary["missing"],
+            "unavailable": {name: {"status": "unavailable", "value": None,
+                "reason": "not_recorded_in_terminal_controls"} for name in ("detailed_failure", "budget", "recovery_exposure")},
+            "http_request_count": None, "grade": None, "grading_launched": False, "invoice_complete": False,
+            "launch_authorized": False, "admission_attempted": False, "replay_authorized": False, "commands": [],
+        }
+        encoded = retained._encoded(record)
+        check()
+        for directory in (destination.parent, destination, cache, cache / "controls"):
+            os.fsync(directory_fd(directory))
+        try:
+            _write_no_clobber(destination / TERMINAL_MARKER, encoded, parent_fd=directory_fd(destination))
+            os.fsync(directory_fd(destination))
+            output._bytes(destination / TERMINAL_MARKER, limit=output.MAX_MANIFEST_BYTES, expected=owned._identity(encoded))
+            check()
+        except (OSError, ValueError, KeyboardInterrupt) as error:
+            raise output.OutputPublicationRefused("fresh_terminal_observation_unconfirmed") from error
+        return {**record, "outcome": "terminal_verified", "terminal_verified": True,
+                "observation_sha256": owned._identity(encoded)["sha256"]}
+
+
 def main(argv=None, *, _test_api=None) -> int:
+    observing = False
     try:
         parser = output._Parser(description=__doc__)
-        parser.add_argument("--read", action="store_true")
+        mode = parser.add_mutually_exclusive_group()
+        mode.add_argument("--read", action="store_true")
+        mode.add_argument("--observe-terminal", action="store_true")
         parser.add_argument("--output", type=Path)
         parser.add_argument("--expected-producer-source")
         parser.add_argument("--expected-request-sha256")
@@ -276,13 +391,20 @@ def main(argv=None, *, _test_api=None) -> int:
         selection.add_argument("--terminal-revision")
         selection.add_argument("--discover-terminal", action="store_true")
         args = parser.parse_args(argv)
-        if not args.read:
+        observing = args.observe_terminal
+        if not (args.read or observing):
             require(not any((args.output, args.expected_producer_source, args.expected_request_sha256,
                 args.cell_id, args.expected_reader_sha256, args.terminal_revision, args.discover_terminal)),
                 "explicit_fresh_result_read_required")
             result = {"mode": "plan", "read_attempted": False, "producer_source_sha": PRODUCER_SOURCE,
                 "request_sha256": REQUEST_SHA256, "cell_id": fresh.CELL_ID, "reader": reader_identity(),
                 "expected_provider": EXPECTED_PROVIDER, "grade": None, "invoice_complete": False}
+        elif observing:
+            result = observe_terminal(expectation=ci.TerminalExpectation(args.expected_request_sha256,
+                args.expected_producer_source, args.cell_id), destination=args.output,
+                expected_reader_sha256=args.expected_reader_sha256, terminal_revision=args.terminal_revision,
+                discover_terminal=args.discover_terminal, _test_api=_test_api)
+            result["mode"] = "observe_terminal"
         else:
             record = read_result(expectation=ci.TerminalExpectation(args.expected_request_sha256,
                 args.expected_producer_source, args.cell_id), destination=args.output,
@@ -301,10 +423,13 @@ def main(argv=None, *, _test_api=None) -> int:
         # exception text/arguments, payloads, paths or upstream HTTP bodies.
         public = {"invalid_arguments", "explicit_fresh_result_read_required", "explicit_hf_token_required",
                   "fresh_result_terminal_not_ready", "fresh_result_success_required",
-                  "fresh_result_completion_acknowledgment_unconfirmed"}
+                  "fresh_result_completion_acknowledgment_unconfirmed", "fresh_terminal_unsuccessful_required",
+                  "fresh_terminal_observation_unconfirmed"}
         reason = error.args[0] if (type(error) is output.OutputPublicationRefused and len(error.args) == 1
-            and type(error.args[0]) is str and error.args[0] in public) else "fresh_result_intake_refused"
-        print(json.dumps({"intake_verified": False, "reason": reason, "launch_authorized": False,
+            and type(error.args[0]) is str and error.args[0] in public) else (
+                "fresh_terminal_observation_refused" if observing else "fresh_result_intake_refused")
+        print(json.dumps({("terminal_verified" if observing else "intake_verified"): False,
+            "reason": reason, "launch_authorized": False,
             "grading_launched": False, "admission_attempted": False, "replay_authorized": False,
             "grade": None, "invoice_complete": False, "commands": []}, sort_keys=True))
         return 2
