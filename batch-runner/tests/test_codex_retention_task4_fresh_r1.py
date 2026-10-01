@@ -114,6 +114,35 @@ def _originals(tmp_path, monkeypatch, approved_pilot_source):
     return inputs, captures, run, manifest, roles
 
 
+def _historical_cells(original_run, captures, approved_pilot_source):
+    old_cells = [{"cell_id": "synthetic-original-" + str(index), "index": index} for index in range(29)]
+    # Only the final historical row reaches retained._paths/_terminal. Build
+    # its full producer shape from the already serialized original profile;
+    # do not compile the thirty-cell study or borrow a retention cell identity.
+    original_config = json.loads(original_run.generated_config.read_bytes())
+    old_task = captures[0]["task_ids"][-1]
+    assert historical.FINAL_CELL == old_task + "_A_r2"
+    old_run = retained.ci.CAMPAIGN + "__" + historical.FINAL_CELL
+    old_config = owned.load_plan(approved_pilot_source / owned.CODEX_TEMPLATE)
+    old_config["experiment"].update(id=old_run, name="GPT-5.4 Codex external-budget pilot",
+        description="One fixed pilot cell; dispatch is not model consumption or graded quality.")
+    old_config["data"]["source"] = original_config["data"]["source"]
+    old_config["data"]["filter"]["task_ids"] = [old_task]
+    old_config["condition_a"] = original_config["condition_a"]
+    old_config["execution"]["codex"] = original_config["execution"]["codex"]
+    old_config["execution"]["codex"]["task_deadline"] = {"condition": "A", "repetition": 2}
+    old_config["execution"].update(timeout=owned.ATTEMPT_SECONDS, max_retries=3, resume_max_rounds=0)
+    assert owned.ExperimentConfig.from_dict(old_config).validate() == []
+    old_cells.append({"cell_id": historical.FINAL_CELL, "run_id": old_run, "task_id": old_task,
+        "condition": "A", "repetition": 2, "index": 29, "config_sha256": owned._digest(old_config),
+        "roles": {role: "cells/" + historical.FINAL_CELL + "/" + suffix for role, suffix in {
+            "config": "config.json", "checkout": "checkout", "deadline": "deadline",
+            "native_workspaces": "native-workspaces", "checkpoint": "cell.json",
+            "result": "checkout/" + owned.RESULT, "ledger": "checkout/" + owned.LEDGER,
+        }.items()}})
+    return old_cells
+
+
 def _source_tree(destination):
     # Exact controller/admission/grader closure only. No Git worktree, private
     # input tree, native state, or installed package is copied.
@@ -161,6 +190,8 @@ def _environment(monkeypatch, host_parent):
 
 
 class FreshTransport(Transport):
+    ordinal, repetition, cell_id = 1, 1, fresh.CELL_ID
+
     def owned_process(self, command, **options):
         assert self.api.commits == ["admission"]
         assert command == [sys.executable, "step2_run_inference.py", "--condition", "condition_a",
@@ -168,15 +199,15 @@ class FreshTransport(Transport):
         assert options["cwd"] == controller.ROOT / "batch-runner" and options["timeout"] == 10860
         assert not {"HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "PYTHONPATH", "PYTHONHOME",
                     "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL"} & options["env"].keys()
-        cell = controller._adapted_cell(registration.compile_plan()["cells"][1])
+        cell = controller._adapted_cell(registration.compile_plan()["cells"][self.ordinal])
         prepared = controller.read_codex_prepared(controller.PREPARED)
         assert prepared["execution"]["codex"]["task_deadline"] == cell["control"] == {
-            "condition": "retention_bundle_v1", "retention_bundle": "fresh", "repetition": 1}
+            "condition": "retention_bundle_v1", "retention_bundle": "fresh", "repetition": self.repetition}
         assert options["env"]["GDPVAL_RELAY_LINEAGE_ID"] == cell["run_id"]
         self.children.append(tuple(command))
         self.api.events.append("child")
         path, binding = options["ownership"]
-        assert binding["cell_id"] == fresh.CELL_ID
+        assert binding["cell_id"] == self.cell_id
         if self.mode == "cleanup":
             owned._save(path, {**owned._owner_state(binding["plan_sha256"]), **binding,
                 "phase": "running", "pid": 4242, "tree_reaped": False, "owner_reaped": False})
@@ -221,7 +252,8 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
     assert reader.reader_identity() == {"module_sha256": "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196",
         "terminal_verifier_sha256": "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c"}
     assert [(binding.cell_id, binding.ordinal, binding.bundle) for binding in controller.CELL_BINDINGS] == [
-        (production_plan["order"][0], 0, "keep"), (production_plan["order"][1], 1, "fresh")]
+        (production_plan["order"][0], 0, "keep"), (production_plan["order"][1], 1, "fresh"),
+        (production_plan["order"][2], 2, "fresh")]
     assert fresh.SCOPE == {**ci.SCOPE, "cell_id": fresh.CELL_ID, "ordinal": 1, "retention_bundle": "fresh"}
     frozen = {name: (REAL_ROOT / name).read_bytes() for name in (
         "batch-runner/codex_retention_fixed_grade.py", "batch-runner/codex_retention_grade_readout.py",
@@ -252,31 +284,7 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
         member.size = len(data)
         tar.addfile(member, io.BytesIO(data))
     git_state = {"head": SOURCE, "dirty": b""}
-    old_cells = [{"cell_id": "synthetic-original-" + str(index), "index": index} for index in range(29)]
-    # Only the final historical row reaches retained._paths/_terminal. Build
-    # its full producer shape from the already serialized original profile;
-    # do not compile the thirty-cell study or borrow a retention cell identity.
-    original_config = json.loads(original_run.generated_config.read_bytes())
-    old_task = captures[0]["task_ids"][-1]
-    assert historical.FINAL_CELL == old_task + "_A_r2"
-    old_run = retained.ci.CAMPAIGN + "__" + historical.FINAL_CELL
-    old_config = owned.load_plan(approved_pilot_source / owned.CODEX_TEMPLATE)
-    old_config["experiment"].update(id=old_run, name="GPT-5.4 Codex external-budget pilot",
-        description="One fixed pilot cell; dispatch is not model consumption or graded quality.")
-    old_config["data"]["source"] = original_config["data"]["source"]
-    old_config["data"]["filter"]["task_ids"] = [old_task]
-    old_config["condition_a"] = original_config["condition_a"]
-    old_config["execution"]["codex"] = original_config["execution"]["codex"]
-    old_config["execution"]["codex"]["task_deadline"] = {"condition": "A", "repetition": 2}
-    old_config["execution"].update(timeout=owned.ATTEMPT_SECONDS, max_retries=3, resume_max_rounds=0)
-    assert owned.ExperimentConfig.from_dict(old_config).validate() == []
-    old_cells.append({"cell_id": historical.FINAL_CELL, "run_id": old_run, "task_id": old_task,
-        "condition": "A", "repetition": 2, "index": 29, "config_sha256": owned._digest(old_config),
-        "roles": {role: "cells/" + historical.FINAL_CELL + "/" + suffix for role, suffix in {
-            "config": "config.json", "checkout": "checkout", "deadline": "deadline",
-            "native_workspaces": "native-workspaces", "checkpoint": "cell.json",
-            "result": "checkout/" + owned.RESULT, "ledger": "checkout/" + owned.LEDGER,
-        }.items()}})
+    old_cells = _historical_cells(original_run, captures, approved_pilot_source)
     assert old_cells[-1]["run_id"] != plan["cells"][1]["config"]["experiment"]["id"]
     observer_response = {"format": historical.FORMAT, "observer_source_sha": historical.SOURCE,
         "producer_source_sha": historical.PRODUCER,
@@ -372,7 +380,7 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
     api = deepcopy(seed)
     transport = FreshTransport(document, api, key)
     denied = host_parent / "not-admitted"
-    for wrong in ("unregistered", plan["order"][2], plan["order"][4]):
+    for wrong in ("unregistered", plan["order"][3], plan["order"][4]):
         with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
             controller.execute_first_cell(replace(request, cell_id=wrong), host_state=denied, grant=grant)
     with pytest.raises(preparation.RetentionPreparationRefused, match="^emitted_config_or_task_bytes_mismatch$"):

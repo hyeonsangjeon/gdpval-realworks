@@ -8,6 +8,7 @@ There is no scheduler, claim adoption, retry, grading or mutable-head fallback.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import io
 import os
@@ -100,12 +101,40 @@ def _predecessor(api, repo, parent, cache, token, deadline):
     return dict(PREDECESSOR)
 
 
+@dataclass(frozen=True)
+class _PublicationBinding:
+    """Source-defined publication values only; no admission policy or callbacks."""
+
+    cell_id: str
+    claim: str
+    terminal: str
+    output: str
+    claim_format: str
+    terminal_format: str
+    output_format: str
+    predecessor: bytes
+    commit_message: str
+
+
+def _publication_binding():
+    return _PublicationBinding(CELL_ID, CLAIM, TERMINAL, OUTPUT, CLAIM_FORMAT, TERMINAL_FORMAT,
+                               OUTPUT_FORMAT, retained._encoded(PREDECESSOR), "Retain Task4 fresh/r1 output")
+
+
 def verify_terminal(api, repo, revision, expected_terminal, expected_claim, cache, token, deadline):
+    return _verify_publication(api, repo, revision, expected_terminal, expected_claim, cache, token, deadline,
+                               _publication_binding())
+
+
+def _verify_publication(api, repo, revision, expected_terminal, expected_claim, cache, token, deadline, binding):
     """Reconcile exact writer bytes/history, never turn observation into an ack.
 
     Expected controls come from the owner's retained local publication records,
     not a newly adopted claim or a mutable latest lookup. This cannot run a child.
     """
+    CELL_ID, CLAIM, TERMINAL, OUTPUT = binding.cell_id, binding.claim, binding.terminal, binding.output
+    CLAIM_FORMAT, TERMINAL_FORMAT, OUTPUT_FORMAT = binding.claim_format, binding.terminal_format, binding.output_format
+    PREDECESSOR = owned._json_object(binding.predecessor)
     ci.require(output._hash(revision, 40), "immutable_fresh_terminal_required")
     ci.require(set(expected_terminal) == {"format", "request_sha256", "authority", "scope", "claim_commit",
                "claim_identity", "output_commit", "output_objects", "completion", "publication_acknowledged"}
@@ -205,57 +234,64 @@ class _FreshAdmission(ci._Admission):
         self.receipt = result
 
     def finish(self, host, state):
-        summary, files = ci._snapshot(host, self.request, self.document, state)
-        summary["format"] = OUTPUT_FORMAT
-        retained._write(host / "remote-terminal-reserved.json", {"outcome": "unresolved", **self.binding})
-        cache = ci._cache(host, "terminal-verification")
-        result = {"outcome": "unresolved", "stage": "output", "reason": None,
-                  "output_commit": None, "terminal_commit": None, "completion": summary}
-        try:
-            with retained._session(self.api) as (api, token, deadline):
-                repo, parent = retained._target(), self.receipt["returned_commit"]
-                ci.require(output._metadata(api, repo, ci.BRANCH, token, deadline)["sha"] == parent,
-                           "retention_output_parent_changed")
-                ci._absent(api, repo, parent, [OUTPUT, TERMINAL], token)
-                claim, _ = retained._control(api, repo, parent, CLAIM, cache, token, deadline, written_at=parent)
-                ci.same("retention_claim_changed", claim, self.receipt["claim"])
-                payloads = {**files, output.MANIFEST: retained._encoded(summary)}
-                staged = tuple(ci._PublicationFile(OUTPUT + "/" + name, io.BytesIO(data), len(data),
-                    hashlib.sha256(data).hexdigest()) for name, data in payloads.items())
-                objects = [retained._object(OUTPUT + "/" + name, data) for name, data in sorted(payloads.items())]
-                try:
-                    operations = ci._publication_additions(staged)
-                    response = api.create_commit(repo_id=repo, repo_type="dataset", revision=ci.BRANCH, token=token,
-                        parent_commit=parent, operations=operations, commit_message="Retain Task4 fresh/r1 output",
-                        num_threads=1, run_as_future=False, create_pr=False)
-                    revision = getattr(response, "oid", None)
-                    ci.require(output._hash(revision, 40) and revision != parent
-                               and not any(getattr(item, "_should_ignore", False) for item in operations),
-                               "retention_output_acknowledgment_missing")
-                finally:
-                    for item in staged:
-                        item.stream.close()
-                result["output_commit"] = revision
-                retained._objects(api, repo, revision, objects, token, deadline, written_at=revision)
-                ci.require(output._metadata(api, repo, ci.BRANCH, token, deadline)["sha"] == revision,
-                           "retention_terminal_parent_changed")
-                terminal = {"format": TERMINAL_FORMAT, **self.binding, "claim_commit": parent,
-                    "claim_identity": owned._identity(retained._encoded(claim)), "output_commit": revision,
-                    "output_objects": objects, "completion": summary, "publication_acknowledged": True}
-                # Retain the exact expected bytes before the single terminal write.
-                # A lost response remains unresolved even if a later read sees them.
-                retained._write(host / "remote-terminal-expected.json", terminal)
-                result["stage"] = "terminal"
-                result["terminal_commit"] = retained._commit(api, repo, revision, TERMINAL, terminal, cache, token, deadline)
-                observed = verify_terminal(api, repo, result["terminal_commit"], terminal, claim,
-                    ci._cache(host, "terminal-readback"), token, deadline)
-                ci.same("retention_terminal_readback_changed", observed["completion"], summary)
-                result.update(outcome="acknowledged", stage="terminal_verified")
-        except (Exception, KeyboardInterrupt) as error:
-            result["reason"] = str(error) if isinstance(error, ci.RetentionCIRefused) else output._error_context(error)[0]
-        retained._write(host / "remote-terminal-receipt.json", result)
-        ci.require(result["outcome"] == "acknowledged", "retention_terminal_unresolved:" + str(result["reason"]))
-        return result
+        return _finish_publication(self, host, state, _publication_binding())
+
+
+def _finish_publication(self, host, state, binding):
+    """Shared unchanged writer sequence; fixed adapters supply only publication values."""
+    CLAIM, TERMINAL, OUTPUT = binding.claim, binding.terminal, binding.output
+    TERMINAL_FORMAT, OUTPUT_FORMAT = binding.terminal_format, binding.output_format
+    summary, files = ci._snapshot(host, self.request, self.document, state)
+    summary["format"] = OUTPUT_FORMAT
+    retained._write(host / "remote-terminal-reserved.json", {"outcome": "unresolved", **self.binding})
+    cache = ci._cache(host, "terminal-verification")
+    result = {"outcome": "unresolved", "stage": "output", "reason": None,
+              "output_commit": None, "terminal_commit": None, "completion": summary}
+    try:
+        with retained._session(self.api) as (api, token, deadline):
+            repo, parent = retained._target(), self.receipt["returned_commit"]
+            ci.require(output._metadata(api, repo, ci.BRANCH, token, deadline)["sha"] == parent,
+                       "retention_output_parent_changed")
+            ci._absent(api, repo, parent, [OUTPUT, TERMINAL], token)
+            claim, _ = retained._control(api, repo, parent, CLAIM, cache, token, deadline, written_at=parent)
+            ci.same("retention_claim_changed", claim, self.receipt["claim"])
+            payloads = {**files, output.MANIFEST: retained._encoded(summary)}
+            staged = tuple(ci._PublicationFile(OUTPUT + "/" + name, io.BytesIO(data), len(data),
+                hashlib.sha256(data).hexdigest()) for name, data in payloads.items())
+            objects = [retained._object(OUTPUT + "/" + name, data) for name, data in sorted(payloads.items())]
+            try:
+                operations = ci._publication_additions(staged)
+                response = api.create_commit(repo_id=repo, repo_type="dataset", revision=ci.BRANCH, token=token,
+                    parent_commit=parent, operations=operations, commit_message=binding.commit_message,
+                    num_threads=1, run_as_future=False, create_pr=False)
+                revision = getattr(response, "oid", None)
+                ci.require(output._hash(revision, 40) and revision != parent
+                           and not any(getattr(item, "_should_ignore", False) for item in operations),
+                           "retention_output_acknowledgment_missing")
+            finally:
+                for item in staged:
+                    item.stream.close()
+            result["output_commit"] = revision
+            retained._objects(api, repo, revision, objects, token, deadline, written_at=revision)
+            ci.require(output._metadata(api, repo, ci.BRANCH, token, deadline)["sha"] == revision,
+                       "retention_terminal_parent_changed")
+            terminal = {"format": TERMINAL_FORMAT, **self.binding, "claim_commit": parent,
+                "claim_identity": owned._identity(retained._encoded(claim)), "output_commit": revision,
+                "output_objects": objects, "completion": summary, "publication_acknowledged": True}
+            # Retain the exact expected bytes before the single terminal write.
+            # A lost response remains unresolved even if a later read sees them.
+            retained._write(host / "remote-terminal-expected.json", terminal)
+            result["stage"] = "terminal"
+            result["terminal_commit"] = retained._commit(api, repo, revision, TERMINAL, terminal, cache, token, deadline)
+            observed = _verify_publication(api, repo, result["terminal_commit"], terminal, claim,
+                ci._cache(host, "terminal-readback"), token, deadline, binding)
+            ci.same("retention_terminal_readback_changed", observed["completion"], summary)
+            result.update(outcome="acknowledged", stage="terminal_verified")
+    except (Exception, KeyboardInterrupt) as error:
+        result["reason"] = str(error) if isinstance(error, ci.RetentionCIRefused) else output._error_context(error)[0]
+    retained._write(host / "remote-terminal-receipt.json", result)
+    ci.require(result["outcome"] == "acknowledged", "retention_terminal_unresolved:" + str(result["reason"]))
+    return result
 
 
 def execute(request, *, host_state, grant, _test_transport=None, _test_api=None):
@@ -293,6 +329,8 @@ def main(argv=None):
     try:
         args = parser.parse_args(argv)
         controller.cell_binding(args.cell)
+        if args.cell not in (controller.FIRST_CELL_ID, CELL_ID):
+            raise controller.RetentionControllerRefused("only_first_or_task4_fresh_r1_supported")
         if args.cell == controller.FIRST_CELL_ID:
             return ci.main(argv)
         ci.require(not args.observe_locator, "fresh_locator_observation_not_supported")
