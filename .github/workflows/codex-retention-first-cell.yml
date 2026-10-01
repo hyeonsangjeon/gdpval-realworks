@@ -1,6 +1,6 @@
 # This workflow is not launch authority. The owner must review the new source
 # and approve the exact prepared request in THIS run's grading environment.
-name: Retention diagnostic — first cell only
+name: Retention diagnostic — first cell and fixed Task4 fresh r1
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       cell_id:
-        description: Only the registered Task4 keep r1 ordinal zero
+        description: Only registered Task4 keep r1 or its fixed fresh r1 successor
         default: 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1
         required: true
         type: string
@@ -19,7 +19,7 @@ on:
         default: false
         type: boolean
       execute:
-        description: Separately directed first cell; still needs exact same-run owner environment review
+        description: Separately directed selected cell; still needs exact same-run owner environment review
         default: false
         type: boolean
       observe_locator:
@@ -77,7 +77,8 @@ jobs:
           [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]
-          [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 ]]
+          [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 ]]
+          [[ ( "$READ_RESULT_ONLY" != true && "$OBSERVE_LOCATOR_ONLY" != true ) || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 ]]
       - &checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -95,7 +96,7 @@ jobs:
         name: Validate the current closed plan before any input credential
         if: inputs.read_result == false
         run: >-
-          python3 batch-runner/codex_retention_ci.py
+          python3 batch-runner/codex_retention_task4_fresh_r1.py
           --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL"
       - &archive
         name: Materialize the exact historical input observer, never its runtime
@@ -139,7 +140,7 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p batch-runner/workspace
-          python3 batch-runner/codex_retention_ci.py --prepare \
+          python3 batch-runner/codex_retention_task4_fresh_r1.py --prepare \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL" \
             --historical-root "$RUNNER_TEMP/retention-historical" \
             --original-root "$RUNNER_TEMP/retention-originals" \
@@ -261,7 +262,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
-          python3 batch-runner/codex_retention_ci.py --verify-approval
+          python3 batch-runner/codex_retention_task4_fresh_r1.py --verify-approval
           --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL"
           --historical-root "$RUNNER_TEMP/retention-historical"
           --original-root "$RUNNER_TEMP/retention-originals"
@@ -301,9 +302,14 @@ jobs:
           mkdir "$RUNNER_TEMP/retention-agent-temp"
           export TMPDIR="$RUNNER_TEMP/retention-agent-temp"
           export GDPVAL_CODEX_RUN_ROOT="$RUNNER_TEMP/retention-native-parent"
-          python3 batch-runner/codex_retention_ci.py --execute \
+          case "$SELECTED_CELL" in
+            3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1) retention_host="$RUNNER_TEMP/retention-first-cell-host" ;;
+            3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1) retention_host="$RUNNER_TEMP/retention-task4-fresh-r1-host" ;;
+            *) exit 2 ;;
+          esac
+          python3 batch-runner/codex_retention_task4_fresh_r1.py --execute \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL" \
             --historical-root "$RUNNER_TEMP/retention-historical" \
             --original-root "$RUNNER_TEMP/retention-originals" \
             --request-sha256 "$APPROVED_REQUEST_SHA256" \
-            --host-state "$RUNNER_TEMP/retention-first-cell-host"
+            --host-state "$retention_host"

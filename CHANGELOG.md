@@ -11,7 +11,168 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct PR713's retention admission guard order. Unknown/noncanonical,
+  mixed-transport and mismatched admissions now receive the existing
+  `retention_execution_grant_required` refusal before `request.cell_id` is
+  accessed. The exact `Request` type is then required with
+  `explicit_retention_request_required`, followed by the unchanged two exact
+  admission/cell pairs. Only this guard and two stale reason assertions changed;
+  later authority/runtime/CAS/cleanup predicates, workflows and pins are unchanged.
+
+  The leader read [CI run 36834022780 / pytest job 110276977686](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36834022780/job/110276977686)
+  at prior reviewed HEAD `9645764f09ea2b5b3fe069bbaade4f78984a1d7f`:
+  1 failed, 13303 passed, 64 skipped, 46 deselected in 1301.15s. The legacy
+  admission with `request=None` raised `AttributeError` before its domain
+  refusal. Review `5376693421` was conditional on CI, not a waiver of that
+  failure; these counts and duration are test evidence, not model usage.
+
+  At tested HEAD `a378df829166dc9cb5031882723944a5d009238a`, one guarded,
+  token-free CI-shaped invocation of
+  `tests/test_codex_retention_ci_entrypoint.py::test_retention_script_entrypoint_uses_canonical_authority_types`
+  collected 1 test and passed in 2.08s, exit 0, CPython 3.10.12 / pytest 9.1.1.
+  The 180-second timeout did not fire. Real legacy/canonical refusals, canonical
+  script identity and final no-effects/empty-host assertions completed. Log
+  SHA256: `c022ac9023b062666d61c18fe554df7b1b3f06a31e9b4aca9f5afcc1389cd5f4`.
+  The separate 34.90s successor/route pass and both earlier fixture failures
+  below remain unchanged; those selectors were not rerun. Narrow pre-edit
+  auth/order review approved this correction. New-HEAD owner review and CI,
+  then exact leader source/run/input/budget direction remain required before
+  one fresh/r1 execution. No live operation or new score is claimed.
+
 ### Changed
+
+- Keep the local, closed Task4 fresh/r1 successor implementation, now with
+  targeted offline acceptance after two fixture-only corrections. Work began from
+  verified main
+  `f30c9efa392bc14cba790fb5d1dedf12071a5677` in a new isolated worktree after
+  the required bounded CI/auth/storage decision. The existing controller gains
+  exact keep/r1 and fresh/r1 bindings; a fixed successor facade reuses its
+  source, approval, runtime, owned-child and publication helpers. The same
+  three workflow jobs retain permissions, concurrency, protected approval,
+  secret scope and original-input verification. Fresh read-result/locator
+  modes are refused before credentials. The hash-pinned first-cell CI verifier,
+  reader, fixed grader, runtime, registration and model/input pins are unchanged.
+
+  Earlier tested HEAD `c291670272f897fba03dcbceaa3779560076b522` collected 2 tests
+  and stopped after 1 failure in 2.68s, exit 1, under CPython 3.10.12 / pytest 9.1.1
+  with a token-free CI-shaped ambient envelope and existing guards. The
+  180-second timeout did not fire. The safe boundary was
+  `synthetic_original_serializer:DispatchPlanRefused:compile_dispatch_plan`:
+  the reused synthetic-original fixture compiled the original comparison
+  profile against the current source root and refused
+  `source_pin:batch-runner/core/codex_runner.py`,
+  `source_pin:batch-runner/step2_run_inference.py` and
+  `source_pin:batch-runner/core/codex_task_deadline.py`.
+  Real registration compilation and frozen-hash/binding assertions completed;
+  original Step1 serialization, fresh staging, predecessor verification,
+  admission/child/publication/reconciliation, no-replay and final effects checks
+  were not reached. `-x` also prevented the changed closed-route selector from
+  running. That first turn ended without a repair or second invocation; no
+  passing successor proof was claimed.
+
+  The continuation reused the same worktree and pinned only the new test's
+  source-context correction at `53e5dc29f87cee0154aeb643c8611f67e751b283`
+  (30 insertions, 5 deletions). An explicit `approved_pilot_source` dependency
+  reuses immutable local archive `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`, its
+  30-second bound, `GIT_NO_LAZY_FETCH=1` and path/type checks. The fixture checks
+  the unchanged current-source refusal, derives the archived plan before
+  rebinding comparison `ROOT`, and checks identical plan bytes. Only comparison
+  `ROOT`/`PLAN` are redirected around the real original serializer/compiler;
+  restoration assertions passed before successor setup. Successor/owned roots,
+  production predicates, workflow, runtime, registration and frozen hashes
+  remain unchanged by this correction.
+
+  The same successor and closed-route selectors ran once in the same guarded,
+  token-free CI-shaped environment: 2 collected, 1 failed in 5.71s, exit 1;
+  the 180-second timeout did not fire. Real original serialization, source-root
+  restoration, fresh packet/stage/readback, duplicate-stage refusal, canonical
+  request, both inert script routes and fresh-locator refusal completed. Test
+  line 338 then passed a synthetic historical cell with no `run_id` to
+  `codex_budget_pilot_retention._paths`; its required run/cell equality accessed
+  that missing key and raised `KeyError: 'run_id'` at line 74, not a
+  `retained_epoch_mismatch` verdict. Approval/admission, predecessor/current-parent
+  CAS, owned child, publication/reconciliation, no-replay and final effects checks
+  were not reached. `-x` prevented the coupled route selector. Log SHA256:
+  `4987911414044bcf1ba619a9fe4eda06e52b02286fb0f0c966b31d2bdebfcacb`.
+  This fixture failure is not a production-defect finding or acceptance. That
+  turn ended without a repair/run, production edit or push/PR.
+
+  The next test-only correction, pinned at tested HEAD
+  `5b788b79a3385a3588d64fe5a96b58434e05ae1e`, adds the full final historical
+  Task5 A/r2 cell shape from the already serialized original profile and
+  immutable template: historical campaign/run, task/condition/repetition,
+  canonical config digest and role paths. The real config validator remains
+  enforced. It does not compile the thirty-cell study, borrow a retention or
+  grading identity, change production code or redirect successor/owned roots.
+  The original source-restoration and deliberately invalid history checks remain.
+
+  One new invocation, without `-x`, collected 2 tests and both passed in 34.90s,
+  exit 0, under the same guarded CPython 3.10.12 / pytest 9.1.1 and token-free
+  CI-shaped envelope; the 180-second timeout did not fire.
+  `test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route`: PASS through
+  staging, all 8 predecessor/admission fault cases, current-parent CAS, simulated
+  owned child, publication, lost-ack reconciliation, duplicate/no-replay,
+  ambiguous cleanup, unchanged ordinal-zero behavior and final no-effects checks.
+  `test_retention_locator_observation_is_closed_and_separate`: PASS through the
+  independent closed workflow/CLI and non-authorizing locator assertions. No
+  selected assertion remained unreached. Log SHA256:
+  `5ad22e5645e824d93ea31791f01ebcc887e376a502bf2e799cf362c249845435`.
+  The required narrow test-diff review found no blockers; it is not new owner
+  source approval or CI evidence. No live inference or publication occurred.
+
+  Replace the stale current score-unread status with the leader's verified
+  receipt from
+  [run 36820845596 / attempt 1 / pilot-readout job 110235885096](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36820845596/job/110235885096),
+  source `f30c9efa392bc14cba790fb5d1dedf12071a5677`, at
+  `2026-10-01T05:43:22.3151574Z`: `verified_writer_recorded_grade`, stage
+  `verified`. Paid/writer/generic jobs were skipped; no model or regrade ran.
+  Keep/r1 earned 30.6 / included possible 45 = 68.0%; full-denominator
+  percentage was 54.64%, with 9 excluded items and excluded maximum 11.0.
+  The 13.36 percentage-point difference is a denominator effect, not treatment
+  uplift. One task was scored, with no recorded task error and payload
+  `run_status=diagnostic`. Coverage is the recorded projection:
+  `judge_items=49`, `rubric_items=40`, `passed_items=25`,
+  `rubric_item_coverage=0.625`, not independent rubric revalidation or a
+  validated quality explanation for coverage/exclusions.
+
+  The grader ledger is present: 93 recorded model calls, `input_tokens=270190`,
+  `cached_input_tokens=212025`, `output_tokens=16031`, `reasoning_tokens=10481`.
+  Cached/reasoning tokens remain subsets, not additional parent tokens. Cost
+  is partial with `missing_reasons=[price_missing]`; known/model/estimated/
+  runtime USD fields and HTTP request count are null; `invoice_complete=false`.
+  These are not HTTP call counts, repriced costs or an invoice. Proof remains
+  `verified_publication_derived_not_independent_provider_authentication`;
+  the materialized-input fingerprint remains unavailable with value/comparison
+  null and reason `materialized_input_fingerprint_not_recorded`.
+
+  The acknowledged grade from writer
+  `29e0353f1539265b1741e71be894fedf9be32a8b` / run `36776393736` remains
+  consumed. Its terminal `40712e0980cc05c31688fdbb98c693774fb90c0d` is not
+  the successor's required inference parent
+  `de50ff0aa6037c0ef6e3b713da519359abd1d08d`. The latter's exact hash, size,
+  producer/request/claim/output and immutable history must be reverified, and
+  the actual shared inference branch must equal it before CAS. Drift cannot
+  reset or adopt a claim. Seven study cells remain unexecuted; the eight-cell
+  study is post-selected, not representative, and one score establishes no
+  retention benefit. Two repetitions, service variation and an uncalibrated
+  judge remain registered limitations. Keep/fresh changes the native-thread/
+  owned-files retention bundle under mechanical B, not the model, inputs,
+  rubric, budget policy or C feedback. The registered both-pairs/no-reverse decision rule and
+  no-recovery denominator stay fixed.
+
+  [The current completion record](tasks/LATEST_TASK_RESULT/README.md) carries
+  the exact scope, pins, per-selector evidence and live gate. Earlier failed
+  reads `36801558936` and `36811186015`, offline failures/passes, producer/intake
+  success and the NAS prerequisite refusal remain separate in the
+  [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f30c9efa392bc14cba790fb5d1dedf12071a5677/tasks/LATEST_TASK_RESULT/README.md).
+  Reporting retained `experiment-design` constraints, then used
+  `experiment-report-en` and protected `im-not-ai-en` only for the bounded
+  status update. No live operation, permission/Project change, merge,
+  inference/grade replay or leader M4 update occurred. Immutable new-HEAD owner
+  review/CI, then exact leader source/run/input/budget direction remain gates
+  before one fresh/r1 execution.
 
 - Fix the fixed retention-grade reader's config-validation working directory.
   `_entry` now wraps only its unchanged real validator call in the existing
@@ -46,8 +207,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   passed all 10 checks as reported by the leader. Its diagnostic-only 8.85s
   pass, earlier live failure and older evidence remain separate in the
   [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/974e6aa48eb0c97c13bf17612d3e397e9a20ed31/tasks/LATEST_TASK_RESULT/README.md).
-  The actual grade remains consumed, numeric score/grader accounting unread
-  and materialized-input comparison unavailable/null. Only completion records
+  At that handoff the actual grade remained consumed, numeric score/grader
+  accounting were unread and materialized-input comparison was unavailable/null.
+  Only completion records
   changed after testing. New-head immutable review/CI and later source-bound
   leader read direction remain gates; no live operation, replay or M4 update.
 
@@ -79,9 +241,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   The 180-second timeout did not fire. Real terminal/claim/object predicates,
   finite-code refusal, secret-like error redaction and final no-effect checks
   completed; grade-payload reads were forbidden. No second test run or live
-  read occurred. The actual acknowledged grade remains consumed, its numeric
-  score and grader accounting unread, and the materialized-input comparison
-  unavailable/null. Historical failures, offline passes, producer/intake success
+  read occurred. At that handoff the actual acknowledged grade remained
+  consumed, its numeric score and grader accounting were unread, and the
+  materialized-input comparison was unavailable/null. Historical failures,
+  offline passes, producer/intake success
   and the NAS prerequisite refusal remain separate in the
   [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/5116cc0d94bad5bcc9ffc2f0f11df7a8a17b9efa/tasks/LATEST_TASK_RESULT/README.md).
   New-head immutable review/CI and a new explicit leader source-bound

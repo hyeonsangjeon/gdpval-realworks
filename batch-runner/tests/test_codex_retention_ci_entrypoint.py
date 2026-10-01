@@ -118,10 +118,10 @@ def test_retention_script_entrypoint_uses_canonical_authority_types(monkeypatch,
     assert str(refused.value) == adapter.controller.LIVE_GATE
     with pytest.raises(adapter.controller.RetentionControllerRefused) as refused:
         adapter.controller._run_post_authority_cell(None, host_state=host, _admission=canonical_admission)
-    assert str(refused.value) == "only_registered_ordinal_zero_supported"
+    assert str(refused.value) == "explicit_retention_request_required"
     with pytest.raises(adapter.controller.RetentionControllerRefused) as refused:
         adapter.controller.execute_first_cell(None, host_state=host, grant=canonical_grant)
-    assert str(refused.value) == "only_registered_ordinal_zero_supported"
+    assert str(refused.value) == "explicit_retention_request_required"
 
     # Actual runpy script entry calls through to the real canonical main, not a verdict stub.
     monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", private)
