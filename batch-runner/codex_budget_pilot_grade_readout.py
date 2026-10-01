@@ -1075,23 +1075,44 @@ def _ungraded_projection(context, terminal, files):
 
 
 def _projection(context, terminal, files, entry):
+    # Keep the historical reader's interface and inference binding unchanged.
+    return _recorded_projection(context, terminal, files, entry,
+        inference_revision=terminal["binding"]["retained"]["output_commit"])
+
+
+def _recorded_projection(context, terminal, files, entry, *, inference_revision,
+                         retention_first_cell_binding=None):
+    """Project recorded grades, without reconstructing intermediate inputs."""
     import step8_grade as step8
     from core.cost_receipts import build_receipt, ledger_reference
     from core.task_checkpoint import CHECKPOINT_FORMAT
 
+    if retention_first_cell_binding is not None:
+        import codex_retention_fixed_grade as bridge
+
+        bridge._context(context)
+        binding = retention_first_cell_binding
+        require(type(binding) is output.RetentionFirstCellLedgerBinding
+                and binding == output.RetentionFirstCellLedgerBinding(
+                    hashlib.sha256(context.run.grader_config_json.encode()).hexdigest()[:16], bridge.GRADER_SHA256)
+                and entry["config_hash"] == binding.config_hash
+                and entry["grader_source_hash"] == binding.grader_source_hash
+                and inference_revision == bridge.RESULT["output_commit"],
+                "fixed_retention_grade_projection_binding_required")
     payload = pilot._json_object(files["grade_result"]) if "grade_result" in files else None
     if payload is not None:
         with grading._cwd(pilot.ROOT / "batch-runner"):
-            grading._validate_grade_identity(payload, context, entry, terminal["binding"]["retained"]["output_commit"])
+            grading._validate_grade_identity(payload, context, entry, inference_revision)
     ledger_receipt = None
     if "grade_cost_ledger" in files:
         data = files["grade_cost_ledger"]
         cost_run_id = step8.make_cost_run_id(experiment_yaml_name=context.run.command[2],
             config_hash=entry["config_hash"], grader_source_hash=entry["grader_source_hash"])
-        output._ledger(data, context.cell, grading_run_id=cost_run_id)
+        output._ledger(data, context.cell, grading_run_id=cost_run_id,
+                       retention_first_cell_binding=retention_first_cell_binding)
         if payload is not None and payload.get("cost_ledger") is not None:
             path = grading._grade_path(context, entry["config_hash"], entry["grader_source_hash"],
-                                       terminal["binding"]["retained"]["output_commit"])
+                                       inference_revision)
             require(payload["cost_ledger"] == ledger_reference(str(path.with_name(path.stem + ".cost_ledger.jsonl")),
                     hashlib.sha256(data).hexdigest()), "grade_ledger_pointer_mismatch")
         rows = [pilot._json_object(line.encode()) for line in data.decode("utf-8").splitlines()]

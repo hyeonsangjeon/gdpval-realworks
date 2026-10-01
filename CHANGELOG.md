@@ -13,6 +13,156 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Isolate the retention-grade readout regression's two local-authority cases
+  from inherited CI metadata. A scoped `monkeypatch.context()` removes only
+  `GITHUB_ACTIONS` for the inert real-script plan and no-local-read-authority
+  assertions, then restores the ambient environment before the existing
+  synthetic readout CI envelope is installed. Every assertion, expected exit,
+  Git simulation, safe diagnostic and offline guard remains. Production
+  authority, schemas, workflow, readout, writer and evidence contracts are
+  unchanged.
+
+  The leader reported that CI at PR710 source
+  `e2dc103de4269491a8c47ea964034ef8c798710e`,
+  [run 36793228751 / job 110150692589](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36793228751/job/110150692589),
+  had 1 failed, 13300 passed, 64 skipped and 46 deselected in 1487.18s.
+  [Owner review 5373552195](https://github.com/hyeonsangjeon/gdpval-realworks/pull/710#pullrequestreview-5373552195)
+  identifies the sole failure at `test_codex_retention_grade_readout.py:261`:
+  the inert local-script assertion inherited `GITHUB_ACTIONS=true` before
+  `_environment` installed the synthetic CI identity. The unchanged authority
+  correctly refused the pytest job's envelope. Earlier
+  [source review 5373356557](https://github.com/hyeonsangjeon/gdpval-realworks/pull/710#pullrequestreview-5373356557)
+  remains conditional on passing CI. These supplied observations were not
+  polled or rerun in this task.
+
+  At corrected tested HEAD `d644fab1d08278300d44eae4904c9b9463804693`, one
+  offline invocation collected 2 tests and passed both in 43.19s, exit 0,
+  under explicit token-free ambient `GITHUB_ACTIONS=true`, `pull_request`,
+  `pytest` and synthetic ref/SHA metadata. Both the complete readout selector
+  and coupled Step8 route selector finished; the 180-second timeout did not
+  fire. The code delta was only 6 insertions and 4 deletions in the regression.
+  The earlier 40.06s local pass and 7.20s, 7.60s and 7.82s failures remain
+  separate below. This pass establishes test isolation, not a production
+  validator fix or a new live result. The actual grade remains consumed and
+  its numeric score unread. Only these completion records changed after the
+  tested commit for the authorized owner commit and one push to existing
+  PR710. New-head immutable review/CI and a separately directed live read
+  remain required; no leader M4 files were updated.
+
+- Add the fixed unpaid `retention/grade-readout` route through the existing
+  protected contents-read job and step-scoped credential, after the same bounded
+  CI/auth/storage reviewer returned `APPROVE-WITH-CONDITIONS`. The reader pins
+  the grade terminal before opening its bound claim and at most `grade_result`
+  plus optional `grade_cost_ledger`; it reuses immutable-object, recorded-entry,
+  schema, typed-ledger and safe score/accounting projection checks. No writer,
+  admission, runtime, grader or intake validation changed; no new permission,
+  discovery, input read, upload or paid route was added. At earlier tested HEAD
+  `98951a5b0d4c25d79f4f245de9dd32d2ba1a5c44`, one isolated offline invocation
+  collected 2 tests and failed 1 in 7.20s, exit 1. The intended-success readout
+  returned exit 2 at `test_codex_retention_grade_readout.py:287`; earlier routing,
+  fixture, inert-script and authority/source refusal assertions completed.
+  Positive score/accounting/object assertions and subsequent corruption,
+  optional-ledger, legacy-projection and final-effect cases were not reached;
+  `-x` left the selected Step8 workflow test unexecuted. The underlying refusal
+  stage/cause was not included in the short failure output. No repair or rerun
+  followed in that task, and there was no push, new published HEAD or PR.
+
+  The previous continuation statically traced that fixture's source refusal to
+  its Git transport seam:
+  replacing `pilot._git` did not replace the defining-module call used by the
+  real repository/configuration validators. The offline subprocess guard raises
+  `AssertionError`, wrapped as `_EntryRefused` at `source_preflight`. The repair
+  applied the same allowlisted Git-metadata simulation to
+  `gpt54_disposable_checkout._git` and added only the existing safe
+  `reason`/`stage` to the assertion diagnostics.
+  This correction changes only the regression, not production or workflow
+  bytes. At corrected tested HEAD `d32e519f074e3ca182338bc7e489aa43b2c796e2`,
+  one changed offline invocation collected 2 tests and failed 1 in 7.60s, exit 1,
+  at `test_codex_retention_grade_readout.py:292`. The safe receipt reports
+  `reason=retention_grade_readout_contract_refused`, `stage=grade_payload`,
+  reader exit 2. Source preflight and synthetic immutable terminal/claim/file
+  metadata verification returned; payload reads or projection then refused.
+  The inner predicate and responsible payload layer were unknown at that
+  boundary. Positive
+  projection, later corruption/optional-ledger/legacy/final assertions and the
+  selected Step8 test were not reached; common safe-output, unavailable-field
+  and forbidden-effect checks completed. No subsequent repair or rerun, push,
+  new published HEAD or PR followed in that task.
+
+  Add test-local observation of the real payload helpers without changing
+  arguments, verdicts, fixture data or production/workflow bytes. The adapter
+  already passes the fixed inference-output revision and reviewed typed
+  retention ledger binding; neither historical pilot assumption is established
+  as the failure's cause. At diagnostic tested HEAD
+  `663423bbc7290233b6e818be8fcb14d20ec7e9b6`, the one offline invocation
+  collected 2 tests and failed 1 in 7.82s, exit 1, at
+  `test_codex_retention_grade_readout.py:341`. The real
+  `step8_grade._validate_schema` raised `ValidationError`, converted by
+  `_validate_grade_identity` to the existing closed `fixed_grade_schema_refused`
+  and propagated by `_recorded_projection`. Reader exit 2 and the safe CLI
+  `retention_grade_readout_contract_refused`/`grade_payload` remained. Payload
+  fetch/hash, typed binding and raw-grade privacy checks completed; payload
+  identity comparisons, ledger-row/pointer validation, positive projection,
+  later negative/optional-ledger/legacy/final assertions and Step8 did not run.
+  The specific schema predicate and responsible fixture/integration layer
+  remained undisclosed at that boundary. This was diagnostic-only, not a
+  readout fix or pass. No repair, second invocation, push, new published HEAD
+  or PR followed in that task. Both completion records were left uncommitted.
+
+  Correct the synthetic grade builder's receipt format without changing the
+  reader, workflow, schema or validators. The reader validates the unchanged
+  decoded payload before projection. The fixture had prematurely applied
+  `project_cost_receipt` to the producer receipt, turning partial-accounting
+  placeholders into null. The public schema requires `type: number` for
+  `costReceipt`'s `known_cost_usd`, `model_cost_usd` and `runtime_cost_usd`, and
+  `costComponent`'s `known_cost_usd`. The fixture now stores the actual
+  `build_receipt(...).as_dict()` producer form, matching Step8 serialization;
+  no amount is fabricated or repriced. Preserve both Git simulations and all
+  real-helper observers/assertions. Extend test-only diagnostics with the
+  public schema validator/path and required-list missing names, never instance
+  values or raw exception text. At tested HEAD
+  `969a944895877e92b665af792d87efece68a9942`, the one changed offline invocation
+  collected 2 tests and passed both in 40.06s, exit 0. Positive projection,
+  recorded identity, ledger, corruption, missing-ledger, legacy, final no-effect
+  and coupled Step8 exact-route assertions completed. A new assertion keeps
+  the public partial runtime amount null; stored placeholders are not zero-cost
+  evidence. The 180-second outer timeout did not fire. No second run followed;
+  this pass does not revise the three earlier failures into passes. Only the
+  regression changed before validation, with 15 insertions and 5 deletions;
+  the completion records were updated afterward for the authorized owner
+  commit, one push and one new draft PR. Immutable new-head review/CI and a
+  separately directed live read remain required.
+
+  Keep the actual acknowledged grade at writer source
+  `29e0353f1539265b1741e71be894fedf9be32a8b` separate from all three synthetic failures
+  and the later offline pass.
+  The leader-read run36776393736/attempt1, protected approval110095273640 and
+  pilot-live110095775811 succeeded; claim18, judge19 and publication20 completed.
+  At `2026-09-30T21:09:56.1203808Z`, the graded terminal was
+  `40712e0980cc05c31688fdbb98c693774fb90c0d`, SHA256
+  `11eb15cd4cb783d35fcfda62b458f14d34bfb3742e60d949c6671a56399c9234`,
+  3119 bytes, linked to claim `dec305d669e3ca2e53c7f7b9ebfbe7974d661350`.
+  The numeric score and grader usage/cost remain unread; `invoice_complete=false`
+  and no inference replay remain explicit. The earlier pre-edit review returned
+  `REJECT` because the retained binding, canonical entry and
+  grade payload lack the materialized-result fingerprint required for the
+  requested comparison. The original result fingerprint
+  `3441f200e6e4c53faf1b36f216283c80eee68e5d3e7d827587ba6c3135c7d200`
+  and preparation digest do not substitute for it. At that earlier boundary no
+  code/workflow/test had changed and no test had run. The user subsequently
+  accepted the narrower writer-recorded contract, without relaxing an
+  implemented writer/admission/identity validator. The receipt explicitly marks
+  the materialized-input comparison unavailable, with null value/comparison and
+  reason `materialized_input_fingerprint_not_recorded`. This is a
+  publication-derived view, not independent input reconstruction, rubric
+  revalidation or fresh provider authentication. Prior reviewed head
+  `4245b3f66d6cd341be197f0f1d38bd58a6cdfebd`/review5371600958/all10PASS is
+  leader-supplied evidence, not a new check here. The
+  [offline readout history and actual grade receipts](tasks/LATEST_TASK_RESULT/README.md#project5-readout-exact-schema-predicate)
+  preserve earlier producer/intake/test/NAS observations and the remaining
+  immutable review/CI and separately directed live-read gates. No paid rerun,
+  broader read, permission change or leader M4
+  update is implied.
 - Reconcile a reserved `retention/first-cell` publication at most once in its
   existing owning job, after the bounded CI/auth decision. Only a nonzero
   publish exit and an owned regular non-symlink reservation permit the same
@@ -29,12 +179,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   earlier 2PASS/14.58s below separate from the leader-read CI run36764747855 /
   job110055972491, 1failed/13298passed/64skipped/46deselected in933.35s, whose
   sole failure was the stale route expectation. Owner review5371296460 was
-  REQUEST-CHANGES at `a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95`; new-head
-  immutable review/CI and later exact-source one-grade authorization remain.
-  The [current result](tasks/LATEST_TASK_RESULT/README.md#project5-pr709-routing-and-reconciliation)
-  records the distinct evidence and unchanged producer/intake, null grade and
-  partial accounting. No live grade, invoice, CI rerun, inference replay or
-  leader M4 update is implied.
+  REQUEST-CHANGES at `a8d5c42e69b9b3ecfadb5af1a1dff945e3541e95`; at that handoff,
+  immutable review/CI and later exact-source one-grade authorization remained.
+  The [immutable result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/4245b3f66d6cd341be197f0f1d38bd58a6cdfebd/tasks/LATEST_TASK_RESULT/README.md#project5-pr709-routing-and-reconciliation)
+  recorded the distinct evidence and unchanged producer/intake, then-null grade
+  and partial accounting. That offline result implies no live grade, invoice,
+  CI rerun, inference replay or leader M4 update.
 - Bind the first retention grade's ledger to its actual Step8-derived
   `retention/first-cell|<16 lowercase hex>|<64 lowercase hex>` identity after
   bounded auth/storage review. A frozen, non-authorizing config/source binding

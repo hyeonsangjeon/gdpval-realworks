@@ -3588,6 +3588,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert _gh_expr(pilot_plan["if"]) == (
         "(startsWith(inputs.experiment_yaml, 'pilot/') || startsWith(inputs.experiment_yaml, 'retention/')) && "
         "inputs.experiment_yaml != 'pilot/grade-readout' && "
+        "inputs.experiment_yaml != 'retention/grade-readout' && "
         "(inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && "
         "inputs.experiment_yaml != 'retention/first-cell'))"
     )
