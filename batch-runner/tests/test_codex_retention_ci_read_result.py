@@ -76,18 +76,19 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # Three result cells, two terminal cells and unsupported selectors,
+    # Four execution cells, three result cells, two terminal cells and unsupported selectors,
     # with all 32 mode combinations,
     # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.
-    cells = (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID, reader.controller.FRESH_R2_CELL_ID)
+    cells = (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID, reader.controller.FRESH_R2_CELL_ID,
+             reader.controller.KEEP_R2_CELL_ID)
     assert gate["run"].splitlines()[-4:] == [
-        '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' ]]',
+        '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' ]]',
         '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + cells[0] + ' ]]',
         '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' ) ]]',
     ]
-    for selected in (*cells, "unregistered", reader.registration.TASK4 + "_retention_bundle_v1_keep_r2"):
+    for selected in (*cells, "unregistered", reader.registration.TASK5 + "_retention_bundle_v1_fresh_r1"):
         for values in itertools.product((False, True), repeat=5):
             modes = dict(zip(mode_names, values))
             prepared, observed, executed, reading, terminal = values
@@ -101,7 +102,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
             expected = (selected in cells and not (reading and (prepared or observed or executed or terminal))
                 and not (terminal and (prepared or observed or executed or reading))
                 and not (observed and (prepared or executed)) and (not observed or selected == cells[0])
-                and (not terminal or selected in cells[1:]) and (not reading or selected in cells))
+                and (not terminal or selected in cells[1:3]) and (not reading or selected in cells[:3]))
             assert admitted_route is expected
             reachable = [index for index, step in enumerate(steps)
                          if admitted_route and _boolean(step.get("if", "true"), replacements)]
@@ -180,7 +181,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         *["  '" + digest + "  batch-runner/" + name + "' \\" for name, digest in (
             ("codex_retention_result_intake.py", module_hash), ("codex_retention_ci.py", verifier_hash),
             ("codex_retention_task4_fresh_r1.py", "a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3"),
-            ("codex_retention_first_cell.py", "a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58"))],
+            ("codex_retention_first_cell.py", "957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601"))],
         "  | sha256sum --check --status",
         'if [[ "$SELECTED_CELL" == ' + cells[2] + ' ]]; then',
         "  printf '%s\\n' '8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f  batch-runner/codex_retention_task4_fresh_r2.py' | sha256sum --check --status",
@@ -201,12 +202,13 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         fresh_script = fresh_script.replace(old, new)
     assert fresh_read["run"] == fresh_script  # Same private destination, bounds, redaction and nonzero exits.
     assert terminal_preflight["run"] == fresh_preflight["run"]
-    facade = "python3 batch-runner/codex_retention_task4_fresh_r2.py"
+    facade = "python3 batch-runner/codex_retention_task4_keep_r2.py"
     assert steps[4]["run"].startswith(facade + " ")
     assert facade + " --prepare" in steps[8]["run"]
     assert execute["steps"][10]["run"].startswith(facade + " --verify-approval ")
     assert facade + " --execute" in execute["steps"][-1]["run"]
-    for cell, namespace in zip(cells, ("retention-first-cell", "retention-task4-fresh-r1", "retention-task4-fresh-r2")):
+    for cell, namespace in zip(cells, ("retention-first-cell", "retention-task4-fresh-r1", "retention-task4-fresh-r2",
+                                     "retention-task4-keep-r2")):
         assert cell + ') retention_host="$RUNNER_TEMP/' + namespace + '-host" ;;' in execute["steps"][-1]["run"]
     terminal_script = fresh_script.replace("--read --discover-terminal", "--observe-terminal --discover-terminal")
     terminal_script = terminal_script.replace("$retention_read_namespace-result.XXXXXXXX", "$retention_read_namespace-terminal.XXXXXXXX")
