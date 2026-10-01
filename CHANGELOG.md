@@ -13,6 +13,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add diagnostic-only, closed refusal fields to the fixed retention-grade
+  reader's terminal-verification boundary after bounded CI/auth/privacy review.
+  `verification_reason` accepts only enumerated constant codes from the exact
+  canonical refusal class; unknown errors remain generic.
+  `verification_substage` names attempted work, never successful verification.
+  The public reason, exit 2, HTTP-status policy, immutable predicates, read
+  bounds, payload gates, workflow, permissions and writer controls are unchanged.
+  No concrete cause of the live refusal was established or repaired.
+
+  The leader directly read
+  [run 36801558936 / attempt 1 / job 110176813572](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36801558936/job/110176813572)
+  at source `52e81f12c969771ae929c2456e06feb27d220f0f`. On 2026-10-01 UTC,
+  plan step 5 succeeded at `01:35:06.2898129Z`; read step 6 failed at
+  `01:35:09.8072326Z` with `outcome=refused`,
+  `reason=retention_grade_readout_contract_refused`, `stage=grade_terminal`,
+  `http_status=null`. Writer, paid and generic jobs were skipped. The failed
+  stage includes metadata, terminal fetch/binding and claim/history checks;
+  the inner predicate is unknown. No terminal-verification, score or usage
+  claim follows. Prior PR710 head `5116cc0d94bad5bcc9ffc2f0f11df7a8a17b9efa`,
+  [review 5373734862](https://github.com/hyeonsangjeon/gdpval-realworks/pull/710#pullrequestreview-5373734862),
+  passed all 10 checks as reported by the leader, not for this new change.
+
+  Tested HEAD `8b60f526d3466993597875162eb987c2b77ab8d3` passed the one focused
+  offline invocation: 1 collected, 1 passed in 8.85s, exit 0, CPython 3.10.12 /
+  pytest 9.1.1, token-free CI-shaped ambient metadata and existing guards.
+  The 180-second timeout did not fire. Real terminal/claim/object predicates,
+  finite-code refusal, secret-like error redaction and final no-effect checks
+  completed; grade-payload reads were forbidden. No second test run or live
+  read occurred. The actual acknowledged grade remains consumed, its numeric
+  score and grader accounting unread, and the materialized-input comparison
+  unavailable/null. Historical failures, offline passes, producer/intake success
+  and the NAS prerequisite refusal remain separate in the
+  [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/5116cc0d94bad5bcc9ffc2f0f11df7a8a17b9efa/tasks/LATEST_TASK_RESULT/README.md).
+  New-head immutable review/CI and a new explicit leader source-bound
+  diagnostic-read instruction remain gates; there is no automatic retry.
+  Only completion records changed after the tested commit. No leader M4 files
+  were updated.
+
 - Isolate the retention-grade readout regression's two local-authority cases
   from inherited CI metadata. A scoped `monkeypatch.context()` removes only
   `GITHUB_ACTIONS` for the inert real-script plan and no-local-read-authority
