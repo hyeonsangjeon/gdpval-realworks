@@ -11,69 +11,95 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- Add explicit terminal-only observation for the consumed Task4 fresh/r1
-  inference, separate from the unchanged successful-result intake. After one
-  fixed-path discovery, `--observe-terminal` reads only immutable terminal,
-  bound claim and output-manifest bodies; declared payloads receive bounded
-  metadata/history checks only. Failed/stopped status, exact types, canonical
-  accounting, hashes, roles/privacy and fixed source/run/request/cell/predecessor
-  plus execution-job binding remain required. Empty declarations are not proof
-  of deliverable absence. A distinct private no-clobber marker returns
-  `terminal_verified` only after final acknowledgment, never successful intake,
-  payload verification, grading readiness or replay authority. Detailed failure,
-  budget and recovery evidence not recorded in these controls stays null.
+- Implement only the predeclared Task4 fresh/r2 ordinal-two/repetition-two path
+  from verified base `910cbdbc49da764a76932bab3af4af231a0b6771`. The original
+  bounded review returned REJECT before any implementation or test because the
+  frozen shared controller supported only ordinals 0/1 and repetition 1. That
+  static dependency conflict was not a failed inference or offline test. The
+  leader's explicit compatibility exception and the same reviewer's limited
+  pre-edit approval resolved it without replacing the controller.
 
-  The default-false `observe_terminal` input is exclusive with `read_result`,
-  `prepare`, `execute` and `observe_locator`, and accepts only the fixed fresh
-  cell. Its source/hash preflight and step-scoped HF secret remain in the existing
-  contents-read job; preparation, protected approval and execution are excluded.
-  Keep/r1 command bodies and all frozen CI/intake/producer/controller/runtime/
-  model/input/grader/registration bytes are unchanged. No job, permission or
-  credential was added. The required bounded CI/auth/storage/workflow decision
-  preceded edits, and its narrow diff review approved the implementation.
+  The fixed adapter uses the existing source/runtime/same-run owner approval,
+  serial CAS, owned-child/clock/cleanup and add-only publication machinery. The
+  controller adds only the exact r2 binding, namespace and canonical
+  admission-type/cell pair. A reviewed publication-only extraction preserves
+  old facade wrappers, request/output schemas and behavior. Other unimplemented
+  ordinals remain refused; old cells remain non-replayable. R2 revalidates the
+  independently pinned failed fresh/r1 controls and object history without
+  payload-body downloads, then requires the actual branch parent to be the
+  pinned terminal before CAS. Existing jobs, permissions, secrets and concurrency
+  are unchanged; old observation routes reject r2 before credentials.
 
-  At tested HEAD `386390b8db59df92f8b297d21d0b99a712887da9`, one guarded,
-  token-free CI-shaped CPython 3.10.12 / pytest 9.1.1 invocation collected 2
-  tests and both passed in 14.86s, exit 0; the 180-second timeout did not fire:
-  `tests/test_codex_retention_fresh_r1_terminal_observation.py::test_fresh_r1_terminal_observation_is_controls_only_and_non_authorizing`
-  and `tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free`.
-  Real validators with synthetic transport reached absent/result-only/partial
-  declarations, identity/history/corruption/type-coercion/role/privacy/bounds
-  refusals, missing controls, private/ambiguous acknowledgment, default-success
-  isolation, all 32 mode combinations and final no-effects assertions. Payload
-  downloads were forbidden; no selected assertion remained unreached. Log SHA256:
-  `d9f7c3217cb1f1d843e47f6854e5fd2bd832eb0fd7568b6f5a98b0148318a128`.
+  Current SHA256 pins are explicitly migrated together: controller
+  `a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58`, fresh/r1
+  facade/shared publication helper
+  `a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3`, and fresh
+  reader `c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9`.
+  The [completion record](tasks/LATEST_TASK_RESULT/README.md) maps old to new
+  hashes. Precredential exact-hash refusals remain; historical observer
+  source 910 / reader `bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa`
+  is not rewritten. The CI verifier, original intake, core/runtime/model/input/
+  grader/registration bytes and budget policy remain unchanged.
 
-  Separately, the leader read actual run `36845127347` / attempt 1 / execution
-  job `110323708382`, producer `e39d8d1aadcb816d09588829a5ec4929b33083e6`,
-  workflow `370228282`. All workflow jobs succeeded, but the final CLI receipt at
-  `2026-10-01T13:22:50.8088344Z` recorded `status=failed`,
-  `remote_terminal=acknowledged`, `cleanup_confirmed=true`, `grade=null`,
-  `grading_launched=false`, `invoice_complete=false` and request SHA256
-  `5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02`.
-  Execution preparation reproduced that digest and the fixed fresh grader;
-  signed approval verification succeeded. Green workflow status is not model
-  success. The roughly 180-minute step does not establish a timeout, rate limit
-  or another cause. Actual terminal/claim/output revisions, artifact declarations,
-  usage/cost, detailed reason and recovery exposure remain unread. The inference
-  is consumed and cannot be replayed; its grade remains null, not zero.
+  One token-free CI-shaped CPython 3.10.12 / pytest 9.1.1 invocation at tested HEAD
+  `f7d11ae4c8ac225b4027086df07771adfb96d78e` collected 2 tests; both passed in
+  49.90s, exit 0, without the 180-second timeout firing. The new
+  `test_task4_fresh_r2_advances_only_the_fixed_failed_predecessor` selector and
+  directly coupled `test_retention_result_read_workflow_is_fixed_and_model_free`
+  selector each passed. Real validators with synthetic transport/owned child
+  reached exact fresh staging, failed-predecessor/current-parent CAS,
+  claim/child/output/terminal, reconciliation, 18 predecessor/admission refusals,
+  type/source/cell guard ordering, duplicate/ambiguous/no-replay behavior,
+  timeout/cleanup, old schemas and current-pin reader compatibility, wrong-hash
+  refusal before credentials, and all 32 workflow mode combinations. Full node
+  IDs are in the completion record. Log SHA256:
+  `1eb2e3b6509e50f31039868e4b4ec12aefb4156b9fefb2cba5350f3082f5e145`.
+  No full suite, delivered reader suite or second invocation ran. This proof is
+  synthetic offline evidence, not live execution or model usage. The bounded
+  production/workflow and test reviews approved this scope.
 
-  Prior reader HEAD `710860be12f26bcf5b60312974c31aff7499eda4`, review
-  `5378531408` and all 10 checks remain separate from this delta. Its
-  `56bb86a7cdca02c7f0f9ef8055d3e44f8df8aaaf` proof (2 passed in 11.06s,
-  exit 0, no timeout), prior preparation/approval and source-review evidence
-  remain in the [immutable reader record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/710860be12f26bcf5b60312974c31aff7499eda4/tasks/LATEST_TASK_RESULT/README.md).
-  This observation is publication-derived, not independent provider authentication,
-  original-input revalidation, CAS ancestry verification or writer acknowledgment.
-  Known partial cost is not an invoice, unknown amounts stay null and recorded
-  calls are not HTTP counts. Keep/r1 scores, exclusions, null costs and study
-  limits below are unchanged; one pair does not establish retention benefit.
-  The [current completion record](tasks/LATEST_TASK_RESULT/README.md) carries
-  exact bindings and the remaining new-HEAD owner-review/CI gate, followed only
-  by separate leader direction for a fixed terminal-only observation. No live
-  read/run, polling, dispatch, replay, grading or leader M4 update occurred.
+  Separately, the leader read successful terminal-only observation run
+  `36884357472` / job `110443771878` at source
+  `910cbdbc49da764a76932bab3af4af231a0b6771`. Its receipt at
+  `2026-10-01T15:29:46.3223244Z` is `terminal_verified`, observation SHA256
+  `36df4b36135d0c45db53a23c4f88fde360695f80bad0437735436516ebb626ea`;
+  approval/execution jobs were skipped. Fresh/r1 remains consumed and failed,
+  exit 1, cleanup confirmed, recorded publication acknowledged, grade null.
+  Its next-cell predecessor terminal is `45f54eb0a24aee5d40dd41b276ff5df777f06d73`,
+  not keep/r1 or a grade terminal. The [completion record](tasks/LATEST_TASK_RESULT/README.md)
+  preserves exact producer/request/terminal/claim/manifest/object hashes and sizes.
+  Declared inference-result/ledger/deliverable counts are 1/1/0, with 3 objects
+  including the manifest. These are control/metadata facts, not successful intake,
+  payload-body verification, proof of absent work/files, independent provider
+  authentication, original-input or CAS ancestry verification, or a new writer
+  acknowledgment.
+
+  The recorded receipt has 39 model calls, with infrastructure-retry 38 and
+  generation 1; these are not HTTP requests or native admission/resume counts.
+  Known/model USD `0.303358` is partial, with `estimated_cost_usd`,
+  `runtime_cost_usd` and HTTP request count null, missing reasons
+  `call_reachability_unknown` and `usage_absent`, and `invoice_complete=false`.
+  Input/cached-input/output/reasoning tokens are 104289/22144/6164/3863; cached
+  and reasoning values are subsets, not additive totals. Detailed failure,
+  budget and recovery exposure remain unavailable/null with
+  `not_recorded_in_terminal_controls`. Duration and retry labels do not diagnose
+  timeout, rate limiting or another cause, and do not justify a repeat or broader
+  read. Green workflow status is not task success; grade null is not zero.
+
+  Prior observer `ea8e7d36693678cedb54fbe277af5cc874360061`, review `5381096406`,
+  and its separate tested `386390b8db59df92f8b297d21d0b99a712887da9` proof
+  (2 collected, 2 passed in 14.86s, exit 0, no timeout) remain in the
+  [immutable observer record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ea8e7d36693678cedb54fbe277af5cc874360061/tasks/LATEST_TASK_RESULT/README.md),
+  along with earlier reader/source/preparation/approval history. Keep/r1 scores,
+  exclusions, partial/null cost and study limits below remain unchanged. Two of
+  eight outcomes are recorded; six cells remain outstanding. Fresh/r2 is the next
+  predeclared cell, not a fresh/r1 retry; one pair establishes no retention benefit.
+  New immutable-HEAD owner review and CI must precede separately
+  source/run/input/budget-bound leader execution direction. No live read/run,
+  dispatch/polling, replay, grading,
+  Project edit, merge or leader M4 update occurred.
 
 ### Fixed
 
