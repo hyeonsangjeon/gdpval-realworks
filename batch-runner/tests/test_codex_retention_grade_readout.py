@@ -6,6 +6,7 @@ Synthetic terminal digests never replace the separately asserted production pin.
 """
 
 from copy import deepcopy
+from dataclasses import replace
 import hashlib
 import json
 import os
@@ -504,6 +505,110 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
             force_download=True, local_files_only=False, etag_timeout=1)
     assert len(missing.calls) == count
     assert effects == [] and git_calls
+
+
+def test_retention_grade_entry_restores_cwd_for_fixed_relative_prompts(tmp_path, monkeypatch):
+    original_cwd = Path.cwd()
+    source_root, batch_root = pilot.ROOT, pilot.ROOT / "batch-runner"
+    assert source_root == bridge.ROOT
+    assert reader.TERMINAL == "40712e0980cc05c31688fdbb98c693774fb90c0d"
+    assert reader.TERMINAL_IDENTITY == {
+        "sha256": "11eb15cd4cb783d35fcfda62b458f14d34bfb3742e60d949c6671a56399c9234", "size": 3119}
+    assert reader.WRITER_SOURCE == "29e0353f1539265b1741e71be894fedf9be32a8b"
+    assert reader.CLAIM == "dec305d669e3ca2e53c7f7b9ebfbe7974d661350"
+    # Construct the existing writer fixture in its own cwd, not the caller's.
+    with grade._cwd(batch_root):
+        context = bridge.compile_request(reader.WRITER_SOURCE)
+        template = _fixture(context)
+    assert Path.cwd() == original_cwd
+    config_bytes = context.run.grader_config_json
+    config = json.loads(config_bytes)
+    prompts = {key: config["prompt"][key] for key in ("template", "tool_template")}
+    assert prompts == {"template": "prompts/grader_judge.md", "tool_template": "prompts/grader_judge_v2.md"}
+    assert all(not (source_root / name).exists() and (batch_root / name).is_file() for name in prompts.values())
+    recorded = deepcopy(template[0]["binding"]["entry"])
+    expected_entry = pilot._digest(recorded)
+    effects, observed_entries = [], []
+
+    def forbidden(*args, **kwargs):
+        effects.append("forbidden_effect")
+        pytest.fail("entry cwd validation crossed a payload, write or paid boundary")
+
+    for target, names in (
+        (bridge, ("_authority", "prepare", "claim", "judge", "publish", "reconcile", "_ready", "_derived_inputs")),
+        (grade, ("_ci_authority", "prepare", "claim", "judge", "publish", "reconcile", "_owned_judge", "setup", "_fetch")),
+        (pilot, ("dispatch",)), (step8, ("main",)), (bridge.reader, ("read_result",)),
+        (reader.readout, ("_recorded_projection",)),
+    ):
+        for name in names:
+            monkeypatch.setattr(target, name, forbidden)
+    monkeypatch.setattr("core.tools.get_renderer_fingerprint", forbidden)
+    monkeypatch.setattr(RubricLoader, "load", forbidden)
+    _environment(monkeypatch)
+
+    for label, caller_root in (("repository", source_root), ("batch-runner", batch_root)):
+        with monkeypatch.context() as caller:
+            caller.chdir(caller_root)
+            # Reproduce the unscoped call's exact predicate in this one test.
+            # No production validator or configuration is replaced.
+            if label == "repository":
+                with pytest.raises(ValueError) as unscoped:
+                    step8.validate_grading_config(json.loads(config_bytes))
+                assert type(unscoped.value) is ValueError
+                assert unscoped.value.args == ("prompt template not found: prompts/grader_judge.md",)
+            else:
+                step8.validate_grading_config(json.loads(config_bytes))
+            assert Path.cwd() == caller_root
+
+            entry = reader._entry(context, deepcopy(recorded))
+            assert Path.cwd() == caller_root and pilot._digest(entry) == expected_entry
+            api = _seed(monkeypatch, *deepcopy(template))
+            before = deepcopy((api.trees, api.writers, api.branches))
+            root = grade._root(tmp_path / label, new=True)
+            with retained._session(api, response_bytes_limit=output.MAX_RECORD_BYTES) as (transport, token, deadline):
+                facade = reader._ReadOnlyGrade(transport, retained._target(), token)
+                terminal, verified_entry, identity = facade.verify(context, root, deadline)
+            assert Path.cwd() == caller_root
+            assert pilot._digest(verified_entry) == expected_entry and identity == reader.TERMINAL_IDENTITY
+            assert terminal["claim_commit"] == reader.CLAIM and terminal["child"]["cleanup_confirmed"] is True
+            assert facade._verification_substage == "terminal_identity"
+            observed_entries.append(pilot._digest(verified_entry))
+            assert api.downloads == [(reader.TERMINAL, bridge.TERMINAL_PATH),
+                                    (reader.TERMINAL, bridge.TERMINAL_PATH), (reader.CLAIM, bridge.CLAIM_PATH)]
+            assert sum(name == "metadata" for name, _ in api.calls) == 1 and len(api.paths) == 5
+            assert (api.trees, api.writers, api.branches) == before and not api.commits
+
+            # Negative configs are direct _entry refusal inputs only, never
+            # canonical contexts offered as successful terminal evidence.
+            for key in ("template", "tool_template"):
+                bad_config = json.loads(config_bytes)
+                missing = "prompts/__missing_retention_entry_test__.md"
+                assert not (batch_root / missing).exists()
+                bad_config["prompt"][key] = missing
+                bad_run = replace(context.run, grader_config_json=pilot._canonical_json(bad_config))
+                bad_context = replace(context, grading=replace(context.grading, runs=(bad_run,)))
+                with pytest.raises(ValueError) as refused:
+                    reader._entry(bad_context, deepcopy(recorded))
+                assert Path.cwd() == caller_root and type(refused.value) is ValueError
+                message = "prompt template not found: " if key == "template" else "prompt.tool_template not found: "
+                assert refused.value.args == (message + missing,)
+                assert reader._terminal_diagnostic(refused.value, "terminal_binding") == {
+                    "verification_substage": "terminal_binding", "verification_reason": "unclassified_verification_error"}
+
+            bad_terminal = deepcopy(terminal)
+            bad_terminal["binding"]["entry"]["config_hash"] = "e" * 16
+            with pytest.raises(output.OutputPublicationRefused) as mismatch:
+                reader._terminal_contract(context, bad_terminal)
+            assert Path.cwd() == caller_root
+            assert mismatch.value.args == ("retention_grade_readout_entry_mismatch",)
+            assert reader._terminal_diagnostic(mismatch.value, "terminal_binding") == {
+                "verification_substage": "terminal_binding", "verification_reason": "retention_grade_readout_entry_mismatch"}
+            assert context.run.grader_config_json == config_bytes
+            assert pilot._digest(template[0]["binding"]["entry"]) == expected_entry
+            assert not effects and not any((root / name).exists() for name in (
+                "claim-reserved.json", "publication-reserved.json", "judge-owner.json", "judge-receipt.json"))
+        assert Path.cwd() == original_cwd
+    assert observed_entries == [expected_entry, expected_entry] and effects == []
 
 
 def test_retention_grade_terminal_diagnostics_are_closed_and_read_only(tmp_path, monkeypatch, capsys):
