@@ -13,64 +13,85 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Extend the existing fresh reader to exactly two fixed r1/r2 profiles for
-  successful-result intake and explicit failed/stopped terminal-only observation.
-  Defaults and omitted bindings remain r1, including the frozen r2 producer's
-  failed-r1 predecessor check. Keep/r1 commands are unchanged. The existing
-  contents-read preparation job selects the exact cell; mode exclusions, three
-  jobs, permissions, step-scoped secret and precredential checks remain intact.
-  No read route can reach preparation, protected approval, execution, model or
-  grade paths. Terminal mode reads only control bodies and object metadata/history,
-  not payloads or grading input; missing controls refuse without retry or fallback.
+- Add only the closed Task4 keep/r2 producer, ordinal 3 / repetition 2, from
+  verified base `0f68701d62ae7d86a95ba8fd6b9f1cc65a4cf2d6`. The fixed adapter
+  reuses the shared controller, source/runtime/same-run approval, serial claim,
+  owned-child, clock, cleanup and publication machinery. KEEP retains this cell's
+  thread/workspace/HOME/CODEX_HOME/owned output without predecessor state import.
+  It is the next predeclared cell, not a fresh/r2 retry. Old ordinal 0/1/2 schemas,
+  paths and no-replay guards remain intact; Task5 cells remain unsupported.
+  Existing reader defaults and r1/r2 bindings are unchanged. The workflow retains
+  three jobs, permissions, inputs and secret boundaries; keep/r2 is excluded
+  from read modes and has its own staging/local/remote namespaces.
 
-  Verified base/producer `5a9614ac04464c4e0a5e80297f54c3a5c9443bae` follows prior
-  reviewed PR716 source `a3bb5e066b2ad842c98b1f85c91eb54e37c17d96`, owner review
-  [5383384460](https://github.com/hyeonsangjeon/gdpval-realworks/pull/716#pullrequestreview-5383384460)
-  and all 10 checks. The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a3bb5e066b2ad842c98b1f85c91eb54e37c17d96/tasks/LATEST_TASK_RESULT/README.md)
-  preserves the original compatibility decision and separate 49.90s/2.61s proofs;
-  neither was repeated or relabeled as this reader's evidence.
+  Prior PR717 HEAD `60f2a334bd76de197cdac668a635ffe1c2e427af`, owner review
+  [5384875894](https://github.com/hyeonsangjeon/gdpval-realworks/pull/717#pullrequestreview-5384875894)
+  and all 10 checks passed their source gate. The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/60f2a334bd76de197cdac668a635ffe1c2e427af/tasks/LATEST_TASK_RESULT/README.md)
+  preserves its 14.64s reader proof, r2 preparation/approval and jobs-metadata
+  binding, plus earlier PR716 decisions and 49.90s/2.61s proofs. None was repeated
+  or transferred into approval of this new head.
 
-  Leader evidence fixes r2 run `36907894862` / attempt 1 / workflow `370228282`.
-  Preparation job `110522963099` reported `prepared_not_admitted` at
-  `2026-10-01T18:37:35.5826822Z`, with request
-  `4798c119ea2d06c7c902ae51638bdba25c5bfaf683a2223d286fd7e652d3b317`, fresh
-  materialized grader `4860a408791b7b313e2c06c2863b4a1ddbae467c8425365af8908be7a3c032d6`
-  and four original roles from bundle
-  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
-  One owner approval bound that request in `grading` `18744914306`, deployment
-  `6792272908`; approval job `110524083305` was queued. The single authorized
-  jobs-metadata projection bound execution job `110535767415` to
-  the exact source/run/attempt. No logs, status polling or live reader call ran.
-  Model admission, outcome, terminal revision, usage, cost and grade remain
-  unobserved. This is not a retry of failed fresh/r1.
+  The leader's actual terminal-only observation run `36936506988` / job
+  `110617920889` at observer `0f68701d62ae7d86a95ba8fd6b9f1cc65a4cf2d6`
+  reported `terminal_verified` at `2026-10-01T22:43:16.1975611Z`, observation
+  SHA256 `50f13364c7a261010f210959d425420509bf879040257daeec9b16fea025e9d3`,
+  historical reader `5bfba1a2cb4d4f5190b0d146fd7b2b890c72ecf3904974d37babfea9ed8661f0`.
+  Approval/execution jobs were skipped; no payload bodies were read. Fresh/r2
+  producer `5a9614ac04464c4e0a5e80297f54c3a5c9443bae`, run `36907894862` /
+  attempt 1 / execution job `110535767415`, request
+  `4798c119ea2d06c7c902ae51638bdba25c5bfaf683a2223d286fd7e652d3b317`, is
+  consumed and failed, exit 1, cleanup confirmed, recorded publication
+  acknowledged, grade null, grading/invoice false. The independently fixed
+  predecessor is terminal `1d5133590911f3704fc2a65279d4b64bee77c1d6`, not r1
+  or a grade. The [completion record](tasks/LATEST_TASK_RESULT/README.md)
+  lists all exact terminal/claim/manifest/object hashes and sizes. Admission uses
+  explicit reader `FRESH_R2` terminal-only validation and requires that exact
+  shared branch parent before one-use CAS. No payload read, adoption or reset.
 
-  Only the current reader hash migrates from
-  `c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9` to
-  `5bfba1a2cb4d4f5190b0d146fd7b2b890c72ecf3904974d37babfea9ed8661f0`, in both
-  fresh preflights and CLI expectations. R2 additionally checks unchanged producer
-  `8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f` before
-  import/credentials. Controller, fresh/r1 facade, r2 producer, CI verifier,
-  original intake and runtime/model/input/grader/registration bytes are unchanged.
-  The [completion record](tasks/LATEST_TASK_RESULT/README.md) lists exact hashes;
-  historical observer source 910 / reader `bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa`
-  and the observation below are not replaced by current pins.
+  R2 declares result 1 / ledger 1 / deliverables 0, total objects 3 including
+  the manifest; this does not establish absence of partial work or grading
+  readiness. Recorded model calls are 39: infrastructure-retry 38 / known USD
+  `0.253777`, generation 1 / known USD `0.045663`; aggregate known/model USD
+  `0.29944`, partial. Input/cached-input/output/reasoning are
+  105233/27648/6571/3979; subsets are not extra totals. Calls are not HTTP requests
+  or native admissions/resumes, and partial known cost is not an invoice.
+  Estimated/runtime cost and HTTP count are null; missing reasons are
+  `call_reachability_unknown` and `usage_absent`. Detailed failure, budget and
+  recovery exposure remain unavailable/null/`not_recorded_in_terminal_controls`.
+  Duration/retry labels do not establish timeout or rate-limit causality. The
+  publication-derived observation is not independent provider/original-input/CAS
+  authentication or observer-established writer acknowledgment. Grade null is
+  not zero; green workflow status is not task success. The observation was not
+  queried or repeated in this task.
 
-  Tested HEAD `d92cac628490baf40ceb8c0a76e38fb6cfd6e985` ran one token-free,
+  CURRENT controller SHA256 migrates from
+  `a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58` to
+  `957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601`;
+  resulting reader SHA256 from
+  `5bfba1a2cb4d4f5190b0d146fd7b2b890c72ecf3904974d37babfea9ed8661f0` to
+  `cd88a768e573d57c82d8f14bcb266ae455187933fb8a5b70da0fadafe17bea46`, in both
+  fresh preflights and CLI expectations. Exact hash checks remain before
+  imports/credentials. Both fresh facades, CI verifier, original intake and
+  core/runtime/model/input/grader/registration bytes remain unchanged. Historical
+  producer/observer/reader/receipt identities are not replaced by current pins.
+
+  Tested HEAD `bf0bcfdb9e4364d8d8bd7ec72dac4b481556d8a3` ran one token-free,
   CI-shaped CPython 3.10.12 / pytest 9.1.1 invocation: 2 collected, 2 passed in
-  14.64s, exit 0, with no 180-second timeout. The new
-  `tests/test_codex_retention_fresh_r2_read.py::test_fresh_r2_reads_only_its_fixed_result_or_terminal`
-  and directly coupled
-  `tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free`
-  each passed. Real validators with synthetic transport covered both read modes,
-  source/run/request/cell/job/predecessor and type/hash/history/role/privacy/bounds
-  refusals, missing controls, no payload downloads in terminal mode, default-r1
-  compatibility, no-clobber/readback, redaction and all 32 routing combinations.
-  No model, remote write or grade effects occurred. Log SHA256:
-  `bd2129ca0fd2bb111207e7659472ef33e17e05aaff2d565f72a716cd8ddafe37`.
-  The bounded auth/storage/workflow review closed with APPROVE after inspecting
-  the saved proof. No second invocation, delivered reader suite, private
-  integration or full suite ran. These are offline test results, not model usage
-  or a live r2 outcome.
+  61.31s, exit 0; the 180-second timeout did not fire. Both
+  `tests/test_codex_retention_task4_keep_r2.py::test_task4_keep_r2_advances_failed_fresh_r2_without_cross_cell_state`
+  and `tests/test_codex_retention_ci_observation.py::test_retention_keep_r2_routes_preserve_read_and_authority_boundaries`
+  passed. Real validators with synthetic transport/owned child reached the full
+  staging/claim/child/publication/reconciliation path, 21 predecessor cases,
+  drift/duplicate/ambiguity/timeout/cleanup/no-replay refusals, in-cell KEEP
+  recovery without cross-cell adoption, old schemas and small r1/r2 current-pin
+  compatibility cases. The route proof covered 192 cell/mode cases and exact
+  hashes before effects. Log SHA256:
+  `6a6f2559224e89acb9cd9e64e6e008aac00ca423362cf75c2c7e71b675d1d628`.
+  The bounded auth/runtime/storage/workflow review approved the scope before
+  edits, then closed with APPROVE after the delta and saved proof. Synthetic
+  expectations do not verify actual live predecessor bytes or current remote
+  head. No second invocation, delivered reader suite, private integration, full
+  suite, model, remote write or grade ran.
 
   Separately, the leader read successful terminal-only observation run
   `36884357472` / job `110443771878` at source
@@ -105,13 +126,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   (2 collected, 2 passed in 14.86s, exit 0, no timeout) remain in the
   [immutable observer record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ea8e7d36693678cedb54fbe277af5cc874360061/tasks/LATEST_TASK_RESULT/README.md),
   along with earlier reader/source/preparation/approval history. Keep/r1 scores,
-  exclusions, partial/null cost and study limits below remain unchanged. Two of
-  eight outcomes are recorded; six cells remain outstanding. Fresh/r2 is the next
-  predeclared cell, not a fresh/r1 retry; one pair establishes no retention benefit.
-  New immutable-HEAD owner review and CI must precede explicit leader direction
-  for a source/producer/run/attempt/request/cell/job-bound read. The existing r2
-  execution was separately approved; this task neither follows it nor creates
-  launch authority. No live read/run, dispatch/polling, replay, grading,
+  exclusions, partial/null cost and study limits below remain unchanged. Three
+  of eight outcomes are recorded; five cells remain, beginning with keep/r2.
+  The original 30-cell pilot stays closed; one task's repeats do not establish
+  retention benefit. GPT-5.4 direct-v1/xhigh, SDK/CLI 0.147.0, original
+  input/rubric, mechanical B/KEEP/no C and carveouts are unchanged. One inference
+  slot and this cell's own 10800 cumulative seconds include waits/recovery/downtime
+  without reset; 1800 is native-turn wait, not an all-in ceiling. No fixed
+  admission count or monetary cutoff was added. New immutable-head owner review
+  and CI must precede separate leader source/run/input/request/budget binding
+  and same-run owner approval for keep/r2. Applied skills: `experiment-design`,
+  `experiment-report-en`, then protected `im-not-ai-en`; UI/animation and new-study
+  work were not applicable. No live read/run, dispatch/polling, replay, grading,
   Project edit, merge or leader M4 update occurred.
 
 ### Fixed
