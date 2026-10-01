@@ -49,9 +49,9 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
         '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' ]]',
-        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' ) ]]',
+        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
-        '[[ "$OBSERVE_TERMINAL_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' ]]',
+        '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' ) ]]',
     ]
     # Evaluate the exact changed cell/mode expressions, not a substring route.
     cells = (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID, adapter.controller.FRESH_R2_CELL_ID)
@@ -70,8 +70,8 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
                 and not (terminal and (preparing or executing or observing or reading))
                 and not (observing and (preparing or executing))
                 and (selected == adapter.controller.FIRST_CELL_ID or not observing)
-                and (selected == adapter.controller.FRESH_CELL_ID or not terminal)
-                and (not reading or selected in cells[:2]))
+                and (selected in cells[1:] or not terminal)
+                and (not reading or selected in cells))
             assert allowed is expected
     facade = "python3 batch-runner/codex_retention_task4_fresh_r2.py"
     assert prepare["steps"][4]["run"].startswith(facade + " ")
