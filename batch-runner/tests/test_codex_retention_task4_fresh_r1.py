@@ -253,7 +253,31 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
         tar.addfile(member, io.BytesIO(data))
     git_state = {"head": SOURCE, "dirty": b""}
     old_cells = [{"cell_id": "synthetic-original-" + str(index), "index": index} for index in range(29)]
-    old_cells.append({"cell_id": historical.FINAL_CELL, "index": 29})
+    # Only the final historical row reaches retained._paths/_terminal. Build
+    # its full producer shape from the already serialized original profile;
+    # do not compile the thirty-cell study or borrow a retention cell identity.
+    original_config = json.loads(original_run.generated_config.read_bytes())
+    old_task = captures[0]["task_ids"][-1]
+    assert historical.FINAL_CELL == old_task + "_A_r2"
+    old_run = retained.ci.CAMPAIGN + "__" + historical.FINAL_CELL
+    old_config = owned.load_plan(approved_pilot_source / owned.CODEX_TEMPLATE)
+    old_config["experiment"].update(id=old_run, name="GPT-5.4 Codex external-budget pilot",
+        description="One fixed pilot cell; dispatch is not model consumption or graded quality.")
+    old_config["data"]["source"] = original_config["data"]["source"]
+    old_config["data"]["filter"]["task_ids"] = [old_task]
+    old_config["condition_a"] = original_config["condition_a"]
+    old_config["execution"]["codex"] = original_config["execution"]["codex"]
+    old_config["execution"]["codex"]["task_deadline"] = {"condition": "A", "repetition": 2}
+    old_config["execution"].update(timeout=owned.ATTEMPT_SECONDS, max_retries=3, resume_max_rounds=0)
+    assert owned.ExperimentConfig.from_dict(old_config).validate() == []
+    old_cells.append({"cell_id": historical.FINAL_CELL, "run_id": old_run, "task_id": old_task,
+        "condition": "A", "repetition": 2, "index": 29, "config_sha256": owned._digest(old_config),
+        "roles": {role: "cells/" + historical.FINAL_CELL + "/" + suffix for role, suffix in {
+            "config": "config.json", "checkout": "checkout", "deadline": "deadline",
+            "native_workspaces": "native-workspaces", "checkpoint": "cell.json",
+            "result": "checkout/" + owned.RESULT, "ledger": "checkout/" + owned.LEDGER,
+        }.items()}})
+    assert old_cells[-1]["run_id"] != plan["cells"][1]["config"]["experiment"]["id"]
     observer_response = {"format": historical.FORMAT, "observer_source_sha": historical.SOURCE,
         "producer_source_sha": historical.PRODUCER,
         "plan": {"reviewed_source_sha": historical.PRODUCER, "run_id": "budget_pilot_ci_20260925_04",
