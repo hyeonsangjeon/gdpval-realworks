@@ -29,8 +29,8 @@ def _boolean(expression, replacements):
 def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp_path, capsys):
     workflow = yaml.safe_load((reader.ci.ROOT / reader.ci.WORKFLOW).read_bytes())
     inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
-    assert set(inputs) == {"reviewed_source_sha", "cell_id", "prepare", "observe_locator", "execute", "read_result"}
-    mode_names = ("prepare", "observe_locator", "execute", "read_result")
+    assert set(inputs) == {"reviewed_source_sha", "cell_id", "prepare", "observe_locator", "execute", "read_result", "observe_terminal"}
+    mode_names = ("prepare", "observe_locator", "execute", "read_result", "observe_terminal")
     assert all(inputs[name]["type"] == "boolean" and inputs[name]["default"] is False for name in mode_names)
     assert inputs["cell_id"]["default"] == reader.controller.FIRST_CELL_ID
     assert inputs["reviewed_source_sha"]["required"] is True
@@ -48,14 +48,17 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     assert workflow["env"]["HF_HUB_DISABLE_IMPLICIT_TOKEN"] == "1"
     assert not any("TOKEN" in name for name in workflow["env"] if name != "HF_HUB_DISABLE_IMPLICIT_TOKEN")
     steps = prepare["steps"]
-    assert len(steps) == 13 and execute["steps"][:9] == steps[:9]
+    assert len(steps) == 15 and execute["steps"][:9] == steps[:9]
     gate, checkout = steps[:2]
     assert not any("secret" in value or "token" in value for value in gate["env"].values())
     assert checkout["with"] == {"ref": "${{ inputs.reviewed_source_sha }}", "fetch-depth": 0, "persist-credentials": False}
-    fresh_preflight, fresh_read, preflight, read = steps[9:]
-    read_condition = "inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+    fresh_preflight, fresh_read, preflight, read, terminal_preflight, terminal_read = steps[9:]
+    read_condition = "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
     assert preflight["if"] == read["if"] == read_condition + " && inputs.cell_id == '" + reader.controller.FIRST_CELL_ID + "'"
     assert fresh_preflight["if"] == fresh_read["if"] == read_condition + " && inputs.cell_id == '" + fresh_reader.fresh.CELL_ID + "'"
+    assert terminal_preflight["if"] == terminal_read["if"] == (
+        "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+        " && inputs.cell_id == '" + fresh_reader.fresh.CELL_ID + "'")
     assert set(preflight) == {"name", "if", "shell", "run"} and preflight["shell"] == "bash"
     assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert set(read) == {"name", "if", "timeout-minutes", "env", "shell", "run"}
@@ -63,32 +66,38 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     assert set(fresh_preflight) == set(preflight) and fresh_preflight["shell"] == "bash"
     assert set(fresh_read) == set(read) and fresh_read["env"] == read["env"]
     assert fresh_read["shell"] == "bash" and fresh_read["timeout-minutes"] == 4
+    assert set(terminal_preflight) == set(preflight) and terminal_preflight["shell"] == "bash"
+    assert set(terminal_read) == set(read) and terminal_read["env"] == read["env"]
+    assert terminal_read["shell"] == "bash" and terminal_read["timeout-minutes"] == 4
     assert all(module not in step.get("run", "") for module in (
         "codex_retention_result_intake.py", "codex_retention_fresh_r1_result_intake.py")
         for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # Both exact cells and unsupported selectors, with all 16 mode combinations,
+    # Both exact cells and unsupported selectors, with all 32 mode combinations,
     # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.
     cells = (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID)
-    assert gate["run"].splitlines()[-2:] == [
+    assert gate["run"].splitlines()[-3:] == [
         '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + cells[0] + ' ]]',
+        '[[ "$OBSERVE_TERMINAL_ONLY" != true || "$SELECTED_CELL" == ' + cells[1] + ' ]]',
     ]
     for selected in (*cells, "unregistered", reader.registration.TASK4 + "_retention_bundle_v1_fresh_r2"):
-        for values in itertools.product((False, True), repeat=4):
+        for values in itertools.product((False, True), repeat=5):
             modes = dict(zip(mode_names, values))
-            prepared, observed, executed, reading = values
+            prepared, observed, executed, reading, terminal = values
             replacements = {"inputs." + name: value for name, value in modes.items()}
             replacements.update({"inputs.cell_id == '" + cell + "'": selected == cell for cell in cells})
             gate_values = {'"$' + name + '"': modes[value.removeprefix("${{ inputs.").removesuffix(" }}")]
                            for name, value in gate["env"].items()}
             gate_values.update({'"$SELECTED_CELL" == ' + cell: selected == cell for cell in cells})
             admitted_route = all(_boolean(line.removeprefix("[[ ").removesuffix(" ]]"), gate_values)
-                for line in [*gate["run"].splitlines()[1:3], *gate["run"].splitlines()[-2:]])
-            expected = (selected in cells and not (reading and (prepared or observed or executed))
-                and not (observed and (prepared or executed)) and (not observed or selected == cells[0]))
+                for line in [*gate["run"].splitlines()[1:4], *gate["run"].splitlines()[-3:]])
+            expected = (selected in cells and not (reading and (prepared or observed or executed or terminal))
+                and not (terminal and (prepared or observed or executed or reading))
+                and not (observed and (prepared or executed)) and (not observed or selected == cells[0])
+                and (not terminal or selected == cells[1]))
             assert admitted_route is expected
             reachable = [index for index, step in enumerate(steps)
                          if admitted_route and _boolean(step.get("if", "true"), replacements)]
@@ -98,6 +107,10 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
                 assert reachable == [0, 1, 2, 3, *( (11, 12) if selected == cells[0] else (9, 10))]
                 assert [steps[index].get("env") for index in reachable
                         if "HF_TOKEN" in steps[index].get("env", {})] == [read["env"]]
+            elif terminal:
+                assert reachable == [0, 1, 2, 3, 13, 14]
+                assert [steps[index].get("env") for index in reachable
+                        if "HF_TOKEN" in steps[index].get("env", {})] == [terminal_read["env"]]
             elif prepared or observed or executed:
                 assert reachable == list(range(9))
             else:
@@ -105,8 +118,8 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
             ready = {**replacements, "needs.retention-prepare.result == 'success'": admitted_route,
                      "needs.retention-prepare.outputs.request_sha256 != ''": True,
                      "needs.retention-approve.result == 'success'": True}
-            assert _boolean(approve["if"], ready) is (expected and not reading and (executed or observed))
-            assert _boolean(execute["if"], ready) is (expected and not reading and (executed or observed))
+            assert _boolean(approve["if"], ready) is (expected and not reading and not terminal and (executed or observed))
+            assert _boolean(execute["if"], ready) is (expected and not reading and not terminal and (executed or observed))
 
     module_hash = "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196"
     verifier_hash = "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c"
@@ -172,6 +185,11 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
                      (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID), (module_hash, fresh_hash)):
         fresh_script = fresh_script.replace(old, new)
     assert fresh_read["run"] == fresh_script  # Same private destination, bounds, redaction and nonzero exits.
+    assert terminal_preflight["run"] == fresh_preflight["run"]
+    terminal_script = fresh_script.replace("--read --discover-terminal", "--observe-terminal --discover-terminal")
+    terminal_script = terminal_script.replace("retention-fresh-r1-result.XXXXXXXX", "retention-fresh-r1-terminal.XXXXXXXX")
+    terminal_script = terminal_script.replace("retention_result_parent", "retention_terminal_parent").replace("/payload", "/evidence")
+    assert terminal_read["run"] == terminal_script
     fresh_argv = argv.copy()
     for index, arg in enumerate(fresh_argv):
         fresh_argv[index] = {reader.PRODUCER_SOURCE: fresh_reader.PRODUCER_SOURCE,
@@ -212,3 +230,15 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "grade": None, "invoice_complete": False, "commands": []}
     assert captured.err == "" and str(fresh_destination) not in captured.out
     assert not (fresh_destination / fresh_reader.MARKER).exists() and effects == []
+    terminal_destination = tmp_path / "fresh-terminal"
+    terminal_argv = ["--observe-terminal", *fresh_argv[1:]]
+    with monkeypatch.context() as context:
+        context.setattr(reader.os, "environ", {})
+        assert fresh_reader.main([str(terminal_destination) if arg == "$retention_result_parent/payload"
+                                  else arg for arg in terminal_argv]) == 2
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"terminal_verified": False, "reason": "explicit_hf_token_required",
+        "launch_authorized": False, "grading_launched": False, "admission_attempted": False, "replay_authorized": False,
+        "grade": None, "invoice_complete": False, "commands": []}
+    assert captured.err == "" and str(terminal_destination) not in captured.out
+    assert not (terminal_destination / fresh_reader.TERMINAL_MARKER).exists() and effects == []
