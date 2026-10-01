@@ -285,6 +285,25 @@ class Transport(adapter.LocalTransport):
         return subprocess.CompletedProcess(command, 0)
 
 
+def _assert_retention_execution_workflow_contract():
+    workflow = yaml.safe_load((controller.ROOT / adapter.WORKFLOW).read_text())
+    jobs = workflow["jobs"]
+    dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
+    assert dispatch["prepare"]["default"] is False and dispatch["execute"]["default"] is False
+    assert set(jobs) == {adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB}
+    assert jobs[adapter.APPROVE_JOB]["environment"] == {"name": "grading"}
+    assert "environment" not in jobs[adapter.EXECUTE_JOB]
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "permissions" not in jobs[adapter.PREPARE_JOB] and jobs[adapter.APPROVE_JOB]["permissions"] == {}
+    assert jobs[adapter.EXECUTE_JOB]["permissions"] == {"contents": "read", "actions": "read", "id-token": "write"}
+    assert workflow["concurrency"] == {"group": "codex-budget-pilot-ci-20260923-01", "cancel-in-progress": False}
+    executable = jobs[adapter.EXECUTE_JOB]["steps"][-1]
+    assert "codex_retention_task4_fresh_r2.py --execute" in executable["run"]
+    assert '--request-sha256 "$APPROVED_REQUEST_SHA256"' in executable["run"]
+    assert set(executable["env"]) == {"GITHUB_TOKEN", "HF_TOKEN", "AZURE_AI_ROUTE_PROFILE",
+                                     "FOUNDRY_PROJECT_ENDPOINT", "CODEX_FOUNDRY_CONNECTION_CONFIRMED"}
+
+
 def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatch, capsys, immutable_archives):
     locator = os.environ.get("GDPVAL_RETENTION_PREPARED_HANDOFF")
     assert locator and Path(locator).is_file(), "required explicit private original-input handoff unavailable"
@@ -742,22 +761,7 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
     with pytest.raises(output.OutputPublicationRefused, match="^retained_epoch_mismatch$"):
         retained._binding({**registration.compile_plan(), "run_id": registration.CAMPAIGN},
                           controller._adapted_cell(registration.compile_plan()["cells"][0]), {})
-    workflow = yaml.safe_load((controller.ROOT / adapter.WORKFLOW).read_text())
-    jobs = workflow["jobs"]
-    dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
-    assert dispatch["prepare"]["default"] is False and dispatch["execute"]["default"] is False
-    assert set(jobs) == {adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB}
-    assert jobs[adapter.APPROVE_JOB]["environment"] == {"name": "grading"}
-    assert "environment" not in jobs[adapter.EXECUTE_JOB]
-    assert workflow["permissions"] == {"contents": "read"}
-    assert "permissions" not in jobs[adapter.PREPARE_JOB] and jobs[adapter.APPROVE_JOB]["permissions"] == {}
-    assert jobs[adapter.EXECUTE_JOB]["permissions"] == {"contents": "read", "actions": "read", "id-token": "write"}
-    assert workflow["concurrency"] == {"group": "codex-budget-pilot-ci-20260923-01", "cancel-in-progress": False}
-    executable = jobs[adapter.EXECUTE_JOB]["steps"][-1]
-    assert "codex_retention_task4_fresh_r1.py --execute" in executable["run"]
-    assert '--request-sha256 "$APPROVED_REQUEST_SHA256"' in executable["run"]
-    assert set(executable["env"]) == {"GITHUB_TOKEN", "HF_TOKEN", "AZURE_AI_ROUTE_PROFILE",
-                                     "FOUNDRY_PROJECT_ENDPOINT", "CODEX_FOUNDRY_CONNECTION_CONFIRMED"}
+    _assert_retention_execution_workflow_contract()
     assert not forbidden_calls
     assert time.sleep is guarded_sleep
     assert {binding["kind"] for binding in allowed_children.values()} == {

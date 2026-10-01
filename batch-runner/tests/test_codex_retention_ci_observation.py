@@ -9,7 +9,12 @@ import yaml
 import codex_retention_ci as adapter
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from .test_codex_budget_pilot import offline  # noqa: F401; unchanged live-boundary guards
+from .test_codex_retention_ci import _assert_retention_execution_workflow_contract
 from .test_codex_retention_ci_read_result import _boolean
+
+
+def test_retention_execution_workflow_contract_is_shared():
+    _assert_retention_execution_workflow_contract()
 
 
 def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsys):
