@@ -517,8 +517,8 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
         with pytest.raises(adapter.RetentionCIRefused, match="^clean_exact_retention_source_required$"):
             controller.execute_first_cell(request, host_state=refused_host, grant=replace(grant, reviewed_source_sha="f" * 40),
                                            _test_transport=transport, _test_api=api)
-        with pytest.raises(controller.RetentionControllerRefused, match="^only_registered_ordinal_zero_supported$"):
-            controller.execute_first_cell(replace(request, cell_id=registration.compile_plan()["order"][1]),
+        with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
+            controller.execute_first_cell(replace(request, cell_id=registration.compile_plan()["order"][2]),
                 host_state=refused_host, grant=grant, _test_transport=transport, _test_api=api)
         with pytest.raises(adapter.RetentionCIRefused, match="^approved_retention_request_changed$"):
             controller.execute_first_cell(request, host_state=refused_host, grant=replace(grant, request_sha256="0" * 64),
@@ -754,7 +754,7 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
     assert jobs[adapter.EXECUTE_JOB]["permissions"] == {"contents": "read", "actions": "read", "id-token": "write"}
     assert workflow["concurrency"] == {"group": "codex-budget-pilot-ci-20260923-01", "cancel-in-progress": False}
     executable = jobs[adapter.EXECUTE_JOB]["steps"][-1]
-    assert "codex_retention_ci.py --execute" in executable["run"]
+    assert "codex_retention_task4_fresh_r1.py --execute" in executable["run"]
     assert '--request-sha256 "$APPROVED_REQUEST_SHA256"' in executable["run"]
     assert set(executable["env"]) == {"GITHUB_TOKEN", "HF_TOKEN", "AZURE_AI_ROUTE_PROFILE",
                                      "FOUNDRY_PROJECT_ENDPOINT", "CODEX_FOUNDRY_CONNECTION_CONFIRMED"}

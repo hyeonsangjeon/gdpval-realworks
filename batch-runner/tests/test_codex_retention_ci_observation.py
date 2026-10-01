@@ -1,6 +1,7 @@
 """One non-authorizing locator observation, with real CLI and workflow routing."""
 
 import json
+import itertools
 import shlex
 
 import yaml
@@ -8,6 +9,7 @@ import yaml
 import codex_retention_ci as adapter
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from .test_codex_budget_pilot import offline  # noqa: F401; unchanged live-boundary guards
+from .test_codex_retention_ci_read_result import _boolean
 
 
 def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsys):
@@ -39,8 +41,32 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
         '[[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
-        '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
+        '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' ]]',
+        '[[ ( "$READ_RESULT_ONLY" != true && "$OBSERVE_LOCATOR_ONLY" != true ) || "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
     ]
+    # Evaluate the exact changed cell/mode expressions, not a substring route.
+    for selected in (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID,
+                     "unregistered", adapter.registration.TASK4 + "_retention_bundle_v1_fresh_r2"):
+        for preparing, executing, observing, reading in itertools.product((False, True), repeat=4):
+            values = {'"$PREPARE_REQUESTED"': preparing, '"$EXECUTE_REQUESTED"': executing,
+                '"$OBSERVE_LOCATOR_ONLY"': observing, '"$READ_RESULT_ONLY"': reading,
+                '"$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID: selected == adapter.controller.FIRST_CELL_ID,
+                '"$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID: selected == adapter.controller.FRESH_CELL_ID}
+            allowed = all(_boolean(line.removeprefix("[[ ").removesuffix(" ]]"), values)
+                for line in [*gate["run"].splitlines()[1:3], *gate["run"].splitlines()[-2:]])
+            expected = (selected in (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID)
+                and not (reading and (preparing or executing or observing))
+                and not (observing and (preparing or executing))
+                and (selected == adapter.controller.FIRST_CELL_ID or not (reading or observing)))
+            assert allowed is expected
+    facade = "python3 batch-runner/codex_retention_task4_fresh_r1.py"
+    assert prepare["steps"][4]["run"].startswith(facade + " ")
+    assert facade + " --prepare" in prepare["steps"][8]["run"]
+    assert execute["steps"][10]["run"].startswith(facade + " --verify-approval ")
+    assert facade + " --execute" in execute["steps"][-1]["run"]
+    assert "retention-task4-fresh-r1-host" in execute["steps"][-1]["run"]
+    assert "retention-first-cell-host" in execute["steps"][-1]["run"]
+    assert "codex_retention_result_intake.py --read --discover-terminal" in prepare["steps"][-1]["run"]
     modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
     prepared = "needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''"
     assert approve["needs"] == adapter.PREPARE_JOB and approve["if"] == modes + " && " + prepared
@@ -63,7 +89,7 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
     assert "--verify-approval" in live_steps[0]["run"]
     assert "diagnose_codex_sandbox_host.py" in live_steps[1]["run"]
     assert live_steps[2]["uses"] == "azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca"
-    assert "codex_retention_ci.py --execute" in live_steps[3]["run"]
+    assert "codex_retention_task4_fresh_r1.py --execute" in live_steps[3]["run"]
     command = shlex.split(observation["run"])
     assert command[:7] == ["env", "-u", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "-u", "GITHUB_TOKEN",
                            "python3", "batch-runner/codex_retention_ci.py"]

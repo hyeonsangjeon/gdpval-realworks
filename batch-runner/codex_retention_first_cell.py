@@ -1,4 +1,4 @@
-"""Stage ordinal zero and provide its local, post-authority child protocol.
+"""Stage one of the two implemented cells and share the owned-child protocol.
 
 Default use verifies a no-launch packet and describes the selected cell. An
 explicit staging call publishes the real Step2 layout in this dedicated source
@@ -42,6 +42,7 @@ from step1_prepare_tasks import _public_codex_config
 
 ROOT = preparation.ROOT
 FIRST_CELL_ID = registration.TASK4 + "_retention_bundle_v1_keep_r1"
+FRESH_CELL_ID = registration.TASK4 + "_retention_bundle_v1_fresh_r1"
 CONTROLLER = "batch-runner/codex_retention_first_cell.py"
 SOURCE_PATHS = (CONTROLLER, "batch-runner/codex_budget_pilot.py",
                 "batch-runner/core/config.py", "batch-runner/core/needs_files.py",
@@ -61,6 +62,33 @@ LIVE_BLOCKERS = [
 
 class RetentionControllerRefused(ValueError):
     """A safe structural category, never private input content or paths."""
+
+
+@dataclass(frozen=True)
+class CellBinding:
+    cell_id: str
+    ordinal: int
+    bundle: str
+    local_name: str
+
+
+CELL_BINDINGS = (
+    CellBinding(FIRST_CELL_ID, 0, "keep", "retention-first-cell"),
+    CellBinding(FRESH_CELL_ID, 1, "fresh", "retention-task4-fresh-r1"),
+)
+
+
+def cell_binding(cell_id: str) -> CellBinding:
+    for binding in CELL_BINDINGS:
+        if type(cell_id) is str and cell_id == binding.cell_id:
+            return binding
+    raise RetentionControllerRefused("only_first_or_task4_fresh_r1_supported")
+
+
+def _stage_paths(cell_id: str) -> tuple[Path, Path]:
+    binding = cell_binding(cell_id)
+    return tuple(WORKSPACE_DIR / (binding.local_name + suffix)
+                 for suffix in ("-staging.json", "-staged.json"))
 
 
 @dataclass(frozen=True)
@@ -92,18 +120,20 @@ def source_identity() -> dict:
 
 
 def _context(request: Request) -> dict:
-    if type(request) is not Request or request.cell_id != FIRST_CELL_ID:
-        raise RetentionControllerRefused("only_registered_ordinal_zero_supported")
+    if type(request) is not Request:
+        raise RetentionControllerRefused("explicit_retention_request_required")
+    binding = cell_binding(request.cell_id)
     if preparation._path(request.runtime_checkout) != ROOT:
         raise RetentionControllerRefused("controller_must_run_from_explicit_runtime_checkout")
     _same("runtime_layout_mismatch", [str(path) for path in (DEFAULT_LOCAL_PATH, WORKSPACE_DIR, PREPARED, MANIFEST)],
           [str(ROOT / role) for role in ("data/gdpval-local", "batch-runner/workspace",
            "batch-runner/workspace/step1_tasks_prepared.json", "batch-runner/workspace/step0_needs_files_manifest.json")])
     plan = registration.compile_plan() if request.plan is None else registration.validate_plan(request.plan)
-    cell = plan["cells"][0]
-    _same("first_cell_binding_mismatch", [plan["order"][0], cell["index"], cell["cell_id"], cell["control"]],
-          [FIRST_CELL_ID, 0, FIRST_CELL_ID,
-           {"condition": "retention_bundle_v1", "retention_bundle": "keep", "repetition": 1}])
+    cell = plan["cells"][binding.ordinal]
+    _same("selected_cell_binding_mismatch",
+          [plan["order"][binding.ordinal], cell["index"], cell["cell_id"], cell["control"]],
+          [binding.cell_id, binding.ordinal, binding.cell_id,
+           {"condition": "retention_bundle_v1", "retention_bundle": binding.bundle, "repetition": 1}])
     source = source_identity()
     _same("controller_source_mismatch", source["sha256"], request.expected_controller_sha256)
     packet = preparation.verify_packet(
@@ -167,7 +197,8 @@ def _runtime_files(request: Request, context: dict) -> dict[str, bytes]:
 def _description(context: dict) -> dict:
     cell, packet = context["cell"], context["packet"]
     return {
-        "format": "codex-retention-first-cell-v1", "cell_id": cell["cell_id"], "ordinal": 0,
+        "format": "codex-" + cell_binding(cell["cell_id"]).local_name + "-v1",
+        "cell_id": cell["cell_id"], "ordinal": cell["index"],
         "campaign_id": context["plan"]["campaign_id"], "plan_sha256": registration.seal(context["plan"]),
         "packet_sha256": registration.seal(packet), "runtime_baseline": packet["runtime_baseline"],
         "compiler_source": packet["compiler_source"], "preparer_source": packet["preparer_source"],
@@ -205,7 +236,8 @@ def _require_no_runtime_output() -> None:
 def _require_unused_runtime() -> None:
     # Exact consumer paths only; no campaign discovery or broad cleanup.
     _require_no_runtime_output()
-    for path in (PREPARED, MANIFEST, STAGING, STAGED, DEFAULT_LOCAL_PATH):
+    markers = tuple(path for binding in CELL_BINDINGS for path in _stage_paths(binding.cell_id))
+    for path in (PREPARED, MANIFEST, *markers, DEFAULT_LOCAL_PATH):
         preparation._path(path)
         if os.path.lexists(path):
             raise RetentionControllerRefused("runtime_path_already_used_or_partial")
@@ -214,13 +246,14 @@ def _require_unused_runtime() -> None:
 def verify_staged_runtime(request: Request) -> dict:
     """Reconcile real inputs, sources, path-specific grader and runtime bytes."""
     context = _context(request)
+    staging, staged = _stage_paths(request.cell_id)
     files = _runtime_files(request, context)
     for role, expected in files.items():
         _same("staged_runtime_bytes_mismatch", preparation._read(ROOT / role, "staged_runtime"), expected)
     record = _stage_record(context, files)
-    _same("staging_reservation_mismatch", preparation._read(STAGING, "staging_reservation"),
+    _same("staging_reservation_mismatch", preparation._read(staging, "staging_reservation"),
           _encoded({"stage_identity": registration.seal(record), "launch_authorized": False}))
-    _same("staging_readback_mismatch", preparation._read(STAGED, "staging_record"), _encoded(record))
+    _same("staging_readback_mismatch", preparation._read(staged, "staging_record"), _encoded(record))
     # The same hardened reader/schema4/reference checks consumed by Step2.
     prepared = read_codex_prepared(PREPARED)
     manifest = NeedsFilesManifest.load(str(MANIFEST))
@@ -243,6 +276,7 @@ def stage_runtime(request: Request) -> dict:
     names file publication only; it is not an inference-slot reservation.
     """
     context = _context(request)
+    staging, staged = _stage_paths(request.cell_id)
     files = _runtime_files(request, context)
     _require_unused_runtime()
     record = _stage_record(context, files)
@@ -250,7 +284,7 @@ def stage_runtime(request: Request) -> dict:
         check_workspace, _, workspace_fd = stack.enter_context(_publication_parents(WORKSPACE_DIR))
         check_data, mkdir, directory_fd = stack.enter_context(_publication_parents(DEFAULT_LOCAL_PATH.parent))
         _require_unused_runtime()
-        _write_no_clobber(STAGING, _encoded({"stage_identity": registration.seal(record), "launch_authorized": False}),
+        _write_no_clobber(staging, _encoded({"stage_identity": registration.seal(record), "launch_authorized": False}),
                           parent_fd=workspace_fd(WORKSPACE_DIR))
         os.fsync(workspace_fd(WORKSPACE_DIR))
         mkdir(DEFAULT_LOCAL_PATH)
@@ -277,7 +311,7 @@ def stage_runtime(request: Request) -> dict:
             _same("staged_runtime_bytes_mismatch", preparation._read(ROOT / role, "staged_runtime"), expected)
         check_workspace()
         check_data()
-        _write_no_clobber(STAGED, _encoded(record), parent_fd=workspace_fd(WORKSPACE_DIR))
+        _write_no_clobber(staged, _encoded(record), parent_fd=workspace_fd(WORKSPACE_DIR))
         os.fsync(workspace_fd(WORKSPACE_DIR))
         _same("staging_readback_mismatch", verify_staged_runtime(request), record)
         check_workspace()
@@ -292,9 +326,11 @@ def execute_first_cell(request: Request, *, host_state: Path, grant=None,
     if grant is None:
         raise RetentionControllerRefused(LIVE_GATE)
     import codex_retention_ci
+    import codex_retention_task4_fresh_r1
 
-    return codex_retention_ci.execute(request, host_state=host_state, grant=grant,
-                                     _test_transport=_test_transport, _test_api=_test_api)
+    adapter = codex_retention_ci if request.cell_id == FIRST_CELL_ID else codex_retention_task4_fresh_r1
+    return adapter.execute(request, host_state=host_state, grant=grant,
+                           _test_transport=_test_transport, _test_api=_test_api)
 
 
 def _deadline(host: Path, context: dict, stage: dict, transport: owned.LocalTransport,
@@ -331,8 +367,11 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
         transport = _test_transport
     else:
         from codex_retention_ci import _Admission
+        from codex_retention_task4_fresh_r1 import _FreshAdmission
 
-        if type(_admission) is not _Admission or _test_transport is not None or _admission.request != request:
+        if ((type(_admission), request.cell_id) not in
+                ((_Admission, FIRST_CELL_ID), (_FreshAdmission, FRESH_CELL_ID))
+                or _test_transport is not None or _admission.request != request):
             raise RetentionControllerRefused(LIVE_GATE)
         transport = _admission.transport
     context = _context(request)
@@ -360,7 +399,7 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise RetentionControllerRefused("local_serial_slot_busy") from None
-        binding = {"stage_sha256": registration.seal(stage), "cell_id": FIRST_CELL_ID,
+        binding = {"stage_sha256": registration.seal(stage), "cell_id": request.cell_id,
                    "plan_sha256": registration.seal(plan), "scope": "local_one_use_not_remote_claim"}
         if _admission is not None:
             binding.update(_admission.binding)
@@ -373,7 +412,7 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
         owned._save(host / "ready.json", {"plan_sha256": registration.seal(plan)})
         owned._save(host / "owned-child.json", owned._owner_state(registration.seal(plan)))
         (host / "cells").mkdir(mode=0o700)
-        (host / "cells" / FIRST_CELL_ID).mkdir(mode=0o700)
+        (host / "cells" / request.cell_id).mkdir(mode=0o700)
         adapted = _adapted_cell(cell)
         state = owned._cell_state(plan, adapted)
         state.update(status="running", phase="prepared", prepared={
