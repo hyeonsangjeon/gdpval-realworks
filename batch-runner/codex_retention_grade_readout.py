@@ -28,6 +28,40 @@ TERMINAL_IDENTITY = {
 CLAIM = "dec305d669e3ca2e53c7f7b9ebfbe7974d661350"
 require = output._require
 
+# Diagnostics identify attempted work, not successful terminal verification.
+_TERMINAL_SUBSTAGES = ("metadata", "terminal_control", "terminal_binding", "claim_history", "terminal_identity")
+_TERMINAL_REFUSALS = (
+    "existing_exact_private_repository_required", "repository_revision_unavailable",
+    "retention_grade_readout_revision_mismatch", "immutable_retention_revision_required",
+    "retention_control_identity_refused", "terminal_or_claim_missing", "retention_control_file_refused",
+    "retention_control_history_mismatch", "retention_control_cache_escape", "retention_control_blob_mismatch",
+    "payload_file_or_size_refused", "payload_file_changed", "payload_identity_mismatch",
+    "noncanonical_retention_record", "retention_record_too_large",
+    "canonical_retention_grade_context_required", "retention_grade_context_changed",
+    "retention_grade_readout_writer_refused", "retention_grade_readout_terminal_refused",
+    "retention_grade_readout_preparation_identity_refused", "retention_grade_readout_entry_refused",
+    "grade_readout_renderer_identity_refused", "retention_grade_readout_entry_mismatch",
+    "retention_grade_readout_writer_binding_mismatch", "grade_cleanup_unconfirmed",
+    "grade_artifact_roles_refused", "grade_missing_accounting_mismatch",
+    "retention_grade_terminal_changed", "retention_grade_terminal_claim_changed",
+    "retention_grade_terminal_cleanup_required", "output_objects_refused", "remote_output_objects_missing",
+    "remote_output_size_mismatch", "remote_output_blob_mismatch", "remote_output_lfs_mismatch",
+    "remote_output_history_mismatch", "retention_grade_readout_terminal_changed",
+    "grade_readout_target_refused", "grade_readout_metadata_refused", "grade_readout_paths_refused",
+    "grade_readout_download_refused", "publication_timeout", "hf_http_failed", "hf_transport_failed", "hf_response_bytes_exceeded",
+    "hf_insecure_request_refused", "hf_credential_forwarding_refused",
+)
+
+
+def _terminal_diagnostic(error, substage):
+    """Project enumerated constants only; do not stringify errors or follow causes."""
+    reason = "unclassified_verification_error"
+    if type(error) is output.OutputPublicationRefused and len(error.args) == 1 and type(error.args[0]) is str:
+        reason = next((code for code in _TERMINAL_REFUSALS if error.args[0] == code), reason)
+    stage = next((value for value in _TERMINAL_SUBSTAGES if type(substage) is str and substage == value),
+                 "unclassified_verification_substage")
+    return {"verification_substage": stage, "verification_reason": reason}
+
 
 def _context(args):
     require(args.selector == SELECTOR and args.phase in {"plan", "readout"}
@@ -130,6 +164,7 @@ class _ReadOnlyGrade:
         self._paths = {TERMINAL: {bridge.TERMINAL_PATH}}
         self._downloads = {(TERMINAL, bridge.TERMINAL_PATH): 2}
         self._path_reads = 5
+        self._verification_substage = None
 
     def _target(self, repo_id, repo_type, token):
         require(repo_id == self._repo and repo_type == "dataset" and token == self._token,
@@ -163,19 +198,25 @@ class _ReadOnlyGrade:
             local_files_only=False, etag_timeout=etag_timeout)
 
     def verify(self, context, root, deadline):
+        self._verification_substage = "metadata"
         require(output._metadata(self, self._repo, TERMINAL, self._token, deadline)["sha"] == TERMINAL,
                 "retention_grade_readout_revision_mismatch")
+        self._verification_substage = "terminal_control"
         terminal, data = retained._control(self, self._repo, TERMINAL, bridge.TERMINAL_PATH,
             grade._cache(root, "terminal"), self._token, deadline,
             expected=TERMINAL_IDENTITY, written_at=TERMINAL)
+        self._verification_substage = "terminal_binding"
         entry, claim = _terminal_contract(context, terminal)
         # Only the pinned, semantically checked terminal can open these reads.
         self._paths[TERMINAL].update({bridge.CLAIM_PATH, *(row["path"] for row in terminal["files"])})
         self._paths[CLAIM] = {bridge.CLAIM_PATH}
         self._downloads[(CLAIM, bridge.CLAIM_PATH)] = 1
         admission = {"returned_commit": CLAIM, "claim": claim, "claim_identity": terminal["claim_identity"]}
+        # Includes the existing terminal reread, claim bytes and object history.
+        self._verification_substage = "claim_history"
         identity = bridge._terminal(self, self._repo, TERMINAL, terminal, admission,
             grade._cache(root, "verified"), self._token, deadline)
+        self._verification_substage = "terminal_identity"
         bridge._same(identity, pilot._identity(data), "retention_grade_readout_terminal_changed")
         # Payload reads remain closed until claim bytes and inherited history pass.
         for record in terminal["files"]:
@@ -247,5 +288,7 @@ def main(args, *, _test_api=None):
         _, status = output._error_context(error)
         public.update(outcome="refused", reason="retention_grade_readout_contract_refused",
                       http_status=status if type(status) is int and 100 <= status <= 599 else None)
+        if public["stage"] == "grade_terminal":
+            public.update(_terminal_diagnostic(error, api._verification_substage))
         print(pilot._canonical_json(public), file=sys.stderr)
         return 2

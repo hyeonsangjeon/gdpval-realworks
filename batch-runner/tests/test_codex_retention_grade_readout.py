@@ -504,3 +504,192 @@ def test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid(t
             force_download=True, local_files_only=False, etag_timeout=1)
     assert len(missing.calls) == count
     assert effects == [] and git_calls
+
+
+def test_retention_grade_terminal_diagnostics_are_closed_and_read_only(tmp_path, monkeypatch, capsys):
+    assert reader.TERMINAL == "40712e0980cc05c31688fdbb98c693774fb90c0d"
+    assert reader.TERMINAL_IDENTITY == {
+        "sha256": "11eb15cd4cb783d35fcfda62b458f14d34bfb3742e60d949c6671a56399c9234", "size": 3119}
+    assert reader.WRITER_SOURCE == "29e0353f1539265b1741e71be894fedf9be32a8b"
+    assert reader.CLAIM == "dec305d669e3ca2e53c7f7b9ebfbe7974d661350"
+    assert reader._TERMINAL_SUBSTAGES == (
+        "metadata", "terminal_control", "terminal_binding", "claim_history", "terminal_identity")
+    context = bridge.compile_request(reader.WRITER_SOURCE)
+    template = _fixture(context)  # Real writer serializer; no payload projection is substituted.
+    effects, git_calls, roots = [], [], []
+
+    def forbidden(*args, **kwargs):
+        effects.append("forbidden_effect")
+        pytest.fail("terminal verification crossed a payload, write or paid boundary")
+
+    for target, names in (
+        (bridge, ("_authority", "prepare", "claim", "judge", "publish", "reconcile", "_ready", "_derived_inputs")),
+        (grade, ("_ci_authority", "prepare", "claim", "judge", "publish", "reconcile", "_owned_judge", "setup", "_fetch")),
+        (pilot, ("dispatch",)), (step8, ("main",)), (bridge.reader, ("read_result",)),
+        (reader.readout, ("_recorded_projection",)),
+    ):
+        for name in names:
+            monkeypatch.setattr(target, name, forbidden)
+    monkeypatch.setattr("core.tools.get_renderer_fingerprint", forbidden)
+    monkeypatch.setattr(RubricLoader, "load", forbidden)
+    common = tmp_path / "synthetic-git-metadata"
+    common.mkdir()
+
+    def git(path, *command, ok=(0,)):
+        assert Path(path) == bridge.ROOT
+        git_calls.append(command)
+        answers = {("rev-parse", "--show-toplevel"): os.fsencode(path) + b"\n",
+            ("rev-parse", "--path-format=absolute", "--git-common-dir"): os.fsencode(common) + b"\n",
+            ("rev-parse", "HEAD"): (OBSERVER + "\n").encode(),
+            ("diff", "--name-only", "HEAD", "--"): b"",
+            ("status", "--porcelain", "--untracked-files=normal"): b"",
+            ("config", "--name-only", "--get-regexp",
+             r"^(filter\.|include\.|includeif\.|extensions\.partialclone$|remote\..*\.promisor$|core\.alternaterefscommand$)"): b""}
+        assert command in answers, "only the established Git metadata seam is simulated"
+        return SimpleNamespace(stdout=answers[command], returncode=0)
+
+    monkeypatch.setattr(source_checkout, "_git", git)
+    monkeypatch.setattr(pilot, "_git", git)
+
+    def invoke(api, phase="readout"):
+        root = tmp_path / f"terminal-refusal-{len(roots)}"
+        roots.append(root)
+        args = ["--selector", reader.SELECTOR, "--reviewed-source-sha", OBSERVER,
+                "--terminal-revision", reader.TERMINAL, "--root", str(root), "--phase", phase]
+        status = grade.main(args, _test_api=api)
+        captured = capsys.readouterr()
+        text = captured.out if status == 0 else captured.err
+        assert not (captured.err if status == 0 else captured.out)
+        for private in (PRIVATE, TOKEN, str(tmp_path), retained._target(), '"criterion":', '"evidence":'):
+            assert private not in text
+        receipt = json.loads(text)
+        assert receipt["remote_mutation_possible"] is False and receipt["judge_entry_requested"] is False
+        assert receipt["inference_requested"] is False and receipt["automatic_retry"] is False
+        assert receipt["invoice_complete"] is False
+        assert receipt["materialized_input_fingerprint"] == {
+            "status": "unavailable", "value": None, "comparison": None,
+            "reason": "materialized_input_fingerprint_not_recorded"}
+        assert not {"score", "terminal_identity", "recorded_task_cost", "file_identities"}.intersection(receipt)
+        assert not effects
+        return status, receipt
+
+    api = _seed(monkeypatch, *deepcopy(template))
+    with monkeypatch.context() as local:
+        local.delenv("GITHUB_ACTIONS", raising=False)
+        status, receipt = invoke(api, phase="plan")
+        assert status == 0 and receipt["outcome"] == "plan_only"
+        assert not {"verification_reason", "verification_substage"}.intersection(receipt)
+        status, receipt = invoke(api)
+        assert status == 2 and receipt["stage"] == "observer_authority"
+        assert not {"verification_reason", "verification_substage"}.intersection(receipt)
+    assert not api.calls and not git_calls and all(not root.exists() for root in roots)
+    _environment(monkeypatch)
+
+    # Actual terminal/claim/entry/history predicates succeed without fetching
+    # either declared payload. Diagnostic state never grants a new operation.
+    before = deepcopy((api.trees, api.writers, api.branches))
+    root = grade._root(tmp_path / "verified-controls", new=True)
+    with retained._session(api, response_bytes_limit=output.MAX_RECORD_BYTES) as (transport, token, deadline):
+        facade = reader._ReadOnlyGrade(transport, retained._target(), token)
+        terminal, entry, identity = facade.verify(context, root, deadline)
+    assert identity == reader.TERMINAL_IDENTITY and entry == template[0]["binding"]["entry"]
+    assert terminal["claim_commit"] == reader.CLAIM and terminal["child"]["cleanup_confirmed"] is True
+    assert facade._verification_substage == "terminal_identity"
+    assert api.downloads == [(reader.TERMINAL, bridge.TERMINAL_PATH),
+                            (reader.TERMINAL, bridge.TERMINAL_PATH), (reader.CLAIM, bridge.CLAIM_PATH)]
+    assert sum(name == "metadata" for name, _ in api.calls) == 1 and len(api.paths) == 5
+    assert (api.trees, api.writers, api.branches) == before and not api.commits
+
+    cases = (
+        ("private_target", "metadata", "existing_exact_private_repository_required"),
+        ("terminal_hash", "terminal_control", "payload_identity_mismatch"),
+        ("terminal_history", "terminal_control", "retention_control_history_mismatch"),
+        ("writer_source", "terminal_binding", "retention_grade_readout_writer_binding_mismatch"),
+        ("entry_hash", "terminal_binding", "retention_grade_readout_entry_mismatch"),
+        ("claim_hash", "claim_history", "payload_identity_mismatch"),
+        ("claim_history", "claim_history", "retention_control_history_mismatch"),
+        ("inherited_claim_history", "claim_history", "remote_output_history_mismatch"),
+        ("file_history", "claim_history", "remote_output_history_mismatch"),
+    )
+    for case, substage, reason in cases:
+        t, c, payload, ledger = deepcopy(template)
+        if case == "writer_source":
+            t["binding"]["source_sha"] = "e" * 40
+        elif case == "entry_hash":
+            t["binding"]["entry"]["config_hash"] = "e" * 16
+        elif case == "claim_hash":
+            t["claim_identity"]["sha256"] = "0" * 64
+        bad = _seed(monkeypatch, t, c, payload, ledger)
+        if case == "private_target":
+            bad.private = False
+        elif case == "terminal_hash":
+            monkeypatch.setattr(reader, "TERMINAL_IDENTITY", {**reader.TERMINAL_IDENTITY, "sha256": "0" * 64})
+        elif case == "terminal_history":
+            bad.writers[reader.TERMINAL][bridge.TERMINAL_PATH] = reader.CLAIM
+        elif case in {"claim_history", "inherited_claim_history"}:
+            revision = reader.CLAIM if case == "claim_history" else reader.TERMINAL
+            bad.writers[revision][bridge.CLAIM_PATH] = bridge.PARENT["revision"]
+        elif case == "file_history":
+            bad.writers[reader.TERMINAL][t["files"][0]["path"]] = reader.CLAIM
+        before = deepcopy((bad.trees, bad.writers, bad.branches))
+        status, receipt = invoke(bad)
+        safe = {key: receipt.get(key) for key in ("reason", "stage", "verification_reason", "verification_substage")}
+        assert status == 2 and receipt["outcome"] == "refused", safe
+        assert safe == {"reason": "retention_grade_readout_contract_refused", "stage": "grade_terminal",
+                        "verification_reason": reason, "verification_substage": substage}
+        assert receipt["http_status"] is None
+        assert all(name in {bridge.TERMINAL_PATH, bridge.CLAIM_PATH} for _, name in bad.downloads)
+        assert sum(name == "metadata" for name, _ in bad.calls) == 1
+        assert len(bad.paths) <= 5 and len(bad.downloads) <= 3
+        assert (bad.trees, bad.writers, bad.branches) == before and not bad.commits
+
+    class RefusalSubclass(output.OutputPublicationRefused):
+        pass
+
+    class StringSubclass(str):
+        pass
+
+    class UnprintableError(ValueError):
+        def __str__(self):
+            pytest.fail("diagnostics must not stringify an unknown exception")
+
+    known = "retention_control_history_mismatch"
+    extra_args = output.OutputPublicationRefused(known)
+    extra_args.args = (known, PRIVATE)
+    wrapped = ValueError(PRIVATE)
+    wrapped.__cause__ = output.OutputPublicationRefused(known, 503)
+    for error in (RefusalSubclass(known), output.OutputPublicationRefused(StringSubclass(known)),
+                  extra_args, wrapped, output.OutputPublicationRefused({"private": PRIVATE}),
+                  UnprintableError(PRIVATE)):
+        assert reader._terminal_diagnostic(error, StringSubclass("metadata")) == {
+            "verification_substage": "unclassified_verification_substage",
+            "verification_reason": "unclassified_verification_error"}
+    assert reader._terminal_diagnostic(output.OutputPublicationRefused(known), PRIVATE) == {
+        "verification_substage": "unclassified_verification_substage", "verification_reason": known}
+
+    # Simulate only external failure boundaries; the real CLI must still refuse.
+    for error, expected_reason, http_status in (
+        (OSError(PRIVATE), "unclassified_verification_error", None),
+        (output.OutputPublicationRefused(PRIVATE), "unclassified_verification_error", None),
+        (wrapped, "unclassified_verification_error", 503),
+        (output.OutputPublicationRefused("hf_http_failed", 503), "hf_http_failed", 503),
+        (UnprintableError(PRIVATE), "unclassified_verification_error", None),
+    ):
+        bad = _seed(monkeypatch, *deepcopy(template))
+
+        def failed_metadata(**kwargs):
+            bad.record("metadata", kwargs)
+            raise error
+
+        monkeypatch.setattr(bad, "repo_info", failed_metadata)
+        before = deepcopy((bad.trees, bad.writers, bad.branches))
+        status, receipt = invoke(bad)
+        assert status == 2 and receipt["outcome"] == "refused"
+        assert receipt["reason"] == "retention_grade_readout_contract_refused" and receipt["stage"] == "grade_terminal"
+        assert receipt["verification_substage"] == "metadata" and receipt["verification_reason"] == expected_reason
+        assert receipt["http_status"] == http_status
+        assert bad.calls == [("metadata", reader.TERMINAL)] and not bad.paths and not bad.downloads
+        assert (bad.trees, bad.writers, bad.branches) == before and not bad.commits
+    assert all(not (root / name).exists() for root in roots for name in (
+        "claim-reserved.json", "publication-reserved.json", "judge-owner.json", "judge-receipt.json"))
+    assert effects == [] and git_calls
