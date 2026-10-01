@@ -11,6 +11,59 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a closed, model-free Task4 fresh/r1 inference-result intake through the
+  existing contents-read preparation job's `read_result` mode. It discovers
+  only the fixed fresh terminal path once, then verifies immutable terminal,
+  claim, manifest and declared payload identities against independent fixed
+  source/run/request/cell/predecessor expectations. Canonical-byte comparisons,
+  existing payload/accounting/privacy validators, bounded transport and fresh
+  private no-clobber publication/readback remain enforced. Missing or unfinished
+  terminals refuse; there is no polling, replay, model call or grade.
+
+  The fresh-only source/hash preflight precedes the existing step-scoped HF
+  secret. Original keep/r1 read command bodies and the frozen CI verifier,
+  first-result reader, producer facade and controller are byte-identical.
+  Both read routes exclude preparation/approval/paid execution and locator
+  mode; fresh locator still refuses. No job, permission, credential, runtime,
+  model, registration, input or grader changed. The required bounded
+  CI/auth/storage/workflow review approved the final diff before validation.
+
+  At tested HEAD `56bb86a7cdca02c7f0f9ef8055d3e44f8df8aaaf`, one guarded,
+  token-free CI-shaped CPython 3.10.12 / pytest 9.1.1 invocation collected 2
+  tests and both passed in 11.06s, exit 0; the 180-second timeout did not fire:
+  `tests/test_codex_retention_fresh_r1_result_intake.py::test_fresh_r1_result_intake_is_fixed_immutable_and_model_free`
+  and `tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free`.
+  Real validators with synthetic transport reached payload/private readback,
+  identity/history/corruption/type-coercion/role/privacy/bounds refusals,
+  optional/missing ledger and terminal cases, ambiguous local completion,
+  both exact read routes and final no-effects assertions. Log SHA256:
+  `eabc583e6f50aa61211cfc28aefc132c0326892b923eedcbe6989bb0f15c037e`.
+  No unrelated selector, previous proof or live private integration was replayed.
+
+  The supplied producer remains `e39d8d1aadcb816d09588829a5ec4929b33083e6`,
+  workflow `370228282`, run `36845127347` / attempt 1, request SHA256
+  `5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02`.
+  Preparation job `110313331439` succeeded with `prepared_not_admitted` at
+  `2026-10-01T09:51:41.9510199Z`; exactly one owner approval was confirmed in
+  environment `grading` `18744914306`, deployment `6781320183`, followed by
+  queued approval job `110314366065`. No fresh admission, output or terminal
+  revision has been observed in the supplied evidence. The source review
+  `5377303231` and all 10 checks for prior HEAD
+  `2308b3fe8248d927e7f96f321963caebdc475a62` do not approve this new reader.
+
+  This is publication-derived evidence, not independent provider authentication,
+  original-input revalidation, Git-parent/CAS execution-history verification,
+  writer acknowledgment, a fresh score or an invoice. Unknown amounts stay
+  null/partial; recorded model calls are not HTTP counts. The verified keep/r1
+  score/accounting and study limits below remain unchanged. The
+  [current completion record](tasks/LATEST_TASK_RESULT/README.md) carries the
+  exact input/grader/predecessor bindings, historical failure/pass links and
+  remaining gate: new immutable reader-source review/CI, then separate leader
+  direction for one fixed fresh/r1 read. No live run was polled or dispatched,
+  no leader M4 update occurred, and no new execution or grading is authorized.
+
 ### Fixed
 
 - Correct PR713's retention admission guard order. Unknown/noncanonical,
@@ -37,9 +90,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   SHA256: `c022ac9023b062666d61c18fe554df7b1b3f06a31e9b4aca9f5afcc1389cd5f4`.
   The separate 34.90s successor/route pass and both earlier fixture failures
   below remain unchanged; those selectors were not rerun. Narrow pre-edit
-  auth/order review approved this correction. New-HEAD owner review and CI,
-  then exact leader source/run/input/budget direction remain required before
-  one fresh/r1 execution. No live operation or new score is claimed.
+  auth/order review approved this correction. At that handoff, new-HEAD owner
+  review and CI, then exact leader source/run/input/budget direction remained
+  required before one fresh/r1 execution. No live operation or new score was
+  claimed by that correction; the later supplied evidence is recorded above.
 
 ### Changed
 
@@ -52,7 +106,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   source, approval, runtime, owned-child and publication helpers. The same
   three workflow jobs retain permissions, concurrency, protected approval,
   secret scope and original-input verification. Fresh read-result/locator
-  modes are refused before credentials. The hash-pinned first-cell CI verifier,
+  modes were refused before credentials at that handoff; the new entry above
+  adds only the fixed fresh read route. The hash-pinned first-cell CI verifier,
   reader, fixed grader, runtime, registration and model/input pins are unchanged.
 
   Earlier tested HEAD `c291670272f897fba03dcbceaa3779560076b522` collected 2 tests
@@ -154,7 +209,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   `de50ff0aa6037c0ef6e3b713da519359abd1d08d`. The latter's exact hash, size,
   producer/request/claim/output and immutable history must be reverified, and
   the actual shared inference branch must equal it before CAS. Drift cannot
-  reset or adopt a claim. Seven study cells remain unexecuted; the eight-cell
+  reset or adopt a claim. At that handoff, seven study cells remained unexecuted; the eight-cell
   study is post-selected, not representative, and one score establishes no
   retention benefit. Two repetitions, service variation and an uncalibrated
   judge remain registered limitations. Keep/fresh changes the native-thread/
@@ -170,9 +225,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   Reporting retained `experiment-design` constraints, then used
   `experiment-report-en` and protected `im-not-ai-en` only for the bounded
   status update. No live operation, permission/Project change, merge,
-  inference/grade replay or leader M4 update occurred. Immutable new-HEAD owner
-  review/CI, then exact leader source/run/input/budget direction remain gates
-  before one fresh/r1 execution.
+  inference/grade replay or leader M4 update occurred. At that handoff,
+  immutable new-HEAD owner review/CI, then exact leader source/run/input/budget
+  direction remained gates before one fresh/r1 execution. The current reader
+  entry records the later supplied preparation/approval and unobserved outcome.
 
 - Fix the fixed retention-grade reader's config-validation working directory.
   `_entry` now wraps only its unchanged real validator call in the existing
