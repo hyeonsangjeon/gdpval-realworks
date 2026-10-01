@@ -1,4 +1,4 @@
-"""Stage one of the two implemented cells and share the owned-child protocol.
+"""Stage one of the three implemented cells and share the owned-child protocol.
 
 Default use verifies a no-launch packet and describes the selected cell. An
 explicit staging call publishes the real Step2 layout in this dedicated source
@@ -43,6 +43,7 @@ from step1_prepare_tasks import _public_codex_config
 ROOT = preparation.ROOT
 FIRST_CELL_ID = registration.TASK4 + "_retention_bundle_v1_keep_r1"
 FRESH_CELL_ID = registration.TASK4 + "_retention_bundle_v1_fresh_r1"
+FRESH_R2_CELL_ID = registration.TASK4 + "_retention_bundle_v1_fresh_r2"
 CONTROLLER = "batch-runner/codex_retention_first_cell.py"
 SOURCE_PATHS = (CONTROLLER, "batch-runner/codex_budget_pilot.py",
                 "batch-runner/core/config.py", "batch-runner/core/needs_files.py",
@@ -70,11 +71,13 @@ class CellBinding:
     ordinal: int
     bundle: str
     local_name: str
+    repetition: int
 
 
 CELL_BINDINGS = (
-    CellBinding(FIRST_CELL_ID, 0, "keep", "retention-first-cell"),
-    CellBinding(FRESH_CELL_ID, 1, "fresh", "retention-task4-fresh-r1"),
+    CellBinding(FIRST_CELL_ID, 0, "keep", "retention-first-cell", 1),
+    CellBinding(FRESH_CELL_ID, 1, "fresh", "retention-task4-fresh-r1", 1),
+    CellBinding(FRESH_R2_CELL_ID, 2, "fresh", "retention-task4-fresh-r2", 2),
 )
 
 
@@ -133,7 +136,7 @@ def _context(request: Request) -> dict:
     _same("selected_cell_binding_mismatch",
           [plan["order"][binding.ordinal], cell["index"], cell["cell_id"], cell["control"]],
           [binding.cell_id, binding.ordinal, binding.cell_id,
-           {"condition": "retention_bundle_v1", "retention_bundle": binding.bundle, "repetition": 1}])
+           {"condition": "retention_bundle_v1", "retention_bundle": binding.bundle, "repetition": binding.repetition}])
     source = source_identity()
     _same("controller_source_mismatch", source["sha256"], request.expected_controller_sha256)
     packet = preparation.verify_packet(
@@ -327,8 +330,10 @@ def execute_first_cell(request: Request, *, host_state: Path, grant=None,
         raise RetentionControllerRefused(LIVE_GATE)
     import codex_retention_ci
     import codex_retention_task4_fresh_r1
+    import codex_retention_task4_fresh_r2
 
-    adapter = codex_retention_ci if request.cell_id == FIRST_CELL_ID else codex_retention_task4_fresh_r1
+    adapter = {FIRST_CELL_ID: codex_retention_ci, FRESH_CELL_ID: codex_retention_task4_fresh_r1,
+               FRESH_R2_CELL_ID: codex_retention_task4_fresh_r2}[request.cell_id]
     return adapter.execute(request, host_state=host_state, grant=grant,
                            _test_transport=_test_transport, _test_api=_test_api)
 
@@ -368,14 +373,16 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
     else:
         from codex_retention_ci import _Admission
         from codex_retention_task4_fresh_r1 import _FreshAdmission
+        from codex_retention_task4_fresh_r2 import _FreshR2Admission
 
-        if (type(_admission) not in (_Admission, _FreshAdmission)
+        if (type(_admission) not in (_Admission, _FreshAdmission, _FreshR2Admission)
                 or _test_transport is not None or _admission.request != request):
             raise RetentionControllerRefused(LIVE_GATE)
         if type(request) is not Request:
             raise RetentionControllerRefused("explicit_retention_request_required")
         if (type(_admission), request.cell_id) not in (
-                (_Admission, FIRST_CELL_ID), (_FreshAdmission, FRESH_CELL_ID)):
+                (_Admission, FIRST_CELL_ID), (_FreshAdmission, FRESH_CELL_ID),
+                (_FreshR2Admission, FRESH_R2_CELL_ID)):
             raise RetentionControllerRefused(LIVE_GATE)
         transport = _admission.transport
     context = _context(request)

@@ -31,8 +31,8 @@ SUPPLIED_REQUEST_BINDING = {
 FROZEN = {
     "intake_sha256": (intake.__file__, "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196"),
     "ci_sha256": (ci.__file__, "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c"),
-    "producer_facade_sha256": (fresh.__file__, "0cf9fdabd985ba4b5c838c3b661317efd1eb6ee6163463b49585a720b7ae6d76"),
-    "controller_sha256": (intake.controller.__file__, "57f463c7e1e079b2e87248af87885ffb7d927f13ec32a107f0f3da41a9971fab"),
+    "producer_facade_sha256": (fresh.__file__, "a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3"),
+    "controller_sha256": (intake.controller.__file__, "a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58"),
 }
 FORMAT = "retention-task4-fresh-r1-result-intake-v1"
 MARKER = "retention-fresh-r1-result-intake.json"

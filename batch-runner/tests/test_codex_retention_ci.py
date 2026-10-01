@@ -518,7 +518,7 @@ def test_retention_ci_grant_cas_and_owned_runtime_are_bound(tmp_path, monkeypatc
             controller.execute_first_cell(request, host_state=refused_host, grant=replace(grant, reviewed_source_sha="f" * 40),
                                            _test_transport=transport, _test_api=api)
         with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
-            controller.execute_first_cell(replace(request, cell_id=registration.compile_plan()["order"][2]),
+            controller.execute_first_cell(replace(request, cell_id=registration.compile_plan()["order"][3]),
                 host_state=refused_host, grant=grant, _test_transport=transport, _test_api=api)
         with pytest.raises(adapter.RetentionCIRefused, match="^approved_retention_request_changed$"):
             controller.execute_first_cell(request, host_state=refused_host, grant=replace(grant, request_sha256="0" * 64),

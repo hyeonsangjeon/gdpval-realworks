@@ -1,6 +1,6 @@
 # This workflow is not launch authority. The owner must review the new source
 # and approve the exact prepared request in THIS run's grading environment.
-name: Retention diagnostic — first cell and fixed Task4 fresh r1
+name: Retention diagnostic — first cell and fixed Task4 fresh r1/r2
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       cell_id:
-        description: Only registered Task4 keep r1 or its fixed fresh r1 successor
+        description: Only registered Task4 keep r1 and its fixed fresh r1/r2 successors
         default: 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1
         required: true
         type: string
@@ -83,7 +83,8 @@ jobs:
           [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]
-          [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 ]]
+          [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 ]]
+          [[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 ) ]]
           [[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 ]]
           [[ "$OBSERVE_TERMINAL_ONLY" != true || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 ]]
       - &checkout
@@ -103,7 +104,7 @@ jobs:
         name: Validate the current closed plan before any input credential
         if: inputs.read_result == false && inputs.observe_terminal == false
         run: >-
-          python3 batch-runner/codex_retention_task4_fresh_r1.py
+          python3 batch-runner/codex_retention_task4_fresh_r2.py
           --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL"
       - &archive
         name: Materialize the exact historical input observer, never its runtime
@@ -147,7 +148,7 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p batch-runner/workspace
-          python3 batch-runner/codex_retention_task4_fresh_r1.py --prepare \
+          python3 batch-runner/codex_retention_task4_fresh_r2.py --prepare \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL" \
             --historical-root "$RUNNER_TEMP/retention-historical" \
             --original-root "$RUNNER_TEMP/retention-originals" \
@@ -180,11 +181,11 @@ jobs:
           retention_checkout_status="$(git status --porcelain=v1 --untracked-files=all)"
           [[ -z "$retention_checkout_status" ]]
           printf '%s\n' \
-            'bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa  batch-runner/codex_retention_fresh_r1_result_intake.py' \
+            'c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9  batch-runner/codex_retention_fresh_r1_result_intake.py' \
             'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
-            '0cf9fdabd985ba4b5c838c3b661317efd1eb6ee6163463b49585a720b7ae6d76  batch-runner/codex_retention_task4_fresh_r1.py' \
-            '57f463c7e1e079b2e87248af87885ffb7d927f13ec32a107f0f3da41a9971fab  batch-runner/codex_retention_first_cell.py' \
+            'a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3  batch-runner/codex_retention_task4_fresh_r1.py' \
+            'a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58  batch-runner/codex_retention_first_cell.py' \
             | sha256sum --check --status
       - name: Read only the fixed fresh r1 inference result; never execute or grade
         if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1'
@@ -207,7 +208,7 @@ jobs:
               --expected-producer-source e39d8d1aadcb816d09588829a5ec4929b33083e6 \
               --expected-request-sha256 5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02 \
               --cell-id 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 \
-              --expected-reader-sha256 bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa \
+              --expected-reader-sha256 c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9 \
               --output "$retention_result_parent/payload" \
               > "$retention_result_parent/receipt.json" 2> "$retention_result_parent/stderr.log" || retention_read_status=$?
           # Only the reviewed reader's safe receipt is public. Partials stay private.
@@ -270,11 +271,11 @@ jobs:
           retention_checkout_status="$(git status --porcelain=v1 --untracked-files=all)"
           [[ -z "$retention_checkout_status" ]]
           printf '%s\n' \
-            'bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa  batch-runner/codex_retention_fresh_r1_result_intake.py' \
+            'c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9  batch-runner/codex_retention_fresh_r1_result_intake.py' \
             'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
-            '0cf9fdabd985ba4b5c838c3b661317efd1eb6ee6163463b49585a720b7ae6d76  batch-runner/codex_retention_task4_fresh_r1.py' \
-            '57f463c7e1e079b2e87248af87885ffb7d927f13ec32a107f0f3da41a9971fab  batch-runner/codex_retention_first_cell.py' \
+            'a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3  batch-runner/codex_retention_task4_fresh_r1.py' \
+            'a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58  batch-runner/codex_retention_first_cell.py' \
             | sha256sum --check --status
       - name: Observe only failed or stopped fresh r1 terminal controls; never read payloads
         if: inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1'
@@ -297,7 +298,7 @@ jobs:
               --expected-producer-source e39d8d1aadcb816d09588829a5ec4929b33083e6 \
               --expected-request-sha256 5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02 \
               --cell-id 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 \
-              --expected-reader-sha256 bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa \
+              --expected-reader-sha256 c19c970d0a0cd1c206a3f3a9286995f7c75e3237791f0220ccaf951c857bcdd9 \
               --output "$retention_terminal_parent/evidence" \
               > "$retention_terminal_parent/receipt.json" 2> "$retention_terminal_parent/stderr.log" || retention_read_status=$?
           # Only the reviewed reader's safe receipt is public. Partials stay private.
@@ -362,7 +363,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
-          python3 batch-runner/codex_retention_task4_fresh_r1.py --verify-approval
+          python3 batch-runner/codex_retention_task4_fresh_r2.py --verify-approval
           --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL"
           --historical-root "$RUNNER_TEMP/retention-historical"
           --original-root "$RUNNER_TEMP/retention-originals"
@@ -405,9 +406,10 @@ jobs:
           case "$SELECTED_CELL" in
             3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1) retention_host="$RUNNER_TEMP/retention-first-cell-host" ;;
             3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1) retention_host="$RUNNER_TEMP/retention-task4-fresh-r1-host" ;;
+            3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2) retention_host="$RUNNER_TEMP/retention-task4-fresh-r2-host" ;;
             *) exit 2 ;;
           esac
-          python3 batch-runner/codex_retention_task4_fresh_r1.py --execute \
+          python3 batch-runner/codex_retention_task4_fresh_r2.py --execute \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL" \
             --historical-root "$RUNNER_TEMP/retention-historical" \
             --original-root "$RUNNER_TEMP/retention-originals" \
