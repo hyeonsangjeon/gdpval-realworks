@@ -13,56 +13,67 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
-- Add a closed, model-free Task4 fresh/r1 inference-result intake through the
-  existing contents-read preparation job's `read_result` mode. It discovers
-  only the fixed fresh terminal path once, then verifies immutable terminal,
-  claim, manifest and declared payload identities against independent fixed
-  source/run/request/cell/predecessor expectations. Canonical-byte comparisons,
-  existing payload/accounting/privacy validators, bounded transport and fresh
-  private no-clobber publication/readback remain enforced. Missing or unfinished
-  terminals refuse; there is no polling, replay, model call or grade.
+- Add explicit terminal-only observation for the consumed Task4 fresh/r1
+  inference, separate from the unchanged successful-result intake. After one
+  fixed-path discovery, `--observe-terminal` reads only immutable terminal,
+  bound claim and output-manifest bodies; declared payloads receive bounded
+  metadata/history checks only. Failed/stopped status, exact types, canonical
+  accounting, hashes, roles/privacy and fixed source/run/request/cell/predecessor
+  plus execution-job binding remain required. Empty declarations are not proof
+  of deliverable absence. A distinct private no-clobber marker returns
+  `terminal_verified` only after final acknowledgment, never successful intake,
+  payload verification, grading readiness or replay authority. Detailed failure,
+  budget and recovery evidence not recorded in these controls stays null.
 
-  The fresh-only source/hash preflight precedes the existing step-scoped HF
-  secret. Original keep/r1 read command bodies and the frozen CI verifier,
-  first-result reader, producer facade and controller are byte-identical.
-  Both read routes exclude preparation/approval/paid execution and locator
-  mode; fresh locator still refuses. No job, permission, credential, runtime,
-  model, registration, input or grader changed. The required bounded
-  CI/auth/storage/workflow review approved the final diff before validation.
+  The default-false `observe_terminal` input is exclusive with `read_result`,
+  `prepare`, `execute` and `observe_locator`, and accepts only the fixed fresh
+  cell. Its source/hash preflight and step-scoped HF secret remain in the existing
+  contents-read job; preparation, protected approval and execution are excluded.
+  Keep/r1 command bodies and all frozen CI/intake/producer/controller/runtime/
+  model/input/grader/registration bytes are unchanged. No job, permission or
+  credential was added. The required bounded CI/auth/storage/workflow decision
+  preceded edits, and its narrow diff review approved the implementation.
 
-  At tested HEAD `56bb86a7cdca02c7f0f9ef8055d3e44f8df8aaaf`, one guarded,
+  At tested HEAD `386390b8db59df92f8b297d21d0b99a712887da9`, one guarded,
   token-free CI-shaped CPython 3.10.12 / pytest 9.1.1 invocation collected 2
-  tests and both passed in 11.06s, exit 0; the 180-second timeout did not fire:
-  `tests/test_codex_retention_fresh_r1_result_intake.py::test_fresh_r1_result_intake_is_fixed_immutable_and_model_free`
+  tests and both passed in 14.86s, exit 0; the 180-second timeout did not fire:
+  `tests/test_codex_retention_fresh_r1_terminal_observation.py::test_fresh_r1_terminal_observation_is_controls_only_and_non_authorizing`
   and `tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free`.
-  Real validators with synthetic transport reached payload/private readback,
-  identity/history/corruption/type-coercion/role/privacy/bounds refusals,
-  optional/missing ledger and terminal cases, ambiguous local completion,
-  both exact read routes and final no-effects assertions. Log SHA256:
-  `eabc583e6f50aa61211cfc28aefc132c0326892b923eedcbe6989bb0f15c037e`.
-  No unrelated selector, previous proof or live private integration was replayed.
+  Real validators with synthetic transport reached absent/result-only/partial
+  declarations, identity/history/corruption/type-coercion/role/privacy/bounds
+  refusals, missing controls, private/ambiguous acknowledgment, default-success
+  isolation, all 32 mode combinations and final no-effects assertions. Payload
+  downloads were forbidden; no selected assertion remained unreached. Log SHA256:
+  `d9f7c3217cb1f1d843e47f6854e5fd2bd832eb0fd7568b6f5a98b0148318a128`.
 
-  The supplied producer remains `e39d8d1aadcb816d09588829a5ec4929b33083e6`,
-  workflow `370228282`, run `36845127347` / attempt 1, request SHA256
+  Separately, the leader read actual run `36845127347` / attempt 1 / execution
+  job `110323708382`, producer `e39d8d1aadcb816d09588829a5ec4929b33083e6`,
+  workflow `370228282`. All workflow jobs succeeded, but the final CLI receipt at
+  `2026-10-01T13:22:50.8088344Z` recorded `status=failed`,
+  `remote_terminal=acknowledged`, `cleanup_confirmed=true`, `grade=null`,
+  `grading_launched=false`, `invoice_complete=false` and request SHA256
   `5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02`.
-  Preparation job `110313331439` succeeded with `prepared_not_admitted` at
-  `2026-10-01T09:51:41.9510199Z`; exactly one owner approval was confirmed in
-  environment `grading` `18744914306`, deployment `6781320183`, followed by
-  queued approval job `110314366065`. No fresh admission, output or terminal
-  revision has been observed in the supplied evidence. The source review
-  `5377303231` and all 10 checks for prior HEAD
-  `2308b3fe8248d927e7f96f321963caebdc475a62` do not approve this new reader.
+  Execution preparation reproduced that digest and the fixed fresh grader;
+  signed approval verification succeeded. Green workflow status is not model
+  success. The roughly 180-minute step does not establish a timeout, rate limit
+  or another cause. Actual terminal/claim/output revisions, artifact declarations,
+  usage/cost, detailed reason and recovery exposure remain unread. The inference
+  is consumed and cannot be replayed; its grade remains null, not zero.
 
-  This is publication-derived evidence, not independent provider authentication,
-  original-input revalidation, Git-parent/CAS execution-history verification,
-  writer acknowledgment, a fresh score or an invoice. Unknown amounts stay
-  null/partial; recorded model calls are not HTTP counts. The verified keep/r1
-  score/accounting and study limits below remain unchanged. The
-  [current completion record](tasks/LATEST_TASK_RESULT/README.md) carries the
-  exact input/grader/predecessor bindings, historical failure/pass links and
-  remaining gate: new immutable reader-source review/CI, then separate leader
-  direction for one fixed fresh/r1 read. No live run was polled or dispatched,
-  no leader M4 update occurred, and no new execution or grading is authorized.
+  Prior reader HEAD `710860be12f26bcf5b60312974c31aff7499eda4`, review
+  `5378531408` and all 10 checks remain separate from this delta. Its
+  `56bb86a7cdca02c7f0f9ef8055d3e44f8df8aaaf` proof (2 passed in 11.06s,
+  exit 0, no timeout), prior preparation/approval and source-review evidence
+  remain in the [immutable reader record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/710860be12f26bcf5b60312974c31aff7499eda4/tasks/LATEST_TASK_RESULT/README.md).
+  This observation is publication-derived, not independent provider authentication,
+  original-input revalidation, CAS ancestry verification or writer acknowledgment.
+  Known partial cost is not an invoice, unknown amounts stay null and recorded
+  calls are not HTTP counts. Keep/r1 scores, exclusions, null costs and study
+  limits below are unchanged; one pair does not establish retention benefit.
+  The [current completion record](tasks/LATEST_TASK_RESULT/README.md) carries
+  exact bindings and the remaining new-HEAD owner-review/CI gate, followed only
+  by separate leader direction for a fixed terminal-only observation. No live
+  read/run, polling, dispatch, replay, grading or leader M4 update occurred.
 
 ### Fixed
 
