@@ -22,8 +22,10 @@ CONTROLS = {fresh.TERMINAL, fresh.CLAIM, fresh.OUTPUT + "/" + output.MANIFEST}
 class TerminalHF(FreshResultHF):
     """Real producer serializers with synthetic unsuccessful control records."""
 
-    def __init__(self, plan, *, status="failed", declared="partial", receipt=None, exit_code=137):
-        super().__init__(plan, receipt=receipt, with_ledger=declared == "partial")
+    def __init__(self, plan, *, status="failed", declared="partial", receipt=None, exit_code=137,
+                 binding=reader.FRESH_R1, terminal_head=TERMINAL_HEAD):
+        super().__init__(plan, receipt=receipt, with_ledger=declared == "partial", binding=binding,
+                         terminal_head=terminal_head)
         self.payload["results"][0]["status"] = "error"
         self.bind_payload()
         if declared == "none":
@@ -31,7 +33,7 @@ class TerminalHF(FreshResultHF):
         elif declared == "result":
             self.files = {intake.RESULT: self.files[intake.RESULT]}
         for authority in (self.claim["authority"], self.terminal["authority"]):
-            authority["provider_job_id"] = reader.EXPECTED_EXECUTION_JOB_ID
+            authority["provider_job_id"] = binding.execution_job_id
         self.summary.update(status=status, exit_code=exit_code)
         self.summary["missing"] = ([] if intake.RESULT in self.files else ["bound_inference_result", "validated_deliverables"])
         self.summary["missing"] += ([] if intake.LEDGER in self.files else ["bound_ledger_export"])
@@ -44,7 +46,8 @@ class TerminalHF(FreshResultHF):
         return [item for item in found if (kwargs["revision"], item.path) != self.omit_metadata]
 
     def hf_hub_download(self, **kwargs):
-        assert kwargs["filename"] in CONTROLS, "terminal observation attempted a payload body download"
+        assert kwargs["filename"] in {self.producer.TERMINAL, self.producer.CLAIM,
+            self.producer.OUTPUT + "/" + output.MANIFEST}, "terminal observation attempted a payload body download"
         return super().hf_hub_download(**kwargs)
 
 

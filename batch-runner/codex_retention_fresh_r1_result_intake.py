@@ -1,4 +1,4 @@
-"""Read only the fixed Task4 fresh/r1 inference publication; never execute it.
+"""Read only the fixed Task4 fresh/r1 or fresh/r2 publication; never execute it.
 
 One terminal-path discovery is allowed, then only immutable declared reads.
 The fixed producer/request expectations are independent of fetched records.
@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import codex_retention_result_intake as intake
@@ -42,46 +43,113 @@ EXPECTED_EXECUTION_JOB_ID = 110323708382
 require = output._require
 
 
-def reader_identity() -> dict:
+@dataclass(frozen=True)
+class ReadBinding:
+    expectation: ci.TerminalExpectation
+    ordinal: int
+    repetition: int
+    run_id: str
+    execution_job_id: int
+    original_input_bundle_sha256: str
+    materialized_grader_source_sha256: str
+    result_format: str
+    result_marker: str
+    terminal_format: str
+    terminal_marker: str
+
+
+FRESH_R1 = ReadBinding(EXPECTATION, 1, 1, RUN_ID, EXPECTED_EXECUTION_JOB_ID,
+    SUPPLIED_REQUEST_BINDING["original_input_bundle_sha256"],
+    SUPPLIED_REQUEST_BINDING["materialized_grader_source_sha256"],
+    FORMAT, MARKER, TERMINAL_FORMAT, TERMINAL_MARKER)
+FRESH_R2 = ReadBinding(ci.TerminalExpectation(
+    "4798c119ea2d06c7c902ae51638bdba25c5bfaf683a2223d286fd7e652d3b317",
+    "5a9614ac04464c4e0a5e80297f54c3a5c9443bae", intake.controller.FRESH_R2_CELL_ID),
+    2, 2, "36907894862", 110535767415,
+    "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+    "4860a408791b7b313e2c06c2863b4a1ddbae467c8425365af8908be7a3c032d6",
+    "retention-task4-fresh-r2-result-intake-v1", "retention-fresh-r2-result-intake.json",
+    "retention-task4-fresh-r2-terminal-observation-v1", "retention-fresh-r2-terminal-observation.json")
+R2_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task4_fresh_r2.py"),
+                   "8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f")
+
+
+def _fixed_binding(binding):
+    require(type(binding) is ReadBinding and (binding is FRESH_R1 or binding is FRESH_R2),
+            "fixed_fresh_read_binding_required")
+    return binding
+
+
+def _frozen(binding):
+    _fixed_binding(binding)
+    return FROZEN if binding is FRESH_R1 else {**FROZEN, "producer_r2_sha256": R2_PRODUCER_PIN}
+
+
+def _producer(binding):
+    _fixed_binding(binding)
+    if binding is FRESH_R1:
+        return fresh
+    path, digest = R2_PRODUCER_PIN
+    require(hashlib.sha256(output._bytes(path, limit=output.MAX_RECORD_BYTES)).hexdigest() == digest,
+            "fresh_result_reader_bytes_mismatch")
+    # The frozen r2 producer imports this reader for its default r1 predecessor.
+    # Resolve it only after the independent fixed-file hash check, never at import.
+    import codex_retention_task4_fresh_r2 as producer
+
+    require(Path(producer.__file__).resolve() == path.resolve(), "fresh_result_reader_bytes_mismatch")
+    return producer
+
+
+def _request_context(binding):
+    return {"original_input_bundle_sha256": binding.original_input_bundle_sha256,
+            "materialized_grader_source_sha256": binding.materialized_grader_source_sha256}
+
+
+def reader_identity(*, binding=FRESH_R1) -> dict:
     return {name: hashlib.sha256(output._bytes(Path(path), limit=output.MAX_RECORD_BYTES)).hexdigest()
-            for name, path in {"module_sha256": __file__, **{key: pair[0] for key, pair in FROZEN.items()}}.items()}
+            for name, path in {"module_sha256": __file__, **{key: pair[0] for key, pair in _frozen(binding).items()}}.items()}
 
 
-def _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal):
+def _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal, *, binding=FRESH_R1):
+    _fixed_binding(binding)
     require(type(expectation) is ci.TerminalExpectation, "fresh_result_expectation_required")
-    require(output._hash(expectation.source_sha, 40) and expectation.source_sha == PRODUCER_SOURCE,
+    require(output._hash(expectation.source_sha, 40) and expectation.source_sha == binding.expectation.source_sha,
             "fresh_result_expected_producer_mismatch")
-    require(output._hash(expectation.request_sha256) and expectation.request_sha256 == REQUEST_SHA256,
+    require(output._hash(expectation.request_sha256) and expectation.request_sha256 == binding.expectation.request_sha256,
             "fresh_result_expected_request_mismatch")
-    require(type(expectation.cell_id) is str and expectation.cell_id == fresh.CELL_ID, "fresh_result_expected_cell_mismatch")
+    require(type(expectation.cell_id) is str and expectation.cell_id == binding.expectation.cell_id,
+            "fresh_result_expected_cell_mismatch")
     require(type(discover_terminal) is bool and (
         (discover_terminal and terminal_revision is None)
         or (not discover_terminal and output._hash(terminal_revision, 40))),
         "one_terminal_revision_or_discovery_required")
-    source = reader_identity()
+    source = reader_identity(binding=binding)
     require(output._hash(expected_reader_sha256) and source["module_sha256"] == expected_reader_sha256
-            and all(source[name] == pair[1] for name, pair in FROZEN.items()), "fresh_result_reader_bytes_mismatch")
+            and all(source[name] == pair[1] for name, pair in _frozen(binding).items()), "fresh_result_reader_bytes_mismatch")
+    _producer(binding)
     plan = intake.registration.compile_plan()
-    cell = intake.controller._adapted_cell(plan["cells"][1])
+    cell = intake.controller._adapted_cell(plan["cells"][binding.ordinal])
     require(plan["campaign_id"] == intake.registration.CAMPAIGN
-            and cell["cell_id"] == fresh.CELL_ID and cell["index"] == 1
-            and cell["control"] == {"condition": "retention_bundle_v1", "retention_bundle": "fresh", "repetition": 1},
+            and cell["cell_id"] == binding.expectation.cell_id and cell["index"] == binding.ordinal
+            and cell["control"] == {"condition": "retention_bundle_v1", "retention_bundle": "fresh",
+                                    "repetition": binding.repetition},
             "fresh_result_registered_cell_mismatch")
     return source, plan, cell
 
 
-def _terminal_revision(api, repo, revision, discover, token, deadline):
+def _terminal_revision(api, repo, revision, discover, token, deadline, *, binding=FRESH_R1):
     from huggingface_hub import RepoFile
 
+    producer = _producer(binding)
     if not discover:
         return revision
     output._remaining(deadline)
     found = api.get_paths_info(repo_id=repo, repo_type="dataset", revision=retained.BRANCH,
-                              paths=[fresh.TERMINAL], expand=True, token=token)
+                              paths=[producer.TERMINAL], expand=True, token=token)
     require(type(found) is list and len(found) == 1 and isinstance(found[0], RepoFile),
             "fresh_result_terminal_not_ready")
     item = found[0]
-    require(item.path == fresh.TERMINAL and item.lfs is None and output._hash(item.blob_id, 40)
+    require(item.path == producer.TERMINAL and item.lfs is None and output._hash(item.blob_id, 40)
             and type(item.size) is int and 0 < item.size <= output.MAX_MANIFEST_BYTES,
             "fresh_result_terminal_metadata_refused")
     revision = getattr(item.last_commit, "oid", None)
@@ -90,11 +158,12 @@ def _terminal_revision(api, repo, revision, discover, token, deadline):
     return revision
 
 
-def _authority(authority):
+def _authority(authority, *, binding=FRESH_R1):
+    _fixed_binding(binding)
     require(type(authority) is dict and set(authority) == {
         "request_sha256", "provider_run_id", "provider_job_id", "runner_id", "host_instance_sha256",
         "job_origin", "review_sha256", "reviewer", "environment"}, "fresh_result_authority_schema_refused")
-    require(authority["request_sha256"] == REQUEST_SHA256 and authority["provider_run_id"] == RUN_ID
+    require(authority["request_sha256"] == binding.expectation.request_sha256 and authority["provider_run_id"] == binding.run_id
             and type(authority["provider_job_id"]) is int and authority["provider_job_id"] > 0
             and type(authority["runner_id"]) is int and authority["runner_id"] > 0
             and authority["reviewer"] == ci.OWNER and authority["environment"] == ci.ENVIRONMENT
@@ -106,12 +175,13 @@ def _authority(authority):
             and origin["host_instance_sha256"] == authority["host_instance_sha256"], "fresh_result_origin_mismatch")
 
 
-def _summary_identity(summary):
+def _summary_identity(summary, *, binding=FRESH_R1):
+    producer = _producer(binding)
     require(type(summary) is dict and set(summary) == {"format", "request_sha256", "source_sha", "cell_id",
         "status", "exit_code", "cleanup_confirmed", "accounting", "receipt", "grade", "grading_launched",
         "invoice_complete", "missing", "files"}
-        and summary["format"] == fresh.OUTPUT_FORMAT and summary["request_sha256"] == REQUEST_SHA256
-        and summary["source_sha"] == PRODUCER_SOURCE and summary["cell_id"] == fresh.CELL_ID
+        and summary["format"] == producer.OUTPUT_FORMAT and summary["request_sha256"] == binding.expectation.request_sha256
+        and summary["source_sha"] == binding.expectation.source_sha and summary["cell_id"] == binding.expectation.cell_id
         and summary["cleanup_confirmed"] is True and summary["grade"] is None
         and summary["grading_launched"] is False and summary["invoice_complete"] is False,
         "fresh_result_completion_mismatch")
@@ -134,8 +204,8 @@ def _summary_files(summary):
     return receipt, names
 
 
-def _summary(summary):
-    _summary_identity(summary)
+def _summary(summary, *, binding=FRESH_R1):
+    _summary_identity(summary, binding=binding)
     require(summary["status"] == "succeeded" and (summary["exit_code"] is None
             or (type(summary["exit_code"]) is int and summary["exit_code"] == 0)), "fresh_result_success_required")
     receipt, names = _summary_files(summary)
@@ -146,9 +216,9 @@ def _summary(summary):
     return roles, deliverables
 
 
-def _terminal_summary(summary):
+def _terminal_summary(summary, *, binding=FRESH_R1):
     """Validate unsuccessful declarations, never the contents of their payloads."""
-    _summary_identity(summary)
+    _summary_identity(summary, binding=binding)
     require(summary["status"] in {"failed", "stopped"} and (summary["exit_code"] is None
             or type(summary["exit_code"]) is int), "fresh_terminal_unsuccessful_required")
     receipt, names = _summary_files(summary)
@@ -174,43 +244,45 @@ def _terminal_summary(summary):
     return roles, deliverables
 
 
-def _verify_terminal(api, repo, head, cache, token, deadline, *, terminal_only=False):
+def _verify_terminal(api, repo, head, cache, token, deadline, *, terminal_only=False, binding=FRESH_R1):
     """Independent fixed-record checks, not the writer's expected-byte verifier."""
     require(type(terminal_only) is bool, "explicit_terminal_observation_required")
-    terminal, terminal_bytes = retained._control(api, repo, head, fresh.TERMINAL, cache, token, deadline,
+    producer = _producer(binding)
+    terminal, terminal_bytes = retained._control(api, repo, head, producer.TERMINAL, cache, token, deadline,
                                                  written_at=head)
     require(set(terminal) == {"format", "request_sha256", "authority", "scope", "claim_commit", "claim_identity",
         "output_commit", "output_objects", "completion", "publication_acknowledged"}
-        and terminal["format"] == fresh.TERMINAL_FORMAT and terminal["request_sha256"] == REQUEST_SHA256
+        and terminal["format"] == producer.TERMINAL_FORMAT and terminal["request_sha256"] == binding.expectation.request_sha256
         and terminal["scope"] == "existing_inference_branch_one_use_remote_cas"
         and terminal["publication_acknowledged"] is True, "fresh_result_terminal_binding_mismatch")
-    _authority(terminal["authority"])
+    _authority(terminal["authority"], binding=binding)
+    if terminal_only or binding is FRESH_R2:
+        require(terminal["authority"]["provider_job_id"] == binding.execution_job_id,
+                "fresh_terminal_execution_job_mismatch" if terminal_only else "fresh_result_execution_job_mismatch")
     if terminal_only:
-        require(terminal["authority"]["provider_job_id"] == EXPECTED_EXECUTION_JOB_ID,
-                "fresh_terminal_execution_job_mismatch")
-        roles, deliverables = _terminal_summary(terminal["completion"])
+        roles, deliverables = _terminal_summary(terminal["completion"], binding=binding)
     else:
-        roles, deliverables = _summary(terminal["completion"])
+        roles, deliverables = _summary(terminal["completion"], binding=binding)
     claim_head, output_head = terminal["claim_commit"], terminal["output_commit"]
     require(all(output._hash(value, 40) for value in (claim_head, output_head))
-            and len({head, claim_head, output_head, fresh.PREDECESSOR["terminal_commit"]}) == 4,
+            and len({head, claim_head, output_head, producer.PREDECESSOR["terminal_commit"]}) == 4,
             "fresh_result_publication_revisions_mismatch")
-    claim, claim_bytes = retained._control(api, repo, claim_head, fresh.CLAIM, cache, token, deadline,
+    claim, claim_bytes = retained._control(api, repo, claim_head, producer.CLAIM, cache, token, deadline,
         expected=terminal["claim_identity"], written_at=claim_head)
     require(set(claim) == {"format", "request_sha256", "authority", "scope", "expected_parent", "predecessor",
-                          "model_result", "grade"} and claim["format"] == fresh.CLAIM_FORMAT
+                          "model_result", "grade"} and claim["format"] == producer.CLAIM_FORMAT
             and claim["model_result"] is False and claim["grade"] is None, "fresh_result_claim_schema_refused")
     require(all(owned._canonical_json(claim[key]) == owned._canonical_json(terminal[key])
                 for key in ("request_sha256", "authority", "scope")),
             "fresh_result_terminal_claim_mismatch")
-    require(owned._canonical_json(claim["predecessor"]) == owned._canonical_json(fresh.PREDECESSOR)
-            and claim["expected_parent"] == fresh.PREDECESSOR["terminal_commit"], "fresh_result_predecessor_mismatch")
-    summary, summary_bytes = retained._control(api, repo, output_head, fresh.OUTPUT + "/" + output.MANIFEST,
+    require(owned._canonical_json(claim["predecessor"]) == owned._canonical_json(producer.PREDECESSOR)
+            and claim["expected_parent"] == producer.PREDECESSOR["terminal_commit"], "fresh_result_predecessor_mismatch")
+    summary, summary_bytes = retained._control(api, repo, output_head, producer.OUTPUT + "/" + output.MANIFEST,
                                                cache, token, deadline, written_at=output_head)
     require(summary_bytes == retained._encoded(terminal["completion"]), "fresh_result_summary_readback_mismatch")
-    expected = {fresh.OUTPUT + "/" + name: {key: item[key] for key in ("size", "sha256")}
+    expected = {producer.OUTPUT + "/" + name: {key: item[key] for key in ("size", "sha256")}
                 for name, item in roles.items()}
-    expected[fresh.OUTPUT + "/" + output.MANIFEST] = owned._identity(summary_bytes)
+    expected[producer.OUTPUT + "/" + output.MANIFEST] = owned._identity(summary_bytes)
     objects = terminal["output_objects"]
     require(type(objects) is list and len(objects) == len(expected), "fresh_result_output_objects_mismatch")
     for item in objects:
@@ -223,14 +295,16 @@ def _verify_terminal(api, repo, head, cache, token, deadline, *, terminal_only=F
             "fresh_result_output_objects_mismatch")
     for revision in (output_head, head):
         retained._objects(api, repo, revision, objects, token, deadline, written_at=output_head)
-    retained._objects(api, repo, head, [retained._object(fresh.CLAIM, claim_bytes)], token, deadline,
+    retained._objects(api, repo, head, [retained._object(producer.CLAIM, claim_bytes)], token, deadline,
                       written_at=claim_head)
     return terminal, terminal_bytes, roles, deliverables
 
 
 def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expected_reader_sha256: str,
-                terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None) -> dict:
-    source, plan, cell = _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal)
+                terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None,
+                binding=FRESH_R1) -> dict:
+    source, plan, cell = _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal, binding=binding)
+    producer = _producer(binding)
     require(isinstance(destination, Path) and destination.is_absolute(), "explicit_absolute_destination_required")
     destination, _ = _destination(destination)
     require(not os.path.lexists(destination), "new_result_destination_required")
@@ -242,15 +316,15 @@ def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expec
             mkdir(cache / name)
         with retained._session(_test_api, response_bytes_limit=output.MAX_FILE_BYTES) as (api, token, deadline):
             repo = retained._target()
-            head = _terminal_revision(api, repo, terminal_revision, discover_terminal, token, deadline)
+            head = _terminal_revision(api, repo, terminal_revision, discover_terminal, token, deadline, binding=binding)
             check()
             terminal, terminal_bytes, roles, deliverables = _verify_terminal(
-                api, repo, head, cache / "controls", token, deadline)
+                api, repo, head, cache / "controls", token, deadline, binding=binding)
             check()
             summary, files = terminal["completion"], {}
             for name, identity in roles.items():
                 check()
-                files[name] = intake.retained_reader._fetch(api, repo, head, fresh.OUTPUT + "/" + name, identity,
+                files[name] = intake.retained_reader._fetch(api, repo, head, producer.OUTPUT + "/" + name, identity,
                                                             cache / "payloads", token, deadline)
                 check()
             value, result = intake._payload(files, summary, plan, cell, roles, deliverables)
@@ -273,19 +347,20 @@ def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expec
             output._bytes(_path(destination, name), limit=output.MAX_FILE_BYTES, expected=owned._identity(data))
         require(bind_deliverable_file_records(value["results"], destination)[0]["deliverable_file_records"]
                 == value["results"][0].get("deliverable_file_records", []), "fresh_result_readback_mismatch")
-        require(reader_identity() == source, "fresh_result_reader_changed")
+        require(reader_identity(binding=binding) == source, "fresh_result_reader_changed")
         record = {
-            "format": FORMAT, "evidence_only": True, "consumer_readback_required": True,
-            "campaign": intake.registration.CAMPAIGN, "ordinal": 1, "cell_id": fresh.CELL_ID,
-            "producer_source_sha": PRODUCER_SOURCE, "request_sha256": REQUEST_SHA256, "reader": source,
-            "expected_provider": EXPECTED_PROVIDER, "supplied_request_binding": SUPPLIED_REQUEST_BINDING,
+            "format": binding.result_format, "evidence_only": True, "consumer_readback_required": True,
+            "campaign": intake.registration.CAMPAIGN, "ordinal": binding.ordinal, "cell_id": binding.expectation.cell_id,
+            "producer_source_sha": binding.expectation.source_sha, "request_sha256": binding.expectation.request_sha256,
+            "reader": source, "expected_provider": {**EXPECTED_PROVIDER, "run_id": binding.run_id},
+            "supplied_request_binding": _request_context(binding),
             "recorded_provider_run_id": terminal["authority"]["provider_run_id"],
             "recorded_provider_job_id": terminal["authority"]["provider_job_id"],
             "terminal_commit": head, "terminal_identity": owned._identity(terminal_bytes),
             "claim_commit": terminal["claim_commit"], "claim_identity": terminal["claim_identity"],
             "output_commit": terminal["output_commit"], "output_manifest_identity": owned._identity(files[output.MANIFEST]),
             "output_objects_sha256": owned._digest(terminal["output_objects"]),
-            "retained_authority_sha256": owned._digest(terminal["authority"]), "predecessor": fresh.PREDECESSOR,
+            "retained_authority_sha256": owned._digest(terminal["authority"]), "predecessor": producer.PREDECESSOR,
             "proof": "verified_publication_derived_not_independent_provider_authentication",
             "fresh_origin_authentication": False, "prepared_input_independently_verified": False,
             "git_parent_cas_independently_verified": False, "writer_acknowledgment": "not_established",
@@ -295,14 +370,16 @@ def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expec
             "http_request_count": None, "grade": None, "grading_launched": False, "invoice_complete": False,
             "launch_authorized": False, "admission_attempted": False, "replay_authorized": False, "commands": [],
         }
+        if binding is FRESH_R2:
+            record["expected_execution_job_id"] = binding.execution_job_id
         encoded = retained._encoded(record)
         check()
         for directory in directories | {destination.parent}:
             os.fsync(directory_fd(directory))
         try:
-            _write_no_clobber(destination / MARKER, encoded, parent_fd=directory_fd(destination))
+            _write_no_clobber(destination / binding.result_marker, encoded, parent_fd=directory_fd(destination))
             os.fsync(directory_fd(destination))
-            output._bytes(destination / MARKER, limit=output.MAX_MANIFEST_BYTES, expected=owned._identity(encoded))
+            output._bytes(destination / binding.result_marker, limit=output.MAX_MANIFEST_BYTES, expected=owned._identity(encoded))
             check()
         except (OSError, ValueError, KeyboardInterrupt) as error:
             raise output.OutputPublicationRefused("fresh_result_completion_acknowledgment_unconfirmed") from error
@@ -310,9 +387,11 @@ def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expec
 
 
 def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, expected_reader_sha256: str,
-                     terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None) -> dict:
+                     terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None,
+                     binding=FRESH_R1) -> dict:
     """Read three control bodies and declared-object metadata; no payload intake."""
-    source, _, _ = _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal)
+    source, _, _ = _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal, binding=binding)
+    producer = _producer(binding)
     require(isinstance(destination, Path) and destination.is_absolute(), "explicit_absolute_destination_required")
     destination, _ = _destination(destination)
     require(not os.path.lexists(destination), "new_result_destination_required")
@@ -323,20 +402,20 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
         mkdir(cache / "controls")
         with retained._session(_test_api, response_bytes_limit=output.MAX_MANIFEST_BYTES) as (api, token, deadline):
             repo = retained._target()
-            head = _terminal_revision(api, repo, terminal_revision, discover_terminal, token, deadline)
+            head = _terminal_revision(api, repo, terminal_revision, discover_terminal, token, deadline, binding=binding)
             check()
             terminal, terminal_bytes, roles, deliverables = _verify_terminal(
-                api, repo, head, cache / "controls", token, deadline, terminal_only=True)
+                api, repo, head, cache / "controls", token, deadline, terminal_only=True, binding=binding)
             check()
             output._remaining(deadline)
-        require(reader_identity() == source, "fresh_result_reader_changed")
+        require(reader_identity(binding=binding) == source, "fresh_result_reader_changed")
         summary = terminal["completion"]
         record = {
-            "format": TERMINAL_FORMAT, "evidence_only": True, "observation_only": True,
-            "campaign": intake.registration.CAMPAIGN, "ordinal": 1, "cell_id": fresh.CELL_ID,
-            "producer_source_sha": PRODUCER_SOURCE, "request_sha256": REQUEST_SHA256, "reader": source,
-            "expected_provider": EXPECTED_PROVIDER, "expected_execution_job_id": EXPECTED_EXECUTION_JOB_ID,
-            "supplied_request_binding": SUPPLIED_REQUEST_BINDING,
+            "format": binding.terminal_format, "evidence_only": True, "observation_only": True,
+            "campaign": intake.registration.CAMPAIGN, "ordinal": binding.ordinal, "cell_id": binding.expectation.cell_id,
+            "producer_source_sha": binding.expectation.source_sha, "request_sha256": binding.expectation.request_sha256,
+            "reader": source, "expected_provider": {**EXPECTED_PROVIDER, "run_id": binding.run_id},
+            "expected_execution_job_id": binding.execution_job_id, "supplied_request_binding": _request_context(binding),
             "recorded_provider_run_id": terminal["authority"]["provider_run_id"],
             "recorded_provider_job_id": terminal["authority"]["provider_job_id"],
             "terminal_commit": head, "terminal_identity": owned._identity(terminal_bytes),
@@ -344,7 +423,7 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
             "output_commit": terminal["output_commit"],
             "output_manifest_identity": owned._identity(retained._encoded(summary)),
             "output_objects_sha256": owned._digest(terminal["output_objects"]),
-            "retained_authority_sha256": owned._digest(terminal["authority"]), "predecessor": fresh.PREDECESSOR,
+            "retained_authority_sha256": owned._digest(terminal["authority"]), "predecessor": producer.PREDECESSOR,
             "proof": "verified_publication_derived_not_independent_provider_authentication",
             "fresh_origin_authentication": False, "prepared_input_independently_verified": False,
             "git_parent_cas_independently_verified": False, "writer_acknowledgment": "not_established",
@@ -365,9 +444,9 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
         for directory in (destination.parent, destination, cache, cache / "controls"):
             os.fsync(directory_fd(directory))
         try:
-            _write_no_clobber(destination / TERMINAL_MARKER, encoded, parent_fd=directory_fd(destination))
+            _write_no_clobber(destination / binding.terminal_marker, encoded, parent_fd=directory_fd(destination))
             os.fsync(directory_fd(destination))
-            output._bytes(destination / TERMINAL_MARKER, limit=output.MAX_MANIFEST_BYTES, expected=owned._identity(encoded))
+            output._bytes(destination / binding.terminal_marker, limit=output.MAX_MANIFEST_BYTES, expected=owned._identity(encoded))
             check()
         except (OSError, ValueError, KeyboardInterrupt) as error:
             raise output.OutputPublicationRefused("fresh_terminal_observation_unconfirmed") from error
@@ -392,6 +471,7 @@ def main(argv=None, *, _test_api=None) -> int:
         selection.add_argument("--discover-terminal", action="store_true")
         args = parser.parse_args(argv)
         observing = args.observe_terminal
+        binding = FRESH_R2 if args.cell_id == FRESH_R2.expectation.cell_id else FRESH_R1
         if not (args.read or observing):
             require(not any((args.output, args.expected_producer_source, args.expected_request_sha256,
                 args.cell_id, args.expected_reader_sha256, args.terminal_revision, args.discover_terminal)),
@@ -403,13 +483,13 @@ def main(argv=None, *, _test_api=None) -> int:
             result = observe_terminal(expectation=ci.TerminalExpectation(args.expected_request_sha256,
                 args.expected_producer_source, args.cell_id), destination=args.output,
                 expected_reader_sha256=args.expected_reader_sha256, terminal_revision=args.terminal_revision,
-                discover_terminal=args.discover_terminal, _test_api=_test_api)
+                discover_terminal=args.discover_terminal, _test_api=_test_api, binding=binding)
             result["mode"] = "observe_terminal"
         else:
             record = read_result(expectation=ci.TerminalExpectation(args.expected_request_sha256,
                 args.expected_producer_source, args.cell_id), destination=args.output,
                 expected_reader_sha256=args.expected_reader_sha256, terminal_revision=args.terminal_revision,
-                discover_terminal=args.discover_terminal, _test_api=_test_api)
+                discover_terminal=args.discover_terminal, _test_api=_test_api, binding=binding)
             result = {key: value for key, value in record.items() if key not in {"files", "result"}}
             result["result"] = {key: value for key, value in record["result"].items()
                                 if key != "recorded_publication_generation"}

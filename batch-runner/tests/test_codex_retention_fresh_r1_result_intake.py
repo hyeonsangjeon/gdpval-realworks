@@ -21,13 +21,17 @@ intake = reader.intake
 class FreshResultHF(MemoryHF):
     """Reuse the valid synthetic result builder; never change production roots."""
 
-    def __init__(self, plan, *, receipt=None, with_ledger=False):
+    def __init__(self, plan, *, receipt=None, with_ledger=False, binding=reader.FRESH_R1,
+                 terminal_head=TERMINAL_HEAD):
         super().__init__()
-        original = ResultHF(plan, receipt=receipt, with_ledger=with_ledger, request_sha256=reader.REQUEST_SHA256)
+        self.producer = producer = reader._producer(binding)
+        self.terminal_head = terminal_head
+        original = ResultHF(plan, receipt=receipt, with_ledger=with_ledger,
+                            request_sha256=binding.expectation.request_sha256)
         self.files, self.payload = deepcopy(original.files), deepcopy(original.payload)
         self.claim, self.summary, self.terminal = (deepcopy(value) for value in
                                                    (original.claim, original.summary, original.terminal))
-        cell = intake.controller._adapted_cell(plan["cells"][1])
+        cell = intake.controller._adapted_cell(plan["cells"][binding.ordinal])
         for key in ("run_id", "experiment_id", "publication_generation"):
             self.payload[key] = cell["run_id"]
         if with_ledger:
@@ -38,11 +42,14 @@ class FreshResultHF(MemoryHF):
             self.files[intake.LEDGER] = (json.dumps(row) + "\n").encode()
             self.payload["cost_ledger"]["sha256"] = owned._identity(self.files[intake.LEDGER])["sha256"]
         self.bind_payload()
-        self.claim.update(format=fresh.CLAIM_FORMAT, expected_parent=fresh.PREDECESSOR["terminal_commit"],
-                          predecessor=deepcopy(fresh.PREDECESSOR))
-        self.claim["authority"].update(provider_run_id=reader.RUN_ID, provider_job_id=123456)  # Synthetic execution job.
-        self.summary.update(format=fresh.OUTPUT_FORMAT, source_sha=reader.PRODUCER_SOURCE, cell_id=fresh.CELL_ID)
-        self.terminal.update(format=fresh.TERMINAL_FORMAT, authority=deepcopy(self.claim["authority"]),
+        self.claim.update(format=producer.CLAIM_FORMAT, expected_parent=producer.PREDECESSOR["terminal_commit"],
+                          predecessor=deepcopy(producer.PREDECESSOR))
+        # Preserve the old r1 success fixture's deliberately different positive job.
+        self.claim["authority"].update(provider_run_id=binding.run_id,
+            provider_job_id=123456 if binding is reader.FRESH_R1 else binding.execution_job_id)
+        self.summary.update(format=producer.OUTPUT_FORMAT, source_sha=binding.expectation.source_sha,
+                            cell_id=binding.expectation.cell_id)
+        self.terminal.update(format=producer.TERMINAL_FORMAT, authority=deepcopy(self.claim["authority"]),
                              completion=self.summary)
         self.downloads, self.path_reads = [], []
         self.corrupt, self.escape, self.read_error = None, None, None
@@ -51,39 +58,40 @@ class FreshResultHF(MemoryHF):
     bind_payload = ResultHF.bind_payload
 
     def seed(self):
+        producer = self.producer
         self.summary["files"] = [{"path": name, **owned._identity(data)} for name, data in sorted(self.files.items())]
         claim_bytes = retained._encoded(self.claim)
         self.terminal["claim_identity"] = owned._identity(claim_bytes)
-        outputs = {fresh.OUTPUT + "/" + name: data for name, data in self.files.items()}
-        outputs[fresh.OUTPUT + "/" + output.MANIFEST] = retained._encoded(self.summary)
+        outputs = {producer.OUTPUT + "/" + name: data for name, data in self.files.items()}
+        outputs[producer.OUTPUT + "/" + output.MANIFEST] = retained._encoded(self.summary)
         self.terminal["output_objects"] = [retained._object(name, data) for name, data in sorted(outputs.items())]
-        self.trees[CLAIM_HEAD] = {fresh.CLAIM: claim_bytes}
+        self.trees[CLAIM_HEAD] = {producer.CLAIM: claim_bytes}
         self.trees[OUTPUT_HEAD] = {**self.trees[CLAIM_HEAD], **outputs}
-        self.trees[TERMINAL_HEAD] = {**self.trees[OUTPUT_HEAD], fresh.TERMINAL: retained._encoded(self.terminal)}
-        self.trees[LATER_HEAD] = {**self.trees[TERMINAL_HEAD], "unrelated/never-read": b"NO SWEEP"}
-        self.writers[CLAIM_HEAD] = {fresh.CLAIM: CLAIM_HEAD}
+        self.trees[self.terminal_head] = {**self.trees[OUTPUT_HEAD], producer.TERMINAL: retained._encoded(self.terminal)}
+        self.trees[LATER_HEAD] = {**self.trees[self.terminal_head], "unrelated/never-read": b"NO SWEEP"}
+        self.writers[CLAIM_HEAD] = {producer.CLAIM: CLAIM_HEAD}
         self.writers[OUTPUT_HEAD] = {**self.writers[CLAIM_HEAD], **{name: OUTPUT_HEAD for name in outputs}}
-        self.writers[TERMINAL_HEAD] = {**self.writers[OUTPUT_HEAD], fresh.TERMINAL: TERMINAL_HEAD}
-        self.writers[LATER_HEAD] = {**self.writers[TERMINAL_HEAD], "unrelated/never-read": LATER_HEAD}
-        self.parents.update({CLAIM_HEAD: fresh.PREDECESSOR["terminal_commit"], OUTPUT_HEAD: CLAIM_HEAD,
-                             TERMINAL_HEAD: OUTPUT_HEAD, LATER_HEAD: TERMINAL_HEAD})
+        self.writers[self.terminal_head] = {**self.writers[OUTPUT_HEAD], producer.TERMINAL: self.terminal_head}
+        self.writers[LATER_HEAD] = {**self.writers[self.terminal_head], "unrelated/never-read": LATER_HEAD}
+        self.parents.update({CLAIM_HEAD: producer.PREDECESSOR["terminal_commit"], OUTPUT_HEAD: CLAIM_HEAD,
+                             self.terminal_head: OUTPUT_HEAD, LATER_HEAD: self.terminal_head})
         self.head = LATER_HEAD
 
     def get_paths_info(self, **kwargs):
-        assert set(kwargs["paths"]) <= {fresh.CLAIM, fresh.TERMINAL, *self.trees[OUTPUT_HEAD]}, "path sweep refused"
+        assert set(kwargs["paths"]) <= {self.producer.CLAIM, self.producer.TERMINAL, *self.trees[OUTPUT_HEAD]}, "path sweep refused"
         self.path_reads.append((kwargs["revision"], tuple(kwargs["paths"])))
         if self.read_error is not None:
             raise self.read_error
         if kwargs["revision"] == retained.BRANCH:
-            assert kwargs["paths"] == [fresh.TERMINAL] and kwargs["expand"] is True
+            assert kwargs["paths"] == [self.producer.TERMINAL] and kwargs["expand"] is True
             kwargs = {**kwargs, "revision": self.head}
         return super().get_paths_info(**kwargs)
 
     def hf_hub_download(self, **kwargs):
         self.record("immutable_read", kwargs)
         revision, name = kwargs["revision"], kwargs["filename"]
-        assert revision in {CLAIM_HEAD, OUTPUT_HEAD, TERMINAL_HEAD}
-        assert name in {fresh.CLAIM, fresh.TERMINAL, *self.trees[OUTPUT_HEAD]}
+        assert revision in {CLAIM_HEAD, OUTPUT_HEAD, self.terminal_head}
+        assert name in {self.producer.CLAIM, self.producer.TERMINAL, *self.trees[OUTPUT_HEAD]}
         assert kwargs["force_download"] is True and kwargs["local_files_only"] is False
         assert 0 < kwargs["etag_timeout"] <= output.REQUEST_SECONDS
         self.downloads.append((revision, name))

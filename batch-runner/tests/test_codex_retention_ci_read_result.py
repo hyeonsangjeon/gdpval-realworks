@@ -54,11 +54,13 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     assert checkout["with"] == {"ref": "${{ inputs.reviewed_source_sha }}", "fetch-depth": 0, "persist-credentials": False}
     fresh_preflight, fresh_read, preflight, read, terminal_preflight, terminal_read = steps[9:]
     read_condition = "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+    fresh_cells = (fresh_reader.FRESH_R1.expectation.cell_id, fresh_reader.FRESH_R2.expectation.cell_id)
+    fresh_condition = " && (" + " || ".join("inputs.cell_id == '" + cell + "'" for cell in fresh_cells) + ")"
     assert preflight["if"] == read["if"] == read_condition + " && inputs.cell_id == '" + reader.controller.FIRST_CELL_ID + "'"
-    assert fresh_preflight["if"] == fresh_read["if"] == read_condition + " && inputs.cell_id == '" + fresh_reader.fresh.CELL_ID + "'"
+    assert fresh_preflight["if"] == fresh_read["if"] == read_condition + fresh_condition
     assert terminal_preflight["if"] == terminal_read["if"] == (
         "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
-        " && inputs.cell_id == '" + fresh_reader.fresh.CELL_ID + "'")
+        + fresh_condition)
     assert set(preflight) == {"name", "if", "shell", "run"} and preflight["shell"] == "bash"
     assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert set(read) == {"name", "if", "timeout-minutes", "env", "shell", "run"}
@@ -74,16 +76,16 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # Three producer cells, two old result cells and unsupported selectors,
+    # Three result cells, two terminal cells and unsupported selectors,
     # with all 32 mode combinations,
     # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.
     cells = (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID, reader.controller.FRESH_R2_CELL_ID)
     assert gate["run"].splitlines()[-4:] == [
         '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' ]]',
-        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' ) ]]',
+        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + cells[0] + ' ]]',
-        '[[ "$OBSERVE_TERMINAL_ONLY" != true || "$SELECTED_CELL" == ' + cells[1] + ' ]]',
+        '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' ) ]]',
     ]
     for selected in (*cells, "unregistered", reader.registration.TASK4 + "_retention_bundle_v1_keep_r2"):
         for values in itertools.product((False, True), repeat=5):
@@ -99,7 +101,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
             expected = (selected in cells and not (reading and (prepared or observed or executed or terminal))
                 and not (terminal and (prepared or observed or executed or reading))
                 and not (observed and (prepared or executed)) and (not observed or selected == cells[0])
-                and (not terminal or selected == cells[1]) and (not reading or selected in cells[:2]))
+                and (not terminal or selected in cells[1:]) and (not reading or selected in cells))
             assert admitted_route is expected
             reachable = [index for index, step in enumerate(steps)
                          if admitted_route and _boolean(step.get("if", "true"), replacements)]
@@ -180,11 +182,22 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
             ("codex_retention_task4_fresh_r1.py", "a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3"),
             ("codex_retention_first_cell.py", "a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58"))],
         "  | sha256sum --check --status",
+        'if [[ "$SELECTED_CELL" == ' + cells[2] + ' ]]; then',
+        "  printf '%s\\n' '8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f  batch-runner/codex_retention_task4_fresh_r2.py' | sha256sum --check --status",
+        "fi",
     ]
     fresh_script = read["run"].replace("codex_retention_result_intake.py", "codex_retention_fresh_r1_result_intake.py")
-    for old, new in (("retention-result.XXXXXXXX", "retention-fresh-r1-result.XXXXXXXX"),
-                     (reader.PRODUCER_SOURCE, fresh_reader.PRODUCER_SOURCE), (reader.REQUEST_SHA256, fresh_reader.REQUEST_SHA256),
-                     (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID), (module_hash, fresh_hash)):
+    selection_lines = ['case "$SELECTED_CELL" in']
+    for binding in (fresh_reader.FRESH_R1, fresh_reader.FRESH_R2):
+        selection_lines += ["  " + binding.expectation.cell_id + ")",
+            "    retention_read_source=" + binding.expectation.source_sha,
+            "    retention_read_request=" + binding.expectation.request_sha256,
+            "    retention_read_namespace=retention-fresh-r" + str(binding.repetition) + " ;;"]
+    selection_lines += ["  *) exit 2 ;;", "esac"]
+    fresh_script = fresh_script.replace("umask 077\n", "umask 077\n" + "\n".join(selection_lines) + "\n")
+    for old, new in (("retention-result.XXXXXXXX", "$retention_read_namespace-result.XXXXXXXX"),
+                     (reader.PRODUCER_SOURCE, '"$retention_read_source"'), (reader.REQUEST_SHA256, '"$retention_read_request"'),
+                     (reader.controller.FIRST_CELL_ID, '"$SELECTED_CELL"'), (module_hash, fresh_hash)):
         fresh_script = fresh_script.replace(old, new)
     assert fresh_read["run"] == fresh_script  # Same private destination, bounds, redaction and nonzero exits.
     assert terminal_preflight["run"] == fresh_preflight["run"]
@@ -196,7 +209,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     for cell, namespace in zip(cells, ("retention-first-cell", "retention-task4-fresh-r1", "retention-task4-fresh-r2")):
         assert cell + ') retention_host="$RUNNER_TEMP/' + namespace + '-host" ;;' in execute["steps"][-1]["run"]
     terminal_script = fresh_script.replace("--read --discover-terminal", "--observe-terminal --discover-terminal")
-    terminal_script = terminal_script.replace("retention-fresh-r1-result.XXXXXXXX", "retention-fresh-r1-terminal.XXXXXXXX")
+    terminal_script = terminal_script.replace("$retention_read_namespace-result.XXXXXXXX", "$retention_read_namespace-terminal.XXXXXXXX")
     terminal_script = terminal_script.replace("retention_result_parent", "retention_terminal_parent").replace("/payload", "/evidence")
     assert terminal_read["run"] == terminal_script
     fresh_argv = argv.copy()
@@ -251,3 +264,23 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "grade": None, "invoice_complete": False, "commands": []}
     assert captured.err == "" and str(terminal_destination) not in captured.out
     assert not (terminal_destination / fresh_reader.TERMINAL_MARKER).exists() and effects == []
+    # The actual shared shell command resolves each exact case to independent
+    # expectations. The r2 CLI must reach the same token prerequisite, never r1.
+    for mode in ("read", "observe-terminal"):
+        r2_destination = tmp_path / ("fresh-r2-" + mode)
+        r2_argv = ["--" + mode, *fresh_argv[1:]]
+        substitutions = {fresh_reader.PRODUCER_SOURCE: fresh_reader.FRESH_R2.expectation.source_sha,
+            fresh_reader.REQUEST_SHA256: fresh_reader.FRESH_R2.expectation.request_sha256,
+            fresh_reader.fresh.CELL_ID: fresh_reader.FRESH_R2.expectation.cell_id,
+            "$retention_result_parent/payload": str(r2_destination)}
+        with monkeypatch.context() as context:
+            context.setattr(reader.os, "environ", {})
+            assert fresh_reader.main([substitutions.get(arg, arg) for arg in r2_argv]) == 2
+        captured = capsys.readouterr()
+        assert json.loads(captured.out) == {("intake_verified" if mode == "read" else "terminal_verified"): False,
+            "reason": "explicit_hf_token_required", "launch_authorized": False, "grading_launched": False,
+            "admission_attempted": False, "replay_authorized": False, "grade": None,
+            "invoice_complete": False, "commands": []}
+        assert captured.err == "" and str(r2_destination) not in captured.out and effects == []
+        assert not (r2_destination / fresh_reader.FRESH_R2.result_marker).exists()
+        assert not (r2_destination / fresh_reader.FRESH_R2.terminal_marker).exists()
