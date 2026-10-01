@@ -78,7 +78,7 @@ jobs:
           [[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]
           [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 ]]
-          [[ ( "$READ_RESULT_ONLY" != true && "$OBSERVE_LOCATOR_ONLY" != true ) || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 ]]
+          [[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 ]]
       - &checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -164,8 +164,54 @@ jobs:
                   stream.write('Owner approval comment must be exactly:\n\n`approve-retention-first-cell sha256:' + digest + '`\n\n')
               stream.write('```json\n' + json.dumps(value, sort_keys=True, indent=2) + '\n```\n')
           PY
+      - name: Bind the fixed fresh r1 reader and frozen helpers before credentials
+        if: inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA" && "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
+          retention_checkout_status="$(git status --porcelain=v1 --untracked-files=all)"
+          [[ -z "$retention_checkout_status" ]]
+          printf '%s\n' \
+            'e64ba8c12e0d1982b58cfe010e9b5887db890dbb4d45480b2f7e39e885447613  batch-runner/codex_retention_fresh_r1_result_intake.py' \
+            'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
+            '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
+            '0cf9fdabd985ba4b5c838c3b661317efd1eb6ee6163463b49585a720b7ae6d76  batch-runner/codex_retention_task4_fresh_r1.py' \
+            '57f463c7e1e079b2e87248af87885ffb7d927f13ec32a107f0f3da41a9971fab  batch-runner/codex_retention_first_cell.py' \
+            | sha256sum --check --status
+      - name: Read only the fixed fresh r1 inference result; never execute or grade
+        if: inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1'
+        timeout-minutes: 4
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" && -O "$RUNNER_TEMP" ]]
+          retention_result_parent="$(mktemp -d "$RUNNER_TEMP/retention-fresh-r1-result.XXXXXXXX")"
+          [[ -d "$retention_result_parent" && ! -L "$retention_result_parent" && -O "$retention_result_parent" ]]
+          [[ "$(stat -c '%a' "$retention_result_parent")" == 700 ]]
+          [[ ! -e "$retention_result_parent/payload" && ! -L "$retention_result_parent/payload" ]]
+          retention_read_status=0
+          env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_RUNTIME_TOKEN \
+            timeout --signal=KILL 180s \
+            python3 batch-runner/codex_retention_fresh_r1_result_intake.py --read --discover-terminal \
+              --expected-producer-source e39d8d1aadcb816d09588829a5ec4929b33083e6 \
+              --expected-request-sha256 5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02 \
+              --cell-id 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 \
+              --expected-reader-sha256 e64ba8c12e0d1982b58cfe010e9b5887db890dbb4d45480b2f7e39e885447613 \
+              --output "$retention_result_parent/payload" \
+              > "$retention_result_parent/receipt.json" 2> "$retention_result_parent/stderr.log" || retention_read_status=$?
+          # Only the reviewed reader's safe receipt is public. Partials stay private.
+          retention_receipt_status=0
+          tee -a "$GITHUB_STEP_SUMMARY" < "$retention_result_parent/receipt.json" || retention_receipt_status=$?
+          if (( retention_read_status != 0 )); then
+            exit "$retention_read_status"
+          fi
+          exit "$retention_receipt_status"
       - name: Bind the fixed result reader to the clean workflow checkout before credentials
-        if: inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator
+        if: inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
         shell: bash
         run: |
           set -euo pipefail
@@ -177,7 +223,7 @@ jobs:
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
             | sha256sum --check --status
       - name: Read the fixed retained result only; no preparation, admission or grading
-        if: inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator
+        if: inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
         timeout-minutes: 4
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
