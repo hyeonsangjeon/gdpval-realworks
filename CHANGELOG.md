@@ -11,6 +11,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct PR713's retention admission guard order. Unknown/noncanonical,
+  mixed-transport and mismatched admissions now receive the existing
+  `retention_execution_grant_required` refusal before `request.cell_id` is
+  accessed. The exact `Request` type is then required with
+  `explicit_retention_request_required`, followed by the unchanged two exact
+  admission/cell pairs. Only this guard and two stale reason assertions changed;
+  later authority/runtime/CAS/cleanup predicates, workflows and pins are unchanged.
+
+  The leader read [CI run 36834022780 / pytest job 110276977686](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36834022780/job/110276977686)
+  at prior reviewed HEAD `9645764f09ea2b5b3fe069bbaade4f78984a1d7f`:
+  1 failed, 13303 passed, 64 skipped, 46 deselected in 1301.15s. The legacy
+  admission with `request=None` raised `AttributeError` before its domain
+  refusal. Review `5376693421` was conditional on CI, not a waiver of that
+  failure; these counts and duration are test evidence, not model usage.
+
+  At tested HEAD `a378df829166dc9cb5031882723944a5d009238a`, one guarded,
+  token-free CI-shaped invocation of
+  `tests/test_codex_retention_ci_entrypoint.py::test_retention_script_entrypoint_uses_canonical_authority_types`
+  collected 1 test and passed in 2.08s, exit 0, CPython 3.10.12 / pytest 9.1.1.
+  The 180-second timeout did not fire. Real legacy/canonical refusals, canonical
+  script identity and final no-effects/empty-host assertions completed. Log
+  SHA256: `c022ac9023b062666d61c18fe554df7b1b3f06a31e9b4aca9f5afcc1389cd5f4`.
+  The separate 34.90s successor/route pass and both earlier fixture failures
+  below remain unchanged; those selectors were not rerun. Narrow pre-edit
+  auth/order review approved this correction. New-HEAD owner review and CI,
+  then exact leader source/run/input/budget direction remain required before
+  one fresh/r1 execution. No live operation or new score is claimed.
+
 ### Changed
 
 - Keep the local, closed Task4 fresh/r1 successor implementation, now with

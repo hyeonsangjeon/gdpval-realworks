@@ -1,25 +1,65 @@
 # Latest task result
 
-## PROJECT5-SUCCESSOR-RECORD-SHAPE-20261001-1640
+## PROJECT5-PR713-CANONICAL-REQUEST-GUARD-20261001-1741
 
-The test-only historical-record correction passed at tested HEAD
-`5b788b79a3385a3588d64fe5a96b58434e05ae1e`. The one new offline invocation
-collected 2 tests and both passed in 34.90s, exit 0, without `-x`. The outer
-timeout did not fire. The successor test reached predecessor/CAS verification, one simulated
-owned child, publication, reconciliation, ambiguous-publication and no-replay
-checks; the independent closed-route selector also passed. This is offline
-acceptance, not a live inference or execution approval.
+The admission guard correction passed at tested HEAD
+`a378df829166dc9cb5031882723944a5d009238a`: 1 collected, 1 passed in 2.08s,
+exit 0. The one guarded, token-free CI-shaped invocation completed the real
+canonical-authority entrypoint regression; the 180-second timeout did not fire.
+The guard rejects noncanonical, mixed-transport or mismatched admissions with
+`retention_execution_grant_required` before accessing `request.cell_id`. It
+then requires the exact `Request` type with
+`explicit_retention_request_required` and retains the exact two admission/cell
+pairs before `_context`, transport access or host effects.
 
-The production delta from `c291670272f897fba03dcbceaa3779560076b522` and the
-source-context correction at `53e5dc29f87cee0154aeb643c8611f67e751b283` are
-unchanged. Only these two completion records changed after testing. The separate
-2.68s source-pin and 5.71s missing-field failures remain preserved below.
+The earlier successor/closed-route pass at
+`5b788b79a3385a3588d64fe5a96b58434e05ae1e` remains separate: 2 tests passed
+in 34.90s, exit 0. It did not cover this entrypoint regression and was not
+rerun. The 2.68s source-pin and 5.71s missing-field failures remain preserved
+below. This is an offline guard correction, not a live inference or execution
+approval. Only the guard and two directly coupled reason assertions changed;
+the remaining successor implementation and fixture corrections are unchanged.
 
 The first keep/r1 numeric result is now available from the leader's successful
 read of the existing safe receipt: 30.6 / included possible 45 = 68.0%, with
 54.64% on the full denominator. This is one writer-recorded task score, not
 evidence of retention benefit. The acknowledged inference and grade remain
 consumed; this implementation task launched neither a model nor a readout.
+
+### PR713 CI failure and targeted correction
+
+The leader directly read
+[CI run 36834022780 / pytest job 110276977686](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36834022780/job/110276977686)
+at prior reviewed HEAD `9645764f09ea2b5b3fe069bbaade4f78984a1d7f`:
+1 failed, 13303 passed, 64 skipped, 46 deselected in 1301.15s.
+[Review 5376693421](https://github.com/hyeonsangjeon/gdpval-realworks/pull/713#pullrequestreview-5376693421)
+was conditional on CI. That failed CI is not green, and its counts/duration
+are test evidence, not model usage or a waiver of the new-HEAD gates.
+
+The sole failure was the entrypoint test at line 117: the admission/cell tuple
+read `None.cell_id` before rejecting the noncanonical `__main__` admission,
+raising `AttributeError` instead of `retention_execution_grant_required`.
+The correction keeps exact class identity, rejects unknown/mixed/mismatched
+admissions first, validates the canonical `Request` before cell access, and
+retains both exact class/cell pairs and every later predicate. The two canonical
+`None` expectations now use `_context`'s existing
+`explicit_retention_request_required` reason. No workflow or pin changed.
+
+The single selector was:
+
+```text
+tests/test_codex_retention_ci_entrypoint.py::test_retention_script_entrypoint_uses_canonical_authority_types
+```
+
+It ran once from `batch-runner` under CPython 3.10.12 / pytest 9.1.1 with
+`-v --tb=short -p no:cacheprovider`, plugin autoload disabled, token-free
+`GITHUB_ACTIONS=true` and synthetic `pull_request`/`pytest` metadata, plus the
+existing process/network/credential guards. The legacy-`None` LIVE_GATE refusal,
+both canonical-`None` reason checks, actual script/class identity checks and
+final no-effects/empty-host assertion all completed. No selected assertion
+remained unreached. The full suite and the passed successor/route selectors
+were not rerun. Log SHA256:
+`c022ac9023b062666d61c18fe554df7b1b3f06a31e9b4aca9f5afcc1389cd5f4`.
 
 ### Source, review boundary and implementation
 
@@ -29,21 +69,25 @@ GitHub main was checked before selecting exact base
 `b/codex-retention-task4-fresh-r1-20261001-1507` at
 `/ai-work/copilot/worktrees/codex-retention-task4-fresh-r1-20261001-1507`.
 This continuation reused that worktree and branch. The existing author and
-committer identity stayed `hyeonsangjeon <wingnut0310@gmail.com>`; the three
-implementation/test commits have no trailers.
+committer identity stayed `hyeonsangjeon <wingnut0310@gmail.com>`; this
+correction retains that identity without trailers.
 
 The required bounded CI/auth/storage reviewer approved the fixed facade
 approach before workflow or authority edits. That implementation decision is
 not an immutable owner review or CI pass for the new HEAD. No broad grader,
 reader or original-pilot review was reopened.
-The prior authority decision still applies to the unchanged production delta;
-this continuation changed only the synthetic historical cell record. It did
-not reopen source or authority approval.
+That authority decision remained applicable to the fixture-only continuations,
+which did not reopen source or authority approval.
 The required read-only review of the test-only diff at
 `5b788b79a3385a3588d64fe5a96b58434e05ae1e` found no blockers. That narrow
 check is not immutable owner/source approval or CI evidence.
 
-The pinned delta covers seven implementation/workflow/test files:
+For the current guard-only correction, the required narrow pre-edit auth/order
+review approved the proposal before the production edit. It did not repeat the
+full implementation review or grant new authority. Immutable new-HEAD owner
+review and CI remain required.
+
+The original pinned successor delta covered seven implementation/workflow/test files:
 
 - The existing controller has two explicit bindings: keep/r1 ordinal 0 and
   fresh/r1 ordinal 1. It selects the registered config/control and local stage
@@ -61,7 +105,7 @@ The pinned delta covers seven implementation/workflow/test files:
 - A new synthetic regression and directly coupled old shape assertions describe
   staging, predecessor/CAS, one owned child, publication, reconciliation and
   no replay. The original invocation stopped before staging, and the next
-  stopped before admission. The latest invocation completed both selectors,
+  stopped before admission. The 34.90s invocation completed both selectors,
   including predecessor/CAS, owned-child, publication and reconciliation checks.
 
 The old CI verifier is byte-identical, SHA256
@@ -198,8 +242,8 @@ There was no `-x`; the 180-second outer timeout did not fire.
 
 No selected assertion remained unreached. Transport, provider records and the
 owned child were synthetic; no live claim, inference, publication, grade or
-readout occurred. The unchanged production delta still needs immutable owner
-review and CI. Log SHA256:
+readout occurred. At that point, the unchanged production delta still needed
+immutable owner review and CI. Log SHA256:
 `5ad22e5645e824d93ea31791f01ebcc887e376a502bf2e799cf362c249845435`.
 
 ### Actual verified keep/r1 readout, separate from offline proof
@@ -277,7 +321,8 @@ attempt ceiling. There is no fixed admission count or automatic monetary cutoff.
 
 The original-source and historical-record fixture boundaries are resolved in
 the targeted offline proof. No production predicate changed for either fixture
-correction. Immutable new-HEAD owner review and CI must precede any live
+correction. The guard-order correction now has separate targeted proof; the
+failed CI above remains a failure. Immutable new-HEAD owner review and CI must precede any live
 operation. The leader must then separately bind
 the actual approved source/run/input/budget for exactly fresh/r1, with same-run
 protected owner approval and reverified predecessor/CAS authority. No other cell
@@ -303,7 +348,7 @@ not rewritten by the later grade and numeric readout.
 The full catalog was checked once for this continuation. The prior
 `experiment-design` constraints remain fixed; no treatment, budget, source pin,
 sample or repeat changed. `experiment-report-en` updated only the bounded
-record-shape/status evidence, followed by protected
+CI-failure/guard-correction evidence, followed by protected
 `im-not-ai-en` with denominators, exclusions, provenance, nulls and claims held
 fixed. UI/animation, new-study and generic-framework skills were not applicable.
 
