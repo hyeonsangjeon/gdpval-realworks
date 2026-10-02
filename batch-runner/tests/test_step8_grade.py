@@ -3590,10 +3590,11 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "inputs.experiment_yaml != 'pilot/grade-readout' && "
         "inputs.experiment_yaml != 'retention/grade-readout' && "
         "(inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && "
-        "inputs.experiment_yaml != 'retention/first-cell'))"
+        "inputs.experiment_yaml != 'retention/first-cell' && inputs.experiment_yaml != 'retention/keep-r2'))"
     )
     assert _gh_expr(pilot_live["if"]) == (
-        "(startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell') && "
+        "(startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell' || "
+        "inputs.experiment_yaml == 'retention/keep-r2') && "
         "inputs.experiment_yaml != 'pilot/grade-readout' && "
         "inputs.dry_run == false && inputs.paid_approval == true && "
         "needs.pilot-approve-paid.result == 'success'"

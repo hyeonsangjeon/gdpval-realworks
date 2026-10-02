@@ -1323,7 +1323,7 @@ def _grade_outcome(payload: dict | None, child: dict, *, progress: bool) -> str:
 
 
 def _grade_files(context: Context, root: Path, prepared: dict, child: dict, *,
-                 retention_first_cell_binding: output.RetentionFirstCellLedgerBinding | None = None
+                 retention_first_cell_binding: output.RetentionFirstCellLedgerBinding | output.RetentionKeepR2LedgerBinding | None = None
                  ) -> tuple[dict[str, bytes], dict[str, str], str]:
     from core.task_checkpoint import checkpoint_path, load_checkpoint
 

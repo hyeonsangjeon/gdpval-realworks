@@ -1,4 +1,4 @@
-"""One retained first-cell result, one existing fixed judge, no replay.
+"""Two closed retained-result bindings, one existing fixed judge each, no replay.
 
 Default planning is inert. Live phases require the existing same-run protected
 grading approval and exact source. The retained producer, later reader, prior
@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 
 import codex_budget_pilot as pilot
 import codex_budget_pilot_ci as pilot_ci
@@ -31,17 +32,23 @@ from gpt54_comparison_preflight import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SELECTOR = "retention/first-cell"
+ORDINAL, REPETITION = 0, 1
 CELL = reader.EXPECTATION.cell_id
 PREFIX = "retention-cell-grades/" + registration.CAMPAIGN + "/" + CELL
 CLAIM_PATH, TERMINAL_PATH = PREFIX + "/claim.json", PREFIX + "/terminal.json"
 CLAIM_FORMAT = "retention-first-cell-grade-claim-v1"
 TERMINAL_FORMAT = "retention-first-cell-grade-terminal-v1"
 GRADER_PATH = "batch-runner/workspace/retention-ci-first/grader-config.json"
+INFERENCE_CONFIG_PATH = "batch-runner/workspace/retention-ci-first/inference-config.json"
+PREPARATION_FORMAT = "retention-first-cell-grade-preparation-v1"
+MARKER = reader.MARKER
 GRADER_SHA256 = "c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320"
 READER = {
     "module_sha256": "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196",
     "terminal_verifier_sha256": "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c",
 }
+READER_FILES = {"module_sha256": "codex_retention_result_intake.py",
+                "terminal_verifier_sha256": "codex_retention_ci.py"}
 # Leader's actual successful immutable intake; never a mutable latest selector.
 RESULT = {
     "producer_source_sha": "e355faf9a6212175a288e8473968915ffb2408d0",
@@ -82,16 +89,31 @@ def _same(actual, expected, reason):
     require(retained._encoded(actual) == retained._encoded(expected), reason)
 
 
-def _fixed_inputs():
-    return {"experiment_yaml": SELECTOR, "inference_revision": RESULT["terminal_commit"],
+def _fixed(selector=SELECTOR):
+    require(type(selector) is str and selector in {SELECTOR, "retention/keep-r2"},
+            "fixed_retention_grade_selector_required")
+    if selector == SELECTOR:
+        return sys.modules[__name__]
+    import codex_retention_keep_r2_grade
+    return codex_retention_keep_r2_grade
+
+
+def _fixed_inputs(selector=SELECTOR):
+    fixed = _fixed(selector)
+    return {"experiment_yaml": fixed.SELECTOR, "inference_revision": fixed.RESULT["terminal_commit"],
         "grading_config": "default_v2_sol_max.yaml", "force": False, "tasks_limit": 0, "tasks": "",
         "dry_run": False, "paid_approval": True, "resume": False, "resume_chunk": 0,
         "shard_count": 1, "shard_index": 0, "run_ordinal": 1}
 
 
-def fixed_evidence_sha256():
-    return pilot._digest({"result": RESULT, "grading_parent": PARENT, "reader": READER,
-                          "grader_path": GRADER_PATH, "grader_sha256": GRADER_SHA256})
+def fixed_evidence_sha256(selector=SELECTOR):
+    fixed = _fixed(selector)
+    evidence = {"result": fixed.RESULT, "grading_parent": fixed.PARENT, "reader": fixed.READER,
+                "grader_path": fixed.GRADER_PATH, "grader_sha256": fixed.GRADER_SHA256}
+    if selector != SELECTOR:
+        # Bind the new route explicitly without changing historical first-cell evidence.
+        evidence["selector"] = fixed.SELECTOR
+    return pilot._digest(evidence)
 
 
 @dataclass(frozen=True)
@@ -100,6 +122,7 @@ class Context:
     cell: dict
     grading: object
     controller_source_sha: str
+    selector: str = SELECTOR
 
     @property
     def run(self):
@@ -107,56 +130,61 @@ class Context:
 
 
 def compile_request(source: str, *, selector=SELECTOR, terminal="", producer="") -> Context:
-    require(selector == SELECTOR and terminal in {"", RESULT["terminal_commit"]}
-            and producer in {"", reader.PRODUCER_SOURCE}, "fixed_retention_grade_selector_required")
-    require(output._hash(source, 40) and source not in {reader.PRODUCER_SOURCE, PARENT["writer_source_sha"],
-            PARENT["observer_source_sha"]}, "distinct_reviewed_grading_source_required")
-    require(grade.BRANCH == PARENT["branch"], "fixed_retention_grade_branch_required")
+    fixed = _fixed(selector)
+    require(terminal in {"", fixed.RESULT["terminal_commit"]}
+            and producer in {"", fixed.RESULT["producer_source_sha"]}, "fixed_retention_grade_selector_required")
+    require(output._hash(source, 40) and source not in {fixed.RESULT["producer_source_sha"], fixed.PARENT["writer_source_sha"],
+            fixed.PARENT["observer_source_sha"]}, "distinct_reviewed_grading_source_required")
+    require(grade.BRANCH == fixed.PARENT["branch"], "fixed_retention_grade_branch_required")
     plan = registration.compile_plan()
-    cell = reader.controller._adapted_cell(plan["cells"][0])
-    require(cell["cell_id"] == CELL and cell["index"] == 0 and cell["control"]["retention_bundle"] == "keep"
-            and cell["config_sha256"] == RESULT["result"]["registered_config_sha256"],
+    cell = reader.controller._adapted_cell(plan["cells"][fixed.ORDINAL])
+    require(cell["cell_id"] == fixed.CELL and cell["index"] == fixed.ORDINAL
+            and cell["control"] == {"condition": "retention_bundle_v1", "retention_bundle": "keep",
+                                   "repetition": fixed.REPETITION}
+            and cell["config_sha256"] == fixed.RESULT["result"]["registered_config_sha256"],
             "registered_retention_grade_cell_required")
     config = cell["config"]
     model = config["condition_a"]["model"]
-    spec = ComparisonRunSpec(cell["run_id"], "codex", 1, "codex", model["provider"], model["deployment"],
+    spec = ComparisonRunSpec(cell["run_id"], "codex", fixed.REPETITION, "codex", model["provider"], model["deployment"],
         model["reasoning_effort"], "advance_check_5", (cell["task_id"],), "source", "batch-runner",
-        "batch-runner/workspace/retention-ci-first/inference-config.json", _canonical_json(config), ())
+        fixed.INFERENCE_CONFIG_PATH, _canonical_json(config), ())
     shared = load_plan(ROOT / registration.ORIGINAL_PROFILE)["shared"]
-    dispatch = ComparisonDispatchPlan(pilot._digest({"registration": plan, "evidence": fixed_evidence_sha256()}),
-        reader.PRODUCER_SOURCE, _canonical_json(plan["source_pins"]), _canonical_json(shared), (spec,))
+    dispatch = ComparisonDispatchPlan(pilot._digest({"registration": plan, "evidence": fixed_evidence_sha256(selector)}),
+        fixed.RESULT["producer_source_sha"], _canonical_json(plan["source_pins"]), _canonical_json(shared), (spec,))
     grading = _compile_grading_plan(dispatch)
     run = grading.runs[0]
     command = list(run.command)
-    command[2] = SELECTOR
-    command[command.index("--config") + 1] = str(Path(GRADER_PATH).relative_to("batch-runner"))
+    command[2] = selector
+    command[command.index("--config") + 1] = str(Path(fixed.GRADER_PATH).relative_to("batch-runner"))
     command[command.index("--limit") + 1] = "1"
     _same(json.loads(run.grader_config_json), plan["grading"]["generated_config"], "fixed_grader_config_changed")
-    run = replace(run, command=tuple(command), experiment_config_path="batch-runner/experiments/" + SELECTOR + ".yaml",
-        grader_config_path=GRADER_PATH, producer_results_path=pilot.RESULT,
+    run = replace(run, command=tuple(command), experiment_config_path="batch-runner/experiments/" + selector + ".yaml",
+        grader_config_path=fixed.GRADER_PATH, producer_results_path=pilot.RESULT,
         input_materialization="codex_retention_fixed_grade.prepare")
-    return Context(plan, cell, replace(grading, runs=(run,)), source)
+    return Context(plan, cell, replace(grading, runs=(run,)), source, selector)
 
 
 def _context(context):
     require(type(context) is Context, "canonical_retention_grade_context_required")
-    expected = compile_request(context.controller_source_sha)
+    expected = compile_request(context.controller_source_sha, selector=context.selector)
     _same({"plan": context.plan, "cell": context.cell, "grading": context.grading.as_dict()},
           {"plan": expected.plan, "cell": expected.cell, "grading": expected.grading.as_dict()},
           "retention_grade_context_changed")
 
 
-def approval_request(source, run):
+def approval_request(source, run, *, selector=SELECTOR):
+    fixed = _fixed(selector)
     return {"workflow": grade.WORKFLOW, "repository": pilot_ci.REPOSITORY, "ref": "refs/heads/main",
-        "controller_source_sha": source, "producer_source_sha": reader.PRODUCER_SOURCE,
-        "cell_id": CELL, "campaign_id": registration.CAMPAIGN,
+        "controller_source_sha": source, "producer_source_sha": fixed.RESULT["producer_source_sha"],
+        "cell_id": fixed.CELL, "campaign_id": registration.CAMPAIGN,
         "repository_name_sha256": retained.TARGET_SHA256, "inference_branch": retained.BRANCH,
         "grading_branch": grade.BRANCH, "github_run_id": run["id"], "github_run_attempt": run["attempt"],
-        "inputs": _fixed_inputs(), "retention_evidence_sha256": fixed_evidence_sha256()}
+        "inputs": _fixed_inputs(selector), "retention_evidence_sha256": fixed_evidence_sha256(selector)}
 
 
 def _authority(context):
     _context(context)
+    fixed = _fixed(context.selector)
     grade._workflow_inputs()
     expected = {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": pilot_ci.REPOSITORY,
         "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main",
@@ -164,19 +192,20 @@ def _authority(context):
         "GITHUB_RUN_ATTEMPT": "1", "GITHUB_JOB": "pilot-live",
         "GITHUB_WORKFLOW_REF": pilot_ci.REPOSITORY + "/" + grade.WORKFLOW + "@refs/heads/main",
         "PILOT_GRADE_PAID_APPROVAL": "true", "PILOT_GRADE_DRY_RUN": "false",
-        "PILOT_GRADE_APPROVAL_RESULT": "success", "GRADE_SELECTOR": SELECTOR,
-        "GRADE_TERMINAL": RESULT["terminal_commit"]}
+        "PILOT_GRADE_APPROVAL_RESULT": "success", "GRADE_SELECTOR": context.selector,
+        "GRADE_TERMINAL": fixed.RESULT["terminal_commit"]}
     require(all(os.environ.get(key) == value for key, value in expected.items()),
             "protected_retention_grade_context_required")
     run = {"id": os.environ.get("GITHUB_RUN_ID"), "job": "pilot-live", "attempt": 1}
     require(type(run["id"]) is str and re.fullmatch(r"[1-9][0-9]{0,19}", run["id"]) is not None,
             "retention_grade_run_identity_required")
     require(os.environ.get("PILOT_GRADE_APPROVAL_REQUEST_SHA256") == pilot._digest(
-            approval_request(context.controller_source_sha, run)), "retention_grade_approval_mismatch")
+            approval_request(context.controller_source_sha, run, selector=context.selector)), "retention_grade_approval_mismatch")
     return run
 
 
 def _source(context, checkout=ROOT):
+    fixed = _fixed(context.selector)
     pilot._repository(checkout)
     pilot._safe_checkout_configuration(checkout)
     require(pilot._git(checkout, "rev-parse", "HEAD").stdout == (context.controller_source_sha + "\n").encode()
@@ -185,36 +214,37 @@ def _source(context, checkout=ROOT):
     if checkout == ROOT:
         require(not pilot._git(checkout, "status", "--porcelain", "--untracked-files=normal").stdout,
                 "clean_retention_grade_source_required")
-    for key, name in (("module_sha256", "codex_retention_result_intake.py"),
-                      ("terminal_verifier_sha256", "codex_retention_ci.py")):
+    for key, name in fixed.READER_FILES.items():
         data = output._bytes(checkout / "batch-runner" / name, limit=output.MAX_RECORD_BYTES)
-        require(pilot._identity(data)["sha256"] == READER[key], "reviewed_retention_reader_required")
+        require(pilot._identity(data)["sha256"] == fixed.READER[key], "reviewed_retention_reader_required")
 
 
-def _intake(record, destination):
+def _intake(record, destination, *, selector=SELECTOR):
     """Actual receipt plus evidence-marker and declared-role readback, not a flag."""
     require(type(record) is dict and record.get("intake_verified") is True, "verified_retention_intake_required")
-    for key, value in RESULT.items():
+    fixed = _fixed(selector)
+    for key, value in fixed.RESULT.items():
         actual = record.get(key)
         if key == "result" and type(actual) is dict:
             actual = {name: actual.get(name) for name in value}
         _same(actual, value, "fixed_retention_result_mismatch")
-    for key, value in {"reader": READER, "status": "succeeded", "cleanup_confirmed": True,
-            "remote_terminal": "acknowledged", "grade": None, "invoice_complete": False,
-            "evidence_only": True, "consumer_readback_required": True}.items():
+    boundary = {"remote_terminal": "acknowledged"} if selector == SELECTOR else fixed.intake_boundary()
+    for key, value in {"reader": fixed.READER, "status": "succeeded", "cleanup_confirmed": True,
+            "grade": None, "invoice_complete": False,
+            "evidence_only": True, "consumer_readback_required": True, **boundary}.items():
         _same(record.get(key), value, "retention_intake_boundary_mismatch")
-    marker = output._bytes(destination / reader.MARKER, limit=output.MAX_MANIFEST_BYTES)
-    require(pilot._identity(marker)["sha256"] == RESULT["intake_sha256"], "retention_intake_marker_changed")
+    marker = output._bytes(destination / fixed.MARKER, limit=output.MAX_MANIFEST_BYTES)
+    require(pilot._identity(marker)["sha256"] == fixed.RESULT["intake_sha256"], "retention_intake_marker_changed")
     _same(pilot._json_object(marker), {key: value for key, value in record.items()
           if key not in {"intake_verified", "intake_sha256"}}, "retention_intake_receipt_changed")
     manifest = output._bytes(destination / output.MANIFEST, limit=output.MAX_MANIFEST_BYTES,
-                             expected=RESULT["output_manifest_identity"])
+                             expected=fixed.RESULT["output_manifest_identity"])
     summary = pilot._json_object(manifest)
     roles, deliverables = reader._roles(summary)
     files = {name: output._bytes(reader._path(destination, name), limit=output.MAX_FILE_BYTES, expected=identity)
              for name, identity in roles.items()}
     plan = registration.compile_plan()
-    _, result = reader._payload(files, summary, plan, reader.controller._adapted_cell(plan["cells"][0]), roles, deliverables)
+    _, result = reader._payload(files, summary, plan, reader.controller._adapted_cell(plan["cells"][fixed.ORDINAL]), roles, deliverables)
     _same(result, record["result"], "retention_intake_readback_changed")
     _same(summary["files"], record["files"], "retention_intake_manifest_changed")
     return files
@@ -293,13 +323,17 @@ def _rubric_readback(context, checkout):
 def prepare(context, root, *, _test_api=None, _test_transport=None):
     run = _authority(context)
     _source(context)
+    fixed = _fixed(context.selector)
     root = grade._root(root, new=True)
     transport = _test_transport or pilot.LocalTransport()
     with grade._lock(root):
-        record = reader.read_result(expectation=reader.EXPECTATION, destination=root / "retained",
-            expected_reader_sha256=READER["module_sha256"], terminal_revision=RESULT["terminal_commit"],
-            discover_terminal=False, _test_api=_test_api)
-        files = _intake(record, root / "retained")
+        if context.selector == SELECTOR:
+            record = reader.read_result(expectation=reader.EXPECTATION, destination=root / "retained",
+                expected_reader_sha256=READER["module_sha256"], terminal_revision=RESULT["terminal_commit"],
+                discover_terminal=False, _test_api=_test_api)
+        else:
+            record = fixed.read_result(root / "retained", _test_api=_test_api)
+        files = _intake(record, root / "retained", selector=context.selector)
         grade._record(root / "intake-receipt.json", record)
         # This is a derived materializer identity, not an original pilot claim.
         evidence = {"terminal": {"output_commit": record["output_commit"]}}
@@ -336,10 +370,10 @@ def prepare(context, root, *, _test_api=None, _test_transport=None):
         _same(_rubric_readback(context, checkout), rubric, "original_rubric_readback_changed")
         immutable.update(rubric["files"])
         entry = grade._entry_contract(context, checkout, record["output_commit"])
-        require(entry["grader_source_hash"] == GRADER_SHA256, "retention_materialized_grader_mismatch")
-        prepared = {"format": "retention-first-cell-grade-preparation-v1", "source_sha": context.controller_source_sha,
-            "fixed_evidence_sha256": fixed_evidence_sha256(), "approval_sha256": pilot._digest(
-                approval_request(context.controller_source_sha, run)), "intake_sha256": record["intake_sha256"],
+        require(entry["grader_source_hash"] == fixed.GRADER_SHA256, "retention_materialized_grader_mismatch")
+        prepared = {"format": fixed.PREPARATION_FORMAT, "source_sha": context.controller_source_sha,
+            "fixed_evidence_sha256": fixed_evidence_sha256(context.selector), "approval_sha256": pilot._digest(
+                approval_request(context.controller_source_sha, run, selector=context.selector)), "intake_sha256": record["intake_sha256"],
             "entry": entry, "rubric": rubric, "immutable_files": immutable, "identity_sha256": identity_sha,
             "materialization": materialized, "evidence": evidence, "judge_ready": True}
         grade._record(root / "prepared.json", prepared)
@@ -349,14 +383,15 @@ def prepare(context, root, *, _test_api=None, _test_transport=None):
 def _ready(context, root):
     run = _authority(context)
     _source(context)
+    fixed = _fixed(context.selector)
     prepared = retained._read(root / "prepared.json")
-    for key, value in {"format": "retention-first-cell-grade-preparation-v1", "source_sha": context.controller_source_sha,
-            "fixed_evidence_sha256": fixed_evidence_sha256(), "approval_sha256": pilot._digest(
-                approval_request(context.controller_source_sha, run)), "intake_sha256": RESULT["intake_sha256"],
+    for key, value in {"format": fixed.PREPARATION_FORMAT, "source_sha": context.controller_source_sha,
+            "fixed_evidence_sha256": fixed_evidence_sha256(context.selector), "approval_sha256": pilot._digest(
+                approval_request(context.controller_source_sha, run, selector=context.selector)), "intake_sha256": fixed.RESULT["intake_sha256"],
             "judge_ready": True}.items():
         _same(prepared.get(key), value, "bound_retention_grade_preparation_required")
-    files = _intake(retained._read(root / "intake-receipt.json"), root / "retained")
-    evidence = {"terminal": {"output_commit": RESULT["output_commit"]}}
+    files = _intake(retained._read(root / "intake-receipt.json"), root / "retained", selector=context.selector)
+    evidence = {"terminal": {"output_commit": fixed.RESULT["output_commit"]}}
     _same(prepared["evidence"], evidence, "retention_prepared_output_changed")
     identity = grade._inference_identity(context, evidence, files, retained._target())
     _same(retained._read(root / "inference-identity.json"), identity, "retention_inference_identity_changed")
@@ -365,7 +400,7 @@ def _ready(context, root):
     members, materialized = _derived_inputs(context, files, identity)
     _same(prepared["materialization"], materialized, "retention_materialized_result_changed")
     _source(context, root / "source")
-    require(prepared["entry"]["grader_source_hash"] == GRADER_SHA256, "retention_materialized_grader_mismatch")
+    require(prepared["entry"]["grader_source_hash"] == fixed.GRADER_SHA256, "retention_materialized_grader_mismatch")
     expected_files = {name: pilot._identity(data) for name, data in
                       {**configs._files(context.grading, context.run.run_id), **members}.items()}
     rubric = _rubric_readback(context, root / "source")
@@ -374,12 +409,15 @@ def _ready(context, root):
     _same(prepared["immutable_files"], expected_files, "retention_prepared_file_set_changed")
     for name, expected in expected_files.items():
         output._bytes(configs._path(root / "source", name), limit=output.MAX_FILE_BYTES, expected=expected)
-    _same(grade._entry_contract(context, root / "source", RESULT["output_commit"]), prepared["entry"],
+    _same(grade._entry_contract(context, root / "source", fixed.RESULT["output_commit"]), prepared["entry"],
           "retention_prepared_entry_changed")
     return prepared
 
 
-def _parent(api, repo, cache, token, deadline):
+def _parent(api, repo, cache, token, deadline, *, selector=SELECTOR):
+    fixed = _fixed(selector)
+    if selector != SELECTOR:
+        return fixed.parent_controls(api, repo, cache, token, deadline)
     cell = {"cell_id": PARENT["cell_id"], "run_id": PARENT["campaign_id"] + "__" + PARENT["cell_id"]}
     claim_path, terminal_path = grade._paths(cell)
     terminal, data = retained._control(api, repo, PARENT["revision"], terminal_path,
@@ -422,9 +460,10 @@ def _parent(api, repo, cache, token, deadline):
 
 def _binding(context, prepared):
     run = _authority(context)
-    return {"source_sha": context.controller_source_sha, "selector": SELECTOR, "cell_id": CELL,
-        "fixed_evidence_sha256": fixed_evidence_sha256(), "intake_sha256": prepared["intake_sha256"],
-        "approval_sha256": pilot._digest(approval_request(context.controller_source_sha, run)), "github_run": run,
+    fixed = _fixed(context.selector)
+    return {"source_sha": context.controller_source_sha, "selector": context.selector, "cell_id": fixed.CELL,
+        "fixed_evidence_sha256": fixed_evidence_sha256(context.selector), "intake_sha256": prepared["intake_sha256"],
+        "approval_sha256": pilot._digest(approval_request(context.controller_source_sha, run, selector=context.selector)), "github_run": run,
         "entry": prepared["entry"], "grading_plan_sha256": pilot._digest(context.grading.as_dict()),
         "preparation_sha256": pilot._digest(prepared), "proof_boundary": grade.PROOF}
 
@@ -433,6 +472,7 @@ def claim(context, root, *, _test_api=None):
     root = grade._root(root)
     with grade._lock(root):
         prepared = _ready(context, root)
+        fixed = _fixed(context.selector)
         binding = _binding(context, prepared)
         require(not any(os.path.lexists(root / name) for name in ("claim-reserved.json", "claim-receipt.json")),
                 "retention_grade_claim_already_reserved")
@@ -440,19 +480,19 @@ def claim(context, root, *, _test_api=None):
         try:
             with retained._session(_test_api) as (api, token, deadline):
                 repo = retained._target()
-                require(output._metadata(api, repo, grade.BRANCH, token, deadline)["sha"] == PARENT["revision"],
+                require(output._metadata(api, repo, grade.BRANCH, token, deadline)["sha"] == fixed.PARENT["revision"],
                         "fixed_grading_parent_drift")
-                inherited = _parent(api, repo, grade._cache(root, "parent"), token, deadline)
-                require(api.get_paths_info(repo_id=repo, repo_type="dataset", revision=PARENT["revision"],
-                    paths=[PREFIX], token=token) == [], "retention_result_already_claimed_for_grading")
-                require(output._metadata(api, repo, grade.BRANCH, token, deadline)["sha"] == PARENT["revision"],
+                inherited = _parent(api, repo, grade._cache(root, "parent"), token, deadline, selector=context.selector)
+                require(api.get_paths_info(repo_id=repo, repo_type="dataset", revision=fixed.PARENT["revision"],
+                    paths=[fixed.PREFIX], token=token) == [], "retention_result_already_claimed_for_grading")
+                require(output._metadata(api, repo, grade.BRANCH, token, deadline)["sha"] == fixed.PARENT["revision"],
                         "fixed_grading_parent_drift")
-                value = {"format": CLAIM_FORMAT, "binding": binding, "expected_parent": PARENT["revision"],
-                         "predecessor": PARENT}
+                value = {"format": fixed.CLAIM_FORMAT, "binding": binding, "expected_parent": fixed.PARENT["revision"],
+                         "predecessor": fixed.PARENT}
                 grade._record(root / "claim-reserved.json", value)
-                revision = grade._commit(api, repo, PARENT["revision"], {CLAIM_PATH: retained._encoded(value)},
+                revision = grade._commit(api, repo, fixed.PARENT["revision"], {fixed.CLAIM_PATH: retained._encoded(value)},
                                          token, deadline, result)
-                confirmed, data = retained._control(api, repo, revision, CLAIM_PATH, grade._cache(root, "claim-verified"),
+                confirmed, data = retained._control(api, repo, revision, fixed.CLAIM_PATH, grade._cache(root, "claim-verified"),
                     token, deadline, expected=pilot._identity(retained._encoded(value)), written_at=revision)
                 _same(confirmed, value, "retention_grade_claim_readback_mismatch")
                 for item, written_at in inherited:
@@ -466,12 +506,13 @@ def claim(context, root, *, _test_api=None):
 
 
 def _admission(context, root, prepared):
+    fixed = _fixed(context.selector)
     value = retained._read(root / "claim-receipt.json")
     require(value.get("outcome") == "acknowledged" and output._hash(value.get("returned_commit"), 40),
             "acknowledged_retention_grade_admission_required")
-    require(value["returned_commit"] != PARENT["revision"], "retention_grade_claim_revision_changed")
-    expected = {"format": CLAIM_FORMAT, "binding": _binding(context, prepared),
-                "expected_parent": PARENT["revision"], "predecessor": PARENT}
+    require(value["returned_commit"] != fixed.PARENT["revision"], "retention_grade_claim_revision_changed")
+    expected = {"format": fixed.CLAIM_FORMAT, "binding": _binding(context, prepared),
+                "expected_parent": fixed.PARENT["revision"], "predecessor": fixed.PARENT}
     _same(value["claim"], expected, "retention_grade_admission_changed")
     _same(retained._read(root / "claim-reserved.json"), expected, "retention_grade_admission_changed")
     data = retained._encoded(expected)
@@ -489,18 +530,19 @@ def judge(context, root, *, _test_transport=None):
         return grade._owned_judge(context, root, prepared, admitted, descriptor, _test_transport=_test_transport)
 
 
-def _terminal(api, repo, revision, expected, admission, cache, token, deadline):
-    value, data = retained._control(api, repo, revision, TERMINAL_PATH, cache, token, deadline,
+def _terminal(api, repo, revision, expected, admission, cache, token, deadline, *, selector=SELECTOR):
+    fixed = _fixed(selector)
+    value, data = retained._control(api, repo, revision, fixed.TERMINAL_PATH, cache, token, deadline,
         expected=pilot._identity(retained._encoded(expected)), written_at=revision)
     _same(value, expected, "retention_grade_terminal_changed")
-    claim, raw = retained._control(api, repo, admission["returned_commit"], CLAIM_PATH,
+    claim, raw = retained._control(api, repo, admission["returned_commit"], fixed.CLAIM_PATH,
         grade._cache(cache, "claim"), token, deadline, expected=admission["claim_identity"],
         written_at=admission["returned_commit"])
     _same(claim, admission["claim"], "retention_grade_terminal_claim_changed")
-    require(revision not in {PARENT["revision"], admission["returned_commit"]}
+    require(revision not in {fixed.PARENT["revision"], admission["returned_commit"]}
             and value["claim_commit"] == admission["returned_commit"] and value["child"]["cleanup_confirmed"] is True,
             "retention_grade_terminal_cleanup_required")
-    retained._objects(api, repo, revision, [retained._object(CLAIM_PATH, raw)], token, deadline,
+    retained._objects(api, repo, revision, [retained._object(fixed.CLAIM_PATH, raw)], token, deadline,
                       written_at=admission["returned_commit"])
     if value["files"]:
         retained._objects(api, repo, revision, [{key: item for key, item in row.items() if key != "role"}
@@ -512,28 +554,31 @@ def publish(context, root, *, _test_api=None):
     root = grade._root(root)
     with grade._lock(root):
         prepared = _ready(context, root)
+        fixed = _fixed(context.selector)
         admitted = _admission(context, root, prepared)
         child = retained._read(root / "judge-receipt.json")
         owner = output._checkpoint(root / "judge-owner.json")
         require(child["entry_invoked"] is True and child["cleanup_confirmed"] is True
                 and all(owner.get(key) == value for key, value in {
                     "plan_sha256": hashlib.sha256(context.grading.canonical_bytes()).hexdigest(),
-                    "cell_id": CELL, "stage": "fixed_grading", "attempt": 1, "phase": "reaped",
+                    "cell_id": fixed.CELL, "stage": "fixed_grading", "attempt": 1, "phase": "reaped",
                     "tree_reaped": True, "owner_reaped": True}.items()), "grade_cleanup_unconfirmed")
+        ledger_type = (output.RetentionFirstCellLedgerBinding if context.selector == SELECTOR
+                       else output.RetentionKeepR2LedgerBinding)
         files, roles, outcome = grade._grade_files(context, root, prepared, child,
-            retention_first_cell_binding=output.RetentionFirstCellLedgerBinding(
+            retention_first_cell_binding=ledger_type(
                 config_hash=prepared["entry"]["config_hash"],
                 grader_source_hash=prepared["entry"]["grader_source_hash"]))
-        terminal = {"format": TERMINAL_FORMAT, "binding": admitted["claim"]["binding"],
+        terminal = {"format": fixed.TERMINAL_FORMAT, "binding": admitted["claim"]["binding"],
             "claim_commit": admitted["returned_commit"], "claim_identity": admitted["claim_identity"],
             "outcome": outcome, "child": child,
-            "files": [{"role": roles[name], **retained._object(PREFIX + "/" + name, data)} for name, data in sorted(files.items())],
+            "files": [{"role": roles[name], **retained._object(fixed.PREFIX + "/" + name, data)} for name, data in sorted(files.items())],
             "missing": [role for role in ("grade_result", "grade_cost_ledger") if role not in roles.values()],
             "invoice_complete": False, "http_request_count": None}
-        payload = {PREFIX + "/" + name: data for name, data in files.items()}
-        payload[TERMINAL_PATH] = retained._encoded(terminal)
+        payload = {fixed.PREFIX + "/" + name: data for name, data in files.items()}
+        payload[fixed.TERMINAL_PATH] = retained._encoded(terminal)
         grade._record(root / "publication-reserved.json", {"terminal": terminal,
-            "expected_parent": admitted["returned_commit"], "terminal_identity": pilot._identity(payload[TERMINAL_PATH])})
+            "expected_parent": admitted["returned_commit"], "terminal_identity": pilot._identity(payload[fixed.TERMINAL_PATH])})
         result = grade._observation(stage="retention_grade_publication")
         try:
             with retained._session(_test_api) as (api, token, deadline):
@@ -544,7 +589,7 @@ def publish(context, root, *, _test_api=None):
                     paths=sorted(payload), token=token) == [], "retention_grade_payload_already_exists")
                 revision = grade._commit(api, repo, admitted["returned_commit"], payload, token, deadline, result)
                 identity = _terminal(api, repo, revision, terminal, admitted,
-                    grade._cache(root, "publication-verified"), token, deadline)
+                    grade._cache(root, "publication-verified"), token, deadline, selector=context.selector)
                 result.update(outcome="acknowledged", terminal_identity=identity, grading_state=outcome)
         except (Exception, KeyboardInterrupt) as error:
             grade._failed(result, error)
@@ -557,6 +602,7 @@ def reconcile(context, root, *, _test_api=None):
     root = grade._root(root)
     with grade._lock(root):
         prepared = _ready(context, root)
+        fixed = _fixed(context.selector)
         admitted = _admission(context, root, prepared)
         reservation = retained._read(root / "publication-reserved.json")
         _same(reservation["terminal_identity"], pilot._identity(retained._encoded(reservation["terminal"])),
@@ -569,12 +615,12 @@ def reconcile(context, root, *, _test_api=None):
                 repo = retained._target()
                 head = output._metadata(api, repo, grade.BRANCH, token, deadline)["sha"]
                 found = api.get_paths_info(repo_id=repo, repo_type="dataset", revision=head,
-                    paths=[TERMINAL_PATH], expand=True, token=token)
+                    paths=[fixed.TERMINAL_PATH], expand=True, token=token)
                 require(len(found) == 1 and isinstance(found[0], RepoFile), "retention_grade_terminal_unresolved")
                 revision = getattr(found[0].last_commit, "oid", None)
                 require(output._hash(revision, 40), "retention_grade_terminal_unresolved")
                 identity = _terminal(api, repo, revision, reservation["terminal"], admitted,
-                    grade._cache(root, "reconciliation-read"), token, deadline)
+                    grade._cache(root, "reconciliation-read"), token, deadline, selector=context.selector)
                 result.update(outcome="verified_server_state", returned_commit=revision,
                     terminal_identity=identity, writer_acknowledgment="not_established")
         except (Exception, KeyboardInterrupt) as error:
@@ -596,15 +642,16 @@ def main(argv=None, *, _test_api=None, _test_transport=None):
         grade._workflow_inputs()
         context = compile_request(args.reviewed_source_sha, selector=args.selector,
                                   terminal=args.terminal_revision, producer=args.producer_source_sha)
+        fixed = _fixed(context.selector)
         if args.phase != "plan" or (os.environ.get("GITHUB_ACTIONS") == "true"
                                    and os.environ.get("PILOT_GRADE_DRY_RUN") == "false"):
             _authority(context)  # Before renderer, HF, OIDC, or any owned reservation.
         if args.phase == "plan":
             result = {"outcome": "plan_only", "judge_ready": False, "commands": [],
-                "fixed_evidence_sha256": fixed_evidence_sha256(), "grading_parent": PARENT["revision"],
-                "inference_terminal": RESULT["terminal_commit"], "grade": None}
+                "fixed_evidence_sha256": fixed_evidence_sha256(context.selector), "grading_parent": fixed.PARENT["revision"],
+                "inference_terminal": fixed.RESULT["terminal_commit"], "grade": None}
         else:
-            require(args.terminal_revision == RESULT["terminal_commit"], "explicit_retention_terminal_required")
+            require(args.terminal_revision == fixed.RESULT["terminal_commit"], "explicit_retention_terminal_required")
             if args.phase == "prepare":
                 prepared = prepare(context, args.root, _test_api=_test_api, _test_transport=_test_transport)
                 from core.azure_ai_clients import grader_route_workloads
@@ -626,7 +673,7 @@ def main(argv=None, *, _test_api=None, _test_transport=None):
             "outcome", "stage", "reason", "http_status", "returned_commit", "terminal_identity", "grading_state",
             "cleanup_confirmed", "entry_invoked", "exit_code", "timed_out", "judge_ready", "grade", "commands",
             "fixed_evidence_sha256", "intake_sha256", "grading_parent", "inference_terminal", "writer_acknowledgment"}}
-        safe.update(selector=SELECTOR, source_sha=context.controller_source_sha, invoice_complete=False,
+        safe.update(selector=context.selector, source_sha=context.controller_source_sha, invoice_complete=False,
                     inference_launched=False, automatic_retry=False)
         print(json.dumps(safe, sort_keys=True))
         return 0 if result["outcome"] in {"plan_only", "prepared", "acknowledged", "child_reaped", "verified_server_state"} else 2
