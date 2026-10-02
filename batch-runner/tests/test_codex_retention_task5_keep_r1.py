@@ -42,9 +42,9 @@ REAL_ROOT, SOURCE, positive, _write = prior.REAL_ROOT, prior.SOURCE, prior.posit
 
 
 class FailedPredecessorHF(shared.SuccessorHF):
-    def __init__(self, plan):
+    def __init__(self, plan, *, binding=reader.TASK5_FRESH_R1, successor_adapter=successor):
         MemoryHF.__init__(self)
-        producer = _task5_fixture(plan, terminal=True, exit_code=1)
+        producer = _task5_fixture(plan, terminal=True, exit_code=1, binding=binding)
         # Authored failed controls declare result/ledger only. No payload read
         # is needed to prove the predecessor's cleanup or publication history.
         row = producer.payload["results"][0]
@@ -53,12 +53,12 @@ class FailedPredecessorHF(shared.SuccessorHF):
                           if name in (reader.intake.RESULT, reader.intake.LEDGER)}
         producer.bind_payload()
         producer.seed()
-        self.producer_paths = (previous.CLAIM, previous.TERMINAL, previous.OUTPUT)
-        self.successor_paths = (successor.CLAIM, successor.TERMINAL, successor.OUTPUT)
-        self.preceding_terminal = previous.PREDECESSOR["terminal_commit"]
+        self.producer_paths = (producer.producer.CLAIM, producer.producer.TERMINAL, producer.producer.OUTPUT)
+        self.successor_paths = (successor_adapter.CLAIM, successor_adapter.TERMINAL, successor_adapter.OUTPUT)
+        self.preceding_terminal = producer.producer.PREDECESSOR["terminal_commit"]
         self.claim, self.summary, self.terminal, self.files = (
             deepcopy(getattr(producer, name)) for name in ("claim", "summary", "terminal", "files"))
-        self.pins = deepcopy(successor.PREDECESSOR)
+        self.pins = deepcopy(successor_adapter.PREDECESSOR)
         self.terminal.update(claim_commit=self.pins["claim_commit"], output_commit=self.pins["output_commit"])
         self.downloads = []
         self.seed()
@@ -84,7 +84,7 @@ class KeepTransport(shared.R2Transport):
         """Retain one owned native bundle through a real settled B recovery."""
         request = self.recovery_request
         context, stage = controller._context(request), controller.verify_staged_runtime(request)
-        old = CodexWorkspace.create(task_id="synthetic-preceding-fresh-cell")
+        old = CodexWorkspace.create(task_id="synthetic-preceding-cell")
         _write(old.workspace / "previous-cell-only.txt", b"never adopt")
         workspace = CodexWorkspace.create(task_id=registration.TASK5)
         assert workspace.root != old.root and list(workspace.workspace.iterdir()) == []
@@ -95,7 +95,7 @@ class KeepTransport(shared.R2Transport):
             _write(path, data)
         deliverable = controller.ROOT / "batch-runner/workspace/upload/deliverable_files" / registration.TASK5 / "report.txt"
         markers[deliverable] = deliverable.read_bytes()
-        identity = owned._digest({"cell_id": successor.CELL_ID, "request_sha256": owned._digest(self.document)})
+        identity = owned._digest({"cell_id": self.cell_id, "request_sha256": owned._digest(self.document)})
         receipt_path, receipt_run = host / "synthetic-keep-recovery.sqlite", "synthetic-task5-keep-recovery"
         store = controller._deadline(host, context, stage, self)
         try:
@@ -110,7 +110,7 @@ class KeepTransport(shared.R2Transport):
                     match="^native thread creation was interrupted before its identifier was bound$"):
                 task.continuation(identity)
             assert all(path.read_bytes() == data for path, data in markers.items())
-            task.bind_thread("synthetic-task5-keep-r1-thread", resumed=False)
+            task.bind_thread("synthetic-" + self.cell_id + "-thread", resumed=False)
             assert task.recovery_context(0) is None  # Mechanical B, no C feedback.
             with CostReceiptLedger(receipt_path, run_id=receipt_run) as ledger:
                 call_id = ledger.reserve(call_id="synthetic-turn-0", task_id=registration.TASK5,
@@ -136,7 +136,7 @@ class KeepTransport(shared.R2Transport):
             bound = task.continuation(identity)
             restored = CodexWorkspace.restore(bound["workspace"])
             assert restored.root == workspace.root and restored.continuation_binding() == layout
-            assert bound["thread_id"] == "synthetic-task5-keep-r1-thread"
+            assert bound["thread_id"] == "synthetic-" + self.cell_id + "-thread"
             assert bound["turns"][0]["phase"] == "settled"
             assert bound["turns"][0]["failure_observation"]["category"] == "rate_limited"
             assert all(path.read_bytes() == data for path, data in markers.items())
@@ -147,7 +147,7 @@ class KeepTransport(shared.R2Transport):
             with pytest.raises(TaskDeadlineRefused, match="^output reset requires the fresh bundle identity$"):
                 task.bind_fresh_output_directory(deliverable.parent)
             with pytest.raises(TaskDeadlineRefused, match="^native continuation request/runtime identity mismatch$"):
-                task.continuation(owned._digest({"cell_id": previous.CELL_ID}))
+                task.continuation(owned._digest({"cell_id": self.document["serial_domain"]["predecessor"]["cell_id"]}))
             with pytest.raises(TaskDeadlineRefused, match="^native continuation cannot replace an admitted workspace$"):
                 task.bind_workspace(identity, owned._digest(self.document), old.continuation_binding())
             with pytest.raises(TaskDeadlineRefused, match="^native resume returned a different thread identifier$"):
@@ -188,7 +188,8 @@ def test_task5_keep_r1_is_the_closed_sixth_cell(tmp_path, monkeypatch, capsys, a
     assert [(item.cell_id, item.ordinal, item.bundle, item.repetition) for item in controller.CELL_BINDINGS] == [
         (production_plan["order"][0], 0, "keep", 1), (production_plan["order"][1], 1, "fresh", 1),
         (production_plan["order"][2], 2, "fresh", 2), (production_plan["order"][3], 3, "keep", 2),
-        (production_plan["order"][4], 4, "fresh", 1), (production_plan["order"][5], 5, "keep", 1)]
+        (production_plan["order"][4], 4, "fresh", 1), (production_plan["order"][5], 5, "keep", 1),
+        (production_plan["order"][6], 6, "keep", 2)]
     assert pins == {"cell_id": previous.CELL_ID,
         "producer_source_sha": "e5e338aa22c247133936fa075c2def7bffb95173", "run_id": "37032230813",
         "execution_job_id": 110933285330,
@@ -246,7 +247,7 @@ def test_task5_keep_r1_is_the_closed_sixth_cell(tmp_path, monkeypatch, capsys, a
     for malformed in (None, True, {}, ForeignPublication(**vars(publication)), *(
             replace(publication, cell_id=cell) for cell in (
                 None, True, 5, b"unknown", "unknown", successor.CELL_ID + "\n",
-                controller.FIRST_CELL_ID, *production_plan["order"][6:]))):
+                controller.FIRST_CELL_ID, *production_plan["order"][7:]))):
         with pytest.raises(ci.RetentionCIRefused, match="^fixed_retention_publication_binding_required$"):
             fresh._verify_publication(None, None, TERMINAL_HEAD, {}, {},
                 tmp_path / "never-unsupported-publication", None, 0, malformed)
@@ -316,7 +317,7 @@ def test_task5_keep_r1_is_the_closed_sixth_cell(tmp_path, monkeypatch, capsys, a
         child.recovery_request = request
         grant = ci.ExecutionGrantRequest(SOURCE, owned._digest(document), archive)
         denied = host_parent / "not-admitted"
-        for wrong in ("unregistered", True, 5, *plan["order"][6:]):
+        for wrong in ("unregistered", True, 5, *plan["order"][7:]):
             with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
                 controller.execute_first_cell(replace(request, cell_id=wrong), host_state=denied, grant=grant)
         with pytest.raises(controller.RetentionControllerRefused, match="^controller_source_mismatch$"):
@@ -651,4 +652,4 @@ def test_task5_keep_r1_routes_and_current_pins_preserve_fixed_readers(tmp_path, 
         state[name] = saved
     assert historical == (bridge.RESULT, bridge.PARENT, bridge.READER, fixed.RESULT, fixed.PARENT, fixed.READER)
     assert effects == []
-    print("OFFLINE ordinal5 routing: exact six-cell execution/six-result/five-terminal allowlists; 288 mode cases; guarded helper imports; current pins/source refusals and immutable historical grading evidence preserved")
+    print("OFFLINE ordinal5 routing: exact seven-cell execution/six-result/five-terminal allowlists; 288 mode cases; guarded helper imports; current pins/source refusals and immutable historical grading evidence preserved")

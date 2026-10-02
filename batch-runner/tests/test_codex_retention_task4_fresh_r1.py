@@ -255,7 +255,8 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
     assert [(binding.cell_id, binding.ordinal, binding.bundle) for binding in controller.CELL_BINDINGS] == [
         (production_plan["order"][0], 0, "keep"), (production_plan["order"][1], 1, "fresh"),
         (production_plan["order"][2], 2, "fresh"), (production_plan["order"][3], 3, "keep"),
-        (production_plan["order"][4], 4, "fresh"), (production_plan["order"][5], 5, "keep")]
+        (production_plan["order"][4], 4, "fresh"), (production_plan["order"][5], 5, "keep"),
+        (production_plan["order"][6], 6, "keep")]
     assert fresh.SCOPE == {**ci.SCOPE, "cell_id": fresh.CELL_ID, "ordinal": 1, "retention_bundle": "fresh"}
     frozen = {name: (REAL_ROOT / name).read_bytes() for name in (
         "batch-runner/codex_retention_fixed_grade.py", "batch-runner/codex_retention_grade_readout.py",
@@ -382,7 +383,7 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
     api = deepcopy(seed)
     transport = FreshTransport(document, api, key)
     denied = host_parent / "not-admitted"
-    for wrong in ("unregistered", plan["order"][6], plan["order"][7]):
+    for wrong in ("unregistered", plan["order"][7]):
         with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
             controller.execute_first_cell(replace(request, cell_id=wrong), host_state=denied, grant=grant)
     with pytest.raises(preparation.RetentionPreparationRefused, match="^emitted_config_or_task_bytes_mismatch$"):

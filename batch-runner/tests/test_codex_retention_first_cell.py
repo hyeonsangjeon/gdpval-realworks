@@ -106,7 +106,7 @@ def test_first_retention_cell_staging_and_serial_control_are_closed(tmp_path, mo
             with pytest.raises(controller.RetentionControllerRefused, match="^" + controller.LIVE_GATE + "$"):
                 controller._run_post_authority_cell(request, host_state=denied_host, _test_transport=transport)
         assert not denied_host.exists()
-        for cell_id in ("unregistered", plan["order"][6], plan["order"][7]):
+        for cell_id in ("unregistered", plan["order"][7]):
             with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
                 controller.plan_first_cell(replace(request, cell_id=cell_id))
         with pytest.raises(controller.RetentionControllerRefused, match="^controller_source_mismatch$"):
