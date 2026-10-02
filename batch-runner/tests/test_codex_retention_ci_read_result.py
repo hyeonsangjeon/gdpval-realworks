@@ -26,10 +26,13 @@ def _boolean(expression, replacements):
     return result
 
 
-def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp_path, capsys):
-    from .test_codex_retention_ci_observation import _assert_retention_mode_routes
+# Resolve the mutual helper imports during collection, before offline guards.
+# Keep a module binding so either helper module can be collected first.
+from . import test_codex_retention_ci_observation as workflow_observation  # noqa: E402
 
-    _assert_retention_mode_routes()
+
+def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp_path, capsys):
+    workflow_observation._assert_retention_mode_routes()
     workflow = yaml.safe_load((reader.ci.ROOT / reader.ci.WORKFLOW).read_bytes())
     inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
     assert set(inputs) == {"reviewed_source_sha", "cell_id", "prepare", "observe_locator", "execute", "read_result", "observe_terminal"}
