@@ -121,6 +121,19 @@ def _publication_binding():
                                OUTPUT_FORMAT, retained._encoded(PREDECESSOR), "Retain Task4 fresh/r1 output")
 
 
+def _publication_task_id(binding):
+    """Only these source-defined successor cells use this publication verifier."""
+    tasks = {
+        controller.FRESH_CELL_ID: registration.TASK4,
+        controller.FRESH_R2_CELL_ID: registration.TASK4,
+        controller.KEEP_R2_CELL_ID: registration.TASK4,
+        controller.TASK5_FRESH_R1_CELL_ID: registration.TASK5,
+    }
+    ci.require(type(binding) is _PublicationBinding and type(binding.cell_id) is str
+               and binding.cell_id in tasks, "fixed_retention_publication_binding_required")
+    return tasks[binding.cell_id]
+
+
 def verify_terminal(api, repo, revision, expected_terminal, expected_claim, cache, token, deadline):
     return _verify_publication(api, repo, revision, expected_terminal, expected_claim, cache, token, deadline,
                                _publication_binding())
@@ -132,6 +145,7 @@ def _verify_publication(api, repo, revision, expected_terminal, expected_claim, 
     Expected controls come from the owner's retained local publication records,
     not a newly adopted claim or a mutable latest lookup. This cannot run a child.
     """
+    task_id = _publication_task_id(binding)
     CELL_ID, CLAIM, TERMINAL, OUTPUT = binding.cell_id, binding.claim, binding.terminal, binding.output
     CLAIM_FORMAT, TERMINAL_FORMAT, OUTPUT_FORMAT = binding.claim_format, binding.terminal_format, binding.output_format
     PREDECESSOR = owned._json_object(binding.predecessor)
@@ -168,7 +182,7 @@ def _verify_publication(api, repo, revision, expected_terminal, expected_claim, 
             and output._hash(record["sha256"]), "fresh_output_identity_refused")
         name = record["path"]
         ci.require(name in {"step2_inference_results.json", Path(owned.LEDGER).name}
-            or ci.canonical_deliverable_path(registration.TASK4, name) == name, "fresh_output_role_refused")
+            or ci.canonical_deliverable_path(task_id, name) == name, "fresh_output_role_refused")
     names = [record["path"] for record in files]
     ci.require(names == sorted(set(names)) and sum(item["size"] for item in files) <= output.MAX_TOTAL_BYTES,
                "fresh_output_bounds_exceeded")

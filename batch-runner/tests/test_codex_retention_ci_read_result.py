@@ -181,7 +181,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "  '" + fresh_hash + "  batch-runner/codex_retention_fresh_r1_result_intake.py' \\",
         *["  '" + digest + "  batch-runner/" + name + "' \\" for name, digest in (
             ("codex_retention_result_intake.py", module_hash), ("codex_retention_ci.py", verifier_hash),
-            ("codex_retention_task4_fresh_r1.py", "a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3"),
+            ("codex_retention_task4_fresh_r1.py", "11901d7398066d0ccf2692c3f1b41fe4a066d872efecfa411756d67858f941e1"),
             ("codex_retention_first_cell.py", "ae5754bdd294a7560aecbe0d4c819bc6fdd123cf82fc652c6aedee5bae2701f7"))],
         "  | sha256sum --check --status",
         'if [[ "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' ]]; then',

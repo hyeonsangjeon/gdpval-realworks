@@ -240,6 +240,46 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
         with pytest.raises(output.OutputPublicationRefused, match="^fixed_fresh_read_binding_required$"):
             reader._fixed_binding(binding)
 
+    # The shared verifier retains all three Task4 successor path contracts.
+    # These are synthetic immutable controls, not a replay of an old cell suite.
+    for binding in (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2):
+        server = FreshResultHF(production_plan, binding=binding)
+        publication = server.producer._publication_binding()
+        assert fresh._publication_task_id(publication) == registration.TASK4
+        with retained._session(server) as (memory, token, deadline):
+            view = fresh._verify_publication(memory, memory.repo, TERMINAL_HEAD, server.terminal,
+                server.claim, ci._cache(tmp_path, "task4-publication-" + str(binding.ordinal)),
+                token, deadline, publication)
+            assert view["completion"]["cell_id"] == binding.expectation.cell_id
+            assert view["writer_acknowledgment"] == "not_established" and view["replay_authorized"] is False
+            wrong = deepcopy(server.terminal)
+            deliverable = next(item for item in wrong["completion"]["files"]
+                               if item["path"].startswith("deliverable_files/"))
+            deliverable["path"] = "deliverable_files/" + registration.TASK5 + "/report.txt"
+            before = list(server.calls)
+            with pytest.raises(ValueError,
+                    match="^deliverable path must stay under deliverable_files/" + registration.TASK4 + "/$") as refused:
+                fresh._verify_publication(memory, memory.repo, TERMINAL_HEAD, wrong, server.claim,
+                    tmp_path / "never-task4-path-read", token, deadline, publication)
+            assert type(refused.value) is ValueError and server.calls == before
+        assert server.commits == []
+
+    publication = successor._publication_binding()
+    assert fresh._publication_task_id(publication) == registration.TASK5
+
+    class ForeignPublication(fresh._PublicationBinding):
+        pass
+
+    for malformed in (None, True, {}, ForeignPublication(**vars(publication)), *(
+            replace(publication, cell_id=cell) for cell in (
+                None, True, 4, b"unregistered", "unregistered", successor.CELL_ID + "\n",
+                controller.FIRST_CELL_ID, *production_plan["order"][5:]))):
+        with pytest.raises(ci.RetentionCIRefused, match="^fixed_retention_publication_binding_required$"):
+            fresh._verify_publication(None, None, TERMINAL_HEAD, {}, {},
+                tmp_path / "never-unsupported-publication", None, 0, malformed)
+    assert not (tmp_path / "never-task4-path-read").exists()
+    assert not (tmp_path / "never-unsupported-publication").exists()
+
     seed = SuccessfulPredecessorHF(production_plan)
     synthetic_pins = seed.synthetic_identities()  # Authored independently before any validator read.
     monkeypatch.setattr(successor, "PREDECESSOR", synthetic_pins)
@@ -406,6 +446,7 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
         shutil.copytree(root, snapshot)
         host = host_parent / "completed"
         original_error_context = output._error_context
+        diagnostic_api, diagnostic_child = api, child
 
         def observe_publication_error(error):
             """Observe the original failure without changing its classification."""
@@ -441,15 +482,16 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
             print(json.dumps({"diagnostic": "task5_publication_original_exception",
                 "exception_chain": chain, "publication": publication,
                 "state_counts": {
-                    "commit_calls": sum(name == "commit" for name, _ in api.calls),
-                    "admission_commit_attempts": api.commits.count("admission"),
-                    "output_commit_attempts": api.commits.count("output"),
-                    "terminal_commit_attempts": api.commits.count("terminal"),
+                    "commit_calls": sum(name == "commit" for name, _ in diagnostic_api.calls),
+                    "admission_commit_attempts": diagnostic_api.commits.count("admission"),
+                    "output_commit_attempts": diagnostic_api.commits.count("output"),
+                    "terminal_commit_attempts": diagnostic_api.commits.count("terminal"),
                     "committed_terminal_controls": sum(
-                        api.writers[revision].get(successor.TERMINAL) == revision for revision in api.parents),
+                        diagnostic_api.writers[revision].get(successor.TERMINAL) == revision
+                        for revision in diagnostic_api.parents),
                     "current_output_objects": sum(name.startswith(successor.OUTPUT + "/")
-                                                  for name in api.trees[api.head]),
-                    "owned_children": len(child.children),
+                                                  for name in diagnostic_api.trees[diagnostic_api.head]),
+                    "owned_children": len(diagnostic_child.children),
                 }}, sort_keys=True))
             return classification
 
@@ -472,6 +514,18 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
         assert terminal["format"] == successor.TERMINAL_FORMAT and terminal["completion"]["format"] == successor.OUTPUT_FORMAT
         held = (host / "remote-terminal-receipt.json").read_bytes()
         with retained._session(api) as (server, token, deadline):
+            wrong = deepcopy(terminal)
+            deliverable = next(item for item in wrong["completion"]["files"]
+                               if item["path"].startswith("deliverable_files/"))
+            assert deliverable["path"].startswith("deliverable_files/" + registration.TASK5 + "/")
+            deliverable["path"] = "deliverable_files/" + registration.TASK4 + "/report.txt"
+            before = list(api.calls)
+            with pytest.raises(ValueError,
+                    match="^deliverable path must stay under deliverable_files/" + registration.TASK5 + "/$") as refused:
+                successor.verify_terminal(server, server.repo, server.head, wrong, claim,
+                    host / "never-task5-path-read", token, deadline)
+            assert type(refused.value) is ValueError and api.calls == before
+            assert not (host / "never-task5-path-read").exists()
             reconciled = successor.verify_terminal(server, server.repo, server.head, terminal, claim,
                 ci._cache(host, "reconcile"), token, deadline)
         assert reconciled["writer_acknowledgment"] == "not_established" and reconciled["replay_authorized"] is False
@@ -491,6 +545,8 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
                 server = deepcopy(api if fault == "remote_no_replay" else seed)
                 server.lost = "terminal" if fault == "lost_terminal" else None
                 transport = Task5Transport(current, server, key, mode=fault if fault in ("cleanup", "timeout") else "ordinary")
+                diagnostic_api, diagnostic_child = server, transport
+                trial.setattr(output, "_error_context", observe_publication_error)
                 private = host_parent / fault
                 if fault == "timeout":
                     stopped = positive("task5_timeout_cleanup_publication", lambda: successor.execute(selected,
@@ -527,4 +583,4 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
                 assert len(transport.children) == (0 if fault == "remote_no_replay" else 1)
                 assert server.commits == (["admission"] if fault == "cleanup" else ["admission", "output", "terminal"])
         assert effects == [] and base.PRIVATE.decode() not in capsys.readouterr().out
-    print("OFFLINE ordinal4: fixed successful KEEP_R2 control-only predecessor, exact authority/CAS, fresh owned reset, unchanged cumulative clock, owned cleanup/publication/no-replay; no live effects")
+    print("OFFLINE ordinal4: closed Task4/Task5 publication paths, fixed successful KEEP_R2 control-only predecessor, exact authority/CAS, fresh owned reset, unchanged cumulative clock, owned cleanup/publication/no-replay; no live effects")
