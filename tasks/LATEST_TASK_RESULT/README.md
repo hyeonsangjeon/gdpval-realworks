@@ -1,44 +1,128 @@
 # Latest task result
 
-## PROJECT5-KEEP-R2-GRADE-FILENAME-20261002-1418
+## PROJECT5-KEEP-R2-FIXED-GRADE-20261002-1246
 
-The closed keep/r2 grading path now passes the authorized synthetic lifecycle
-and coupled routing proof at `7d90f7dcce88537d8fe2fa271c19be68078ca019`:
-2 collected, 2 passed in 36.42s, exit 0, with no timeout. The leader's dated
-1418 APPROVE-WITH-CONDITIONS decision authorized only the unpublished selector
-rename and its required bindings. This proof is ready for independent
-immutable-head review and applicable CI; it is not a live grade or final source
-approval. The 1316 and 1246 entries below are preserved historical snapshots of
-their earlier stops, not the current publication status.
+Implemented the fixed one-use Task4 keep/r2 grading path as
+`retention/keep-r2`. Its authorized token-free proof at
+`7d90f7dcce88537d8fe2fa271c19be68078ca019` collected 2 selectors and passed
+both in 36.42s, exit 0, without timeout. Real validators with synthetic
+transport and an owned judge reached preparation, grading-parent history/CAS,
+private publication and lost-ack reconciliation. This is not a live grade;
+the consumed keep/r2 inference remains ungraded.
 
-### Closed naming correction
+Owner review
+[5388701816](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5388701816)
+of source HEAD `fedf80d4298aeb0e4a4fbc43086ddffc148ad236` found no blocking
+implementation defect, verified the four current source hashes below and
+recomputed the fixed-evidence digest. SOURCE-APPROVE applies to those code
+bytes, not final delivery or paid grading. This consolidation changes only the
+two completion records; final records review, applicable same-HEAD CI and a
+separately approved exact live-grade binding remain required.
 
-The new selector changes from `retention/task4-keep-r2` to
-`retention/keep-r2`. The long selector was never published or executed and is
-refused, not retained as an alias or sent through generic grading. The adapter,
-canonical context/command, emitted
-`batch-runner/experiments/retention/keep-r2.yaml` metadata path, exact typed
-ledger/run-ID binding and workflow plan/protected/live/reconciliation gates
-use the short selector. Approval inputs and the new fixed-evidence digest bind
-that spelling. The dispatcher still reaches the existing closed selector guard.
+### Implemented scope
 
-The cell remains
-`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2`, ordinal 3 /
-repetition 2, with the same producer, immutable result and same-run authority.
-`retention/first-cell`, old pilot/readout selectors and historical evidence keep
-their meanings. No UUID/hash truncation, random path, alias, global Step8 or
-checkpoint naming change, relaxed `PC_NAME_MAX` check, judge/config/rubric/model
-change, permission change or budget change was made. Both the canonical-context
-mutation refusal and the actual-reader-byte corruption checks are retained.
+The six-file implementation binds cell
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2`, KEEP,
+ordinal 3 / repetition 2, to the fixed consumed result and the separate keep/r1
+grading parent. It reuses the existing fixed-grade lifecycle, deliverables-only
+materializer staging, recomputed provenance and derived-input fingerprint,
+exact rubric/grader checks, serial current-parent CAS, one-use owned judge,
+private add-only publication and same-job read-only lost-ack reconciliation.
+The second exact ledger-binding type does not replace the first-cell type or
+widen pilot ledger identities. One immutable result permits one judge, not
+another judge or upload after an uncertain acknowledgment.
+
+The adapter/context/command, emitted
+`batch-runner/experiments/retention/keep-r2.yaml` metadata path, typed ledger/run-ID,
+approval inputs and existing plan/protected/live/reconciliation workflow routes
+use `retention/keep-r2`. The former unpublished `retention/task4-keep-r2` is
+refused, not an alias or a generic-grading fallback. The dispatcher still uses
+the closed selector guard. `retention/first-cell`, old pilot/readout selectors,
+generic retention exclusions, historical evidence and no-replay behavior remain.
+No arbitrary profile, job, secret, permission, experimental condition, retry
+policy or budget axis was added. `default_v2_sol_max.yaml`, original rubric
+revision `11e7900cdcac61bc4daf59e65feb238acda98fbf`, the 240-minute judge,
+242-minute owned-child and 300-minute job limits are unchanged.
+
+The leader's source-informed 1246 APPROVE-WITH-CONDITIONS decision authorized
+the closed implementation scope. The 1316 decision allowed the test-only fault
+injection correction; the 1418 decision allowed only the new selector rename
+and coupled bindings. They did not authorize paid execution. Prior failed
+reviewer transports were not retried or treated as approvals. Prior reader
+PR719 HEAD `2f865eb6491e236ebe54027f29c030d75e88cef0`, review
+[5387838626](https://github.com/hyeonsangjeon/gdpval-realworks/pull/719#pullrequestreview-5387838626)
+and all 10 checks passed that reader's source gate; its 1429-line review and
+19.11s reader proof were not repeated and are not this grading proof.
+
+### Targeted proof and historical attempts
+
+Implementation/workflow/test bytes were pinned before the invocations. The
+passing invocation used
+`/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 / pytest
+9.1.1, after its same-environment import prerequisite, with no installation.
+Both selectors in `tests/test_codex_retention_keep_r2_grade.py` passed:
+`test_keep_r2_fixed_grade_is_bound_one_use_and_private` and
+`test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed`.
+The command ran from `batch-runner`:
+
+```text
+timeout --signal=TERM --kill-after=10s 180s env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTHONHASHSEED=0 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_is_bound_one_use_and_private tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed -vv -s --tb=short -p no:cacheprovider
+```
+
+Saved log: `/tmp/project5-keep-r2-grade-filename.Y8x8dU/targeted.log`, SHA256
+`bef2f512c1d22474d69d564b38e965deda8c454a004e80901622ad45edf54c16`.
+Result: 2 collected, 2 passed in 36.42s, exit 0; the 180-second timeout did not
+fire. Offline process/network/model guards, disabled implicit HF tokens and
+plugin autoload, and the absence of credential variables were preserved.
+No `-x`, separate collection probe, delivered suite, private integration,
+full suite or build was used. No proof was rerun for this records correction.
+
+The lifecycle verified marker/payload readback, materializer provenance and
+derived fingerprint, exact original rubric, distinct grade-parent controls,
+claim and object history, current-parent CAS, one synthetic owned judge,
+private publication and lost-ack read-only reconciliation. The coupled proof
+ran the real protected-approval script, parsed workflow YAML and checked old
+defaults, closed routes, typed first-cell/keep-r2 ledger rows and refusals,
+same-run approval and secret/job/time boundaries. These synthetic observations
+do not authenticate live publications, prove native installation, establish
+writer acknowledgment or constitute a live grade.
+
+| Historical tested HEAD and result | Log SHA256 | Refusal and reached/unreached boundary | Subsequent correction |
+| --- | --- | --- | --- |
+| `44fa6694f73fad8d6ad202855e5847b6c4212d6d`: 2 collected, 1 failed / 1 passed in 7.32s, exit 1; no timeout | `3070012930c09ed096529c73e50ba0a6ee997f412da28874e8249ed661f5234e` | At test line 195, expected `reviewed_retention_reader_required` but correctly received the earlier `retention_grade_context_changed`. Canonical request compilation, frozen-reader checks, synthetic KEEP_R2 intake and pre-root approval/source refusals were reached. The intended bad-byte predicate, successful preparation/materialization, grade-parent history/CAS, owned judge and publication were not reached. The workflow/approval/ledger selector passed only against the old long selector. | `9a628e52732c162dd0a179ca96579dacc402a4d2` retained the expected-pin context-mutation refusal and added actual-reader-byte corruption with canonical expected pins. Production and workflow bytes did not change in that test-only correction. |
+| `9a628e52732c162dd0a179ca96579dacc402a4d2`: lifecycle only, 1 collected / 1 failed in 8.64s, exit 1; no timeout | `99ca382018a16c5b6145db7a200ef1d1ec67cd05a5ad81cc15c1873e44cf4ca1` | Corrected context-mutation and actual-byte refusal checks completed. The first intended successful `bridge.prepare` at test line 234 reached `codex_retention_fixed_grade.py:368`, then `_entry_contract` at `codex_budget_pilot_grading.py:747`, and refused with `grading_filename_capacity_refused`. Successful preparation, derived fingerprint/materialization, grade-parent history/CAS, judge, publication and reconciliation assertions were not reached. | `7d90f7dcce88537d8fe2fa271c19be68078ca019` applied the leader-authorized shorter selector and filename assertions. Its changed routing/authority bytes required the separately authorized two-selector proof above. |
+
+Neither historical failure is relabeled as a passing lifecycle proof. Their
+logs remain `/tmp/project5-keep-r2-fixed-grade.gz9e7b/targeted.log` and
+`/tmp/project5-keep-r2-grade-test-correction.uEdJ4x/lifecycle.log`. The first
+attempt used both named selectors; the second used the lifecycle selector only
+with the same runner/offline flags and bound. Its test wrapper delegates to
+the real `output._bytes`, corrupts only bytes returned for the exact dependency
+path, confirms the targeted read, and requires `reviewed_retention_reader_required`
+with no private root, transport call or owned-judge activity. Expected-pin
+mutation still requires `retention_grade_context_changed`; no guard was
+weakened or reordered.
+
+The initial prerequisite printed
+`sys.executable=/ai-work/venvs/gdpval-realworks-py310/bin/python`,
+`sys.version=3.10.12 (main, Jun 22 2026, 18:55:27) [GCC 11.4.0]` and
+`pytest.__version__=9.1.1`, exit 0, without installing packages; its log SHA256
+is `5f1ef71b3a20194547eb67a95ef44e8a440bd619cf6be992e3b599c9469f60cb`.
+The later prerequisites also passed without installation; both
+`/tmp/project5-keep-r2-grade-test-correction.uEdJ4x/prerequisite.log` and
+`/tmp/project5-keep-r2-grade-filename.Y8x8dU/prerequisite.log` have SHA256
+`5513d294c3594784460699bb31a4f4ba3698c333c8f144c3b8085264a9d98b96`.
+The earlier reader's missing-pytest failure and authorized replacement proof
+remain separate in the preexisting history below.
 
 ### Measured filename boundary
 
-Before pytest, the real fixed config, Step8 output resolver, judge slug and
-checkpoint resolver produced these UTF-8 leaf lengths. Actual
-`os.pathconf(..., "PC_NAME_MAX")` was 255 on both the worktree and task-owned
+Before the passing invocation, the real fixed config, Step8 output resolver,
+judge slug and checkpoint resolver produced these UTF-8 leaf lengths. Actual
+`os.pathconf(..., "PC_NAME_MAX")` was 255 on both the worktree and test-owned
 filesystem; the limit was not mocked.
 
-| Derived leaf | Former long selector, bytes | New short selector, bytes |
+| Derived leaf | Former long selector, bytes | Final `retention/keep-r2`, bytes |
 | --- | ---: | ---: |
 | Grade JSON | 219 | 213 |
 | JSONL cost ledger | 232 | 226 |
@@ -49,310 +133,35 @@ filesystem; the limit was not mocked.
 | Checkpoint | 257 | 251 |
 | Atomic checkpoint temporary | 261 | 255 |
 
-The temporary checkpoint fits exactly, with no spare bytes. The targeted test
-asserted every required length against the actual limit and completed a tiny
-real checkpoint write/readback on its own filesystem, including the 255-byte
-temporary leaf. This verifies the local boundary, not an unmeasured host's
-capacity. The generated config hash is `62a6d99d9e74d187`; grader-source SHA256
-remains `997c30a6b6b8ed8f53d75a6db180dca549df6d0ae31e549934b75eb27d1b0fc1`.
-Full derived names and measurements are saved in
+The temporary checkpoint fits exactly, with no spare bytes. The test asserted
+every required leaf against the actual limit and completed a tiny real
+checkpoint write/readback including the 255-byte temporary leaf. It proves the
+local boundary, not an unmeasured host's capacity. No UUID/hash truncation,
+random path, global Step8/checkpoint naming change or relaxed filesystem check
+was used. Generated config hash: `62a6d99d9e74d187`. Full derived names are in
 `/tmp/project5-keep-r2-grade-filename.Y8x8dU/filenames.json`, SHA256
 `5d5dbf13a662280080b0f04862e81753c4b49482074c00b75af0aac53b1e43eb`.
 
-### Pinned proof and earlier failures
+### Fixed input, marker and grading-parent evidence
 
-The same-environment prerequisite verified
-`/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 / pytest
-9.1.1, without installation. Its saved `prerequisite.log` in the measurement
-directory has SHA256
-`5513d294c3594784460699bb31a4f4ba3698c333c8f144c3b8085264a9d98b96`.
-Exactly these two selectors passed at
-`7d90f7dcce88537d8fe2fa271c19be68078ca019`:
-
-| Selector in `tests/test_codex_retention_keep_r2_grade.py` | Result |
-| --- | --- |
-| `test_keep_r2_fixed_grade_is_bound_one_use_and_private` | Passed |
-| `test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed` | Passed |
-
-From `batch-runner`, the single invocation was:
-
-```text
-timeout --signal=TERM --kill-after=10s 180s env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTHONHASHSEED=0 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_is_bound_one_use_and_private tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed -vv -s --tb=short -p no:cacheprovider
-```
-
-The full log is
-`/tmp/project5-keep-r2-grade-filename.Y8x8dU/targeted.log`, SHA256
-`bef2f512c1d22474d69d564b38e965deda8c454a004e80901622ad45edf54c16`.
-Both selectors passed in 36.42s, exit 0; the 180-second timeout did not fire.
-Offline network/process/model guards and disabled plugin autoload remained
-active. No separate collection probe, other suite, private integration or live
-operation was run.
-
-The lifecycle reached real marker/payload readback, materializer provenance and
-derived fingerprint checks, the exact original rubric, the distinct keep/r1
-grade-parent control/claim/history and current-parent CAS, one synthetic owned
-judge, private publication and lost-ack read-only reconciliation. It retained
-no-replay and one-result/one-judge assertions. The coupled selector verified
-same-run approval, old defaults, exact typed ledger binding and secret/job/time
-boundaries. These are synthetic transport/owned-child checks, not authentication
-of live publications or an established writer acknowledgment.
-
-The prior results remain separate:
-
-- At `44fa6694f73fad8d6ad202855e5847b6c4212d6d`, 2 collected with 1 failed /
-  1 passed in 7.32s, exit 1. The lifecycle expected
-  `reviewed_retention_reader_required` but correctly encountered the earlier
-  `retention_grade_context_changed` guard. The routing selector passed only
-  against the former long selector. Log SHA256
-  `3070012930c09ed096529c73e50ba0a6ee997f412da28874e8249ed661f5234e`.
-- At `9a628e52732c162dd0a179ca96579dacc402a4d2`, the lifecycle-only follow-up
-  failed in 8.64s, exit 1, without timeout. Corrected context-mutation and actual
-  reader-byte checks completed; the first intended successful preparation
-  refused at `codex_budget_pilot_grading.py:747` with
-  `grading_filename_capacity_refused`, before successful preparation or later
-  lifecycle assertions. Log SHA256
-  `99ca382018a16c5b6145db7a200ef1d1ec67cd05a5ad81cc15c1873e44cf4ca1`.
-
-The 1418 order separately authorized the naming correction and this two-selector
-invocation because routing and authority bytes changed. Neither earlier failure
-is relabeled as a passing lifecycle proof. Their logs and records remain intact.
-
-### Current bindings and unchanged evidence
-
-The new selector-bound evidence SHA256 is
-`25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`, replacing
-only the unpublished long-route digest
-`eacfc94a16f6fdee0d3259590d35abd0e9d365733742946b8b139b705d5def07`.
-Historical first-cell evidence remains
-`1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d`.
-
-| Current source at the tested HEAD | SHA256 |
-| --- | --- |
-| `codex_retention_keep_r2_grade.py` | `bb8d1b3a46824a2597f31fe6567531fc59deabb79af87e85d98fd1a08ae3988e` |
-| `codex_retention_fixed_grade.py` | `7790852b04f8496db8b13ac6957badf641175c501f422720a7d14896b340d5ac` |
-| `codex_budget_pilot_output.py` | `635966f42c0310c9093d59e8f417259a0625b847c52f73342c07ec6c64fa2fdb` |
-| `.github/workflows/grade-run.yml` | `a59762078a6dc81a9867490338873a2f6db2ebb8f456f37759874b40710b6824` |
-
-The shared reader remains
-`5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583`.
-Frozen inference controller/producer/facade/CI-verifier/original-intake files,
-grader configuration, grader source modules, rubric, prompt and dependency manifests
-remain unchanged. Only the two completion records change after the tested HEAD.
-
-Actual successful keep/r2 intake remains separate from this offline proof. Its
-input is inference terminal `e55fac5d60191167dd66688510ec0fef472e594d`, result
-fingerprint `909ef80ffdce0e59ffeae5010df929ef7d93510c2e54cd710624e61ec343b86a`.
-The grading parent is instead keep/r1 grade terminal
-`40712e0980cc05c31688fdbb98c693774fb90c0d` on `pilot-grades-20260925-04`.
-Keep/r2 is consumed and ungraded: 6 recorded inference model calls, aggregate
-known/model USD 0.22195 partial, with null generation cost. Recorded zero
-generation counters do not establish free work. The earlier intake section
-preserves all immutable identities, missing-usage fields and publication-derived
-proof limits; no invoice, HTTP count, deliverable count, writer acknowledgment
-or retention benefit is inferred. Old keep/r1 scores, failed-fresh partial
-costs, null grades, unavailable causes and study limits remain unchanged.
-
-The leader's independent review of the actual new immutable HEAD/diff/proof and
-applicable CI remain required. A later live grade also requires a separately
-approved exact source/run/request/result/budget/stop binding. No live read,
-inference, grade, dispatch, consumed-result replay, HF mutation, Project edit,
-merge, credential/permission change or Azure management action occurred.
-Previous failed reviewer transports remain failures, not approvals, and were
-not retried. The existing owner identity is unchanged.
-
-The full skill catalog was checked once for this phase. `experiment-design`
-and the grading-engineer domain/spec requirements preserved the registered
-conditions and grader semantics. `experiment-report-en`, then protected
-`im-not-ai-en`, kept this new evidence entry separate from historical failed
-proofs and actual partial inference accounting; unrelated historical text was
-not reprocessed.
-
-## PROJECT5-KEEP-R2-GRADE-TEST-CORRECTION-20261002-1316
-
-The authorized test-setup correction is pinned at
-`9a628e52732c162dd0a179ca96579dacc402a4d2`. Its single follow-up lifecycle
-invocation collected 1 selector and failed in 8.64s, exit 1. Both corrected
-negative checks completed, but preparation then refused with
-`grading_filename_capacity_refused`. The full lifecycle is still unverified.
-No further repair, test invocation, push or draft PR followed. Both completion
-records remain saved and uncommitted in the same grading worktree and branch.
-
-The correction changes only the negative setup in
-`tests/test_codex_retention_keep_r2_grade.py`. Post-compilation expected-pin
-mutation still requires the earlier `retention_grade_context_changed` refusal.
-A separate scoped wrapper delegates to the real `output._bytes` reader and
-corrupts only the returned bytes for each exact dependency path. Expected pins
-and the compiled context remain canonical; each case requires
-`reviewed_retention_reader_required`, confirms the targeted read, and checks
-that no private root, transport call or owned judge activity occurred.
-
-The failure is at test line 234, in the first intended successful
-`bridge.prepare` call. The trace reaches `codex_retention_fixed_grade.py:368`,
-then `codex_budget_pilot_grading.py:747`, where `_entry_contract` raises
-`grading_filename_capacity_refused`. This is the recorded refusal boundary,
-not a diagnosis of its underlying cause. Successful preparation, derived-input
-fingerprint/materialization assertions, grading-parent history/CAS, owned-judge
-execution, private publication and lost-ack reconciliation assertions were not
-reached. No production predicate was weakened or reordered.
-
-The original proof at `44fa6694f73fad8d6ad202855e5847b6c4212d6d` remains
-2 collected, 1 failed / 1 passed in 7.32s, exit 1. Its lifecycle failure expected
-`reviewed_retention_reader_required` but received
-`retention_grade_context_changed`; it was not a passing lifecycle proof.
-The already-passed
-`tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed`
-selector was not rerun. Its pass belongs only to that original tested HEAD.
-The original log remains `/tmp/project5-keep-r2-fixed-grade.gz9e7b/targeted.log`,
-SHA256 `3070012930c09ed096529c73e50ba0a6ee997f412da28874e8249ed661f5234e`.
-The unchanged 1246 section below records that earlier order and its stop.
-
-The new same-environment prerequisite verified
-`/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 and pytest
-9.1.1, exit 0, without installation. Its log is
-`/tmp/project5-keep-r2-grade-test-correction.uEdJ4x/prerequisite.log`, SHA256
-`5513d294c3594784460699bb31a4f4ba3698c333c8f144c3b8085264a9d98b96`.
-The single follow-up call ran from `batch-runner` under `env -i`, the same
-offline settings, disabled implicit HF tokens and plugin autoload, and the
-existing network/process/model guards. It used the following command, without
-`-x`, another selector or a collection probe:
-
-```text
-timeout --signal=TERM --kill-after=10s 180s env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTHONHASHSEED=0 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_is_bound_one_use_and_private -vv -s --tb=short -p no:cacheprovider
-```
-
-The timeout did not fire. The complete follow-up log is
-`/tmp/project5-keep-r2-grade-test-correction.uEdJ4x/lifecycle.log`, SHA256
-`99ca382018a16c5b6145db7a200ef1d1ec67cd05a5ad81cc15c1873e44cf4ca1`.
-No delivered suite, private integration, full suite or build was run.
-
-Before and after the follow-up, a byte comparison against
-`44fa6694f73fad8d6ad202855e5847b6c4212d6d` found no changes outside the test
-file and these two records. Production, workflow, dependency manifests,
-grader configuration, parent bindings and reader/producer pins are unchanged.
-The shared reader remains
-`5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583`.
-The adapter/controller/workflow hashes and both fixed-evidence digests below
-remain exact. The ordinary test-only commit retained the existing owner identity
-`hyeonsangjeon <wingnut0310@gmail.com>` without attribution trailers.
-
-The actual keep/r2 intake and accounting below remain separate from this
-synthetic proof. Keep/r2 is consumed and ungraded, with 6 recorded model calls
-and aggregate known/model cost USD 0.22195, partial; generation cost remains
-null. The grading parent is `40712e0980cc05c31688fdbb98c693774fb90c0d`, not
-inference terminal `e55fac5d60191167dd66688510ec0fef472e594d`. The result
-fingerprint stays `909ef80ffdce0e59ffeae5010df929ef7d93510c2e54cd710624e61ec343b86a`.
-No invoice, deliverable count, writer acknowledgment or retention benefit is
-inferred. Earlier scores, partial costs, nulls, unavailable causes and the
-previous reviewer/runner failures are preserved without another live read.
-
-The 1246 conditional decision still covers unchanged production; it is not
-final source approval. This new failed boundary requires leader direction
-before another correction or proof. A passing authorized lifecycle proof,
-independent immutable-HEAD review, applicable CI and a separately bound live
-grading approval remain required. No live HF read/write, inference, grade,
-dispatch, replay, Project change, merge, Azure or permission action occurred.
-The full catalog was checked once for this phase; `experiment-design` preserved
-the existing invariants, and `experiment-report-en` followed by protected
-`im-not-ai-en` kept the two failed proofs and actual intake evidence distinct.
-## PROJECT5-KEEP-R2-FIXED-GRADE-20261002-1246
-
-The local fixed keep/r2 grading implementation did not clear its targeted
-proof. At tested HEAD `44fa6694f73fad8d6ad202855e5847b6c4212d6d`, the one
-invocation collected 2 selectors and reported 1 failed, 1 passed in 7.32s,
-exit 1. The lifecycle selector stopped at a wrong-reader-hash assertion; the
-workflow/approval/ledger selector passed. No source correction or rerun followed.
-The implementation remains pinned locally, with these two completion records
-uncommitted. Nothing was pushed and no draft PR was created.
-
-The worktree is `codex-retention-keep-r2-fixed-grade-20261002-1246`, branch
-`b/codex-retention-keep-r2-fixed-grade-20261002-1246`, from verified main/base
-`f1f274f1b0510a9f4d7e7c969574913442105579`. Earlier worktrees and
-`wip/local-main-preserved-20260719` were preserved. The existing author and
-committer identity stayed `hyeonsangjeon <wingnut0310@gmail.com>`, without
-attribution trailers. The leader's source-informed 1246
-APPROVE-WITH-CONDITIONS decision authorized the closed pre-edit scope, not
-unwritten code, this failed proof or a paid run. Prior reviewer transport
-failures remain historical failures; none was retried or treated as approval.
-
-Prior reader PR719 HEAD `2f865eb6491e236ebe54027f29c030d75e88cef0`, owner review
-[5387838626](https://github.com/hyeonsangjeon/gdpval-realworks/pull/719#pullrequestreview-5387838626)
-and all 10 checks passed their source gate. Its 1429-line review and separate
-19.11s reader proof were not repeated and do not validate this grading route.
-
-### Implementation scope and stopped proof
-
-The six-file implementation adds only `retention/task4-keep-r2`, for Task4
-KEEP ordinal 3 / repetition 2, through the existing fixed grading lifecycle.
-Its adapter binds the verified result and the separate keep/r1 grading parent.
-The source retains the original deliverables-only materializer staging,
-recomputed provenance/fingerprint, exact rubric and grader checks, serial
-current-parent CAS, one-use owned judge, private add-only publication and
-same-job read-only lost-ack reconciliation. A second exact ledger-binding type
-does not replace the first-cell type or widen pilot ledger identities.
-Only the existing plan/protected/live workflow routes admit the new selector;
-generic retention exclusions and old selectors remain. No new job, permission,
-secret, arbitrary profile, experimental condition, retry policy or budget axis
-was added. The existing `default_v2_sol_max.yaml`, original rubric revision
-`11e7900cdcac61bc4daf59e65feb238acda98fbf`, 240-minute judge, 242-minute owned
-child and 300-minute job limits are unchanged. The full lifecycle remains
-unverified by this invocation.
-
-The same-environment prerequisite printed
-`sys.executable=/ai-work/venvs/gdpval-realworks-py310/bin/python`,
-`sys.version=3.10.12 (main, Jun 22 2026, 18:55:27) [GCC 11.4.0]` and
-`pytest.__version__=9.1.1`, exit 0. No packages were installed. Prerequisite
-log SHA256 is `5f1ef71b3a20194547eb67a95ef44e8a440bd619cf6be992e3b599c9469f60cb`.
-The single test call ran from `batch-runner` with that absolute interpreter,
-`env -i`, offline/implicit-token-disabled settings, no credential variables,
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`, `timeout --signal=TERM --kill-after=10s 180s`
-and `-m pytest -vv -s --tb=short -p no:cacheprovider`, without `-x`.
-Production/workflow/test bytes matched the pinned HEAD before the call.
-
-| Exact selector | Result |
-| --- | --- |
-| `tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_is_bound_one_use_and_private` | FAIL at line 195: expected `reviewed_retention_reader_required`; actual `retention_grade_context_changed` |
-| `tests/test_codex_retention_keep_r2_grade.py::test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed` | PASS |
-
-The lifecycle selector reached canonical request compilation, frozen reader
-identity checks, successful intake of synthetic KEEP_R2 payloads and pre-root
-approval/source refusal checks. Its first wrong-reader-hash case was refused
-by the earlier canonical-context guard. It did not reach the expected hash
-refusal, successful grading preparation/materialization, grading-parent
-control/history verification, claim/CAS, owned judge or publication assertions.
-The passing selector executed the real protected-approval script and parsed
-current workflow YAML, checked old defaults and closed routes, and exercised
-the exact first-cell/keep-r2 ledger types and row refusals. Offline process,
-network and model guards were active. These are synthetic test observations,
-not live source approval, native installation or grading evidence.
-
-The outer timeout did not fire. The complete saved log is
-`/tmp/project5-keep-r2-fixed-grade.gz9e7b/targeted.log`, SHA256
-`3070012930c09ed096529c73e50ba0a6ee997f412da28874e8249ed661f5234e`.
-No second invocation, collection probe, delivered suite, private integration,
-full suite or build ran. The prior missing-pytest failure and its replacement
-proof remain separately recorded below; this was a reached assertion failure.
-
-### Fixed input and grading-parent identities
-
-The following are independent leader-supplied live evidence, not products of
-the synthetic proof. The successful intake used workflow `370228282`, run
-`36959616821` / attempt 1 / job `110690181822`, reader source
+These are independent leader-supplied live-evidence pins, not products of the
+synthetic proof. Successful intake used workflow `370228282`, run `36959616821`
+/ attempt 1 / job `110690181822`, reader source
 `f1f274f1b0510a9f4d7e7c969574913442105579` and reader SHA256
 `5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583`.
-Its `2026-10-02T03:21:22.9144192Z` receipt reports `intake_verified=true`,
+The `2026-10-02T03:21:22.9144192Z` receipt reports `intake_verified=true`,
 `status=succeeded`, `cleanup_confirmed=true`,
 `recorded_publication_acknowledged=true`, `grade=null`, `grading_launched=false`
-and `invoice_complete=false`. Approval/execution jobs were skipped. No live
-read was repeated in this implementation task.
+and `invoice_complete=false`. Approval/execution jobs were skipped. That read
+was not repeated during implementation or this records correction.
 
-The consumed producer is `b8351e561acb9675a4993419e819c12787b5b305`, run
-`36947454688` / attempt 1 / execution job `110660390316`, cell
-`3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2`.
-Its request SHA256 is
+Consumed producer `b8351e561acb9675a4993419e819c12787b5b305` ran as
+`36947454688` / attempt 1 / execution job `110660390316`, for the fixed keep/r2
+cell above. Request SHA256:
 `8a06cc7df34cbf10896b635f6c8d9ad4e91313d3c685511f8fc5c159cb6ddec1`.
-The original input bundle is
-`757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`;
-the path-specific materialized grader source is
+Original input-bundle SHA256:
+`757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+Path-specific materialized grader-source SHA256:
 `997c30a6b6b8ed8f53d75a6db180dca549df6d0ae31e549934b75eb27d1b0fc1`.
 
 | Inference object | Immutable revision | SHA256 | Bytes |
@@ -376,28 +185,32 @@ and registered config SHA256 is
 `307dc07923d377faa7d7c6bd6c4934de2fa5f99e9007dd0d723f3c3337e6d010`.
 The inference predecessor remains failed fresh/r2 terminal
 `1d5133590911f3704fc2a65279d4b64bee77c1d6` through the frozen producer's pins.
-The safe receipt does not disclose a deliverable count or the full marker's
-files/result-generation fields. None was fabricated. Future grading preparation
-must revalidate the exact full marker and declared immutable payloads because
-`consumer_readback_required=true`; the original fingerprint is not the
-materializer's derived-input fingerprint.
 
-The required parent on `pilot-grades-20260925-04` is the keep/r1 grade terminal
-`40712e0980cc05c31688fdbb98c693774fb90c0d`, SHA256
-`11eb15cd4cb783d35fcfda62b458f14d34bfb3742e60d949c6671a56399c9234`, 3119 bytes,
-with claim `dec305d669e3ca2e53c7f7b9ebfbe7974d661350`, SHA256
+The safe receipt does not disclose a deliverable count or the full marker's
+files/result-generation fields; none is fabricated from that projection.
+Future grading preparation must revalidate the exact full marker and declared
+immutable payloads because `consumer_readback_required=true`. It retains
+deliverables-only staging, recomputes materializer provenance and fingerprint,
+and checks the original rubric and grader bytes. The original result
+fingerprint is not the materializer's derived-input fingerprint.
+
+The required grading parent on `pilot-grades-20260925-04` is keep/r1 grade
+terminal `40712e0980cc05c31688fdbb98c693774fb90c0d`, not keep/r2 inference
+terminal `e55fac5d60191167dd66688510ec0fef472e594d`. Its SHA256 is
+`11eb15cd4cb783d35fcfda62b458f14d34bfb3742e60d949c6671a56399c9234`, 3119 bytes;
+claim `dec305d669e3ca2e53c7f7b9ebfbe7974d661350` has SHA256
 `8e1e0a51b462a442e9024c2bd5140d3898b61424ce3f44d4adff9fa346cce53d`, 2384 bytes.
 Its writer is `29e0353f1539265b1741e71be894fedf9be32a8b`, run `36776393736` /
 job `pilot-live` / attempt 1, previously verified by readout `36820845596` at
 source `f30c9efa392bc14cba790fb5d1dedf12071a5677`. Its inference terminal
 `de50ff0aa6037c0ef6e3b713da519359abd1d08d` and result fingerprint
 `3441f200e6e4c53faf1b36f216283c80eee68e5d3e7d827587ba6c3135c7d200` remain
-historical. Existing readout predicates are reused for its controls, claim and
-object history without payload-body reads. Historical verification is not
-current branch-head evidence: exact current-parent equality remains required
-before a new one-use CAS. Drift or uncertainty must refuse, not adopt or reset.
+historical. Existing readout predicates verify controls, claim and object
+history without payload-body reads. Historical verification is not current
+branch-head evidence: exact current-parent equality is required before new
+one-use CAS. Drift or uncertainty must refuse, not adopt or reset.
 
-### Accounting, byte identities and remaining gate
+### Accounting and proof limits
 
 Actual recorded keep/r2 inference accounting is partial: 6 model calls,
 comprising 5 infrastructure-retry calls with known USD 0.22195 and 1 generation
@@ -420,32 +233,53 @@ partial. Their null grades and unavailable detailed cause/budget/recovery
 evidence remain unchanged. Duration or retry labels do not identify a failure
 cause, and these repeats do not establish a retention benefit.
 
-New fixed-evidence SHA256 is
+### Source bindings and remaining gate
+
+The reviewed selector-bound evidence SHA256 is
+`25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`.
+It replaces only the unpublished long-route digest
 `eacfc94a16f6fdee0d3259590d35abd0e9d365733742946b8b139b705d5def07`.
-The original first-cell digest stays
+Historical first-cell evidence remains
 `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d`.
-At the tested HEAD, the new adapter SHA256 is
-`5c403632d33cebf4e5cf0fb212c7a8262484a6dfe05be7e1acd67a672e978c91`;
-the shared fixed-grade controller is
+
+| Source at tested `7d90f7dcce88537d8fe2fa271c19be68078ca019` and reviewed `fedf80d4298aeb0e4a4fbc43086ddffc148ad236` | SHA256 |
+| --- | --- |
+| `codex_retention_keep_r2_grade.py` | `bb8d1b3a46824a2597f31fe6567531fc59deabb79af87e85d98fd1a08ae3988e` |
+| `codex_retention_fixed_grade.py` | `7790852b04f8496db8b13ac6957badf641175c501f422720a7d14896b340d5ac` |
+| `codex_budget_pilot_output.py` | `635966f42c0310c9093d59e8f417259a0625b847c52f73342c07ec6c64fa2fdb` |
+| `.github/workflows/grade-run.yml` | `a59762078a6dc81a9867490338873a2f6db2ebb8f456f37759874b40710b6824` |
+
+For the historical long-route attempts, adapter SHA256 was
+`5c403632d33cebf4e5cf0fb212c7a8262484a6dfe05be7e1acd67a672e978c91` and shared
+fixed-grade controller SHA256 was
 `e0b3c878b735e4e2e30b54b528c1887807f02cd326cfc0e32c2bf947106ab44f`.
-The current reader and all six frozen producer/controller/verifier/intake
-file hashes remain identical to base. No historical pin or receipt was migrated.
+Those are historical bytes, not current pins. Reader and all six frozen
+inference producer/controller/facade/CI-verifier/original-intake hashes remain
+identical to base; no historical pin or receipt was migrated. Grader configuration,
+grader source modules, rubric, prompt, model and dependency manifests are unchanged.
 
-The reached assertion failure is preserved. Publication is blocked pending
-leader direction for a bounded correction and a newly authorized focused proof;
-the single invocation under this order is used. After a passing proof, final
-independent review of the actual immutable HEAD/diff, applicable CI and separate
-leader approval of an exact grading source/run/request/result/budget/stop binding
-remain mandatory. No live read, HF branch mutation, dispatch, model/judge call,
-grade, replay, Project edit, merge, credential/permission change or Azure
-management action occurred. No failed reviewer call supplied approval.
+The task remains in worktree `codex-retention-keep-r2-fixed-grade-20261002-1246`,
+branch `b/codex-retention-keep-r2-fixed-grade-20261002-1246`, from base
+`f1f274f1b0510a9f4d7e7c969574913442105579`. Earlier worktrees and
+`wip/local-main-preserved-20260719` are preserved. Existing author/committer
+`hyeonsangjeon <wingnut0310@gmail.com>` is unchanged, without attribution trailers.
+Production, workflow, test, dependency and pin bytes in this records follow-up
+remain identical to reviewed `fedf80d4298aeb0e4a4fbc43086ddffc148ad236` and the
+tested code tree. Only `CHANGELOG.md` and this record change.
 
-The full skill catalog was checked once. `experiment-design` preserved the
-registered condition and budgets; the repository grading-engineer domain/spec
-requirements were applied without changing providers or rebuilding the grader.
-`experiment-report-en`, then protected `im-not-ai-en`, kept the failed local
-proof separate from the leader's actual intake and partial accounting. Only
-these new record passages were edited; the historical text below is preserved.
+Owner source approval does not waive final records review, applicable same-HEAD
+CI or separate leader approval of the exact grading source/run/request/result/
+budget/stop binding. No live read, HF mutation, inference, grade, dispatch,
+consumed-result replay, Project edit, merge, Azure management or
+credential/permission change occurred. This follow-up performs documentation
+validation only, without pytest, a renderer, proof replay or CI polling.
+
+The implementation used `experiment-design` and the grading-engineer domain/spec
+requirements without changing the registered experiment or grader semantics.
+For this consolidation, the full skill catalog was checked once;
+`experiment-report-en`, then protected `im-not-ai-en`, retained the unique
+evidence and uncertainty while removing duplicate current-task snapshots.
+Unrelated preexisting history below is byte-identical.
 
 ## PROJECT5-KEEP-R2-READER-RUNNER-FIX-20261002-1113
 

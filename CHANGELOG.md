@@ -13,145 +13,68 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Shorten only the new, unpublished fixed grading selector from
-  `retention/task4-keep-r2` to `retention/keep-r2`, under the leader's dated
-  1418 APPROVE-WITH-CONDITIONS decision. The exact cell, ordinal 3 / repetition
-  2, producer/result identities, same-run approval and one-use authority remain
-  fixed. The adapter/context, emitted metadata path, typed ledger/run-ID and
-  workflow plan/protected/live/reconciliation gates use the shorter selector;
-  the long spelling is refused without an alias or generic fallback. Existing
-  `retention/first-cell`, pilot/readout selectors and historical evidence stay
-  unchanged. No global filename algorithm, filesystem guard, model, grader,
-  rubric, permission or budget changed.
+- Implement the fixed one-use Task4 keep/r2 grading path as
+  `retention/keep-r2`, with 2 collected / 2 passed in 36.42s, exit 0 and no
+  timeout at `7d90f7dcce88537d8fe2fa271c19be68078ca019`. Real validators with
+  synthetic transport and an owned judge reached marker/payload readback,
+  materializer provenance/derived fingerprint, exact rubric, separate grading
+  parent/history/current-parent CAS, private publication and lost-ack read-only
+  reconciliation. The coupled workflow/approval/typed-ledger selector passed.
+  This is an offline grading-path proof, not a live grade or inference replay.
 
-  The real resolvers measured all eight UTF-8 leaves against actual
-  `PC_NAME_MAX` 255 on the worktree and task-owned filesystem. Former/new byte
-  lengths are grade 219/213, JSONL ledger 232/226, SQLite 234/228, `-wal`
-  238/232, `-shm` 238/232, `-journal` 242/236, checkpoint 257/251 and atomic
-  checkpoint temporary 261/255. The temporary name fits exactly. The targeted
-  proof asserted all lengths and completed a real tiny checkpoint write/readback
-  on its synthetic filesystem; no limit was mocked or identity truncated.
+  The route binds KEEP ordinal 3 / repetition 2 and the fixed consumed result
+  through existing grading and publication helpers. Old `retention/first-cell`,
+  pilot/readout selectors, exact byte checks and no-replay guards remain.
+  Only the new unpublished selector changed from `retention/task4-keep-r2`;
+  the long spelling is refused without an alias or generic fallback. Its
+  adapter/context, metadata path, typed ledger/run-ID, approval/evidence and
+  plan/protected/live/reconciliation gates use the final spelling. No new
+  model, grader, rubric, job, secret, permission, retry policy or budget axis
+  was added. The existing 240-minute judge, 242-minute owned-child and
+  300-minute job limits remain.
 
-  At pinned HEAD `7d90f7dcce88537d8fe2fa271c19be68078ca019`, the one authorized
-  token-free invocation collected 2 selectors and passed both in 36.42s,
-  exit 0, without timeout. It used the verified
+  The real fixed-config/Step8/checkpoint resolvers measured actual `PC_NAME_MAX`
+  255 on the worktree and test-owned filesystem. Former/final UTF-8 byte lengths
+  are grade 219/213, JSONL ledger 232/226, SQLite 234/228, `-wal` 238/232,
+  `-shm` 238/232, `-journal` 242/236, checkpoint 257/251 and temporary checkpoint
+  261/255. Every required leaf was checked; a tiny real checkpoint write/readback
+  passed with the exactly 255-byte temporary name. No filesystem predicate,
+  global naming algorithm or UUID/hash identity was weakened or shortened.
+
+  The proof used the verified
   `/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 / pytest
-  9.1.1, offline guards, disabled plugin autoload and the 180-second bound.
-  Real validators reached synthetic marker/payload/materializer/rubric checks,
-  distinct grading-parent history/current-parent CAS, one owned judge, private
-  publication and lost-ack read-only reconciliation. Coupled routing, approval
-  and exact ledger assertions also passed. Log SHA256
-  `bef2f512c1d22474d69d564b38e965deda8c454a004e80901622ad45edf54c16`.
+  9.1.1, offline guards, disabled plugin autoload and a 180-second bound.
+  Log SHA256 `bef2f512c1d22474d69d564b38e965deda8c454a004e80901622ad45edf54c16`.
+  The [current task record](tasks/LATEST_TASK_RESULT/README.md) consolidates the
+  exact historical-proof table: `44fa6694f73fad8d6ad202855e5847b6c4212d6d`
+  remains 1 failed / 1 passed in 7.32s at the context-mutation guard, and
+  `9a628e52732c162dd0a179ca96579dacc402a4d2` remains 1 failed in 8.64s at
+  `grading_filename_capacity_refused`. Their log hashes, reached/unreached
+  boundaries and later test-setup/selector corrections are preserved. The
+  changed routing/authority bytes required the separately authorized coupled
+  rerun; no failed result is relabeled as a pass.
 
-  The original `44fa6694f73fad8d6ad202855e5847b6c4212d6d` proof remains
-  1 failed / 1 passed in 7.32s, log SHA256
-  `3070012930c09ed096529c73e50ba0a6ee997f412da28874e8249ed661f5234e`.
-  The `9a628e52732c162dd0a179ca96579dacc402a4d2` lifecycle follow-up remains
-  failed in 8.64s at `grading_filename_capacity_refused`, log SHA256
-  `99ca382018a16c5b6145db7a200ef1d1ec67cd05a5ad81cc15c1873e44cf4ca1`.
-  Both failed-proof records below describe their historical stopping points.
-  The new routing/authority change required this separately authorized coupled
-  rerun; neither previous failure is relabeled as a passing lifecycle proof.
+  Actual keep/r2 intake remains ungraded, with 6 recorded model calls / known
+  USD 0.22195 partial and null generation cost; zero generation counters do not
+  establish free work. Fixed input terminal
+  `e55fac5d60191167dd66688510ec0fef472e594d` remains distinct from grading parent
+  `40712e0980cc05c31688fdbb98c693774fb90c0d`. The consolidated record preserves
+  the full marker/result/parent identities, original-versus-derived input
+  distinction, prior scores, partial costs, nulls, unavailable causes and
+  publication-derived proof limits. The intake does not independently authenticate
+  provider, original-input or CAS facts. No invoice, HTTP count, deliverable
+  count, writer acknowledgment or retention benefit is inferred.
 
-  New selector-bound evidence SHA256 is
-  `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`, replacing
-  only unpublished digest
-  `eacfc94a16f6fdee0d3259590d35abd0e9d365733742946b8b139b705d5def07`.
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md) records exact
-  source hashes, commands, measurements and boundaries. Reader/producer pins
-  and historical first-cell evidence remain unchanged. Only completion records
-  change after the tested HEAD. Actual keep/r2 intake remains ungraded, with
-  6 recorded calls / known USD 0.22195 partial and null generation cost. Grading
-  parent `40712e0980cc05c31688fdbb98c693774fb90c0d` is not inference terminal
-  `e55fac5d60191167dd66688510ec0fef472e594d`. Prior scores, partial costs, nulls,
-  unknown causes and proof limits are preserved. Independent immutable-head
-  review, applicable CI and a separately bound leader-approved live grade remain
-  required. No live read, inference, grade or retention-benefit claim followed
-  this proof.
-
-- Correct only the fixed keep/r2 grading test's reader-hash fault injection,
-  pinned at `9a628e52732c162dd0a179ca96579dacc402a4d2`. The canonical-context
-  mutation refusal is retained; separate corruption of actual dependency bytes
-  reaches `reviewed_retention_reader_required` with expected pins unchanged.
-  The authorized lifecycle-only follow-up collected 1 selector and failed in
-  8.64s, exit 1, at `grading_filename_capacity_refused` during preparation's
-  `_entry_contract`. Successful preparation/materialization, grading-parent
-  history/CAS, owned judge, publication and reconciliation assertions remain
-  unreached. No further repair, rerun, push or draft PR followed.
-
-  Production, workflow, configuration, dependency manifests and all pins remain
-  byte-identical to `44fa6694f73fad8d6ad202855e5847b6c4212d6d`. Its original
-  2-collected, 1-failed / 1-passed result in 7.32s remains separate; the passing
-  workflow/approval/ledger selector was not rerun. The original log SHA256
-  remains `3070012930c09ed096529c73e50ba0a6ee997f412da28874e8249ed661f5234e`.
-  The follow-up used the verified
-  `/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 / pytest
-  9.1.1, with the same token-free offline guards, disabled plugin autoload and
-  180-second bound; the timeout did not fire. Its log SHA256 is
-  `99ca382018a16c5b6145db7a200ef1d1ec67cd05a5ad81cc15c1873e44cf4ca1`.
-
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md) preserves both
-  failures, exact commands and unreached boundaries. The following initial
-  implementation entry describes the earlier 1246 order and its stop. Actual
-  keep/r2 intake, partial 6 calls / USD 0.22195, null generation cost, ungraded
-  status and all older evidence limits are unchanged. Grading parent
-  `40712e0980cc05c31688fdbb98c693774fb90c0d` remains distinct from inference
-  terminal `e55fac5d60191167dd66688510ec0fef472e594d`. Publication is blocked
-  pending new leader direction for this failed boundary, a passing authorized
-  proof, independent immutable-head review and applicable CI; a live grade
-  also requires separate exact leader approval. No live operation occurred.
-
-- Add the closed `retention/task4-keep-r2` grading implementation locally at
-  `44fa6694f73fad8d6ad202855e5847b6c4212d6d`, from verified base
-  `f1f274f1b0510a9f4d7e7c969574913442105579`. Validation did not pass: the one
-  token-free invocation collected 2 selectors and reported 1 failed, 1 passed
-  in 7.32s, exit 1. The lifecycle selector stopped at its wrong-reader-hash
-  expectation, before successful grading preparation: the test expected
-  `reviewed_retention_reader_required`, but the earlier canonical-context
-  guard returned `retention_grade_context_changed`. The coupled workflow,
-  approval and ledger selector passed. Materialization, grading-parent history,
-  claim/CAS, owned-judge and publication assertions were not reached by the
-  lifecycle selector. No correction, rerun, push or draft PR followed.
-
-  The invocation used `/ai-work/venvs/gdpval-realworks-py310/bin/python`,
-  CPython 3.10.12 / pytest 9.1.1, after its same-environment import prerequisite.
-  It ran with `env -i`, offline settings, disabled plugin autoload, no `-x`
-  and `timeout --signal=TERM --kill-after=10s 180s`; the timeout did not fire.
-  Log SHA256 `3070012930c09ed096529c73e50ba0a6ee997f412da28874e8249ed661f5234e`.
-  This reached assertion failure is separate from the preserved earlier
-  missing-pytest failure and its authorized 19.11s replacement proof.
-
-  The source adds a fixed evidence adapter, a second exact ledger-binding type
-  and the existing plan/protected/live workflow routes. It reuses the fixed
-  grading lifecycle, materializer, original rubric, owned judge and add-only
-  publication helpers. The required grading parent is keep/r1 grade terminal
-  `40712e0980cc05c31688fdbb98c693774fb90c0d`, not keep/r2 inference terminal
-  `e55fac5d60191167dd66688510ec0fef472e594d`. New fixed-evidence SHA256 is
-  `eacfc94a16f6fdee0d3259590d35abd0e9d365733742946b8b139b705d5def07`;
-  first-cell evidence and historical identities are unchanged. Reader,
-  producer, inference controller, CI-verifier and original-intake bytes remain
-  frozen. No judge, rubric, model, budget, credential, permission or job was
-  added or changed. These are source changes, not a verified full grading path.
-
-  The leader's 1246 APPROVE-WITH-CONDITIONS decision authorized this pre-edit
-  scope, not the new code or a paid run. Prior reader PR719 HEAD
-  `2f865eb6491e236ebe54027f29c030d75e88cef0`, review
-  [5387838626](https://github.com/hyeonsangjeon/gdpval-realworks/pull/719#pullrequestreview-5387838626)
-  and all 10 checks passed their separate source gate; they were not repeated.
-  The actual leader-read keep/r2 intake at run `36959616821`, job
-  `110690181822`, receipt `2026-10-02T03:21:22.9144192Z`, verified the consumed
-  successful result with cleanup confirmed, grade null and grading not launched.
-  Its 6 recorded model calls have aggregate known/model cost USD 0.22195,
-  partial: 5 infrastructure-retry calls carry that known amount; the generation
-  call has null cost and recorded zero token counters, which do not establish
-  free work. The safe receipt does not expose a deliverable count. Publication
-  evidence does not independently authenticate provider/original-input/CAS
-  facts, and writer acknowledgment remains not established. Prior scores,
-  partial costs, nulls, unavailable causes and study limits remain unchanged.
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md) preserves full
-  identities, accounting and the exact stopped boundary. A new authorized
-  correction/proof, independent immutable-head review, applicable CI and a
-  separately bound leader-approved live grading run remain required.
+  Owner review
+  [5388701816](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5388701816)
+  source-approved `fedf80d4298aeb0e4a4fbc43086ddffc148ad236`, verified four source
+  hashes and recomputed fixed evidence
+  `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`.
+  This follow-up changes only the two completion records; code/workflow/test
+  bytes and all pins remain identical to that reviewed source and the tested
+  code tree. Final records review, applicable same-HEAD CI and separate exact
+  leader approval remain required before any live grade. No pytest, renderer,
+  prior proof, live operation or CI polling was run for the records correction.
 
 - Add the fixed keep/r2 successful-result and failed/stopped terminal-only
   read binding, with the leader-authorized runner replacement passing both
