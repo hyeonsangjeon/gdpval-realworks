@@ -1091,13 +1091,16 @@ def _recorded_projection(context, terminal, files, entry, *, inference_revision,
         import codex_retention_fixed_grade as bridge
 
         bridge._context(context)
+        fixed = bridge._fixed(context.selector)
+        ledger_type = (output.RetentionFirstCellLedgerBinding if context.selector == bridge.SELECTOR
+                       else output.RetentionKeepR2LedgerBinding)
         binding = retention_first_cell_binding
-        require(type(binding) is output.RetentionFirstCellLedgerBinding
-                and binding == output.RetentionFirstCellLedgerBinding(
-                    hashlib.sha256(context.run.grader_config_json.encode()).hexdigest()[:16], bridge.GRADER_SHA256)
+        require(type(binding) is ledger_type
+                and binding == ledger_type(
+                    hashlib.sha256(context.run.grader_config_json.encode()).hexdigest()[:16], fixed.GRADER_SHA256)
                 and entry["config_hash"] == binding.config_hash
                 and entry["grader_source_hash"] == binding.grader_source_hash
-                and inference_revision == bridge.RESULT["output_commit"],
+                and inference_revision == fixed.RESULT["output_commit"],
                 "fixed_retention_grade_projection_binding_required")
     payload = pilot._json_object(files["grade_result"]) if "grade_result" in files else None
     if payload is not None:

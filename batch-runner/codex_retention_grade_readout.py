@@ -1,4 +1,4 @@
-"""Fixed, unpaid readout of the first retention grade's recorded publication.
+"""Fixed, unpaid readouts of the two KEEP grades' recorded publications.
 
 This authenticates immutable publication bytes and available recorded bindings,
 not intermediate-input reconstruction or fresh provider authentication. Nothing
@@ -7,6 +7,7 @@ here grants the writer's preparation, admission, judge or publication authority.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -26,7 +27,48 @@ TERMINAL = "40712e0980cc05c31688fdbb98c693774fb90c0d"
 TERMINAL_IDENTITY = {
     "sha256": "11eb15cd4cb783d35fcfda62b458f14d34bfb3742e60d949c6671a56399c9234", "size": 3119}
 CLAIM = "dec305d669e3ca2e53c7f7b9ebfbe7974d661350"
+
+KEEP_R2_SELECTOR = "retention/keep-r2-readout"
+KEEP_R2_WRITER_SOURCE = "b99a28a4c0ec0ed961a2a8ddcaa886462beb0691"
+KEEP_R2_WRITER_RUN = {"id": "36984239149", "job": "pilot-live", "attempt": 1}
+KEEP_R2_WRITER_JOB_ID = 110766211046
+KEEP_R2_TERMINAL = "76f51d0464b3c90d9ff80b78b656b9e7d45a0b6e"
+KEEP_R2_TERMINAL_IDENTITY = {
+    "sha256": "d1f2a48d392044937a904243feb5ab0d320d271f1082806ac2aa9e927cb3c66c", "size": 3107}
+KEEP_R2_CLAIM = "f8d5189a86c297499c77084aeeb697aea15aad00"
+KEEP_R2_ADAPTER_SHA256 = "bb8d1b3a46824a2597f31fe6567531fc59deabb79af87e85d98fd1a08ae3988e"
 require = output._require
+
+
+@dataclass(frozen=True)
+class _ReadBinding:
+    selector: str
+    grading_selector: str
+    writer_source: str
+    writer_run: dict
+    terminal: str
+    terminal_identity: dict
+    claim: str
+
+
+def _fixed(selector=SELECTOR):
+    """Two closed routes only; omitted calls retain the historical parent reader."""
+    require(type(selector) is str and selector in {SELECTOR, KEEP_R2_SELECTOR},
+            "retention_grade_readout_route_refused")
+    if selector == SELECTOR:
+        return _ReadBinding(SELECTOR, bridge.SELECTOR, WRITER_SOURCE, WRITER_RUN,
+                            TERMINAL, TERMINAL_IDENTITY, CLAIM)
+    # Check the unchanged evidence adapter before bridge._fixed lazily imports
+    # it, and before this readout can acquire a private cache or credential.
+    from pathlib import Path
+
+    data = output._bytes(Path(__file__).with_name("codex_retention_keep_r2_grade.py"),
+                         limit=output.MAX_RECORD_BYTES)
+    require(pilot._identity(data)["sha256"] == KEEP_R2_ADAPTER_SHA256,
+            "reviewed_retention_grade_adapter_required")
+    return _ReadBinding(KEEP_R2_SELECTOR, "retention/keep-r2", KEEP_R2_WRITER_SOURCE, KEEP_R2_WRITER_RUN,
+                        KEEP_R2_TERMINAL, KEEP_R2_TERMINAL_IDENTITY, KEEP_R2_CLAIM)
+
 
 # Diagnostics identify attempted work, not successful terminal verification.
 _TERMINAL_SUBSTAGES = ("metadata", "terminal_control", "terminal_binding", "claim_history", "terminal_identity")
@@ -64,18 +106,23 @@ def _terminal_diagnostic(error, substage):
 
 
 def _context(args):
-    require(args.selector == SELECTOR and args.phase in {"plan", "readout"}
-            and args.terminal_revision == TERMINAL and args.producer_source_sha == "",
+    profile = _fixed(args.selector)
+    fixed = bridge._fixed(profile.grading_selector)
+    require(args.phase in {"plan", "readout"}
+            and args.terminal_revision == profile.terminal and args.producer_source_sha == "",
             "retention_grade_readout_route_refused")
     require(output._hash(args.reviewed_source_sha, 40)
-            and args.reviewed_source_sha not in {WRITER_SOURCE, bridge.RESULT["producer_source_sha"]},
+            and args.reviewed_source_sha not in {profile.writer_source, fixed.RESULT["producer_source_sha"]},
             "distinct_reviewed_observer_required")
-    return bridge.compile_request(WRITER_SOURCE)
+    return bridge.compile_request(profile.writer_source, selector=profile.grading_selector)
 
 
-def _entry(context, recorded):
+def _entry(context, recorded, *, selector=SELECTOR):
     import step8_grade as step8
 
+    profile = _fixed(selector)
+    fixed = bridge._fixed(profile.grading_selector)
+    require(context.selector == profile.grading_selector, "retention_grade_readout_writer_refused")
     require(type(recorded) is dict and set(recorded) == {
         "grade_path", "config_hash", "grader_source_hash", "renderer_fingerprint", "cost_run_id"},
         "retention_grade_readout_entry_refused")
@@ -89,33 +136,37 @@ def _entry(context, recorded):
     with grade._cwd(pilot.ROOT / "batch-runner"):
         step8.validate_grading_config(json.loads(context.run.grader_config_json))
     config_hash = hashlib.sha256(context.run.grader_config_json.encode()).hexdigest()[:16]
-    path = grade._grade_path(context, config_hash, bridge.GRADER_SHA256, bridge.RESULT["output_commit"])
+    path = grade._grade_path(context, config_hash, fixed.GRADER_SHA256, fixed.RESULT["output_commit"])
     expected = {"grade_path": str(path), "config_hash": config_hash,
-        "grader_source_hash": bridge.GRADER_SHA256, "renderer_fingerprint": renderer,
-        "cost_run_id": step8.make_cost_run_id(experiment_yaml_name=bridge.SELECTOR,
-            config_hash=config_hash, grader_source_hash=bridge.GRADER_SHA256)}
+        "grader_source_hash": fixed.GRADER_SHA256, "renderer_fingerprint": renderer,
+        "cost_run_id": step8.make_cost_run_id(experiment_yaml_name=fixed.SELECTOR,
+            config_hash=config_hash, grader_source_hash=fixed.GRADER_SHA256)}
     bridge._same(recorded, expected, "retention_grade_readout_entry_mismatch")
     return expected
 
 
-def _terminal_contract(context, terminal):
+def _terminal_contract(context, terminal, *, selector=SELECTOR):
     """Reconstruct only recorded writer fields; never invent the missing input."""
     bridge._context(context)
-    require(context.controller_source_sha == WRITER_SOURCE, "retention_grade_readout_writer_refused")
+    profile = _fixed(selector)
+    fixed = bridge._fixed(profile.grading_selector)
+    require(context.controller_source_sha == profile.writer_source and context.selector == profile.grading_selector,
+            "retention_grade_readout_writer_refused")
     require(type(terminal) is dict and set(terminal) == {
         "format", "binding", "claim_commit", "claim_identity", "outcome", "child", "files", "missing",
         "invoice_complete", "http_request_count"}
-        and terminal["format"] == bridge.TERMINAL_FORMAT and terminal["outcome"] == "graded"
-        and terminal["claim_commit"] == CLAIM and terminal["invoice_complete"] is False
+        and terminal["format"] == fixed.TERMINAL_FORMAT and terminal["outcome"] == "graded"
+        and terminal["claim_commit"] == profile.claim and terminal["invoice_complete"] is False
         and terminal["http_request_count"] is None, "retention_grade_readout_terminal_refused")
     binding = terminal["binding"]
     require(type(binding) is dict and output._hash(binding.get("preparation_sha256")),
             "retention_grade_readout_preparation_identity_refused")
-    entry = _entry(context, binding.get("entry"))
-    expected = {"source_sha": WRITER_SOURCE, "selector": bridge.SELECTOR, "cell_id": bridge.CELL,
-        "fixed_evidence_sha256": bridge.fixed_evidence_sha256(), "intake_sha256": bridge.RESULT["intake_sha256"],
-        "approval_sha256": pilot._digest(bridge.approval_request(WRITER_SOURCE, WRITER_RUN)),
-        "github_run": WRITER_RUN, "entry": entry, "grading_plan_sha256": pilot._digest(context.grading.as_dict()),
+    entry = _entry(context, binding.get("entry"), selector=selector)
+    expected = {"source_sha": profile.writer_source, "selector": fixed.SELECTOR, "cell_id": fixed.CELL,
+        "fixed_evidence_sha256": bridge.fixed_evidence_sha256(fixed.SELECTOR), "intake_sha256": fixed.RESULT["intake_sha256"],
+        "approval_sha256": pilot._digest(bridge.approval_request(profile.writer_source, profile.writer_run,
+                                                              selector=fixed.SELECTOR)),
+        "github_run": profile.writer_run, "entry": entry, "grading_plan_sha256": pilot._digest(context.grading.as_dict()),
         "preparation_sha256": binding["preparation_sha256"], "proof_boundary": grade.PROOF}
     bridge._same(binding, expected, "retention_grade_readout_writer_binding_mismatch")
     identity = terminal["claim_identity"]
@@ -128,8 +179,8 @@ def _terminal_contract(context, terminal):
     from pathlib import Path
 
     path = Path(entry["grade_path"])
-    allowed = {"grade_result": bridge.PREFIX + "/" + str(path),
-        "grade_cost_ledger": bridge.PREFIX + "/" + str(path.with_name(path.stem + ".cost_ledger.jsonl"))}
+    allowed = {"grade_result": fixed.PREFIX + "/" + str(path),
+        "grade_cost_ledger": fixed.PREFIX + "/" + str(path.with_name(path.stem + ".cost_ledger.jsonl"))}
     records = terminal["files"]
     require(type(records) is list and 1 <= len(records) <= 2, "grade_artifact_roles_refused")
     roles, names, total = [], [], 0
@@ -147,8 +198,8 @@ def _terminal_contract(context, terminal):
             and names == sorted(set(names)) and total <= output.MAX_TOTAL_BYTES, "grade_artifact_roles_refused")
     require(terminal["missing"] == [role for role in ("grade_result", "grade_cost_ledger") if role not in roles],
             "grade_missing_accounting_mismatch")
-    claim = {"format": bridge.CLAIM_FORMAT, "binding": expected,
-             "expected_parent": bridge.PARENT["revision"], "predecessor": bridge.PARENT}
+    claim = {"format": fixed.CLAIM_FORMAT, "binding": expected,
+             "expected_parent": fixed.PARENT["revision"], "predecessor": fixed.PARENT}
     return entry, claim
 
 
@@ -159,11 +210,13 @@ class _ReadOnlyGrade:
     The SDK paths-info POST is read-only. Failed reads consume their allowance.
     """
 
-    def __init__(self, api, repo, token):
+    def __init__(self, api, repo, token, *, selector=SELECTOR):
         self._api, self._repo, self._token = api, repo, token
+        self._profile = profile = _fixed(selector)
+        self._fixed = fixed = bridge._fixed(profile.grading_selector)
         self._metadata_open = True
-        self._paths = {TERMINAL: {bridge.TERMINAL_PATH}}
-        self._downloads = {(TERMINAL, bridge.TERMINAL_PATH): 2}
+        self._paths = {profile.terminal: {fixed.TERMINAL_PATH}}
+        self._downloads = {(profile.terminal, fixed.TERMINAL_PATH): 2}
         self._path_reads = 5
         self._verification_substage = None
 
@@ -173,7 +226,7 @@ class _ReadOnlyGrade:
 
     def repo_info(self, *, repo_id, repo_type, revision, token, timeout):
         self._target(repo_id, repo_type, token)
-        require(self._metadata_open and revision == TERMINAL, "grade_readout_metadata_refused")
+        require(self._metadata_open and revision == self._profile.terminal, "grade_readout_metadata_refused")
         self._metadata_open = False
         return self._api.repo_info(repo_id=repo_id, repo_type=repo_type, revision=revision,
                                    token=token, timeout=timeout)
@@ -199,29 +252,30 @@ class _ReadOnlyGrade:
             local_files_only=False, etag_timeout=etag_timeout)
 
     def verify(self, context, root, deadline):
+        profile, fixed = self._profile, self._fixed
         self._verification_substage = "metadata"
-        require(output._metadata(self, self._repo, TERMINAL, self._token, deadline)["sha"] == TERMINAL,
+        require(output._metadata(self, self._repo, profile.terminal, self._token, deadline)["sha"] == profile.terminal,
                 "retention_grade_readout_revision_mismatch")
         self._verification_substage = "terminal_control"
-        terminal, data = retained._control(self, self._repo, TERMINAL, bridge.TERMINAL_PATH,
+        terminal, data = retained._control(self, self._repo, profile.terminal, fixed.TERMINAL_PATH,
             grade._cache(root, "terminal"), self._token, deadline,
-            expected=TERMINAL_IDENTITY, written_at=TERMINAL)
+            expected=profile.terminal_identity, written_at=profile.terminal)
         self._verification_substage = "terminal_binding"
-        entry, claim = _terminal_contract(context, terminal)
+        entry, claim = _terminal_contract(context, terminal, selector=profile.selector)
         # Only the pinned, semantically checked terminal can open these reads.
-        self._paths[TERMINAL].update({bridge.CLAIM_PATH, *(row["path"] for row in terminal["files"])})
-        self._paths[CLAIM] = {bridge.CLAIM_PATH}
-        self._downloads[(CLAIM, bridge.CLAIM_PATH)] = 1
-        admission = {"returned_commit": CLAIM, "claim": claim, "claim_identity": terminal["claim_identity"]}
+        self._paths[profile.terminal].update({fixed.CLAIM_PATH, *(row["path"] for row in terminal["files"])})
+        self._paths[profile.claim] = {fixed.CLAIM_PATH}
+        self._downloads[(profile.claim, fixed.CLAIM_PATH)] = 1
+        admission = {"returned_commit": profile.claim, "claim": claim, "claim_identity": terminal["claim_identity"]}
         # Includes the existing terminal reread, claim bytes and object history.
         self._verification_substage = "claim_history"
-        identity = bridge._terminal(self, self._repo, TERMINAL, terminal, admission,
-            grade._cache(root, "verified"), self._token, deadline)
+        identity = bridge._terminal(self, self._repo, profile.terminal, terminal, admission,
+            grade._cache(root, "verified"), self._token, deadline, selector=fixed.SELECTOR)
         self._verification_substage = "terminal_identity"
         bridge._same(identity, pilot._identity(data), "retention_grade_readout_terminal_changed")
         # Payload reads remain closed until claim bytes and inherited history pass.
         for record in terminal["files"]:
-            self._downloads[(TERMINAL, record["path"])] = 1
+            self._downloads[(profile.terminal, record["path"])] = 1
         return terminal, entry, identity
 
 
@@ -238,11 +292,20 @@ def main(args, *, _test_api=None):
         "materialized_input_fingerprint": {"status": "unavailable", "value": None, "comparison": None,
             "reason": "materialized_input_fingerprint_not_recorded"}}
     try:
+        profile = _fixed(args.selector)
+        fixed = bridge._fixed(profile.grading_selector)
+        public.update(selector=profile.selector, cell_id=fixed.CELL, grade_writer_source_sha=profile.writer_source,
+            grade_writer_run=profile.writer_run, inference_producer_source_sha=fixed.RESULT["producer_source_sha"])
+        if profile.selector == KEEP_R2_SELECTOR:
+            # The terminal records the logical job name, not the provider's
+            # numeric job ID. Preserve that independently supplied limit.
+            public.update(supplied_grade_writer_job_id=KEEP_R2_WRITER_JOB_ID,
+                          provider_job_identity_independently_verified=False)
         context = _context(args)
         public["stage"] = "observer_authority"
         readout._authority(args.reviewed_source_sha, live=args.phase == "readout")
         if os.environ.get("GITHUB_ACTIONS") == "true":
-            require(os.environ.get("GRADE_SELECTOR") == SELECTOR and os.environ.get("GRADE_TERMINAL") == TERMINAL,
+            require(os.environ.get("GRADE_SELECTOR") == profile.selector and os.environ.get("GRADE_TERMINAL") == profile.terminal,
                     "retention_grade_readout_route_refused")
         if args.phase == "plan":
             public["stage"] = "plan"
@@ -250,31 +313,33 @@ def main(args, *, _test_api=None):
             return 0
         public["stage"] = "source_preflight"
         with grade._entry_boundary("source_preflight"):
-            bridge._source(bridge.compile_request(args.reviewed_source_sha))
+            bridge._source(bridge.compile_request(args.reviewed_source_sha, selector=fixed.SELECTOR))
         public["stage"] = "read_cache"
         root = grade._root(args.root, new=True)
         with grade._lock(root), retained._session(_test_api, response_bytes_limit=output.MAX_RECORD_BYTES) as (
                 raw_api, token, deadline):
             repo = retained._target()
-            api = _ReadOnlyGrade(raw_api, repo, token)
+            api = _ReadOnlyGrade(raw_api, repo, token, selector=profile.selector)
             public["stage"] = "grade_terminal"
             terminal, entry, identity = api.verify(context, root, deadline)
             public["stage"] = "grade_payload"
             cache = grade._cache(root, "payload")
-            files = {row["role"]: grade._fetch(api, repo, TERMINAL, row["path"], row, cache, token, deadline)
+            files = {row["role"]: grade._fetch(api, repo, profile.terminal, row["path"], row, cache, token, deadline)
                      for row in terminal["files"]}
+            ledger_type = (output.RetentionFirstCellLedgerBinding if profile.selector == SELECTOR
+                           else output.RetentionKeepR2LedgerBinding)
             summary = readout._recorded_projection(context, terminal, files, entry,
-                inference_revision=bridge.RESULT["output_commit"],
-                retention_first_cell_binding=output.RetentionFirstCellLedgerBinding(
+                inference_revision=fixed.RESULT["output_commit"],
+                retention_first_cell_binding=ledger_type(
                     entry["config_hash"], entry["grader_source_hash"]))
         public.update(outcome="verified_writer_recorded_grade", stage="verified", **summary,
-            grade_revision=TERMINAL, terminal_identity=identity, claim_revision=CLAIM,
+            grade_revision=profile.terminal, terminal_identity=identity, claim_revision=profile.claim,
             claim_identity=terminal["claim_identity"],
             file_identities=[{key: row[key] for key in ("role", "size", "sha256")} for row in terminal["files"]],
             missing=terminal["missing"], proof_boundary=grade.PROOF,
-            fixed_evidence_sha256=bridge.fixed_evidence_sha256(), intake_sha256=bridge.RESULT["intake_sha256"],
-            original_result_fingerprint=bridge.RESULT["result"]["result_fingerprint"],
-            inference_terminal=bridge.RESULT["terminal_commit"], inference_output=bridge.RESULT["output_commit"],
+            fixed_evidence_sha256=bridge.fixed_evidence_sha256(fixed.SELECTOR), intake_sha256=fixed.RESULT["intake_sha256"],
+            original_result_fingerprint=fixed.RESULT["result"]["result_fingerprint"],
+            inference_terminal=fixed.RESULT["terminal_commit"], inference_output=fixed.RESULT["output_commit"],
             writer_preparation_sha256=terminal["binding"]["preparation_sha256"],
             config_sha256=hashlib.sha256(context.run.grader_config_json.encode()).hexdigest(),
             config_hash=entry["config_hash"], grader_source_hash=entry["grader_source_hash"],

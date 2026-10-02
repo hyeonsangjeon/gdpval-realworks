@@ -1832,6 +1832,7 @@ jobs:
       ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || startsWith(inputs.experiment_yaml, 'retention/')) &&
           inputs.experiment_yaml != 'pilot/grade-readout' &&
           inputs.experiment_yaml != 'retention/grade-readout' &&
+          inputs.experiment_yaml != 'retention/keep-r2-readout' &&
           (inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && inputs.experiment_yaml != 'retention/first-cell' && inputs.experiment_yaml != 'retention/keep-r2')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -2213,10 +2214,10 @@ jobs:
       # source-identity, ledger, payload and child-log files stay private.
 
   pilot-readout:
-    # Closed historical/first-retention grade readers, no paid authority. Dry planning and
+    # Closed pilot/keep-r1/keep-r2 grade readers, no paid authority. Dry planning and
     # reads use this job; only the final read step receives the HF credential.
     if: >-
-      ${{ (inputs.experiment_yaml == 'pilot/grade-readout' || inputs.experiment_yaml == 'retention/grade-readout') && inputs.paid_approval == false &&
+      ${{ (inputs.experiment_yaml == 'pilot/grade-readout' || inputs.experiment_yaml == 'retention/grade-readout' || inputs.experiment_yaml == 'retention/keep-r2-readout') && inputs.paid_approval == false &&
           github.repository == 'hyeonsangjeon/gdpval-realworks' && github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' && github.sha == github.workflow_sha && github.run_attempt == '1' }}
     runs-on: ubuntu-24.04

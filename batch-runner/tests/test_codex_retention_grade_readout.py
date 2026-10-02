@@ -33,13 +33,14 @@ PRIVATE = "PRIVATE-readout-canary https://private.invalid/path?credential=PRIVAT
 
 
 class ReadHF(base.GradeHF):
-    def __init__(self):
+    def __init__(self, *, selector=reader.SELECTOR):
         super().__init__()
+        self.terminal_revision = reader._fixed(selector).terminal
         self.downloads, self.paths = [], []
         self.corrupt_download = None
 
     def repo_info(self, **kwargs):
-        assert kwargs["revision"] == reader.TERMINAL, "no mutable branch discovery"
+        assert kwargs["revision"] == self.terminal_revision, "no mutable branch discovery"
         return super().repo_info(**kwargs)
 
     def get_paths_info(self, **kwargs):
@@ -62,14 +63,16 @@ class ReadHF(base.GradeHF):
         pytest.fail("readout attempted branch creation")
 
 
-def _fixture(context):
+def _fixture(context, *, selector=reader.SELECTOR):
+    profile = reader._fixed(selector)
+    fixed = bridge._fixed(profile.grading_selector)
     config = json.loads(context.run.grader_config_json)
     config_hash = hashlib.sha256(context.run.grader_config_json.encode()).hexdigest()[:16]
-    path = grade._grade_path(context, config_hash, bridge.GRADER_SHA256, bridge.RESULT["output_commit"])
-    entry = {"grade_path": str(path), "config_hash": config_hash, "grader_source_hash": bridge.GRADER_SHA256,
+    path = grade._grade_path(context, config_hash, fixed.GRADER_SHA256, fixed.RESULT["output_commit"])
+    entry = {"grade_path": str(path), "config_hash": config_hash, "grader_source_hash": fixed.GRADER_SHA256,
         "renderer_fingerprint": base.RENDERER,
-        "cost_run_id": step8.make_cost_run_id(experiment_yaml_name=bridge.SELECTOR,
-            config_hash=config_hash, grader_source_hash=bridge.GRADER_SHA256)}
+        "cost_run_id": step8.make_cost_run_id(experiment_yaml_name=fixed.SELECTOR,
+            config_hash=config_hash, grader_source_hash=fixed.GRADER_SHA256)}
     ledger = base._ledger(entry["cost_run_id"], context.cell["task_id"], "grading")
     # Step8 persists the producer receipt; safe readout projection happens only
     # after schema validation and may turn partial-accounting placeholders null.
@@ -87,57 +90,62 @@ def _fixture(context):
     row = step8._task_to_dict(task, grading_wall_time_ms=1.0)
     row["grading_cost"] = receipt
     loader = RubricLoader(config["rubric"]["repo_id"], config["rubric"]["revision"], config["rubric"]["cache_dir"])
-    payload = step8._build_grade_payload(exp_name=bridge.SELECTOR, inf_results={"model": "synthetic-inference"},
+    payload = step8._build_grade_payload(exp_name=fixed.SELECTOR, inf_results={"model": "synthetic-inference"},
         config=config, config_hash=config_hash, loader=loader, prompt_version=config["prompt"]["version"],
-        task_dicts=[row], grader_source_hash=bridge.GRADER_SHA256, source_inference_repo_id=retained._target(),
-        source_inference_revision=bridge.RESULT["output_commit"], azure_ai_runtime_fingerprint="f" * 64,
+        task_dicts=[row], grader_source_hash=fixed.GRADER_SHA256, source_inference_repo_id=retained._target(),
+        source_inference_revision=fixed.RESULT["output_commit"], azure_ai_runtime_fingerprint="f" * 64,
         azure_ai_routes=[{"workload": "grader", "runtime_fingerprint": "f" * 64,
                           "profile": "direct-v1", "endpoint_kind": "direct-v1"}],
         run_status="diagnostic", expected_task_ids=[context.cell["task_id"]],
         source_experiment_id=context.cell["run_id"], renderer_fingerprint=base.RENDERER,
         cost_ledger=ledger_reference(str(path.with_name(path.stem + ".cost_ledger.jsonl")), hashlib.sha256(ledger).hexdigest()))
-    binding = {"source_sha": reader.WRITER_SOURCE, "selector": bridge.SELECTOR, "cell_id": bridge.CELL,
-        "fixed_evidence_sha256": bridge.fixed_evidence_sha256(), "intake_sha256": bridge.RESULT["intake_sha256"],
-        "approval_sha256": pilot._digest(bridge.approval_request(reader.WRITER_SOURCE, reader.WRITER_RUN)),
-        "github_run": reader.WRITER_RUN, "entry": entry, "grading_plan_sha256": pilot._digest(context.grading.as_dict()),
+    binding = {"source_sha": profile.writer_source, "selector": fixed.SELECTOR, "cell_id": fixed.CELL,
+        "fixed_evidence_sha256": bridge.fixed_evidence_sha256(fixed.SELECTOR), "intake_sha256": fixed.RESULT["intake_sha256"],
+        "approval_sha256": pilot._digest(bridge.approval_request(profile.writer_source, profile.writer_run,
+                                                              selector=fixed.SELECTOR)),
+        "github_run": profile.writer_run, "entry": entry, "grading_plan_sha256": pilot._digest(context.grading.as_dict()),
         "preparation_sha256": "a" * 64, "proof_boundary": grade.PROOF}
-    claim = {"format": bridge.CLAIM_FORMAT, "binding": binding,
-             "expected_parent": bridge.PARENT["revision"], "predecessor": bridge.PARENT}
-    terminal = {"format": bridge.TERMINAL_FORMAT, "binding": binding, "claim_commit": reader.CLAIM,
+    claim = {"format": fixed.CLAIM_FORMAT, "binding": binding,
+             "expected_parent": fixed.PARENT["revision"], "predecessor": fixed.PARENT}
+    terminal = {"format": fixed.TERMINAL_FORMAT, "binding": binding, "claim_commit": profile.claim,
         "claim_identity": pilot._identity(retained._encoded(claim)), "outcome": "graded",
         "child": {"entry_invoked": True, "exit_code": 0, "timed_out": False, "cleanup_confirmed": True},
         "files": [], "missing": [], "invoice_complete": False, "http_request_count": None}
     return terminal, claim, payload, ledger
 
 
-def _seed(monkeypatch, terminal, claim, payload, ledger, *, declared=True):
-    api = ReadHF()
+def _seed(monkeypatch, terminal, claim, payload, ledger, *, declared=True, selector=reader.SELECTOR):
+    profile = reader._fixed(selector)
+    fixed = bridge._fixed(profile.grading_selector)
+    api = ReadHF(selector=selector)
     entry = terminal["binding"]["entry"]
     path = Path(entry["grade_path"])
-    files = {bridge.PREFIX + "/" + str(path): base._json(payload)}
+    files = {fixed.PREFIX + "/" + str(path): base._json(payload)}
     roles = {name: "grade_result" for name in files}
     if ledger is not None:
-        name = bridge.PREFIX + "/" + str(path.with_name(path.stem + ".cost_ledger.jsonl"))
+        name = fixed.PREFIX + "/" + str(path.with_name(path.stem + ".cost_ledger.jsonl"))
         files[name], roles[name] = ledger, "grade_cost_ledger"
     if declared:
         terminal["files"] = [{"role": roles[name], **retained._object(name, data)} for name, data in sorted(files.items())]
         terminal["missing"] = [] if ledger is not None else ["grade_cost_ledger"]
-    api.seed(bridge.PARENT["revision"], retained.BOOTSTRAP, {})
-    api.seed(reader.CLAIM, bridge.PARENT["revision"], {bridge.CLAIM_PATH: retained._encoded(claim)})
+    api.seed(fixed.PARENT["revision"], retained.BOOTSTRAP, {})
+    api.seed(profile.claim, fixed.PARENT["revision"], {fixed.CLAIM_PATH: retained._encoded(claim)})
     raw = retained._encoded(terminal)
-    api.seed(reader.TERMINAL, reader.CLAIM, {**files, bridge.TERMINAL_PATH: raw})
+    api.seed(profile.terminal, profile.claim, {**files, fixed.TERMINAL_PATH: raw})
     # Bind this synthetic publication, never assert it is the actual terminal.
-    monkeypatch.setattr(reader, "TERMINAL_IDENTITY", pilot._identity(raw))
+    identity_name = "TERMINAL_IDENTITY" if selector == reader.SELECTOR else "KEEP_R2_TERMINAL_IDENTITY"
+    monkeypatch.setattr(reader, identity_name, pilot._identity(raw))
     return api
 
 
-def _environment(monkeypatch):
+def _environment(monkeypatch, *, selector=reader.SELECTOR):
+    profile = reader._fixed(selector)
     env = {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": bridge.pilot_ci.REPOSITORY,
         "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main", "GITHUB_SHA": OBSERVER,
         "PILOT_WORKFLOW_SHA": OBSERVER, "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_ID": "12345",
         "GITHUB_JOB": "pilot-readout", "PILOT_GRADE_PAID_APPROVAL": "false", "PILOT_GRADE_DRY_RUN": "false",
         "GITHUB_WORKFLOW_REF": bridge.pilot_ci.REPOSITORY + "/" + grade.WORKFLOW + "@refs/heads/main",
-        "GRADE_SELECTOR": reader.SELECTOR, "GRADE_TERMINAL": reader.TERMINAL,
+        "GRADE_SELECTOR": profile.selector, "GRADE_TERMINAL": profile.terminal,
         "GRADE_CONFIG": "default_v2_sol_max.yaml", "GRADE_FORCE": "false", "GRADE_TASKS_LIMIT": "0",
         "GRADE_TASKS": "", "GRADE_RESUME": "false", "GRADE_RESUME_CHUNK": "0", "GRADE_SHARD_COUNT": "1",
         "GRADE_SHARD_INDEX": "0", "GRADE_RUN_ORDINAL": "1", "HF_TOKEN": TOKEN}
@@ -149,7 +157,8 @@ def _workflow():
     jobs = yaml.safe_load((bridge.ROOT / grade.WORKFLOW).read_bytes())["jobs"]
     job = jobs["pilot-readout"]
     assert " ".join(job["if"].split()) == (
-        "${{ (inputs.experiment_yaml == 'pilot/grade-readout' || inputs.experiment_yaml == 'retention/grade-readout') "
+        "${{ (inputs.experiment_yaml == 'pilot/grade-readout' || inputs.experiment_yaml == 'retention/grade-readout' "
+        "|| inputs.experiment_yaml == 'retention/keep-r2-readout') "
         "&& inputs.paid_approval == false && github.repository == 'hyeonsangjeon/gdpval-realworks' "
         "&& github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' "
         "&& github.sha == github.workflow_sha && github.run_attempt == '1' }}")
@@ -158,6 +167,14 @@ def _workflow():
     assert job["steps"][1]["with"] == {"python-version": "3.11"}
     assert job["steps"][0]["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
     assert "inputs.experiment_yaml != 'retention/grade-readout'" in jobs["pilot-plan"]["if"]
+    assert "inputs.experiment_yaml != 'retention/keep-r2-readout'" in jobs["pilot-plan"]["if"]
+    assert " ".join(jobs["pilot-plan"]["if"].split()) == (
+        "${{ (startsWith(inputs.experiment_yaml, 'pilot/') || startsWith(inputs.experiment_yaml, 'retention/')) && "
+        "inputs.experiment_yaml != 'pilot/grade-readout' && "
+        "inputs.experiment_yaml != 'retention/grade-readout' && "
+        "inputs.experiment_yaml != 'retention/keep-r2-readout' && "
+        "(inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && "
+        "inputs.experiment_yaml != 'retention/first-cell' && inputs.experiment_yaml != 'retention/keep-r2')) }}")
     for name in ("pilot-approve-paid", "pilot-live"):
         assert (
             "|| inputs.experiment_yaml == 'retention/first-cell' || inputs.experiment_yaml == 'retention/keep-r2')"

@@ -3589,6 +3589,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "(startsWith(inputs.experiment_yaml, 'pilot/') || startsWith(inputs.experiment_yaml, 'retention/')) && "
         "inputs.experiment_yaml != 'pilot/grade-readout' && "
         "inputs.experiment_yaml != 'retention/grade-readout' && "
+        "inputs.experiment_yaml != 'retention/keep-r2-readout' && "
         "(inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && "
         "inputs.experiment_yaml != 'retention/first-cell' && inputs.experiment_yaml != 'retention/keep-r2'))"
     )
