@@ -261,7 +261,14 @@ def test_task5_keep_r1_is_the_closed_sixth_cell(tmp_path, monkeypatch, capsys, a
         case = host_parent / "scenario"
         case.mkdir()
         plan, root, archive, sources = shared._scenario(case, monkeypatch, approved_pilot_source)
-        for role in successor.SOURCE_PATHS:
+        scenario_roles = (shared.successor.FACADE, fresh.FACADE,
+            "batch-runner/codex_retention_fresh_r1_result_intake.py")
+        additional_roles = (successor.FACADE, previous.FACADE, previous.previous.FACADE)
+        assert set(successor.SOURCE_PATHS) == {*scenario_roles, *additional_roles}
+        # The shared scenario owns these copies; verify their current bytes.
+        for role in (*scenario_roles, "batch-runner/codex_retention_result_intake.py"):
+            assert (root / role).read_bytes() == (REAL_ROOT / role).read_bytes()
+        for role in additional_roles:
             _write(root / role, (REAL_ROOT / role).read_bytes())
         _runtime(monkeypatch, root)
         base._environment(monkeypatch, host_parent)
