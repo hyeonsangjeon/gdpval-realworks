@@ -15,8 +15,10 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 import codex_retention_task5_fresh_r1 as successor
+from core.codex_cost import CodexTokenTotals, settle_codex_turn, turn_usage_delta
 from core.codex_runner import CodexWorkspace
 from core.codex_task_deadline import TaskDeadlineRefused
+from core.cost_receipts import CostReceiptLedger
 from . import test_codex_retention_task4_keep_r2 as prior
 from .test_codex_budget_pilot_retention import MemoryHF, TOKEN, offline  # noqa: F401
 from .test_codex_retention_fresh_r1_result_intake import FreshResultHF
@@ -82,16 +84,43 @@ class Task5Transport(prior.prior.R2Transport):
             task.bind_fresh_output_directory(outputs)
             assert task.admit_attempt(workspace.root) == 0
             task.bind_workspace(identity, owned._digest(self.document), workspace.continuation_binding())
+            owned_folders = (workspace.workspace, workspace.home, workspace.codex_home, outputs)
+            for folder in owned_folders:
+                _write(folder / "fresh-only.txt", b"discard only this owned bundle")
             task.thread_starting()
             # An ambiguous start is not authority to discard state and try again.
-            with pytest.raises(TaskDeadlineRefused, match="^fresh bundle lacks a reconciled eligible recovery$"):
+            with pytest.raises(TaskDeadlineRefused,
+                    match="^native thread creation was interrupted before its identifier was bound$"):
                 task.require_fresh_retirement(task.continuation(identity))
+            assert task.retired_continuations(identity) == []
+            assert all((folder / "fresh-only.txt").read_bytes() == b"discard only this owned bundle"
+                       for folder in owned_folders)
             task.bind_thread("synthetic-task5-first-thread", resumed=False)
+            bound = task.continuation(identity)
+            assert bound["phase"] == "bound" and bound["thread_id"] == "synthetic-task5-first-thread"
+            for retirement in (task.require_fresh_retirement, task.retire_fresh_bundle):
+                with pytest.raises(TaskDeadlineRefused, match="^fresh bundle lacks a reconciled eligible recovery$"):
+                    retirement(bound)
+            assert task.continuation(identity) == bound and task.retired_continuations(identity) == []
+            assert all((folder / "fresh-only.txt").read_bytes() == b"discard only this owned bundle"
+                       for folder in owned_folders)
             assert task.recovery_context(0) is None  # Mechanical B, no C feedback.
-            task.begin_turn(0, "synthetic-turn-0", input_sha256=owned._digest(self.document), recovery_context=None)
-            for folder in (workspace.workspace, workspace.home, workspace.codex_home, outputs):
-                _write(folder / "fresh-only.txt", b"discard only this owned bundle")
-            task.observe_turn_start_failure(0)
+            receipt_path = host / "synthetic-fresh-recovery.sqlite"
+            with CostReceiptLedger(receipt_path, run_id="synthetic-task5-fresh-recovery") as ledger:
+                call_id = ledger.reserve(call_id="synthetic-turn-0", task_id=registration.TASK5,
+                    stage="generation", retry_kind="none", provider="synthetic", requested_model="synthetic",
+                    request_sha256=owned._digest(self.document))
+                before = task.begin_turn(0, call_id, input_sha256=owned._digest(self.document), recovery_context=None)
+                after = dict.fromkeys(before)  # The synthetic failed turn reports no usage.
+                task.observe_turn(0, after, failure_observation={
+                    "category": "rate_limited", "http_status_code": 429, "retry_guidance": None})
+                with pytest.raises(TaskDeadlineRefused, match="^fresh bundle lacks a reconciled eligible recovery$"):
+                    task.require_fresh_retirement(task.continuation(identity))
+                settle_codex_turn(ledger, call_id,
+                    totals=turn_usage_delta(CodexTokenTotals(**before), CodexTokenTotals(**after)))
+                task.acknowledge_usage(0)
+                receipts = ledger.calls_for(registration.TASK5)
+                assert len(receipts) == 1 and receipts[0]["call_id"] == call_id and receipts[0]["state"] == "settled"
             task.wait(30, lambda seconds: setattr(self.clock, "now", self.clock.now + seconds))
         finally:
             store.close()
@@ -102,7 +131,20 @@ class Task5Transport(prior.prior.R2Transport):
             with pytest.raises(TaskDeadlineRefused, match="^native continuation request/runtime identity mismatch$"):
                 task.continuation(owned._digest({"cell_id": previous.CELL_ID}))
             bound = task.continuation(identity)
+            assert bound["phase"] == "bound" and bound["native_resumes"] == 0 and bound["terminal_reason"] is None
+            assert len(bound["turns"]) == 1 and bound["turns"][0]["phase"] == "settled"
+            assert bound["turns"][0]["before"] == dict.fromkeys(before, 0)
+            assert bound["turns"][0]["failure_observation"] == {
+                "category": "rate_limited", "http_status_code": 429, "retry_guidance": None}
+            with CostReceiptLedger(receipt_path, run_id="synthetic-task5-fresh-recovery") as ledger:
+                assert ledger.calls_for(registration.TASK5) == receipts
+                assert bound["turns"][0]["call_id"] == receipts[0]["call_id"]
             task.require_fresh_retirement(bound)
+            with pytest.raises(TaskDeadlineRefused, match="^retired native workspace is still present or unsafe$"):
+                task.retire_fresh_bundle(bound)
+            assert task.continuation(identity) == bound and task.retired_continuations(identity) == []
+            assert all((folder / "fresh-only.txt").read_bytes() == b"discard only this owned bundle"
+                       for folder in owned_folders)
             task.clear_fresh_outputs()
             assert list(outputs.iterdir()) == [] and neighbor.read_bytes() == b"unrelated output"
             CodexWorkspace.remove_owned_bundle(bound["workspace"])
@@ -118,9 +160,17 @@ class Task5Transport(prior.prior.R2Transport):
             task.thread_starting()
             task.bind_thread("synthetic-task5-second-thread", resumed=False)
             assert task.recovery_context(1) is None
-            task.begin_turn(1, "synthetic-turn-1", input_sha256=owned._digest(self.document), recovery_context=None)
-            task.observe_turn(1, dict.fromkeys(bound["usage_boundary"]), terminal_reason="completed")
-            task.acknowledge_usage(1)
+            with CostReceiptLedger(receipt_path, run_id="synthetic-task5-fresh-recovery") as ledger:
+                call_id = ledger.reserve(call_id="synthetic-turn-1", task_id=registration.TASK5,
+                    stage="generation", retry_kind="infrastructure", provider="synthetic", requested_model="synthetic",
+                    request_sha256=owned._digest(self.document))
+                before = task.begin_turn(1, call_id, input_sha256=owned._digest(self.document), recovery_context=None)
+                after = dict.fromkeys(before)
+                task.observe_turn(1, after, terminal_reason="completed")
+                settle_codex_turn(ledger, call_id,
+                    totals=turn_usage_delta(CodexTokenTotals(**before), CodexTokenTotals(**after)))
+                task.acknowledge_usage(1)
+                assert [row["state"] for row in ledger.calls_for(registration.TASK5)] == ["settled", "settled"]
             self.fresh_record = task.as_record()
             assert self.fresh_record["started_unix"] == original["started_unix"]
             assert self.fresh_record["expires_unix"] == original["expires_unix"]
