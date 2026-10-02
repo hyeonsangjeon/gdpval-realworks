@@ -142,7 +142,8 @@ def test_task4_keep_r2_advances_failed_fresh_r2_without_cross_cell_state(
     }
     assert [(item.cell_id, item.ordinal, item.bundle, item.repetition) for item in controller.CELL_BINDINGS] == [
         (production_plan["order"][0], 0, "keep", 1), (production_plan["order"][1], 1, "fresh", 1),
-        (production_plan["order"][2], 2, "fresh", 2), (production_plan["order"][3], 3, "keep", 2)]
+        (production_plan["order"][2], 2, "fresh", 2), (production_plan["order"][3], 3, "keep", 2),
+        (production_plan["order"][4], 4, "fresh", 1)]
     assert reader.intake.reader_identity() == {
         "module_sha256": "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196",
         "terminal_verifier_sha256": "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c"}
@@ -257,7 +258,7 @@ def test_task4_keep_r2_advances_failed_fresh_r2_without_cross_cell_state(
         child.recovery_request = request
         grant = ci.ExecutionGrantRequest(SOURCE, owned._digest(document), archive)
         denied = host_parent / "not-admitted"
-        for wrong in ("unregistered", *plan["order"][4:]):
+        for wrong in ("unregistered", *plan["order"][5:]):
             with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
                 controller.execute_first_cell(replace(request, cell_id=wrong), host_state=denied, grant=grant)
         for old_cell in (controller.FIRST_CELL_ID, fresh.CELL_ID, previous.CELL_ID):

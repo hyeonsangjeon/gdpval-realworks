@@ -91,6 +91,10 @@ class OwnedJudge(base.Child):
 
 
 def _synthetic_case(tmp_path, monkeypatch):
+    # Production's consumed receipt keeps its historical READER and refuses the
+    # migrated current helper. This authored fixture, like its RESULT below,
+    # binds its own current bytes before compiling a synthetic grading context.
+    monkeypatch.setattr(fixed, "READER", reader.reader_identity(binding=reader.KEEP_R2))
     original = bridge.compile_request(SOURCE, selector=fixed.SELECTOR)
     assert bridge._origins(original)[0] == "11e7900cdcac61bc4daf59e65feb238acda98fbf"
     monkeypatch.setenv("HF_TOKEN", TOKEN)
@@ -179,7 +183,10 @@ def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch,
     assert fixed.RESULT["intake_sha256"] == "4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4"
     assert fixed.PARENT["revision"] == "40712e0980cc05c31688fdbb98c693774fb90c0d"
     assert fixed.PARENT["revision"] != fixed.RESULT["terminal_commit"]
-    assert fixed._reader() is reader and reader.reader_identity(binding=reader.KEEP_R2) == fixed.READER
+    assert reader.reader_identity(binding=reader.KEEP_R2) != fixed.READER
+    with pytest.raises(output.OutputPublicationRefused, match="^reviewed_retention_reader_required$"):
+        fixed._reader()
+    assert bridge.fixed_evidence_sha256(fixed.SELECTOR) == EVIDENCE
     case, transport, record, source_state = _synthetic_case(tmp_path, monkeypatch)
     context, root, api = case.context, case.root, case.api
     assert context.cell["index"] == 3 and context.cell["control"] == {

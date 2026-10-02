@@ -204,8 +204,8 @@ def _authority(context):
     return run
 
 
-def _source(context, checkout=ROOT):
-    fixed = _fixed(context.selector)
+def _source_checkout(context, checkout=ROOT):
+    """Exact safe source checkout, shared without changing historical evidence."""
     pilot._repository(checkout)
     pilot._safe_checkout_configuration(checkout)
     require(pilot._git(checkout, "rev-parse", "HEAD").stdout == (context.controller_source_sha + "\n").encode()
@@ -214,6 +214,11 @@ def _source(context, checkout=ROOT):
     if checkout == ROOT:
         require(not pilot._git(checkout, "status", "--porcelain", "--untracked-files=normal").stdout,
                 "clean_retention_grade_source_required")
+
+
+def _source(context, checkout=ROOT):
+    fixed = _fixed(context.selector)
+    _source_checkout(context, checkout)
     for key, name in fixed.READER_FILES.items():
         data = output._bytes(checkout / "batch-runner" / name, limit=output.MAX_RECORD_BYTES)
         require(pilot._identity(data)["sha256"] == fixed.READER[key], "reviewed_retention_reader_required")

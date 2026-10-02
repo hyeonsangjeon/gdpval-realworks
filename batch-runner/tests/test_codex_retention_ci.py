@@ -298,7 +298,7 @@ def _assert_retention_execution_workflow_contract():
     assert jobs[adapter.EXECUTE_JOB]["permissions"] == {"contents": "read", "actions": "read", "id-token": "write"}
     assert workflow["concurrency"] == {"group": "codex-budget-pilot-ci-20260923-01", "cancel-in-progress": False}
     executable = jobs[adapter.EXECUTE_JOB]["steps"][-1]
-    assert "codex_retention_task4_keep_r2.py --execute" in executable["run"]
+    assert "codex_retention_task5_fresh_r1.py --execute" in executable["run"]
     assert '--request-sha256 "$APPROVED_REQUEST_SHA256"' in executable["run"]
     assert set(executable["env"]) == {"GITHUB_TOKEN", "HF_TOKEN", "AZURE_AI_ROUTE_PROFILE",
                                      "FOUNDRY_PROJECT_ENDPOINT", "CODEX_FOUNDRY_CONNECTION_CONFIRMED"}
