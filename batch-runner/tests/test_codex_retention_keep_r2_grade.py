@@ -189,12 +189,32 @@ def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch,
     with pytest.raises(output.OutputPublicationRefused, match="^retention_grade_source_changed$"):
         bridge.prepare(context, root, _test_api=api, _test_transport=transport)
     source_state["head"] = SOURCE
+    # Expected-pin mutation invalidates the compiled context before source reads.
     for key in fixed.READER:
         with monkeypatch.context() as scoped:
             scoped.setattr(fixed, "READER", {**fixed.READER, key: "0" * 64})
+            with pytest.raises(output.OutputPublicationRefused, match="^retention_grade_context_changed$"):
+                bridge.prepare(context, root, _test_api=api, _test_transport=transport)
+        assert not root.exists() and not api.calls and transport.calls == 0
+
+    # Keep canonical expectations intact and corrupt only actual source bytes.
+    real_bytes = output._bytes
+    for name in fixed.READER_FILES.values():
+        target, corrupted = bridge.ROOT / "batch-runner" / name, []
+
+        def corrupt_reader_bytes(path, **arguments):
+            data = real_bytes(path, **arguments)
+            if Path(path) == target:
+                corrupted.append(Path(path))
+                return data + b"\n# synthetic reader-integrity corruption\n"
+            return data
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(output, "_bytes", corrupt_reader_bytes)
             with pytest.raises(output.OutputPublicationRefused, match="^reviewed_retention_reader_required$"):
                 bridge.prepare(context, root, _test_api=api, _test_transport=transport)
-        assert not root.exists() and not api.calls
+        assert corrupted == [target]
+        assert not root.exists() and not api.calls and transport.calls == 0
 
     real_materialize, uploads = bridge._materialize_bound_codex_grading_input, []
 
