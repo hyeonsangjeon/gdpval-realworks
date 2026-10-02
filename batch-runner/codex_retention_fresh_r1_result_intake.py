@@ -1,4 +1,4 @@
-"""Read only the fixed Task4 fresh/r1 or fresh/r2 publication; never execute it.
+"""Read only fixed Task4 fresh/r1, fresh/r2 or keep/r2 publications; never execute.
 
 One terminal-path discovery is allowed, then only immutable declared reads.
 The fixed producer/request expectations are independent of fetched records.
@@ -56,6 +56,7 @@ class ReadBinding:
     result_marker: str
     terminal_format: str
     terminal_marker: str
+    retention_bundle: str = "fresh"
 
 
 FRESH_R1 = ReadBinding(EXPECTATION, 1, 1, RUN_ID, EXPECTED_EXECUTION_JOB_ID,
@@ -72,29 +73,46 @@ FRESH_R2 = ReadBinding(ci.TerminalExpectation(
     "retention-task4-fresh-r2-terminal-observation-v1", "retention-fresh-r2-terminal-observation.json")
 R2_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task4_fresh_r2.py"),
                    "8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f")
+KEEP_R2 = ReadBinding(ci.TerminalExpectation(
+    "8a06cc7df34cbf10896b635f6c8d9ad4e91313d3c685511f8fc5c159cb6ddec1",
+    "b8351e561acb9675a4993419e819c12787b5b305", intake.controller.KEEP_R2_CELL_ID),
+    3, 2, "36947454688", 110660390316,
+    "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+    "997c30a6b6b8ed8f53d75a6db180dca549df6d0ae31e549934b75eb27d1b0fc1",
+    "retention-task4-keep-r2-result-intake-v1", "retention-keep-r2-result-intake.json",
+    "retention-task4-keep-r2-terminal-observation-v1", "retention-keep-r2-terminal-observation.json", "keep")
+KEEP_R2_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task4_keep_r2.py"),
+                        "12106b5423e25ffefa1b04023e2e98742861762762966a04bf17fe3da1851450")
 
 
 def _fixed_binding(binding):
-    require(type(binding) is ReadBinding and (binding is FRESH_R1 or binding is FRESH_R2),
+    require(type(binding) is ReadBinding and (binding is FRESH_R1 or binding is FRESH_R2 or binding is KEEP_R2),
             "fixed_fresh_read_binding_required")
     return binding
 
 
 def _frozen(binding):
     _fixed_binding(binding)
-    return FROZEN if binding is FRESH_R1 else {**FROZEN, "producer_r2_sha256": R2_PRODUCER_PIN}
+    if binding is FRESH_R1:
+        return FROZEN
+    pins = {**FROZEN, "producer_r2_sha256": R2_PRODUCER_PIN}
+    return {**pins, "producer_keep_r2_sha256": KEEP_R2_PRODUCER_PIN} if binding is KEEP_R2 else pins
 
 
 def _producer(binding):
     _fixed_binding(binding)
     if binding is FRESH_R1:
         return fresh
-    path, digest = R2_PRODUCER_PIN
-    require(hashlib.sha256(output._bytes(path, limit=output.MAX_RECORD_BYTES)).hexdigest() == digest,
-            "fresh_result_reader_bytes_mismatch")
-    # The frozen r2 producer imports this reader for its default r1 predecessor.
-    # Resolve it only after the independent fixed-file hash check, never at import.
-    import codex_retention_task4_fresh_r2 as producer
+    pins = (R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN) if binding is KEEP_R2 else (R2_PRODUCER_PIN,)
+    for path, digest in pins:
+        require(hashlib.sha256(output._bytes(path, limit=output.MAX_RECORD_BYTES)).hexdigest() == digest,
+                "fresh_result_reader_bytes_mismatch")
+    # Both frozen successor producers import this reader for earlier cells.
+    # Hash every dependency before resolving the cycle through a lazy import.
+    if binding is KEEP_R2:
+        import codex_retention_task4_keep_r2 as producer
+    else:
+        import codex_retention_task4_fresh_r2 as producer
 
     require(Path(producer.__file__).resolve() == path.resolve(), "fresh_result_reader_bytes_mismatch")
     return producer
@@ -131,7 +149,7 @@ def _binding(expectation, expected_reader_sha256, terminal_revision, discover_te
     cell = intake.controller._adapted_cell(plan["cells"][binding.ordinal])
     require(plan["campaign_id"] == intake.registration.CAMPAIGN
             and cell["cell_id"] == binding.expectation.cell_id and cell["index"] == binding.ordinal
-            and cell["control"] == {"condition": "retention_bundle_v1", "retention_bundle": "fresh",
+            and cell["control"] == {"condition": "retention_bundle_v1", "retention_bundle": binding.retention_bundle,
                                     "repetition": binding.repetition},
             "fresh_result_registered_cell_mismatch")
     return source, plan, cell
@@ -256,7 +274,7 @@ def _verify_terminal(api, repo, head, cache, token, deadline, *, terminal_only=F
         and terminal["scope"] == "existing_inference_branch_one_use_remote_cas"
         and terminal["publication_acknowledged"] is True, "fresh_result_terminal_binding_mismatch")
     _authority(terminal["authority"], binding=binding)
-    if terminal_only or binding is FRESH_R2:
+    if terminal_only or binding is not FRESH_R1:
         require(terminal["authority"]["provider_job_id"] == binding.execution_job_id,
                 "fresh_terminal_execution_job_mismatch" if terminal_only else "fresh_result_execution_job_mismatch")
     if terminal_only:
@@ -370,7 +388,7 @@ def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expec
             "http_request_count": None, "grade": None, "grading_launched": False, "invoice_complete": False,
             "launch_authorized": False, "admission_attempted": False, "replay_authorized": False, "commands": [],
         }
-        if binding is FRESH_R2:
+        if binding is not FRESH_R1:
             record["expected_execution_job_id"] = binding.execution_job_id
         encoded = retained._encoded(record)
         check()
@@ -471,7 +489,8 @@ def main(argv=None, *, _test_api=None) -> int:
         selection.add_argument("--discover-terminal", action="store_true")
         args = parser.parse_args(argv)
         observing = args.observe_terminal
-        binding = FRESH_R2 if args.cell_id == FRESH_R2.expectation.cell_id else FRESH_R1
+        binding = (KEEP_R2 if args.cell_id == KEEP_R2.expectation.cell_id else
+                   FRESH_R2 if args.cell_id == FRESH_R2.expectation.cell_id else FRESH_R1)
         if not (args.read or observing):
             require(not any((args.output, args.expected_producer_source, args.expected_request_sha256,
                 args.cell_id, args.expected_reader_sha256, args.terminal_revision, args.discover_terminal)),
