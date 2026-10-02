@@ -155,7 +155,7 @@ def test_keep_r2_grade_readout_is_fixed_numeric_and_model_free(tmp_path, monkeyp
     git_state.update(head=old.OBSERVER, dirty=b"")
     real_bytes = output._bytes
     for filename, reason in (("codex_retention_keep_r2_grade.py", "reviewed_retention_grade_adapter_required"),
-                             ("codex_retention_fresh_r1_result_intake.py", "reviewed_retention_reader_required")):
+                             ("codex_retention_fresh_r1_result_intake.py", "reviewed_retention_observer_dependency_required")):
         with monkeypatch.context() as scoped:
             def corrupt(path, **kwargs):
                 data = real_bytes(path, **kwargs)
@@ -167,9 +167,8 @@ def test_keep_r2_grade_readout_is_fixed_numeric_and_model_free(tmp_path, monkeyp
                 with pytest.raises(output.OutputPublicationRefused, match=f"^{reason}$"):
                     reader._fixed(SELECTOR)
             else:
-                observer = bridge.compile_request(old.OBSERVER, selector=fixed.SELECTOR)
                 with pytest.raises(output.OutputPublicationRefused, match=f"^{reason}$"):
-                    bridge._source(observer)
+                    reader._source_current(old.OBSERVER, selector=SELECTOR)
             assert invoke()[0] == 2 and not roots[-1].exists() and not api.calls
 
     before = deepcopy((api.trees, api.writers, api.branches))
@@ -183,13 +182,13 @@ def test_keep_r2_grade_readout_is_fixed_numeric_and_model_free(tmp_path, monkeyp
         return call
 
     with monkeypatch.context() as proof:
-        for target, name in ((bridge, "_source"), (bridge, "_terminal"), (reader, "_terminal_contract"),
+        for target, name in ((reader, "_source_current"), (bridge, "_terminal"), (reader, "_terminal_contract"),
                              (grade, "_validate_grade_identity"), (output, "_ledger"),
                              (reader.readout, "_recorded_projection"), (reader.readout, "_receipt")):
             proof.setattr(target, name, witness(name, getattr(target, name)))
         status, result = invoke()
     assert status == 0 and result["outcome"] == "verified_writer_recorded_grade", result
-    assert reached == {"_source", "_terminal", "_terminal_contract", "_validate_grade_identity", "_ledger",
+    assert reached == {"_source_current", "_terminal", "_terminal_contract", "_validate_grade_identity", "_ledger",
                        "_recorded_projection", "_receipt"}
     assert result["grade_state"] == "graded" and result["record_kind"] == "writer_recorded_grade"
     assert result["score"] == {"earned": 2, "possible": 4, "pct": 50,

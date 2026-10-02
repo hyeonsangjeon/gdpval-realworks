@@ -37,6 +37,27 @@ KEEP_R2_TERMINAL_IDENTITY = {
     "sha256": "d1f2a48d392044937a904243feb5ab0d320d271f1082806ac2aa9e927cb3c66c", "size": 3107}
 KEEP_R2_CLAIM = "f8d5189a86c297499c77084aeeb697aea15aad00"
 KEEP_R2_ADAPTER_SHA256 = "bb8d1b3a46824a2597f31fe6567531fc59deabb79af87e85d98fd1a08ae3988e"
+# Executable dependencies of this model-free observer, not historical grading
+# evidence. Both readouts use this one closed current set. The observer itself
+# and the remaining source tree are bound by the exact clean reviewed checkout.
+# Paid bridge._source still requires each grading adapter's historical READER.
+CURRENT_DEPENDENCIES = {
+    "codex_retention_fresh_r1_result_intake.py": "d042c02228f2430d4129ed37b3fb453cf9792bbde269a28bd10c6daf8f00b900",
+    "codex_retention_result_intake.py": "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196",
+    "codex_retention_ci.py": "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c",
+    "codex_retention_task4_fresh_r1.py": "11901d7398066d0ccf2692c3f1b41fe4a066d872efecfa411756d67858f941e1",
+    "codex_retention_first_cell.py": "ae5754bdd294a7560aecbe0d4c819bc6fdd123cf82fc652c6aedee5bae2701f7",
+    "codex_retention_task4_fresh_r2.py": "8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f",
+    "codex_retention_task4_keep_r2.py": "12106b5423e25ffefa1b04023e2e98742861762762966a04bf17fe3da1851450",
+    "codex_retention_keep_r2_grade.py": "bb8d1b3a46824a2597f31fe6567531fc59deabb79af87e85d98fd1a08ae3988e",
+    "codex_retention_fixed_grade.py": "3d771582eaaf0d4cfab8e8858db1c7e557473459c2dd5769a837f059f516a684",
+    "codex_budget_pilot.py": "ba12e15002b4126fa550c76ba86f61333baf74e1622cc1adcd2b069c2014c398",
+    "codex_budget_pilot_grade_readout.py": "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815",
+    "codex_budget_pilot_grading.py": "7ae99e053d11f9a21d6b4db27f390366e70df278a414b0f78db0fe82344bf989",
+    "codex_budget_pilot_output.py": "635966f42c0310c9093d59e8f417259a0625b847c52f73342c07ec6c64fa2fdb",
+    "codex_budget_pilot_retention.py": "147f3a03b5efeb86e9d0fabe8abbf7c41302816fa136548d512a8f67e97c5bcd",
+    "gpt54_disposable_checkout.py": "0dbbab8911e1cba106745087aed471dca0a8b7f904058b4958df1e07864bb885",
+}
 require = output._require
 
 
@@ -68,6 +89,16 @@ def _fixed(selector=SELECTOR):
             "reviewed_retention_grade_adapter_required")
     return _ReadBinding(KEEP_R2_SELECTOR, "retention/keep-r2", KEEP_R2_WRITER_SOURCE, KEEP_R2_WRITER_RUN,
                         KEEP_R2_TERMINAL, KEEP_R2_TERMINAL_IDENTITY, KEEP_R2_CLAIM)
+
+
+def _source_current(source_sha, *, selector=SELECTOR):
+    """Current executable closure before private effects; never repin a receipt."""
+    profile = _fixed(selector)  # Keeps the exact keep/r2 adapter pre-import check.
+    context = bridge.compile_request(source_sha, selector=profile.grading_selector)
+    bridge._source_checkout(context)
+    for name, digest in CURRENT_DEPENDENCIES.items():
+        data = output._bytes(bridge.ROOT / "batch-runner" / name, limit=output.MAX_RECORD_BYTES)
+        require(pilot._identity(data)["sha256"] == digest, "reviewed_retention_observer_dependency_required")
 
 
 # Diagnostics identify attempted work, not successful terminal verification.
@@ -313,7 +344,7 @@ def main(args, *, _test_api=None):
             return 0
         public["stage"] = "source_preflight"
         with grade._entry_boundary("source_preflight"):
-            bridge._source(bridge.compile_request(args.reviewed_source_sha, selector=fixed.SELECTOR))
+            _source_current(args.reviewed_source_sha, selector=profile.selector)
         public["stage"] = "read_cache"
         root = grade._root(args.root, new=True)
         with grade._lock(root), retained._session(_test_api, response_bytes_limit=output.MAX_RECORD_BYTES) as (

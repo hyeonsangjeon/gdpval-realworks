@@ -13,7 +13,134 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add fixed model-free `retention/keep-r2-readout`, with 2 collected / 2 passed
+- Implement the closed Task5 fresh/r1 producer, ordinal 4 / repetition 1, cell
+  `0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1`, from
+  independently verified main `07e330fd936860aa592bfc5751736e0e8a9c2ad9`.
+  The final targeted lifecycle proof at
+  `4a2be68c96ef3f3e0961eb65fe15270a81baac6b` reported 1 collected / 1 passed in
+  44.78s, exit 0, no timeout. It reached synthetic execute-return, acknowledged
+  terminal readbacks/history, reconciliation, lost-ack/no-replay and later
+  timeout/cleanup assertions. The shared publication verifier now derives the
+  task UUID from the exact supported cell binding: the three existing Task4
+  successor bindings remain Task4, and only Task5 fresh/r1 ordinal 4 resolves
+  to Task5. The canonical path predicate is unchanged. Old/new cross-task paths,
+  noncanonical binding types, malformed identities and unsupported cells refuse.
+  No caller task override, future-cell admission, wire schema or live authority
+  was added. The leader's 2303 conditional decision authorized this narrow
+  correction and its current-pin migration, not final source approval.
+
+  The initial implementation/workflow/tests were pinned at
+  `2068c92d4841e5f7be7aa9e9fc027c9dcc0205d5`. The retained publication diagnostic
+  at `77118007ffe9d676e740e98d36bb8e6847fc3a8d` identified the original `ValueError`
+  at `batch-runner/core/inference_manifest.py:110`: the shared publication
+  verifier passed hardcoded Task4 at
+  `batch-runner/codex_retention_task4_fresh_r1.py:171` for the Task5 deliverable.
+  One lifecycle selector failed in 29.18s, exit 1, no timeout. This remains a
+  historical diagnostic, not passing verification. Production, workflows,
+  dependency manifests and every pin were unchanged at that diagnostic HEAD.
+  The scoped test observer
+  delegates unchanged to `_error_context` and logs only exception classes,
+  repository-relative locations and nonsecret state counts. That diagnostic
+  phase stopped without a source fix or second invocation; the new correction
+  and verification followed separate authority.
+
+  The failed diagnostic recorded 3 synthetic commit calls, one each for admission,
+  output and terminal. Output and terminal commit IDs returned, one terminal
+  control was committed, and 4 current output objects and one owned child were
+  present. Writer acknowledgment remained 0. `_commit`'s exact terminal control
+  readback and the earlier output-object history check had completed; the later
+  publication verifier then failed its role/path check before full readback/
+  history reconciliation. These counts describe this synthetic diagnostic only,
+  not a live publication or the unsaved earlier receipt. The generic
+  `hf_operation_failed` does not diagnose an HF outage or rate limit.
+
+  The separately authorized test-fixture correction at
+  `e29f26b8e3ae91907fb7ba759da0feeee20d7046` remains 1 failed in 26.67s, exit 1,
+  no timeout, at `retention_terminal_unresolved:hf_operation_failed`. Fresh
+  recovery completed; execute-return, reconciliation and later timeout/cleanup
+  assertions were not reached. That corrective phase stopped without a repair
+  or second invocation, and its failure remains separately recorded.
+
+  The original invocation remains 3 collected / 1 failed / 2 passed in 51.26s,
+  exit 1, no timeout. At test lines 87–88, its lifecycle fixture expected
+  `fresh bundle lacks a reconciled eligible recovery` but received the earlier
+  `native thread creation was interrupted before its identifier was bound`.
+  Synthetic admission and the owned-process callback were reached; complete
+  fresh reset/recovery, successful child completion, publication/reconciliation
+  and later timeout/cleanup assertions were not reached in that invocation.
+  The current-source/historical-readout and workflow-routing selectors passed
+  at the original HEAD and were not rerun. All three preceding attempts remain
+  failures, separate from the new 44.78s pass. The fixture
+  correction preserves the interrupted-start refusal,
+  separately checks a bound but ineligible thread, and uses real deadline/
+  receipt APIs to settle a synthetic B-eligible failure before owned cleanup
+  and retirement. A 30-second wait plus 45 seconds of downtime leaves 10725
+  of 10800 seconds; the replacement bundle is distinct and prior-cell state
+  remains untouched. That fixture correction forced no phase/checksum and
+  changed no production guard.
+  The registered eight-cell order and
+  GPT-5.4/direct-v1/xhigh, SDK/CLI 0.147.0, B/no-C, one-slot and 10800-second
+  cumulative-clock/no-reset rules remain. Native-turn wait is 1800 seconds,
+  not the all-in attempt ceiling; no new count or money cutoff is added.
+
+  The requested inference predecessor is successful keep/r2 terminal
+  `e55fac5d60191167dd66688510ec0fef472e594d`, not either grade terminal. Its exact
+  independent producer/run/request/job and control/object identities remain
+  in the [current task record](tasks/LATEST_TASK_RESULT/README.md). Admission
+  requires explicit `KEEP_R2` control/history/cleanup verification without
+  predecessor payload reads, then actual inference-branch HEAD equality before
+  one-use CAS. The new exact request/admission-type/cell binding and distinct
+  namespaces reuse the existing owned lifecycle and publication helper. Old
+  entrypoints refuse the new cell. No live predecessor read, CAS or admission
+  occurred; synthetic control and refusal checks remain separate from live work.
+
+  The pre-edit inspection found that the observer's shared `_source` checked
+  current files against `fixed.READER`, which also contributes to consumed
+  grading evidence. That source boundary was not a failed test. The leader's
+  2026-10-02 2130 APPROVE-WITH-CONDITIONS decision authorized the separate
+  closed `CURRENT_DEPENDENCIES` set for the model-free observer. It reuses the
+  exact safe/clean checkout checks before private roots, credentials or reads;
+  paid grading still checks its historical reader bytes. The unchanged keep/r2
+  grade adapter remains checked before lazy import. Both readouts and the
+  omitted-binding keep/r1 parent controls passed the focused compatibility proof.
+  Historical `RESULT`/`PARENT`/`READER`, evidence
+  `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0` and
+  `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d`, and marker
+  `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4`
+  remain unchanged. No controller copy, hash fallback or weakened guard was added.
+
+  All four invocations used the verified absolute CPython 3.10.12 / pytest
+  9.1.1 interpreter, token-free offline/process/network guards, disabled plugin
+  autoload and a 180-second bound. The original log SHA256 remains
+  `15c8dbf5bf0534c2630dc3a9c9a6a7821b1412c5fcced67a83d23a686cb98495`.
+  The single-selector follow-up log SHA256 is
+  `51a95d83582a52fb70275391af6c2338c04230b2de1deb226e69f4685f5f6b53`.
+  The single-selector diagnostic log SHA256 is
+  `f9a9d047ead8725b9d83b15b687c374725a7ffd4df4fd6e98a51a7734cefb7c2`.
+  The new single-selector verification log SHA256 is
+  `9213298b7d7376b4ac60c4f794bddd7001fede53943f8ae1628387dddb5590ed`, with command
+  SHA256 `29247dde61ddf35befe8f7b013ab1dc47324a283c71cab859a8648c75f5303c4`.
+  The current record contains the exact commands, interpreter checks, log
+  paths, original exception frames and reached/unreached boundaries. The two
+  originally passing selectors were not rerun. The passing route selector's
+  inherited summary labels remain unchanged and do not report Task5 completion.
+
+  The current shared publication helper SHA256 changes from
+  `a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3` to
+  `11901d7398066d0ccf2692c3f1b41fe4a066d872efecfa411756d67858f941e1`.
+  The current intake changes from
+  `d6ef09d39dd4da91e96dedf861c5a26e29c6eae504d312ab496e3489f01e12cf` to
+  `d042c02228f2430d4129ed37b3fb453cf9792bbde269a28bd10c6daf8f00b900`.
+  Its observer-current dependency set and workflow preflight/CLI pins migrate
+  accordingly; the exact four-file mapping is in the current task record.
+  Static checks verified 15 current observer dependencies, 16 workflow pin
+  occurrences and unchanged historical evidence/marker digests. The two earlier
+  passing selectors were not replayed; only their directly coupled current-hash
+  expectations changed. Historical grading `READER` still records the original
+  producer/reader bytes. Paid routes, the canonical path validator, runtime,
+  registration, input and grader semantics remain unchanged.
+
+  The existing fixed model-free `retention/keep-r2-readout` passed 2 selectors
   in 27.10s, exit 0, no timeout at `8a0b1c368d1e02bf21453bf75e1399f01d0a771f`.
   Real validators and synthetic immutable transport covered writer/control/
   history identities, grade payloads, the exact KEEP_R2 ledger type, numeric
@@ -21,10 +148,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   no-clobber reads and the historical omitted-binding keep/r1 parent reader.
   The coupled proof parses the current workflow's exact closed read/plan groups
   and paid/secret guards; both directly coupled old-selector expectations were
-  updated. This is offline readout proof, not a live score or grade-cost read.
+  updated in that prior task. This is historical offline readout proof, not
+  this Task5 task's validation or the live score/accounting evidence below.
 
   The existing readout transport and projection are shared; the default
-  `retention/grade-readout` remains keep/r1. The new route binds KEEP ordinal 3 /
+  `retention/grade-readout` remains keep/r1. The keep/r2 route binds KEEP ordinal 3 /
   repetition 2, writer `b99a28a4c0ec0ed961a2a8ddcaa886462beb0691`, run
   `36984239149` / attempt 1 / logical job `pilot-live`, supplied provider job
   `110766211046`, claim `f8d5189a86c297499c77084aeeb697aea15aad00` and terminal
@@ -32,8 +160,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   `d1f2a48d392044937a904243feb5ab0d320d271f1082806ac2aa9e927cb3c66c`, 3107 bytes.
   The leader-read 2026-10-02T08:40:54.0824759Z receipt acknowledged
   `grading_state=graded`, after judge exit 0/no timeout/confirmed cleanup.
-  The grade and inference are consumed. Numeric score and grade accounting
-  remain unread and unknown; no first-cell score or inference cost is substituted.
+  The grade and inference are consumed. The leader's later fixed readout
+  `36999576988` / job `110813946845` / source
+  `07e330fd936860aa592bfc5751736e0e8a9c2ad9`, at
+  `2026-10-02T11:32:45.1993344Z`, verified 30.35 / 45 = 67.44% included,
+  54.20% full denominator, 9 excluded items / maximum score 11. The claim SHA256 is
+  `2bf4fad3a789915e56f8fe6b842821f275e1994e0ca577d64654df773923b23b`, 2512 bytes.
+  Grade accounting records 91 model calls with `price_missing` and null
+  known/model/estimated/runtime costs, `invoice_complete=false`. Grade usage is
+  input 264029, cached input 199080, output 19748, reasoning 14411; cached and
+  reasoning are subsets. This does not substitute inference cost or establish
+  independent provider authentication or a retention benefit. The unrecorded
+  materialized-input comparison remains unavailable. Task4 is closed for
+  execution, four producer outcomes are recorded and all four Task5 cells remain.
 
   Only fixed immutable terminal/claim and declared grade-result/ledger bodies
   may be read. The reader preserves exact hashes/types/history/roles/bounds,
@@ -41,13 +180,21 @@ entries land under a fresh dated heading the day they merge to `main`.
   unrecorded materialized-input comparison or independently authenticate the
   provider job. Paid routes, all jobs/inputs/permissions, step-only HF credential,
   grader/model/rubric/prompt, one-use policy and budgets remain unchanged.
-  Current readout SHA256 changes from
+  The prior readout SHA256 changed from
   `ab5d5e09dc243dfce83972eb8c860ab0f9c0b653db2fa966472a5cd24d285860` to
   `c2fd083fbb4a90115fee1b20c4eed1ab687639d1efa8f80c169cb01f2dc06c9e`;
-  the [current task record](tasks/LATEST_TASK_RESULT/README.md) maps all four
-  current source changes. Historical producer, receipt and evidence pins stay fixed.
+  the current task record maps all four historical readout source changes.
+  Task5 changes the current controller from
+  `957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601` to
+  `ae5754bdd294a7560aecbe0d4c819bc6fdd123cf82fc652c6aedee5bae2701f7`, and the
+  current shared reader from
+  `5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583` to
+  `d6ef09d39dd4da91e96dedf861c5a26e29c6eae504d312ab496e3489f01e12cf`.
+  The record maps the current source helper, observer, producer and inference
+  workflow hashes. Historical producer/reader/receipt/evidence pins stay fixed;
+  `grade-run.yml`, grader/model/rubric/prompt and dependency manifests are unchanged.
 
-  The one bounded invocation used the verified
+  The prior readout's one bounded invocation used the verified
   `/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 / pytest
   9.1.1, token-free offline/process/network guards, disabled plugin autoload and
   a 180-second limit. Log SHA256:
@@ -76,11 +223,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
   Prior grading source PR720 HEAD `4a5f1852933e4958669b6b41e6aa755aca1db428`,
   owner review [5389266031](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5389266031)
-  and all 10 checks passed its source gate. This new readout still requires
-  final immutable-source review, applicable CI and separate exact live-read
-  authorization. No live read/write, model/grade call, dispatch, replay,
-  full-suite run, renderer, Project edit, merge, Azure management or polling
-  occurred in this task.
+  and all 10 checks passed its source gate. That gate and all historical proofs
+  remain separate from the three failed Task5 lifecycle attempts, including
+  the diagnostic, and the new 44.78s synthetic pass. The 2303 decision authorized
+  the closed task-discrimination correction without relaxing canonical paths;
+  historical evidence remains fixed and may not be rewritten. The three passing selectors across
+  the original and current invocations are not a same-HEAD all-checks claim.
+  The leader reviewed source HEAD `979df01aeeee9a3a0a624e605fa47e887f18b048`,
+  found no blocking implementation issue, and verified 15 current dependency
+  hashes, 16 checksum occurrences and 3 reader CLI pins. The leader reported
+  all 10 checks successful at that HEAD. The records now distinguish the
+  unchanged Task4 fresh/r2 and keep/r2 facades from the shared fresh/r1 facade's
+  approved task-discriminator change. This records-only follow-up leaves
+  production, workflows, tests, dependency manifests and every pin byte-identical
+  to that source-reviewed HEAD. The records delta and same-HEAD CI still require
+  the leader's review. Current-source approval does not authorize live Task5;
+  separate live-cell authorization remains required. No live read/write,
+  model/grade call, dispatch, replay, renderer, Project edit, merge, Azure
+  management or polling occurred in this task. The reporting skills
+  preserve the new leader-read numeric evidence separately from prior synthetic
+  proof, partial inference costs, null grade costs, all three failed lifecycle
+  attempts and the new passing proof. No duplicate current task snapshot or
+  changelog entry was added.
 
 - Add the fixed keep/r2 successful-result and failed/stopped terminal-only
   read binding, with the leader-authorized runner replacement passing both
