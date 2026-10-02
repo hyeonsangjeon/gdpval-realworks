@@ -159,7 +159,9 @@ def _workflow():
     assert job["steps"][0]["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
     assert "inputs.experiment_yaml != 'retention/grade-readout'" in jobs["pilot-plan"]["if"]
     for name in ("pilot-approve-paid", "pilot-live"):
-        assert "|| inputs.experiment_yaml == 'retention/first-cell')" in jobs[name]["if"]
+        assert (
+            "|| inputs.experiment_yaml == 'retention/first-cell' || inputs.experiment_yaml == 'retention/keep-r2')"
+        ) in jobs[name]["if"]
         assert "startsWith(inputs.experiment_yaml, 'retention/')" not in jobs[name]["if"]
         assert "inputs.paid_approval == true" in jobs[name]["if"]
     for name in ("validate-request", "approve-paid", "grade-dry-run", "grade", "verify-published"):
