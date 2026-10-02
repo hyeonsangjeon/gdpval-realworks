@@ -405,8 +405,58 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
         snapshot = host_parent / "staged-snapshot"
         shutil.copytree(root, snapshot)
         host = host_parent / "completed"
-        result = positive("task5_claim_fresh_recovery_child_output_terminal", lambda: controller.execute_first_cell(request,
-            host_state=host, grant=grant, _test_transport=child, _test_api=api))
+        original_error_context = output._error_context
+
+        def observe_publication_error(error):
+            """Observe the original failure without changing its classification."""
+            classification = original_error_context(error)
+            chain, publication = [], {}
+            current = error
+            for _ in range(8):
+                frames, trace = [], current.__traceback__
+                for _ in range(32):
+                    if trace is None:
+                        break
+                    code = trace.tb_frame.f_code
+                    try:
+                        relative = Path(code.co_filename).relative_to(REAL_ROOT).as_posix()
+                    except ValueError:
+                        pass  # Never expose an external or private absolute path.
+                    else:
+                        frames.append({"operation": code.co_name, "file": relative, "line": trace.tb_lineno})
+                        if code.co_name == "_finish_publication":
+                            saved = trace.tb_frame.f_locals.get("result", {})
+                            stage = saved.get("stage")
+                            publication = {
+                                "stage": stage if stage in {"output", "terminal", "terminal_verified"} else "unrecorded",
+                                "output_commit_returned_count": int(saved.get("output_commit") is not None),
+                                "terminal_commit_returned_count": int(saved.get("terminal_commit") is not None),
+                                "acknowledged_count": int(saved.get("outcome") == "acknowledged"),
+                            }
+                    trace = trace.tb_next
+                chain.append({"exception_class": type(current).__name__, "frames": frames})
+                if current.__cause__ is None:
+                    break
+                current = current.__cause__
+            print(json.dumps({"diagnostic": "task5_publication_original_exception",
+                "exception_chain": chain, "publication": publication,
+                "state_counts": {
+                    "commit_calls": sum(name == "commit" for name, _ in api.calls),
+                    "admission_commit_attempts": api.commits.count("admission"),
+                    "output_commit_attempts": api.commits.count("output"),
+                    "terminal_commit_attempts": api.commits.count("terminal"),
+                    "committed_terminal_controls": sum(
+                        api.writers[revision].get(successor.TERMINAL) == revision for revision in api.parents),
+                    "current_output_objects": sum(name.startswith(successor.OUTPUT + "/")
+                                                  for name in api.trees[api.head]),
+                    "owned_children": len(child.children),
+                }}, sort_keys=True))
+            return classification
+
+        with monkeypatch.context() as diagnostic:
+            diagnostic.setattr(output, "_error_context", observe_publication_error)
+            result = positive("task5_claim_fresh_recovery_child_output_terminal", lambda: controller.execute_first_cell(request,
+                host_state=host, grant=grant, _test_transport=child, _test_api=api))
         assert result == {"cell_id": successor.CELL_ID, "status": "succeeded", "request_sha256": grant.request_sha256,
             "cleanup_confirmed": True, "remote_terminal": "acknowledged", "grade": None,
             "grading_launched": False, "invoice_complete": False}
