@@ -54,6 +54,21 @@ entries land under a fresh dated heading the day they merge to `main`.
   changed routing/authority bytes required the separately authorized coupled
   rerun; no failed result is relabeled as a pass.
 
+  The leader-read CI log for run `36972501988` / job `110729309892` at
+  `8adeaba71228f3da6e8b484436e148d335339f49` reported 2 failed, 13312 passed,
+  64 skipped and 46 deselected in 1048.45s. Three stale expected workflow
+  expressions in the existing readout and Step8 tests were corrected to require
+  the closed first-cell/keep-r2 paid group and the keep-r2 plan exclusion.
+  Surrounding safety assertions remain unchanged. At test-only HEAD
+  `cbe0d5d9ad2567bb1a486860de439ce8a9028d34`, one invocation of exactly those
+  two failed CI selectors collected 2 and passed both in 41.88s, exit 0,
+  without timeout. The same verified CPython 3.10.12 / pytest 9.1.1 environment,
+  offline guards, disabled plugin autoload and 180-second bound were used.
+  The current task record includes the exact command and log path; log SHA256
+  is `cc227b2dbece1f417f13f0328c71e8369bf1e02b9bb0a395c054969162fe6464`.
+  This is separate from the 36.42s lifecycle proof, which was not rerun, and
+  does not replace applicable CI at the new published HEAD.
+
   Actual keep/r2 intake remains ungraded, with 6 recorded model calls / known
   USD 0.22195 partial and null generation cost; zero generation counters do not
   establish free work. Fixed input terminal
@@ -70,11 +85,15 @@ entries land under a fresh dated heading the day they merge to `main`.
   source-approved `fedf80d4298aeb0e4a4fbc43086ddffc148ad236`, verified four source
   hashes and recomputed fixed evidence
   `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`.
-  This follow-up changes only the two completion records; code/workflow/test
-  bytes and all pins remain identical to that reviewed source and the tested
-  code tree. Final records review, applicable same-HEAD CI and separate exact
-  leader approval remain required before any live grade. No pytest, renderer,
-  prior proof, live operation or CI polling was run for the records correction.
+  Final review
+  [5388860597](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5388860597)
+  was conditional on CI. This correction changes only the two existing test
+  files and two completion records; production/workflow/dependency bytes and
+  all pins remain identical to `8adeaba71228f3da6e8b484436e148d335339f49` and
+  the reviewed production source. Leader review of this test/record delta,
+  applicable same-HEAD CI and separate exact approval remain required before
+  any live grade. No full-suite replay, renderer, live operation or CI polling
+  was performed.
 
 - Add the fixed keep/r2 successful-result and failed/stopped terminal-only
   read binding, with the leader-authorized runner replacement passing both

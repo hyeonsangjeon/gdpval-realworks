@@ -15,9 +15,12 @@ Owner review
 of source HEAD `fedf80d4298aeb0e4a4fbc43086ddffc148ad236` found no blocking
 implementation defect, verified the four current source hashes below and
 recomputed the fixed-evidence digest. SOURCE-APPROVE applies to those code
-bytes, not final delivery or paid grading. This consolidation changes only the
-two completion records; final records review, applicable same-HEAD CI and a
-separately approved exact live-grade binding remain required.
+bytes, not final delivery or paid grading. Final review
+[5388860597](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5388860597)
+was conditional on CI. That CI run failed two stale workflow-test expectations;
+the correction below passed both failed selectors in 41.88s without changing
+production or workflow bytes. Leader review of the test/record delta, applicable
+same-HEAD CI and a separately approved exact live-grade binding remain required.
 
 ### Implemented scope
 
@@ -75,7 +78,8 @@ Result: 2 collected, 2 passed in 36.42s, exit 0; the 180-second timeout did not
 fire. Offline process/network/model guards, disabled implicit HF tokens and
 plugin autoload, and the absence of credential variables were preserved.
 No `-x`, separate collection probe, delivered suite, private integration,
-full suite or build was used. No proof was rerun for this records correction.
+full suite or build was used. This 36.42s lifecycle proof was not rerun for the
+CI-contract correction below.
 
 The lifecycle verified marker/payload readback, materializer provenance and
 derived fingerprint, exact original rubric, distinct grade-parent controls,
@@ -115,6 +119,52 @@ The later prerequisites also passed without installation; both
 The earlier reader's missing-pytest failure and authorized replacement proof
 remain separate in the preexisting history below.
 
+### CI workflow-contract correction
+
+The leader read the actual CI log for run `36972501988` / job `110729309892`
+at published HEAD `8adeaba71228f3da6e8b484436e148d335339f49`: pytest reported
+2 failed, 13312 passed, 64 skipped and 46 deselected in 1048.45s. The failures
+were stale expectations for already reviewed workflow bytes, not a failed
+keep/r2 lifecycle proof. No CI log was fetched again and no full suite was
+replayed for this correction.
+
+Only three expected expressions changed in two existing test files:
+
+- `tests/test_codex_retention_grade_readout.py` now requires the exact closed
+  paid-selector group containing `retention/first-cell` OR `retention/keep-r2`.
+  Generic retention selection remains forbidden; the surrounding paid-approval,
+  contents-only readout, secret, no-OIDC and no-model assertions are unchanged.
+- `tests/test_step8_grade.py` adds the explicit `retention/keep-r2` exclusion
+  to the expected pilot-plan expression and the explicit second selector to
+  the expected pilot-live group. Every other job, permission, RC7 partial
+  publication, resume, verification, secret and paid-approval assertion remains.
+
+The test-only correction was pinned at
+`cbe0d5d9ad2567bb1a486860de439ce8a9028d34`. Its same-environment prerequisite
+verified `/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 /
+pytest 9.1.1, with no installation. Prerequisite log:
+`/tmp/project5-pr720-ci-contracts.il0bbJ/runner-prerequisite.log`, SHA256
+`5f1ef71b3a20194547eb67a95ef44e8a440bd619cf6be992e3b599c9469f60cb`.
+Exactly the two failed CI selectors ran once from `batch-runner`:
+
+```text
+timeout --signal=TERM --kill-after=10s 180s env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTHONHASHSEED=0 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest tests/test_codex_retention_grade_readout.py::test_first_retention_grade_readout_is_immutable_writer_recorded_and_unpaid tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial -vv -s --tb=short -p no:cacheprovider
+```
+
+Result: 2 collected, 2 passed in 41.88s, exit 0; the 180-second timeout did not
+fire. Saved log: `/tmp/project5-pr720-ci-contracts.il0bbJ/targeted.log`, SHA256
+`cc227b2dbece1f417f13f0328c71e8369bf1e02b9bb0a395c054969162fe6464`.
+The existing offline/network/process guards remained active; credential
+variables were absent, implicit HF tokens and plugin autoload were disabled.
+There was no `-x`, skip/xfail, separate collection pass, renderer, private
+integration, new keep/r2 lifecycle rerun, other passed suite or full build.
+This targeted pass does not replace applicable CI at the new published HEAD.
+
+All production, workflow, dependency and pin bytes at the tested correction
+match `8adeaba71228f3da6e8b484436e148d335339f49`. Only the two named test files
+changed before validation; only the two completion records changed afterward.
+The fixed evidence digest and the source-hash table below remain unchanged.
+
 ### Measured filename boundary
 
 Before the passing invocation, the real fixed config, Step8 output resolver,
@@ -153,7 +203,8 @@ The `2026-10-02T03:21:22.9144192Z` receipt reports `intake_verified=true`,
 `status=succeeded`, `cleanup_confirmed=true`,
 `recorded_publication_acknowledged=true`, `grade=null`, `grading_launched=false`
 and `invoice_complete=false`. Approval/execution jobs were skipped. That read
-was not repeated during implementation or this records correction.
+was not repeated during implementation, records consolidation or this
+CI-contract correction.
 
 Consumed producer `b8351e561acb9675a4993419e819c12787b5b305` ran as
 `36947454688` / attempt 1 / execution job `110660390316`, for the fixed keep/r2
@@ -263,23 +314,27 @@ branch `b/codex-retention-keep-r2-fixed-grade-20261002-1246`, from base
 `f1f274f1b0510a9f4d7e7c969574913442105579`. Earlier worktrees and
 `wip/local-main-preserved-20260719` are preserved. Existing author/committer
 `hyeonsangjeon <wingnut0310@gmail.com>` is unchanged, without attribution trailers.
-Production, workflow, test, dependency and pin bytes in this records follow-up
-remain identical to reviewed `fedf80d4298aeb0e4a4fbc43086ddffc148ad236` and the
-tested code tree. Only `CHANGELOG.md` and this record change.
+Production, workflow, dependency and pin bytes remain identical to
+`8adeaba71228f3da6e8b484436e148d335339f49`, reviewed
+`fedf80d4298aeb0e4a4fbc43086ddffc148ad236` and the original tested production
+tree. This CI correction changes only the two named existing tests,
+`CHANGELOG.md` and this record.
 
-Owner source approval does not waive final records review, applicable same-HEAD
-CI or separate leader approval of the exact grading source/run/request/result/
-budget/stop binding. No live read, HF mutation, inference, grade, dispatch,
-consumed-result replay, Project edit, merge, Azure management or
-credential/permission change occurred. This follow-up performs documentation
-validation only, without pytest, a renderer, proof replay or CI polling.
+Owner source approval and conditional final review `5388860597` do not waive
+leader review of this test/record delta, applicable same-HEAD CI or separate
+leader approval of the exact grading source/run/request/result/budget/stop
+binding. No live read, HF mutation, inference, grade, dispatch, consumed-result
+replay, Project edit, merge, Azure management or credential/permission change
+occurred. Only the two failed CI selectors were rerun; there was no full-suite
+replay or CI polling. The earlier records-only consolidation ran no tests.
 
 The implementation used `experiment-design` and the grading-engineer domain/spec
 requirements without changing the registered experiment or grader semantics.
-For this consolidation, the full skill catalog was checked once;
-`experiment-report-en`, then protected `im-not-ai-en`, retained the unique
-evidence and uncertainty while removing duplicate current-task snapshots.
-Unrelated preexisting history below is byte-identical.
+For this CI-contract correction, the full skill catalog was checked once;
+`experiment-report-en`, then protected `im-not-ai-en`, kept the actual CI failure,
+new targeted pass and prior lifecycle proof distinct within the existing task
+entry. Fixed evidence, accounting limits and unrelated preexisting history
+below are unchanged.
 
 ## PROJECT5-KEEP-R2-READER-RUNNER-FIX-20261002-1113
 
