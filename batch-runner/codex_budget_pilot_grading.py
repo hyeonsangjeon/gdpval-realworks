@@ -1463,7 +1463,7 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
     args = None
     try:
         args = parser.parse_args(argv)
-        if args.selector == "retention/grade-readout":
+        if args.selector in {"retention/grade-readout", "retention/keep-r2-readout"}:
             from codex_retention_grade_readout import main as retention_readout_main
             return retention_readout_main(args, _test_api=_test_api)
         if args.selector.startswith("retention/"):

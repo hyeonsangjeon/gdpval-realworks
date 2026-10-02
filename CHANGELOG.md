@@ -13,87 +13,74 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Implement the fixed one-use Task4 keep/r2 grading path as
-  `retention/keep-r2`, with 2 collected / 2 passed in 36.42s, exit 0 and no
-  timeout at `7d90f7dcce88537d8fe2fa271c19be68078ca019`. Real validators with
-  synthetic transport and an owned judge reached marker/payload readback,
-  materializer provenance/derived fingerprint, exact rubric, separate grading
-  parent/history/current-parent CAS, private publication and lost-ack read-only
-  reconciliation. The coupled workflow/approval/typed-ledger selector passed.
-  This is an offline grading-path proof, not a live grade or inference replay.
+- Add fixed model-free `retention/keep-r2-readout`, with 2 collected / 2 passed
+  in 27.10s, exit 0, no timeout at `8a0b1c368d1e02bf21453bf75e1399f01d0a771f`.
+  Real validators and synthetic immutable transport covered writer/control/
+  history identities, grade payloads, the exact KEEP_R2 ledger type, numeric
+  score/exclusion/coverage and partial accounting projection, refusals, private
+  no-clobber reads and the historical omitted-binding keep/r1 parent reader.
+  The coupled proof parses the current workflow's exact closed read/plan groups
+  and paid/secret guards; both directly coupled old-selector expectations were
+  updated. This is offline readout proof, not a live score or grade-cost read.
 
-  The route binds KEEP ordinal 3 / repetition 2 and the fixed consumed result
-  through existing grading and publication helpers. Old `retention/first-cell`,
-  pilot/readout selectors, exact byte checks and no-replay guards remain.
-  Only the new unpublished selector changed from `retention/task4-keep-r2`;
-  the long spelling is refused without an alias or generic fallback. Its
-  adapter/context, metadata path, typed ledger/run-ID, approval/evidence and
-  plan/protected/live/reconciliation gates use the final spelling. No new
-  model, grader, rubric, job, secret, permission, retry policy or budget axis
-  was added. The existing 240-minute judge, 242-minute owned-child and
-  300-minute job limits remain.
+  The existing readout transport and projection are shared; the default
+  `retention/grade-readout` remains keep/r1. The new route binds KEEP ordinal 3 /
+  repetition 2, writer `b99a28a4c0ec0ed961a2a8ddcaa886462beb0691`, run
+  `36984239149` / attempt 1 / logical job `pilot-live`, supplied provider job
+  `110766211046`, claim `f8d5189a86c297499c77084aeeb697aea15aad00` and terminal
+  `76f51d0464b3c90d9ff80b78b656b9e7d45a0b6e`, SHA256
+  `d1f2a48d392044937a904243feb5ab0d320d271f1082806ac2aa9e927cb3c66c`, 3107 bytes.
+  The leader-read 2026-10-02T08:40:54.0824759Z receipt acknowledged
+  `grading_state=graded`, after judge exit 0/no timeout/confirmed cleanup.
+  The grade and inference are consumed. Numeric score and grade accounting
+  remain unread and unknown; no first-cell score or inference cost is substituted.
 
-  The real fixed-config/Step8/checkpoint resolvers measured actual `PC_NAME_MAX`
-  255 on the worktree and test-owned filesystem. Former/final UTF-8 byte lengths
-  are grade 219/213, JSONL ledger 232/226, SQLite 234/228, `-wal` 238/232,
-  `-shm` 238/232, `-journal` 242/236, checkpoint 257/251 and temporary checkpoint
-  261/255. Every required leaf was checked; a tiny real checkpoint write/readback
-  passed with the exactly 255-byte temporary name. No filesystem predicate,
-  global naming algorithm or UUID/hash identity was weakened or shortened.
+  Only fixed immutable terminal/claim and declared grade-result/ledger bodies
+  may be read. The reader preserves exact hashes/types/history/roles/bounds,
+  nulls, exclusions and private redacted output. It does not reconstruct an
+  unrecorded materialized-input comparison or independently authenticate the
+  provider job. Paid routes, all jobs/inputs/permissions, step-only HF credential,
+  grader/model/rubric/prompt, one-use policy and budgets remain unchanged.
+  Current readout SHA256 changes from
+  `ab5d5e09dc243dfce83972eb8c860ab0f9c0b653db2fa966472a5cd24d285860` to
+  `c2fd083fbb4a90115fee1b20c4eed1ab687639d1efa8f80c169cb01f2dc06c9e`;
+  the [current task record](tasks/LATEST_TASK_RESULT/README.md) maps all four
+  current source changes. Historical producer, receipt and evidence pins stay fixed.
 
-  The proof used the verified
+  The one bounded invocation used the verified
   `/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 / pytest
-  9.1.1, offline guards, disabled plugin autoload and a 180-second bound.
-  Log SHA256 `bef2f512c1d22474d69d564b38e965deda8c454a004e80901622ad45edf54c16`.
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md) consolidates the
-  exact historical-proof table: `44fa6694f73fad8d6ad202855e5847b6c4212d6d`
-  remains 1 failed / 1 passed in 7.32s at the context-mutation guard, and
+  9.1.1, token-free offline/process/network guards, disabled plugin autoload and
+  a 180-second limit. Log SHA256:
+  `915a61788524b9ccfe1f16b79ea64123200b64fd43e4866bfe324e280392e4c7`.
+  The task record preserves exact commands, input/marker/result/grade-parent
+  identities and historical proof: `44fa6694f73fad8d6ad202855e5847b6c4212d6d`
+  remains 1 failed / 1 passed in 7.32s at the context guard;
   `9a628e52732c162dd0a179ca96579dacc402a4d2` remains 1 failed in 8.64s at
-  `grading_filename_capacity_refused`. Their log hashes, reached/unreached
-  boundaries and later test-setup/selector corrections are preserved. The
-  changed routing/authority bytes required the separately authorized coupled
-  rerun; no failed result is relabeled as a pass.
+  `grading_filename_capacity_refused`. The corrected `retention/keep-r2`
+  lifecycle passed 2 selectors in 36.42s at `7d90f7dcce88537d8fe2fa271c19be68078ca019`,
+  with a real exactly 255-byte temporary-checkpoint write/readback against
+  actual `PC_NAME_MAX=255`; the full former/final leaf measurements remain in
+  the record. Historical CI run `36972501988` / job `110729309892` at `8adeaba71228f3da6e8b484436e148d335339f49`
+  reported 2 failed / 13312 passed / 64 skipped / 46 deselected in 1048.45s;
+  its two-test correction passed in 41.88s at `cbe0d5d9ad2567bb1a486860de439ce8a9028d34`.
+  None of those earlier proofs or failures was rerun or relabeled here.
 
-  The leader-read CI log for run `36972501988` / job `110729309892` at
-  `8adeaba71228f3da6e8b484436e148d335339f49` reported 2 failed, 13312 passed,
-  64 skipped and 46 deselected in 1048.45s. Three stale expected workflow
-  expressions in the existing readout and Step8 tests were corrected to require
-  the closed first-cell/keep-r2 paid group and the keep-r2 plan exclusion.
-  Surrounding safety assertions remain unchanged. At test-only HEAD
-  `cbe0d5d9ad2567bb1a486860de439ce8a9028d34`, one invocation of exactly those
-  two failed CI selectors collected 2 and passed both in 41.88s, exit 0,
-  without timeout. The same verified CPython 3.10.12 / pytest 9.1.1 environment,
-  offline guards, disabled plugin autoload and 180-second bound were used.
-  The current task record includes the exact command and log path; log SHA256
-  is `cc227b2dbece1f417f13f0328c71e8369bf1e02b9bb0a395c054969162fe6464`.
-  This is separate from the 36.42s lifecycle proof, which was not rerun, and
-  does not replace applicable CI at the new published HEAD.
+  Keep/r2 inference accounting remains 6 calls / known USD 0.22195 partial,
+  with null generation cost; zero generation counters do not prove free work.
+  Keep/r1 remains 68.0% included / 54.64% full with exclusions; failed fresh/r1
+  and fresh/r2 remain 39 calls each / known USD 0.303358 and USD 0.29944 partial,
+  respectively, with null grades and unavailable detailed causes. The intake
+  remains publication-derived, not independent provider/original-input/CAS
+  authentication or writer acknowledgment. No invoice, HTTP count, deliverable
+  count or causal retention benefit is inferred.
 
-  Actual keep/r2 intake remains ungraded, with 6 recorded model calls / known
-  USD 0.22195 partial and null generation cost; zero generation counters do not
-  establish free work. Fixed input terminal
-  `e55fac5d60191167dd66688510ec0fef472e594d` remains distinct from grading parent
-  `40712e0980cc05c31688fdbb98c693774fb90c0d`. The consolidated record preserves
-  the full marker/result/parent identities, original-versus-derived input
-  distinction, prior scores, partial costs, nulls, unavailable causes and
-  publication-derived proof limits. The intake does not independently authenticate
-  provider, original-input or CAS facts. No invoice, HTTP count, deliverable
-  count, writer acknowledgment or retention benefit is inferred.
-
-  Owner review
-  [5388701816](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5388701816)
-  source-approved `fedf80d4298aeb0e4a4fbc43086ddffc148ad236`, verified four source
-  hashes and recomputed fixed evidence
-  `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`.
-  Final review
-  [5388860597](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5388860597)
-  was conditional on CI. This correction changes only the two existing test
-  files and two completion records; production/workflow/dependency bytes and
-  all pins remain identical to `8adeaba71228f3da6e8b484436e148d335339f49` and
-  the reviewed production source. Leader review of this test/record delta,
-  applicable same-HEAD CI and separate exact approval remain required before
-  any live grade. No full-suite replay, renderer, live operation or CI polling
-  was performed.
+  Prior grading source PR720 HEAD `4a5f1852933e4958669b6b41e6aa755aca1db428`,
+  owner review [5389266031](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5389266031)
+  and all 10 checks passed its source gate. This new readout still requires
+  final immutable-source review, applicable CI and separate exact live-read
+  authorization. No live read/write, model/grade call, dispatch, replay,
+  full-suite run, renderer, Project edit, merge, Azure management or polling
+  occurred in this task.
 
 - Add the fixed keep/r2 successful-result and failed/stopped terminal-only
   read binding, with the leader-authorized runner replacement passing both
