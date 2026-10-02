@@ -26,6 +26,8 @@ import codex_retention_grade_readout as parent_reader
 import gpt54_disposable_checkout as checkout
 import gpt54_v2_grading_input as materializer
 from core.result_fingerprint import inference_result_fingerprint
+from core.task_checkpoint import (TaskProgressDraft, build_progress, checkpoint_path,
+                                 load_checkpoint, write_checkpoint)
 from step2_run_inference import _build_execution_observability
 from . import test_codex_budget_pilot_grading as base
 from . import test_codex_retention_fixed_grade as first
@@ -37,8 +39,18 @@ from .test_codex_retention_result_intake import TERMINAL_HEAD, PRIVATE
 
 grade, pilot, retained, output = bridge.grade, bridge.pilot, bridge.retained, bridge.output
 SOURCE, RUN = first.SOURCE, first.RUN
-EVIDENCE = "eacfc94a16f6fdee0d3259590d35abd0e9d365733742946b8b139b705d5def07"
+EVIDENCE = "25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0"
 FIRST_EVIDENCE = "1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d"
+
+
+def _filename_leaves(grade_path, task_id):
+    path = Path(grade_path)
+    checkpoint = checkpoint_path(path, task_id)
+    sqlite = path.stem + ".cost_ledger.sqlite3"
+    return {"grade": path.name, "jsonl_ledger": path.stem + ".cost_ledger.jsonl",
+        "sqlite": sqlite, "sqlite_wal": sqlite + "-wal", "sqlite_shm": sqlite + "-shm",
+        "sqlite_journal": sqlite + "-journal", "checkpoint": checkpoint.name,
+        "checkpoint_tmp": checkpoint.with_suffix(".json.tmp").name}
 
 
 def _environment(monkeypatch, selector=fixed.SELECTOR):
@@ -160,6 +172,7 @@ def _capture(capsys, tmp_path):
 
 
 def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch, capsys):
+    assert fixed.SELECTOR == "retention/keep-r2"
     assert bridge.fixed_evidence_sha256() == FIRST_EVIDENCE
     assert bridge.fixed_evidence_sha256(fixed.SELECTOR) == EVIDENCE
     assert fixed.RESULT["terminal_commit"] == "e55fac5d60191167dd66688510ec0fef472e594d"
@@ -172,6 +185,7 @@ def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch,
     assert context.cell["index"] == 3 and context.cell["control"] == {
         "condition": "retention_bundle_v1", "retention_bundle": "keep", "repetition": 2}
     assert context.run.command[2] == fixed.SELECTOR and context.run.grader_config_path == fixed.GRADER_PATH
+    assert context.run.experiment_config_path == "batch-runner/experiments/retention/keep-r2.yaml"
     assert record["expected_execution_job_id"] == record["recorded_provider_job_id"] == 110660390316
     assert record["predecessor"]["terminal_commit"] == "1d5133590911f3704fc2a65279d4b64bee77c1d6"
 
@@ -236,6 +250,28 @@ def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch,
     assert prepared["format"] == fixed.PREPARATION_FORMAT
     assert prepared["entry"]["grader_source_hash"] == fixed.GRADER_SHA256
     assert uploads == [root / "original-upload"] and api.events == [] and transport.calls == 0
+    leaves = _filename_leaves(prepared["entry"]["grade_path"], context.cell["task_id"])
+    leaf_bytes = {name: len(value.encode("utf-8")) for name, value in leaves.items()}
+    assert leaf_bytes == {"grade": 213, "jsonl_ledger": 226, "sqlite": 228, "sqlite_wal": 232,
+                          "sqlite_shm": 232, "sqlite_journal": 236, "checkpoint": 251, "checkpoint_tmp": 255}
+    name_max = os.pathconf(root / "source", "PC_NAME_MAX")
+    assert all(size <= name_max for size in leaf_bytes.values())
+    checkpoint_root = tmp_path / "filename-checkpoint"
+    checkpoint_root.mkdir(mode=0o700)
+    checkpoint_name_max = os.pathconf(checkpoint_root, "PC_NAME_MAX")
+    assert all(size <= checkpoint_name_max for size in leaf_bytes.values())
+    partial = checkpoint_root / leaves["grade"]
+    rubric_ids = prepared["rubric"]["rubric_item_ids"]
+    progress = build_progress(task_id=context.cell["task_id"], grader_source_hash=fixed.GRADER_SHA256,
+                              rubric_item_ids=rubric_ids, draft=TaskProgressDraft())
+    checkpoint = write_checkpoint(partial, progress)
+    assert checkpoint.name == leaves["checkpoint"] and checkpoint.is_file()
+    assert not checkpoint.with_suffix(".json.tmp").exists()
+    readback = load_checkpoint(partial, task_id=context.cell["task_id"],
+                              grader_source_hash=fixed.GRADER_SHA256, rubric_item_ids=rubric_ids)
+    assert readback is not None and readback.to_dict() == progress.to_dict()
+    assert (root / "source" / context.run.experiment_config_path).is_file()
+    assert not (root / "source/batch-runner/experiments/retention/task4-keep-r2.yaml").exists()
     derived = json.loads((root / "inputs" / context.run.inference_results_path).read_bytes())
     assert derived["result_fingerprint"] == inference_result_fingerprint(derived)
     assert derived["result_fingerprint"] != record["result"]["result_fingerprint"]
@@ -429,20 +465,23 @@ def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch,
         subprocess.run(["python", "-c", "pass"])
     assert not capsys.readouterr().out
     print("OFFLINE keep/r2: marker/payload/materializer/rubric, two-control grade parent, serial CAS, one owned judge, no replay, read-only lost-ack reconciliation; synthetic only")
+    print("OFFLINE keep/r2 filenames: " + json.dumps({"leaf_bytes": leaf_bytes, "name_max": name_max,
+        "checkpoint_name_max": checkpoint_name_max, "checkpoint_write_readback": True}, sort_keys=True))
 
 
 def test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed(tmp_path, monkeypatch, capsys):
     _environment(monkeypatch, bridge.SELECTOR)
     first._workflow_contract(tmp_path, monkeypatch)  # Existing pure assertions, not the old integration.
     workflow = yaml.safe_load((bridge.ROOT / grade.WORKFLOW).read_bytes())
+    assert "retention/task4-keep-r2" not in (bridge.ROOT / grade.WORKFLOW).read_text()
     plan, approval, live = (workflow["jobs"][name] for name in ("pilot-plan", "pilot-approve-paid", "pilot-live"))
-    assert "inputs.experiment_yaml != 'retention/task4-keep-r2'" in plan["if"]
+    assert "inputs.experiment_yaml != 'retention/keep-r2'" in plan["if"]
     for job in (approval, live):
-        assert "|| inputs.experiment_yaml == 'retention/task4-keep-r2'" in job["if"]
+        assert "|| inputs.experiment_yaml == 'retention/keep-r2'" in job["if"]
         assert "startsWith(inputs.experiment_yaml, 'retention/')" not in job["if"]
-    assert "inputs.experiment_yaml == 'retention/task4-keep-r2' && '" + fixed.RESULT["producer_source_sha"] + "'" in live["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
+    assert "inputs.experiment_yaml == 'retention/keep-r2' && '" + fixed.RESULT["producer_source_sha"] + "'" in live["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
     publication = next(step for step in live["steps"] if "--phase publish" in step.get("run", ""))
-    assert '"$GRADE_SELECTOR" == "retention/task4-keep-r2"' in publication["run"]
+    assert '"$GRADE_SELECTOR" == "retention/keep-r2"' in publication["run"]
     assert publication["run"].count("--phase reconcile") == 1
     assert 'exit "$publication_status"' in publication["run"]
     assert "--phase judge" not in publication["run"] and "--phase claim" not in publication["run"]
@@ -490,7 +529,8 @@ def test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed(tmp_path, m
             planned = _capture(capsys, tmp_path)
             assert planned["outcome"] == "plan_only" and planned["selector"] == selector
             assert planned["commands"] == [] and planned["grade"] is None and not planned["judge_ready"]
-        for selector in ("retention/task4-keep-r2-extra", "retention/task4-fresh-r2", "retention/task5-keep-r1"):
+        for selector in ("retention/task4-keep-r2", "retention/keep-r2-extra",
+                         "retention/task4-fresh-r2", "retention/task5-keep-r1"):
             assert grade.main(args + ["--selector", selector]) == 2
             assert _capture(capsys, tmp_path)["reason"] == "fixed_retention_grade_selector_required"
         for extra in (("--phase", "record-ungraded"), ("--phase", "setup"), ("--resume",),
@@ -519,7 +559,8 @@ def test_keep_r2_fixed_grade_workflow_approval_and_ledger_are_closed(tmp_path, m
                 ("control", {**cell["control"], "repetition": True})):
             with pytest.raises(output.OutputPublicationRefused, match="^fixed_retention_grading_ledger_binding_required$"):
                 output._ledger(data, {**cell, field: value}, **options)
-        for bad_run in (None, run_id + "|run2", run_id.replace(selector, "pilot/cell-03")):
+        for bad_run in (None, run_id + "|run2", run_id.replace(selector, "pilot/cell-03"),
+                        run_id.replace(selector, "retention/task4-keep-r2")):
             with pytest.raises(output.OutputPublicationRefused, match="^fixed_retention_grading_ledger_run_required$"):
                 output._ledger(data, cell, grading_run_id=bad_run, retention_first_cell_binding=binding)
         row = json.loads(data)

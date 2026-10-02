@@ -6,7 +6,7 @@ import codex_budget_pilot as pilot
 import codex_budget_pilot_output as output
 import codex_budget_pilot_retention as retained
 
-SELECTOR = "retention/task4-keep-r2"
+SELECTOR = "retention/keep-r2"
 CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2"
 ORDINAL, REPETITION = 3, 2
 PREFIX = "retention-cell-grades/retention_bundle_diagnostic_20260929/" + CELL

@@ -207,7 +207,7 @@ def _ledger(data: bytes, cell: dict, *, grading_run_id: str | None = None,
         _require(type(binding) in {RetentionFirstCellLedgerBinding, RetentionKeepR2LedgerBinding},
                  "fixed_retention_grading_ledger_binding_required")
         ordinal, repetition, selector = ((0, 1, "retention/first-cell")
-            if type(binding) is RetentionFirstCellLedgerBinding else (3, 2, "retention/task4-keep-r2"))
+            if type(binding) is RetentionFirstCellLedgerBinding else (3, 2, "retention/keep-r2"))
         _require(type(cell) is dict
                  and type(cell.get("index")) is int and cell["index"] == ordinal
                  and cell.get("task_id") == task

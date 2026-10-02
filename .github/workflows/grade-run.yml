@@ -1832,7 +1832,7 @@ jobs:
       ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || startsWith(inputs.experiment_yaml, 'retention/')) &&
           inputs.experiment_yaml != 'pilot/grade-readout' &&
           inputs.experiment_yaml != 'retention/grade-readout' &&
-          (inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && inputs.experiment_yaml != 'retention/first-cell' && inputs.experiment_yaml != 'retention/task4-keep-r2')) }}
+          (inputs.dry_run == true || (startsWith(inputs.experiment_yaml, 'retention/') && inputs.experiment_yaml != 'retention/first-cell' && inputs.experiment_yaml != 'retention/keep-r2')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -1840,7 +1840,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'retention/task4-keep-r2' && 'b8351e561acb9675a4993419e819c12787b5b305' || inputs.experiment_yaml == 'retention/first-cell' && 'e355faf9a6212175a288e8473968915ffb2408d0' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'retention/keep-r2' && 'b8351e561acb9675a4993419e819c12787b5b305' || inputs.experiment_yaml == 'retention/first-cell' && 'e355faf9a6212175a288e8473968915ffb2408d0' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -1875,7 +1875,7 @@ jobs:
   pilot-approve-paid:
     name: Approve paid pilot grading
     if: >-
-      ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell' || inputs.experiment_yaml == 'retention/task4-keep-r2') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true &&
+      ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell' || inputs.experiment_yaml == 'retention/keep-r2') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true &&
           github.repository == 'hyeonsangjeon/gdpval-realworks' && github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' && github.sha == github.workflow_sha && github.run_attempt == '1' }}
     runs-on: ubuntu-24.04
@@ -1959,17 +1959,17 @@ jobs:
               "inference_branch": "pilot-inference-20260925-04", "grading_branch": "pilot-grades-20260925-04",
               "github_run_id": os.environ["GITHUB_RUN_ID"], "github_run_attempt": 1, "inputs": inputs,
           }
-          if selector in {"retention/first-cell", "retention/task4-keep-r2"}:
+          if selector in {"retention/first-cell", "retention/keep-r2"}:
               # Two closed retained results, neither an original pilot producer.
               terminal, producer, cell, evidence = {
                   "retention/first-cell": ("de50ff0aa6037c0ef6e3b713da519359abd1d08d",
                       "e355faf9a6212175a288e8473968915ffb2408d0",
                       "3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1",
                       "1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d"),
-                  "retention/task4-keep-r2": ("e55fac5d60191167dd66688510ec0fef472e594d",
+                  "retention/keep-r2": ("e55fac5d60191167dd66688510ec0fef472e594d",
                       "b8351e561acb9675a4993419e819c12787b5b305",
                       "3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2",
-                      "eacfc94a16f6fdee0d3259590d35abd0e9d365733742946b8b139b705d5def07"),
+                      "25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0"),
               }[selector]
               expected = {"experiment_yaml": selector,
                   "inference_revision": terminal,
@@ -1988,7 +1988,7 @@ jobs:
 
   pilot-live:
     needs: [pilot-approve-paid]
-    if: ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell' || inputs.experiment_yaml == 'retention/task4-keep-r2') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true && needs.pilot-approve-paid.result == 'success' }}
+    if: ${{ (startsWith(inputs.experiment_yaml, 'pilot/') || inputs.experiment_yaml == 'retention/first-cell' || inputs.experiment_yaml == 'retention/keep-r2') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true && needs.pilot-approve-paid.result == 'success' }}
     runs-on: ubuntu-24.04
     # Approval is a mandatory same-run dependency above. This execution job
     # retains the main-ref OIDC subject, not the grading-environment subject.
@@ -2008,7 +2008,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'retention/task4-keep-r2' && 'b8351e561acb9675a4993419e819c12787b5b305' || inputs.experiment_yaml == 'retention/first-cell' && 'e355faf9a6212175a288e8473968915ffb2408d0' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'retention/keep-r2' && 'b8351e561acb9675a4993419e819c12787b5b305' || inputs.experiment_yaml == 'retention/first-cell' && 'e355faf9a6212175a288e8473968915ffb2408d0' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2","pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2","pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -2191,7 +2191,7 @@ jobs:
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
             --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade" || publication_status=$?
-          if [[ ( "$GRADE_SELECTOR" == "retention/first-cell" || "$GRADE_SELECTOR" == "retention/task4-keep-r2" ) && "$publication_status" -ne 0 ]]; then
+          if [[ ( "$GRADE_SELECTOR" == "retention/first-cell" || "$GRADE_SELECTOR" == "retention/keep-r2" ) && "$publication_status" -ne 0 ]]; then
             printf 'retention_publication_exit_code=%s\n' "$publication_status"
             if [[ -f "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" &&
                   ! -L "$RUNNER_TEMP/pilot-fixed-grade/publication-reserved.json" &&

@@ -90,7 +90,7 @@ def _same(actual, expected, reason):
 
 
 def _fixed(selector=SELECTOR):
-    require(type(selector) is str and selector in {SELECTOR, "retention/task4-keep-r2"},
+    require(type(selector) is str and selector in {SELECTOR, "retention/keep-r2"},
             "fixed_retention_grade_selector_required")
     if selector == SELECTOR:
         return sys.modules[__name__]
@@ -108,8 +108,12 @@ def _fixed_inputs(selector=SELECTOR):
 
 def fixed_evidence_sha256(selector=SELECTOR):
     fixed = _fixed(selector)
-    return pilot._digest({"result": fixed.RESULT, "grading_parent": fixed.PARENT, "reader": fixed.READER,
-                          "grader_path": fixed.GRADER_PATH, "grader_sha256": fixed.GRADER_SHA256})
+    evidence = {"result": fixed.RESULT, "grading_parent": fixed.PARENT, "reader": fixed.READER,
+                "grader_path": fixed.GRADER_PATH, "grader_sha256": fixed.GRADER_SHA256}
+    if selector != SELECTOR:
+        # Bind the new route explicitly without changing historical first-cell evidence.
+        evidence["selector"] = fixed.SELECTOR
+    return pilot._digest(evidence)
 
 
 @dataclass(frozen=True)
