@@ -643,11 +643,14 @@ For the historical long-route attempts, adapter SHA256 was
 fixed-grade controller SHA256 was
 `e0b3c878b735e4e2e30b54b528c1887807f02cd326cfc0e32c2bf947106ab44f`.
 Those are historical bytes, not current pins. The current Task5 controller and
-shared reader migrate only in the current namespaces below. The original
-intake, CI verifier, all three Task4 producer facades and keep/r2 grading adapter
-remain byte-identical to base; no historical pin or receipt was migrated.
-Grader configuration, core grader source modules, rubric, prompt, model and
-dependency manifests are unchanged.
+shared reader migrate only in the current namespaces below. At source-reviewed
+HEAD `979df01aeeee9a3a0a624e605fa47e887f18b048`, the original intake, CI verifier,
+Task4 fresh/r2 and keep/r2 producer facades and keep/r2 grading adapter remain
+byte-identical to base. The shared Task4 fresh/r1 facade changed for the approved
+closed task discriminator; its exact current hash migration is listed below.
+No historical pin or receipt was migrated. Grader configuration, core grader
+source modules, rubric, prompt, model and dependency manifests are unchanged.
+Current-source approval does not authorize live Task5.
 
 Paid behavior from the six-file one-use grading implementation is unchanged: its
 `retention/keep-r2` adapter/context/command, emitted

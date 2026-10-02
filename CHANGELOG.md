@@ -229,8 +229,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   the closed task-discrimination correction without relaxing canonical paths;
   historical evidence remains fixed and may not be rewritten. The three passing selectors across
   the original and current invocations are not a same-HEAD all-checks claim.
-  Final actual-HEAD review, applicable CI and separate live-cell authorization
-  remain required. No live read/write,
+  The leader reviewed source HEAD `979df01aeeee9a3a0a624e605fa47e887f18b048`,
+  found no blocking implementation issue, and verified 15 current dependency
+  hashes, 16 checksum occurrences and 3 reader CLI pins. The leader reported
+  all 10 checks successful at that HEAD. The records now distinguish the
+  unchanged Task4 fresh/r2 and keep/r2 facades from the shared fresh/r1 facade's
+  approved task-discriminator change. This records-only follow-up leaves
+  production, workflows, tests, dependency manifests and every pin byte-identical
+  to that source-reviewed HEAD. The records delta and same-HEAD CI still require
+  the leader's review. Current-source approval does not authorize live Task5;
+  separate live-cell authorization remains required. No live read/write,
   model/grade call, dispatch, replay, renderer, Project edit, merge, Azure
   management or polling occurred in this task. The reporting skills
   preserve the new leader-read numeric evidence separately from prior synthetic
