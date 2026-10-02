@@ -13,140 +13,120 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add only the registered Task5 keep/r1 ordinal 5 / repetition 1 adapter,
+- Add a fixed model-free result/terminal reader for the already registered
+  Task5 keep/r1 cell, ordinal 5 / repetition 1,
   `0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1`, from exact
-  main `eb0f40016aa14cb8b1afa8b3590d6c437e8f97e3`. Implementation
-  `703d9bbf94f59045c4a04d58bf16ddda82d905a0` adds the exact controller/admission
-  pair, separate namespaces, shared Task5 publication binding and protected
-  workflow route. It is the sixth of eight predeclared cells, not a fresh/r1
-  retry or a new condition. Ordinals 6 and 7 remain unsupported. KEEP retains
-  only this cell's own native thread/workspace/HOME/CODEX_HOME/output across
-  eligible recovery, never the failed predecessor's state. GPT-5.4/direct-v1/xhigh,
-  SDK/CLI 0.147.0, mechanical B/no C, one inference slot, 10800-second cumulative
-  clock without reset and 1800-second native-turn wait remain unchanged; no new
-  attempt-count or money cutoff, job, permission, secret or paid authority is added.
+  main `a8353cd41f01f7d94129421512a57a62b9bd6997`. The one source-defined
+  `TASK5_KEEP_R1` profile and existing `read_result` / `observe_terminal` routes
+  reuse immutable intake, role/path/type/hash/history/size, private no-clobber
+  and marker validators. Successful intake verifies declared payload bodies;
+  failed/stopped observation reads only three controls plus object metadata,
+  with no payload verification or grading-ready claim. Old defaults and fixed
+  bindings remain closed; ordinals 6 and 7 remain unsupported. No producer,
+  controller, publication verifier, paid route, job, permission, secret,
+  dependency manifest, model, grader or experimental condition changed.
 
-  The test-only fixture correction at
-  `a8e88e5adaf93303032a4bd636f91d48085abaa6` passed its one authorized lifecycle
-  selector: 1 collected / 1 passed in 41.97s, exit 0, no timeout. It asserts exact
-  bytes for source files already owned by the shared scenario and creates only
-  the three additional adapters through the unchanged exclusive `xb` writer.
-  Production, workflow, dependency manifests, current pins and historical
-  evidence remain byte-identical to 703d9bbf. The proof reached packet/staging,
-  exact predecessor/current-parent CAS and admission pairing, within-cell KEEP
-  receipt/recovery and cumulative-clock checks, owned-child completion, terminal
-  acknowledgment, read-only reconciliation, lost-ack/no-replay and timeout/cleanup
-  assertions. It is a synthetic local lifecycle proof, not a live cell outcome.
+  Tested HEAD `ee24a3a12c2f07d66f9ec89ed84073bbd7879ccb` passed the single
+  authorized offline selector: 1 collected / 1 passed in 18.80s, exit 0,
+  log-capture exit 0, no timeout. Real validators with sealed synthetic
+  transport reached success/readback, failed/stopped control-only reads,
+  source/cell/job/request/run/predecessor and immutable-history refusals,
+  fingerprint/ledger/marker/no-clobber checks, current-source/historical-evidence
+  separation and 288 exact routing cases, with zero live effects. Helpers
+  were imported at collection and process/network/model guards stayed active.
+  The established absolute CPython 3.10.12 / pytest 9.1.1 prerequisite passed
+  without installation; the invocation had a 180-second bound. No older
+  delivered selector, private integration, renderer, collection probe or full
+  suite was run. Log
+  `/tmp/task5-keep-r1-reader-proof-20261003-0623.TTPPa4/pytest.log`, SHA256
+  `8fd97856dbf973f9897f1573fc46ae4bd5f0fa0cb170916514f9109ab6e431b7`.
+  The [current task record](tasks/LATEST_TASK_RESULT/README.md) preserves the
+  exact command, runner/prerequisite hashes and current executable-pin mapping.
 
-  The original token-free invocation at 703d9bbf reported 2 collected /
-  1 failed / 1 passed in 7.64s, exit 1, no timeout. The routing/current-pin selector
-  passed exact six-cell execution/five-result/four-terminal allowlists, 288 mode
-  cases, permissions, secrets, current hashes, old defaults, source refusals and
-  frozen historical grading evidence. Helper imports occurred at collection,
-  with process/network/model guards active. The lifecycle selector failed at
-  `batch-runner/tests/test_codex_retention_task5_keep_r1.py:265`: its setup tried
-  to create `batch-runner/codex_retention_task4_fresh_r2.py` after the shared
-  scenario had already created it. The no-clobber helper at
-  `batch-runner/tests/test_codex_retention_task4_fresh_r1.py:57` raised
-  `FileExistsError` from `open("xb")`. Closed Task4/Task5 canonical-path and
-  unsupported-binding checks had passed, but new packet/staging/request,
-  authority/predecessor/CAS admission, KEEP recovery, child, publication,
-  reconciliation and timeout/cleanup phases were not reached. This is not a
-  production verifier failure or passing lifecycle proof. That task stopped
-  without repair, retry, push or PR. The later 0444 order authorized the test-only
-  correction and lifecycle-only invocation; the 288-mode pass was not rerun.
+  The leader supplied the completed producer source gate: PR724 HEAD
+  `d23e0a7df8dca37c3fabc14ae9957b05b3eaea72`, tree
+  `128c85a9a8d189b56631fb04705e035dedfca078`, owner review
+  [5396422844](https://github.com/hyeonsangjeon/gdpval-realworks/pull/724#pullrequestreview-5396422844)
+  and all 10 checks. The leader dispatched workflow `370228282`, run
+  `37066171719` / attempt 1 exactly once at producer source
+  `a8353cd41f01f7d94129421512a57a62b9bd6997`; preparation/approval/execution jobs
+  are `111034384244` / `111035594016` / `111036410671`. Request
+  `22e0bc6f06e4c9c2ac2d3fa4bfe6a7c567ef24e9111bf319b704409d731997de` matched
+  the prospective scope; protected owner approval `6818606633` was posted and
+  read back once. Execution was in progress at the supplied observation, with
+  no model-entry or task-result claim. These facts reconcile the pending
+  delivery/dispatch record, not an independently read local-volume backlog.
+  Future terminal/claim/output identities are unknown. The new materialized-
+  grader receipt hash is unavailable/null, not copied from fresh/r1 or learned
+  from fetched bodies. No live outcome was queried or awaited.
 
-  The same-environment prerequisite confirmed
-  `/ai-work/venvs/gdpval-realworks-py310/bin/python`, CPython 3.10.12 / pytest
-  9.1.1, without installation. The original two selectors and the separately
-  authorized lifecycle-only correction ran from `batch-runner`, each invocation
-  with offline/network/process guards and a 180-second bound.
-  Log `/tmp/task5-keep-r1-proof-20261003-0413.z8knKw/pytest.log`, SHA256
-  `3365b47a58477e67d93537a12776a2c6d32546b28066221881d26348f0c6fbf5`;
-  runner SHA256 `380cd53ddb44780491d74e00f44fefafc0584dd7b3bdef2780d0347edfb16e63`.
-  The correction log is
-  `/tmp/task5-keep-fixture-proof-20261003-0444.Vc0jY8/pytest.log`, SHA256
-  `1e5b17617b877a94b883e27bcd75d6558c89650010d3693a007295dcbbf2efdf`;
-  runner SHA256 `806e84d6bee913c83ff56ab34c47d484b8a4a9a2cbdd3d343b6f17c6f8e75c2b`.
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md) preserves both
-  exact commands, tested HEADs, selector outcomes, current-pin mapping and
-  historical versus completed boundaries. No other selector or suite was rerun.
+  Only the current shared-reader hash, the observer's separate
+  `CURRENT_DEPENDENCIES` reader entry and the workflow read-route checksums
+  migrate. The proof checked all 15 observer dependency hashes and 9 checksums
+  per read preflight. The unchanged producer adapter remains
+  `21623a1a5bb661f105b8d9dcdfaaad13634c21cb8f1207189608f602b80b14ee`.
+  Historical RESULT/PARENT/READER evidence, including
+  `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`,
+  `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d` and
+  intake `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4`,
+  stays fixed. One fixed-path terminal discovery is followed only by immutable
+  reads. Publication-derived proof is not independent provider/original-input/
+  actual-CAS authentication, a new writer acknowledgment or replay authority.
 
-  The leader's terminal-only observation `37049700859` / attempt 1 / job
-  `110979716273` / source `eb0f40016aa14cb8b1afa8b3590d6c437e8f97e3`, at
-  `2026-10-02T18:48:52.3056439Z`, verified Task5 fresh/r1 FAILED / exit 1 /
-  cleanup true / recorded publication acknowledged. Its producer remains
-  `e5e338aa22c247133936fa075c2def7bffb95173`, workflow `370228282`, run
-  `37032230813` / attempt 1 / execution job `110933285330`, request
-  `9a53e9c0ae7b50400f2b27d514207e489b237cc5b5195ff8e36fcc4ea920370b`.
-  This consumed failed inference, not either Task4 grade terminal, is the new
-  fixed parent: terminal `94628d12162da2e00cace216fdda5ce41f57e47f`, SHA256
-  `5bc2eb37dd4ab83cd7653106166cc18d36c193eec12e2bc99b9bf429be6942cf`, 4188 bytes;
-  claim `fb39a92ccbaf26f1ab698510cf0914f73b17cb0e`; output
-  `70a69c818be5c7d751a0481808dbba86aa983b19`. All claim/manifest/object-set,
-  observation-marker and retained-authority identities are preserved in the
-  task record. The existing explicit `TASK5_FRESH_R1` verifier must check fixed
-  controls/history/cleanup without payload downloads, then actual inference-branch
-  parent equality before one-use CAS. Partial or uncertain claims cannot be adopted.
+  The fixed predecessor remains failed Task5 fresh/r1 inference terminal
+  `94628d12162da2e00cace216fdda5ce41f57e47f`, not a grade terminal. The leader's
+  terminal-only observation `37049700859` / attempt 1 / job `110979716273` /
+  source `eb0f40016aa14cb8b1afa8b3590d6c437e8f97e3` at
+  `2026-10-02T18:48:52.3056439Z` recorded FAILED / exit 1 / cleanup true /
+  publication acknowledged. All independent producer/request/claim/manifest/
+  object-set/observation-marker/authority identities remain in the task record.
+  Its partial inference accounting remains 18 model calls: 17 infrastructure-
+  retry calls / known USD 2.517018 plus 1 generation call / known USD 0.059075,
+  aggregate known USD 2.576093. Usage is input 1487642, cached input 1080192,
+  output 85828 and reasoning 62263; subsets are not added again. Estimated/
+  runtime costs and HTTP counts are null, `call_reachability_unknown`, invoice
+  false. Controls declare 1 result, 1 ledger, 0 deliverables / 3 objects
+  including manifest, but bodies were not verified and absence of all partial
+  work is not established. Cause, budget and recovery remain unavailable /
+  `not_recorded_in_terminal_controls`; no successful intake or grade exists.
 
-  Recorded fresh/r1 inference accounting is partial: 18 model calls, comprising
-  17 infrastructure-retry calls / known USD 2.517018 and 1 generation call /
-  known USD 0.059075, aggregate known USD 2.576093. Usage is input 1487642,
-  cached input 1080192, output 85828 and reasoning 62263; subsets are not added
-  again. Estimated/runtime costs and HTTP counts are null,
-  `call_reachability_unknown`, `invoice_complete=false`. Controls declare
-  1 result, 1 ledger, 0 deliverables / 3 objects including manifest, but bodies
-  were not verified and absence of all partial work is not established.
-  Detailed failure, budget and recovery exposure remain unavailable /
-  `not_recorded_in_terminal_controls`. No successful intake or grade exists;
-  no rate-limit/timeout cause, independent provider proof or retention benefit
-  is inferred. The earlier preparation `110921652971`, approval `6812887076`
-  and in-progress snapshots remain historical, not completion evidence.
+  Earlier proof outcomes remain historical, never relabeled as passes: the
+  keep/r1 producer at `703d9bbf94f59045c4a04d58bf16ddda82d905a0` had
+  1 failed / 1 passed in 7.64s, with duplicate exclusive source creation before
+  lifecycle entry and a passed 288-mode routing/current-pin selector. Its log
+  SHA256 remains `3365b47a58477e67d93537a12776a2c6d32546b28066221881d26348f0c6fbf5`.
+  The separate test-only correction at
+  `a8e88e5adaf93303032a4bd636f91d48085abaa6` passed the lifecycle in 41.97s,
+  log SHA256 `1e5b17617b877a94b883e27bcd75d6558c89650010d3693a007295dcbbf2efdf`,
+  without changing production or rerunning its passing selector. The prior
+  reader's 17.71s failure / 4.13s correction, producer's 51.26s / 26.67s /
+  29.18s failures / 44.78s pass, grading's 7.32s / 8.64s failures / 36.42s pass
+  and 255-byte temporary checkpoint at `PC_NAME_MAX=255`, and CI's 1048.45s
+  result of 2 failed / 13312 passed / 64 skipped / 46 deselected followed by
+  the 41.88s two-test correction retain exact historical sources and boundaries
+  in the task record. None was repeated here.
 
-  Current controller/shared-discriminator/reader/observer/workflow pins migrate
-  explicitly; historical producer/writer/RESULT/PARENT/READER pins do not.
-  Evidence `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0`,
-  `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d` and intake
-  `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4` remain fixed.
-  The Task5 fresh/r1 producer stays byte-identical, SHA256
-  `9919fda7728e84d0d707fe6a4b23a8a601c04b1e5241bcc83387b9acd20f0f5a`.
-  Paid grading, canonical paths, runtime/model/rubric/prompt/dependency bytes,
-  old reader contracts and their no-replay/acknowledgment boundaries remain unchanged.
+  Task4 keep/r2 remains 30.35 / 45 = 67.44% included / 54.20% full denominator,
+  with 9 exclusions / maximum score 11. Its 91 grade calls have `price_missing`,
+  null monetary costs and invoice false; the unrecorded materialized-input
+  comparison remains unavailable. They are distinct from 6 inference calls /
+  known USD 0.22195 partial / null generation cost and Task5 inference costs.
+  Keep/r1 remains 68.0% / 54.64%; Task4 fresh/r1 and fresh/r2 remain failed/
+  ungraded with 39 calls each / known USD 0.303358 and USD 0.29944 partial and
+  unknown detailed causes. No invoice, causal retention benefit or cost-free
+  generation is inferred. Five producer outcomes are recorded; ordinal 5 is
+  pending, and ordinals 6 and 7 have not been executed.
 
-  Historical evidence remains distinct: the reader's `f4a2c2fdd87e7b69ee99fec52bc0e33fcb19e2d9`
-  invocation was 2 passed / 1 failed in 17.71s at the late `Popen._wait` helper
-  import; only its failed routing selector passed in 4.13s at
-  `113ad8ad329a08978bc1185ba623f6baed28c065`. The delivered reader's PR723 HEAD
-  `40b699e9022c601d4fb72482173354829d7b87e1`, owner review
-  [5395210507](https://github.com/hyeonsangjeon/gdpval-realworks/pull/723#pullrequestreview-5395210507)
-  and all 10 checks passed its source gate. The producer's 51.26s, 26.67s and
-  29.18s failed attempts, then 44.78s lifecycle pass, retain exact HEAD/log/cause
-  and reached/unreached evidence in the task record. The diagnostic's 3 synthetic
-  commits versus 0 acknowledgments remain a failed synthetic proof, not a live
-  HF outage. Earlier grading failures of 7.32s and 8.64s, the 36.42s pass with
-  a real 255-byte checkpoint temporary name at `PC_NAME_MAX=255`, and the
-  1048.45s CI result of 2 failed / 13312 passed / 64 skipped / 46 deselected
-  followed by the 41.88s two-test correction remain historical and were not rerun.
+  The pre-edit extreme-reasoner decision approved only this bounded scope.
+  Independent final immutable-reader-HEAD review, applicable same-HEAD CI and
+  separate leader authorization remain required before a live read. The
+  running producer and preserved worktrees were untouched. Only the two
+  completion records change after the tested HEAD. The report/copyediting
+  pass used `experiment-report-en` then protected `im-not-ai-en`; no design
+  change warranted `experiment-design`. No live read/write, inference/grade,
+  dispatch, duplicate approval, replay, budget reset, Project edit, merge,
+  Azure operation or CI polling occurred.
 
-  Task4 keep/r2 stays 30.35 / 45 = 67.44% included / 54.20% full, 9 exclusions /
-  maximum score 11. Its 91 grade calls have `price_missing`, null monetary costs
-  and `invoice_complete=false`; the unrecorded materialized-input comparison is
-  unavailable. They are not the 6 inference calls / known USD 0.22195 partial /
-  null generation cost, nor the new Task5 inference costs. Keep/r1 remains
-  68.0% / 54.64%; Task4 fresh/r1 and fresh/r2 remain failed/ungraded with
-  39 calls each / known USD 0.303358 and USD 0.29944 partial and unknown detailed
-  causes. No invoice, added subset-token total or causal retention conclusion
-  is claimed. Five producer outcomes are recorded; three registered cells remain.
-
-  The complete keep/r1 unit has bounded offline evidence for one draft PR.
-  Independent final immutable-HEAD review, same-HEAD CI and separate leader
-  direction remain required before live keep/r1 execution. Only the two completion
-  records change after tested `a8e88e5`; no live query/read/write, model/grade
-  call, dispatch, duplicate approval, replay, budget reset, Project edit, merge,
-  Azure management, renderer or CI polling occurred. `experiment-report-en`
-  then protected `im-not-ai-en` kept the failed setup proof, passing test-only
-  correction, actual terminal evidence, partial accounting and historical proofs
-  separate within this single entry.
 - Add the fixed keep/r2 successful-result and failed/stopped terminal-only
   read binding, with the leader-authorized runner replacement passing both
   targeted selectors in 19.11s. The unchanged implementation is tested at
