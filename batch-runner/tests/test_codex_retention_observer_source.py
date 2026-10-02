@@ -26,7 +26,7 @@ def test_current_observer_source_preserves_historical_grade_bindings(tmp_path, m
     assert reader._fixed().selector == reader.SELECTOR and reader._fixed().grading_selector == bridge.SELECTOR
     assert set(fixed.READER_FILES.values()) <= set(reader.CURRENT_DEPENDENCIES)
     assert reader.CURRENT_DEPENDENCIES["codex_retention_first_cell.py"] == "ae5754bdd294a7560aecbe0d4c819bc6fdd123cf82fc652c6aedee5bae2701f7"
-    assert reader.CURRENT_DEPENDENCIES["codex_retention_fresh_r1_result_intake.py"] == "d042c02228f2430d4129ed37b3fb453cf9792bbde269a28bd10c6daf8f00b900"
+    assert reader.CURRENT_DEPENDENCIES["codex_retention_fresh_r1_result_intake.py"] == "89ba281379783d879e7c6208d29415c4aeea22a0af19569fe6c969c9f48f98c2"
     assert fixed.READER["controller_sha256"] == "957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601"
     assert fixed.READER["module_sha256"] == "5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583"
     for name, expected in reader.CURRENT_DEPENDENCIES.items():

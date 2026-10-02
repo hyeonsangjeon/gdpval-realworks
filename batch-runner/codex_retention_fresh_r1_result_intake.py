@@ -1,4 +1,4 @@
-"""Read only fixed Task4 fresh/r1, fresh/r2 or keep/r2 publications; never execute.
+"""Read fixed Task4 successors or Task5 fresh/r1 publications; never execute.
 
 One terminal-path discovery is allowed, then only immutable declared reads.
 The fixed producer/request expectations are independent of fetched records.
@@ -83,10 +83,21 @@ KEEP_R2 = ReadBinding(ci.TerminalExpectation(
     "retention-task4-keep-r2-terminal-observation-v1", "retention-keep-r2-terminal-observation.json", "keep")
 KEEP_R2_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task4_keep_r2.py"),
                         "12106b5423e25ffefa1b04023e2e98742861762762966a04bf17fe3da1851450")
+TASK5_FRESH_R1 = ReadBinding(ci.TerminalExpectation(
+    "9a53e9c0ae7b50400f2b27d514207e489b237cc5b5195ff8e36fcc4ea920370b",
+    "e5e338aa22c247133936fa075c2def7bffb95173", intake.controller.TASK5_FRESH_R1_CELL_ID),
+    4, 1, "37032230813", 110933285330,
+    "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+    "a820cd9e3a8e74e684aa65a710e5a7b0649ce0435fe425a070a0eb6d8b30145e",
+    "retention-task5-fresh-r1-result-intake-v1", "retention-task5-fresh-r1-result-intake.json",
+    "retention-task5-fresh-r1-terminal-observation-v1", "retention-task5-fresh-r1-terminal-observation.json")
+TASK5_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task5_fresh_r1.py"),
+                      "9919fda7728e84d0d707fe6a4b23a8a601c04b1e5241bcc83387b9acd20f0f5a")
 
 
 def _fixed_binding(binding):
-    require(type(binding) is ReadBinding and (binding is FRESH_R1 or binding is FRESH_R2 or binding is KEEP_R2),
+    require(type(binding) is ReadBinding and any(binding is fixed for fixed in
+            (FRESH_R1, FRESH_R2, KEEP_R2, TASK5_FRESH_R1)),
             "fixed_fresh_read_binding_required")
     return binding
 
@@ -96,20 +107,27 @@ def _frozen(binding):
     if binding is FRESH_R1:
         return FROZEN
     pins = {**FROZEN, "producer_r2_sha256": R2_PRODUCER_PIN}
-    return {**pins, "producer_keep_r2_sha256": KEEP_R2_PRODUCER_PIN} if binding is KEEP_R2 else pins
+    if binding is KEEP_R2 or binding is TASK5_FRESH_R1:
+        pins["producer_keep_r2_sha256"] = KEEP_R2_PRODUCER_PIN
+    if binding is TASK5_FRESH_R1:
+        pins["producer_task5_fresh_r1_sha256"] = TASK5_PRODUCER_PIN
+    return pins
 
 
 def _producer(binding):
     _fixed_binding(binding)
     if binding is FRESH_R1:
         return fresh
-    pins = (R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN) if binding is KEEP_R2 else (R2_PRODUCER_PIN,)
+    pins = ((R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN, TASK5_PRODUCER_PIN) if binding is TASK5_FRESH_R1 else
+            (R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN) if binding is KEEP_R2 else (R2_PRODUCER_PIN,))
     for path, digest in pins:
         require(hashlib.sha256(output._bytes(path, limit=output.MAX_RECORD_BYTES)).hexdigest() == digest,
                 "fresh_result_reader_bytes_mismatch")
-    # Both frozen successor producers import this reader for earlier cells.
+    # Frozen successor producers import this reader for earlier cells.
     # Hash every dependency before resolving the cycle through a lazy import.
-    if binding is KEEP_R2:
+    if binding is TASK5_FRESH_R1:
+        import codex_retention_task5_fresh_r1 as producer
+    elif binding is KEEP_R2:
         import codex_retention_task4_keep_r2 as producer
     else:
         import codex_retention_task4_fresh_r2 as producer
@@ -227,10 +245,36 @@ def _summary(summary, *, binding=FRESH_R1):
     require(summary["status"] == "succeeded" and (summary["exit_code"] is None
             or (type(summary["exit_code"]) is int and summary["exit_code"] == 0)), "fresh_result_success_required")
     receipt, names = _summary_files(summary)
-    roles, deliverables = intake._roles(summary)
+    if binding is TASK5_FRESH_R1:
+        require(intake.RESULT in names, "retention_result_payload_required")
+        roles, deliverables = _declared_roles(summary, binding=binding)
+    else:
+        roles, deliverables = intake._roles(summary)
     missing = ([] if intake.LEDGER in names else ["bound_ledger_export"])
     missing += ([] if receipt is not None and receipt["usage"] is not None else ["usage"])
     require(summary["missing"] == missing, "fresh_result_missing_accounting_mismatch")
+    return roles, deliverables
+
+
+def _declared_roles(summary, *, binding):
+    """Keep the existing role/privacy checks; only the closed task scope varies."""
+    _fixed_binding(binding)
+    task_id = (fresh._publication_task_id(_producer(binding)._publication_binding())
+               if binding is TASK5_FRESH_R1 else intake.registration.TASK4)
+    roles = {item["path"]: item for item in summary["files"]}
+    deliverables = []
+    for name, record in roles.items():
+        if name in (intake.RESULT, intake.LEDGER):
+            require((1 if name == intake.RESULT else 0) <= record["size"] <= output.MAX_RECORD_BYTES,
+                    "retention_result_record_bounds_exceeded")
+        else:
+            require(intake.canonical_deliverable_path(task_id, name) == name,
+                    "retention_result_role_refused")
+            require(not {part.lower() for part in Path(name).parts} & intake.PRIVATE_PARTS
+                    and Path(name).suffix.lower() not in {".sqlite", ".sqlite3", ".db"},
+                    "retention_result_private_state_refused")
+            deliverables.append(name)
+    require(len(deliverables) <= output.MAX_FILES, "retention_result_deliverable_count_exceeded")
     return roles, deliverables
 
 
@@ -240,20 +284,7 @@ def _terminal_summary(summary, *, binding=FRESH_R1):
     require(summary["status"] in {"failed", "stopped"} and (summary["exit_code"] is None
             or type(summary["exit_code"]) is int), "fresh_terminal_unsuccessful_required")
     receipt, names = _summary_files(summary)
-    roles = {item["path"]: item for item in summary["files"]}
-    deliverables = []
-    for name, record in roles.items():
-        if name in (intake.RESULT, intake.LEDGER):
-            require((1 if name == intake.RESULT else 0) <= record["size"] <= output.MAX_RECORD_BYTES,
-                    "retention_result_record_bounds_exceeded")
-        else:
-            require(intake.canonical_deliverable_path(intake.registration.TASK4, name) == name,
-                    "retention_result_role_refused")
-            require(not {part.lower() for part in Path(name).parts} & intake.PRIVATE_PARTS
-                    and Path(name).suffix.lower() not in {".sqlite", ".sqlite3", ".db"},
-                    "retention_result_private_state_refused")
-            deliverables.append(name)
-    require(len(deliverables) <= output.MAX_FILES, "retention_result_deliverable_count_exceeded")
+    roles, deliverables = _declared_roles(summary, binding=binding)
     missing = [] if intake.RESULT in roles else ["bound_inference_result", "validated_deliverables"]
     require(not missing or not roles, "fresh_terminal_missing_result_roles")
     missing += ([] if intake.LEDGER in names else ["bound_ledger_export"])
@@ -489,7 +520,8 @@ def main(argv=None, *, _test_api=None) -> int:
         selection.add_argument("--discover-terminal", action="store_true")
         args = parser.parse_args(argv)
         observing = args.observe_terminal
-        binding = (KEEP_R2 if args.cell_id == KEEP_R2.expectation.cell_id else
+        binding = (TASK5_FRESH_R1 if args.cell_id == TASK5_FRESH_R1.expectation.cell_id else
+                   KEEP_R2 if args.cell_id == KEEP_R2.expectation.cell_id else
                    FRESH_R2 if args.cell_id == FRESH_R2.expectation.cell_id else FRESH_R1)
         if not (args.read or observing):
             require(not any((args.output, args.expected_producer_source, args.expected_request_sha256,
