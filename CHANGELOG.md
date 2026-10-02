@@ -13,10 +13,102 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Implement the closed Task5 fresh/r1 producer, ordinal 4 / repetition 1, cell
+- Add the fixed model-free Task5 fresh/r1 result/terminal reader for ordinal 4 /
+  repetition 1, cell
   `0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1`, from
-  independently verified main `07e330fd936860aa592bfc5751736e0e8a9c2ad9`.
-  The final targeted lifecycle proof at
+  independently verified main `e5e338aa22c247133936fa075c2def7bffb95173`.
+  The implementation is pinned at `f4a2c2fdd87e7b69ee99fec52bc0e33fcb19e2d9`.
+  The authorized import-only test correction at
+  `113ad8ad329a08978bc1185ba623f6baed28c065` passed the sole failed routing
+  selector: 1 collected / 1 passed in 4.13s, exit 0, no timeout. It reached
+  224 mode cases, exact closed routes/permissions/secret/hash contracts and
+  guarded missing-token CLI refusals, with `live_effects=0`. All production,
+  workflow, dependency and pin bytes remain identical to `f4a2c2f`.
+
+  The original invocation at `f4a2c2f` remains 3 collected / 2 passed /
+  1 failed in 17.71s, exit 1, no timeout. Successful payload/marker intake,
+  failed/stopped control-only observation, exact execution-job checks in both
+  modes, old defaults, privacy/no-clobber and current-source/historical-evidence
+  checks passed with synthetic transport and were not rerun. The directly
+  coupled workflow selector failed before assertions in that original invocation.
+  The later routing pass completes targeted evidence across two HEADs, not a
+  same-HEAD full-suite or CI claim.
+
+  The original exception was `AttributeError: 'function' object has no attribute '_wait'`.
+  At the original HEAD, the in-test helper import at
+  `batch-runner/tests/test_codex_retention_ci_read_result.py:30` imports
+  `test_codex_retention_ci_observation.py:13`, then
+  `test_codex_retention_ci.py:47` accesses `REAL_POPEN._wait` during module
+  initialization. The already active offline fixture has replaced
+  `subprocess.Popen` with its refusal function. This is a test-helper
+  import-order failure, not a workflow assertion or live-service failure.
+  The intended 224 routing combinations and later missing-token CLI checks
+  were not reached in that invocation. That phase stopped without weakening
+  a guard, making a repair or running a second invocation.
+  Log `/tmp/project5-task5-reader-proof.nwly6s/pytest.log`, SHA256
+  `74c75d9273fb30cb54c51f71dc3ec236756797c917e112d01fb9a35c9bc86dcc`;
+  runner SHA256 `13ec7d12bb96990c10ab2c9be8d899a8f8530c5c5340fcc32bc05fa99eb6f3ea`.
+  The verified `/ai-work/venvs/gdpval-realworks-py310/bin/python` reported
+  CPython 3.10.12 / pytest 9.1.1 without installation. The exact command in the
+  task record ran once from `batch-runner`, token-free with offline/process/
+  network guards, plugin autoload disabled, no `-x` and a 180-second bound.
+
+  The separate `PROJECT5-TASK5-READER-IMPORT-FIX-20261003-0240` authorization
+  moved the required helper module import to collection time, after `_boolean`
+  is defined. Its module binding preserves the immediate mutual helper import
+  without asking for a function from a partially initialized module. The
+  assertion body and offline fixture are unchanged; the helper runs inside
+  the already guarded routing test. No real `Popen` restoration, fake process
+  method, swallowed exception, guard bypass or private integration was added.
+  Only that failed selector ran once after the same absolute Python 3.10.12 /
+  pytest 9.1.1 prerequisite, with the same token-free guards and 180-second bound.
+  Correction log `/tmp/project5-task5-reader-import-proof.CG9Exu/pytest.log`, SHA256
+  `1086d024317ad1c5a7fc519762c9f52f326dac0cfcb1a04a6397ed76a61b2dad`;
+  runner SHA256 `0bb290c0438b2ed584ba2a48e4a5f30728eba42c63f91588f841e1ad9fd52b3a`.
+  The exact single-selector command is in the current task record. Neither
+  original passing selector, any delivered suite, full build or collection
+  probe was rerun.
+
+  The leader supplied workflow `370228282`, run `37032230813` / attempt 1,
+  producer `e5e338aa22c247133936fa075c2def7bffb95173`, successful preparation job
+  `110921652971`, request
+  `9a53e9c0ae7b50400f2b27d514207e489b237cc5b5195ff8e36fcc4ea920370b` and
+  materialized grader source
+  `a820cd9e3a8e74e684aa65a710e5a7b0649ce0435fe425a070a0eb6d8b30145e`.
+  Protected approval `6812887076` was applied once. Execution job `110933285330`
+  was initially reported at pinned runtime installation; the leader's 0240
+  update reports `in_progress` at the combined grant/claim/owned-cell step. Model entry,
+  completion, new terminal revision/hash, result and Task5 usage/cost remain
+  unobserved. No live job was polled or read in this task.
+
+  The new exact binding reuses the shared reader and unchanged reviewed Task5
+  publication verifier, checking adapter bytes before lazy import. It adds the
+  cell only to existing success/terminal read allowlists, never paid/execution
+  routes. Successful intake must verify result/ledger/deliverable bodies and
+  marker; failed/stopped observation reads only three fixed controls and object
+  metadata/history, not bodies or grading-ready input. A future authorized read
+  may perform the existing fixed-path discovery, pin the immutable terminal,
+  then validate independent source/run/attempt/request/job/cell/predecessor
+  expectations. No known terminal was fabricated, partial claim adopted,
+  writer acknowledgment upgraded or replay authorized. Old bindings/defaults,
+  strict validators, jobs, permissions, secrets and running producer bytes remain.
+
+  The current reader SHA256 changes from
+  `d042c02228f2430d4129ed37b3fb453cf9792bbde269a28bd10c6daf8f00b900` to
+  `89ba281379783d879e7c6208d29415c4aeea22a0af19569fe6c969c9f48f98c2`.
+  Only the observer's separate `CURRENT_DEPENDENCIES` reader pin changes;
+  observer SHA256 is `431f69bb264493041f7814c804a289fb9a52b70b4308eb886ba4186afda2bb89`.
+  Current read workflow SHA256 is
+  `6cc111c823100a32d01668a816f1941360ffaf8ac09b7ff1aab8b59d0a843cef`.
+  The complete base/current mapping is in the task record. Task5 adapter
+  `9919fda7728e84d0d707fe6a4b23a8a601c04b1e5241bcc83387b9acd20f0f5a`, historical
+  grading evidence and all immutable producer/result/parent/marker pins stay
+  fixed. The import-only correction changed no implementation or pin bytes;
+  only the two completion records change after tested `113ad8a`.
+
+  The preceding closed Task5 producer was implemented from independently
+  verified main `07e330fd936860aa592bfc5751736e0e8a9c2ad9`.
+  Its historical final targeted lifecycle proof at
   `4a2be68c96ef3f3e0961eb65fe15270a81baac6b` reported 1 collected / 1 passed in
   44.78s, exit 0, no timeout. It reached synthetic execute-return, acknowledged
   terminal readbacks/history, reconciliation, lost-ack/no-replay and later
@@ -26,7 +118,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   to Task5. The canonical path predicate is unchanged. Old/new cross-task paths,
   noncanonical binding types, malformed identities and unsupported cells refuse.
   No caller task override, future-cell admission, wire schema or live authority
-  was added. The leader's 2303 conditional decision authorized this narrow
+  was added by that producer change. The leader's 2303 conditional decision authorized this narrow
   correction and its current-pin migration, not final source approval.
 
   The initial implementation/workflow/tests were pinned at
@@ -69,8 +161,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   fresh reset/recovery, successful child completion, publication/reconciliation
   and later timeout/cleanup assertions were not reached in that invocation.
   The current-source/historical-readout and workflow-routing selectors passed
-  at the original HEAD and were not rerun. All three preceding attempts remain
-  failures, separate from the new 44.78s pass. The fixture
+  at the original HEAD and were not rerun during the later producer corrections.
+  All three preceding attempts remain failures, separate from the historical
+  44.78s pass and this reader's 17.71s partial proof. The fixture
   correction preserves the interrupted-start refusal,
   separately checks a bound but ineligible thread, and uses real deadline/
   receipt APIs to settle a synthetic B-eligible failure before owned cleanup
@@ -92,7 +185,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   one-use CAS. The new exact request/admission-type/cell binding and distinct
   namespaces reuse the existing owned lifecycle and publication helper. Old
   entrypoints refuse the new cell. No live predecessor read, CAS or admission
-  occurred; synthetic control and refusal checks remain separate from live work.
+  occurred during that producer implementation; synthetic control and refusal
+  checks remain separate from the later leader-supplied live snapshot above.
 
   The pre-edit inspection found that the observer's shared `_source` checked
   current files against `fixed.READER`, which also contributes to consumed
@@ -109,7 +203,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4`
   remain unchanged. No controller copy, hash fallback or weakened guard was added.
 
-  All four invocations used the verified absolute CPython 3.10.12 / pytest
+  All four historical producer invocations used the verified absolute CPython 3.10.12 / pytest
   9.1.1 interpreter, token-free offline/process/network guards, disabled plugin
   autoload and a 180-second bound. The original log SHA256 remains
   `15c8dbf5bf0534c2630dc3a9c9a6a7821b1412c5fcced67a83d23a686cb98495`.
@@ -117,22 +211,24 @@ entries land under a fresh dated heading the day they merge to `main`.
   `51a95d83582a52fb70275391af6c2338c04230b2de1deb226e69f4685f5f6b53`.
   The single-selector diagnostic log SHA256 is
   `f9a9d047ead8725b9d83b15b687c374725a7ffd4df4fd6e98a51a7734cefb7c2`.
-  The new single-selector verification log SHA256 is
+  The historical single-selector verification log SHA256 is
   `9213298b7d7376b4ac60c4f794bddd7001fede53943f8ae1628387dddb5590ed`, with command
   SHA256 `29247dde61ddf35befe8f7b013ab1dc47324a283c71cab859a8648c75f5303c4`.
   The current record contains the exact commands, interpreter checks, log
   paths, original exception frames and reached/unreached boundaries. The two
-  originally passing selectors were not rerun. The passing route selector's
+  originally passing selectors were not rerun during those producer corrections.
+  The passing route selector's
   inherited summary labels remain unchanged and do not report Task5 completion.
 
-  The current shared publication helper SHA256 changes from
+  The prior producer correction changed the shared publication helper SHA256 from
   `a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3` to
   `11901d7398066d0ccf2692c3f1b41fe4a066d872efecfa411756d67858f941e1`.
-  The current intake changes from
+  Its shared intake changed from
   `d6ef09d39dd4da91e96dedf861c5a26e29c6eae504d312ab496e3489f01e12cf` to
   `d042c02228f2430d4129ed37b3fb453cf9792bbde269a28bd10c6daf8f00b900`.
   Its observer-current dependency set and workflow preflight/CLI pins migrate
-  accordingly; the exact four-file mapping is in the current task record.
+  accordingly; that historical four-file mapping remains in the task record,
+  separate from the reader's current migration above.
   Static checks verified 15 current observer dependencies, 16 workflow pin
   occurrences and unchanged historical evidence/marker digests. The two earlier
   passing selectors were not replayed; only their directly coupled current-hash
@@ -172,7 +268,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   reasoning are subsets. This does not substitute inference cost or establish
   independent provider authentication or a retention benefit. The unrecorded
   materialized-input comparison remains unavailable. Task4 is closed for
-  execution, four producer outcomes are recorded and all four Task5 cells remain.
+  execution, four producer outcomes are recorded and all four Task5 terminal
+  outcomes remain unobserved. Preparation/approval does not add a completed cell.
 
   Only fixed immutable terminal/claim and declared grade-result/ledger bodies
   may be read. The reader preserves exact hashes/types/history/roles/bounds,
@@ -184,14 +281,15 @@ entries land under a fresh dated heading the day they merge to `main`.
   `ab5d5e09dc243dfce83972eb8c860ab0f9c0b653db2fa966472a5cd24d285860` to
   `c2fd083fbb4a90115fee1b20c4eed1ab687639d1efa8f80c169cb01f2dc06c9e`;
   the current task record maps all four historical readout source changes.
-  Task5 changes the current controller from
+  The initial Task5 producer changed the controller from
   `957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601` to
   `ae5754bdd294a7560aecbe0d4c819bc6fdd123cf82fc652c6aedee5bae2701f7`, and the
-  current shared reader from
+  shared reader from
   `5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583` to
   `d6ef09d39dd4da91e96dedf861c5a26e29c6eae504d312ab496e3489f01e12cf`.
-  The record maps the current source helper, observer, producer and inference
-  workflow hashes. Historical producer/reader/receipt/evidence pins stay fixed;
+  The record preserves those historical source-helper, observer, producer and
+  inference-workflow hashes separately from the current reader mapping.
+  Historical producer/reader/receipt/evidence pins stay fixed;
   `grade-run.yml`, grader/model/rubric/prompt and dependency manifests are unchanged.
 
   The prior readout's one bounded invocation used the verified
@@ -225,26 +323,34 @@ entries land under a fresh dated heading the day they merge to `main`.
   owner review [5389266031](https://github.com/hyeonsangjeon/gdpval-realworks/pull/720#pullrequestreview-5389266031)
   and all 10 checks passed its source gate. That gate and all historical proofs
   remain separate from the three failed Task5 lifecycle attempts, including
-  the diagnostic, and the new 44.78s synthetic pass. The 2303 decision authorized
+  the diagnostic, the 44.78s synthetic pass, this reader's original 17.71s
+  partial proof and the separate 4.13s routing correction.
+  The 2303 decision authorized
   the closed task-discrimination correction without relaxing canonical paths;
-  historical evidence remains fixed and may not be rewritten. The three passing selectors across
-  the original and current invocations are not a same-HEAD all-checks claim.
+  historical evidence remains fixed and may not be rewritten. The three passing
+  producer selectors across its original and final invocations are not a
+  same-HEAD all-checks claim.
   The leader reviewed source HEAD `979df01aeeee9a3a0a624e605fa47e887f18b048`,
   found no blocking implementation issue, and verified 15 current dependency
   hashes, 16 checksum occurrences and 3 reader CLI pins. The leader reported
-  all 10 checks successful at that HEAD. The records now distinguish the
+  all 10 checks successful at that HEAD. The prior records correction distinguished the
   unchanged Task4 fresh/r2 and keep/r2 facades from the shared fresh/r1 facade's
-  approved task-discriminator change. This records-only follow-up leaves
-  production, workflows, tests, dependency manifests and every pin byte-identical
-  to that source-reviewed HEAD. The records delta and same-HEAD CI still require
-  the leader's review. Current-source approval does not authorize live Task5;
-  separate live-cell authorization remains required. No live read/write,
-  model/grade call, dispatch, replay, renderer, Project edit, merge, Azure
-  management or polling occurred in this task. The reporting skills
-  preserve the new leader-read numeric evidence separately from prior synthetic
-  proof, partial inference costs, null grade costs, all three failed lifecycle
-  attempts and the new passing proof. No duplicate current task snapshot or
-  changelog entry was added.
+  approved task-discriminator change without changing source bytes or pins.
+  The leader subsequently delivered PR722 final HEAD
+  `59320a3cb15aec72073ae4af466ff0a9201e0bae`, review
+  [5393747564](https://github.com/hyeonsangjeon/gdpval-realworks/pull/722#pullrequestreview-5393747564),
+  with all 10 checks passed. That gate covers the existing producer, not this
+  new reader. The 0240 test-only correction and its one routing invocation
+  passed without rerunning the other two selectors. Final independent
+  immutable-source review, applicable CI and separate leader
+  authorization remain mandatory before reading the eventual fixed Task5 result.
+  No live read/write, model/grade call, dispatch, duplicate approval, clock reset,
+  replay, renderer, Project edit, merge, Azure management or live-run/CI polling
+  occurred in this reader task. `experiment-report-en`, then protected
+  `im-not-ai-en`, preserves actual preparation/approval and Task4 numeric evidence
+  separately from synthetic proof, partial inference costs, null grade costs,
+  historical failures, the original test-helper failure and the authorized
+  4.13s correction. No duplicate current task snapshot or changelog entry was added.
 
 - Add the fixed keep/r2 successful-result and failed/stopped terminal-only
   read binding, with the leader-authorized runner replacement passing both
