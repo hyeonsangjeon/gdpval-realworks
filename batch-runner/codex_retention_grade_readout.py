@@ -42,7 +42,7 @@ KEEP_R2_ADAPTER_SHA256 = "bb8d1b3a46824a2597f31fe6567531fc59deabb79af87e85d98fd1
 # and the remaining source tree are bound by the exact clean reviewed checkout.
 # Paid bridge._source still requires each grading adapter's historical READER.
 CURRENT_DEPENDENCIES = {
-    "codex_retention_fresh_r1_result_intake.py": "d042c02228f2430d4129ed37b3fb453cf9792bbde269a28bd10c6daf8f00b900",
+    "codex_retention_fresh_r1_result_intake.py": "89ba281379783d879e7c6208d29415c4aeea22a0af19569fe6c969c9f48f98c2",
     "codex_retention_result_intake.py": "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196",
     "codex_retention_ci.py": "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c",
     "codex_retention_task4_fresh_r1.py": "11901d7398066d0ccf2692c3f1b41fe4a066d872efecfa411756d67858f941e1",
