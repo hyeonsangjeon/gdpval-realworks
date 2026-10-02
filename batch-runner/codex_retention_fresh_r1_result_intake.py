@@ -33,7 +33,7 @@ FROZEN = {
     "intake_sha256": (intake.__file__, "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196"),
     "ci_sha256": (ci.__file__, "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c"),
     "producer_facade_sha256": (fresh.__file__, "a0710039c33c17af85f226269ceeaccdb1c17bbc7238a46a15614226afed26e3"),
-    "controller_sha256": (intake.controller.__file__, "a7c44ce7224b02f31865620e482d0ff6964f36d2b4c4753658e3ecfc72dcbc58"),
+    "controller_sha256": (intake.controller.__file__, "957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601"),
 }
 FORMAT = "retention-task4-fresh-r1-result-intake-v1"
 MARKER = "retention-fresh-r1-result-intake.json"

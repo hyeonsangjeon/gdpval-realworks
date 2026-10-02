@@ -1,4 +1,4 @@
-"""Stage one of the three implemented cells and share the owned-child protocol.
+"""Stage one of the four implemented cells and share the owned-child protocol.
 
 Default use verifies a no-launch packet and describes the selected cell. An
 explicit staging call publishes the real Step2 layout in this dedicated source
@@ -44,6 +44,7 @@ ROOT = preparation.ROOT
 FIRST_CELL_ID = registration.TASK4 + "_retention_bundle_v1_keep_r1"
 FRESH_CELL_ID = registration.TASK4 + "_retention_bundle_v1_fresh_r1"
 FRESH_R2_CELL_ID = registration.TASK4 + "_retention_bundle_v1_fresh_r2"
+KEEP_R2_CELL_ID = registration.TASK4 + "_retention_bundle_v1_keep_r2"
 CONTROLLER = "batch-runner/codex_retention_first_cell.py"
 SOURCE_PATHS = (CONTROLLER, "batch-runner/codex_budget_pilot.py",
                 "batch-runner/core/config.py", "batch-runner/core/needs_files.py",
@@ -78,6 +79,7 @@ CELL_BINDINGS = (
     CellBinding(FIRST_CELL_ID, 0, "keep", "retention-first-cell", 1),
     CellBinding(FRESH_CELL_ID, 1, "fresh", "retention-task4-fresh-r1", 1),
     CellBinding(FRESH_R2_CELL_ID, 2, "fresh", "retention-task4-fresh-r2", 2),
+    CellBinding(KEEP_R2_CELL_ID, 3, "keep", "retention-task4-keep-r2", 2),
 )
 
 
@@ -331,9 +333,11 @@ def execute_first_cell(request: Request, *, host_state: Path, grant=None,
     import codex_retention_ci
     import codex_retention_task4_fresh_r1
     import codex_retention_task4_fresh_r2
+    import codex_retention_task4_keep_r2
 
     adapter = {FIRST_CELL_ID: codex_retention_ci, FRESH_CELL_ID: codex_retention_task4_fresh_r1,
-               FRESH_R2_CELL_ID: codex_retention_task4_fresh_r2}[request.cell_id]
+               FRESH_R2_CELL_ID: codex_retention_task4_fresh_r2,
+               KEEP_R2_CELL_ID: codex_retention_task4_keep_r2}[request.cell_id]
     return adapter.execute(request, host_state=host_state, grant=grant,
                            _test_transport=_test_transport, _test_api=_test_api)
 
@@ -374,15 +378,16 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
         from codex_retention_ci import _Admission
         from codex_retention_task4_fresh_r1 import _FreshAdmission
         from codex_retention_task4_fresh_r2 import _FreshR2Admission
+        from codex_retention_task4_keep_r2 import _KeepR2Admission
 
-        if (type(_admission) not in (_Admission, _FreshAdmission, _FreshR2Admission)
+        if (type(_admission) not in (_Admission, _FreshAdmission, _FreshR2Admission, _KeepR2Admission)
                 or _test_transport is not None or _admission.request != request):
             raise RetentionControllerRefused(LIVE_GATE)
         if type(request) is not Request:
             raise RetentionControllerRefused("explicit_retention_request_required")
         if (type(_admission), request.cell_id) not in (
                 (_Admission, FIRST_CELL_ID), (_FreshAdmission, FRESH_CELL_ID),
-                (_FreshR2Admission, FRESH_R2_CELL_ID)):
+                (_FreshR2Admission, FRESH_R2_CELL_ID), (_KeepR2Admission, KEEP_R2_CELL_ID)):
             raise RetentionControllerRefused(LIVE_GATE)
         transport = _admission.transport
     context = _context(request)

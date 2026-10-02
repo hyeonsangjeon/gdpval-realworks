@@ -7,6 +7,7 @@ import shlex
 import yaml
 
 import codex_retention_ci as adapter
+import codex_retention_fresh_r1_result_intake as reader
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from .test_codex_budget_pilot import offline  # noqa: F401; unchanged live-boundary guards
 from .test_codex_retention_ci import _assert_retention_execution_workflow_contract
@@ -17,7 +18,8 @@ def test_retention_execution_workflow_contract_is_shared():
     _assert_retention_execution_workflow_contract()
 
 
-def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsys):
+def _assert_retention_mode_routes():
+    """Shared pure YAML assertions; no locator, credential or private fixture."""
     workflow = yaml.safe_load((adapter.ROOT / adapter.WORKFLOW).read_bytes())
     dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
     assert set(dispatch) == {"reviewed_source_sha", "cell_id", "prepare", "execute", "observe_locator", "read_result", "observe_terminal"}
@@ -48,21 +50,23 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
         '[[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
-        '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' ]]',
+        '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.KEEP_R2_CELL_ID + ' ]]',
         '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
         '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' ) ]]',
     ]
     # Evaluate the exact changed cell/mode expressions, not a substring route.
-    cells = (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID, adapter.controller.FRESH_R2_CELL_ID)
-    for selected in (*cells, "unregistered", adapter.registration.TASK4 + "_retention_bundle_v1_keep_r2"):
+    cells = (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID, adapter.controller.FRESH_R2_CELL_ID,
+             adapter.controller.KEEP_R2_CELL_ID)
+    for selected in (*cells, "unregistered", adapter.registration.TASK5 + "_retention_bundle_v1_fresh_r1"):
         for preparing, executing, observing, reading, terminal in itertools.product((False, True), repeat=5):
             values = {'"$PREPARE_REQUESTED"': preparing, '"$EXECUTE_REQUESTED"': executing,
                 '"$OBSERVE_LOCATOR_ONLY"': observing, '"$READ_RESULT_ONLY"': reading,
                 '"$OBSERVE_TERMINAL_ONLY"': terminal,
                 '"$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID: selected == adapter.controller.FIRST_CELL_ID,
                 '"$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID: selected == adapter.controller.FRESH_CELL_ID,
-                '"$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID: selected == adapter.controller.FRESH_R2_CELL_ID}
+                '"$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID: selected == adapter.controller.FRESH_R2_CELL_ID,
+                '"$SELECTED_CELL" == ' + adapter.controller.KEEP_R2_CELL_ID: selected == adapter.controller.KEEP_R2_CELL_ID}
             allowed = all(_boolean(line.removeprefix("[[ ").removesuffix(" ]]"), values)
                 for line in [*gate["run"].splitlines()[1:4], *gate["run"].splitlines()[-4:]])
             expected = (selected in cells
@@ -70,10 +74,10 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
                 and not (terminal and (preparing or executing or observing or reading))
                 and not (observing and (preparing or executing))
                 and (selected == adapter.controller.FIRST_CELL_ID or not observing)
-                and (selected in cells[1:] or not terminal)
-                and (not reading or selected in cells))
+                and (selected in cells[1:3] or not terminal)
+                and (not reading or selected in cells[:3]))
             assert allowed is expected
-    facade = "python3 batch-runner/codex_retention_task4_fresh_r2.py"
+    facade = "python3 batch-runner/codex_retention_task4_keep_r2.py"
     assert prepare["steps"][4]["run"].startswith(facade + " ")
     assert facade + " --prepare" in prepare["steps"][8]["run"]
     assert execute["steps"][10]["run"].startswith(facade + " --verify-approval ")
@@ -81,6 +85,7 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
     assert "retention-task4-fresh-r1-host" in execute["steps"][-1]["run"]
     assert "retention-first-cell-host" in execute["steps"][-1]["run"]
     assert "retention-task4-fresh-r2-host" in execute["steps"][-1]["run"]
+    assert "retention-task4-keep-r2-host" in execute["steps"][-1]["run"]
     assert "codex_retention_result_intake.py --read --discover-terminal" in prepare["steps"][12]["run"]
     modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
     prepared = "needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''"
@@ -104,11 +109,53 @@ def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsy
     assert "--verify-approval" in live_steps[0]["run"]
     assert "diagnose_codex_sandbox_host.py" in live_steps[1]["run"]
     assert live_steps[2]["uses"] == "azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca"
-    assert "codex_retention_task4_fresh_r2.py --execute" in live_steps[3]["run"]
+    assert "codex_retention_task4_keep_r2.py --execute" in live_steps[3]["run"]
     command = shlex.split(observation["run"])
     assert command[:7] == ["env", "-u", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "-u", "GITHUB_TOKEN",
                            "python3", "batch-runner/codex_retention_ci.py"]
     assert command[7:] == ["--observe-locator", "--reviewed-source-sha", "$REVIEWED_SOURCE_SHA", "--cell", "$SELECTED_CELL"]
+    return command
+
+
+def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
+    _assert_retention_execution_workflow_contract()
+    _assert_retention_mode_routes()
+    workflow = yaml.safe_load((adapter.ROOT / adapter.WORKFLOW).read_bytes())
+    steps = workflow["jobs"][adapter.PREPARE_JOB]["steps"]
+    # Existing read allowlists stay closed; only current helper-byte pins migrate.
+    read_only = "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+    terminal_only = "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+    fixed_fresh = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'"
+                                       for binding in (reader.FRESH_R1, reader.FRESH_R2)) + ")"
+    assert steps[9]["if"] == steps[10]["if"] == read_only + fixed_fresh
+    assert steps[13]["if"] == steps[14]["if"] == terminal_only + fixed_fresh
+    assert steps[11]["if"] == steps[12]["if"] == read_only + " && inputs.cell_id == '" + adapter.controller.FIRST_CELL_ID + "'"
+    identity = reader.reader_identity(binding=reader.FRESH_R2)
+    expected_hashes = {
+        "codex_retention_fresh_r1_result_intake.py": identity["module_sha256"],
+        "codex_retention_task4_fresh_r2.py": identity["producer_r2_sha256"],
+        **{path.rsplit("/", 1)[-1]: digest for path, digest in reader.FROZEN.values()},
+    }
+    for index in (9, 13):
+        preflight, read = steps[index:index + 2]
+        assert "env" not in preflight and "secrets." not in preflight["run"]
+        assert preflight["run"].startswith("set -euo pipefail\n")
+        assert '"$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA"' in preflight["run"]
+        assert '"$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA"' in preflight["run"]
+        for filename, digest in expected_hashes.items():
+            assert "'" + digest + "  batch-runner/" + filename + "'" in preflight["run"]
+        assert preflight["run"].count("sha256sum --check --status") == 2
+        assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+        assert "--expected-reader-sha256 " + identity["module_sha256"] in read["run"]
+        assert adapter.controller.KEEP_R2_CELL_ID not in read["run"]
+    assert steps[9]["run"] == steps[13]["run"]
+    assert expected_hashes["codex_retention_task4_fresh_r2.py"] == "8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f"
+    print(json.dumps({"scope": "synthetic_keep_r2_route_only", "mode_cases": 192,
+        "read_allowlists_unchanged": True, "three_jobs": True, "current_pins_before_credentials": True}, sort_keys=True))
+
+
+def test_retention_locator_observation_is_closed_and_separate(monkeypatch, capsys):
+    command = _assert_retention_mode_routes()
     source = "a" * 40  # Syntax only; observation never claims this is reviewed source.
     argv = [{"$REVIEWED_SOURCE_SHA": source, "$SELECTED_CELL": adapter.controller.FIRST_CELL_ID}.get(arg, arg)
             for arg in command[7:]]

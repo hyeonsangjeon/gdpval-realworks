@@ -191,6 +191,7 @@ def _environment(monkeypatch, host_parent):
 
 class FreshTransport(Transport):
     ordinal, repetition, cell_id = 1, 1, fresh.CELL_ID
+    bundle = "fresh"
 
     def owned_process(self, command, **options):
         assert self.api.commits == ["admission"]
@@ -202,7 +203,7 @@ class FreshTransport(Transport):
         cell = controller._adapted_cell(registration.compile_plan()["cells"][self.ordinal])
         prepared = controller.read_codex_prepared(controller.PREPARED)
         assert prepared["execution"]["codex"]["task_deadline"] == cell["control"] == {
-            "condition": "retention_bundle_v1", "retention_bundle": "fresh", "repetition": self.repetition}
+            "condition": "retention_bundle_v1", "retention_bundle": self.bundle, "repetition": self.repetition}
         assert options["env"]["GDPVAL_RELAY_LINEAGE_ID"] == cell["run_id"]
         self.children.append(tuple(command))
         self.api.events.append("child")
@@ -253,7 +254,7 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
         "terminal_verifier_sha256": "8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c"}
     assert [(binding.cell_id, binding.ordinal, binding.bundle) for binding in controller.CELL_BINDINGS] == [
         (production_plan["order"][0], 0, "keep"), (production_plan["order"][1], 1, "fresh"),
-        (production_plan["order"][2], 2, "fresh")]
+        (production_plan["order"][2], 2, "fresh"), (production_plan["order"][3], 3, "keep")]
     assert fresh.SCOPE == {**ci.SCOPE, "cell_id": fresh.CELL_ID, "ordinal": 1, "retention_bundle": "fresh"}
     frozen = {name: (REAL_ROOT / name).read_bytes() for name in (
         "batch-runner/codex_retention_fixed_grade.py", "batch-runner/codex_retention_grade_readout.py",
@@ -380,7 +381,7 @@ def test_task4_fresh_r1_has_one_bound_predecessor_and_owned_route(
     api = deepcopy(seed)
     transport = FreshTransport(document, api, key)
     denied = host_parent / "not-admitted"
-    for wrong in ("unregistered", plan["order"][3], plan["order"][4]):
+    for wrong in ("unregistered", plan["order"][4], plan["order"][5]):
         with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
             controller.execute_first_cell(replace(request, cell_id=wrong), host_state=denied, grant=grant)
     with pytest.raises(preparation.RetentionPreparationRefused, match="^emitted_config_or_task_bytes_mismatch$"):
