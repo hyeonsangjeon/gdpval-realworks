@@ -146,10 +146,53 @@ grader provenance; the later supplied actual preparation hash
 `75f38c05e5c348e481e54f4c0b2000772c2414d7bae7519b1f2a38d92e1e0dc5` does not
 backfill or rewrite that historical field.
 
+## Later RESULT-only budget observation
+
+The leader's 2026-10-03 20:11 KST supplement supplies the first actual retained
+budget observation for Task5 fresh/r2. [Run 37119043633](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37119043633),
+read job `111191419176`, succeeded at `2026-10-03T11:17:04.8848163Z`;
+approval/execution were skipped. Its fixed producer, terminal and control
+identities match the final row above. The new JSON field
+`cells[7].current_budget_observation` records this later receipt separately;
+the original terminal-only read, missing fields and closeout limits remain
+historical evidence and are not backfilled as RESULT verification.
+
+The verified RESULT is 6069 bytes, SHA256
+`f68a695c50e26caa4f37984e190216c1bb5eb0553dd4c5c778edc3be521efdd1`.
+The JSON retains its result/prepared fingerprints and registered configuration
+hash. Observation SHA256 is
+`02892ab81228f52767087c2196be84bbeb2f7c399fdd600f773b4f4b74fbce36`;
+the unchanged projector is
+`96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815`.
+
+| Stored field | Recorded value | Measurement boundary |
+| --- | ---: | --- |
+| `total_seconds` | 10800 | Registered cumulative budget in seconds |
+| `started_unix` | 1791009579.9246106 | Stored Unix timestamp in seconds |
+| `expires_unix` | 1791020379.9246106 | Stored Unix timestamp in seconds |
+| `remaining_seconds` | 10724.012340545654 | Zero-clamped remaining time at the stored snapshot |
+| `wait_seconds` | 0.0 | Recorded retry backoff only, in seconds |
+| `attempts_admitted` | 1 | Recorded native admissions, not model calls |
+| `native_resumes` | 0 | Confirmed native bindings, not HTTP requests |
+
+The snapshot's `missing` object is empty. Remaining time is not zero, but this
+does not identify the final failure cause, uncapped elapsed time or an absence
+of provider errors. RESULT-body verification is true; overall payload, ledger
+and deliverable-body verification and grading readiness remain false. The
+source outcome remains failed/exit 1/cleanup true/grade null, with 1 recorded
+model call and known partial USD 0.13489. Detailed failure/recovery exposure
+and independent provider/input/CAS authentication remain unavailable. Observer
+`writer_acknowledgment=not_established` is still distinct from producer acknowledgment.
+
+This consumed read was not queried or replayed here, and no raw payload was
+supplied. The paired Task5 keep/r2 budget remains unobserved. One stored snapshot
+does not complete the card's realized budget, wait, admission, resume and
+attribution criteria; the finite execution/accounting closeout is unchanged.
+
 ## Limits and finite closeout
 
 Post-selection, two repetitions, fixed order and service variation, evolving
-source wrappers, unavailable realized budget/recovery detail and uncalibrated
+source wrappers, limited realized budget evidence, unavailable recovery detail and uncalibrated
 judging prevent a causal retention or general model-performance claim. The
 public report and JSON disclose only task IDs, control identities and aggregate
 measurements; private metadata, secret dataset names, original task bodies and

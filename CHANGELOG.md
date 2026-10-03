@@ -13,58 +13,87 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add a closed, optional retained-budget observation for the already failed
-  final Task5 fresh/r2 cell. The existing reader verifies its fixed terminal
-  `4fdd9c2e3da1dbd7ef30d335d5fe378a4cddc84c`, claim/manifest/object identities
-  and immutable history, then reads only the declared RESULT at
-  `ddf15bff98aede8c714c5c3611ff30ee3e09afd9`. RESULT hash, fingerprint,
-  task/source/configuration checks precede the unchanged `_budget_snapshot`
-  projection. Missing fields retain explicit null reasons; recorded zeros do
-  not become missing values. No ledger or deliverable body is read. The opt-in
-  `observe_budget` route reuses the terminal-reader steps, excludes every other
-  mode and paid job, and preserves the command's 180-second/four-minute-step
-  bounds, jobs, permissions, secrets and experiment settings. Only necessary
-  current executable pins and directly coupled test expectations migrate;
-  historical producer/grading evidence and report artifacts remain unchanged.
+- Extend the existing optional retained-budget path to exactly Task5 keep/r2
+  alongside the accepted fresh/r2 profile. KEEP binds failed inference terminal
+  `3be1c0b892a199fdfccf3d5c4379d40c782119e5` and output
+  `3984e404ba59e0b7f356ca5d0426b57d4477ea50`, with its exact source/run/job/request,
+  control/history/authority pins, sealed KEEP/repetition-2 configuration and
+  distinct private marker. The shared verifier still reads only RESULT after
+  controls, checks size/hash/fingerprint/task/source/configuration and uses the
+  unchanged `_budget_snapshot`. Missing fields retain explicit reasons; zeros
+  are not missing. No ledger/deliverable body or raw payload/error is published.
+  Fresh and ordinary read behavior remain intact. Other profiles/modes and paid
+  jobs stay closed; eight execution bindings, three jobs, permissions, secrets,
+  concurrency, 180-second/four-minute read bounds and experiment settings are
+  unchanged. Only current reader/workflow/observer pins and coupled assertions migrate.
 
-  Implementation HEAD `64bcb21c8d6ad04b6999dfb214576397d89bfb7d` is unchanged.
-  The original token-free launcher exited 127 at line 5 because `/usr/bin/time`
-  is absent; log-capture exit was 0. Python 3.10.12 / pytest 9.1.1 passed the
-  prerequisite check, but pytest, collection, offline fixtures, the timeout
-  command and every selector assertion were unreached by that attempt. It has
-  no pytest result or duration. Original log SHA256
-  `4406ff374092e54cb7d6383d83fea174581b0770e6b4a35ecfb03a369cc7ecd5` is preserved.
+  Record the leader's actual fresh/r2 RESULT-only receipt separately in the
+  [report](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md) and
+  [JSON](tasks/codex_budget_pilot/retention_diagnostic_readout.json), without
+  backfilling terminal-only evidence. Observer `37119043633` / read `111191419176`
+  succeeded at `2026-10-03T11:17:04.8848163Z`, approval/execution skipped;
+  observation SHA256 `02892ab81228f52767087c2196be84bbeb2f7c399fdd600f773b4f4b74fbce36`.
+  Its verified 6069-byte RESULT records total 10800 seconds, started
+  1791009579.9246106, expires 1791020379.9246106, remaining 10724.012340545654,
+  retry-backoff wait 0.0 seconds, 1 admission, 0 confirmed native resumes and
+  no missing fields. Nonzero remaining time does not identify cause or uncapped
+  elapsed time; admissions/resumes are not model/HTTP calls. RESULT-only
+  verification is true, overall payload/ledger/deliverable verification and
+  grading readiness false. Failed/exit 1/cleanup true/grade null and 1 call /
+  partial USD 0.13489 remain unchanged. Detailed failure/recovery and independent
+  provider/input/CAS authentication remain unavailable. Observer acknowledgment
+  stays `not_established`. No worker live read or replay occurred.
 
-  The leader's 2026-10-03 19:09 KST steer authorized the first actual selector
-  invocation after removing only the timing wrapper and its format arguments
-  from the test command. The prerequisite probe was not repeated. At tested
-  checkout `db48f5ec661ad20bbf422ab4bc00a4bd564b715c`, all non-record bytes
-  match the pinned implementation. The selector passed 1 test in 9.50s, with
-  test/log-capture exits 0 and no timeout under the unchanged 180-second guard.
-  The 9.50s is pytest's duration; outer elapsed time is unavailable. It reached
-  fixed-control/RESULT-only verification, identity/history/snapshot refusals,
-  null/zero distinctions, private marker/readback/no-replay, old controls-only
-  behavior and 576 mode cases with zero network/model/writer/child/paid effects.
-  Corrected log SHA256
-  `2cee50d40a6fdbdb28566c27f344f94e17cedfab7f0be4030d3898de25198528`;
-  the [current task record](tasks/LATEST_TASK_RESULT/README.md) retains both
-  exact commands, separate boundaries, script/status hashes and current pins.
+  One new token-free selector passed at tested implementation
+  `417db02a9433efe312202a4da6535979eeb7deda`: 1 passed in 7.26s, 576 mode cases,
+  test/log-capture exits 0, no timeout, zero network/model/writer/child/paid
+  effects. It used the established absolute py310 runner and 180-second guard,
+  without `/usr/bin/time` or prerequisite probes. It reached KEEP binding/config/
+  tamper refusals, controls-first RESULT-only reads, missing/null/zero semantics,
+  private marker/no-replay, fresh/control-only/paid isolation and current pins.
+  Log SHA256 `c5065d19a0a3d042ed98d13cb268a243b3cef582168adcb012b368e93f200254`;
+  the [task record](tasks/LATEST_TASK_RESULT/README.md) retains the exact command,
+  script/status hashes and current-pin map. Current JSON SHA256 is
+  `394d96519362164bc5edd5994600fffe349b1273a491761200c1ee266cdcfd4b`.
+  All prior JSON fields and original-pilot bytes were confirmed unchanged.
 
-  The 2026-10-03 18:38 KST APPROVE-WITH-CONDITIONS decision is a direct leader
-  pre-edit decision, not a returned memo-agent verdict. Accepted report HEAD
-  `47978bdcd8b6026f9bd35ff24e94e8771a672544`, review
-  [5399909431](https://github.com/hyeonsangjeon/gdpval-realworks/pull/730#pullrequestreview-5399909431)
-  and all nine applicable checks are prior evidence only. All eight outcomes,
-  164 recorded inference calls / known partial USD 5.206594, separate grading,
-  original proof failures and three failed memo streams remain unchanged.
-  The implementation's `experiment-design` use preserved the measurement/
-  registration boundary; this continuation applies only `experiment-report-en`
-  then protected `im-not-ai-en` to changed record passages. Final immutable-source
-  review, same-HEAD CI, delivery and separate live-read authorization remain.
-  No realized budget fields were observed. Budget/wait/admission/resume and
-  attribution criteria are still open; the whole card is not complete. The
-  GHCP Sol VM card remains blocked without a KVM/image handoff, with no recheck
-  or substitute runtime. No live operation, new experiment or pilot replay.
+  Correct the six missed coupled test expectations identified by the leader at
+  `a67911109c3a768b74f068520f2a72338e04001c`: the budget predicate now expects
+  exactly KEEP/r2 and FRESH/r2, including the central CI-read test's admission
+  pair and fixed terminal-revision shell cases. This was a static mismatch,
+  not an observed CI failure. One authorized CI-read selector passed at test-only
+  HEAD `1e775e4338046632a4f66f387eb4fccad4b0f699`: 1 passed in 5.29s, 576 mode
+  cases, test/log-capture exits 0, no timeout and zero live effects under the
+  existing token-free/offline guards and 180-second bound. Log SHA256
+  `3b71391b4887693392963a829ac3bae160f594890a08edc6d136ca66b58e0783`;
+  the task record retains its exact command and source/script/status hashes.
+  The other five corrected test files were not executed. The 7.26s proof above
+  was not rerun. Runtime, workflow, producer, projector, current pins, report/JSON,
+  fixed tuples and observed values stay byte-identical to the cited correction
+  base. Only `experiment-report-en` then protected `im-not-ai-en` apply to this
+  continuation's record edits. Final new-HEAD review and same-HEAD CI remain
+  leader-owned; no live authority is added.
+
+  Accepted PR731 HEAD `c84c406b8c41a6998fc6311b675b8b8708f1f026`, review
+  [5400379821](https://github.com/hyeonsangjeon/gdpval-realworks/pull/731#pullrequestreview-5400379821)
+  and all ten checks remain prior evidence. Its launcher-127 failure preceded
+  timeout/pytest/fixtures/assertions, log
+  `4406ff374092e54cb7d6383d83fea174581b0770e6b4a35ecfb03a369cc7ecd5`.
+  Its separate first actual 9.50s / 576-case pass at
+  `db48f5ec661ad20bbf422ab4bc00a4bd564b715c`, unchanged implementation
+  `64bcb21c8d6ad04b6999dfb214576397d89bfb7d`, retains log
+  `2cee50d40a6fdbdb28566c27f344f94e17cedfab7f0be4030d3898de25198528` and was not rerun.
+  Eight outcomes, 164 calls / known partial inference USD 5.206594, separate
+  null/price-missing grade costs and earlier failed proofs/memo streams remain
+  unchanged. The 2026-10-03 20:11 KST APPROVE-WITH-CONDITIONS is a direct leader
+  decision, not an agent verdict. `experiment-design` preserved only the
+  measurement boundary; `experiment-report-en` then protected `im-not-ai-en`
+  preserved evidence and uncertainty in changed passages. The paired KEEP
+  budget is still unobserved. Final immutable-HEAD review, same-HEAD CI, delivery
+  and separate live-read direction remain required. Budget/wait/admission/resume
+  and attribution criteria are open; the whole card is not complete. The GHCP
+  Sol VM card stays blocked without a KVM/image handoff, with no recheck or
+  substitute runtime. No live operation or new experiment.
 
 - Close the eight-cell retention diagnostic's finite execution and available
   accounting with a [result-first report](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)

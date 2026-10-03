@@ -50,7 +50,7 @@ def _assert_retention_mode_routes():
         '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]',
         '[[ "$OBSERVE_BUDGET_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]',
-        '[[ "$OBSERVE_BUDGET_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID + ' ]]',
+        '[[ "$OBSERVE_BUDGET_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID + ' ) ]]',
         '[[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
@@ -85,7 +85,8 @@ def _assert_retention_mode_routes():
                 and not (terminal and (preparing or executing or observing or reading))
                 and not (observing and (preparing or executing))
                 and not (budget and (preparing or executing or observing or reading or terminal))
-                and (not budget or selected == adapter.controller.TASK5_FRESH_R2_CELL_ID)
+                and (not budget or selected in (adapter.controller.TASK5_FRESH_R2_CELL_ID,
+                                               adapter.controller.TASK5_KEEP_R2_CELL_ID))
                 and (selected == adapter.controller.FIRST_CELL_ID or not observing)
                 and (selected in read_cells[1:] or not terminal)
                 and (not reading or selected in read_cells))
@@ -152,8 +153,9 @@ def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
     steps = workflow["jobs"][adapter.PREPARE_JOB]["steps"]
     # Existing read routes stay closed; the fixed keep/r2 reader joins them.
     read_only = "inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
-    terminal_only = ("((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && inputs.cell_id == '"
-        + reader.TASK5_FRESH_R2.expectation.cell_id + "')) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator")
+    terminal_only = ("((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && (inputs.cell_id == '"
+        + reader.TASK5_FRESH_R2.expectation.cell_id + "' || inputs.cell_id == '" + reader.TASK5_KEEP_R2.expectation.cell_id
+        + "'))) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator")
     fixed_fresh = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'"
                                        for binding in (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2,
                                                        reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1,
