@@ -155,6 +155,40 @@
       "read": {"mode": "observe_terminal", "source_sha": "eb0f40016aa14cb8b1afa8b3590d6c437e8f97e3", "run_id": "37049700859", "job_id": 110979716273, "receipt_utc": "2026-10-02T18:48:52.3056439Z", "marker_sha256": "429158a5eca5931e2265faa07ff78616b009f5bf83fc071b4734c1d29d3728ed", "retained_authority_sha256": "e121ccf6ed4213cbfee29ba5eda4d7e8dd25b37ba372a602661d2aa88b762216", "payload_bodies_verified": false, "successful_intake_established": false, "grading_input_ready": false, "writer_acknowledgment": "not_established", "approval_execution_skipped": null, "job_status_missing_reason": "not_explicit_in_retained_observation_summary"},
       "declared_roles": {"results": 1, "ledgers": 1, "deliverables": 0, "objects_including_manifest": 3},
       "supplied_materialized_grader_source_sha256": "a820cd9e3a8e74e684aa65a710e5a7b0649ce0435fe425a070a0eb6d8b30145e",
+      "current_budget_observation": {
+        "source_addendum": "Project5 leader order 2026-10-04 00:19 KST; actual RESULT-only receipt supplied by the leader, not a worker live read",
+        "historical_scope": "read_terminal_details_and_original_limits_preserved_as_terminal_only_evidence_not_backfilled",
+        "mode": "observe_budget", "source_sha": "3d43a674e47d700dd874680c053a91bc1807b693",
+        "run_id": "37131238762", "job_id": 111226607598, "receipt_utc": "2026-10-03T14:55:40.4040030Z",
+        "outcome": "budget_observation_verified", "approval_execution_skipped": true,
+        "marker_sha256": "883f64c6f1c8190c9fde011ba11d33b436438b6ea9c62577d6099f41a398d5c3",
+        "historical_reader_sha256": "dd23824360e03f415feb5c7d247024ac7d67300c4ed7f2120e0eb2c9d6e47eb9",
+        "budget_projector_sha256": "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815",
+        "terminal_commit": "94628d12162da2e00cace216fdda5ce41f57e47f", "output_commit": "70a69c818be5c7d751a0481808dbba86aa983b19",
+        "retained_authority_sha256": "e121ccf6ed4213cbfee29ba5eda4d7e8dd25b37ba372a602661d2aa88b762216",
+        "supplied_request_binding": {
+          "original_input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+          "materialized_grader_source_sha256": "a820cd9e3a8e74e684aa65a710e5a7b0649ce0435fe425a070a0eb6d8b30145e"
+        },
+        "result": {
+          "sha256": "eda9982c2812a5d4e1519c952f65438d1395b5526d07515fcf066dc604a1579a", "size": 7635,
+          "result_fingerprint": "591f1f7f8e1a55aa82b7fcf759d3fe8edf51e5ccf199b7e082294605165fb79a",
+          "recorded_prepared_fingerprint": "73ddcf56510ac10a676d58b6b49c5aef61efbce56f1a03795f006748bc84e575",
+          "registered_config_sha256": "d67cbfeb3a26716d445b36a4466d5dc55559652381db71056aaf44a50a43e2eb"
+        },
+        "inference_budget_snapshot": {"total_seconds": 10800, "started_unix": 1790959571.661407, "expires_unix": 1790970371.661407, "remaining_seconds": 4909.906562328339, "wait_seconds": 3781.06050658226, "attempts_admitted": 18, "native_resumes": 0, "missing": {}},
+        "status": "failed", "exit_code": 1, "cleanup_confirmed": true, "grade": null,
+        "result_body_verified": true, "payload_verification_scope": "inference_result_only", "payload_bodies_verified": false,
+        "ledger_body_verified": false, "deliverable_bodies_verified": false, "grading_input_ready": false,
+        "writer_acknowledgment": "not_established", "recorded_publication_acknowledged": true,
+        "fresh_origin_authentication": false, "prepared_input_independently_verified": false, "git_parent_cas_independently_verified": false,
+        "unavailable": {
+          "detailed_failure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"},
+          "recovery_exposure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"}
+        },
+        "measurement_limits": ["remaining_seconds_is_zero_clamped_not_uncapped_elapsed_or_failure_cause", "wait_seconds_is_retry_backoff_only", "admissions_and_confirmed_native_resumes_are_not_model_or_HTTP_calls", "snapshot_does_not_establish_absence_of_provider_errors_or_unrecorded_recovery"],
+        "live_read_repeated_here": false, "replay_authorized": false
+      },
       "inference": {"model_calls": 18, "known_cost_usd": "2.576093", "estimated_cost_usd": null, "runtime_cost_usd": null, "http_request_count": null, "invoice_complete": false, "cost_status": "partial", "missing_reasons": ["call_reachability_unknown"], "usage": {"input_tokens": 1487642, "cached_input_tokens": 1080192, "output_tokens": 85828, "reasoning_tokens": 62263}, "recorded_components": [{"role": "infrastructure_retry", "model_calls": 17, "known_cost_usd": "2.517018"}, {"role": "generation", "model_calls": 1, "known_cost_usd": "0.059075"}]},
       "terminal_details": {"detailed_failure": null, "budget": null, "recovery_exposure": null, "missing_reason": "not_recorded_in_terminal_controls"},
       "grade": null, "grade_missing_reason": "failed_no_successful_intake_or_grade"
@@ -173,6 +207,40 @@
       "declared_roles": {"results": 1, "ledgers": 1, "deliverables": 0, "objects_including_manifest": 3},
       "supplied_materialized_grader_source_sha256": "75f38c05e5c348e481e54f4c0b2000772c2414d7bae7519b1f2a38d92e1e0dc5",
       "fixed_reader_supplied_grader_sha256": null, "fixed_reader_supplied_grader_missing_reason": "not_supplied_to_PR725_reader_task_later_preparation_evidence_does_not_backfill_it",
+      "current_budget_observation": {
+        "source_addendum": "Project5 leader order 2026-10-04 00:19 KST; actual RESULT-only receipt supplied by the leader, not a worker live read",
+        "historical_scope": "read_terminal_details_and_original_limits_preserved_as_terminal_only_evidence_not_backfilled",
+        "mode": "observe_budget", "source_sha": "3d43a674e47d700dd874680c053a91bc1807b693",
+        "run_id": "37131339406", "job_id": 111227047774, "receipt_utc": "2026-10-03T14:58:10.8491476Z",
+        "outcome": "budget_observation_verified", "approval_execution_skipped": true,
+        "marker_sha256": "a55103477c3be7571e736546b76d338dda6cd12ba908b569af65aef3b7e9febc",
+        "historical_reader_sha256": "dd23824360e03f415feb5c7d247024ac7d67300c4ed7f2120e0eb2c9d6e47eb9",
+        "budget_projector_sha256": "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815",
+        "terminal_commit": "33278d9c26e8c8e8cfe68649e482e01f684d7705", "output_commit": "5e56a906c4bd7a3510087ffc2efe392637e22be9",
+        "retained_authority_sha256": "ff1a41b9062bca8d743ad15968aab753d5fad09a08af168e5413902b29410f11",
+        "supplied_request_binding": {
+          "original_input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+          "materialized_grader_source_sha256": null
+        },
+        "result": {
+          "sha256": "137dec5dc2c4c2c0614ba253732bc6ebc0388ac9d1d511908f0d618ed7c09a54", "size": 7593,
+          "result_fingerprint": "689cd06e107143d05f35f514d6575fb0978d7f044ebaaf9c92f5e7b47015280a",
+          "recorded_prepared_fingerprint": "fec4fe641e3ef97ebb88a8c92a3663b884c550b756455f05d8d9feeaef8d9625",
+          "registered_config_sha256": "4c75e2f0d8eb5a197fc44c2dc71b1abc166334c350791224ab5e3abc1a017cc3"
+        },
+        "inference_budget_snapshot": {"total_seconds": 10800, "started_unix": 1790976592.4457858, "expires_unix": 1790987392.4457858, "remaining_seconds": 7373.157982349396, "wait_seconds": 2580.858815908432, "attempts_admitted": 13, "native_resumes": 12, "missing": {}},
+        "status": "failed", "exit_code": 1, "cleanup_confirmed": true, "grade": null,
+        "result_body_verified": true, "payload_verification_scope": "inference_result_only", "payload_bodies_verified": false,
+        "ledger_body_verified": false, "deliverable_bodies_verified": false, "grading_input_ready": false,
+        "writer_acknowledgment": "not_established", "recorded_publication_acknowledged": true,
+        "fresh_origin_authentication": false, "prepared_input_independently_verified": false, "git_parent_cas_independently_verified": false,
+        "unavailable": {
+          "detailed_failure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"},
+          "recovery_exposure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"}
+        },
+        "measurement_limits": ["remaining_seconds_is_zero_clamped_not_uncapped_elapsed_or_failure_cause", "wait_seconds_is_retry_backoff_only", "admissions_and_confirmed_native_resumes_are_not_model_or_HTTP_calls", "snapshot_does_not_establish_absence_of_provider_errors_or_unrecorded_recovery"],
+        "live_read_repeated_here": false, "replay_authorized": false
+      },
       "inference": {"model_calls": 13, "known_cost_usd": "0.413364", "estimated_cost_usd": null, "runtime_cost_usd": null, "http_request_count": null, "invoice_complete": false, "cost_status": "partial", "missing_reasons": ["call_reachability_unknown"], "usage": {"input_tokens": 190746, "cached_input_tokens": 121216, "output_tokens": 13949, "reasoning_tokens": 12251}, "recorded_components": [{"role": "infrastructure_retry", "model_calls": 12, "known_cost_usd": "0.252019"}, {"role": "generation", "model_calls": 1, "known_cost_usd": "0.161345"}]},
       "terminal_details": {"detailed_failure": null, "budget": null, "recovery_exposure": null, "missing_reason": "not_recorded_in_terminal_controls"},
       "grade": null, "grade_missing_reason": "failed_no_successful_intake_or_grade"

@@ -179,6 +179,35 @@ TASK5_KEEP_R1_BUDGET_CONTROLS = {
 TASK5_KEEP_R1_CONFIG_SHA256 = "4c75e2f0d8eb5a197fc44c2dc71b1abc166334c350791224ab5e3abc1a017cc3"
 TASK5_KEEP_R1_BUDGET_FORMAT = "retention-task5-keep-r1-budget-observation-v1"
 TASK5_KEEP_R1_BUDGET_MARKER = "retention-task5-keep-r1-budget-observation.json"
+# These older records have no separately supplied authority digest. Their
+# exact terminal bytes bind that authority; the terminal verifier still checks
+# its full schema, request, run and execution job before any RESULT read.
+FRESH_R1_BUDGET_CONTROLS = {
+    "terminal_commit": "45f54eb0a24aee5d40dd41b276ff5df777f06d73",
+    "terminal_identity": {"sha256": "2fa29205d842956fcbd857e4b1e1878af4551ebddc7573e480d7e17d01b63faa", "size": 4206},
+    "claim_commit": "4bff20bdae3cddb28519eadec9f032af5b6843d5",
+    "claim_identity": {"sha256": "0ed2ab8979fd918218415ee08eee5ad99d9d3a9e08b41695f0b30e2afd0cc1c4", "size": 1484},
+    "output_commit": "3b27e0a7e9d05c9ecfb400040bd8c025bc7f2484",
+    "output_manifest_identity": {"sha256": "f48abaab90af661811b257d709a0934819ef057854976694a543e4ed76cd3380", "size": 2125},
+    "output_objects_sha256": "1ac663171c092a21edd0287e2749daab3e216dcbee1efa14b5ea70eab4853c1a",
+    "status": "failed", "exit_code": 1, "cleanup_confirmed": True,
+}
+FRESH_R1_CONFIG_SHA256 = "5993b6d0c94ef1d56e808fab07941daed6e77d3f7adf7e055d9329043af63e02"
+FRESH_R1_BUDGET_FORMAT = "retention-task4-fresh-r1-budget-observation-v1"
+FRESH_R1_BUDGET_MARKER = "retention-task4-fresh-r1-budget-observation.json"
+FRESH_R2_BUDGET_CONTROLS = {
+    "terminal_commit": "1d5133590911f3704fc2a65279d4b64bee77c1d6",
+    "terminal_identity": {"sha256": "c1ab656b3ee0556aa5934dc976dfa6086ac59f4f3e2abf936a600a9fcb7fda2b", "size": 4200},
+    "claim_commit": "98724c1fc83af2b45f65533648162692ba8d12b0",
+    "claim_identity": {"sha256": "d2718f7635870efbb3edefaf7d38ed20691fed40c1c39389b93e53947a6ceeb4", "size": 1889},
+    "output_commit": "46fff9e31bc844a55ced352926aba49479869624",
+    "output_manifest_identity": {"sha256": "f44c09d86d48d59579ff6ae3355633740b5d2888c7b38e33cd6c132bb45cf882", "size": 2119},
+    "output_objects_sha256": "029c0b29cd7e3b593fb28ec0dfe4a6c3d6999b8867f980496cde1da335d18c3a",
+    "status": "failed", "exit_code": 1, "cleanup_confirmed": True,
+}
+FRESH_R2_CONFIG_SHA256 = "7148453eb16dd8a0c6737bffe2fc5df42319dbb1a11afba2cdc2b90b649f305d"
+FRESH_R2_BUDGET_FORMAT = "retention-task4-fresh-r2-budget-observation-v1"
+FRESH_R2_BUDGET_MARKER = "retention-task4-fresh-r2-budget-observation.json"
 BUDGET_PROJECTOR_PIN = (Path(__file__).with_name("codex_budget_pilot_grade_readout.py"),
                         "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815")
 BUDGET_FORMAT = "retention-task5-fresh-r2-budget-observation-v1"
@@ -599,11 +628,12 @@ def _budget_result(data, summary, plan, cell, roles, projector):
 def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, expected_reader_sha256: str,
                      terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None,
                      binding=FRESH_R1, include_budget=False) -> dict:
-    """Controls only by default; four fixed Task5 opt-ins project their declared RESULT."""
+    """Controls only by default; six fixed failed-cell opt-ins project their RESULT."""
     require(type(include_budget) is bool, "explicit_budget_observation_required")
     if include_budget:
         require(binding is TASK5_FRESH_R2 or binding is TASK5_KEEP_R2
-                or binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1, "fixed_budget_observation_required")
+                or binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1
+                or binding is FRESH_R1 or binding is FRESH_R2, "fixed_budget_observation_required")
         if binding is TASK5_KEEP_R2:
             budget_controls, config_sha256 = TASK5_KEEP_R2_BUDGET_CONTROLS, TASK5_KEEP_R2_CONFIG_SHA256
             budget_format, budget_marker = TASK5_KEEP_R2_BUDGET_FORMAT, TASK5_KEEP_R2_BUDGET_MARKER
@@ -613,6 +643,12 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
         elif binding is TASK5_KEEP_R1:
             budget_controls, config_sha256 = TASK5_KEEP_R1_BUDGET_CONTROLS, TASK5_KEEP_R1_CONFIG_SHA256
             budget_format, budget_marker = TASK5_KEEP_R1_BUDGET_FORMAT, TASK5_KEEP_R1_BUDGET_MARKER
+        elif binding is FRESH_R1:
+            budget_controls, config_sha256 = FRESH_R1_BUDGET_CONTROLS, FRESH_R1_CONFIG_SHA256
+            budget_format, budget_marker = FRESH_R1_BUDGET_FORMAT, FRESH_R1_BUDGET_MARKER
+        elif binding is FRESH_R2:
+            budget_controls, config_sha256 = FRESH_R2_BUDGET_CONTROLS, FRESH_R2_CONFIG_SHA256
+            budget_format, budget_marker = FRESH_R2_BUDGET_FORMAT, FRESH_R2_BUDGET_MARKER
         else:
             budget_controls, config_sha256 = TASK5_FRESH_R2_BUDGET_CONTROLS, TASK5_FRESH_R2_CONFIG_SHA256
             budget_format, budget_marker = BUDGET_FORMAT, BUDGET_MARKER
@@ -650,6 +686,10 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
                     "output_objects_sha256": owned._digest(terminal["output_objects"]),
                     "retained_authority_sha256": owned._digest(terminal["authority"]),
                     **{key: terminal["completion"][key] for key in ("status", "exit_code", "cleanup_confirmed")}}
+                if binding is FRESH_R1 or binding is FRESH_R2:
+                    # Their complete fixed terminal identity already seals the
+                    # authority; do not invent a separately supplied digest.
+                    del fixed["retained_authority_sha256"]
                 require(owned._canonical_json(fixed) == owned._canonical_json(budget_controls)
                         and set(roles) == {intake.RESULT, intake.LEDGER} and not deliverables,
                         "fresh_budget_fixed_controls_mismatch")
