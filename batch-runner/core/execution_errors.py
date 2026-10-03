@@ -80,6 +80,24 @@ _TRANSPORT_ERROR_MARKERS = (
 )
 
 
+#: The explicit Responses reason retained in
+#: docs/run_records/exp035_run34685779030_partial/outcomes.json. Neither a
+#: configured max_tokens/max_output_tokens nor contextWindowExceeded says
+#: that an answer reached its output limit. Require the complete error phrase
+#: and a reason terminator, not an arbitrary mention or a longer code.
+_OUTPUT_LIMIT_REASON = re.compile(
+    r"\bincomplete response returned, reason: max_output_tokens(?=[ \t]*(?:,|$))",
+    re.IGNORECASE,
+)
+
+
+def _output_limit_category(message: str) -> Optional[str]:
+    # Consult only at the old unknown fallbacks; existing categories win.
+    if _OUTPUT_LIMIT_REASON.search(message):
+        return "output_limit_exceeded"
+    return None
+
+
 def _message_category(message: str) -> Optional[str]:
     lowered = message.lower()
     # First, because it is the one marker set that reliably co-occurs with
@@ -120,7 +138,7 @@ def _last_exception_category(text: str) -> Optional[str]:
     mapped = _EXCEPTION_CATEGORY.get(exception_name.lower())
     if mapped:
         return mapped
-    return _message_category(message) or "execution_error"
+    return _message_category(message) or _output_limit_category(message) or "execution_error"
 
 
 def classify_execution_error(text: Optional[str]) -> Optional[str]:
@@ -183,4 +201,4 @@ def classify_execution_error(text: Optional[str]) -> Optional[str]:
             for marker in markers
         ):
             return category
-    return "execution_error"
+    return _output_limit_category(text or "") or "execution_error"
