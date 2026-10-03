@@ -560,9 +560,7 @@ def test_task5_keep_r1_routes_and_current_pins_preserve_fixed_readers(tmp_path, 
     assert steps[9]["if"] == steps[10]["if"] == (
         "inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
     assert steps[13]["if"] == steps[14]["if"] == (
-        "((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && (inputs.cell_id == '"
-        + reader.TASK5_FRESH_R2.expectation.cell_id + "' || inputs.cell_id == '" + reader.TASK5_KEEP_R2.expectation.cell_id
-        + "'))) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
+        workflow_contract._terminal_observation_condition() + read_group)
     assert steps[13]["run"] == steps[9]["run"] + (
         'if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n'
         "  printf '%s\\n' '" + reader.BUDGET_PROJECTOR_PIN[1] + "  batch-runner/codex_budget_pilot_grade_readout.py' | sha256sum --check --status\nfi\n")

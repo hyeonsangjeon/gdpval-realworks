@@ -190,6 +190,34 @@
       "read": {"mode": "observe_terminal", "source_sha": "3c8cc5440629b0f70cc7540773dbda3014d71192", "run_id": "37095186598", "job_id": 111123558934, "receipt_utc": "2026-10-03T04:04:36.4889828Z", "marker_sha256": "b32a31a7b9aca1cc681f454e515b2405a7d9afb095f78f1d2816d1b7b5d963db", "retained_authority_sha256": "dac2226c90b36eb50084861d7bb0e582e3691021b96eaf7385e8134d773f1b03", "payload_bodies_verified": false, "successful_intake_established": false, "grading_input_ready": false, "writer_acknowledgment": "not_established", "approval_execution_skipped": true},
       "declared_roles": {"results": 1, "ledgers": 1, "deliverables": 0, "objects_including_manifest": 3},
       "supplied_materialized_grader_source_sha256": "81bfae73b21f260ffd4985d701631f53c4ee7cb67e4d1a7ff39a7563598bbc6f",
+      "current_budget_observation": {
+        "source_addendum": "Project5 leader order 2026-10-03 22:15 KST; actual RESULT-only receipt supplied by the leader, not a worker live read",
+        "historical_scope": "read_terminal_details_and_original_limits_preserved_as_terminal_only_evidence_not_backfilled",
+        "mode": "observe_budget", "run_id": "37125749122", "job_id": 111210580807,
+        "receipt_utc": "2026-10-03T13:21:06.8522139Z", "outcome": "budget_observation_verified", "approval_execution_skipped": true,
+        "marker_sha256": "eca874ea9123475d5632c08c90dc072942a296d3badb1f8923c44db48bb3b043",
+        "budget_projector_sha256": "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815",
+        "terminal_commit": "3be1c0b892a199fdfccf3d5c4379d40c782119e5", "output_commit": "3984e404ba59e0b7f356ca5d0426b57d4477ea50",
+        "retained_authority_sha256": "dac2226c90b36eb50084861d7bb0e582e3691021b96eaf7385e8134d773f1b03",
+        "result": {
+          "sha256": "d17695351a36522df6b66a1e0fe0860e90410af92c11ec157672a0750ea282ff", "size": 7619,
+          "result_fingerprint": "657c19e44d255e6a2849a4f88bb60dab5e5a5710a846cc992abaa3b4e85d2077",
+          "recorded_prepared_fingerprint": "14e9357577a916bbeb974853dbe776534082ec16f608b03b20a16e21d0d5c829",
+          "registered_config_sha256": "1bda6431161ff4d27e751b3475979f861eb875beb7d16a608c7649830f051286"
+        },
+        "inference_budget_snapshot": {"total_seconds": 10800, "started_unix": 1790987596.6290615, "expires_unix": 1790998396.6290615, "remaining_seconds": 0.0, "wait_seconds": 8742.75936126709, "attempts_admitted": 38, "native_resumes": 37, "missing": {}},
+        "status": "failed", "exit_code": 1, "cleanup_confirmed": true, "grade": null,
+        "result_body_verified": true, "payload_verification_scope": "inference_result_only", "payload_bodies_verified": false,
+        "ledger_body_verified": false, "deliverable_bodies_verified": false, "grading_input_ready": false,
+        "writer_acknowledgment": "not_established", "recorded_publication_acknowledged": true,
+        "fresh_origin_authentication": false, "prepared_input_independently_verified": false, "git_parent_cas_independently_verified": false,
+        "unavailable": {
+          "detailed_failure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"},
+          "recovery_exposure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"}
+        },
+        "measurement_limits": ["remaining_seconds_is_zero_clamped_not_uncapped_elapsed_or_failure_cause", "wait_seconds_is_retry_backoff_only", "admissions_and_confirmed_native_resumes_are_not_model_or_HTTP_calls", "snapshot_does_not_establish_absence_of_provider_errors_or_unrecorded_recovery"],
+        "live_read_repeated_here": false, "replay_authorized": false
+      },
       "inference": {"model_calls": 38, "known_cost_usd": "0.847605", "estimated_cost_usd": null, "runtime_cost_usd": null, "http_request_count": null, "invoice_complete": false, "cost_status": "partial", "missing_reasons": ["call_reachability_unknown"], "usage": {"input_tokens": 566268, "cached_input_tokens": 406400, "output_tokens": 23089, "reasoning_tokens": 17389}, "recorded_components": [{"role": "infrastructure_retry", "model_calls": 37, "known_cost_usd": "0.709292"}, {"role": "generation", "model_calls": 1, "known_cost_usd": "0.138313"}]},
       "terminal_details": {"detailed_failure": null, "budget": null, "recovery_exposure": null, "missing_reason": "not_recorded_in_terminal_controls"},
       "grade": null, "grade_missing_reason": "failed_no_successful_intake_or_grade"

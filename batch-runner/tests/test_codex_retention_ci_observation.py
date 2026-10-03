@@ -14,6 +14,30 @@ from .test_codex_retention_ci import _assert_retention_execution_workflow_contra
 from .test_codex_retention_ci_read_result import _boolean
 
 
+# Authored expectations, independent of the workflow and its budget allowlist.
+_BUDGET_CASES = (
+    (reader.TASK5_FRESH_R2.expectation.cell_id, "retention-task5-fresh-r2-budget", "4fdd9c2e3da1dbd7ef30d335d5fe378a4cddc84c"),
+    (reader.TASK5_KEEP_R2.expectation.cell_id, "retention-task5-keep-r2-budget", "3be1c0b892a199fdfccf3d5c4379d40c782119e5"),
+    (reader.TASK5_FRESH_R1.expectation.cell_id, "retention-task5-fresh-r1-budget", "94628d12162da2e00cace216fdda5ce41f57e47f"),
+    (reader.TASK5_KEEP_R1.expectation.cell_id, "retention-task5-keep-r1-budget", "33278d9c26e8c8e8cfe68649e482e01f684d7705"),
+)
+_BUDGET_CELLS = tuple(cell for cell, _, _ in _BUDGET_CASES)
+
+
+def _terminal_observation_condition():
+    return ("((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && ("
+        + " || ".join("inputs.cell_id == '" + cell + "'" for cell in _BUDGET_CELLS)
+        + "))) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator")
+
+
+def _budget_terminal_selection():
+    lines = ['if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then', '  case "$SELECTED_CELL" in']
+    for cell, namespace, terminal in _BUDGET_CASES:
+        lines += ['    ' + cell + ')', '      retention_read_namespace=' + namespace,
+                  '      retention_terminal_args=(--observe-budget --terminal-revision ' + terminal + ') ;;']
+    return "\n".join([*lines, '    *) exit 2 ;;', '  esac', 'fi', ''])
+
+
 def test_retention_execution_workflow_contract_is_shared():
     _assert_retention_execution_workflow_contract()
 
@@ -50,7 +74,7 @@ def _assert_retention_mode_routes():
         '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]',
         '[[ "$OBSERVE_BUDGET_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]',
-        '[[ "$OBSERVE_BUDGET_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID + ' ) ]]',
+        '[[ "$OBSERVE_BUDGET_ONLY" != true || ( ' + ' || '.join('"$SELECTED_CELL" == ' + cell for cell in _BUDGET_CELLS) + ' ) ]]',
         '[[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
@@ -85,8 +109,7 @@ def _assert_retention_mode_routes():
                 and not (terminal and (preparing or executing or observing or reading))
                 and not (observing and (preparing or executing))
                 and not (budget and (preparing or executing or observing or reading or terminal))
-                and (not budget or selected in (adapter.controller.TASK5_FRESH_R2_CELL_ID,
-                                               adapter.controller.TASK5_KEEP_R2_CELL_ID))
+                and (not budget or selected in _BUDGET_CELLS)
                 and (selected == adapter.controller.FIRST_CELL_ID or not observing)
                 and (selected in read_cells[1:] or not terminal)
                 and (not reading or selected in read_cells))
@@ -153,9 +176,7 @@ def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
     steps = workflow["jobs"][adapter.PREPARE_JOB]["steps"]
     # Existing read routes stay closed; the fixed keep/r2 reader joins them.
     read_only = "inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
-    terminal_only = ("((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && (inputs.cell_id == '"
-        + reader.TASK5_FRESH_R2.expectation.cell_id + "' || inputs.cell_id == '" + reader.TASK5_KEEP_R2.expectation.cell_id
-        + "'))) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator")
+    terminal_only = _terminal_observation_condition()
     fixed_fresh = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'"
                                        for binding in (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2,
                                                        reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1,

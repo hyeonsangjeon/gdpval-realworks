@@ -184,10 +184,42 @@ model call and known partial USD 0.13489. Detailed failure/recovery exposure
 and independent provider/input/CAS authentication remain unavailable. Observer
 `writer_acknowledgment=not_established` is still distinct from producer acknowledgment.
 
-This consumed read was not queried or replayed here, and no raw payload was
-supplied. The paired Task5 keep/r2 budget remains unobserved. One stored snapshot
-does not complete the card's realized budget, wait, admission, resume and
-attribution criteria; the finite execution/accounting closeout is unchanged.
+The leader's 2026-10-03 22:15 KST supplement adds the paired Task5 keep/r2
+RESULT-only observation. [Run 37125749122](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37125749122),
+read job `111210580807`, succeeded at `2026-10-03T13:21:06.8522139Z`;
+approval/execution were skipped. The fixed producer identity and control tuple
+are unchanged. `cells[6].current_budget_observation` records this later receipt
+without backfilling its terminal-only read or historical missing fields.
+
+The verified KEEP RESULT is 7619 bytes, SHA256
+`d17695351a36522df6b66a1e0fe0860e90410af92c11ec157672a0750ea282ff`.
+Its observation SHA256 is
+`eca874ea9123475d5632c08c90dc072942a296d3badb1f8923c44db48bb3b043`;
+the projector is unchanged. The JSON retains the result/prepared fingerprints
+and sealed KEEP configuration hash. Its stored total is 10800 seconds,
+`started_unix=1790987596.6290615`, `expires_unix=1790998396.6290615`,
+and `missing={}`.
+
+| Stored measurement | Task5 keep/r2 | Task5 fresh/r2 | Boundary for both points |
+| --- | ---: | ---: | --- |
+| Remaining seconds | 0.0 | 10724.012340545654 | Zero-clamped, not exact uncapped elapsed time |
+| Wait seconds | 8742.75936126709 | 0.0 | Retry backoff only |
+| Native admissions | 38 | 1 | Not model calls |
+| Confirmed native resumes | 37 | 0 | Not HTTP requests |
+
+Both source outcomes remain failed/exit 1/cleanup true/grade null; no inference
+cost or grade changed. Both receipts verify only RESULT bodies, not ledger,
+deliverables or overall payload, and neither establishes grading readiness or
+independent provider/input/CAS authentication. The stored differences do not
+identify a failure cause, absence of provider errors or a causal retention effect.
+Observer `writer_acknowledgment=not_established` remains distinct from producer
+acknowledgment.
+
+Both r2 budget observations are consumed; neither was queried or replayed here,
+and no raw payload was supplied. Task5 r1 budgets remain unobserved. These two
+stored points do not complete the card's realized budget, wait, admission,
+resume and attribution criteria; the finite execution/accounting closeout is
+unchanged.
 
 ## Limits and finite closeout
 

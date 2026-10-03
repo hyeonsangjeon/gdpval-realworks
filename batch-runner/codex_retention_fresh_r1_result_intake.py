@@ -151,6 +151,34 @@ TASK5_KEEP_R2_BUDGET_CONTROLS = {
 TASK5_KEEP_R2_CONFIG_SHA256 = "1bda6431161ff4d27e751b3475979f861eb875beb7d16a608c7649830f051286"
 TASK5_KEEP_R2_BUDGET_FORMAT = "retention-task5-keep-r2-budget-observation-v1"
 TASK5_KEEP_R2_BUDGET_MARKER = "retention-task5-keep-r2-budget-observation.json"
+TASK5_FRESH_R1_BUDGET_CONTROLS = {
+    "terminal_commit": "94628d12162da2e00cace216fdda5ce41f57e47f",
+    "terminal_identity": {"sha256": "5bc2eb37dd4ab83cd7653106166cc18d36c193eec12e2bc99b9bf429be6942cf", "size": 4188},
+    "claim_commit": "fb39a92ccbaf26f1ab698510cf0914f73b17cb0e",
+    "claim_identity": {"sha256": "6e06ae9c9e79201ec7eb28019de56ffa1d63b2cc6c8ab9569a267791733d260e", "size": 1891},
+    "output_commit": "70a69c818be5c7d751a0481808dbba86aa983b19",
+    "output_manifest_identity": {"sha256": "dff85ecf69ee2c38bbfe40280099d87ecd3989969512307671ac3e8a15e60cf4", "size": 2107},
+    "output_objects_sha256": "6c7ea668caa8cf39569a1848a025bc534bb406c46b46874ea7fdd584870a24e2",
+    "retained_authority_sha256": "e121ccf6ed4213cbfee29ba5eda4d7e8dd25b37ba372a602661d2aa88b762216",
+    "status": "failed", "exit_code": 1, "cleanup_confirmed": True,
+}
+TASK5_FRESH_R1_CONFIG_SHA256 = "d67cbfeb3a26716d445b36a4466d5dc55559652381db71056aaf44a50a43e2eb"
+TASK5_FRESH_R1_BUDGET_FORMAT = "retention-task5-fresh-r1-budget-observation-v1"
+TASK5_FRESH_R1_BUDGET_MARKER = "retention-task5-fresh-r1-budget-observation.json"
+TASK5_KEEP_R1_BUDGET_CONTROLS = {
+    "terminal_commit": "33278d9c26e8c8e8cfe68649e482e01f684d7705",
+    "terminal_identity": {"sha256": "bb9cca2f81ea6bcdf0e9c08da9192e7b012d0834b89ea0f64f33489ef9700809", "size": 4176},
+    "claim_commit": "93b30ecb08acadcede50f0c4eacab15f35450bb5",
+    "claim_identity": {"sha256": "17ed95b8bd181fa0de7b76642cc2ab67d9ee80db6673f66b1da3c1dedcc40632", "size": 1888},
+    "output_commit": "5e56a906c4bd7a3510087ffc2efe392637e22be9",
+    "output_manifest_identity": {"sha256": "b9b1a4f89151a742caf5a7b0451102e1e1857d993ec4184e6f64a211d08ce3d7", "size": 2099},
+    "output_objects_sha256": "4476d117f6cdc6c381491d622a92a24e99d490282c8c7ec72ecce132b0a8b9d7",
+    "retained_authority_sha256": "ff1a41b9062bca8d743ad15968aab753d5fad09a08af168e5413902b29410f11",
+    "status": "failed", "exit_code": 1, "cleanup_confirmed": True,
+}
+TASK5_KEEP_R1_CONFIG_SHA256 = "4c75e2f0d8eb5a197fc44c2dc71b1abc166334c350791224ab5e3abc1a017cc3"
+TASK5_KEEP_R1_BUDGET_FORMAT = "retention-task5-keep-r1-budget-observation-v1"
+TASK5_KEEP_R1_BUDGET_MARKER = "retention-task5-keep-r1-budget-observation.json"
 BUDGET_PROJECTOR_PIN = (Path(__file__).with_name("codex_budget_pilot_grade_readout.py"),
                         "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815")
 BUDGET_FORMAT = "retention-task5-fresh-r2-budget-observation-v1"
@@ -571,13 +599,20 @@ def _budget_result(data, summary, plan, cell, roles, projector):
 def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, expected_reader_sha256: str,
                      terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None,
                      binding=FRESH_R1, include_budget=False) -> dict:
-    """Controls only by default; two fixed opt-ins also project their declared RESULT."""
+    """Controls only by default; four fixed Task5 opt-ins project their declared RESULT."""
     require(type(include_budget) is bool, "explicit_budget_observation_required")
     if include_budget:
-        require(binding is TASK5_FRESH_R2 or binding is TASK5_KEEP_R2, "fixed_budget_observation_required")
+        require(binding is TASK5_FRESH_R2 or binding is TASK5_KEEP_R2
+                or binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1, "fixed_budget_observation_required")
         if binding is TASK5_KEEP_R2:
             budget_controls, config_sha256 = TASK5_KEEP_R2_BUDGET_CONTROLS, TASK5_KEEP_R2_CONFIG_SHA256
             budget_format, budget_marker = TASK5_KEEP_R2_BUDGET_FORMAT, TASK5_KEEP_R2_BUDGET_MARKER
+        elif binding is TASK5_FRESH_R1:
+            budget_controls, config_sha256 = TASK5_FRESH_R1_BUDGET_CONTROLS, TASK5_FRESH_R1_CONFIG_SHA256
+            budget_format, budget_marker = TASK5_FRESH_R1_BUDGET_FORMAT, TASK5_FRESH_R1_BUDGET_MARKER
+        elif binding is TASK5_KEEP_R1:
+            budget_controls, config_sha256 = TASK5_KEEP_R1_BUDGET_CONTROLS, TASK5_KEEP_R1_CONFIG_SHA256
+            budget_format, budget_marker = TASK5_KEEP_R1_BUDGET_FORMAT, TASK5_KEEP_R1_BUDGET_MARKER
         else:
             budget_controls, config_sha256 = TASK5_FRESH_R2_BUDGET_CONTROLS, TASK5_FRESH_R2_CONFIG_SHA256
             budget_format, budget_marker = BUDGET_FORMAT, BUDGET_MARKER

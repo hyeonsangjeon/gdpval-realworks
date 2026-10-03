@@ -117,11 +117,12 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
         "33278d9c26e8c8e8cfe68649e482e01f684d7705")
     assert binding.materialized_grader_source_sha256 == row["supplied_materialized_grader_source_sha256"]
     assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
-    assert "current_budget_observation" not in row  # KEEP budget is still unobserved.
+    assert row["current_budget_observation"]["mode"] == "observe_budget"
 
-    # A later leader-supplied receipt is separate from the original eight rows.
-    # Removing only this field must reproduce the canonical delivered JSON.
+    # Both later leader-supplied receipts are separate from the original rows.
+    # Removing only those fields must reproduce the canonical historical JSON.
     prior = deepcopy(readout)
+    prior["cells"][6].pop("current_budget_observation")
     actual = prior["cells"][7].pop("current_budget_observation")
     canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
     assert hashlib.sha256(canonical).hexdigest() == "aaea03354686ada4e716b4eb0eb24b9c1ab964d8e4e4e4210e5b960519dfdd89"
@@ -152,7 +153,8 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/REPORT.md").read_bytes()).hexdigest() == (
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
-    assert "paired Task5 keep/r2 budget remains unobserved" in report
+    assert "Both r2 budget observations are consumed" in report
+    assert "Task5 r1 budgets remain unobserved" in report
     for value in actual["inference_budget_snapshot"].values():
         if type(value) in (int, float):
             assert str(value) in report
@@ -268,9 +270,10 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
         for other_mode in ("--read", "--observe-terminal"):
             assert reader.main(["--observe-budget", other_mode], _test_api=api) == 2
             assert captured(api)["reason"] == "invalid_arguments"
-        closed = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2, reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1)
+        closed = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2)
         for index, changes in enumerate((
-            *({"binding": other} for other in (*closed, replace(binding), object(), reader.TASK5_FRESH_R2)),
+            *({"binding": other} for other in (*closed, replace(binding), object(), reader.TASK5_FRESH_R2,
+                                               reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1)),
             {"include_budget": 1}, {"expected_reader_sha256": "c" * 64},
             {"expectation": replace(binding.expectation, cell_id=reader.TASK5_FRESH_R2.expectation.cell_id)},
             {"expectation": replace(binding.expectation, source_sha="a" * 40)},
@@ -509,7 +512,7 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
         for index in (9, 10, 11, 12, 13, 14):
             expected = ((reading and selected in cells[1:]) if index in (9, 10) else
                         (reading and selected == cells[0]) if index in (11, 12) else
-                        ((terminal and selected in cells[1:]) or (budget and selected in cells[6:8])))
+                        ((terminal and selected in cells[1:]) or (budget and selected in workflow_contract._BUDGET_CELLS)))
             assert workflow_contract._boolean(steps[index]["if"], values) is expected
     preflight, step = steps[13:15]
     assert "secrets." not in preflight["run"]
@@ -526,14 +529,7 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
     assert all(hashlib.sha256((ci.ROOT / path).read_bytes()).hexdigest() == digest for digest, path in pins)
     assert step["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}", "OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
     assert step["timeout-minutes"] == 4 and jobs[ci.PREPARE_JOB]["timeout-minutes"] == 20
-    budget_case = ('if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n  case "$SELECTED_CELL" in\n'
-        '    ' + reader.TASK5_FRESH_R2.expectation.cell_id + ')\n'
-        '      retention_read_namespace=retention-task5-fresh-r2-budget\n'
-        '      retention_terminal_args=(--observe-budget --terminal-revision ' + fresh_fixed["terminal_commit"] + ') ;;\n'
-        '    ' + binding.expectation.cell_id + ')\n'
-        '      retention_read_namespace=retention-task5-keep-r2-budget\n'
-        '      retention_terminal_args=(--observe-budget --terminal-revision ' + fixed["terminal_commit"] + ') ;;\n'
-        '    *) exit 2 ;;\n  esac\nfi\n')
+    budget_case = workflow_contract._budget_terminal_selection()
     assert budget_case in step["run"] and "retention_terminal_args=(--observe-terminal --discover-terminal)" in step["run"]
     command = shlex.split(next(line for line in step["run"].replace("\\\n", "").splitlines() if line.startswith("env -u ")))
     assert command[:17] == ["env", "-u", "GITHUB_TOKEN", "-u", "GH_TOKEN", "-u", "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
