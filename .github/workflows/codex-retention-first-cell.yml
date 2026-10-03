@@ -35,7 +35,7 @@ on:
         default: false
         type: boolean
       observe_budget:
-        description: Read only a fixed Task4 FRESH, Task4 KEEP/r2 or Task5 RESULT budget after its controls; conflicts with every other mode
+        description: Read only one of the eight fixed RESULT budgets after its controls; conflicts with every other mode
         default: false
         type: boolean
 
@@ -86,7 +86,7 @@ jobs:
           [[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false ) ]]
           [[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]
           [[ "$OBSERVE_BUDGET_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]
-          [[ "$OBSERVE_BUDGET_ONLY" != true || ( "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 ) ]]
+          [[ "$OBSERVE_BUDGET_ONLY" != true || ( "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 ) ]]
           [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]
@@ -274,8 +274,10 @@ jobs:
             exit "$retention_read_status"
           fi
           exit "$retention_receipt_status"
-      - name: Bind the fixed result reader to the clean workflow checkout before credentials
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
+      - name: Bind the first-cell intake or budget facade before credentials
+        if: ((inputs.read_result && !inputs.observe_budget) || (inputs.observe_budget && !inputs.read_result)) && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
+        env:
+          OBSERVE_BUDGET_ONLY: ${{ inputs.observe_budget }}
         shell: bash
         run: |
           set -euo pipefail
@@ -286,28 +288,45 @@ jobs:
             'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
             | sha256sum --check --status
-      - name: Read the fixed retained result only; no preparation, admission or grading
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
+          if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then
+            printf '%s\n' \
+              '043100017cb1db06f74b562b5feca1a6de8e3eed99ff153645e9a33b3481d975  batch-runner/codex_retention_first_cell_budget.py' \
+              'c42c8bb3e521c10a5d48680918978a3b9269468a724cd127109f8f4898fe2e6b  batch-runner/codex_retention_first_cell.py' \
+              'c8ac9d0ec3eca0d4251c345f733009f506d366d312c5357836e6c67332a76c53  batch-runner/codex_retention_diagnostic.py' \
+              '96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815  batch-runner/codex_budget_pilot_grade_readout.py' \
+              | sha256sum --check --status
+          fi
+      - name: Read the fixed first-cell result or its budget only; never execute or grade
+        if: ((inputs.read_result && !inputs.observe_budget) || (inputs.observe_budget && !inputs.read_result)) && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
         timeout-minutes: 4
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          OBSERVE_BUDGET_ONLY: ${{ inputs.observe_budget }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
+          retention_read_namespace=retention
+          retention_first_command=(python3 batch-runner/codex_retention_result_intake.py --read --discover-terminal)
+          retention_reader_sha=df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196
+          if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then
+            retention_read_namespace=retention-first-cell-budget
+            retention_first_command=(python3 batch-runner/codex_retention_first_cell_budget.py --observe-budget --terminal-revision de50ff0aa6037c0ef6e3b713da519359abd1d08d)
+            retention_reader_sha=043100017cb1db06f74b562b5feca1a6de8e3eed99ff153645e9a33b3481d975
+          fi
           [[ -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" && -O "$RUNNER_TEMP" ]]
-          retention_result_parent="$(mktemp -d "$RUNNER_TEMP/retention-result.XXXXXXXX")"
+          retention_result_parent="$(mktemp -d "$RUNNER_TEMP/$retention_read_namespace-result.XXXXXXXX")"
           [[ -d "$retention_result_parent" && ! -L "$retention_result_parent" && -O "$retention_result_parent" ]]
           [[ "$(stat -c '%a' "$retention_result_parent")" == 700 ]]
           [[ ! -e "$retention_result_parent/payload" && ! -L "$retention_result_parent/payload" ]]
           retention_read_status=0
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_RUNTIME_TOKEN \
             timeout --signal=KILL 180s \
-            python3 batch-runner/codex_retention_result_intake.py --read --discover-terminal \
+            "${retention_first_command[@]}" \
               --expected-producer-source e355faf9a6212175a288e8473968915ffb2408d0 \
               --expected-request-sha256 ed8b51f6d80e641922013eba9e19d7d3e145d84ae15fb8d7d9509e643c975c68 \
               --cell-id 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 \
-              --expected-reader-sha256 df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196 \
+              --expected-reader-sha256 "$retention_reader_sha" \
               --output "$retention_result_parent/payload" \
               > "$retention_result_parent/receipt.json" 2> "$retention_result_parent/stderr.log" || retention_read_status=$?
           # Only the reviewed reader's safe receipt is public. Partials stay private.

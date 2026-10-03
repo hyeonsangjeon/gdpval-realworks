@@ -478,7 +478,7 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     steps = jobs[ci.PREPARE_JOB]["steps"]
     names = ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget")
     cells = (ci.controller.FIRST_CELL_ID, *(profile.expectation.cell_id for profile in fixed_readers))
-    assert len(workflow_contract._BUDGET_CELLS) == 7 and set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], cells[3], *cells[4:8]}
+    assert len(workflow_contract._BUDGET_CELLS) == 8 and set(workflow_contract._BUDGET_CELLS) == set(cells)
     for selected, flags in itertools.product((*cells, "unknown"), itertools.product((False, True), repeat=6)):
         modes = dict(zip(names, flags))
         values = {"inputs." + key: value for key, value in modes.items()}
@@ -488,8 +488,8 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
         budget = modes["observe_budget"] and sum(flags) == 1
         for index in (9, 10, 11, 12, 13, 14):
             expected = ((reading and selected in cells[1:]) if index in (9, 10) else
-                        (reading and selected == cells[0]) if index in (11, 12) else
-                        ((terminal and selected in cells[1:]) or (budget and selected in workflow_contract._BUDGET_CELLS)))
+                        ((reading or budget) and selected == cells[0]) if index in (11, 12) else
+                        ((terminal or budget) and selected in cells[1:]))
             assert workflow_contract._boolean(steps[index]["if"], values) is expected
     preflight, step = steps[13:15]
     assert preflight["env"] == {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}

@@ -8,6 +8,7 @@ import yaml
 
 import codex_retention_ci as adapter
 import codex_retention_fresh_r1_result_intake as reader
+import codex_retention_first_cell_budget as first_budget
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from .test_codex_budget_pilot import offline  # noqa: F401; unchanged live-boundary guards
 from .test_codex_retention_ci import _assert_retention_execution_workflow_contract
@@ -24,12 +25,14 @@ _BUDGET_CASES = (
     (reader.FRESH_R2.expectation.cell_id, "retention-task4-fresh-r2-budget", "1d5133590911f3704fc2a65279d4b64bee77c1d6"),
     (reader.KEEP_R2.expectation.cell_id, "retention-task4-keep-r2-budget", "e55fac5d60191167dd66688510ec0fef472e594d"),
 )
-_BUDGET_CELLS = tuple(cell for cell, _, _ in _BUDGET_CASES)
+_FIRST_BUDGET_CASE = (adapter.controller.FIRST_CELL_ID, "retention-first-cell-budget",
+                      "de50ff0aa6037c0ef6e3b713da519359abd1d08d")
+_BUDGET_CELLS = tuple(cell for cell, _, _ in (*_BUDGET_CASES, _FIRST_BUDGET_CASE))
 
 
 def _terminal_observation_condition():
     return ("((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && ("
-        + " || ".join("inputs.cell_id == '" + cell + "'" for cell in _BUDGET_CELLS)
+        + " || ".join("inputs.cell_id == '" + cell + "'" for cell, _, _ in _BUDGET_CASES)
         + "))) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator")
 
 
@@ -39,6 +42,34 @@ def _budget_terminal_selection():
         lines += ['    ' + cell + ')', '      retention_read_namespace=' + namespace,
                   '      retention_terminal_args=(--observe-budget --terminal-revision ' + terminal + ') ;;']
     return "\n".join([*lines, '    *) exit 2 ;;', '  esac', 'fi', ''])
+
+
+def _first_intake_condition():
+    return ("((inputs.read_result && !inputs.observe_budget) || (inputs.observe_budget && !inputs.read_result))"
+        " && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+        " && inputs.cell_id == '" + adapter.controller.FIRST_CELL_ID + "'")
+
+
+def _first_budget_selection():
+    return "\n".join([
+        'retention_read_namespace=retention',
+        'retention_first_command=(python3 batch-runner/codex_retention_result_intake.py --read --discover-terminal)',
+        'retention_reader_sha=df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196',
+        'if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then',
+        '  retention_read_namespace=retention-first-cell-budget',
+        '  retention_first_command=(python3 batch-runner/codex_retention_first_cell_budget.py --observe-budget --terminal-revision de50ff0aa6037c0ef6e3b713da519359abd1d08d)',
+        '  retention_reader_sha=' + first_budget.reader_identity()["module_sha256"],
+        'fi', ''])
+
+
+def _first_budget_preflight():
+    pins = (("codex_retention_first_cell_budget.py", first_budget.reader_identity()["module_sha256"]),
+        ("codex_retention_first_cell.py", "c42c8bb3e521c10a5d48680918978a3b9269468a724cd127109f8f4898fe2e6b"),
+        ("codex_retention_diagnostic.py", "c8ac9d0ec3eca0d4251c345f733009f506d366d312c5357836e6c67332a76c53"),
+        ("codex_budget_pilot_grade_readout.py", "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815"))
+    return "\n".join(['if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then', "  printf '%s\\n' \\",
+        *("    '" + digest + "  batch-runner/" + name + "' \\" for name, digest in pins),
+        '    | sha256sum --check --status', 'fi', ''])
 
 
 def test_retention_execution_workflow_contract_is_shared():
@@ -92,7 +123,7 @@ def _assert_retention_mode_routes():
              adapter.controller.TASK5_KEEP_R1_CELL_ID, adapter.controller.TASK5_KEEP_R2_CELL_ID,
              adapter.controller.TASK5_FRESH_R2_CELL_ID)
     cells = read_cells
-    assert len(_BUDGET_CELLS) == 7 and set(_BUDGET_CELLS) == {cells[1], cells[2], cells[3], *cells[4:8]}
+    assert len(_BUDGET_CELLS) == 8 and set(_BUDGET_CELLS) == set(cells)
     for selected in (*cells, "unregistered"):
         for preparing, executing, observing, reading, terminal, budget in itertools.product((False, True), repeat=6):
             values = {'"$PREPARE_REQUESTED"': preparing, '"$EXECUTE_REQUESTED"': executing,
@@ -142,7 +173,8 @@ def _assert_retention_mode_routes():
     assert "retention-task5-keep-r1-host" in execute["steps"][-1]["run"]
     assert "retention-task5-keep-r2-host" in execute["steps"][-1]["run"]
     assert "retention-task5-fresh-r2-host" in execute["steps"][-1]["run"]
-    assert "codex_retention_result_intake.py --read --discover-terminal" in prepare["steps"][12]["run"]
+    assert _first_budget_selection() in prepare["steps"][12]["run"]
+    assert prepare["steps"][11]["if"] == prepare["steps"][12]["if"] == _first_intake_condition()
     modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
     prepared = "needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''"
     assert approve["needs"] == adapter.PREPARE_JOB and approve["if"] == modes + " && " + prepared
@@ -187,7 +219,7 @@ def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
                                                        reader.TASK5_KEEP_R2, reader.TASK5_FRESH_R2)) + ")"
     assert steps[9]["if"] == steps[10]["if"] == read_only + fixed_fresh
     assert steps[13]["if"] == steps[14]["if"] == terminal_only + fixed_fresh
-    assert steps[11]["if"] == steps[12]["if"] == read_only + " && inputs.cell_id == '" + adapter.controller.FIRST_CELL_ID + "'"
+    assert steps[11]["if"] == steps[12]["if"] == _first_intake_condition()
     identity = reader.reader_identity(binding=reader.KEEP_R2)
     expected_hashes = {
         "codex_retention_fresh_r1_result_intake.py": identity["module_sha256"],
