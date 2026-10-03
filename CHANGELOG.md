@@ -13,75 +13,136 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add the closed model-free `TASK5_KEEP_R2` reader and existing read/terminal
-  routes for the exact ordinal 6 / KEEP / repetition 2 cell. Its single offline
-  selector passed at `2f58256bc6aabc345f46c37e8418b1f5f7a188d6`: 1 collected /
-  1 passed in 17.12s, invocation exit 0, log-capture exit 0, no timeout within
-  180 seconds. The proof reached successful result/ledger/deliverable intake,
-  failed/stopped three-control-only observation, wrong identity/history/source
-  refusals, marker readback/no-clobber, old defaults and 288 mode cases with zero
-  forbidden effects or synthetic commits. This is synthetic reader proof, not
-  live inference completion, grading or read authorization. Log
+- Add only registered Task5 fresh/r2, ordinal 7 / repetition 2,
+  `0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2`, as the
+  eighth exact controller/admission/adapter binding. Its single offline selector
+  passed at `7031b4784d76b1ebfcf270f7df96b5c1ea153e2a`: 1 collected / 1 passed
+  in 48.22s, invocation exit 0, log-capture exit 0, no timeout within 180 seconds.
+  The proof reached packet/staging, exact predecessor/current-parent CAS,
+  guarded own-cell FRESH reset with settled accounting and cumulative time
+  preserved, child completion, terminal acknowledgment, reconciliation,
+  lost-ack/no-replay, timeout/cleanup and 288 routing cases. This is synthetic
+  lifecycle proof, not a live final-cell result or execution authority. Log
+  `/tmp/task5-fresh-r2-proof-20261003-1330.VUW5GW/pytest.log`, SHA256
+  `c5da3147c8158879d011d8cc04090f8ea63833f2137e9c7bb819a9c7580717f1`.
+  The [current task record](tasks/LATEST_TASK_RESULT/README.md) gives the exact
+  command, CPython 3.10.12 / pytest 9.1.1 prerequisite, status log, reached
+  boundaries and complete current-pin mapping. No old selector, broad suite,
+  collection probe, install, sleep or second invocation ran.
+
+  Work began in new clean branch/worktree
+  `codex-retention-task5-fresh-r2-20261003-1330` from exact main
+  `3c8cc5440629b0f70cc7540773dbda3014d71192`; the one duplicate-PR inspection
+  found none. All prior worktrees and `wip/local-main-preserved-20260719` remain.
+  The leader supplied accepted PR727 reader HEAD
+  `0a2b716824cfe1b1d39b85806f5043e81c8ee837`, owner review
+  [5398479057](https://github.com/hyeonsangjeon/gdpval-realworks/pull/727#pullrequestreview-5398479057)
+  and all 10 checks. Its 17.12s proof was reused without rerunning or reviewing
+  that delivered unit. It does not approve this new final-cell source.
+
+  The separate Project5 leader/AI systems architect supplied a new direct
+  `APPROVE-WITH-CONDITIONS` pre-edit decision on 2026-10-03 at 13:30 KST for
+  this final closed extension. The extreme-reasoner checklist decision substitutes
+  for unavailable memo transport only within this scope; it is neither a returned
+  subagent verdict nor reuse of the earlier reader decision. Exact failed-parent
+  controls precede one-use CAS, class-cell pairing remains closed, and own-cell
+  FRESH cleanup/reset preserves settled receipts and the same clock. No standing
+  rule, final source/CI gate or live gate is waived. No old stream was retried.
+
+  The new adapter reuses explicit `reader.TASK5_KEEP_R2` controls-only predecessor
+  verification, the owned lifecycle and shared publication helpers. It compares
+  the full fixed failed-inference tuple and immutable history, then requires
+  actual inference-branch parent equality and namespace absence before CAS.
+  The distinct packet is `batch-runner/workspace/retention-ci-task5-fresh-r2`;
+  stage/host/remote namespaces use `retention-task5-fresh-r2`. Older entrypoints,
+  unknown/cross-class identities and Task4/Task5 cross-paths remain refused.
+  FRESH never imports predecessor state or clears a different cell's workspace.
+  GPT-5.4 / direct-v1 / xhigh, SDK/CLI 0.147.0, mechanical B/no C, one slot,
+  its own 10800-second cumulative clock including waits/recovery/downtime, and
+  the 1800-second native-turn wait remain fixed. That wait is not an all-in
+  attempt ceiling; no count or automatic money cutoff was added.
+
+  Only execution support grows to eight cells. The existing seven result-reader
+  and six terminal-observer allowlists, three jobs, permissions, secrets and
+  concurrency remain unchanged. No final-cell result reader is added before
+  its future producer identity exists. Read modes still cannot enable paid
+  approval/execution, including with spurious nonempty request outputs. No
+  runtime, model, input, rubric, prompt, dependency or experimental axis changed.
+  Current executable hashes migrate only for the new adapter
+  `6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd`, controller
+  `c42c8bb3e521c10a5d48680918978a3b9269468a724cd127109f8f4898fe2e6b`, shared
+  publication helper `75a183f632df17a16f66df4745e01b696f1538b4285f3f11e51fc784c92c15c1`,
+  reader `5cfd55c60b29d0268230044ad94dd9c7bf3c0de0b9d8bc5d9e99559a2c900e55`,
+  observer `CURRENT_DEPENDENCIES` consumer
+  `f7110ecca4e7b938226cba3e2955d5274894321c57f6ed2097ac560a9ba8ff4f`, and workflow
+  `2c148ec798e1444e69b15f00b1018ee4292afce9c81e89f4df7faf79a8cea031`.
+  All 15 observer-current dependencies and read preflight checksum sets matched.
+  Historical producer/writer/`RESULT`/`PARENT`/`READER`, grading evidence
+  `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0` /
+  `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d`, intake
+  `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4` and actual
+  outcomes remain exact. Eleven existing test files received directly coupled
+  expectations; only the new lifecycle selector ran.
+
+  The leader supplied the seventh producer's actual FAILED / exit 1 / grade null /
+  cleanup true / acknowledged terminal at `2026-10-03T03:33:19.1682207Z`.
+  Source `bdb7c21111a4c86136b6158f4969a39a9950acb3`, workflow `370228282` /
+  run `37081963299` / attempt 1 / execution `111085094584` and request
+  `1b042b77fcc80b8c1a1c21fdd73feeefbcb80ce7f505b7c842aba496419386ac` bind the
+  final cell's failed INFERENCE predecessor
+  `3be1c0b892a199fdfccf3d5c4379d40c782119e5`, never a grading terminal.
+  The exact claim/output/terminal fingerprints and full tuple are in the current
+  task record and source. Observer `37095186598` / read `111123558934` /
+  source `3c8cc5440629b0f70cc7540773dbda3014d71192` completed successfully at
+  `2026-10-03T04:04:36.4889828Z`; approval/execution jobs were skipped.
+  Observation SHA256 is
+  `b32a31a7b9aca1cc681f454e515b2405a7d9afb095f78f1d2816d1b7b5d963db`, retained
+  authority `dac2226c90b36eb50084861d7bb0e582e3691021b96eaf7385e8134d773f1b03`.
+  Both operations are consumed and were not queried, awaited or replayed here.
+
+  Keep/r2's recorded inference accounting is partial: 38 model calls comprise
+  37 infrastructure retry calls / known USD 0.709292 plus 1 generation call /
+  known USD 0.138313, aggregate known/model USD 0.847605. Usage is input 566268,
+  cached input 406400, output 23089 and reasoning 17389; subsets count once.
+  Estimated/runtime costs and HTTP request count are null,
+  `call_reachability_unknown`, invoice false. Controls declare 1 result/1 ledger/
+  0 deliverables and 3 objects including the manifest, but bodies were not
+  verified. There is no successful intake or grade and no verified absence of
+  partial work. Detailed failure/budget/recovery are unavailable /
+  `not_recorded_in_terminal_controls`; duration does not establish timeout or
+  a causal retention benefit. Publication-derived proof does not independently
+  authenticate provider/original inputs/actual CAS. Observer
+  `writer_acknowledgment=not_established` stays distinct from the producer's
+  actual acknowledgment.
+
+  Successful preparation `111084233411`, approval job `111084948854` and owner
+  approval `6821020369`, posted/read back once for that exact request, remain
+  prior operational evidence. Actual supplied preparation grader-source SHA256
+  is `81bfae73b21f260ffd4985d701631f53c4ee7cb67e4d1a7ff39a7563598bbc6f`;
+  the registered original-input bundle remains
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  Supplied provenance is not independent input verification. Keep/r1's older
+  null supplied-grader field is not rewritten. The unchanged keep/r2 adapter
+  remains pinned at `7ac1e8d8014e7fff765c65a80774d808a8b34d2cc2d88af8ef9ba8580ad820af`
+  before lazy import.
+
+  Accepted historical PR727's fixed-reader selector passed at
+  `2f58256bc6aabc345f46c37e8418b1f5f7a188d6`: 1 collected / 1 passed in 17.12s,
+  invocation/log-capture exit 0, no timeout within 180 seconds. It reached
+  successful result/ledger/deliverable intake, failed/stopped three-control-only
+  observation, identity/history/source refusals, marker readback/no-clobber,
+  old defaults and 288 mode cases with zero forbidden effects or synthetic
+  commits. Its log remains
   `/tmp/task5-keep-r2-reader-proof-20261003-1024.z5MOYT/pytest.log`, SHA256
-  `dd1a659dcab342b28be93a9ca3c6f5cb5c6e798c4dee4f69f5426485602c7bbe`.
-  The current task record preserves the exact command and verified CPython
-  3.10.12 / pytest 9.1.1 prerequisite. No old selector or broad suite was rerun.
-
-  The Project5 leader/AI systems architect supplied the direct
-  `APPROVE-WITH-CONDITIONS` pre-edit decision on 2026-10-03 at 10:24 KST against
-  `bdb7c21111a4c86136b6158f4969a39a9950acb3`, explicitly substituting the
-  separate leader's extreme-reasoner checklist review for unavailable memo
-  transport for this scope only. This was not a returned subagent verdict,
-  final source approval or live authority. The one-line obsolete `model:`
-  deletion in `.github/agents/extreme-reasoner.md` remains; all other agent
-  instructions and standing gates are intact. All three failed streams remain
-  recorded separately below and in the current task record.
-
-  Work continued in `codex-retention-task5-keep-r2-reader-20261003-0922` from
-  that exact base, without a new worktree or repeated duplicate-PR search. The
-  original single check found none. The reader retains the
-  unchanged producer's failed keep/r1 inference predecessor and independent
-  source/run/job/request expectations, immutable history, successful payload
-  intake versus unsuccessful controls-only boundaries, private no-clobber
-  markers and zero model/writer/child/dispatch authority. Producer, controller,
-  publication discriminator, runtime dependencies, experiment configuration
-  and historical evidence remain unchanged; ordinal 7 is unsupported.
-
-  Both Task5 role branches use the canonical Task5 path rule. Only the read
-  allowlists/cases and necessary current pins changed: shared reader SHA256
-  `3cabfed49238d43a4ddf9480558e19fdc1c5e64a29fd0aaa129d964ffef6f558`,
-  observer `CURRENT_DEPENDENCIES` consumer SHA256
-  `29e896f77d001f116f8e68edbd9162414cb99a5994423de642acd9f3834dcb11`,
-  and read workflow SHA256
-  `e01e28d5375255bcd2ab489193aaf09c04179dae34309ec55538885d1122356e`.
-  The unchanged keep/r2 producer remains pinned at
-  `7ac1e8d8014e7fff765c65a80774d808a8b34d2cc2d88af8ef9ba8580ad820af` before
-  lazy import. All 15 observer hashes and 10 checksums per read preflight matched
-  current bytes. Seven execution bindings, three jobs, permissions, secrets,
-  concurrency and paid routes stay fixed; only reader counts grow to seven
-  result and six terminal cells. Read modes still exclude every other mode and
-  cannot enable approval/execution even with spurious nonempty request outputs.
-  Keep/r1's prior null supplied-grader provenance and every historical
-  `RESULT`/`PARENT`/`READER` value stay unchanged. Six existing test files received
-  directly coupled expectations; only the new fixed-reader selector ran.
-
-  The leader supplied PR726 reviewed HEAD
+  `dd1a659dcab342b28be93a9ca3c6f5cb5c6e798c4dee4f69f5426485602c7bbe`; the exact
+  command and historical pin mapping are retained in the task record. That
+  proof was not repeated. Both Task5 role branches retain canonical Task5 path
+  checks; unsuccessful observation cannot claim payload verification or grading
+  readiness, upgrade writer acknowledgment or gain model/writer/child authority.
+  The leader had supplied PR726 reviewed HEAD
   `226e9ab34385b2f5aff646f5ac2b809f989aafc1`, owner review
   [5397963786](https://github.com/hyeonsangjeon/gdpval-realworks/pull/726#pullrequestreview-5397963786)
-  and all 10 checks. The producer's accepted 45.85s proof below was not rerun.
-  Leader-owned producer source `bdb7c21111a4c86136b6158f4969a39a9950acb3`,
-  workflow `370228282` / run `37081963299` / attempt 1 has successful preparation
-  `111084233411` and approval `111084948854`; execution `111085094584` was in
-  progress at the supplied observation. Owner approval `6821020369` was posted
-  and read back once for request
-  `1b042b77fcc80b8c1a1c21fdd73feeefbcb80ce7f505b7c842aba496419386ac`.
-  Actual preparation grader-source SHA256 is
-  `81bfae73b21f260ffd4985d701631f53c4ee7cb67e4d1a7ff39a7563598bbc6f`;
-  original-input bundle SHA256 remains
-  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
-  Supplied provenance is not independent input verification. New terminal,
-  claim and output identities are unknown; no model entry or task outcome is
-  claimed. No live outcome was queried, awaited or replayed.
+  and all 10 checks. Its accepted 45.85s producer proof below was not rerun.
 
   Accepted historical PR726 added only registered Task5 keep/r2,
   ordinal 6 / repetition 2,
@@ -204,14 +265,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   calls / known USD 0.22195 partial / null generation cost and Task5 inference
   costs. Task4 keep/r1 remains 68.0% / 54.64%; Task4 fresh/r1 and fresh/r2 remain failed/
   ungraded with 39 calls each / known USD 0.303358 and USD 0.29944 partial and
-  unknown detailed causes. Zero counters do not prove free generation. Six
-  producer outcomes are recorded; Task5 keep/r2 is now dispatched with outcome
-  pending, while Task5 fresh/r2 remains unexecuted.
+  unknown detailed causes. Zero counters do not prove free generation. Seven
+  producer outcomes are recorded; Task5 fresh/r2 remains unexecuted.
 
-  PR726's prior pre-edit memo and producer proof do not approve this new reader.
-  Its final independent immutable-reader-HEAD review, same-HEAD CI, source delivery
-  and separate outcome-matched live-read authorization remain mandatory despite
-  the direct pre-edit decision and passing offline proof. The original two-failure
+  PR727's accepted reader and earlier producer proofs do not approve this final
+  cell's source. Final independent immutable-HEAD review, same-HEAD CI, source
+  delivery and a separate finite one-cell live order with same-run request
+  approval remain mandatory despite the direct pre-edit decision and passing
+  offline proof. The historical PR727 reader's original two-failure
   record retains SHA256
   `5f78b7d705e339ed48fa6f643e657e5060e6304a957a5222cd1b3d6321b59456`.
   The third failed request was `/root/extreme_reasoner_keep_r2_current_route`;
@@ -224,13 +285,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   occurred. Its error was
   `stream disconnected before completion: response.failed event received`, not
   a pytest failure. At that earlier blocked boundary there had been no reader
-  implementation, test, commit, push or PR. The later direct decision's saved
-  provenance/condition record has SHA256
+  implementation, test, commit, push or PR. The historical 2026-10-03 10:24 KST
+  direct reader decision's saved provenance/condition record has SHA256
   `d54dcbc8ece6e91e43e9e8e84e6be5c2bc3f023a55d76445380d20b921001833`.
-  No global/user settings, permissions, provider or account changed. The full
-  catalog was checked once for this continuation.
+  That was supplied leader authority, not a returned subagent verdict. The
+  one-line obsolete `model:` deletion in `.github/agents/extreme-reasoner.md`
+  remains, with all other instructions and standing gates intact. The new
+  13:30 KST decision's local transcription/registration brief has SHA256
+  `542d944a40b1429d44701144e0080527743b87a03cfd47a9d78de187cd5158b1`; it does not
+  reuse the reader decision. No global/user settings, permissions, provider or
+  account changed. The full catalog was checked once for this task.
+  `experiment-design` preserved the original registration and stopping rules;
   `experiment-report-en` then protected `im-not-ai-en` preserved the bounded
-  evidence. No experiment-design/configuration change or UI/animation work applies.
+  evidence. No new configuration axis or UI/animation work applies.
   No live HF query, experiment model/grade call, dispatch, duplicate approval,
   replay, budget reset, Project edit, merge, Azure operation or CI polling occurred.
 
