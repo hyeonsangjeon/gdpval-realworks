@@ -130,6 +130,7 @@ def _publication_task_id(binding):
         controller.TASK5_FRESH_R1_CELL_ID: registration.TASK5,
         controller.TASK5_KEEP_R1_CELL_ID: registration.TASK5,
         controller.TASK5_KEEP_R2_CELL_ID: registration.TASK5,
+        controller.TASK5_FRESH_R2_CELL_ID: registration.TASK5,
     }
     ci.require(type(binding) is _PublicationBinding and type(binding.cell_id) is str
                and binding.cell_id in tasks, "fixed_retention_publication_binding_required")

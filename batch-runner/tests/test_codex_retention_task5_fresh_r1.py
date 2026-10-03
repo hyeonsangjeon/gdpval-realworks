@@ -190,7 +190,7 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
         (production_plan["order"][0], 0, "keep", 1), (production_plan["order"][1], 1, "fresh", 1),
         (production_plan["order"][2], 2, "fresh", 2), (production_plan["order"][3], 3, "keep", 2),
         (production_plan["order"][4], 4, "fresh", 1), (production_plan["order"][5], 5, "keep", 1),
-        (production_plan["order"][6], 6, "keep", 2)]
+        (production_plan["order"][6], 6, "keep", 2), (production_plan["order"][7], 7, "fresh", 2)]
     assert pins == {"cell_id": previous.CELL_ID,
         "producer_source_sha": "b8351e561acb9675a4993419e819c12787b5b305", "run_id": "36947454688",
         "execution_job_id": 110660390316,
@@ -274,7 +274,7 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
     for malformed in (None, True, {}, ForeignPublication(**vars(publication)), *(
             replace(publication, cell_id=cell) for cell in (
                 None, True, 4, b"unregistered", "unregistered", successor.CELL_ID + "\n",
-                controller.FIRST_CELL_ID, *production_plan["order"][7:]))):
+                controller.FIRST_CELL_ID, production_plan["order"][7] + "_unsupported"))):
         with pytest.raises(ci.RetentionCIRefused, match="^fixed_retention_publication_binding_required$"):
             fresh._verify_publication(None, None, TERMINAL_HEAD, {}, {},
                 tmp_path / "never-unsupported-publication", None, 0, malformed)
@@ -339,7 +339,7 @@ def test_task5_fresh_r1_is_the_closed_fifth_cell(tmp_path, monkeypatch, capsys, 
         child.recovery_request = request
         grant = ci.ExecutionGrantRequest(SOURCE, owned._digest(document), archive)
         denied = host_parent / "not-admitted"
-        for wrong in ("unregistered", True, 4, *plan["order"][7:]):
+        for wrong in ("unregistered", True, 4, plan["order"][7] + "_unsupported"):
             with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
                 controller.execute_first_cell(replace(request, cell_id=wrong), host_state=denied, grant=grant)
         with pytest.raises(controller.RetentionControllerRefused, match="^controller_source_mismatch$"):
