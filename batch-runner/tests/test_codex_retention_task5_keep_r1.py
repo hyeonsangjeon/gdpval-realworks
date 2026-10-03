@@ -558,17 +558,22 @@ def test_task5_keep_r1_routes_and_current_pins_preserve_fixed_readers(tmp_path, 
                      reader.TASK5_KEEP_R1, reader.TASK5_KEEP_R2, reader.TASK5_FRESH_R2)
     read_group = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'" for binding in fixed_readers) + ")"
     assert steps[9]["if"] == steps[10]["if"] == (
-        "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
+        "inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
     assert steps[13]["if"] == steps[14]["if"] == (
-        "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
-    assert steps[9]["run"] == steps[13]["run"]
+        "((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && inputs.cell_id == '"
+        + reader.TASK5_FRESH_R2.expectation.cell_id + "')) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
+    assert steps[13]["run"] == steps[9]["run"] + (
+        'if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n'
+        "  printf '%s\\n' '" + reader.BUDGET_PROJECTOR_PIN[1] + "  batch-runner/codex_budget_pilot_grade_readout.py' | sha256sum --check --status\nfi\n")
     for index in (9, 13):
-        assert "env" not in steps[index] and "secrets." not in steps[index]["run"]
+        assert steps[index].get("env", {}) == ({} if index == 9 else {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"})
+        assert "secrets." not in steps[index]["run"]
         pins = re.findall(r"'([0-9a-f]{64})  (batch-runner/[^']+)'", steps[index]["run"])
-        assert len(pins) == 11
+        assert len(pins) == (11 if index == 9 else 12)
         for digest, path in pins:
             assert hashlib.sha256((REAL_ROOT / path).read_bytes()).hexdigest() == digest
-        assert steps[index + 1]["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+        assert steps[index + 1]["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}", **({} if index == 9 else {
+            "OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"})}
         assert successor.CELL_ID + ")" in steps[index + 1]["run"]
         assert "retention_read_source=" + reader.TASK5_KEEP_R1.expectation.source_sha in steps[index + 1]["run"]
         assert "retention_read_request=" + reader.TASK5_KEEP_R1.expectation.request_sha256 in steps[index + 1]["run"]

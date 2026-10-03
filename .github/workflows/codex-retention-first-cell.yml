@@ -34,6 +34,10 @@ on:
         description: Observe only failed/stopped fixed fresh or keep r2 controls, not payloads; conflicts with every other mode
         default: false
         type: boolean
+      observe_budget:
+        description: Read only the recorded final Task5 fresh/r2 RESULT budget after fixed controls; conflicts with every other mode
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -74,12 +78,15 @@ jobs:
           EXECUTE_REQUESTED: ${{ inputs.execute }}
           READ_RESULT_ONLY: ${{ inputs.read_result }}
           OBSERVE_TERMINAL_ONLY: ${{ inputs.observe_terminal }}
+          OBSERVE_BUDGET_ONLY: ${{ inputs.observe_budget }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "$READ_RESULT_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]
           [[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false ) ]]
           [[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]
+          [[ "$OBSERVE_BUDGET_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]
+          [[ "$OBSERVE_BUDGET_ONLY" != true || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]
           [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]
@@ -102,7 +109,7 @@ jobs:
         run: python3 -m pip install -r batch-runner/requirements.txt
       - &plan
         name: Validate the current closed plan before any input credential
-        if: inputs.read_result == false && inputs.observe_terminal == false
+        if: inputs.read_result == false && inputs.observe_terminal == false && inputs.observe_budget == false
         run: >-
           python3 batch-runner/codex_retention_task5_fresh_r2.py
           --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --cell "$SELECTED_CELL"
@@ -173,7 +180,7 @@ jobs:
               stream.write('```json\n' + json.dumps(value, sort_keys=True, indent=2) + '\n```\n')
           PY
       - name: Bind the shared fixed reader and frozen helpers before credentials
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
+        if: inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
         shell: bash
         run: |
           set -euo pipefail
@@ -181,7 +188,7 @@ jobs:
           retention_checkout_status="$(git status --porcelain=v1 --untracked-files=all)"
           [[ -z "$retention_checkout_status" ]]
           printf '%s\n' \
-            '3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27  batch-runner/codex_retention_fresh_r1_result_intake.py' \
+            '55ca5ddb1d692e95f3602d180a6553bc23de154bab3a40065d16a46c2e549928  batch-runner/codex_retention_fresh_r1_result_intake.py' \
             'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
             '75a183f632df17a16f66df4745e01b696f1538b4285f3f11e51fc784c92c15c1  batch-runner/codex_retention_task4_fresh_r1.py' \
@@ -206,7 +213,7 @@ jobs:
             printf '%s\n' '6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd  batch-runner/codex_retention_task5_fresh_r2.py' | sha256sum --check --status
           fi
       - name: Read only the selected fixed inference result; never execute or grade
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
+        if: inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
         timeout-minutes: 4
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -257,7 +264,7 @@ jobs:
               --expected-producer-source "$retention_read_source" \
               --expected-request-sha256 "$retention_read_request" \
               --cell-id "$SELECTED_CELL" \
-              --expected-reader-sha256 3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27 \
+              --expected-reader-sha256 55ca5ddb1d692e95f3602d180a6553bc23de154bab3a40065d16a46c2e549928 \
               --output "$retention_result_parent/payload" \
               > "$retention_result_parent/receipt.json" 2> "$retention_result_parent/stderr.log" || retention_read_status=$?
           # Only the reviewed reader's safe receipt is public. Partials stay private.
@@ -268,7 +275,7 @@ jobs:
           fi
           exit "$retention_receipt_status"
       - name: Bind the fixed result reader to the clean workflow checkout before credentials
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
+        if: inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
         shell: bash
         run: |
           set -euo pipefail
@@ -280,7 +287,7 @@ jobs:
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
             | sha256sum --check --status
       - name: Read the fixed retained result only; no preparation, admission or grading
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
+        if: inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator && inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1'
         timeout-minutes: 4
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -312,7 +319,9 @@ jobs:
           exit "$retention_receipt_status"
 
       - name: Bind the fixed terminal observer and frozen helpers before credentials
-        if: inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
+        if: ((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
+        env:
+          OBSERVE_BUDGET_ONLY: ${{ inputs.observe_budget }}
         shell: bash
         run: |
           set -euo pipefail
@@ -320,7 +329,7 @@ jobs:
           retention_checkout_status="$(git status --porcelain=v1 --untracked-files=all)"
           [[ -z "$retention_checkout_status" ]]
           printf '%s\n' \
-            '3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27  batch-runner/codex_retention_fresh_r1_result_intake.py' \
+            '55ca5ddb1d692e95f3602d180a6553bc23de154bab3a40065d16a46c2e549928  batch-runner/codex_retention_fresh_r1_result_intake.py' \
             'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
             '75a183f632df17a16f66df4745e01b696f1538b4285f3f11e51fc784c92c15c1  batch-runner/codex_retention_task4_fresh_r1.py' \
@@ -344,11 +353,15 @@ jobs:
           if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd  batch-runner/codex_retention_task5_fresh_r2.py' | sha256sum --check --status
           fi
-      - name: Observe only failed or stopped fixed terminal controls; never read payloads
-        if: inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
+          if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then
+            printf '%s\n' '96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815  batch-runner/codex_budget_pilot_grade_readout.py' | sha256sum --check --status
+          fi
+      - name: Observe fixed failed controls; only explicit final-cell budget mode reads its RESULT
+        if: ((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
         timeout-minutes: 4
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          OBSERVE_BUDGET_ONLY: ${{ inputs.observe_budget }}
         shell: bash
         run: |
           set -euo pipefail
@@ -385,6 +398,12 @@ jobs:
             *) exit 2 ;;
           esac
           [[ -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" && -O "$RUNNER_TEMP" ]]
+          retention_terminal_args=(--observe-terminal --discover-terminal)
+          if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then
+            [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]
+            retention_read_namespace=retention-task5-fresh-r2-budget
+            retention_terminal_args=(--observe-budget --terminal-revision 4fdd9c2e3da1dbd7ef30d335d5fe378a4cddc84c)
+          fi
           retention_terminal_parent="$(mktemp -d "$RUNNER_TEMP/$retention_read_namespace-terminal.XXXXXXXX")"
           [[ -d "$retention_terminal_parent" && ! -L "$retention_terminal_parent" && -O "$retention_terminal_parent" ]]
           [[ "$(stat -c '%a' "$retention_terminal_parent")" == 700 ]]
@@ -392,11 +411,11 @@ jobs:
           retention_read_status=0
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_RUNTIME_TOKEN \
             timeout --signal=KILL 180s \
-            python3 batch-runner/codex_retention_fresh_r1_result_intake.py --observe-terminal --discover-terminal \
+            python3 batch-runner/codex_retention_fresh_r1_result_intake.py "${retention_terminal_args[@]}" \
               --expected-producer-source "$retention_read_source" \
               --expected-request-sha256 "$retention_read_request" \
               --cell-id "$SELECTED_CELL" \
-              --expected-reader-sha256 3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27 \
+              --expected-reader-sha256 55ca5ddb1d692e95f3602d180a6553bc23de154bab3a40065d16a46c2e549928 \
               --output "$retention_terminal_parent/evidence" \
               > "$retention_terminal_parent/receipt.json" 2> "$retention_terminal_parent/stderr.log" || retention_read_status=$?
           # Only the reviewed reader's safe receipt is public. Partials stay private.
@@ -409,7 +428,7 @@ jobs:
 
   retention-approve:
     needs: retention-prepare
-    if: (inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !(inputs.observe_locator && (inputs.prepare || inputs.execute)) && needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''
+    if: (inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !(inputs.observe_locator && (inputs.prepare || inputs.execute)) && needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     permissions: {}
@@ -430,7 +449,7 @@ jobs:
 
   retention-execute:
     needs: [retention-prepare, retention-approve]
-    if: (inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !(inputs.observe_locator && (inputs.prepare || inputs.execute)) && needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != '' && needs.retention-approve.result == 'success'
+    if: (inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !(inputs.observe_locator && (inputs.prepare || inputs.execute)) && needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != '' && needs.retention-approve.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 240
     # No environment here: preserve the established main-ref Azure OIDC subject.

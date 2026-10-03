@@ -123,6 +123,24 @@ TASK5_FRESH_R2 = ReadBinding(ci.TerminalExpectation(
     "retention-task5-fresh-r2-terminal-observation-v1", "retention-task5-fresh-r2-terminal-observation.json")
 TASK5_FRESH_R2_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task5_fresh_r2.py"),
                               "6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd")
+# Independently supplied, already observed failed inference controls. These
+# pins authorize neither discovery of another result nor another producer run.
+TASK5_FRESH_R2_BUDGET_CONTROLS = {
+    "terminal_commit": "4fdd9c2e3da1dbd7ef30d335d5fe378a4cddc84c",
+    "terminal_identity": {"sha256": "2c8ca6f08bf54b8a48cbf0f0c1d50b06d0f5b7fdb1f72ffdc23f132edbcb81ec", "size": 3718},
+    "claim_commit": "c8abf52115d6fb9670da496043da4300d7315fd4",
+    "claim_identity": {"sha256": "868e7e009f1c6c94a3938e07634cc0a23f6271e165db6575b37721d32ebd7edb", "size": 1888},
+    "output_commit": "ddf15bff98aede8c714c5c3611ff30ee3e09afd9",
+    "output_manifest_identity": {"sha256": "52b80606c5138e8808a471924e86d9c2ea5dc7980d01fcd05f44625e177f61d0", "size": 1639},
+    "output_objects_sha256": "94918aaa4094d91ca7253aedebbfe7cbdd900388c1d2f8888fd8c32ed213bab4",
+    "retained_authority_sha256": "dc39d9451c87e0c15800f82dda918913c09e5cc514e059884ce744fcf32b3c28",
+    "status": "failed", "exit_code": 1, "cleanup_confirmed": True,
+}
+TASK5_FRESH_R2_CONFIG_SHA256 = "3dd0af0802619dd60cc9eda5c492f6b75cd641463dca84a68ad5ad362e56074a"
+BUDGET_PROJECTOR_PIN = (Path(__file__).with_name("codex_budget_pilot_grade_readout.py"),
+                        "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815")
+BUDGET_FORMAT = "retention-task5-fresh-r2-budget-observation-v1"
+BUDGET_MARKER = "retention-task5-fresh-r2-budget-observation.json"
 
 
 def _fixed_binding(binding):
@@ -482,11 +500,74 @@ def read_result(*, expectation: ci.TerminalExpectation, destination: Path, expec
         return {**record, "intake_verified": True, "intake_sha256": owned._identity(encoded)["sha256"]}
 
 
+def _budget_projector():
+    path, digest = BUDGET_PROJECTOR_PIN
+    require(hashlib.sha256(output._bytes(path, limit=output.MAX_RECORD_BYTES)).hexdigest() == digest,
+            "fresh_budget_projector_bytes_mismatch")
+    # Only reuse the pure existing projection, never its grading entrypoints.
+    import codex_budget_pilot_grade_readout as projector
+
+    require(Path(projector.__file__).resolve() == path.resolve(), "fresh_budget_projector_bytes_mismatch")
+    return projector._budget_snapshot
+
+
+def _budget_result(data, summary, plan, cell, roles, projector):
+    """Validate the declared RESULT, but never read its ledger or deliverables."""
+    value = owned._json_object(data)
+    fingerprint = intake.validate_inference_result_fingerprint(value)
+    output._safe_record(value)
+    require(set(value) <= output.RESULT_FIELDS, "unsafe_result_fields")
+    for key, expected in {
+        "run_id": cell["run_id"], "experiment_id": cell["run_id"], "condition_identity": "condition_a",
+        "condition": cell["config"]["condition_a"]["name"], "execution_mode": "codex_foundry",
+        "ordered_task_ids": [cell["task_id"]], "model": "gpt-5.4", "source": plan["inputs"]["repo_id"],
+    }.items():
+        require(value.get(key) == expected, "fresh_budget_result_binding_mismatch")
+    require(output._hash(value.get("prepared_fingerprint")) and
+            intake.validate_publication_generation(value.get("publication_generation")) == cell["run_id"],
+            "fresh_budget_result_binding_mismatch")
+    require(type(value.get("results")) is list and len(value["results"]) == 1
+            and type(value["results"][0]) is dict, "retention_result_one_row_required")
+    row = value["results"][0]
+    require(set(row) <= output.ROW_FIELDS and row.get("task_id") == cell["task_id"]
+            and row.get("model") == "gpt-5.4" and row.get("status") in {"success", "error", "qa_failed"}
+            and row.get("usage") is None and not row.get("failure_evidence")
+            and not row.get("reflection_history") and row.get("reflection_attempts", 0) == 0,
+            "fresh_budget_result_binding_mismatch")
+    output._receipt_fields(row.get("problem_solving_cost"))
+    require(intake.project_result_row({}, row).get("problem_solving_cost") == summary["receipt"],
+            "retention_result_status_or_receipt_mismatch")
+    require(row.get("deliverable_files") == [] and row.get("deliverable_file_records", []) == [],
+            "retention_result_deliverable_binding_mismatch")
+    ledger = value.get("cost_ledger")
+    require(type(ledger) is dict and set(ledger) == {"path", "sha256"} and ledger["path"] == intake.LEDGER
+            and ledger["sha256"] == roles[intake.LEDGER]["sha256"], "retention_result_ledger_binding_mismatch")
+    snapshot = projector(value)  # Retains null/not_recorded/unavailable and strict numeric types.
+    stored = row.get("observability", {}).get("task_deadline", {})
+    for key, expected in {"run_id": cell["run_id"], "task_id": cell["task_id"], **cell["control"],
+                          "total_seconds": 10800, "attempt_seconds": 1800}.items():
+        if key in stored:
+            require(type(stored[key]) is type(expected) and stored[key] == expected,
+                    "fresh_budget_config_binding_mismatch")
+    return {**owned._identity(data), "result_fingerprint": fingerprint,
+            "recorded_prepared_fingerprint": value["prepared_fingerprint"],
+            "registered_config_sha256": cell["config_sha256"]}, snapshot
+
+
 def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, expected_reader_sha256: str,
                      terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None,
-                     binding=FRESH_R1) -> dict:
-    """Read three control bodies and declared-object metadata; no payload intake."""
-    source, _, _ = _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal, binding=binding)
+                     binding=FRESH_R1, include_budget=False) -> dict:
+    """Controls only by default; one fixed opt-in also projects its declared RESULT."""
+    require(type(include_budget) is bool, "explicit_budget_observation_required")
+    if include_budget:
+        require(binding is TASK5_FRESH_R2 and discover_terminal is False
+                and terminal_revision == TASK5_FRESH_R2_BUDGET_CONTROLS["terminal_commit"],
+                "fixed_budget_observation_required")
+    source, plan, cell = _binding(expectation, expected_reader_sha256, terminal_revision, discover_terminal, binding=binding)
+    if include_budget:
+        require(cell["config_sha256"] == intake.registration.seal(cell["config"]) == TASK5_FRESH_R2_CONFIG_SHA256,
+                "fresh_budget_config_binding_mismatch")
+        projector = _budget_projector()
     producer = _producer(binding)
     require(isinstance(destination, Path) and destination.is_absolute(), "explicit_absolute_destination_required")
     destination, _ = _destination(destination)
@@ -496,15 +577,35 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
         cache = destination / intake.CACHE
         mkdir(cache)
         mkdir(cache / "controls")
-        with retained._session(_test_api, response_bytes_limit=output.MAX_MANIFEST_BYTES) as (api, token, deadline):
+        if include_budget:
+            mkdir(cache / "result")
+        with retained._session(_test_api, response_bytes_limit=(output.MAX_RECORD_BYTES if include_budget
+                                                              else output.MAX_MANIFEST_BYTES)) as (api, token, deadline):
             repo = retained._target()
             head = _terminal_revision(api, repo, terminal_revision, discover_terminal, token, deadline, binding=binding)
             check()
             terminal, terminal_bytes, roles, deliverables = _verify_terminal(
                 api, repo, head, cache / "controls", token, deadline, terminal_only=True, binding=binding)
             check()
+            if include_budget:
+                fixed = {"terminal_commit": head, "terminal_identity": owned._identity(terminal_bytes),
+                    "claim_commit": terminal["claim_commit"], "claim_identity": terminal["claim_identity"],
+                    "output_commit": terminal["output_commit"],
+                    "output_manifest_identity": owned._identity(retained._encoded(terminal["completion"])),
+                    "output_objects_sha256": owned._digest(terminal["output_objects"]),
+                    "retained_authority_sha256": owned._digest(terminal["authority"]),
+                    **{key: terminal["completion"][key] for key in ("status", "exit_code", "cleanup_confirmed")}}
+                require(owned._canonical_json(fixed) == owned._canonical_json(TASK5_FRESH_R2_BUDGET_CONTROLS)
+                        and set(roles) == {intake.RESULT, intake.LEDGER} and not deliverables,
+                        "fresh_budget_fixed_controls_mismatch")
+                data = intake.retained_reader._fetch(api, repo, terminal["output_commit"],
+                    producer.OUTPUT + "/" + intake.RESULT, roles[intake.RESULT], cache / "result", token, deadline)
+                check()
+                result, budget = _budget_result(data, terminal["completion"], plan, cell, roles, projector)
             output._remaining(deadline)
         require(reader_identity(binding=binding) == source, "fresh_result_reader_changed")
+        if include_budget:
+            require(_budget_projector() is projector, "fresh_budget_projector_bytes_mismatch")
         summary = terminal["completion"]
         record = {
             "format": binding.terminal_format, "evidence_only": True, "observation_only": True,
@@ -535,28 +636,42 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
             "http_request_count": None, "grade": None, "grading_launched": False, "invoice_complete": False,
             "launch_authorized": False, "admission_attempted": False, "replay_authorized": False, "commands": [],
         }
+        marker = binding.terminal_marker
+        if include_budget:
+            marker = BUDGET_MARKER
+            record.update(format=BUDGET_FORMAT, result=result, inference_budget_snapshot=budget,
+                budget_projector_sha256=BUDGET_PROJECTOR_PIN[1], result_body_verified=True,
+                ledger_body_verified=False, deliverable_bodies_verified=False,
+                payload_verification_scope="inference_result_only")
+            del record["unavailable"]["budget"]
         encoded = retained._encoded(record)
         check()
         for directory in (destination.parent, destination, cache, cache / "controls"):
             os.fsync(directory_fd(directory))
+        if include_budget:
+            os.fsync(directory_fd(cache / "result"))
         try:
-            _write_no_clobber(destination / binding.terminal_marker, encoded, parent_fd=directory_fd(destination))
+            _write_no_clobber(destination / marker, encoded, parent_fd=directory_fd(destination))
             os.fsync(directory_fd(destination))
-            output._bytes(destination / binding.terminal_marker, limit=output.MAX_MANIFEST_BYTES, expected=owned._identity(encoded))
+            output._bytes(destination / marker, limit=output.MAX_MANIFEST_BYTES, expected=owned._identity(encoded))
             check()
         except (OSError, ValueError, KeyboardInterrupt) as error:
             raise output.OutputPublicationRefused("fresh_terminal_observation_unconfirmed") from error
+        if include_budget:
+            return {**record, "outcome": "budget_observation_verified", "terminal_verified": True,
+                    "budget_observation_verified": True, "observation_sha256": owned._identity(encoded)["sha256"]}
         return {**record, "outcome": "terminal_verified", "terminal_verified": True,
                 "observation_sha256": owned._identity(encoded)["sha256"]}
 
 
 def main(argv=None, *, _test_api=None) -> int:
-    observing = False
+    observing = budgeting = False
     try:
         parser = output._Parser(description=__doc__)
         mode = parser.add_mutually_exclusive_group()
         mode.add_argument("--read", action="store_true")
         mode.add_argument("--observe-terminal", action="store_true")
+        mode.add_argument("--observe-budget", action="store_true")
         parser.add_argument("--output", type=Path)
         parser.add_argument("--expected-producer-source")
         parser.add_argument("--expected-request-sha256")
@@ -566,7 +681,8 @@ def main(argv=None, *, _test_api=None) -> int:
         selection.add_argument("--terminal-revision")
         selection.add_argument("--discover-terminal", action="store_true")
         args = parser.parse_args(argv)
-        observing = args.observe_terminal
+        budgeting = args.observe_budget
+        observing = args.observe_terminal or budgeting
         binding = (TASK5_FRESH_R2 if args.cell_id == TASK5_FRESH_R2.expectation.cell_id else
                    TASK5_KEEP_R2 if args.cell_id == TASK5_KEEP_R2.expectation.cell_id else
                    TASK5_KEEP_R1 if args.cell_id == TASK5_KEEP_R1.expectation.cell_id else
@@ -584,8 +700,8 @@ def main(argv=None, *, _test_api=None) -> int:
             result = observe_terminal(expectation=ci.TerminalExpectation(args.expected_request_sha256,
                 args.expected_producer_source, args.cell_id), destination=args.output,
                 expected_reader_sha256=args.expected_reader_sha256, terminal_revision=args.terminal_revision,
-                discover_terminal=args.discover_terminal, _test_api=_test_api, binding=binding)
-            result["mode"] = "observe_terminal"
+                discover_terminal=args.discover_terminal, _test_api=_test_api, binding=binding, include_budget=budgeting)
+            result["mode"] = "observe_budget" if budgeting else "observe_terminal"
         else:
             record = read_result(expectation=ci.TerminalExpectation(args.expected_request_sha256,
                 args.expected_producer_source, args.cell_id), destination=args.output,
@@ -608,8 +724,9 @@ def main(argv=None, *, _test_api=None) -> int:
                   "fresh_terminal_observation_unconfirmed"}
         reason = error.args[0] if (type(error) is output.OutputPublicationRefused and len(error.args) == 1
             and type(error.args[0]) is str and error.args[0] in public) else (
+                "fresh_budget_observation_refused" if budgeting else
                 "fresh_terminal_observation_refused" if observing else "fresh_result_intake_refused")
-        print(json.dumps({("terminal_verified" if observing else "intake_verified"): False,
+        print(json.dumps({("budget_observation_verified" if budgeting else "terminal_verified" if observing else "intake_verified"): False,
             "reason": reason, "launch_authorized": False,
             "grading_launched": False, "admission_attempted": False, "replay_authorized": False,
             "grade": None, "invoice_complete": False, "commands": []}, sort_keys=True))

@@ -22,11 +22,12 @@ def _assert_retention_mode_routes():
     """Shared pure YAML assertions; no locator, credential or private fixture."""
     workflow = yaml.safe_load((adapter.ROOT / adapter.WORKFLOW).read_bytes())
     dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
-    assert set(dispatch) == {"reviewed_source_sha", "cell_id", "prepare", "execute", "observe_locator", "read_result", "observe_terminal"}
-    assert all(dispatch[name]["default"] is False for name in ("prepare", "execute", "observe_locator", "read_result", "observe_terminal"))
+    assert set(dispatch) == {"reviewed_source_sha", "cell_id", "prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget"}
+    assert all(dispatch[name]["default"] is False for name in ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget"))
     assert dispatch["observe_locator"]["type"] == "boolean"
     assert dispatch["read_result"]["type"] == "boolean"
     assert dispatch["observe_terminal"]["type"] == "boolean"
+    assert dispatch["observe_budget"]["type"] == "boolean"
     jobs = workflow["jobs"]
     assert set(jobs) == {adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB}
     prepare, approve, execute = (jobs[name] for name in (adapter.PREPARE_JOB, adapter.APPROVE_JOB, adapter.EXECUTE_JOB))
@@ -41,12 +42,15 @@ def _assert_retention_mode_routes():
     assert gate == execute["steps"][0]
     assert gate["env"] == {"OBSERVE_LOCATOR_ONLY": "${{ inputs.observe_locator }}",
                            "PREPARE_REQUESTED": "${{ inputs.prepare }}", "EXECUTE_REQUESTED": "${{ inputs.execute }}",
-                           "READ_RESULT_ONLY": "${{ inputs.read_result }}", "OBSERVE_TERMINAL_ONLY": "${{ inputs.observe_terminal }}"}
+                           "READ_RESULT_ONLY": "${{ inputs.read_result }}", "OBSERVE_TERMINAL_ONLY": "${{ inputs.observe_terminal }}",
+                           "OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
     assert gate["run"].splitlines() == [
         "set -euo pipefail",
         '[[ "$READ_RESULT_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]',
         '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false ) ]]',
+        '[[ "$OBSERVE_BUDGET_ONLY" != true || ( "$PREPARE_REQUESTED" == false && "$EXECUTE_REQUESTED" == false && "$OBSERVE_LOCATOR_ONLY" == false && "$READ_RESULT_ONLY" == false && "$OBSERVE_TERMINAL_ONLY" == false ) ]]',
+        '[[ "$OBSERVE_BUDGET_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID + ' ]]',
         '[[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
@@ -62,10 +66,10 @@ def _assert_retention_mode_routes():
              adapter.controller.TASK5_FRESH_R2_CELL_ID)
     cells = read_cells
     for selected in (*cells, "unregistered"):
-        for preparing, executing, observing, reading, terminal in itertools.product((False, True), repeat=5):
+        for preparing, executing, observing, reading, terminal, budget in itertools.product((False, True), repeat=6):
             values = {'"$PREPARE_REQUESTED"': preparing, '"$EXECUTE_REQUESTED"': executing,
                 '"$OBSERVE_LOCATOR_ONLY"': observing, '"$READ_RESULT_ONLY"': reading,
-                '"$OBSERVE_TERMINAL_ONLY"': terminal,
+                '"$OBSERVE_TERMINAL_ONLY"': terminal, '"$OBSERVE_BUDGET_ONLY"': budget,
                 '"$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID: selected == adapter.controller.FIRST_CELL_ID,
                 '"$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID: selected == adapter.controller.FRESH_CELL_ID,
                 '"$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID: selected == adapter.controller.FRESH_R2_CELL_ID,
@@ -75,21 +79,23 @@ def _assert_retention_mode_routes():
                 '"$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID: selected == adapter.controller.TASK5_KEEP_R2_CELL_ID,
                 '"$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID: selected == adapter.controller.TASK5_FRESH_R2_CELL_ID}
             allowed = all(_boolean(line.removeprefix("[[ ").removesuffix(" ]]"), values)
-                for line in [*gate["run"].splitlines()[1:4], *gate["run"].splitlines()[-4:]])
+                for line in [*gate["run"].splitlines()[1:6], *gate["run"].splitlines()[-4:]])
             expected = (selected in cells
                 and not (reading and (preparing or executing or observing or terminal))
                 and not (terminal and (preparing or executing or observing or reading))
                 and not (observing and (preparing or executing))
+                and not (budget and (preparing or executing or observing or reading or terminal))
+                and (not budget or selected == adapter.controller.TASK5_FRESH_R2_CELL_ID)
                 and (selected == adapter.controller.FIRST_CELL_ID or not observing)
                 and (selected in read_cells[1:] or not terminal)
                 and (not reading or selected in read_cells))
             assert allowed is expected
-            if reading or terminal:
+            if reading or terminal or budget:
                 # Even spuriously successful/nonempty request outputs cannot
                 # route either read mode into protected approval or execution.
                 ready = {"inputs.prepare": preparing, "inputs.execute": executing,
                     "inputs.observe_locator": observing, "inputs.read_result": reading,
-                    "inputs.observe_terminal": terminal,
+                    "inputs.observe_terminal": terminal, "inputs.observe_budget": budget,
                     "needs.retention-prepare.result == 'success'": True,
                     "needs.retention-prepare.outputs.request_sha256 != ''": True,
                     "needs.retention-approve.result == 'success'": True}
@@ -109,7 +115,7 @@ def _assert_retention_mode_routes():
     assert "retention-task5-keep-r2-host" in execute["steps"][-1]["run"]
     assert "retention-task5-fresh-r2-host" in execute["steps"][-1]["run"]
     assert "codex_retention_result_intake.py --read --discover-terminal" in prepare["steps"][12]["run"]
-    modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
+    modes = "(inputs.execute || inputs.observe_locator) && !inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !(inputs.observe_locator && (inputs.prepare || inputs.execute))"
     prepared = "needs.retention-prepare.result == 'success' && needs.retention-prepare.outputs.request_sha256 != ''"
     assert approve["needs"] == adapter.PREPARE_JOB and approve["if"] == modes + " && " + prepared
     assert execute["needs"] == [adapter.PREPARE_JOB, adapter.APPROVE_JOB]
@@ -117,7 +123,7 @@ def _assert_retention_mode_routes():
     assert "this is not authenticated execution approval" in approve["steps"][0]["run"]
     assert len(prepare["steps"]) == 15
     assert execute["steps"][:9] == prepare["steps"][:9]
-    assert prepare["steps"][4]["if"] == "inputs.read_result == false && inputs.observe_terminal == false"
+    assert prepare["steps"][4]["if"] == "inputs.read_result == false && inputs.observe_terminal == false && inputs.observe_budget == false"
     for step in prepare["steps"][5:9]:
         assert step["if"] == "inputs.prepare || inputs.execute || inputs.observe_locator"
     assert "no token, signed approval verification or admission follows" in prepare["steps"][8]["run"]
@@ -145,8 +151,9 @@ def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
     workflow = yaml.safe_load((adapter.ROOT / adapter.WORKFLOW).read_bytes())
     steps = workflow["jobs"][adapter.PREPARE_JOB]["steps"]
     # Existing read routes stay closed; the fixed keep/r2 reader joins them.
-    read_only = "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
-    terminal_only = "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+    read_only = "inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
+    terminal_only = ("((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && inputs.cell_id == '"
+        + reader.TASK5_FRESH_R2.expectation.cell_id + "')) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator")
     fixed_fresh = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'"
                                        for binding in (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2,
                                                        reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1,
@@ -163,21 +170,26 @@ def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
     }
     for index in (9, 13):
         preflight, read = steps[index:index + 2]
-        assert "env" not in preflight and "secrets." not in preflight["run"]
+        assert preflight.get("env", {}) == ({} if index == 9 else {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"})
+        assert "secrets." not in preflight["run"]
         assert preflight["run"].startswith("set -euo pipefail\n")
         assert '"$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA"' in preflight["run"]
         assert '"$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA"' in preflight["run"]
         for filename, digest in expected_hashes.items():
             assert "'" + digest + "  batch-runner/" + filename + "'" in preflight["run"]
-        assert preflight["run"].count("sha256sum --check --status") == 7
-        assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+        assert preflight["run"].count("sha256sum --check --status") == (7 if index == 9 else 8)
+        assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}", **({} if index == 9 else {
+            "OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"})}
         assert "--expected-reader-sha256 " + identity["module_sha256"] in read["run"]
         assert adapter.controller.KEEP_R2_CELL_ID + ")" in read["run"]
         assert "retention_read_source=" + reader.KEEP_R2.expectation.source_sha in read["run"]
         assert "retention_read_request=" + reader.KEEP_R2.expectation.request_sha256 in read["run"]
-    assert steps[9]["run"] == steps[13]["run"]
+    assert steps[13]["run"] == steps[9]["run"] + (
+        'if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n'
+        "  printf '%s\\n' '" + reader.BUDGET_PROJECTOR_PIN[1] + "  batch-runner/codex_budget_pilot_grade_readout.py' | sha256sum --check --status\n"
+        'fi\n')
     assert expected_hashes["codex_retention_task4_fresh_r2.py"] == "8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f"
-    print(json.dumps({"scope": "synthetic_keep_r2_route_only", "mode_cases": 288,
+    print(json.dumps({"scope": "synthetic_keep_r2_route_only", "mode_cases": 576,
         "old_routes_preserved": True, "keep_r2_reads_added": True, "three_jobs": True,
         "current_pins_before_credentials": True}, sort_keys=True))
 
