@@ -13,7 +13,97 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Extend the existing optional budget path only to failed Task4 FRESH/r1 and FRESH/r2,
+- Add only successful Task4 `reader.KEEP_R2`, ordinal3/repetition2, to the
+  existing RESULT-only budget path. Exactly seven canonical budget bindings are
+  eligible: cells[1:8]; legacy Task4 KEEP/r1, unknown and copied profiles remain
+  refused. The fixed producer is `b8351e561acb9675a4993419e819c12787b5b305`,
+  run36947454688/attempt1/job110660390316, request
+  `8a06cc7df34cbf10896b635f6c8d9ad4e91313d3c685511f8fc5c159cb6ddec1`.
+  Seal the complete retained tuple before RESULT: succeeded/exit0/cleanuptrue,
+  terminal `e55fac5d60191167dd66688510ec0fef472e594d`, claim
+  `f29f8d4a19710aa0e832dba720ff7d32701c309c`, output
+  `54a4362ce3554b7c71b5ada00802efc9521038e6` and the exact object/authority
+  identities in JSON cells[3]. Its inert-compiler config is
+  `307dc07923d377faa7d7c6bd6c4934de2fa5f99e9007dd0d723f3c3337e6d010`, with
+  distinct `retention-task4-keep-r2-budget` namespace/marker. Only this profile
+  uses the verifier's existing successful-controls branch; it does not call
+  full intake. Validate RESULT size/hash/fingerprint/task/source/config/receipt
+  and canonical declared deliverable metadata against the verified manifest,
+  never ledger/deliverable bodies. The new receipt distinguishes succeeded
+  source outcome from partial RESULT-only verification and establishes no new
+  full intake, delivery, grading readiness or grade. The actual prior grade
+  and full-intake evidence remain unchanged.
+
+  The six failed-budget paths retain their controls/empty-deliverable rules.
+  Ordinary reads, projector, missing/null/zero semantics, private markers,
+  no-clobber/readback/no-replay, all eight execution bindings, jobs, permissions,
+  secrets, concurrency/cancellation and180s/4-minute bounds stay intact.
+  Shared authored expectations cover the seven fixed cells and every mode/paid
+  exclusion, including spurious request outputs. Central/six legacy sites,
+  both r2 budget tests and newer r1/Task4 tests use those helpers; historical
+  JSON checks strip only explicit later observations without repinning their
+  original hashes. Only necessary current executable pins and observer
+  `CURRENT_DEPENDENCIES` migrate; historical producer/RESULT/PARENT/READER
+  records are untouched.
+
+  Record the leader's 2026-10-04 02:23 KST actual Task4 FRESH observations in
+  `cells[1:3].current_budget_observation` and the descriptive six-point
+  [report](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md) table.
+  FRESH/r1 observer37138725894/read111248535588 at
+  `2026-10-03T16:59:36.1876048Z` has observation SHA256
+  `d2b354bc9ad165fc18d90318dac3eb852e64f455f0fa31f89de3f2330f9c896c`;
+  FRESH/r2 observer37138900161/read111249054328 at
+  `2026-10-03T17:02:20.9246243Z` has
+  `7304dd060ec089542085d8156f295f20fd8e3bdfd9ead8af5766894a59c17c83`.
+  Both used source `c4828cc83892fb9f844599bb6c3be3d66500d9e8`, historical
+  reader `9359eab1be22b54bc6f18092560308058a820dde0a55c365a9ee263f6f9c0f09`,
+  unchanged projector and skipped approval/execution. Both record10800 total
+  seconds, remaining0.0,39 admissions,0 confirmed resumes and no missing fields;
+  retry-backoff waits are8983.719460487366 /8985.385900974274 seconds.
+  New authority digests belong only to these observations, never their older
+  digest-absent records. The JSON retains exact RESULT hashes/sizes/fingerprints,
+  sealed configs and timestamps. All six failed-cell reads are consumed;
+  both successful Task4 KEEP budgets remain unobserved. RESULT-only verification
+  is not overall-payload verification, grading readiness, independent provider/
+  input/CAS authentication, uncapped elapsed time or cause attribution.
+  Observer acknowledgment remains `not_established`, distinct from producer
+  acknowledgment. Native counts are not model/HTTP calls. All eight outcomes,
+  costs/grades, Task5 observations, historical missingness and original-pilot
+  bytes remain exact; no causal ranking, invoice or whole-card completion claim.
+
+  The single new KEEP/r2-success selector passed at tested implementation
+  `a4950d6b968714bb79e237f8dc944290c01ec5bf`: 1 passed in11.47s, all576 mode
+  cases, test/log-capture exits0, no timeout and zero recorded network/model/
+  writer/child/paid effects. It covered successful fixed controls, nonempty
+  deliverable metadata with RESULT-only fetch, identity/config/metadata tampering,
+  no false full-intake/grade flags, all six failed paths and ordinary-mode
+  compatibility. Existing absolute py310/token-free/offline/180s guards were
+  used once, without timing wrapper, probe, install or old-proof rerun. Duration
+  is pytest's; outer elapsed time was not measured. Log SHA256
+  `01e984403a134e76aa2282cd2e7cb62d08ad06abefe93cb316c94d227dd587ac`.
+  Current JSON SHA256 is
+  `31f7d2b58d044a5548cb9998362b8b6ebaf2d428b4d679b4a42f4191d666814e`, report
+  `12ad05a9483461161e431a8fef834c90cf62832a0177e8a514cb32b3ce32b699`.
+  Removing only the two added fields restored delivered canonical JSON
+  `6b3830c740ffe6a540990c299887eb4f205e82eb42e71cce8b99e8c3e7feeffe`.
+  Only the two completion records change after proof.
+
+  Accepted PR734 HEAD `e57bacc2fdacd404d4664f4c22b4da8bdd526dab`, review
+  [5401659305](https://github.com/hyeonsangjeon/gdpval-realworks/pull/734#pullrequestreview-5401659305)
+  and all ten checks are prior acceptance evidence; its11.32s proof was not
+  rerun. The [accepted record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e57bacc2fdacd404d4664f4c22b4da8bdd526dab/tasks/LATEST_TASK_RESULT/README.md)
+  retains earlier proofs, launcher127, failed memo streams and exact boundaries.
+  The 02:23 KST APPROVE-WITH-CONDITIONS is the direct leader/architect decision
+  for this one success profile, not a returned agent verdict. No memo retry or
+  policy change occurred. `experiment-design` preserved the measurement boundary;
+  `experiment-report-en` then protected `im-not-ai-en` preserved supplied values
+  and limits without optional literal restyling. Final immutable-HEAD review,
+  same-HEAD CI, delivery and separate KEEP/r2 live-read direction remain required.
+  Measurement/attribution gaps remain open and the Sol VM card remains blocked
+  without KVM/image handoff. No live action or new experiment ran here.
+
+- Prior Task4-FRESH extension (accepted PR734): extend the existing optional
+  budget path only to failed Task4 FRESH/r1 and FRESH/r2,
   making exactly six canonical bindings eligible: JSON cells[1], cells[2] and
   cells[4:8]. Successful Task4 KEEP, unknown and copied bindings remain refused.
   The new profiles bind failed terminals `45f54eb0a24aee5d40dd41b276ff5df777f06d73`
