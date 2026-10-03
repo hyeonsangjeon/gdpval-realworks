@@ -86,7 +86,8 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     readout = json.loads((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes())
     row = readout["cells"][7]
     prior = deepcopy(readout)
-    for index in (6, 7):
+    # Remove the four explicitly added later observations, not historical data.
+    for index in (4, 5, 6, 7):
         prior["cells"][index].pop("current_budget_observation")
     canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
     assert hashlib.sha256(canonical).hexdigest() == "aaea03354686ada4e716b4eb0eb24b9c1ab964d8e4e4e4210e5b960519dfdd89"
@@ -477,6 +478,7 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     steps = jobs[ci.PREPARE_JOB]["steps"]
     names = ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget")
     cells = (ci.controller.FIRST_CELL_ID, *(profile.expectation.cell_id for profile in fixed_readers))
+    assert len(workflow_contract._BUDGET_CELLS) == 6 and set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], *cells[4:8]}
     for selected, flags in itertools.product((*cells, "unknown"), itertools.product((False, True), repeat=6)):
         modes = dict(zip(names, flags))
         values = {"inputs." + key: value for key, value in modes.items()}

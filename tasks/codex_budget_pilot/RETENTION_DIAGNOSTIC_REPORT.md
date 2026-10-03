@@ -200,24 +200,51 @@ and sealed KEEP configuration hash. Its stored total is 10800 seconds,
 `started_unix=1790987596.6290615`, `expires_unix=1790998396.6290615`,
 and `missing={}`.
 
-| Stored measurement | Task5 keep/r2 | Task5 fresh/r2 | Boundary for both points |
-| --- | ---: | ---: | --- |
-| Remaining seconds | 0.0 | 10724.012340545654 | Zero-clamped, not exact uncapped elapsed time |
-| Wait seconds | 8742.75936126709 | 0.0 | Retry backoff only |
-| Native admissions | 38 | 1 | Not model calls |
-| Confirmed native resumes | 37 | 0 | Not HTTP requests |
+The leader's 2026-10-04 00:19 KST supplement supplies both Task5 r1 observations
+at source `3d43a674e47d700dd874680c053a91bc1807b693`, using reader
+`dd23824360e03f415feb5c7d247024ac7d67300c4ed7f2120e0eb2c9d6e47eb9`
+and the unchanged projector. FRESH/r1 [run 37131238762](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37131238762),
+read job `111226607598`, succeeded at `2026-10-03T14:55:40.4040030Z`;
+KEEP/r1 [run 37131339406](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37131339406),
+read job `111227047774`, succeeded at `2026-10-03T14:58:10.8491476Z`.
+Approval/execution were skipped in both. Their observation SHA256 values are
+`883f64c6f1c8190c9fde011ba11d33b436438b6ea9c62577d6099f41a398d5c3`
+and `a55103477c3be7571e736546b76d338dda6cd12ba908b569af65aef3b7e9febc`,
+respectively.
 
-Both source outcomes remain failed/exit 1/cleanup true/grade null; no inference
-cost or grade changed. Both receipts verify only RESULT bodies, not ledger,
-deliverables or overall payload, and neither establishes grading readiness or
-independent provider/input/CAS authentication. The stored differences do not
+The verified FRESH/r1 RESULT is 7635 bytes, SHA256
+`eda9982c2812a5d4e1519c952f65438d1395b5526d07515fcf066dc604a1579a`;
+the KEEP/r1 RESULT is 7593 bytes, SHA256
+`137dec5dc2c4c2c0614ba253732bc6ebc0388ac9d1d511908f0d618ed7c09a54`.
+Both snapshots record 10800 total seconds and `missing={}`. FRESH/r1 records
+`started_unix=1790959571.661407` and `expires_unix=1790970371.661407`;
+KEEP/r1 records `started_unix=1790976592.4457858` and
+`expires_unix=1790987392.4457858`. These are stored timestamps in seconds.
+The new `cells[4:6].current_budget_observation` fields retain the exact
+result/prepared fingerprints and sealed configuration hashes without changing
+the terminal-only evidence. KEEP/r1's supplied-grader field remains null,
+distinct from the later preparation hash documented above.
+
+| Stored measurement | Task5 fresh/r1 | Task5 keep/r1 | Task5 keep/r2 | Task5 fresh/r2 | Boundary for all four points |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Remaining seconds | 4909.906562328339 | 7373.157982349396 | 0.0 | 10724.012340545654 | Zero-clamped, not exact uncapped elapsed time |
+| Wait seconds | 3781.06050658226 | 2580.858815908432 | 8742.75936126709 | 0.0 | Retry backoff only |
+| Native admissions | 18 | 13 | 38 | 1 | Not model calls |
+| Confirmed native resumes | 0 | 12 | 37 | 0 | Not HTTP requests |
+
+All four source outcomes remain failed/exit 1/cleanup true/grade null; no inference
+cost or grade changed. All four receipts verify only RESULT bodies, not ledger,
+deliverables or overall payload, and none establishes grading readiness or
+independent provider/input/CAS authentication. Detailed failure/recovery exposure
+remains unavailable. The stored differences do not
 identify a failure cause, absence of provider errors or a causal retention effect.
 Observer `writer_acknowledgment=not_established` remains distinct from producer
 acknowledgment.
 
-Both r2 budget observations are consumed; neither was queried or replayed here,
-and no raw payload was supplied. Task5 r1 budgets remain unobserved. These two
-stored points do not complete the card's realized budget, wait, admission,
+Both r2 budget observations are consumed, as are both r1 observations. None was
+queried or replayed here, and no raw payload was supplied. All Task4 budget values
+remain unobserved. These four stored points do not complete the card's realized
+budget, wait, admission,
 resume and attribution criteria; the finite execution/accounting closeout is
 unchanged.
 

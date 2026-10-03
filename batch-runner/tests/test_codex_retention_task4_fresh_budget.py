@@ -1,4 +1,4 @@
-"""One combined offline proof for the two fixed Task5 r1 budget profiles."""
+"""One combined offline proof for the two fixed failed Task4 FRESH budgets."""
 
 import builtins
 from copy import deepcopy
@@ -18,95 +18,43 @@ import yaml
 
 import codex_retention_fresh_r1_result_intake as reader
 import codex_retention_grade_readout as observer
-import codex_retention_task5_fresh_r1 as fresh_r1
-import codex_retention_task5_keep_r1 as keep_r1
-import codex_retention_task5_keep_r2 as keep_r2
-import codex_retention_task5_fresh_r2 as fresh_r2
+import codex_retention_task4_fresh_r1 as fresh_r1
+import codex_retention_task4_fresh_r2 as fresh_r2
+import codex_retention_task4_keep_r2 as keep_r2
+import codex_retention_task5_fresh_r1 as task5_fresh_r1
+import codex_retention_task5_keep_r1 as task5_keep_r1
+import codex_retention_task5_keep_r2 as task5_keep_r2
+import codex_retention_task5_fresh_r2 as task5_fresh_r2
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from core.cost_receipts import CostReceipt
 from .test_codex_budget_pilot_retention import TOKEN, offline  # noqa: F401
-# Collection-time imports preserve the existing process/network fixture guards.
+# Import helper owners at collection, before process/network/model guards.
 from .test_codex_retention_ci import REAL_POPEN
 from . import test_codex_retention_ci_observation as workflow_contract
 from . import test_codex_retention_fresh_r1_result_intake as fixtures
 from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
 from .test_codex_retention_task5_keep_r2_budget import _recorded_controls
-from .test_codex_retention_result_intake import PRIVATE
+from .test_codex_retention_task5_r1_budget import _assert_task5_r1_observations
+from .test_codex_retention_result_intake import FILE, PRIVATE
 
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
 
-def _assert_task5_r1_observations(readout):
-    """Check the supplied additions without treating synthetic reads as evidence."""
-    prior = deepcopy(readout)
-    added = [prior["cells"][index].pop("current_budget_observation") for index in (4, 5)]
-    canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
-    assert hashlib.sha256(canonical).hexdigest() == "eaefa00b1a8db81b9a12dd914135c0fbf2c279d09697b4cb1cb499e983d369de"
-    expected = (
-        (reader.TASK5_FRESH_R1, "37131238762", 111226607598, "2026-10-03T14:55:40.4040030Z",
-         "883f64c6f1c8190c9fde011ba11d33b436438b6ea9c62577d6099f41a398d5c3",
-         {"sha256": "eda9982c2812a5d4e1519c952f65438d1395b5526d07515fcf066dc604a1579a", "size": 7635,
-          "result_fingerprint": "591f1f7f8e1a55aa82b7fcf759d3fe8edf51e5ccf199b7e082294605165fb79a",
-          "recorded_prepared_fingerprint": "73ddcf56510ac10a676d58b6b49c5aef61efbce56f1a03795f006748bc84e575",
-          "registered_config_sha256": "d67cbfeb3a26716d445b36a4466d5dc55559652381db71056aaf44a50a43e2eb"},
-         {"total_seconds": 10800, "started_unix": 1790959571.661407, "expires_unix": 1790970371.661407,
-          "remaining_seconds": 4909.906562328339, "wait_seconds": 3781.06050658226,
-          "attempts_admitted": 18, "native_resumes": 0, "missing": {}}),
-        (reader.TASK5_KEEP_R1, "37131339406", 111227047774, "2026-10-03T14:58:10.8491476Z",
-         "a55103477c3be7571e736546b76d338dda6cd12ba908b569af65aef3b7e9febc",
-         {"sha256": "137dec5dc2c4c2c0614ba253732bc6ebc0388ac9d1d511908f0d618ed7c09a54", "size": 7593,
-          "result_fingerprint": "689cd06e107143d05f35f514d6575fb0978d7f044ebaaf9c92f5e7b47015280a",
-          "recorded_prepared_fingerprint": "fec4fe641e3ef97ebb88a8c92a3663b884c550b756455f05d8d9feeaef8d9625",
-          "registered_config_sha256": "4c75e2f0d8eb5a197fc44c2dc71b1abc166334c350791224ab5e3abc1a017cc3"},
-         {"total_seconds": 10800, "started_unix": 1790976592.4457858, "expires_unix": 1790987392.4457858,
-          "remaining_seconds": 7373.157982349396, "wait_seconds": 2580.858815908432,
-          "attempts_admitted": 13, "native_resumes": 12, "missing": {}}),
-    )
-    for actual, (profile, run, job, timestamp, digest, result, snapshot) in zip(added, expected):
-        row = readout["cells"][profile.ordinal]
-        assert actual["source_addendum"] == (
-            "Project5 leader order 2026-10-04 00:19 KST; actual RESULT-only receipt supplied by the leader, not a worker live read")
-        assert (actual["mode"], actual["source_sha"], actual["run_id"], actual["job_id"], actual["receipt_utc"]) == (
-            "observe_budget", "3d43a674e47d700dd874680c053a91bc1807b693", run, job, timestamp)
-        assert actual["outcome"] == "budget_observation_verified" and actual["approval_execution_skipped"] is True
-        assert actual["marker_sha256"] == digest
-        assert actual["historical_reader_sha256"] == "dd23824360e03f415feb5c7d247024ac7d67300c4ed7f2120e0eb2c9d6e47eb9"
-        assert actual["budget_projector_sha256"] == "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815"
-        assert actual["result"] == result
-        assert owned._canonical_json(actual["inference_budget_snapshot"]) == owned._canonical_json(snapshot)
-        assert actual["terminal_commit"] == row["terminal"]["revision"]
-        assert actual["output_commit"] == row["output_manifest"]["revision"]
-        assert actual["retained_authority_sha256"] == row["read"]["retained_authority_sha256"]
-        assert actual["supplied_request_binding"] == reader._request_context(profile)
-        assert (actual["status"], actual["exit_code"], actual["cleanup_confirmed"], actual["grade"]) == ("failed", 1, True, None)
-        assert actual["result_body_verified"] is True and actual["payload_verification_scope"] == "inference_result_only"
-        assert actual["writer_acknowledgment"] == "not_established" and actual["recorded_publication_acknowledged"] is True
-        for key in ("payload_bodies_verified", "ledger_body_verified", "deliverable_bodies_verified", "grading_input_ready",
-                    "fresh_origin_authentication", "prepared_input_independently_verified", "git_parent_cas_independently_verified",
-                    "live_read_repeated_here", "replay_authorized"):
-            assert actual[key] is False
-        assert actual["historical_scope"] == "read_terminal_details_and_original_limits_preserved_as_terminal_only_evidence_not_backfilled"
-        assert actual["measurement_limits"] == readout["cells"][7]["current_budget_observation"]["measurement_limits"]
-        assert actual["unavailable"] == readout["cells"][7]["current_budget_observation"]["unavailable"]
-        assert row["terminal_details"]["budget"] is None and row["read"]["payload_bodies_verified"] is False
-    assert added[1]["supplied_request_binding"]["materialized_grader_source_sha256"] is None
-    assert all("current_budget_observation" not in row for row in readout["cells"][:4])
-
-
-def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch, capsys):
+def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch, capsys):
     effects, transports, failures = [], [], []
 
     def forbidden(*args, **kwargs):
         effects.append(True)
-        raise AssertionError("r1 budget proof crossed a network, model, remote writer, child or paid boundary")
+        raise AssertionError("Task4 budget proof crossed a network, model, remote writer, child or paid boundary")
 
+    producers = (fresh_r1, fresh_r2, keep_r2, task5_fresh_r1, task5_keep_r1, task5_keep_r2, task5_fresh_r2)
     for owner, names in (
         (ci, ("execute", "verify_approval", "verify_job_origin", "verify_terminal")),
-        *((producer, ("execute", "_predecessor", "verify_terminal"))
-          for producer in (fresh_r1, keep_r1, keep_r2, fresh_r2)),
+        *((producer, ("execute", "_predecessor", "verify_terminal")) for producer in producers),
         *((admission, ("__init__",)) for admission in (
-            fresh_r1._Task5FreshR1Admission, keep_r1._Task5KeepR1Admission,
-            keep_r2._Task5KeepR2Admission, fresh_r2._Task5FreshR2Admission, ci._Admission)),
+            fresh_r1._FreshAdmission, fresh_r2._FreshR2Admission, keep_r2._KeepR2Admission,
+            task5_fresh_r1._Task5FreshR1Admission, task5_keep_r1._Task5KeepR1Admission,
+            task5_keep_r2._Task5KeepR2Admission, task5_fresh_r2._Task5FreshR2Admission, ci._Admission)),
         (ci.LocalTransport, ("github_job_token", "authority_opener", "github", "azure")),
         (owned.LocalTransport, ("clock", "child", "process")),
         (ci.preparation, ("prepare_packet", "verify_packet")), (ci.historical, ("observe",)),
@@ -123,8 +71,8 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
     assert subprocess.Popen is not REAL_POPEN and subprocess.Popen.__name__ == "blocked"
     assert socket.create_connection.__name__ == socket.socket.connect.__name__ == "blocked"
 
-    # Keep original exception classes and relative frames if CLI redaction
-    # hides an unexpected assertion; never disclose private exception strings.
+    # If CLI redaction hides an unexpected failure, retain classes/relative
+    # frames for its first boundary, never private exception text or payloads.
     real_observe = reader.observe_terminal
 
     def observed(**kwargs):
@@ -146,16 +94,22 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
 
     monkeypatch.setattr(reader, "observe_terminal", observed)
     profiles = (
-        (reader.TASK5_FRESH_R1, fresh_r1, "TASK5_FRESH_R1_BUDGET_CONTROLS",
+        (reader.FRESH_R1, fresh_r1, "FRESH_R1_BUDGET_CONTROLS",
+         "retention-task4-fresh-r1-budget-observation-v1", "retention-task4-fresh-r1-budget-observation.json",
+         "5993b6d0c94ef1d56e808fab07941daed6e77d3f7adf7e055d9329043af63e02"),
+        (reader.FRESH_R2, fresh_r2, "FRESH_R2_BUDGET_CONTROLS",
+         "retention-task4-fresh-r2-budget-observation-v1", "retention-task4-fresh-r2-budget-observation.json",
+         "7148453eb16dd8a0c6737bffe2fc5df42319dbb1a11afba2cdc2b90b649f305d"),
+        (reader.TASK5_FRESH_R1, task5_fresh_r1, "TASK5_FRESH_R1_BUDGET_CONTROLS",
          "retention-task5-fresh-r1-budget-observation-v1", "retention-task5-fresh-r1-budget-observation.json",
          "d67cbfeb3a26716d445b36a4466d5dc55559652381db71056aaf44a50a43e2eb"),
-        (reader.TASK5_KEEP_R1, keep_r1, "TASK5_KEEP_R1_BUDGET_CONTROLS",
+        (reader.TASK5_KEEP_R1, task5_keep_r1, "TASK5_KEEP_R1_BUDGET_CONTROLS",
          "retention-task5-keep-r1-budget-observation-v1", "retention-task5-keep-r1-budget-observation.json",
          "4c75e2f0d8eb5a197fc44c2dc71b1abc166334c350791224ab5e3abc1a017cc3"),
-        (reader.TASK5_KEEP_R2, keep_r2, "TASK5_KEEP_R2_BUDGET_CONTROLS",
+        (reader.TASK5_KEEP_R2, task5_keep_r2, "TASK5_KEEP_R2_BUDGET_CONTROLS",
          "retention-task5-keep-r2-budget-observation-v1", "retention-task5-keep-r2-budget-observation.json",
          "1bda6431161ff4d27e751b3475979f861eb875beb7d16a608c7649830f051286"),
-        (reader.TASK5_FRESH_R2, fresh_r2, "TASK5_FRESH_R2_BUDGET_CONTROLS",
+        (reader.TASK5_FRESH_R2, task5_fresh_r2, "TASK5_FRESH_R2_BUDGET_CONTROLS",
          "retention-task5-fresh-r2-budget-observation-v1", "retention-task5-fresh-r2-budget-observation.json",
          "3dd0af0802619dd60cc9eda5c492f6b75cd641463dca84a68ad5ad362e56074a"),
     )
@@ -163,8 +117,22 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
     readout = json.loads((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes())
     plan = intake.registration.compile_plan()
     for profile, producer, name, _, _, config_hash in profiles:
-        row = readout["cells"][profile.ordinal]
-        assert controls[name] == _recorded_controls(row)
+        row, fixed = readout["cells"][profile.ordinal], controls[name]
+        if profile is reader.FRESH_R1 or profile is reader.FRESH_R2:
+            assert "retained_authority_sha256" not in row["read"]
+            assert fixed == {
+                "terminal_commit": row["terminal"]["revision"],
+                "terminal_identity": {"sha256": row["terminal"]["sha256"], "size": row["terminal"]["bytes"]},
+                "claim_commit": row["claim"]["revision"],
+                "claim_identity": {"sha256": row["claim"]["sha256"], "size": row["claim"]["bytes"]},
+                "output_commit": row["output_manifest"]["revision"],
+                "output_manifest_identity": {"sha256": row["output_manifest"]["sha256"], "size": row["output_manifest"]["bytes"]},
+                "output_objects_sha256": row["output_objects_sha256"],
+                "status": "failed", "exit_code": 1, "cleanup_confirmed": True}
+            successor = fresh_r2 if profile is reader.FRESH_R1 else keep_r2
+            assert fixed == {key: successor.PREDECESSOR[key] for key in fixed}
+        else:
+            assert fixed == _recorded_controls(row)
         assert profile.expectation == ci.TerminalExpectation(
             row["producer"]["request_sha256"], row["producer"]["source_sha"], row["cell_id"])
         assert (profile.run_id, profile.execution_job_id, row["producer"]["attempt"]) == (
@@ -173,62 +141,21 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         assert producer.PREDECESSOR["terminal_commit"] == row["preceding_registered_inference_terminal"]
         cell = intake.controller._adapted_cell(plan["cells"][profile.ordinal])
         assert cell["config_sha256"] == intake.registration.seal(cell["config"]) == config_hash
-    assert reader.TASK5_FRESH_R1_CONFIG_SHA256 == profiles[0][-1]
-    assert reader.TASK5_KEEP_R1_CONFIG_SHA256 == profiles[1][-1]
+    assert reader.FRESH_R1_CONFIG_SHA256 == profiles[0][-1] and reader.FRESH_R2_CONFIG_SHA256 == profiles[1][-1]
     assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
-    assert readout["cells"][5]["supplied_materialized_grader_source_sha256"] == (
-        "75f38c05e5c348e481e54f4c0b2000772c2414d7bae7519b1f2a38d92e1e0dc5")
     _assert_task5_r1_observations(readout)
-
-    # Only the newly supplied KEEP receipt may differ from the delivered JSON.
-    # This is evidence preservation inside the new selector, not a report rerun.
-    prior = deepcopy(readout)
-    # Exclude the later, explicitly supplied r1 observations from this older snapshot.
-    for index in (4, 5):
-        prior["cells"][index].pop("current_budget_observation")
-    actual = prior["cells"][6].pop("current_budget_observation")
-    canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
-    # Python canonicalization retains the delivered 0.0 spelling (unlike jq).
-    assert hashlib.sha256(canonical).hexdigest() == "bb8749e42de933000f126299616bdc2235c63bf420f6a4ebf5a7c16512924965"
-    assert (actual["mode"], actual["run_id"], actual["job_id"], actual["receipt_utc"]) == (
-        "observe_budget", "37125749122", 111210580807, "2026-10-03T13:21:06.8522139Z")
-    assert "2026-10-03 22:15 KST" in actual["source_addendum"]
-    assert actual["marker_sha256"] == "eca874ea9123475d5632c08c90dc072942a296d3badb1f8923c44db48bb3b043"
-    assert actual["budget_projector_sha256"] == reader.BUDGET_PROJECTOR_PIN[1]
-    assert actual["result"] == {
-        "sha256": "d17695351a36522df6b66a1e0fe0860e90410af92c11ec157672a0750ea282ff", "size": 7619,
-        "result_fingerprint": "657c19e44d255e6a2849a4f88bb60dab5e5a5710a846cc992abaa3b4e85d2077",
-        "recorded_prepared_fingerprint": "14e9357577a916bbeb974853dbe776534082ec16f608b03b20a16e21d0d5c829",
-        "registered_config_sha256": reader.TASK5_KEEP_R2_CONFIG_SHA256}
-    assert actual["inference_budget_snapshot"] == {"total_seconds": 10800,
-        "started_unix": 1790987596.6290615, "expires_unix": 1790998396.6290615,
-        "remaining_seconds": 0.0, "wait_seconds": 8742.75936126709,
-        "attempts_admitted": 38, "native_resumes": 37, "missing": {}}
-    for key in ("terminal_commit", "output_commit", "retained_authority_sha256"):
-        assert actual[key] == controls["TASK5_KEEP_R2_BUDGET_CONTROLS"][key]
-    assert actual["result_body_verified"] and actual["approval_execution_skipped"]
-    assert actual["payload_verification_scope"] == "inference_result_only"
-    for key in ("payload_bodies_verified", "ledger_body_verified", "deliverable_bodies_verified", "grading_input_ready",
-                "fresh_origin_authentication", "prepared_input_independently_verified", "git_parent_cas_independently_verified",
-                "live_read_repeated_here", "replay_authorized"):
-        assert actual[key] is False
-    assert (actual["status"], actual["exit_code"], actual["cleanup_confirmed"], actual["grade"]) == ("failed", 1, True, None)
-    assert actual["writer_acknowledgment"] == "not_established" and actual["recorded_publication_acknowledged"] is True
-    assert actual["measurement_limits"] == readout["cells"][7]["current_budget_observation"]["measurement_limits"]
-    assert actual["unavailable"] == readout["cells"][7]["current_budget_observation"]["unavailable"]
-    for index in (6, 7):
-        assert readout["cells"][index]["terminal_details"]["budget"] is None
-        assert not readout["cells"][index]["read"]["payload_bodies_verified"]
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/REPORT.md").read_bytes()).hexdigest() == (
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
-    assert "Both r2 budget observations are consumed" in report
     assert "All Task4 budget values remain unobserved" in " ".join(report.split())
-    for value in actual["inference_budget_snapshot"].values():
-        if type(value) in (int, float):
-            assert str(value) in report
+    for index in (4, 5):
+        actual = readout["cells"][index]["current_budget_observation"]
+        for value in actual["inference_budget_snapshot"].values():
+            if type(value) in (int, float):
+                assert str(value) in report
+        assert actual["marker_sha256"] in report and actual["result"]["sha256"] in report
     with capsys.disabled():
-        print("BOUNDARY four exact Task5 configurations/controls; new actual KEEP receipt separated from unchanged historical/FRESH evidence")
+        print("BOUNDARY six fixed configurations/controls; two actual Task5 r1 additions preserve all delivered JSON fields and pilot bytes")
 
     source = reader.reader_identity(binding=reader.TASK5_FRESH_R2)
     monkeypatch.setattr(intake.registration, "compile_plan", lambda: deepcopy(plan))
@@ -260,8 +187,9 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
             "terminal_identity": owned._identity(retained._encoded(api.terminal)),
             "claim_identity": owned._identity(retained._encoded(api.claim)),
             "output_manifest_identity": owned._identity(retained._encoded(api.summary)),
-            "output_objects_sha256": owned._digest(api.terminal["output_objects"]),
-            "retained_authority_sha256": owned._digest(api.terminal["authority"])}
+            "output_objects_sha256": owned._digest(api.terminal["output_objects"])}
+        if "retained_authority_sha256" in api.fixed:
+            api.expected["retained_authority_sha256"] = owned._digest(api.terminal["authority"])
 
     def seal(api):
         revisions(api.fixed)
@@ -273,7 +201,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         cell = intake.controller._adapted_cell(plan["cells"][profile.ordinal])
         return {"run_id": cell["run_id"], "task_id": cell["task_id"], **cell["control"],
             "total_seconds": 10800, "attempt_seconds": 1800, "started_unix": 100.0, "expires_unix": 10900.0,
-            "remaining_seconds": 100.0, "wait_seconds": 12.5, "attempts_admitted": 2, "native_resumes": 1}
+            "remaining_seconds": 100.0, "wait_seconds": 12.5, "attempts_admitted": 2, "native_resumes": 0}
 
     default_snapshot = object()
 
@@ -281,12 +209,18 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         spec = next(spec for spec in profiles if spec[0] is profile)
         fixed = controls[spec[2]]
         revisions(fixed)
-        # Reuse the exclusive fixture owner; do not create source roles again.
-        api = _task5_fixture(plan, binding=profile, receipt=receipt, with_ledger=True,
-                             terminal_head=fixed["terminal_commit"])
+        # Each source role stays with its established exclusive fixture owner.
+        # Task4 uses its original transport, never the Task5 task-ID rewriter.
+        task4 = profile is reader.FRESH_R1 or profile is reader.FRESH_R2
+        factory = fixtures.FreshResultHF if task4 else _task5_fixture
+        api = factory(plan, binding=profile, receipt=receipt, with_ledger=True, terminal_head=fixed["terminal_commit"])
         transports.append(api)
         api.fixed, api.profile, api.spec = fixed, profile, spec
-        api.files.pop(TASK5_FILE)
+        api.files.pop(FILE if task4 else TASK5_FILE)
+        # Ordinary FRESH/r1 success historically accepts another positive job;
+        # its terminal/budget mode requires the exact supplied execution job.
+        api.claim["authority"]["provider_job_id"] = profile.execution_job_id
+        api.terminal["authority"] = deepcopy(api.claim["authority"])
         api.payload["condition"] = plan["cells"][profile.ordinal]["config"]["condition_a"]["name"]
         api.payload["results"][0].update(status="error", deliverable_files=[], deliverable_file_records=[],
             observability={"task_deadline": deepcopy(complete(profile) if snapshot is default_snapshot else snapshot)})
@@ -317,7 +251,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         text = capsys.readouterr()
         assert not text.err
         assert all(secret not in text.out for secret in
-            (str(tmp_path), api.repo, TOKEN, PRIVATE.decode().strip(), TASK5_FILE, "SECRET-LIKE-ERROR"))
+            (str(tmp_path), api.repo, TOKEN, PRIVATE.decode().strip(), FILE, TASK5_FILE, "SECRET-LIKE-ERROR"))
         return json.loads(text.out)
 
     def cli(api, name):
@@ -333,7 +267,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         return code, captured(api)
 
     for profile, producer, *_ in profiles[:2]:
-        prefix, api = profile.retention_bundle + "-r1-", make(profile)
+        prefix, api = "task4-fresh-r" + str(profile.repetition) + "-", make(profile)
         with monkeypatch.context() as early:
             early.setattr(retained, "_session", forbidden)
             early.setattr(reader, "_budget_projector", forbidden)
@@ -341,12 +275,12 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
             for other_mode in ("--read", "--observe-terminal"):
                 assert reader.main(["--observe-budget", other_mode], _test_api=api) == 2
                 assert captured(api)["reason"] == "invalid_arguments"
-            wrong_profiles = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2,
-                *(spec[0] for spec in profiles if spec[0] is not profile),
+            wrong_profiles = (reader.KEEP_R2, *(spec[0] for spec in profiles if spec[0] is not profile),
                 replace(profile), replace(profile, run_id="1"), replace(profile, execution_job_id=1), object())
             for index, changes in enumerate((
                 *({"binding": other} for other in wrong_profiles),
                 {"include_budget": 1}, {"expected_reader_sha256": "c" * 64},
+                {"expectation": intake.EXPECTATION},  # Successful Task4 KEEP/r1 is not budget eligible.
                 {"expectation": replace(profile.expectation, cell_id="unknown")},
                 {"expectation": replace(profile.expectation, source_sha="a" * 40)},
                 {"expectation": replace(profile.expectation, request_sha256="b" * 64)},
@@ -391,15 +325,15 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
                     assert not (tmp_path / name).exists()
         assert not api.calls and not effects
     with capsys.disabled():
-        print("BOUNDARY both r1 identities/sealed configs and changed/missing current pins refused before imports/session")
+        print("BOUNDARY both Task4 FRESH identities/configs; KEEP/unknown/copied bindings and changed/missing pins refused before session")
 
     monkeypatch.setenv("HF_TOKEN", TOKEN)  # Authored fixture token, never a credential.
     for profile, producer, _, expected_format, marker_name, config_hash in profiles[:2]:
-        prefix, api = profile.retention_bundle + "-r1-", make(profile)
+        prefix, api = "task4-fresh-r" + str(profile.repetition) + "-", make(profile)
         code, record = cli(api, prefix + "budget")
         assert code == 0, {"boundary": prefix + "first_result_budget_projection", "original_causes": failures[-1:]}
-        assert record["format"] == expected_format
-        assert record["mode"] == "observe_budget" and record["budget_observation_verified"] is True
+        assert record["format"] == expected_format and record["mode"] == "observe_budget"
+        assert record["budget_observation_verified"] is True
         assert record["inference_budget_snapshot"] == {**{key: complete(profile)[key] for key in fields}, "missing": {}}
         assert record["inference_budget_snapshot"]["attempts_admitted"] != record["receipt"]["model_calls"]
         assert record["result"] == {**owned._identity(api.files[intake.RESULT]),
@@ -407,8 +341,9 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
             "recorded_prepared_fingerprint": api.payload["prepared_fingerprint"],
             "registered_config_sha256": config_hash}
         assert not {"results", "raw_payload", "stderr", "error", "deliverable_files"} & record.keys()
-        assert record["supplied_request_binding"]["materialized_grader_source_sha256"] == profile.materialized_grader_source_sha256
+        assert record["supplied_request_binding"] == reader._request_context(profile)
         assert record["predecessor"] == producer.PREDECESSOR
+        assert record["expected_execution_job_id"] == record["recorded_provider_job_id"] == profile.execution_job_id
         assert (record["status"], record["exit_code"], record["cleanup_confirmed"], record["grade"]) == ("failed", 1, True, None)
         assert record["result_body_verified"] and record["payload_verification_scope"] == "inference_result_only"
         for key in ("payload_bodies_verified", "ledger_body_verified", "deliverable_bodies_verified", "grading_input_ready",
@@ -416,6 +351,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
                     "launch_authorized", "grading_launched", "admission_attempted", "replay_authorized", "invoice_complete"):
             assert record[key] is False
         assert record["writer_acknowledgment"] == "not_established" and record["recorded_publication_acknowledged"] is True
+        assert record["retained_authority_sha256"] == owned._digest(api.terminal["authority"])
         assert record["receipt"] == receipt and record["commands"] == []
         assert set(record["unavailable"]) == {"detailed_failure", "recovery_exposure"}
         result_path = producer.OUTPUT + "/" + intake.RESULT
@@ -438,7 +374,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
             lambda api: api.summary.update(cell_id=reader.TASK5_FRESH_R2.expectation.cell_id),
             lambda api: api.terminal.update(request_sha256=reader.TASK5_FRESH_R2.expectation.request_sha256),
             lambda api: api.claim.update(expected_parent=api.fixed["terminal_commit"]),
-            lambda api: api.claim["predecessor"].update(exit_code=137),
+            lambda api: api.claim["predecessor"].update(cell_id="wrong-predecessor"),
             lambda api: api.summary.update(cleanup_confirmed=False),
             lambda api: api.terminal.update(publication_acknowledged=False),
         )):
@@ -451,10 +387,18 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
                 bad = make(profile)
                 bad.expected[key][field] = "0" * 64 if field == "sha256" else bad.expected[key][field] + 1
                 refuse(bad, prefix + key + field, before_result=True)
-        for key in ("output_objects_sha256", "retained_authority_sha256"):
-            bad = make(profile)
-            bad.expected[key] = "0" * 64
-            refuse(bad, prefix + key, before_result=True)
+        bad = make(profile)
+        bad.expected["output_objects_sha256"] = "0" * 64
+        refuse(bad, prefix + "object-set", before_result=True)
+        # With no separately supplied Task4 authority digest, the pinned
+        # terminal still rejects a well-formed but changed embedded authority.
+        bad = make(profile)
+        pinned_terminal = deepcopy(bad.expected["terminal_identity"])
+        bad.claim["authority"]["runner_id"] += 1
+        bad.terminal["authority"] = deepcopy(bad.claim["authority"])
+        seal(bad)
+        bad.expected["terminal_identity"] = pinned_terminal
+        refuse(bad, prefix + "authority-inside-terminal", before_result=True)
         for index, (revision, path) in enumerate((
             (api.fixed["claim_commit"], producer.CLAIM), (api.fixed["output_commit"], result_path),
             (api.fixed["terminal_commit"], producer.OUTPUT + "/" + intake.LEDGER),
@@ -470,12 +414,12 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
             lambda value: value.update(source="synthetic-wrong/source"),
             lambda value: value.update(run_id="wrong-config-run"),
             lambda value: value.update(condition="wrong-condition"),
-            lambda value: value.update(ordered_task_ids=[intake.registration.TASK4]),
-            lambda value: value["results"][0].update(task_id=intake.registration.TASK4),
+            lambda value: value.update(ordered_task_ids=[intake.registration.TASK5]),
+            lambda value: value["results"][0].update(task_id=intake.registration.TASK5),
             lambda value: value["results"][0].update(observability=[]),
             lambda value: value["results"][0]["observability"].update(task_deadline=None),
-            lambda value: value["results"][0]["observability"]["task_deadline"].update(retention_bundle="fresh" if profile.retention_bundle == "keep" else "keep"),
-            lambda value: value["results"][0]["observability"]["task_deadline"].update(repetition=2),
+            lambda value: value["results"][0]["observability"]["task_deadline"].update(retention_bundle="keep"),
+            lambda value: value["results"][0]["observability"]["task_deadline"].update(repetition=3 - profile.repetition),
             lambda value: value["results"][0]["observability"]["task_deadline"].update(total_seconds=10801),
             lambda value: value["results"][0]["observability"]["task_deadline"].update(attempt_seconds=1801),
             lambda value: value["results"][0]["observability"]["task_deadline"].update(attempts_admitted=1.0),
@@ -508,7 +452,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         assert read(zeros, prefix + "zeros")["inference_budget_snapshot"] == {
             "total_seconds": 10800, **dict.fromkeys(fields[1:], 0), "missing": {}}
         with capsys.disabled():
-            print("BOUNDARY " + prefix + "controls/history then RESULT only; tamper refusals and missing/null/zero semantics verified")
+            print("BOUNDARY " + prefix + "controls/history before RESULT; exact authority/job, tamper and missing/null/zero checks")
 
         writer, real_bytes = reader._write_no_clobber, output._bytes
         for failure in ("write", "readback"):
@@ -563,14 +507,15 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
                                   if key != "include_budget"})
         assert all(path != result_path for _, path in failed_intake.downloads)
 
-    # Directly coupled r2 synthetic compatibility, never their delivered tests
-    # or either consumed actual observation.
+    # Directly coupled synthetic Task5 compatibility, not any earlier test or
+    # consumed real observation. Their fixed controls and marker formats stay.
     for profile, _, _, expected_format, marker_name, config_hash in profiles[2:]:
-        prefix, api = profile.retention_bundle + "-r2-", make(profile)
+        prefix, api = "task5-" + profile.retention_bundle + "-r" + str(profile.repetition) + "-", make(profile)
         record = read(api, prefix + "budget")
         assert record["format"] == expected_format and record["result"]["registered_config_sha256"] == config_hash
         assert record["inference_budget_snapshot"] == {**{key: complete(profile)[key] for key in fields}, "missing": {}}
         assert (tmp_path / (prefix + "budget") / marker_name).is_file()
+        assert record["supplied_request_binding"] == reader._request_context(profile)
         control = make(profile)
         with monkeypatch.context() as controls_only:
             controls_only.setattr(reader, "_budget_projector", forbidden)
@@ -584,14 +529,15 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
     assert observer.bridge.fixed_evidence_sha256("retention/keep-r2") == "25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0"
     assert observer.bridge._fixed("retention/keep-r2").RESULT["intake_sha256"] == "4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4"
     with capsys.disabled():
-        print("BOUNDARY both r1 private markers/lost-ack/no-replay; unchanged r2/control-only behavior and historical evidence")
+        print("BOUNDARY Task4 private no-clobber/lost-ack/no-replay; Task5/control-only compatibility and historical grade evidence unchanged")
 
     workflow_contract._assert_retention_execution_workflow_contract()
     workflow_contract._assert_retention_mode_routes()
     workflow = yaml.safe_load((ci.ROOT / ci.WORKFLOW).read_bytes())
     jobs, cells = workflow["jobs"], tuple(plan["order"])
     steps = jobs[ci.PREPARE_JOB]["steps"]
-    assert set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], *cells[4:8]} and len(workflow_contract._BUDGET_CELLS) == 6
+    budget_cells = {cells[1], cells[2], *cells[4:8]}
+    assert len(workflow_contract._BUDGET_CELLS) == 6 and set(workflow_contract._BUDGET_CELLS) == budget_cells
     names = ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget")
     mode_cases = 0
     for selected, flags in itertools.product((*cells, "unknown"), itertools.product((False, True), repeat=6)):
@@ -602,7 +548,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         for index in (9, 10, 11, 12, 13, 14):
             expected = ((reading and selected in cells[1:]) if index in (9, 10) else
                         (reading and selected == cells[0]) if index in (11, 12) else
-                        ((terminal and selected in cells[1:]) or (budget and selected in workflow_contract._BUDGET_CELLS)))
+                        ((terminal and selected in cells[1:]) or (budget and selected in budget_cells)))
             assert workflow_contract._boolean(steps[index]["if"], values) is expected
         mode_cases += 1
     assert mode_cases == 576
@@ -634,10 +580,11 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
     assert not effects and all(not api.commits for api in transports)
     assert subprocess.Popen is not REAL_POPEN and subprocess.Popen.__name__ == socket.create_connection.__name__ == "blocked"
     with capsys.disabled():
-        print(json.dumps({"scope": "synthetic_combined_task5_r1_result_only_budget_observation", "new_profiles": 2,
-            "closed_task5_budget_profiles": 4, "mode_cases": mode_cases, "fixed_controls_before_result": True,
-            "sealed_r1_configs": True, "missing_null_zero_preserved": True, "private_marker_readback_no_replay": True,
-            "unchanged_r2_controls_only_paid_isolation": True, "current_historical_pins_separate": True,
-            "actual_keep_r2_receipt_separate_from_synthetic_proof": True,
-            "prior_json_fields_fresh_receipt_original_pilot_unchanged": True,
-            "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))
+        print(json.dumps({"scope": "synthetic_combined_task4_fresh_result_only_budget_observation", "new_profiles": 2,
+            "closed_budget_profiles": 6, "mode_cases": mode_cases, "fixed_controls_before_result": True,
+            "authority_bound_by_exact_terminal_bytes": True, "sealed_task4_configs": True,
+            "missing_null_zero_preserved": True, "private_marker_readback_no_replay": True,
+            "unchanged_task5_controls_only_paid_isolation": True, "current_historical_pins_separate": True,
+            "actual_task5_r1_receipts_separate_from_synthetic_proof": True,
+            "prior_json_fields_r2_receipts_original_pilot_unchanged": True,
+            "task4_budget_values_unobserved": True, "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))
