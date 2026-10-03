@@ -84,22 +84,21 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # Seven execution cells, six result cells, five terminal cells and unsupported selectors,
+    # Eight execution cells, seven result cells, six terminal cells and an unsupported selector,
     # with all 32 mode combinations,
     # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.
     cells = (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID, reader.controller.FRESH_R2_CELL_ID,
              reader.controller.KEEP_R2_CELL_ID, reader.controller.TASK5_FRESH_R1_CELL_ID,
              reader.controller.TASK5_KEEP_R1_CELL_ID, reader.controller.TASK5_KEEP_R2_CELL_ID)
-    execution_cells = cells
+    execution_cells = (*cells, reader.controller.TASK5_FRESH_R2_CELL_ID)
     assert gate["run"].splitlines()[-4:] == [
-        '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + execution_cells[5] + ' || "$SELECTED_CELL" == ' + execution_cells[6] + ' ]]',
+        '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + execution_cells[5] + ' || "$SELECTED_CELL" == ' + execution_cells[6] + ' || "$SELECTED_CELL" == ' + execution_cells[7] + ' ]]',
         '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + cells[0] + ' ]]',
         '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ) ]]',
     ]
-    for selected in (*execution_cells, "unregistered",
-                     reader.registration.TASK5 + "_retention_bundle_v1_fresh_r2"):
+    for selected in (*execution_cells, "unregistered"):
         for values in itertools.product((False, True), repeat=5):
             modes = dict(zip(mode_names, values))
             prepared, observed, executed, reading, terminal = values
@@ -191,8 +190,8 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "  '" + fresh_hash + "  batch-runner/codex_retention_fresh_r1_result_intake.py' \\",
         *["  '" + digest + "  batch-runner/" + name + "' \\" for name, digest in (
             ("codex_retention_result_intake.py", module_hash), ("codex_retention_ci.py", verifier_hash),
-            ("codex_retention_task4_fresh_r1.py", "b0c397dd6a6dc0f0650322f05ec68282eee92c3abc4099dd82c4a9480f5b8daa"),
-            ("codex_retention_first_cell.py", "5bbbe1f715169192e7fdb45a5f19fe77d075633825b30ecf5dbb18f7b782576a"))],
+            ("codex_retention_task4_fresh_r1.py", "75a183f632df17a16f66df4745e01b696f1538b4285f3f11e51fc784c92c15c1"),
+            ("codex_retention_first_cell.py", "c42c8bb3e521c10a5d48680918978a3b9269468a724cd127109f8f4898fe2e6b"))],
         "  | sha256sum --check --status",
         'if [[ "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ]]; then',
         "  printf '%s\\n' '8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f  batch-runner/codex_retention_task4_fresh_r2.py' | sha256sum --check --status",
@@ -230,7 +229,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         fresh_script = fresh_script.replace(old, new)
     assert fresh_read["run"] == fresh_script  # Same private destination, bounds, redaction and nonzero exits.
     assert terminal_preflight["run"] == fresh_preflight["run"]
-    facade = "python3 batch-runner/codex_retention_task5_keep_r2.py"
+    facade = "python3 batch-runner/codex_retention_task5_fresh_r2.py"
     assert steps[4]["run"].startswith(facade + " ")
     assert facade + " --prepare" in steps[8]["run"]
     assert execute["steps"][10]["run"].startswith(facade + " --verify-approval ")

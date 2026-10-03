@@ -189,7 +189,7 @@ def test_task5_keep_r1_is_the_closed_sixth_cell(tmp_path, monkeypatch, capsys, a
         (production_plan["order"][0], 0, "keep", 1), (production_plan["order"][1], 1, "fresh", 1),
         (production_plan["order"][2], 2, "fresh", 2), (production_plan["order"][3], 3, "keep", 2),
         (production_plan["order"][4], 4, "fresh", 1), (production_plan["order"][5], 5, "keep", 1),
-        (production_plan["order"][6], 6, "keep", 2)]
+        (production_plan["order"][6], 6, "keep", 2), (production_plan["order"][7], 7, "fresh", 2)]
     assert pins == {"cell_id": previous.CELL_ID,
         "producer_source_sha": "e5e338aa22c247133936fa075c2def7bffb95173", "run_id": "37032230813",
         "execution_job_id": 110933285330,
@@ -247,7 +247,7 @@ def test_task5_keep_r1_is_the_closed_sixth_cell(tmp_path, monkeypatch, capsys, a
     for malformed in (None, True, {}, ForeignPublication(**vars(publication)), *(
             replace(publication, cell_id=cell) for cell in (
                 None, True, 5, b"unknown", "unknown", successor.CELL_ID + "\n",
-                controller.FIRST_CELL_ID, *production_plan["order"][7:]))):
+                controller.FIRST_CELL_ID, production_plan["order"][7] + "_unsupported"))):
         with pytest.raises(ci.RetentionCIRefused, match="^fixed_retention_publication_binding_required$"):
             fresh._verify_publication(None, None, TERMINAL_HEAD, {}, {},
                 tmp_path / "never-unsupported-publication", None, 0, malformed)
@@ -317,7 +317,7 @@ def test_task5_keep_r1_is_the_closed_sixth_cell(tmp_path, monkeypatch, capsys, a
         child.recovery_request = request
         grant = ci.ExecutionGrantRequest(SOURCE, owned._digest(document), archive)
         denied = host_parent / "not-admitted"
-        for wrong in ("unregistered", True, 5, *plan["order"][7:]):
+        for wrong in ("unregistered", True, 5, plan["order"][7] + "_unsupported"):
             with pytest.raises(controller.RetentionControllerRefused, match="^only_first_or_task4_fresh_r1_supported$"):
                 controller.execute_first_cell(replace(request, cell_id=wrong), host_state=denied, grant=grant)
         with pytest.raises(controller.RetentionControllerRefused, match="^controller_source_mismatch$"):
@@ -653,4 +653,4 @@ def test_task5_keep_r1_routes_and_current_pins_preserve_fixed_readers(tmp_path, 
         state[name] = saved
     assert historical == (bridge.RESULT, bridge.PARENT, bridge.READER, fixed.RESULT, fixed.PARENT, fixed.READER)
     assert effects == []
-    print("OFFLINE ordinal5 routing: exact seven-cell execution/seven-result/six-terminal allowlists; 288 mode cases; guarded helper imports; current pins/source refusals and immutable historical grading evidence preserved")
+    print("OFFLINE ordinal5 routing: exact eight-cell execution/seven-result/six-terminal allowlists; 288 mode cases; guarded helper imports; current pins/source refusals and immutable historical grading evidence preserved")
