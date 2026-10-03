@@ -13,7 +13,78 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add only registered Task5 keep/r2, ordinal 6 / repetition 2,
+- Add the closed model-free `TASK5_KEEP_R2` reader and existing read/terminal
+  routes for the exact ordinal 6 / KEEP / repetition 2 cell. Its single offline
+  selector passed at `2f58256bc6aabc345f46c37e8418b1f5f7a188d6`: 1 collected /
+  1 passed in 17.12s, invocation exit 0, log-capture exit 0, no timeout within
+  180 seconds. The proof reached successful result/ledger/deliverable intake,
+  failed/stopped three-control-only observation, wrong identity/history/source
+  refusals, marker readback/no-clobber, old defaults and 288 mode cases with zero
+  forbidden effects or synthetic commits. This is synthetic reader proof, not
+  live inference completion, grading or read authorization. Log
+  `/tmp/task5-keep-r2-reader-proof-20261003-1024.z5MOYT/pytest.log`, SHA256
+  `dd1a659dcab342b28be93a9ca3c6f5cb5c6e798c4dee4f69f5426485602c7bbe`.
+  The current task record preserves the exact command and verified CPython
+  3.10.12 / pytest 9.1.1 prerequisite. No old selector or broad suite was rerun.
+
+  The Project5 leader/AI systems architect supplied the direct
+  `APPROVE-WITH-CONDITIONS` pre-edit decision on 2026-10-03 at 10:24 KST against
+  `bdb7c21111a4c86136b6158f4969a39a9950acb3`, explicitly substituting the
+  separate leader's extreme-reasoner checklist review for unavailable memo
+  transport for this scope only. This was not a returned subagent verdict,
+  final source approval or live authority. The one-line obsolete `model:`
+  deletion in `.github/agents/extreme-reasoner.md` remains; all other agent
+  instructions and standing gates are intact. All three failed streams remain
+  recorded separately below and in the current task record.
+
+  Work continued in `codex-retention-task5-keep-r2-reader-20261003-0922` from
+  that exact base, without a new worktree or repeated duplicate-PR search. The
+  original single check found none. The reader retains the
+  unchanged producer's failed keep/r1 inference predecessor and independent
+  source/run/job/request expectations, immutable history, successful payload
+  intake versus unsuccessful controls-only boundaries, private no-clobber
+  markers and zero model/writer/child/dispatch authority. Producer, controller,
+  publication discriminator, runtime dependencies, experiment configuration
+  and historical evidence remain unchanged; ordinal 7 is unsupported.
+
+  Both Task5 role branches use the canonical Task5 path rule. Only the read
+  allowlists/cases and necessary current pins changed: shared reader SHA256
+  `3cabfed49238d43a4ddf9480558e19fdc1c5e64a29fd0aaa129d964ffef6f558`,
+  observer `CURRENT_DEPENDENCIES` consumer SHA256
+  `29e896f77d001f116f8e68edbd9162414cb99a5994423de642acd9f3834dcb11`,
+  and read workflow SHA256
+  `e01e28d5375255bcd2ab489193aaf09c04179dae34309ec55538885d1122356e`.
+  The unchanged keep/r2 producer remains pinned at
+  `7ac1e8d8014e7fff765c65a80774d808a8b34d2cc2d88af8ef9ba8580ad820af` before
+  lazy import. All 15 observer hashes and 10 checksums per read preflight matched
+  current bytes. Seven execution bindings, three jobs, permissions, secrets,
+  concurrency and paid routes stay fixed; only reader counts grow to seven
+  result and six terminal cells. Read modes still exclude every other mode and
+  cannot enable approval/execution even with spurious nonempty request outputs.
+  Keep/r1's prior null supplied-grader provenance and every historical
+  `RESULT`/`PARENT`/`READER` value stay unchanged. Six existing test files received
+  directly coupled expectations; only the new fixed-reader selector ran.
+
+  The leader supplied PR726 reviewed HEAD
+  `226e9ab34385b2f5aff646f5ac2b809f989aafc1`, owner review
+  [5397963786](https://github.com/hyeonsangjeon/gdpval-realworks/pull/726#pullrequestreview-5397963786)
+  and all 10 checks. The producer's accepted 45.85s proof below was not rerun.
+  Leader-owned producer source `bdb7c21111a4c86136b6158f4969a39a9950acb3`,
+  workflow `370228282` / run `37081963299` / attempt 1 has successful preparation
+  `111084233411` and approval `111084948854`; execution `111085094584` was in
+  progress at the supplied observation. Owner approval `6821020369` was posted
+  and read back once for request
+  `1b042b77fcc80b8c1a1c21fdd73feeefbcb80ce7f505b7c842aba496419386ac`.
+  Actual preparation grader-source SHA256 is
+  `81bfae73b21f260ffd4985d701631f53c4ee7cb67e4d1a7ff39a7563598bbc6f`;
+  original-input bundle SHA256 remains
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  Supplied provenance is not independent input verification. New terminal,
+  claim and output identities are unknown; no model entry or task outcome is
+  claimed. No live outcome was queried, awaited or replayed.
+
+  Accepted historical PR726 added only registered Task5 keep/r2,
+  ordinal 6 / repetition 2,
   `0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2`, as the
   seventh exact controller/admission/adapter binding from main
   `eef25d13c2e2c764ac4be4d4681791223a34fcf2`. The one authorized offline selector
@@ -134,18 +205,34 @@ entries land under a fresh dated heading the day they merge to `main`.
   costs. Task4 keep/r1 remains 68.0% / 54.64%; Task4 fresh/r1 and fresh/r2 remain failed/
   ungraded with 39 calls each / known USD 0.303358 and USD 0.29944 partial and
   unknown detailed causes. Zero counters do not prove free generation. Six
-  producer outcomes are recorded; Task5 keep/r2 and fresh/r2 remain unexecuted.
+  producer outcomes are recorded; Task5 keep/r2 is now dispatched with outcome
+  pending, while Task5 fresh/r2 remains unexecuted.
 
-  The pre-edit extreme-reasoner memo approved only this bounded scope. Final
-  independent immutable-HEAD review, applicable same-HEAD CI and separate leader
-  authorization remain required before live keep/r2 execution. Older worktrees
-  are preserved; only the two completion records change after the tested HEAD.
-  The full catalog was checked once. `experiment-design` preserved the registered
-  conditions; `experiment-report-en` then protected `im-not-ai-en` kept the new
-  synthetic proof separate from actual terminal evidence and partial accounting.
-  No unrelated UI/animation skill, broken-reviewer retry, live query/read/write,
-  inference/grade, dispatch, duplicate approval, replay, budget reset, Project
-  edit, merge, Azure operation or CI polling occurred.
+  PR726's prior pre-edit memo and producer proof do not approve this new reader.
+  Its final independent immutable-reader-HEAD review, same-HEAD CI, source delivery
+  and separate outcome-matched live-read authorization remain mandatory despite
+  the direct pre-edit decision and passing offline proof. The original two-failure
+  record retains SHA256
+  `5f78b7d705e339ed48fa6f643e657e5060e6304a957a5222cd1b3d6321b59456`.
+  The third failed request was `/root/extreme_reasoner_keep_r2_current_route`;
+  its saved record has SHA256
+  `5e5e1e2d35dc797b08d6bd2d0445e887d2abfb23205af7cb2065aaf59962f66d`,
+  with paths and provenance in the current task record. The leader's direct
+  unavailable-model error supports removing the obsolete override; it does not
+  prove the internal cause of any stream failure. No effective backend identity
+  or decision returned from that stream, and no second post-correction attempt
+  occurred. Its error was
+  `stream disconnected before completion: response.failed event received`, not
+  a pytest failure. At that earlier blocked boundary there had been no reader
+  implementation, test, commit, push or PR. The later direct decision's saved
+  provenance/condition record has SHA256
+  `d54dcbc8ece6e91e43e9e8e84e6be5c2bc3f023a55d76445380d20b921001833`.
+  No global/user settings, permissions, provider or account changed. The full
+  catalog was checked once for this continuation.
+  `experiment-report-en` then protected `im-not-ai-en` preserved the bounded
+  evidence. No experiment-design/configuration change or UI/animation work applies.
+  No live HF query, experiment model/grade call, dispatch, duplicate approval,
+  replay, budget reset, Project edit, merge, Azure operation or CI polling occurred.
 
 - Add the fixed keep/r2 successful-result and failed/stopped terminal-only
   read binding, with the leader-authorized runner replacement passing both

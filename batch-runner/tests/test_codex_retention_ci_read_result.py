@@ -62,7 +62,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     read_condition = "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
     fresh_cells = tuple(binding.expectation.cell_id for binding in (
         fresh_reader.FRESH_R1, fresh_reader.FRESH_R2, fresh_reader.KEEP_R2, fresh_reader.TASK5_FRESH_R1,
-        fresh_reader.TASK5_KEEP_R1))
+        fresh_reader.TASK5_KEEP_R1, fresh_reader.TASK5_KEEP_R2))
     fresh_condition = " && (" + " || ".join("inputs.cell_id == '" + cell + "'" for cell in fresh_cells) + ")"
     assert preflight["if"] == read["if"] == read_condition + " && inputs.cell_id == '" + reader.controller.FIRST_CELL_ID + "'"
     assert fresh_preflight["if"] == fresh_read["if"] == read_condition + fresh_condition
@@ -90,13 +90,13 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     # Read exclusion must hold even if a request output is spuriously nonempty.
     cells = (reader.controller.FIRST_CELL_ID, fresh_reader.fresh.CELL_ID, reader.controller.FRESH_R2_CELL_ID,
              reader.controller.KEEP_R2_CELL_ID, reader.controller.TASK5_FRESH_R1_CELL_ID,
-             reader.controller.TASK5_KEEP_R1_CELL_ID)
-    execution_cells = (*cells, reader.controller.TASK5_KEEP_R2_CELL_ID)
+             reader.controller.TASK5_KEEP_R1_CELL_ID, reader.controller.TASK5_KEEP_R2_CELL_ID)
+    execution_cells = cells
     assert gate["run"].splitlines()[-4:] == [
         '[[ "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + execution_cells[5] + ' || "$SELECTED_CELL" == ' + execution_cells[6] + ' ]]',
-        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' ) ]]',
+        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[0] + ' || "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + cells[0] + ' ]]',
-        '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' ) ]]',
+        '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + cells[1] + ' || "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ) ]]',
     ]
     for selected in (*execution_cells, "unregistered",
                      reader.registration.TASK5 + "_retention_bundle_v1_fresh_r2"):
@@ -194,24 +194,28 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
             ("codex_retention_task4_fresh_r1.py", "b0c397dd6a6dc0f0650322f05ec68282eee92c3abc4099dd82c4a9480f5b8daa"),
             ("codex_retention_first_cell.py", "5bbbe1f715169192e7fdb45a5f19fe77d075633825b30ecf5dbb18f7b782576a"))],
         "  | sha256sum --check --status",
-        'if [[ "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' ]]; then',
+        'if [[ "$SELECTED_CELL" == ' + cells[2] + ' || "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ]]; then',
         "  printf '%s\\n' '8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f  batch-runner/codex_retention_task4_fresh_r2.py' | sha256sum --check --status",
         "fi",
-        'if [[ "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' ]]; then',
+        'if [[ "$SELECTED_CELL" == ' + cells[3] + ' || "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ]]; then',
         "  printf '%s\\n' '12106b5423e25ffefa1b04023e2e98742861762762966a04bf17fe3da1851450  batch-runner/codex_retention_task4_keep_r2.py' | sha256sum --check --status",
         "fi",
-        'if [[ "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' ]]; then',
+        'if [[ "$SELECTED_CELL" == ' + cells[4] + ' || "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ]]; then',
         "  printf '%s\\n' '9919fda7728e84d0d707fe6a4b23a8a601c04b1e5241bcc83387b9acd20f0f5a  batch-runner/codex_retention_task5_fresh_r1.py' | sha256sum --check --status",
         "fi",
-        'if [[ "$SELECTED_CELL" == ' + cells[5] + ' ]]; then',
+        'if [[ "$SELECTED_CELL" == ' + cells[5] + ' || "$SELECTED_CELL" == ' + cells[6] + ' ]]; then',
         "  printf '%s\\n' '21623a1a5bb661f105b8d9dcdfaaad13634c21cb8f1207189608f602b80b14ee  batch-runner/codex_retention_task5_keep_r1.py' | sha256sum --check --status",
+        "fi",
+        'if [[ "$SELECTED_CELL" == ' + cells[6] + ' ]]; then',
+        "  printf '%s\\n' '7ac1e8d8014e7fff765c65a80774d808a8b34d2cc2d88af8ef9ba8580ad820af  batch-runner/codex_retention_task5_keep_r2.py' | sha256sum --check --status",
         "fi",
     ]
     fresh_script = read["run"].replace("codex_retention_result_intake.py", "codex_retention_fresh_r1_result_intake.py")
     selection_lines = ['case "$SELECTED_CELL" in']
     for binding in (fresh_reader.FRESH_R1, fresh_reader.FRESH_R2, fresh_reader.KEEP_R2, fresh_reader.TASK5_FRESH_R1,
-                    fresh_reader.TASK5_KEEP_R1):
-        namespace = ("retention-task5-keep-r1" if binding is fresh_reader.TASK5_KEEP_R1 else
+                    fresh_reader.TASK5_KEEP_R1, fresh_reader.TASK5_KEEP_R2):
+        namespace = ("retention-task5-keep-r2" if binding is fresh_reader.TASK5_KEEP_R2 else
+                     "retention-task5-keep-r1" if binding is fresh_reader.TASK5_KEEP_R1 else
                      "retention-task5-fresh-r1" if binding is fresh_reader.TASK5_FRESH_R1 else
                      "retention-" + binding.retention_bundle + "-r" + str(binding.repetition))
         selection_lines += ["  " + binding.expectation.cell_id + ")",
@@ -294,7 +298,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     # The actual shared shell command resolves each exact case to independent
     # expectations. Each added profile must reach the same token prerequisite.
     for binding, mode in itertools.product((fresh_reader.FRESH_R2, fresh_reader.KEEP_R2, fresh_reader.TASK5_FRESH_R1,
-                                           fresh_reader.TASK5_KEEP_R1),
+                                           fresh_reader.TASK5_KEEP_R1, fresh_reader.TASK5_KEEP_R2),
                                            ("read", "observe-terminal")):
         r2_destination = tmp_path / (str(binding.ordinal) + "-" + mode)
         r2_argv = ["--" + mode, *fresh_argv[1:]]

@@ -554,7 +554,8 @@ def test_task5_keep_r1_routes_and_current_pins_preserve_fixed_readers(tmp_path, 
     workflow = yaml.safe_load((REAL_ROOT / ci.WORKFLOW).read_bytes())
     jobs = workflow["jobs"]
     steps = jobs[ci.PREPARE_JOB]["steps"]
-    fixed_readers = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2, reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1)
+    fixed_readers = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2, reader.TASK5_FRESH_R1,
+                     reader.TASK5_KEEP_R1, reader.TASK5_KEEP_R2)
     read_group = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'" for binding in fixed_readers) + ")"
     assert steps[9]["if"] == steps[10]["if"] == (
         "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
@@ -564,7 +565,7 @@ def test_task5_keep_r1_routes_and_current_pins_preserve_fixed_readers(tmp_path, 
     for index in (9, 13):
         assert "env" not in steps[index] and "secrets." not in steps[index]["run"]
         pins = re.findall(r"'([0-9a-f]{64})  (batch-runner/[^']+)'", steps[index]["run"])
-        assert len(pins) == 9
+        assert len(pins) == 10
         for digest, path in pins:
             assert hashlib.sha256((REAL_ROOT / path).read_bytes()).hexdigest() == digest
         assert steps[index + 1]["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
@@ -652,4 +653,4 @@ def test_task5_keep_r1_routes_and_current_pins_preserve_fixed_readers(tmp_path, 
         state[name] = saved
     assert historical == (bridge.RESULT, bridge.PARENT, bridge.READER, fixed.RESULT, fixed.PARENT, fixed.READER)
     assert effects == []
-    print("OFFLINE ordinal5 routing: exact seven-cell execution/six-result/five-terminal allowlists; 288 mode cases; guarded helper imports; current pins/source refusals and immutable historical grading evidence preserved")
+    print("OFFLINE ordinal5 routing: exact seven-cell execution/seven-result/six-terminal allowlists; 288 mode cases; guarded helper imports; current pins/source refusals and immutable historical grading evidence preserved")
