@@ -35,8 +35,16 @@ cost and the analyzer never adds the two together.
 
 from __future__ import annotations
 
+import builtins
+import hashlib
+import io
 import json
+import os
+import socket
+import subprocess
 import sys
+import time
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -45,6 +53,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import analyze_codex_run as analyzer  # noqa: E402
+# Import real compiler/client types before the new selector's offline guards.
+import codex_retention_diagnostic as registration  # noqa: E402
+import step8_grade  # noqa: E402
+from core import azure_ai_clients, codex_azure_token  # noqa: E402
+from openai_codex import Codex  # noqa: E402
+from openai_codex.client import CodexClient  # noqa: E402
 
 
 def build(root: Path, spec: list[tuple]) -> Path:
@@ -483,3 +497,265 @@ def test_the_statement_field_this_dataset_uses_is_the_one_read(tmp_path, capsys)
     build(tmp_path, [("aaaa1111", "success", None, 1, 0, 1)])
     out = run(tmp_path, capsys)
     assert "cannot test" in out
+
+
+def test_local_output_limit_diagnostic_preserves_records_and_grader_closure(
+    tmp_path, monkeypatch, capsys,
+):
+    """One local-artifact selector; no historical outcome is reclassified."""
+    reason = "Incomplete response returned, reason: max_output_tokens"
+    # This exact message is retained at exp035_run34685779030_partial/
+    # outcomes.json:6145. All variations below are authored contracts, not
+    # claims about what happened in the retention diagnostic.
+    recorded = (
+        "the Codex turn failed: stream disconnected before completion: "
+        "Incomplete response returned, reason: max_output_tokens, mem=187MB"
+    )
+    positives = (
+        recorded, reason, f"stream disconnected before completion: {reason}",
+        f"the Codex turn failed: {reason}", f"{reason}, mem=188MB",
+        f" \t{reason} \t", reason.upper(),
+        f"the Codex turn failed: stream disconnected before completion: {reason}",
+    )
+    missing = object()
+    negatives = (
+        missing, None, "", " \t", "[redacted]", "pilot_task_failed", 0, False,
+        {"message": reason}, [reason], "the stream ended",
+        "tokens max_tokens output length", '{"max_output_tokens": 2400}',
+        "max_output_tokens", "reason: max_output_tokens",
+        "ValueError: max_tokens must be positive",
+        "RuntimeError: report output length exceeds the requested width",
+        'File "output_length.py", line 429, in max_tokens',
+        'File "run.py", line 8192, in max_output_tokens\nTypeError: bad argument',
+        "contextWindowExceeded",
+        "context_length_exceeded: input and max_output_tokens exceed the context window",
+        "Incomplete response returned, reason: contextWindowExceeded",
+        "Incomplete response returned, reason: max_input_tokens",
+        "Incomplete response returned, reason: max_tokens",
+        "sessionBudgetExceeded", "usageLimitExceeded",
+        f"{reason}_per_turn", f"{reason}.per_turn", f"{reason}-per-turn",
+        f"{reason}2", f"{reason}=2400", f"{reason} would be a configuration example",
+        f'Example: "{reason}"', f"{reason}, [redacted]", f"{reason}, mem=unknown",
+        f"RuntimeError: {reason}\nRuntimeError: wrapper failed",
+        f"{reason}\nRuntimeError: wrapper failed",
+        f"RuntimeError: wrapper failed\n{reason}",
+        f"Traceback (most recent call last):\n  {reason}",
+        f"{reason}, endpoint=https://private.invalid/SECRET_ENDPOINT",
+        f"{reason}, api_key=SECRET_CREDENTIAL",
+    )
+    # category, local error, expected addition, status, structured HTTP status
+    cases = [
+        (category, error, True, "error", None)
+        for category in ("turn_failed", "execution_error") for error in positives
+    ]
+    cases += [
+        (category, error, False, "error", None)
+        for category in ("turn_failed", "execution_error") for error in negatives
+    ]
+    known_categories = (
+        "rate_limited", "content_filtered", "transport_error", "timeout",
+        "out_of_memory", "syntax_error", "schema_error", "value_error",
+        "runtime_unavailable", "session_start_failed", "turn_start_failed",
+        "pilot_task_budget_exhausted", "output_limit_exceeded", None, "", "unknown",
+    )
+    cases += [(category, recorded, False, "error", None) for category in known_categories]
+    known_messages = (
+        "HTTP 429 returned by the provider", "rate limit reached; timed out",
+        "reason: content_filter", "Transport error: timed out",
+        "error decoding response body", "execution timeout", "timeout exceeded",
+    )
+    cases += [
+        ("turn_failed", text, False, "error", None)
+        for message in known_messages
+        for text in (f"{message} {reason}", f"{reason}\n{message}")
+    ]
+    cases += [
+        ("turn_failed", recorded, False, "success", None),
+        ("execution_error", recorded, False, "timeout", None),
+        ("turn_failed", recorded, False, "error", 429),
+        ("execution_error", recorded, False, "error", 429),
+    ]
+    spec = [
+        (f"case{index:04d}", status, category, 2, 900, 7, http_status)
+        for index, (category, _, _, status, http_status) in enumerate(cases)
+    ]
+    baseline_root = build(tmp_path / "legacy", spec)
+    artifact_root = build(tmp_path / "local", spec)
+    for root in (baseline_root, artifact_root):
+        path = root / "workspace/step2_inference_results.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for index, result in enumerate(payload["results"]):
+            result["grade"] = None
+            result["usage"] = {"input_tokens": 20, "output_tokens": 4}
+            if index == 0:
+                result["problem_solving_cost"]["known_cost_usd"] = 0.125
+            if root == artifact_root:
+                if cases[index][1] is not missing:
+                    result["error"] = cases[index][1]
+                # Untrusted extra fields cannot manufacture a derived result.
+                result["derived_output_limit_diagnostic"] = {"category": "SECRET_CREDENTIAL"}
+                result["provider_error"] = reason
+            if index == len(cases) - 1:
+                # Exercise the same legacy top-level HTTP fallback as collect.
+                result["http_status_code"] = result["observability"]["codex"].pop("http_status_code")
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        prepared_path = root / "workspace/step1_tasks_prepared.json"
+        prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+        prepared["tasks"][0]["instruction"] = "PRIVATE_TASK_BODY_DO_NOT_PRINT"
+        prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+    artifact_before = {
+        str(path.relative_to(artifact_root)): path.read_bytes()
+        for path in artifact_root.rglob("*") if path.is_file()
+    }
+    effects = []
+
+    def forbidden(*args, **kwargs):
+        effects.append("forbidden")
+        raise AssertionError("offline analyzer selector crossed a live/write boundary")
+
+    for owner, names in (
+        (subprocess, ("Popen", "run", "check_call", "check_output")),
+        (socket.socket, ("connect", "connect_ex")),
+        (socket, ("create_connection", "getaddrinfo")),
+        (os, ("system",)), (time, ("sleep",)),
+        (Path, ("write_bytes", "write_text")),
+        (codex_azure_token, ("acquire_token", "get_bearer_token_provider")),
+    ):
+        for name in names:
+            monkeypatch.setattr(owner, name, forbidden)
+    for constructor in (
+        azure_ai_clients.AzureAIClientFactory, azure_ai_clients.OpenAI,
+        azure_ai_clients.AzureOpenAI, azure_ai_clients.DefaultAzureCredential,
+        step8_grade.Grader, Codex, CodexClient,
+    ):
+        monkeypatch.setattr(constructor, "__init__", forbidden)
+    for module in (builtins, io):
+        original_open = module.open
+
+        def read_only_open(file, mode="r", *args, _open=original_open, **kwargs):
+            if any(flag in mode for flag in "wax+"):
+                forbidden()
+            return _open(file, mode, *args, **kwargs)
+
+        monkeypatch.setattr(module, "open", read_only_open)
+    for name in ("OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "HF_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    # Exact base bytes, not replacement runtime pins or mocked fingerprints.
+    repo = Path(__file__).resolve().parents[2]
+    frozen_sha256 = {
+        "batch-runner/core/execution_errors.py": "b3eb94fb60b4d5a57e3fd367e77d51122d624c33e93fa4badec60446e1f96321",
+        "batch-runner/tests/test_execution_errors.py": "a04fafe0d299740f6a8920f9ab42f386128aaec9fe86957d206cb40d4a9a6705",
+        "batch-runner/core/codex_runner.py": "b2324e8193754d6bf88242463b8327f9560d5e4c480066182a42b57fc4b23232",
+        "batch-runner/core/codex_task_deadline.py": "7af4af22903af0a97fdcfb33c318616f105bc50ae1cd8054daeb55e75989550f",
+        "batch-runner/step2_run_inference.py": "9ae6e0c809be498fd96c25ad16b83302c567fe95bdd7dc587451c4029b8c24bc",
+        "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md": "8f9ecada7ce17d88700a4fcd759ee72cc74af0651af21fbe53a31d7e2644c400",
+        "tasks/codex_budget_pilot/retention_diagnostic_readout.json": "cda3068a6f46ab8395aac0127e5f2252847e1f6d9af475d3d96068179bd12287",
+        "tasks/codex_budget_pilot/REPORT.md": "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e",
+    }
+    for relative, digest in frozen_sha256.items():
+        assert hashlib.sha256((repo / relative).read_bytes()).hexdigest() == digest, relative
+    # Git blob IDs of all workflows at base9f9b33aa; read bytes, not git children.
+    expected_workflows = {
+        "agentic-sandbox-preflight.yml": "d596243d0ee213c731a176c7aab29c3efd71a38c",
+        "agentic-v2-stage-a-probe.yml": "35ade47f86faebd3408ea0c4c8d625a90b8750bd",
+        "agentic-v2-stage-run.yml": "88b46cef4c8a6e50e0cf2fc03554eb24c4c9eb73",
+        "audio-accuracy-probe.yml": "ade5e2220a7daa06eb988d4a6d2ba005c491a122",
+        "audio-format-diagnostic.yml": "de91d69a11c6b73aaf77afc1943d2b855ecf0ec7",
+        "azure-boot-host-survey.yml": "aa4ffeee4275435be2c6e0b501891be82a24defa",
+        "azure-deployment-capacity.yml": "3f138c634e208de1e02088891d6bcd0499d814a4",
+        "azure-rbac-diagnostic.yml": "9d0dd58ef758b2f9e9f28baa55294eb475e326a0",
+        "backend-tests.yml": "82d73b54d5e1d6f9252fed79f1d06d38ce4ff707",
+        "batch-run.yml": "7a18db046cae7b988a1d01fe3a2e5a0e44ba7c7a",
+        "build-grading-image.yml": "6a552453afd7bb5fab8566d66aa8560e38abc526",
+        "build-sandbox-image.yml": "4d03b124825ba213a18521bcae4a0c856ff14435",
+        "codex-budget-pilot-ci-cell.yml": "1ea10825588e3b3c367a54486e5579b0a3267d29",
+        "codex-foundry-connection-diagnostic.yml": "d9e383a6172626ad3dac1dc33833067bed6e7caf",
+        "codex-retention-first-cell.yml": "1f3b5f8bf487fdc3c2e004e00377f595adc6d5e7",
+        "codex-sandbox-host-survey.yml": "23fdbe04f4c448ccca188d92c3fe1101a3fc1f14",
+        "deploy.yml": "19aac41df33f77a711579f55941fc936fbf93b99",
+        "execution-envelope-preflight.yml": "ab4b0e1aaef05fd8bacdbe31097143803a59a5e0",
+        "grade-run.yml": "e2be554a3d0b3326150b6dbb488da13bff1feee7",
+        "grader-hash-freeze.yml": "c81c4f48a95c211fbff73d91c8748db91693ae1a",
+        "grading-renderer-preflight.yml": "f0329bd3ffd5bb66ad14a954eae889c7fddd470c",
+        "preflight-track2-cohort.yml": "7113fa74ec0ec17d0bbf7b25b5590cdd5677e103",
+        "shard-relay-sweep.yml": "b41cf4292c1161395a44328a8dea9e5096ebf440",
+        "speech-verification-set.yml": "abed55fb6bd5e47aa9b14771836ca134c78adfb5",
+    }
+    actual_workflows = {}
+    for path in (repo / ".github/workflows").iterdir():
+        body = path.read_bytes()
+        actual_workflows[path.name] = hashlib.sha1(
+            f"blob {len(body)}\0".encode() + body,
+        ).hexdigest()
+    assert actual_workflows == expected_workflows
+    with capsys.disabled():
+        print("BOUNDARY exact base runtime/test/report bytes and all24 workflows unchanged")
+
+    assert registration.ROOT == repo
+    plan = registration.compile_plan()  # Exactly one real call, including the grader closure.
+    closure = "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"
+    assert plan["grading"]["template_source_sha256"] == closure
+    assert registration.BASE_GRADER_TEMPLATE_SOURCE_SHA256 == closure
+    assert plan["cell_count"] == 8
+    assert plan["launch_authorized"] is plan["compiler_reviewed"] is False
+    assert plan["commands"] == []
+    assert plan["common"]["recovery_failure_categories"] == ["rate_limited", "turn_start_failed"]
+    for role, paths in registration.SOURCE_ROLES.items():
+        assert set(plan["source_pins"][role]) == set(paths)
+        for relative in paths:
+            assert hashlib.sha256((repo / relative).read_bytes()).hexdigest() == plan["source_pins"][role][relative]
+    with capsys.disabled():
+        print(f"BOUNDARY one real compile_plan: grader closure {closure}; all source roles verified; no launch authority")
+
+    baseline = analyzer.collect(baseline_root)
+    data = analyzer.collect(artifact_root)
+    expected_diagnostic = {
+        "category": "output_limit_exceeded",
+        "provenance": "offline_local_result_error_explicit_reason",
+        "missing_reason": None,
+    }
+    assert data["meta"] == json.loads(artifact_before["workspace/step2_inference_results.json"])
+    assert data["ledger"] == baseline["ledger"]
+    assert len(data["tasks"]) == len(cases)
+    for index, (task, original, case) in enumerate(zip(data["tasks"], baseline["tasks"], cases)):
+        copy = deepcopy(task)
+        diagnostic = copy.pop("derived_output_limit_diagnostic", None)
+        assert diagnostic == (expected_diagnostic if case[2] else None), ("diagnostic", index)
+        assert copy == original, ("recorded fields", index)
+        assert task["error_category"] == case[0] and task["status"] == case[3]
+        assert task["attempts"] == task["settled"] == 2
+        assert task["known_cost_usd"] == (0.125 if index == 0 else None)
+    assert all("derived_output_limit_diagnostic" not in t for t in baseline["tasks"])
+    analyzer.report(baseline)
+    baseline_output = capsys.readouterr().out
+    analyzer.report(data)
+    output = capsys.readouterr().out
+    marker = "\n=== offline derived output-limit diagnostic ===\n"
+    legacy_output, separator, derived_output = output.partition(marker)
+    assert separator == marker and legacy_output == baseline_output
+    assert "not runtime category emission or independent failure-cause attribution" in derived_output
+    assert derived_output.count("category=output_limit_exceeded ") == 2 * len(positives)
+    for index, case in enumerate(cases):
+        assert (f"case{index:04d}  category=" in derived_output) is case[2], ("report", index)
+    assert "=== outcome ===  success 1/" in output
+    assert "UNDETERMINED, which is not zero" in output
+    assert "task-solving only; grading is a separate run" in output
+    for private in (reason, "mem=187MB", "SECRET_ENDPOINT", "SECRET_CREDENTIAL",
+                    "private.invalid", "PRIVATE_TASK_BODY_DO_NOT_PRINT", str(artifact_root)):
+        assert private not in output
+        assert private not in json.dumps(data["tasks"])
+    assert analyzer.main([str(artifact_root)]) == 0
+    assert capsys.readouterr().out == output
+    assert analyzer.main([str(baseline_root)]) == 0
+    assert capsys.readouterr().out == baseline_output
+    assert marker not in baseline_output
+    assert artifact_before == {
+        str(path.relative_to(artifact_root)): path.read_bytes()
+        for path in artifact_root.rglob("*") if path.is_file()
+    }
+    assert effects == []
+    with capsys.disabled():
+        print(f"BOUNDARY local collect/report/CLI: {len(cases)} authored cases; {2 * len(positives)} explicit diagnostics")
+        print("BOUNDARY missing/redacted/context/input/wrapper/known-category/HTTP429 refusals; recorded fields and artifact bytes unchanged")
+        print("BOUNDARY fixed labels only; legacy output/denominators/usage/costs unchanged; zero network/model/grade/writer/child/sleep effects")
