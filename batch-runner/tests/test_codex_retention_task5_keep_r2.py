@@ -44,7 +44,8 @@ def _routes_and_current_sources(tmp_path, monkeypatch):
     workflow = yaml.safe_load((REAL_ROOT / ci.WORKFLOW).read_bytes())
     jobs = workflow["jobs"]
     steps = jobs[ci.PREPARE_JOB]["steps"]
-    fixed_readers = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2, reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1)
+    fixed_readers = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2, reader.TASK5_FRESH_R1,
+                     reader.TASK5_KEEP_R1, reader.TASK5_KEEP_R2)
     read_group = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'" for binding in fixed_readers) + ")"
     assert steps[9]["if"] == steps[10]["if"] == (
         "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
@@ -54,11 +55,13 @@ def _routes_and_current_sources(tmp_path, monkeypatch):
     for index in (9, 13):
         assert "env" not in steps[index] and "secrets." not in steps[index]["run"]
         pins = re.findall(r"'([0-9a-f]{64})  (batch-runner/[^']+)'", steps[index]["run"])
-        assert len(pins) == 9
+        assert len(pins) == 10
         for digest, path in pins:
             assert hashlib.sha256((REAL_ROOT / path).read_bytes()).hexdigest() == digest
         assert steps[index + 1]["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
-        assert successor.CELL_ID not in steps[index + 1]["run"]
+        assert successor.CELL_ID + ")" in steps[index + 1]["run"]
+        assert "retention_read_source=" + reader.TASK5_KEEP_R2.expectation.source_sha in steps[index + 1]["run"]
+        assert "retention_read_request=" + reader.TASK5_KEEP_R2.expectation.request_sha256 in steps[index + 1]["run"]
         assert "--expected-reader-sha256 " + reader.reader_identity()["module_sha256"] in steps[index + 1]["run"]
     assert successor.CELL_ID + ') retention_host="$RUNNER_TEMP/retention-task5-keep-r2-host" ;;' in jobs[ci.EXECUTE_JOB]["steps"][-1]["run"]
     assert jobs[ci.EXECUTE_JOB]["timeout-minutes"] == 240
