@@ -13,6 +13,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Classify the explicit `Incomplete response returned, reason: max_output_tokens`
+  error as `output_limit_exceeded`, grounded in an existing recorded message.
+  Require the full phrase and reason delimiter; preserve earlier categories,
+  structured HTTP429 precedence, context/input-limit and unknown fallbacks.
+  This is diagnostic-only: both recovery allowlists, content-filter handling,
+  runner/deadline code, budgets, workflows, current/historical pins and all
+  completed experiment reports/data remain unchanged. No historical failure
+  cause, measured improvement or new recovery permission is claimed.
+
+  One offline selector passed:1 passed in0.34s at clean implementation HEAD
+  `7ca9f67acf3db16686ae749ecd82356c55e5203b`, selector/log/status-capture exits0,
+  no timeout and zero guarded live effects. It checked8 positive shapes,
+  25 negative/fallback shapes,18 existing-message cases in3 variants,
+  structured HTTP429, fixed-category publication and unchanged recovery rules.
+  Proof log SHA256`f05f97d1b7d210a020ffed1b8a47f63066d76c6ed1295a902ffe89d97f30ac46`.
+  The0.34s is pytest duration, not outer elapsed or a model measurement. The
+  [latest record](tasks/LATEST_TASK_RESULT/README.md) retains the exact command,
+  artifact hashes, source grounding, skill reconciliation and remaining gates.
+
+  Base main`9f9b33aa2c86ea77e97624fa58d5d6dc67122f25` delivered accepted
+  PR737 HEAD`0f105b3e8dea9697749cb23278b7dbba662c4b27`, owner review5402995317
+  and all10 checks. Its1.61s and earlier proofs, launcher127 and failed memo
+  history were not repeated. All30 original outcomes, eight diagnostic outcomes
+  and eight consumed budget observations stay fixed. experiment-design kept
+  the policy boundary; experiment-report-en then protected im-not-ai-en kept
+  the numerical evidence and limits. Final immutable-HEAD review, same-HEAD CI
+  and leader acceptance remain; no Project decision or live action is granted.
+
 - Consolidate the [retention-budget report](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
   and its [machine-readable evidence](tasks/codex_budget_pilot/retention_diagnostic_readout.json)
   after the leader's05:28/05:59 KST supplements. Add only the two successful
