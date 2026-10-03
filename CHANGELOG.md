@@ -13,7 +13,71 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add only successful Task4 `reader.KEEP_R2`, ordinal3/repetition2, to the
+- Add only the legacy first Task4 KEEP/r1 budget facade, ordinal0/repetition1,
+  for `3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1`.
+  Exactly eight budget paths are now eligible: this facade and the seven
+  unchanged successor profiles. Reuse the existing first-intake workflow step
+  pair; no fake successor binding, new job, framework or live operation.
+  The fixed producer is `e355faf9a6212175a288e8473968915ffb2408d0`,
+  workflow370228282/run36696961231/attempt1/job109837605787, request
+  `ed8b51f6d80e641922013eba9e19d7d3e145d84ae15fb8d7d9509e643c975c68`.
+  Pin terminal `de50ff0aa6037c0ef6e3b713da519359abd1d08d` before dependent
+  controls/metadata:6449 bytes/SHA256
+  `0821af11393cab65d1e14259e43b14872b94a431496e8c1e3c38e719f33f21b8`.
+  The exact claim/output/manifest and embedded identities remain bound through
+  the legacy verifier before only RESULT is fetched. Preserve historical null
+  exit code and absent claim hash/size/object-set digest in JSON cells[0];
+  only a later observation can derive those values. Validate the sealed
+  first-cell config, fingerprint, legacy runtime/task/receipt and declared
+  deliverable/ledger-reference metadata without ledger/deliverable bodies or
+  full-payload validation. Legal publication generation need not equal the
+  runtime run ID; legacy missing source/condition metadata remains permitted.
+  The receipt establishes no new full intake, delivery, grading readiness,
+  grade or independent provider/input/CAS authentication.
+
+  First intake, successor reader, projector, historical grading bindings and
+  observer `CURRENT_DEPENDENCIES` are byte-identical. Distinct first-cell
+  private namespace/marker, current pins before credentials/lazy imports,
+  no-clobber/readback/no-replay, strict missing/null/zero semantics, safe receipts,
+  all mode/paid exclusions and180s/4-minute bounds remain. Authored shared and
+  coupled tests independently expect eight budget cells and the separate legacy
+  step pair; assertions were not skipped or derived from YAML. No producer,
+  controller, publication, permission, secret, queue, model or budget change.
+
+  The one new selector passed at tested implementation
+  `a66015685ef5e9d3850d7e3e45ff618862be68f7`:1 passed in14.34s, all576 mode
+  combinations, test/log-capture exits0, no timeout and zero recorded network/
+  model/writer/child/paid effects. Real legacy validators and synthetic transport
+  covered primary/nested tampering, optional/null legacy metadata, RESULT-only
+  nonempty deliverables, missing/null/zero, private no-replay and all seven
+  existing budget paths. Duration is pytest's; outer elapsed was not measured.
+  Proof log SHA256`d3ea1b5c4555ea760fe6201f8b44ba7c3051d2ffa1037f7765eace0f98c7f31c`;
+  new facade SHA256`043100017cb1db06f74b562b5feca1a6de8e3eed99ff153645e9a33b3481d975`.
+  Only the two completion records change after this proof.
+
+  Accepted PR735 HEAD `c0b5ea5f1f14036d011609ddf887de533bc8d0d1`, review
+  [5402117763](https://github.com/hyeonsangjeon/gdpval-realworks/pull/735#pullrequestreview-5402117763)
+  and all ten checks are prior acceptance evidence. Its11.47s proof and all
+  earlier proofs, launcher127, failed memo streams and consumed reads remain
+  historical, not repeated or relabeled; the
+  [accepted record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c0b5ea5f1f14036d011609ddf887de533bc8d0d1/tasks/LATEST_TASK_RESULT/README.md)
+  retains exact identities and boundaries. The 2026-10-04 03:56 KST
+  APPROVE-WITH-CONDITIONS is the direct leader's scope-specific pre-edit decision,
+  not a returned agent verdict. `experiment-design` preserved the measurement
+  boundary; `experiment-report-en` then protected `im-not-ai-en` preserved
+  numerical evidence and uncertainty without optional restyling.
+
+  Report/JSON/original-pilot bytes and all eight outcomes, costs/grades and six
+  failed-cell budget points remain unchanged. No KEEP budget numbers were
+  supplied. The leader's KEEP/r2 run37146242626/read111270679161 remains
+  unobserved here and was not queried or awaited; both successful KEEP budgets
+  remain unobserved. Final independent immutable-HEAD review, same-HEAD CI,
+  delivery and separate first-cell live-read direction remain required.
+  Measurement/attribution criteria remain open; this is not whole-card completion.
+  The Sol VM card stays blocked without KVM/image handoff. No live authority,
+  new inference, grade, replay or experiment is granted by this code-only unit.
+
+- Prior Task4 KEEP/r2 extension (accepted PR735): add only successful Task4 `reader.KEEP_R2`, ordinal3/repetition2, to the
   existing RESULT-only budget path. Exactly seven canonical budget bindings are
   eligible: cells[1:8]; legacy Task4 KEEP/r1, unknown and copied profiles remain
   refused. The fixed producer is `b8351e561acb9675a4993419e819c12787b5b305`,
