@@ -36,6 +36,9 @@ from . import test_codex_retention_result_intake as first_fixtures
 from . import test_codex_retention_fresh_r1_result_intake as fixtures
 from . import test_codex_retention_ci_observation as workflow_contract
 from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
+from .retention_budget_report_evidence import (
+    PRIOR_CODE_ONLY_ARTIFACTS, before_success_budget_observations, assert_consolidated_report,
+)
 
 ci, retained, output, owned = intake.ci, intake.retained, intake.output, intake.owned
 FILE, PRIVATE = first_fixtures.FILE, first_fixtures.PRIVATE
@@ -105,14 +108,24 @@ def test_first_cell_budget_preserves_legacy_controls_and_result_only_boundary(tm
     monkeypatch.setattr(budget, "observe_budget", observed)
     fixed = deepcopy(budget.CONTROLS)
     source = budget.reader_identity()
-    artifact_hashes = {
+    # These raw identities describe PR736's code-only snapshot, not current
+    # report bytes. The two authorized additions have a separate semantic check.
+    historical_artifact_hashes = {
         "tasks/codex_budget_pilot/retention_diagnostic_readout.json": "31f7d2b58d044a5548cb9998362b8b6ebaf2d428b4d679b4a42f4191d666814e",
         "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md": "12ad05a9483461161e431a8fef834c90cf62832a0177e8a514cb32b3ce32b699",
         "tasks/codex_budget_pilot/REPORT.md": "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e",
     }
-    for path, digest in artifact_hashes.items():
-        assert hashlib.sha256((ci.ROOT / path).read_bytes()).hexdigest() == digest
+    assert historical_artifact_hashes == PRIOR_CODE_ONLY_ARTIFACTS
+    pilot_path = "tasks/codex_budget_pilot/REPORT.md"
+    assert hashlib.sha256((ci.ROOT / pilot_path).read_bytes()).hexdigest() == historical_artifact_hashes[pilot_path]
     readout = json.loads((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes())
+    prior = before_success_budget_observations(readout)
+    report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
+    assert_consolidated_report(report, readout)
+    current_artifact_hashes = {
+        path: hashlib.sha256((ci.ROOT / path).read_bytes()).hexdigest()
+        for path in historical_artifact_hashes
+    }
     first = readout["cells"][0]
     assert fixed == {
         "terminal_commit": first["terminal"]["revision"],
@@ -128,8 +141,9 @@ def test_first_cell_budget_preserves_legacy_controls_and_result_only_boundary(tm
     assert first["read"]["successful_intake_established"] is True
     assert (first["grade"]["score"], first["grade"]["included_max"], first["grade"]["included_percent"], first["grade"]["full_percent"]) == (
         "30.6", "45", "68.0", "54.64")
-    assert all("current_budget_observation" not in readout["cells"][index] for index in (0, 3))
-    assert all("current_budget_observation" in readout["cells"][index] for index in (1, 2, 4, 5, 6, 7))
+    assert all("current_budget_observation" not in prior["cells"][index] for index in (0, 3))
+    assert all("current_budget_observation" in prior["cells"][index] for index in (1, 2, 4, 5, 6, 7))
+    assert all("current_budget_observation" in row for row in readout["cells"])
     assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
     plan = intake.registration.compile_plan()
     cell = intake.controller._adapted_cell(plan["cells"][0])
@@ -567,10 +581,10 @@ def test_first_cell_budget_preserves_legacy_controls_and_result_only_boundary(tm
         assert hashlib.sha256((ci.ROOT / "batch-runner" / name).read_bytes()).hexdigest() == digest
     assert observer.bridge.fixed_evidence_sha256() == "1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d"
     assert observer.bridge.fixed_evidence_sha256("retention/keep-r2") == "25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0"
-    for path, digest in artifact_hashes.items():
+    for path, digest in current_artifact_hashes.items():
         assert hashlib.sha256((ci.ROOT / path).read_bytes()).hexdigest() == digest
     with capsys.disabled():
-        print("BOUNDARY seven existing budget profiles/ordinary controls unchanged; historical intake/grading/data bytes and six observations retained")
+        print("BOUNDARY seven existing budget profiles/ordinary controls unchanged; historical intake/grading evidence and current report/data with eight observations retained")
 
     workflow_contract._assert_retention_execution_workflow_contract()
     workflow_contract._assert_retention_mode_routes()

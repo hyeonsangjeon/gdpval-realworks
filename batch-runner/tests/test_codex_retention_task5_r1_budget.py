@@ -32,13 +32,14 @@ from . import test_codex_retention_fresh_r1_result_intake as fixtures
 from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
 from .test_codex_retention_task5_keep_r2_budget import _recorded_controls
 from .test_codex_retention_result_intake import PRIVATE
+from .retention_budget_report_evidence import before_success_budget_observations, assert_consolidated_report
 
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
 
 def _assert_task5_r1_observations(readout):
     """Check the supplied additions without treating synthetic reads as evidence."""
-    prior = deepcopy(readout)
+    prior = before_success_budget_observations(readout)
     # The later Task4 FRESH observations are not part of this historical snapshot.
     for index in (1, 2):
         prior["cells"][index].pop("current_budget_observation")
@@ -93,7 +94,7 @@ def _assert_task5_r1_observations(readout):
         assert actual["unavailable"] == readout["cells"][7]["current_budget_observation"]["unavailable"]
         assert row["terminal_details"]["budget"] is None and row["read"]["payload_bodies_verified"] is False
     assert added[1]["supplied_request_binding"]["materialized_grader_source_sha256"] is None
-    assert all("current_budget_observation" not in readout["cells"][index] for index in (0, 3))
+    assert all("current_budget_observation" not in prior["cells"][index] for index in (0, 3))
 
 
 def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch, capsys):
@@ -183,9 +184,9 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         "75f38c05e5c348e481e54f4c0b2000772c2414d7bae7519b1f2a38d92e1e0dc5")
     _assert_task5_r1_observations(readout)
 
-    # Only the newly supplied KEEP receipt may differ from the delivered JSON.
-    # This is evidence preservation inside the new selector, not a report rerun.
-    prior = deepcopy(readout)
+    # Preserve this older KEEP-receipt comparison after separately checking the
+    # later successful additions; do not relabel its historical proof.
+    prior = before_success_budget_observations(readout)
     # Exclude the later Task4 FRESH and Task5 r1 observations from this older snapshot.
     for index in (1, 2, 4, 5):
         prior["cells"][index].pop("current_budget_observation")
@@ -225,8 +226,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/REPORT.md").read_bytes()).hexdigest() == (
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
-    assert "Both r2 budget observations are consumed" in report
-    assert "Both successful Task4 KEEP budgets remain unobserved" in " ".join(report.split())
+    assert_consolidated_report(report, readout)
     for value in actual["inference_budget_snapshot"].values():
         if type(value) in (int, float):
             assert str(value) in report

@@ -36,13 +36,14 @@ from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
 from .test_codex_retention_task5_keep_r2_budget import _recorded_controls
 from .test_codex_retention_task5_r1_budget import _assert_task5_r1_observations
 from .test_codex_retention_result_intake import FILE, PRIVATE
+from .retention_budget_report_evidence import before_success_budget_observations, assert_consolidated_report
 
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
 
 def _assert_task4_fresh_observations(readout):
     """Keep later supplied RESULT receipts separate from older controls-only evidence."""
-    prior = deepcopy(readout)
+    prior = before_success_budget_observations(readout)
     added = [prior["cells"][index].pop("current_budget_observation") for index in (1, 2)]
     canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
     assert hashlib.sha256(canonical).hexdigest() == "6b3830c740ffe6a540990c299887eb4f205e82eb42e71cce8b99e8c3e7feeffe"
@@ -101,7 +102,7 @@ def _assert_task4_fresh_observations(readout):
         assert actual["measurement_limits"] == readout["cells"][7]["current_budget_observation"]["measurement_limits"]
         assert actual["unavailable"] == readout["cells"][7]["current_budget_observation"]["unavailable"]
         assert row["terminal_details"]["budget"] is None and row["read"]["payload_bodies_verified"] is False
-    assert all("current_budget_observation" not in readout["cells"][index] for index in (0, 3))
+    assert all("current_budget_observation" not in prior["cells"][index] for index in (0, 3))
 
 
 def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch, capsys):
@@ -212,7 +213,7 @@ def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypa
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/REPORT.md").read_bytes()).hexdigest() == (
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
-    assert "Both successful Task4 KEEP budgets remain unobserved" in " ".join(report.split())
+    assert_consolidated_report(report, readout)
     for index in (4, 5):
         actual = readout["cells"][index]["current_budget_observation"]
         for value in actual["inference_budget_snapshot"].values():
@@ -652,4 +653,4 @@ def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypa
             "unchanged_task5_controls_only_paid_isolation": True, "current_historical_pins_separate": True,
             "actual_task5_r1_receipts_separate_from_synthetic_proof": True,
             "prior_json_fields_r2_receipts_original_pilot_unchanged": True,
-            "successful_task4_keep_budgets_unobserved": True, "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))
+            "successful_task4_keep_result_only_observations_preserved": True, "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))
