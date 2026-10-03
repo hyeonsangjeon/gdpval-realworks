@@ -7,7 +7,7 @@
     "source_sha": "f7439da4f3443ea67dc02ddea0cb3a1806622e0d",
     "path": "tasks/LATEST_TASK_RESULT/README.md",
     "sha256": "bcb4bbb55db7960c8505e5e4f142afee2e1b6c65abb15e8f196eb99f45ea79ef",
-    "final_row_addendum": "Project5 leader order 2026-10-03 17:05 KST"
+    "final_row_addendum": "Project5 leader order 2026-10-03 17:05 KST; Project5 leader supplement 2026-10-03 17:36 KST supplies exit_code=1 from the final observer receipt"
   },
   "accepted_reader": {
     "head_sha": "70c80baa5c150d1734bb77de7fac1ebaac17b303",
@@ -197,7 +197,7 @@
     {
       "ordinal": 7, "task_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e", "retention_bundle": "fresh", "repetition": 2,
       "cell_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2",
-      "status": "failed", "exit_code": null, "exit_code_missing_reason": "not_supplied_in_final_leader_summary", "cleanup_confirmed": true, "producer_acknowledgment": "acknowledged", "producer_grade": null,
+      "status": "failed", "exit_code": 1, "cleanup_confirmed": true, "producer_acknowledgment": "acknowledged", "producer_grade": null,
       "producer": {"source_sha": "dfa812a2b7ad10b1aa3c7e873b4fabef9b195bd6", "workflow_id": 370228282, "run_id": "37101934436", "attempt": 1, "execution_job_id": 111147701025, "request_sha256": "797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a", "receipt_utc": "2026-10-03T06:40:58.8935285Z"},
       "preparation": {"job_id": 111143024723, "approval_job_id": 111143427544, "status": "succeeded", "owner_approval_id": 6824090693, "owner_approval_posted_and_read_back_once": true},
       "preceding_registered_inference_terminal": "3be1c0b892a199fdfccf3d5c4379d40c782119e5",

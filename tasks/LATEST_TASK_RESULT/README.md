@@ -6,9 +6,11 @@ Completed the documentation/data closeout of the eight-cell retention
 diagnostic. The [result-first report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
 and [compact JSON readout](../codex_budget_pilot/retention_diagnostic_readout.json)
 cover all eight registered producer outcomes: two succeeded and six failed.
-The single authorized local consistency check passed in 0.289s, check exit 0,
+The original local consistency check passed in 0.289s, check exit 0,
 log-capture exit 0 and no timeout under its 180-second bound. It was a static
 document/data check, not a producer, reader, grade, pytest or build invocation.
+The 17:36 KST supplement below records the supplied final exit code and its
+separate narrow check; the original proof was not rerun.
 
 Work started in a new clean branch/worktree
 `codex-retention-diagnostic-report-20261003-1705` from exact main
@@ -68,8 +70,12 @@ not this report's local check. Producer
 `37101934436` / attempt 1 / execution `111147701025`, request
 `797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a`, reported
 FAILED / cleanup true / acknowledged remote terminal / grade null at
-`2026-10-03T06:40:58.8935285Z`. No numeric exit code was supplied in that final
-summary; the JSON keeps it null with an explicit reason rather than inferring it.
+`2026-10-03T06:40:58.8935285Z`. The original 17:05 KST summary did not supply
+a numeric exit code. The leader's 2026-10-03 17:36 KST supplement supplies
+integer `exit_code=1` from the final observer receipt identified below, which
+explicitly records `status=failed` and `cleanup_confirmed=true`. The JSON now
+records that code and removes its obsolete missing reason. This supplemental
+fact does not identify a failure cause; no new live read was made.
 
 The final terminal is `4fdd9c2e3da1dbd7ef30d335d5fe378a4cddc84c`, SHA256
 `2c8ca6f08bf54b8a48cbf0f0c1d50b06d0f5b7fdb1f72ffdc23f132edbcb81ec`, 3718 bytes.
@@ -106,13 +112,13 @@ identify timeout, rate limiting or another cause. Observer
 acknowledgment; publication-derived proof does not independently authenticate
 provider activity, original inputs or actual CAS.
 
-### One bounded local consistency check
+### Original bounded local consistency check
 
 The checked HEAD was the unchanged base
 `f7439da4f3443ea67dc02ddea0cb3a1806622e0d` with the new report documents in the
 working tree. No implementation commit or new runtime test is claimed. The
-checked artifact hashes below identify the exact candidate bytes; the ordinary
-publication commit follows validation and these completion-record updates.
+checked artifact hashes below identify the original pre-supplement candidate
+bytes, not the corrected JSON. That single invocation was not rerun.
 The existing absolute interpreter reported Python 3.10.12 without installation.
 Exactly one consistency invocation ran:
 
@@ -152,6 +158,31 @@ byte-identical to base. Historical grading digests remain
 `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0` and
 `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d`; intake remains
 `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4`.
+
+### Narrow 17:36 KST addendum check
+
+The leader reviewed report HEAD `c5ea85c83a0cf26eb2cc74f6c8bb15929346e972`
+before supplying the exit-code supplement. One local comparison against that
+HEAD's JSON passed in 0.001517s, check/log-capture exits 0, no timeout under
+30 seconds. It verified integer 1, removal of the obsolete missing reason,
+the unchanged final producer/observer/control tuple, and deep plus byte
+equality except for the declared exit-code and addendum-provenance changes.
+The report prose and original pilot artifact hashes remain unchanged.
+
+```text
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=5s 30s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/retention-diagnostic-addendum-20261003-1736.F617e0/addendum-check.py /ai-work/copilot/worktrees/codex-retention-diagnostic-report-20261003-1705 /tmp/retention-diagnostic-addendum-20261003-1736.F617e0
+```
+
+Corrected JSON SHA256:
+`42839c92b3aac1c36a3bd3b3afa0930f1bd1f882d711cf12bb78bf4fbc832f5c`.
+New check-log SHA256:
+`6c88bb666a2e1036d56fa708beb42c03f215b1a753f02e9e2705a8041a049af1`.
+The checker, log, status and editorial checkpoints are retained in
+`/tmp/retention-diagnostic-addendum-20261003-1736.F617e0`. This supplement changes
+only the JSON and these two completion records; it does not extend the original
+0.289s proof to new bytes. The catalog was read once for this continuation;
+`experiment-report-en` then protected `im-not-ai-en` applied only to the changed
+passages, with no new design, workflow, memo, UI or repository audit.
 
 ### Historical failures remain failures
 

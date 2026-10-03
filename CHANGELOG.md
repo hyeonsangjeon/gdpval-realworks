@@ -37,6 +37,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   remain separate. The final 1 call / USD 0.13489 is partial and does not rule
   out unrecorded errors or native retries; detailed cause/budget/recovery remain
   unavailable / `not_recorded_in_terminal_controls`, not inferred from duration.
+  The leader's 2026-10-03 17:36 KST supplement supplies integer `exit_code=1`
+  from that same final observer receipt. The JSON removes the obsolete missing
+  reason and adds the supplement's provenance; no cause or new live read is claimed.
 
   One bounded local consistency invocation passed in 0.289s, check/log-capture
   exits 0, no timeout under 180 seconds. It checked exact eight-row order,
@@ -49,6 +52,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   Accepted reader HEAD `70c80baa5c150d1734bb77de7fac1ebaac17b303`, review
   [5399481664](https://github.com/hyeonsangjeon/gdpval-realworks/pull/729#pullrequestreview-5399481664),
   all ten checks and its consumed 17.09s proof were reused, not repeated.
+
+  After leader review of report HEAD `c5ea85c83a0cf26eb2cc74f6c8bb15929346e972`,
+  one separate addendum check passed in 0.001517s, check/log-capture exits 0,
+  no timeout under 30 seconds. It confirmed the exit-code correction, unchanged
+  final tuple and JSON equality except for the declared exit/provenance changes.
+  Corrected JSON SHA256 is
+  `42839c92b3aac1c36a3bd3b3afa0930f1bd1f882d711cf12bb78bf4fbc832f5c`;
+  addendum log SHA256 is
+  `6c88bb666a2e1036d56fa708beb42c03f215b1a753f02e9e2705a8041a049af1`.
+  The original 0.289s proof and snapshot hashes remain historical, not validation
+  of corrected bytes. Report prose, pilot bytes and all other JSON values remain
+  unchanged. Only `experiment-report-en` and protected `im-not-ai-en` were
+  applied to the supplement's record passages.
 
   Only documentation/data changes. The original pilot report gains one bounded
   link/note; its 24 epoch04 outcomes (18 graded / 6 model-free UNGRADED) and
