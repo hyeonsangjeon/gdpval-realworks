@@ -3,6 +3,14 @@
 This leader-verified report contains **24 unique epoch04 projections: 18 graded and 6 model-free UNGRADED, with 0 pending and no duplicates**. Together with six separate frozen epoch03 T1 failure outcomes, it documents all 30 original cell IDs—not 30 successful same-protocol runs or 30 epoch04 cells.
 The observations are high T2/T3 scores, moderate T4 scores with large exclusions, and poor or missing T5 grades. They do not establish a causal model or condition ranking.
 
+The separate [eight-cell retention diagnostic](RETENTION_DIAGNOSTIC_REPORT.md)
+now has all 8 recorded outcomes: 2 succeeded and 6 failed, with null grades on
+the failures. Its [machine-readable readout](retention_diagnostic_readout.json)
+closes only that finite execution and available-accounting scope. It does not
+resolve causal retention questions or reopen this original 30-cell pilot.
+No original row, epoch boundary or budget snapshot below is changed; the
+diagnostic report awaits leader review and authorizes no live operation.
+
 ## Conditions and original task identities
 
 The [approved pilot design](../../batch-runner/experiments/execution_envelope/codex_external_budget_pilot.yaml) specifies 5 original tasks × A/B/C × 2 repetitions = 30 original cell IDs, ordered A1/B1/C1/C2/B2/A2 (ABC/CBA) within each task.
