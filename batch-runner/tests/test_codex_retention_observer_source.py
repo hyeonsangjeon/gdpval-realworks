@@ -25,8 +25,8 @@ def test_current_observer_source_preserves_historical_grade_bindings(tmp_path, m
     assert fixed.RESULT["intake_sha256"] == "4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4"
     assert reader._fixed().selector == reader.SELECTOR and reader._fixed().grading_selector == bridge.SELECTOR
     assert set(fixed.READER_FILES.values()) <= set(reader.CURRENT_DEPENDENCIES)
-    assert reader.CURRENT_DEPENDENCIES["codex_retention_first_cell.py"] == "054b5f3c68510594b19f53327b39bf973cb96b242e8ed2d1fc31736e6acf54d8"
-    assert reader.CURRENT_DEPENDENCIES["codex_retention_fresh_r1_result_intake.py"] == "d5f6162011028aa06fa4e9cbd58725a34d1f59b5bdfab92fef6eea84ab6d3bcc"
+    assert reader.CURRENT_DEPENDENCIES["codex_retention_first_cell.py"] == "5bbbe1f715169192e7fdb45a5f19fe77d075633825b30ecf5dbb18f7b782576a"
+    assert reader.CURRENT_DEPENDENCIES["codex_retention_fresh_r1_result_intake.py"] == "d9c1c6a13203d38086ce76ede383d9c1c6459467649b716843ba3fd1434269b4"
     assert fixed.READER["controller_sha256"] == "957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601"
     assert fixed.READER["module_sha256"] == "5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583"
     for name, expected in reader.CURRENT_DEPENDENCIES.items():

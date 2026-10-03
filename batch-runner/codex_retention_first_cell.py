@@ -1,4 +1,4 @@
-"""Stage one of the six implemented cells and share the owned-child protocol.
+"""Stage one of the seven implemented cells and share the owned-child protocol.
 
 Default use verifies a no-launch packet and describes the selected cell. An
 explicit staging call publishes the real Step2 layout in this dedicated source
@@ -47,6 +47,7 @@ FRESH_R2_CELL_ID = registration.TASK4 + "_retention_bundle_v1_fresh_r2"
 KEEP_R2_CELL_ID = registration.TASK4 + "_retention_bundle_v1_keep_r2"
 TASK5_FRESH_R1_CELL_ID = registration.TASK5 + "_retention_bundle_v1_fresh_r1"
 TASK5_KEEP_R1_CELL_ID = registration.TASK5 + "_retention_bundle_v1_keep_r1"
+TASK5_KEEP_R2_CELL_ID = registration.TASK5 + "_retention_bundle_v1_keep_r2"
 CONTROLLER = "batch-runner/codex_retention_first_cell.py"
 SOURCE_PATHS = (CONTROLLER, "batch-runner/codex_budget_pilot.py",
                 "batch-runner/core/config.py", "batch-runner/core/needs_files.py",
@@ -84,6 +85,7 @@ CELL_BINDINGS = (
     CellBinding(KEEP_R2_CELL_ID, 3, "keep", "retention-task4-keep-r2", 2),
     CellBinding(TASK5_FRESH_R1_CELL_ID, 4, "fresh", "retention-task5-fresh-r1", 1),
     CellBinding(TASK5_KEEP_R1_CELL_ID, 5, "keep", "retention-task5-keep-r1", 1),
+    CellBinding(TASK5_KEEP_R2_CELL_ID, 6, "keep", "retention-task5-keep-r2", 2),
 )
 
 
@@ -340,12 +342,14 @@ def execute_first_cell(request: Request, *, host_state: Path, grant=None,
     import codex_retention_task4_keep_r2
     import codex_retention_task5_fresh_r1
     import codex_retention_task5_keep_r1
+    import codex_retention_task5_keep_r2
 
     adapter = {FIRST_CELL_ID: codex_retention_ci, FRESH_CELL_ID: codex_retention_task4_fresh_r1,
                FRESH_R2_CELL_ID: codex_retention_task4_fresh_r2,
                KEEP_R2_CELL_ID: codex_retention_task4_keep_r2,
                TASK5_FRESH_R1_CELL_ID: codex_retention_task5_fresh_r1,
-               TASK5_KEEP_R1_CELL_ID: codex_retention_task5_keep_r1}[request.cell_id]
+               TASK5_KEEP_R1_CELL_ID: codex_retention_task5_keep_r1,
+               TASK5_KEEP_R2_CELL_ID: codex_retention_task5_keep_r2}[request.cell_id]
     return adapter.execute(request, host_state=host_state, grant=grant,
                            _test_transport=_test_transport, _test_api=_test_api)
 
@@ -389,9 +393,10 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
         from codex_retention_task4_keep_r2 import _KeepR2Admission
         from codex_retention_task5_fresh_r1 import _Task5FreshR1Admission
         from codex_retention_task5_keep_r1 import _Task5KeepR1Admission
+        from codex_retention_task5_keep_r2 import _Task5KeepR2Admission
 
         if (type(_admission) not in (_Admission, _FreshAdmission, _FreshR2Admission, _KeepR2Admission,
-                                    _Task5FreshR1Admission, _Task5KeepR1Admission)
+                                    _Task5FreshR1Admission, _Task5KeepR1Admission, _Task5KeepR2Admission)
                 or _test_transport is not None or _admission.request != request):
             raise RetentionControllerRefused(LIVE_GATE)
         if type(request) is not Request:
@@ -400,7 +405,8 @@ def _run_post_authority_cell(request: Request, *, host_state: Path,
                 (_Admission, FIRST_CELL_ID), (_FreshAdmission, FRESH_CELL_ID),
                 (_FreshR2Admission, FRESH_R2_CELL_ID), (_KeepR2Admission, KEEP_R2_CELL_ID),
                 (_Task5FreshR1Admission, TASK5_FRESH_R1_CELL_ID),
-                (_Task5KeepR1Admission, TASK5_KEEP_R1_CELL_ID)):
+                (_Task5KeepR1Admission, TASK5_KEEP_R1_CELL_ID),
+                (_Task5KeepR2Admission, TASK5_KEEP_R2_CELL_ID)):
             raise RetentionControllerRefused(LIVE_GATE)
         transport = _admission.transport
     context = _context(request)
