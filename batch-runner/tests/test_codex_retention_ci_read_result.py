@@ -85,7 +85,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # Eight execution cells, eight result cells, seven terminal cells, six budget
+    # Eight execution cells, eight result cells, seven terminal cells, seven budget
     # cells and an unsupported selector, with all 64 mode combinations,
     # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.

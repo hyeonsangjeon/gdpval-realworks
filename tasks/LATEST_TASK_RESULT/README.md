@@ -1,68 +1,71 @@
 # Latest task result
 
-## PROJECT5-TASK4-FRESH-BUDGET-OBSERVATION-20261004-0019
+## PROJECT5-TASK4-KEEP-R2-BUDGET-OBSERVATION-20261004-0223
 
-The one authorized combined Task4-FRESH selector passed at implementation HEAD
-`c4e3cff1e3de83d41cf72abf101ce6031be865a8`: 1 passed in 11.32s, with all 576
+The one authorized KEEP/r2-success selector passed at implementation HEAD
+`a4950d6b968714bb79e237f8dc944290c01ec5bf`: 1 passed in 11.47s, with all 576
 mode cases, test/log-capture exits 0, no timeout and zero recorded network/model/
-writer/child/paid effects. The 11.32s is pytest's duration; outer elapsed time
+writer/child/paid effects. The 11.47s is pytest's duration; outer elapsed time
 was not measured. Only the two completion records change after this proof.
 Tested executable, test, report and JSON bytes remain unchanged.
 
-This unit adds only the failed Task4 `FRESH_R1` and `FRESH_R2` profiles to the
-existing optional budget path. Exactly six canonical profiles are eligible:
-JSON cells[1], cells[2] and cells[4:8]. Successful Task4 KEEP cells, unknown and
-copied bindings remain refused. The [report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
+This unit adds only successful Task4 `reader.KEEP_R2`, ordinal3/repetition2,
+to the optional budget path. Exactly seven canonical profiles are eligible:
+JSON cells[1:8]. Legacy Task4 KEEP/r1, unknown and copied bindings remain
+refused; this is not `TASK5_KEEP_R2`. The [report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
 and [JSON](../codex_budget_pilot/retention_diagnostic_readout.json) now record
-the leader's two actual Task5 r1 RESULT-only observations separately from
-their historical terminal-only evidence. All four Task5 budget observations
-are consumed; all Task4 budget values remain unobserved. No live read or new
-experiment ran here.
+the leader's two actual Task4 FRESH RESULT-only observations separately from
+their historical terminal-only evidence. All six failed-cell budget observations
+are consumed; both successful Task4 KEEP budgets remain unobserved. No live
+read, inference, regrade or new experiment ran here.
 
 The new clean branch/worktree is
-`codex-retention-task4-fresh-budget-observation-20261004-0019`, from main
-`3d43a674e47d700dd874680c053a91bc1807b693`. The one duplicate-open-PR check
+`codex-retention-task4-keep-r2-budget-observation-20261004-0223`, from main
+`c4828cc83892fb9f844599bb6c3be3d66500d9e8`. The one duplicate-open-PR check
 returned none. The preserved checkout, earlier worktrees and
-`wip/local-main-preserved-20260719` were untouched. Accepted PR733 HEAD
-`3e57226defc0469106a14c7cda19c90916864ecf`, owner review
-[5401208301](https://github.com/hyeonsangjeon/gdpval-realworks/pull/733#pullrequestreview-5401208301)
+`wip/local-main-preserved-20260719` were untouched. Accepted PR734 HEAD
+`e57bacc2fdacd404d4664f4c22b4da8bdd526dab`, owner review
+[5401659305](https://github.com/hyeonsangjeon/gdpval-realworks/pull/734#pullrequestreview-5401659305)
 and all ten checks are supplied prior acceptance evidence, not approval of
-this new HEAD. Its 10.51s proof and all consumed reads were not rerun.
+this new HEAD. Its 11.32s proof and all consumed reads were not rerun.
 
 ### Closed extension and direct pre-edit decision
 
-The leader's 2026-10-04 00:19 KST APPROVE-WITH-CONDITIONS is a direct Project5
-leader decision for this two-profile extension, not a returned agent verdict.
+The leader's 2026-10-04 02:23 KST APPROVE-WITH-CONDITIONS is a direct Project5
+leader/AI systems architect decision, separate from this implementation worker,
+for this one successful profile, not a returned agent verdict.
 The unavailable memo transport was not retried. Standing policy and final
 immutable-source review, same-HEAD CI, delivery and separate live-read gates
 remain intact.
 
-Both new profiles belong to Task4 `3baa0009-5a60-4ae8-ae99-4955cb328ff3`,
-workflow `370228282`, attempt 1. Their complete retained control tuples remain
-in JSON cells[1:3] without alteration.
+The binding is Task4 `3baa0009-5a60-4ae8-ae99-4955cb328ff3`, workflow370228282,
+producer `b8351e561acb9675a4993419e819c12787b5b305`, run36947454688/attempt1,
+execution110660390316, request
+`8a06cc7df34cbf10896b635f6c8d9ad4e91313d3c685511f8fc5c159cb6ddec1`.
+Its full immutable tuple remains in JSON cells[3]: succeeded/exit0/cleanuptrue,
+inference terminal `e55fac5d60191167dd66688510ec0fef472e594d`, claim
+`f29f8d4a19710aa0e832dba720ff7d32701c309c`, output
+`54a4362ce3554b7c71b5ada00802efc9521038e6`, object-set
+`4bda1c0d48a5dd980bd683a6f8316b3d52808e95dca68099b86ad4de2d3e03b2`
+and authority `7427be5a3d3f5692ca9d92920161c7ddf4491faf39f36f9ee9cee062f45f5705`.
+The distinct grading terminal and prior full-intake/grade evidence are untouched.
 
-| Profile | Fixed producer / run / execution job / request | Failed inference terminal / output |
-| --- | --- | --- |
-| fresh/r1, ordinal 1 / repetition 1 | `e39d8d1aadcb816d09588829a5ec4929b33083e6` / `36845127347` / `110323708382` / `5bbb0e4cb5ae9444eac9c804ac3c8d2f6d39acbec63e7f7de78d7f2ee35fcf02` | `45f54eb0a24aee5d40dd41b276ff5df777f06d73` / `3b27e0a7e9d05c9ecfb400040bd8c025bc7f2484` |
-| fresh/r2, ordinal 2 / repetition 2 | `5a9614ac04464c4e0a5e80297f54c3a5c9443bae` / `36907894862` / `110535767415` / `4798c119ea2d06c7c902ae51638bdba25c5bfaf683a2223d286fd7e652d3b317` | `1d5133590911f3704fc2a65279d4b64bee77c1d6` / `46fff9e31bc844a55ced352926aba49479869624` |
+The unchanged inert compiler derives sealed config
+`307dc07923d377faa7d7c6bd6c4934de2fa5f99e9007dd0d723f3c3337e6d010`.
+Namespace `retention-task4-keep-r2-budget` and marker
+`retention-task4-keep-r2-budget-observation.json` are distinct. Only this canonical
+budget profile uses `_verify_terminal(terminal_only=False)` to validate successful
+controls and metadata. Full terminal/claim/manifest/object/authority identities
+and immutable history are sealed before fetching RESULT at the fixed output.
+The reader checks size/hash/fingerprint/task/source/config/receipt and exact
+canonical deliverable metadata against the verified manifest. It does not call
+`read_result` or full payload/file-readback validation. The six failed-budget
+paths retain failed-controls/empty-deliverable restrictions.
 
-The unchanged inert compiler derives sealed configs
-`5993b6d0c94ef1d56e808fab07941daed6e77d3f7adf7e055d9329043af63e02` and
-`7148453eb16dd8a0c6737bffe2fc5df42319dbb1a11afba2cdc2b90b649f305d`, respectively.
-Private namespaces are `retention-task4-fresh-r1-budget` and
-`retention-task4-fresh-r2-budget`, each with its own fixed budget marker.
-The existing Task5 constants, supplied provenance and behavior stay unchanged.
-
-The shared verifier checks terminal/claim/manifest controls, declared object
-identities and immutable history before fetching only the declared RESULT at
-the fixed output revision. Size/hash, fingerprint, task, source and sealed
-configuration must match before the unchanged `_budget_snapshot` projection.
-Task4's historical rows have no separately supplied authority digest. Their
-exact terminal bytes bind the embedded authority; existing schema/run/job/
-request checks still apply. No digest was invented or historical row backfilled.
-The selector rejects even a well-formed changed authority under the fixed
-terminal hash. Task4 FRESH/r1's exact job check applies to terminal/budget mode;
-its older ordinary-success behavior was not changed.
+The new receipt reports the succeeded source outcome but explicitly establishes
+no new full intake, delivery, grading readiness or grade. It verifies RESULT only;
+overall payload, ledger and deliverable-body verification stay false. The
+existing Task4 KEEP/r2 grade remains 30.35/45, 67.44% included/54.20% full.
 
 No ledger or deliverable body is fetched by budget mode, and no raw payload,
 error text or private destination is published. Missing/null/zero semantics,
@@ -74,41 +77,49 @@ All other modes and paid jobs remain excluded, including spurious nonempty
 request outputs. Hash checks precede credentials and lazy imports; token
 stripping and safe-receipt publication remain.
 
-The shared authored workflow helpers independently expect cells[1], cells[2]
-and cells[4:8], not values derived from YAML. This covers the central and six
-legacy route sites, both r2 budget tests and the combined r1 test. Historical
+The shared authored workflow helpers independently expect cells[1], cells[2],
+cells[3] and cells[4:8], not values derived from YAML. This covers the central
+and six legacy route sites, both r2 budget tests, the combined r1 test and the
+Task4 tests. Historical
 canonical-JSON assertions now remove only explicitly added observation fields;
 their historical hashes remain unchanged. No assertion was deleted or skipped.
 
-### Two supplied Task5 r1 observations
+### Two supplied Task4 FRESH observations
 
 The leader supplied these completed RESULT-only receipts at source
-`3d43a674e47d700dd874680c053a91bc1807b693`, with historical reader
-`dd23824360e03f415feb5c7d247024ac7d67300c4ed7f2120e0eb2c9d6e47eb9` and unchanged
+`c4828cc83892fb9f844599bb6c3be3d66500d9e8`, with historical reader
+`9359eab1be22b54bc6f18092560308058a820dde0a55c365a9ee263f6f9c0f09` and unchanged
 projector `96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815`.
 Approval/execution were skipped in both. No raw payload was supplied.
 
 | Supplied observation | Read job / receipt UTC | Observation SHA256 |
 | --- | --- | --- |
-| Task5 fresh/r1 `37131238762` | `111226607598` / `2026-10-03T14:55:40.4040030Z` | `883f64c6f1c8190c9fde011ba11d33b436438b6ea9c62577d6099f41a398d5c3` |
-| Task5 keep/r1 `37131339406` | `111227047774` / `2026-10-03T14:58:10.8491476Z` | `a55103477c3be7571e736546b76d338dda6cd12ba908b569af65aef3b7e9febc` |
+| Task4 fresh/r1 `37138725894` | `111248535588` / `2026-10-03T16:59:36.1876048Z` | `d2b354bc9ad165fc18d90318dac3eb852e64f455f0fa31f89de3f2330f9c896c` |
+| Task4 fresh/r2 `37138900161` | `111249054328` / `2026-10-03T17:02:20.9246243Z` | `7304dd060ec089542085d8156f295f20fd8e3bdfd9ead8af5766894a59c17c83` |
 
-Their verified RESULTs are 7635 bytes /
-`eda9982c2812a5d4e1519c952f65438d1395b5526d07515fcf066dc604a1579a` and 7593 bytes /
-`137dec5dc2c4c2c0614ba253732bc6ebc0388ac9d1d511908f0d618ed7c09a54`.
+Their verified RESULTs are 7771 bytes /
+`b93c0d4b0d629ea8f351b60865eb7aa49c2a52e8634c73206d026aebd5112b5f` and 7737 bytes /
+`c865b09977ca9a904c979531057f573ccc0c5358e20cfec90197853011afbf42`.
 The exact result/prepared fingerprints, configuration hashes, timestamps and
-supplied-request bindings are in the two new current-observation fields.
-KEEP/r1's supplied-grader binding remains null, distinct from later preparation
+supplied-request bindings are in cells[1:3]'s new current-observation fields.
+Their newly derived authority digests are
+`220b35dec4130fb5c83ffa3a1367f7acab41c9e3e3f740e228628df30de866c0` and
+`dfee46e28de07e107384fb986bdc9c0d4d43e21fbefd200818a9004893a396a2`.
+Those belong only to these new observations. The older digest-absent read
+records and fixed failed-budget control dictionaries remain digest-absent.
+Task5 KEEP/r1's supplied-grader binding remains null, distinct from later preparation
 hash `75f38c05e5c348e481e54f4c0b2000772c2414d7bae7519b1f2a38d92e1e0dc5`.
 
-| Recorded Task5 point | Remaining seconds | Retry-backoff wait seconds | Native admissions | Confirmed native resumes |
+| Recorded point | Remaining seconds | Retry-backoff wait seconds | Native admissions | Confirmed native resumes |
 | --- | ---: | ---: | ---: | ---: |
-| fresh/r1 | 4909.906562328339 | 3781.06050658226 | 18 | 0 |
-| keep/r1 | 7373.157982349396 | 2580.858815908432 | 13 | 12 |
-| keep/r2, unchanged | 0.0 | 8742.75936126709 | 38 | 37 |
-| fresh/r2, unchanged | 10724.012340545654 | 0.0 | 1 | 0 |
+| Task4 fresh/r1 | 0.0 | 8983.719460487366 | 39 | 0 |
+| Task4 fresh/r2 | 0.0 | 8985.385900974274 | 39 | 0 |
+| Task5 fresh/r1, unchanged | 4909.906562328339 | 3781.06050658226 | 18 | 0 |
+| Task5 keep/r1, unchanged | 7373.157982349396 | 2580.858815908432 | 13 | 12 |
+| Task5 keep/r2, unchanged | 0.0 | 8742.75936126709 | 38 | 37 |
+| Task5 fresh/r2, unchanged | 10724.012340545654 | 0.0 | 1 | 0 |
 
-All four snapshots have 10800 total seconds and empty `missing` objects. The
+All six snapshots have 10800 total seconds and empty `missing` objects. The
 source outcomes remain failed/exit 1/cleanup true/grade null; costs and grades
 are unchanged. Only RESULT bodies were verified, not ledger/deliverables or
 overall payload, and grading readiness remains false. Remaining time is
@@ -118,56 +129,58 @@ or HTTP calls. No absence of provider errors or unrecorded recovery is inferred.
 These observations do not establish the absence of all partial work.
 Detailed failure/recovery exposure and independent provider/input/CAS
 authentication remain unavailable. Observer `writer_acknowledgment=not_established`
-is distinct from producer acknowledgment. All four Task5 reads are consumed.
+is distinct from producer acknowledgment. All six failed-cell reads are consumed.
 
-Removing only cells[4] and cells[5]'s new `current_budget_observation` fields
+Removing only cells[1] and cells[2]'s new `current_budget_observation` fields
 reproduced the delivered JSON's Python compact sorted canonical SHA256
-`eaefa00b1a8db81b9a12dd914135c0fbf2c279d09697b4cb1cb499e983d369de`.
+`6b3830c740ffe6a540990c299887eb4f205e82eb42e71cce8b99e8c3e7feeffe`.
 The source raw JSON hash remains historical
-`e8b79d25813bde83fc3b9b5615b73151016a702a75fb94b92d4b356cf73b497d`.
-Both r2 observations, all original terminal-only missingness, eight outcomes,
+`c4642634b846905f106f8a9bd47737984345b3a65992416931a67ce55362f72d`.
+All four Task5 observations, original terminal-only missingness, eight outcomes,
 costs/grades and original-pilot bytes remain unchanged. This is local evidence
 consistency, not independent authentication of a private receipt.
 
-### Single combined Task4-FRESH proof
+### Single KEEP/r2-success proof
 
-The worktree was clean at tested HEAD `c4e3cff1e3de83d41cf72abf101ce6031be865a8`,
-tree `782c1fff52d9b33fe6b4a2a349fefa73c300516c`. The exact token-free invocation
+The worktree was clean at tested HEAD `a4950d6b968714bb79e237f8dc944290c01ec5bf`,
+tree `813bcd348fb52d4aa0cd99995c2a0898934e7170`. The exact token-free invocation
 was:
 
 ```text
-env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-retention-task4-fresh-budget-observation-20261004-0019/batch-runner bash /tmp/retention-task4-fresh-budget-20261004-0019.8RKcQa/run-proof.sh
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-retention-task4-keep-r2-budget-observation-20261004-0223/batch-runner bash /tmp/retention-task4-keep-r2-budget-20261004-0223.gT0Gyt/run-proof.sh
 ```
 
 The launcher ran exactly one selector from `batch-runner`:
 
 ```text
-timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_codex_retention_task4_fresh_budget.py::test_task4_fresh_budgets_are_fixed_private_and_model_free --tb=short
+timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_codex_retention_task4_keep_r2_budget.py::test_task4_keep_r2_success_budget_is_fixed_private_and_model_free --tb=short
 ```
 
-It collected one test and passed in 11.32s, with test/log-capture exits 0 and
+It collected one test and passed in 11.47s, with test/log-capture exits 0 and
 no timeout. Python 3.10.12 / pytest 9.1.1 were reported by that invocation, not
-a separate prerequisite probe. It reached both exact Task4 bindings/configs,
-source-pin refusals before import/session, controls/history before RESULT,
-tampered controls/source/task/config/hash/fingerprint/authority refusals,
+a separate prerequisite probe. It reached the exact successful KEEP/r2 binding/config,
+source-pin refusals before import/session, successful controls/history before RESULT,
+nonempty deliverable metadata without ledger/deliverable downloads, tampered
+controls/source/task/config/hash/fingerprint/authority/receipt/metadata refusals,
 missing/null/zero semantics, private markers/readback, no-clobber/lost-ack/
-no-replay, unchanged Task5/controls-only behavior and all 576 mode combinations
+no-replay, unchanged six failed-budget and ordinary controls-only/intake-refusal
+behavior, no false full-intake/delivery/grade flags and all 576 mode combinations
 with paid isolation. Zero network/model/writer/child/paid effects were recorded.
 Collection-time helper imports and established exclusive fixture ownership
 were preserved; no source role was recreated. Real validators stayed active
-with synthetic transport bodies/identities. No actual Task4 budget was observed.
+with synthetic transport bodies/identities. No worker live budget observation ran.
 
 | Current proof/artifact | SHA256 |
 | --- | --- |
-| `proof.log` | `8d459a782b89de2994ebe1547c2bd5fac0218d628aed07b1d85911a64d5ad569` |
-| `run-proof.sh` | `ac9199317d5f16fd97c49be1f387420ff74f7a476da18a57dca997d7de4ef510` |
+| `proof.log` | `01e984403a134e76aa2282cd2e7cb62d08ad06abefe93cb316c94d227dd587ac` |
+| `run-proof.sh` | `0a902c88112d63ef6510014125661d5dc4fff7a961a354ae87b08a8be113ec9d` |
 | `status.txt` | `efcc32872ebd2ff7620b538ec980fab2614614b8fec099cef21b6db2e4cdf2e7` |
-| Combined Task4-FRESH selector | `564cbd7f1e1fef1729904d4020418f1610ed876f8e0c681a941a9089ba3460f0` |
-| Report with four Task5 budget points | `94ad89b29d3bc63ffcf2634b827c1e592b43655f2c1b00799b8d939b4346ed2c` |
-| JSON with separate current observations | `c4642634b846905f106f8a9bd47737984345b3a65992416931a67ce55362f72d` |
-| Shared reader | `9359eab1be22b54bc6f18092560308058a820dde0a55c365a9ee263f6f9c0f09` |
-| Grade observer, current-reader pin only | `24654886e7de23394941dd2ab382161174966706b5c44a32e9a15d5cf03d79cf` |
-| Workflow with six fixed budget cases | `debb810e3090743e268501fd0c7da6dd5fed0f024860bd8a8f6d1e54b5ee7b34` |
+| KEEP/r2-success selector | `190afc6ca8b15be3dd24ffef8a9eb8fba3e37c349f6e9693e60a6c8a0d74eb0d` |
+| Report with six failed-cell budget points | `12ad05a9483461161e431a8fef834c90cf62832a0177e8a514cb32b3ce32b699` |
+| JSON with separate current observations | `31f7d2b58d044a5548cb9998362b8b6ebaf2d428b4d679b4a42f4191d666814e` |
+| Shared reader | `631dd2a76faecd28ae65bdbe69d755f598aa4b025cfc66a8280872c2f3a2bc96` |
+| Grade observer, current-reader pin only | `e53614168286901f53eeeef3b7571ad3b7cc5658dea19d162a4bbba66b1ec4b1` |
+| Workflow with seven fixed budget cases | `d8e2e841b2666b1f35b3be007fd5185bae68bf9a0f951a8280f68cae1bb19ee7` |
 
 Only necessary current reader/workflow pins and the observer's separate
 `CURRENT_DEPENDENCIES` changed. The projector remains
@@ -178,6 +191,14 @@ and `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d`, and inta
 `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4`.
 
 ### Preserved outcomes and history
+
+The [accepted PR734 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e57bacc2fdacd404d4664f4c22b4da8bdd526dab/tasks/LATEST_TASK_RESULT/README.md)
+retains the earlier exact commands, artifact hashes and reached boundaries.
+Its distinct 11.32s / 576-case proof passed at
+`c4e3cff1e3de83d41cf72abf101ce6031be865a8`, log
+`8d459a782b89de2994ebe1547c2bd5fac0218d628aed07b1d85911a64d5ad569`.
+Its JSON/report/source snapshots remain historical, not evidence that the
+current implementation was tested previously. That proof was not rerun.
 
 The [accepted PR733 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/3e57226defc0469106a14c7cda19c90916864ecf/tasks/LATEST_TASK_RESULT/README.md)
 retains prior exact commands, source/artifact hashes, receipts and failure
@@ -243,7 +264,7 @@ kept numerical evidence, provenance and uncertainty intact in changed passages.
 Source/structural/candidate checkpoints, a change ledger, literal/date/link/
 hedge reconciliation and a reverse-condition review preserve the distinction
 between supplied observations and synthetic proof. The protected copyedit
-makes no factual changes. This bounded same-session editorial check is not an
+makes no factual or optional number-spacing changes. This bounded same-session editorial check is not an
 independent source review. No new design axis, UI, repository audit, memo request
 or agent-policy change was added.
 
@@ -254,9 +275,10 @@ not an all-in attempt ceiling. KEEP/FRESH remain guarded within-cell treatments,
 with no fixed admission or automatic monetary cap.
 
 Final independent review of the new immutable HEAD, same-HEAD CI and delivery
-remain leader-owned and precede separately directed Task4 model-free reads.
-No live-read authority is granted. All Task4 budget values remain unobserved;
-all four Task5 observations are consumed. Finite execution and available
+remain leader-owned and precede a separately directed Task4 KEEP/r2 model-free read.
+No live-read authority is granted. Both successful Task4 KEEP budgets remain
+unobserved; all six failed-cell observations are consumed. Cached grade-only
+receipts have no budget fields and were not reread. Finite execution and available
 accounting are closed, not the whole Project5 card. Realized budget/wait/
 admission/resume and attribution gaps remain, as do missing prices, exclusion
 causes/item overlap and intermediate-input comparisons. Post-selection, two

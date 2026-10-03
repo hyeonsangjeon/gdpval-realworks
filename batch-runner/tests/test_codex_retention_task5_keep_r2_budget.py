@@ -119,10 +119,10 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
     assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
     assert row["current_budget_observation"]["mode"] == "observe_budget"
 
-    # All four later leader-supplied receipts are separate from the original rows.
+    # All six later leader-supplied receipts are separate from the original rows.
     # Removing only those fields must reproduce the canonical historical JSON.
     prior = deepcopy(readout)
-    for index in (4, 5, 6):
+    for index in (1, 2, 4, 5, 6):
         prior["cells"][index].pop("current_budget_observation")
     actual = prior["cells"][7].pop("current_budget_observation")
     canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
@@ -155,7 +155,7 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
     assert "Both r2 budget observations are consumed" in report
-    assert "All Task4 budget values remain unobserved" in " ".join(report.split())
+    assert "Both successful Task4 KEEP budgets remain unobserved" in " ".join(report.split())
     for value in actual["inference_budget_snapshot"].values():
         if type(value) in (int, float):
             assert str(value) in report
@@ -503,7 +503,7 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
     workflow_contract._assert_retention_mode_routes()
     workflow = yaml.safe_load((ci.ROOT / ci.WORKFLOW).read_bytes())
     jobs, cells = workflow["jobs"], tuple(plan["order"])
-    assert len(workflow_contract._BUDGET_CELLS) == 6 and set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], *cells[4:8]}
+    assert len(workflow_contract._BUDGET_CELLS) == 7 and set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], cells[3], *cells[4:8]}
     steps = jobs[ci.PREPARE_JOB]["steps"]
     names = ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget")
     for selected, flags in itertools.product((*cells, "unknown"), itertools.product((False, True), repeat=6)):

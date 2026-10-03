@@ -208,6 +208,22 @@ FRESH_R2_BUDGET_CONTROLS = {
 FRESH_R2_CONFIG_SHA256 = "7148453eb16dd8a0c6737bffe2fc5df42319dbb1a11afba2cdc2b90b649f305d"
 FRESH_R2_BUDGET_FORMAT = "retention-task4-fresh-r2-budget-observation-v1"
 FRESH_R2_BUDGET_MARKER = "retention-task4-fresh-r2-budget-observation.json"
+# This successful inference tuple is distinct from its later grading terminal.
+# Only this canonical profile may project a successful RESULT without intake.
+KEEP_R2_BUDGET_CONTROLS = {
+    "terminal_commit": "e55fac5d60191167dd66688510ec0fef472e594d",
+    "terminal_identity": {"sha256": "70fb8778ae15e369ef1ac4d03dbe4fa6f5d9852966b250fa812695d6bd77bf91", "size": 5885},
+    "claim_commit": "f29f8d4a19710aa0e832dba720ff7d32701c309c",
+    "claim_identity": {"sha256": "4af63e82ddcaf2b795595081c59d29369e2bf2a4bb2c37f81eb7f5409cd6b363", "size": 1888},
+    "output_commit": "54a4362ce3554b7c71b5ada00802efc9521038e6",
+    "output_manifest_identity": {"sha256": "93e1dada24779909cfc593dff7507b7f9c6452c6f36c12b2c5e86305e35d9a8c", "size": 2679},
+    "output_objects_sha256": "4bda1c0d48a5dd980bd683a6f8316b3d52808e95dca68099b86ad4de2d3e03b2",
+    "retained_authority_sha256": "7427be5a3d3f5692ca9d92920161c7ddf4491faf39f36f9ee9cee062f45f5705",
+    "status": "succeeded", "exit_code": 0, "cleanup_confirmed": True,
+}
+KEEP_R2_CONFIG_SHA256 = "307dc07923d377faa7d7c6bd6c4934de2fa5f99e9007dd0d723f3c3337e6d010"
+KEEP_R2_BUDGET_FORMAT = "retention-task4-keep-r2-budget-observation-v1"
+KEEP_R2_BUDGET_MARKER = "retention-task4-keep-r2-budget-observation.json"
 BUDGET_PROJECTOR_PIN = (Path(__file__).with_name("codex_budget_pilot_grade_readout.py"),
                         "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815")
 BUDGET_FORMAT = "retention-task5-fresh-r2-budget-observation-v1"
@@ -582,7 +598,7 @@ def _budget_projector():
     return projector._budget_snapshot
 
 
-def _budget_result(data, summary, plan, cell, roles, projector):
+def _budget_result(data, summary, plan, cell, roles, projector, *, binding=FRESH_R1):
     """Validate the declared RESULT, but never read its ledger or deliverables."""
     value = owned._json_object(data)
     fingerprint = intake.validate_inference_result_fingerprint(value)
@@ -606,10 +622,24 @@ def _budget_result(data, summary, plan, cell, roles, projector):
             and not row.get("reflection_history") and row.get("reflection_attempts", 0) == 0,
             "fresh_budget_result_binding_mismatch")
     output._receipt_fields(row.get("problem_solving_cost"))
-    require(intake.project_result_row({}, row).get("problem_solving_cost") == summary["receipt"],
+    projected = intake.project_result_row({}, row)
+    require(projected.get("problem_solving_cost") == summary["receipt"]
+            and (binding is not KEEP_R2 or projected["status"] == "success"),
             "retention_result_status_or_receipt_mismatch")
-    require(row.get("deliverable_files") == [] and row.get("deliverable_file_records", []) == [],
-            "retention_result_deliverable_binding_mismatch")
+    if binding is KEEP_R2:
+        # _summary/_roles already validated the manifest's canonical paths and
+        # strict metadata. Reuse that metadata contract, never local file reads.
+        deliverables = set(roles) - {intake.RESULT, intake.LEDGER}
+        names, records = row.get("deliverable_files"), row.get("deliverable_file_records", [])
+        require(type(names) is list and all(type(name) is str for name in names)
+                and len(names) == len(deliverables) and set(names) == deliverables
+                and all(intake.canonical_deliverable_path(cell["task_id"], name) == name for name in names),
+                "retention_result_deliverable_binding_mismatch")
+        require(type(records) is list and all(type(item) is dict and type(item.get("size")) is int for item in records)
+                and records == [roles[name] for name in names], "retention_result_deliverable_binding_mismatch")
+    else:
+        require(row.get("deliverable_files") == [] and row.get("deliverable_file_records", []) == [],
+                "retention_result_deliverable_binding_mismatch")
     ledger = value.get("cost_ledger")
     require(type(ledger) is dict and set(ledger) == {"path", "sha256"} and ledger["path"] == intake.LEDGER
             and ledger["sha256"] == roles[intake.LEDGER]["sha256"], "retention_result_ledger_binding_mismatch")
@@ -628,12 +658,12 @@ def _budget_result(data, summary, plan, cell, roles, projector):
 def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, expected_reader_sha256: str,
                      terminal_revision: str | None = None, discover_terminal: bool = False, _test_api=None,
                      binding=FRESH_R1, include_budget=False) -> dict:
-    """Controls only by default; six fixed failed-cell opt-ins project their RESULT."""
+    """Controls only by default; seven fixed budget opt-ins project only RESULT."""
     require(type(include_budget) is bool, "explicit_budget_observation_required")
     if include_budget:
         require(binding is TASK5_FRESH_R2 or binding is TASK5_KEEP_R2
                 or binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1
-                or binding is FRESH_R1 or binding is FRESH_R2, "fixed_budget_observation_required")
+                or binding is FRESH_R1 or binding is FRESH_R2 or binding is KEEP_R2, "fixed_budget_observation_required")
         if binding is TASK5_KEEP_R2:
             budget_controls, config_sha256 = TASK5_KEEP_R2_BUDGET_CONTROLS, TASK5_KEEP_R2_CONFIG_SHA256
             budget_format, budget_marker = TASK5_KEEP_R2_BUDGET_FORMAT, TASK5_KEEP_R2_BUDGET_MARKER
@@ -649,6 +679,9 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
         elif binding is FRESH_R2:
             budget_controls, config_sha256 = FRESH_R2_BUDGET_CONTROLS, FRESH_R2_CONFIG_SHA256
             budget_format, budget_marker = FRESH_R2_BUDGET_FORMAT, FRESH_R2_BUDGET_MARKER
+        elif binding is KEEP_R2:
+            budget_controls, config_sha256 = KEEP_R2_BUDGET_CONTROLS, KEEP_R2_CONFIG_SHA256
+            budget_format, budget_marker = KEEP_R2_BUDGET_FORMAT, KEEP_R2_BUDGET_MARKER
         else:
             budget_controls, config_sha256 = TASK5_FRESH_R2_BUDGET_CONTROLS, TASK5_FRESH_R2_CONFIG_SHA256
             budget_format, budget_marker = BUDGET_FORMAT, BUDGET_MARKER
@@ -676,7 +709,8 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
             head = _terminal_revision(api, repo, terminal_revision, discover_terminal, token, deadline, binding=binding)
             check()
             terminal, terminal_bytes, roles, deliverables = _verify_terminal(
-                api, repo, head, cache / "controls", token, deadline, terminal_only=True, binding=binding)
+                api, repo, head, cache / "controls", token, deadline,
+                terminal_only=not (include_budget and binding is KEEP_R2), binding=binding)
             check()
             if include_budget:
                 fixed = {"terminal_commit": head, "terminal_identity": owned._identity(terminal_bytes),
@@ -691,12 +725,13 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
                     # authority; do not invent a separately supplied digest.
                     del fixed["retained_authority_sha256"]
                 require(owned._canonical_json(fixed) == owned._canonical_json(budget_controls)
-                        and set(roles) == {intake.RESULT, intake.LEDGER} and not deliverables,
+                        and (set(roles) == {intake.RESULT, intake.LEDGER, *deliverables} if binding is KEEP_R2
+                             else set(roles) == {intake.RESULT, intake.LEDGER} and not deliverables),
                         "fresh_budget_fixed_controls_mismatch")
                 data = intake.retained_reader._fetch(api, repo, terminal["output_commit"],
                     producer.OUTPUT + "/" + intake.RESULT, roles[intake.RESULT], cache / "result", token, deadline)
                 check()
-                result, budget = _budget_result(data, terminal["completion"], plan, cell, roles, projector)
+                result, budget = _budget_result(data, terminal["completion"], plan, cell, roles, projector, binding=binding)
             output._remaining(deadline)
         require(reader_identity(binding=binding) == source, "fresh_result_reader_changed")
         if include_budget:
@@ -738,6 +773,9 @@ def observe_terminal(*, expectation: ci.TerminalExpectation, destination: Path, 
                 budget_projector_sha256=BUDGET_PROJECTOR_PIN[1], result_body_verified=True,
                 ledger_body_verified=False, deliverable_bodies_verified=False,
                 payload_verification_scope="inference_result_only")
+            if binding is KEEP_R2:
+                record.update(full_intake_established_by_this_observation=False,
+                    delivery_established_by_this_observation=False, grade_established_by_this_observation=False)
             del record["unavailable"]["budget"]
         encoded = retained._encoded(record)
         check()

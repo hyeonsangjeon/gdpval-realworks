@@ -22,6 +22,7 @@ _BUDGET_CASES = (
     (reader.TASK5_KEEP_R1.expectation.cell_id, "retention-task5-keep-r1-budget", "33278d9c26e8c8e8cfe68649e482e01f684d7705"),
     (reader.FRESH_R1.expectation.cell_id, "retention-task4-fresh-r1-budget", "45f54eb0a24aee5d40dd41b276ff5df777f06d73"),
     (reader.FRESH_R2.expectation.cell_id, "retention-task4-fresh-r2-budget", "1d5133590911f3704fc2a65279d4b64bee77c1d6"),
+    (reader.KEEP_R2.expectation.cell_id, "retention-task4-keep-r2-budget", "e55fac5d60191167dd66688510ec0fef472e594d"),
 )
 _BUDGET_CELLS = tuple(cell for cell, _, _ in _BUDGET_CASES)
 
@@ -91,7 +92,7 @@ def _assert_retention_mode_routes():
              adapter.controller.TASK5_KEEP_R1_CELL_ID, adapter.controller.TASK5_KEEP_R2_CELL_ID,
              adapter.controller.TASK5_FRESH_R2_CELL_ID)
     cells = read_cells
-    assert len(_BUDGET_CELLS) == 6 and set(_BUDGET_CELLS) == {cells[1], cells[2], *cells[4:8]}
+    assert len(_BUDGET_CELLS) == 7 and set(_BUDGET_CELLS) == {cells[1], cells[2], cells[3], *cells[4:8]}
     for selected in (*cells, "unregistered"):
         for preparing, executing, observing, reading, terminal, budget in itertools.product((False, True), repeat=6):
             values = {'"$PREPARE_REQUESTED"': preparing, '"$EXECUTE_REQUESTED"': executing,
