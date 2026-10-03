@@ -388,7 +388,7 @@ def test_task5_keep_r2_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
 
     # Current-source/default checks only; no older delivered result is replayed.
     fixed_readers = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2, reader.TASK5_FRESH_R1,
-                     reader.TASK5_KEEP_R1, binding)
+                     reader.TASK5_KEEP_R1, binding, reader.TASK5_FRESH_R2)
     assert reader.FRESH_R1.expectation is reader.EXPECTATION
     assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
     for old in fixed_readers:
@@ -476,7 +476,7 @@ def test_task5_keep_r2_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
     assert steps[13]["if"] == steps[14]["if"] == (
         "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
     assert steps[9]["run"] == steps[13]["run"]
-    expected_pins = {"batch-runner/" + Path(path).name: digest for path, digest in reader._frozen(binding).values()}
+    expected_pins = {"batch-runner/" + Path(path).name: digest for path, digest in reader._frozen(reader.TASK5_FRESH_R2).values()}
     expected_pins["batch-runner/" + Path(reader.__file__).name] = source["module_sha256"]
     for index, mode in ((9, "--read"), (13, "--observe-terminal")):
         preflight, read_step = steps[index:index + 2]
@@ -484,10 +484,10 @@ def test_task5_keep_r2_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
         assert '"$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA"' in preflight["run"]
         assert "git status --porcelain=v1 --untracked-files=all" in preflight["run"]
         pins = re.findall(r"'([0-9a-f]{64})  (batch-runner/[^']+)'", preflight["run"])
-        assert len(pins) == 10 and {path: digest for digest, path in pins} == expected_pins
+        assert len(pins) == 11 and {path: digest for digest, path in pins} == expected_pins
         for digest, path in pins:
             assert hashlib.sha256((ci.ROOT / path).read_bytes()).hexdigest() == digest
-        assert preflight["run"].count("sha256sum --check --status") == 6
+        assert preflight["run"].count("sha256sum --check --status") == 7
         assert read_step["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"} and read_step["timeout-minutes"] == 4
         expected_case = (binding.expectation.cell_id + ")\n"
             "    retention_read_source=" + binding.expectation.source_sha + "\n"

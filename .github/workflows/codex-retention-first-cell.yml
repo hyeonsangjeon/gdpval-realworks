@@ -84,9 +84,9 @@ jobs:
           [[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]
           [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]
-          [[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ) ]]
+          [[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ) ]]
           [[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1 ]]
-          [[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ) ]]
+          [[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ) ]]
       - &checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -173,7 +173,7 @@ jobs:
               stream.write('```json\n' + json.dumps(value, sort_keys=True, indent=2) + '\n```\n')
           PY
       - name: Bind the shared fixed reader and frozen helpers before credentials
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2')
+        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
         shell: bash
         run: |
           set -euo pipefail
@@ -181,29 +181,32 @@ jobs:
           retention_checkout_status="$(git status --porcelain=v1 --untracked-files=all)"
           [[ -z "$retention_checkout_status" ]]
           printf '%s\n' \
-            '5cfd55c60b29d0268230044ad94dd9c7bf3c0de0b9d8bc5d9e99559a2c900e55  batch-runner/codex_retention_fresh_r1_result_intake.py' \
+            '3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27  batch-runner/codex_retention_fresh_r1_result_intake.py' \
             'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
             '75a183f632df17a16f66df4745e01b696f1538b4285f3f11e51fc784c92c15c1  batch-runner/codex_retention_task4_fresh_r1.py' \
             'c42c8bb3e521c10a5d48680918978a3b9269468a724cd127109f8f4898fe2e6b  batch-runner/codex_retention_first_cell.py' \
             | sha256sum --check --status
-          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f  batch-runner/codex_retention_task4_fresh_r2.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '12106b5423e25ffefa1b04023e2e98742861762762966a04bf17fe3da1851450  batch-runner/codex_retention_task4_keep_r2.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '9919fda7728e84d0d707fe6a4b23a8a601c04b1e5241bcc83387b9acd20f0f5a  batch-runner/codex_retention_task5_fresh_r1.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '21623a1a5bb661f105b8d9dcdfaaad13634c21cb8f1207189608f602b80b14ee  batch-runner/codex_retention_task5_keep_r1.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '7ac1e8d8014e7fff765c65a80774d808a8b34d2cc2d88af8ef9ba8580ad820af  batch-runner/codex_retention_task5_keep_r2.py' | sha256sum --check --status
           fi
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
+            printf '%s\n' '6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd  batch-runner/codex_retention_task5_fresh_r2.py' | sha256sum --check --status
+          fi
       - name: Read only the selected fixed inference result; never execute or grade
-        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2')
+        if: inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
         timeout-minutes: 4
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -236,6 +239,10 @@ jobs:
               retention_read_source=bdb7c21111a4c86136b6158f4969a39a9950acb3
               retention_read_request=1b042b77fcc80b8c1a1c21fdd73feeefbcb80ce7f505b7c842aba496419386ac
               retention_read_namespace=retention-task5-keep-r2 ;;
+            0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2)
+              retention_read_source=dfa812a2b7ad10b1aa3c7e873b4fabef9b195bd6
+              retention_read_request=797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a
+              retention_read_namespace=retention-task5-fresh-r2 ;;
             *) exit 2 ;;
           esac
           [[ -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" && -O "$RUNNER_TEMP" ]]
@@ -250,7 +257,7 @@ jobs:
               --expected-producer-source "$retention_read_source" \
               --expected-request-sha256 "$retention_read_request" \
               --cell-id "$SELECTED_CELL" \
-              --expected-reader-sha256 5cfd55c60b29d0268230044ad94dd9c7bf3c0de0b9d8bc5d9e99559a2c900e55 \
+              --expected-reader-sha256 3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27 \
               --output "$retention_result_parent/payload" \
               > "$retention_result_parent/receipt.json" 2> "$retention_result_parent/stderr.log" || retention_read_status=$?
           # Only the reviewed reader's safe receipt is public. Partials stay private.
@@ -305,7 +312,7 @@ jobs:
           exit "$retention_receipt_status"
 
       - name: Bind the fixed terminal observer and frozen helpers before credentials
-        if: inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2')
+        if: inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
         shell: bash
         run: |
           set -euo pipefail
@@ -313,29 +320,32 @@ jobs:
           retention_checkout_status="$(git status --porcelain=v1 --untracked-files=all)"
           [[ -z "$retention_checkout_status" ]]
           printf '%s\n' \
-            '5cfd55c60b29d0268230044ad94dd9c7bf3c0de0b9d8bc5d9e99559a2c900e55  batch-runner/codex_retention_fresh_r1_result_intake.py' \
+            '3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27  batch-runner/codex_retention_fresh_r1_result_intake.py' \
             'df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196  batch-runner/codex_retention_result_intake.py' \
             '8462ffd6be01c9bd9ef1ac8f6b878a92d8233a6d7b3f28b3a01d979b2df2982c  batch-runner/codex_retention_ci.py' \
             '75a183f632df17a16f66df4745e01b696f1538b4285f3f11e51fc784c92c15c1  batch-runner/codex_retention_task4_fresh_r1.py' \
             'c42c8bb3e521c10a5d48680918978a3b9269468a724cd127109f8f4898fe2e6b  batch-runner/codex_retention_first_cell.py' \
             | sha256sum --check --status
-          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2 || "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '8b387ec5d172f74c4e6d2e1b93973c674e973f3cbba47b640184c126312ab00f  batch-runner/codex_retention_task4_fresh_r2.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '12106b5423e25ffefa1b04023e2e98742861762762966a04bf17fe3da1851450  batch-runner/codex_retention_task4_keep_r2.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '9919fda7728e84d0d707fe6a4b23a8a601c04b1e5241bcc83387b9acd20f0f5a  batch-runner/codex_retention_task5_fresh_r1.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '21623a1a5bb661f105b8d9dcdfaaad13634c21cb8f1207189608f602b80b14ee  batch-runner/codex_retention_task5_keep_r1.py' | sha256sum --check --status
           fi
-          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 ]]; then
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2 || "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
             printf '%s\n' '7ac1e8d8014e7fff765c65a80774d808a8b34d2cc2d88af8ef9ba8580ad820af  batch-runner/codex_retention_task5_keep_r2.py' | sha256sum --check --status
           fi
+          if [[ "$SELECTED_CELL" == 0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2 ]]; then
+            printf '%s\n' '6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd  batch-runner/codex_retention_task5_fresh_r2.py' | sha256sum --check --status
+          fi
       - name: Observe only failed or stopped fixed terminal controls; never read payloads
-        if: inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2')
+        if: inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator && (inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r1' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_fresh_r2' || inputs.cell_id == '3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2' || inputs.cell_id == '0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2')
         timeout-minutes: 4
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -368,6 +378,10 @@ jobs:
               retention_read_source=bdb7c21111a4c86136b6158f4969a39a9950acb3
               retention_read_request=1b042b77fcc80b8c1a1c21fdd73feeefbcb80ce7f505b7c842aba496419386ac
               retention_read_namespace=retention-task5-keep-r2 ;;
+            0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2)
+              retention_read_source=dfa812a2b7ad10b1aa3c7e873b4fabef9b195bd6
+              retention_read_request=797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a
+              retention_read_namespace=retention-task5-fresh-r2 ;;
             *) exit 2 ;;
           esac
           [[ -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" && -O "$RUNNER_TEMP" ]]
@@ -382,7 +396,7 @@ jobs:
               --expected-producer-source "$retention_read_source" \
               --expected-request-sha256 "$retention_read_request" \
               --cell-id "$SELECTED_CELL" \
-              --expected-reader-sha256 5cfd55c60b29d0268230044ad94dd9c7bf3c0de0b9d8bc5d9e99559a2c900e55 \
+              --expected-reader-sha256 3b5200b73c0f99c220d507c061fc11e5a83aea9588db2b8cbea38ed8cc051c27 \
               --output "$retention_terminal_parent/evidence" \
               > "$retention_terminal_parent/receipt.json" 2> "$retention_terminal_parent/stderr.log" || retention_read_status=$?
           # Only the reviewed reader's safe receipt is public. Partials stay private.

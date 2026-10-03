@@ -210,7 +210,10 @@ def test_task5_fresh_r2_is_the_closed_eighth_cell(tmp_path, monkeypatch, capsys,
         prior._routes_and_current_sources(tmp_path, no_private)
         workflow = yaml.safe_load((REAL_ROOT / ci.WORKFLOW).read_bytes())
         steps = workflow["jobs"][ci.PREPARE_JOB]["steps"]
-        for index in (9, 10, 11, 12, 13, 14):
+        for index in (9, 10, 13, 14):
+            assert successor.CELL_ID in steps[index]["if"]
+            assert successor.CELL_ID in steps[index]["run"]
+        for index in (11, 12):
             assert successor.CELL_ID not in steps[index]["if"]
             assert successor.CELL_ID not in steps[index]["run"]
         assert successor.CELL_ID + ') retention_host="$RUNNER_TEMP/retention-task5-fresh-r2-host" ;;' in workflow["jobs"][ci.EXECUTE_JOB]["steps"][-1]["run"]
@@ -220,7 +223,7 @@ def test_task5_fresh_r2_is_the_closed_eighth_cell(tmp_path, monkeypatch, capsys,
                 expectation=replace(reader.TASK5_KEEP_R2.expectation, cell_id=successor.CELL_ID),
                 ordinal=7, retention_bundle="fresh"))
     with capsys.disabled():
-        print("BOUNDARY ordinal7: 288 closed mode cases; eight execution/seven result/six terminal routes; current dependency bytes and frozen grading evidence passed")
+        print("BOUNDARY ordinal7: 288 closed mode cases; eight execution/eight result/seven terminal routes; current dependency bytes and frozen grading evidence passed")
     monkeypatch.setenv("HF_TOKEN", TOKEN)
     # The unchanged canonical predicate remains task-specific for every closed
     # publication binding. Full publication/history is reached below for ordinal7.

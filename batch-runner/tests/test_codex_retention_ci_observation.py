@@ -51,15 +51,16 @@ def _assert_retention_mode_routes():
         '[[ "$REVIEWED_SOURCE_SHA" == "$GITHUB_SHA" && "$GITHUB_SHA" == "$RETENTION_WORKFLOW_SHA" ]]',
         '[[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_RUN_ATTEMPT" == 1 ]]',
         '[[ "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID + ' ]]',
-        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID + ' ) ]]',
+        '[[ "$READ_RESULT_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID + ' ) ]]',
         '[[ "$OBSERVE_LOCATOR_ONLY" != true || "$SELECTED_CELL" == ' + adapter.controller.FIRST_CELL_ID + ' ]]',
-        '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID + ' ) ]]',
+        '[[ "$OBSERVE_TERMINAL_ONLY" != true || ( "$SELECTED_CELL" == ' + adapter.controller.FRESH_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.FRESH_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R1_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_KEEP_R2_CELL_ID + ' || "$SELECTED_CELL" == ' + adapter.controller.TASK5_FRESH_R2_CELL_ID + ' ) ]]',
     ]
     # Evaluate the exact changed cell/mode expressions, not a substring route.
     read_cells = (adapter.controller.FIRST_CELL_ID, adapter.controller.FRESH_CELL_ID, adapter.controller.FRESH_R2_CELL_ID,
              adapter.controller.KEEP_R2_CELL_ID, adapter.controller.TASK5_FRESH_R1_CELL_ID,
-             adapter.controller.TASK5_KEEP_R1_CELL_ID, adapter.controller.TASK5_KEEP_R2_CELL_ID)
-    cells = (*read_cells, adapter.controller.TASK5_FRESH_R2_CELL_ID)
+             adapter.controller.TASK5_KEEP_R1_CELL_ID, adapter.controller.TASK5_KEEP_R2_CELL_ID,
+             adapter.controller.TASK5_FRESH_R2_CELL_ID)
+    cells = read_cells
     for selected in (*cells, "unregistered"):
         for preparing, executing, observing, reading, terminal in itertools.product((False, True), repeat=5):
             values = {'"$PREPARE_REQUESTED"': preparing, '"$EXECUTE_REQUESTED"': executing,
@@ -149,7 +150,7 @@ def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
     fixed_fresh = " && (" + " || ".join("inputs.cell_id == '" + binding.expectation.cell_id + "'"
                                        for binding in (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2,
                                                        reader.TASK5_FRESH_R1, reader.TASK5_KEEP_R1,
-                                                       reader.TASK5_KEEP_R2)) + ")"
+                                                       reader.TASK5_KEEP_R2, reader.TASK5_FRESH_R2)) + ")"
     assert steps[9]["if"] == steps[10]["if"] == read_only + fixed_fresh
     assert steps[13]["if"] == steps[14]["if"] == terminal_only + fixed_fresh
     assert steps[11]["if"] == steps[12]["if"] == read_only + " && inputs.cell_id == '" + adapter.controller.FIRST_CELL_ID + "'"
@@ -168,7 +169,7 @@ def test_retention_keep_r2_routes_preserve_read_and_authority_boundaries():
         assert '"$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA"' in preflight["run"]
         for filename, digest in expected_hashes.items():
             assert "'" + digest + "  batch-runner/" + filename + "'" in preflight["run"]
-        assert preflight["run"].count("sha256sum --check --status") == 6
+        assert preflight["run"].count("sha256sum --check --status") == 7
         assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
         assert "--expected-reader-sha256 " + identity["module_sha256"] in read["run"]
         assert adapter.controller.KEEP_R2_CELL_ID + ")" in read["run"]

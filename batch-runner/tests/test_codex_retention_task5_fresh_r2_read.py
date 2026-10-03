@@ -1,4 +1,4 @@
-"""One offline fixed-reader proof; no running producer or real result is read."""
+"""One offline proof of the fixed eighth-cell reader, never a live read."""
 
 import builtins
 from copy import deepcopy
@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import socket
 import subprocess
 from types import SimpleNamespace
 
@@ -18,14 +19,13 @@ import yaml
 
 import codex_retention_fresh_r1_result_intake as reader
 import codex_retention_grade_readout as observer
-import codex_retention_task5_keep_r1 as producer
+import codex_retention_task5_fresh_r2 as producer
 import gpt54_disposable_checkout as source_checkout
 from core.codex_task_deadline import CodexTaskDeadline, CodexTaskDeadlineStore
 from core.cost_receipts import CostReceipt
 from core.reference_integrity import ReferenceIntegrityError
 from .test_codex_budget_pilot_retention import TOKEN, offline  # noqa: F401
-# This module captures real Popen methods: resolve it at collection, not after
-# the autouse offline fixture has replaced all process constructors.
+# Resolve helpers while collecting, before the offline fixture replaces Popen.
 from .test_codex_retention_ci import REAL_POPEN
 from . import test_codex_retention_ci_observation as workflow_contract
 from .test_codex_retention_result_intake import CLAIM_HEAD, OUTPUT_HEAD, TERMINAL_HEAD, FILE, PRIVATE
@@ -34,7 +34,7 @@ from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
 
-def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypatch, capsys):
+def test_task5_fresh_r2_reader_is_fixed_model_free_and_closed(tmp_path, monkeypatch, capsys):
     effects, transports, errors = [], [], []
 
     def forbidden(*args, **kwargs):
@@ -44,7 +44,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
     for owner, names in (
         (ci, ("execute", "verify_approval", "verify_job_origin", "verify_terminal")),
         (producer, ("execute", "_predecessor", "verify_terminal")),
-        (producer._Task5KeepR1Admission, ("__init__",)), (ci._Admission, ("__init__",)),
+        (producer._Task5FreshR2Admission, ("__init__",)), (ci._Admission, ("__init__",)),
         (ci.LocalTransport, ("github_job_token", "authority_opener", "github", "azure")),
         (owned.LocalTransport, ("clock", "child", "process")),
         (ci.preparation, ("prepare_packet", "verify_packet")), (ci.historical, ("observe",)),
@@ -59,6 +59,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
     for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         monkeypatch.delenv(key, raising=False)
     assert subprocess.Popen is not REAL_POPEN and subprocess.Popen.__name__ == "blocked"
+    assert socket.create_connection.__name__ == socket.socket.connect.__name__ == "blocked"
 
     def observed(function):
         def call(**kwargs):
@@ -77,28 +78,44 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
                     current = current.__cause__ or current.__context__
                 errors.append({"operation": function.__name__, "chain": chain,
                     "remote_commits": sum(len(api.commits) for api in transports)})
-                raise  # No strings, bodies, credentials or private paths in diagnostics.
+                raise  # No exception strings, bodies, credentials or private paths.
         return call
 
     monkeypatch.setattr(reader, "read_result", observed(reader.read_result))
     monkeypatch.setattr(reader, "observe_terminal", observed(reader.observe_terminal))
-    binding = reader.TASK5_KEEP_R1
+    binding = reader.TASK5_FRESH_R2
     assert binding.expectation == ci.TerminalExpectation(
-        "22e0bc6f06e4c9c2ac2d3fa4bfe6a7c567ef24e9111bf319b704409d731997de",
-        "a8353cd41f01f7d94129421512a57a62b9bd6997",
-        "0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r1")
+        "797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a",
+        "dfa812a2b7ad10b1aa3c7e873b4fabef9b195bd6",
+        "0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_fresh_r2")
     assert (binding.ordinal, binding.repetition, binding.retention_bundle, binding.run_id,
-            binding.execution_job_id) == (5, 1, "keep", "37066171719", 111036410671)
+            binding.execution_job_id) == (7, 2, "fresh", "37101934436", 111147701025)
+    assert (binding.result_format, binding.result_marker, binding.terminal_format, binding.terminal_marker) == (
+        "retention-task5-fresh-r2-result-intake-v1", "retention-task5-fresh-r2-result-intake.json",
+        "retention-task5-fresh-r2-terminal-observation-v1", "retention-task5-fresh-r2-terminal-observation.json")
     assert reader._request_context(binding) == {
         "original_input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
-        "materialized_grader_source_sha256": None}
-    assert producer.PREDECESSOR["terminal_commit"] == "94628d12162da2e00cace216fdda5ce41f57e47f"
-    assert producer.PREDECESSOR["terminal_identity"] == {
-        "sha256": "5bc2eb37dd4ab83cd7653106166cc18d36c193eec12e2bc99b9bf429be6942cf", "size": 4188}
+        "materialized_grader_source_sha256": "9f656008909dbaf1e299cf42fecfabce11ced81a01d9aeff335a13d8e55d2cca"}
+    assert producer.PREDECESSOR == {
+        "cell_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e_retention_bundle_v1_keep_r2",
+        "producer_source_sha": "bdb7c21111a4c86136b6158f4969a39a9950acb3",
+        "run_id": "37081963299", "execution_job_id": 111085094584,
+        "request_sha256": "1b042b77fcc80b8c1a1c21fdd73feeefbcb80ce7f505b7c842aba496419386ac",
+        "terminal_commit": "3be1c0b892a199fdfccf3d5c4379d40c782119e5",
+        "terminal_identity": {"sha256": "7510ea45f39271a751e7c2805a5b2048b83c5f31e5f7f48e7afeff2091e77885", "size": 4179},
+        "claim_commit": "e7db56481f7cb2d908a9362ad1091022237afd21",
+        "claim_identity": {"sha256": "bc3ad16ea05ed02a1fb3b0fd082b10abdad4bf90103fbfd7ade69e4bce55e4a3", "size": 1887},
+        "output_commit": "3984e404ba59e0b7f356ca5d0426b57d4477ea50",
+        "output_manifest_identity": {"sha256": "bfb8ad4caddc0625dd9e9f92f7f67df5d465b160e69adc28f844f13d163673cb", "size": 2102},
+        "output_objects_sha256": "4104dd725feac4591c05436ca03a4fe3aca9be8a2cf9e82a484f3ef62b1e3670",
+        "status": "failed", "exit_code": 1, "cleanup_confirmed": True,
+    }
+    predecessor = deepcopy(producer.PREDECESSOR)
     source = reader.reader_identity(binding=binding)
-    assert source["producer_task5_keep_r1_sha256"] == "21623a1a5bb661f105b8d9dcdfaaad13634c21cb8f1207189608f602b80b14ee"
-    assert reader.reader_identity(binding=reader.TASK5_FRESH_R1) == {
-        key: value for key, value in source.items() if key != "producer_task5_keep_r1_sha256"}
+    assert source["producer_task5_fresh_r2_sha256"] == "6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd"
+    assert reader.reader_identity(binding=reader.TASK5_KEEP_R2) == {
+        key: value for key, value in source.items() if key != "producer_task5_fresh_r2_sha256"}
+    assert reader.fresh._publication_task_id(producer._publication_binding()) == intake.registration.TASK5
     plan = intake.registration.compile_plan()
 
     def make(*, terminal=False, **options):
@@ -139,44 +156,58 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
         assert captured(api)["cell_id"] == reader.FRESH_R1.expectation.cell_id
         for index, (changes, reason) in enumerate((
             ({"binding": replace(binding)}, "fixed_fresh_read_binding_required"),
-            ({"binding": replace(binding, ordinal=6)}, "fixed_fresh_read_binding_required"),
-            ({"expectation": replace(binding.expectation, cell_id=reader.TASK5_FRESH_R1.expectation.cell_id)}, "fresh_result_expected_cell_mismatch"),
-            ({"expectation": replace(binding.expectation, source_sha=reader.TASK5_FRESH_R1.expectation.source_sha)}, "fresh_result_expected_producer_mismatch"),
-            ({"expectation": replace(binding.expectation, request_sha256=reader.TASK5_FRESH_R1.expectation.request_sha256)}, "fresh_result_expected_request_mismatch"),
-            ({"expected_reader_sha256": "d14673345ed406c1f2054d55ee38209f28aa8862d7bd324d88ceeb36dd649e53"}, "fresh_result_reader_bytes_mismatch"),
+            ({"binding": replace(binding, ordinal=8, repetition=3)}, "fixed_fresh_read_binding_required"),
+            ({"binding": None}, "fixed_fresh_read_binding_required"),
+            ({"expectation": replace(binding.expectation, cell_id=reader.TASK5_KEEP_R2.expectation.cell_id)}, "fresh_result_expected_cell_mismatch"),
+            ({"expectation": replace(binding.expectation, source_sha=reader.TASK5_KEEP_R2.expectation.source_sha)}, "fresh_result_expected_producer_mismatch"),
+            ({"expectation": replace(binding.expectation, request_sha256=reader.TASK5_KEEP_R2.expectation.request_sha256)}, "fresh_result_expected_request_mismatch"),
+            ({"expected_reader_sha256": "d9c1c6a13203d38086ce76ede383d9c1c6459467649b716843ba3fd1434269b4"}, "fresh_result_reader_bytes_mismatch"),
             ({"discover_terminal": True}, "one_terminal_revision_or_discovery_required"),
+            ({"discover_terminal": 1, "terminal_revision": None}, "one_terminal_revision_or_discovery_required"),
         )):
             for terminal in (False, True):
                 name = f"early-{index}-{terminal}"
                 refuse(api, name, reason, terminal=terminal, **changes)
                 assert not (tmp_path / name).exists()
         wrong = deepcopy(plan)
-        wrong["cells"][5]["control"]["retention_bundle"] = "fresh"
+        wrong["cells"][7]["control"]["retention_bundle"] = "keep"
         early.setattr(intake.registration, "compile_plan", lambda: wrong)
         refuse(api, "wrong-treatment", "fresh_result_registered_cell_mismatch")
     assert not api.calls and not effects
 
     real_bytes, real_import = output._bytes, builtins.__import__
     for bad_path, _ in reader._frozen(binding).values():
-        def changed_bytes(path, **kwargs):
-            data = real_bytes(path, **kwargs)
-            return data + b"\n" if Path(path) == Path(bad_path) else data
+        for missing in (False, True):
+            def changed_bytes(path, **kwargs):
+                if Path(path) == Path(bad_path):
+                    if missing:
+                        raise FileNotFoundError("synthetic missing dependency")
+                    return real_bytes(path, **kwargs) + b"\n"
+                return real_bytes(path, **kwargs)
 
-        def no_lazy_import(name, *args, **kwargs):
-            if name == "codex_retention_task5_keep_r1":
-                return forbidden()
-            return real_import(name, *args, **kwargs)
+            def no_lazy_import(name, *args, **kwargs):
+                if name == "codex_retention_task5_fresh_r2":
+                    return forbidden()
+                return real_import(name, *args, **kwargs)
 
-        with monkeypatch.context() as corrupt:
-            corrupt.setattr(output, "_bytes", changed_bytes)
-            corrupt.setattr(builtins, "__import__", no_lazy_import)
-            corrupt.setattr(retained, "_session", forbidden)
-            refuse(api, "bytes-" + Path(bad_path).stem, "fresh_result_reader_bytes_mismatch")
-            if Path(bad_path) == reader.TASK5_KEEP_PRODUCER_PIN[0]:
-                with pytest.raises(output.OutputPublicationRefused, match="^fresh_result_reader_bytes_mismatch$"):
-                    reader._producer(binding)
+            with monkeypatch.context() as corrupt:
+                corrupt.setattr(output, "_bytes", changed_bytes)
+                corrupt.setattr(builtins, "__import__", no_lazy_import)
+                corrupt.setattr(retained, "_session", forbidden)
+                name = "bytes-" + Path(bad_path).stem + str(missing)
+                if missing:
+                    with pytest.raises(FileNotFoundError):
+                        read(api, name)
+                else:
+                    refuse(api, name, "fresh_result_reader_bytes_mismatch")
+                assert not (tmp_path / name).exists()
+                if Path(bad_path) == reader.TASK5_FRESH_R2_PRODUCER_PIN[0] and not missing:
+                    with pytest.raises(output.OutputPublicationRefused, match="^fresh_result_reader_bytes_mismatch$"):
+                        reader._producer(binding)
     assert not api.calls and not effects
 
+    with capsys.disabled():
+        print("BOUNDARY fixed profile/default/refusals: changed or missing dependencies refused before lazy import or private/session effects")
     monkeypatch.setenv("HF_TOKEN", TOKEN)  # Synthetic transport, not a credential.
     receipt = ci.project_cost_receipt(CostReceipt(status="partial", model_calls=2,
         known_cost_usd=Decimal("0.01"), model_cost_usd=Decimal("0.01"),
@@ -188,7 +219,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
     assert code == 0, {"stage": "success_payload_readback", "cause": errors[-1:]}
     assert success["intake_verified"] is True and success["status"] == "succeeded"
     assert success["format"] == binding.result_format and "terminal_verified" not in success
-    assert success["result"]["registered_config_sha256"] == plan["cells"][5]["config_sha256"]
+    assert success["result"]["registered_config_sha256"] == plan["cells"][7]["config_sha256"]
     assert output._hash(success["result"]["result_fingerprint"])
     marker = tmp_path / "result" / binding.result_marker
     assert success["intake_sha256"] == owned._identity(marker.read_bytes())["sha256"]
@@ -200,6 +231,8 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
     controls = {producer.CLAIM, producer.TERMINAL, producer.OUTPUT + "/" + output.MANIFEST}
     assert {name for _, name in success_api.downloads} == {
         *controls, *(producer.OUTPUT + "/" + name for name in success_api.files)}
+    with capsys.disabled():
+        print("BOUNDARY success intake: result, ledger, Task5 deliverable, fingerprint and private marker/readback verified")
     evidence = [(success_api, success)]
     for index, (status, declared, cost, exit_code) in enumerate((
         ("failed", "none", None, 1), ("stopped", "none", receipt, None),
@@ -227,14 +260,14 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
         refuse(terminal_api, "no-success-fallback-" + str(index), "fresh_result_success_required")
     refuse(success_api, "no-terminal-fallback", "fresh_terminal_unsuccessful_required", terminal=True)
     for transport, record in evidence:
-        assert record["ordinal"] == 5 and record["cell_id"] == binding.expectation.cell_id
+        assert record["ordinal"] == 7 and record["cell_id"] == binding.expectation.cell_id
         assert record["producer_source_sha"] == binding.expectation.source_sha
         assert record["request_sha256"] == binding.expectation.request_sha256
-        assert record["recorded_provider_job_id"] == record["expected_execution_job_id"] == 111036410671
-        assert record["recorded_provider_run_id"] == record["expected_provider"]["run_id"] == "37066171719"
+        assert record["recorded_provider_job_id"] == record["expected_execution_job_id"] == 111147701025
+        assert record["recorded_provider_run_id"] == record["expected_provider"]["run_id"] == "37101934436"
         assert record["expected_provider"]["attempt"] == 1 and record["expected_provider"]["workflow_id"] == 370228282
         assert record["terminal_commit"] == TERMINAL_HEAD != transport.head
-        assert record["predecessor"] == producer.PREDECESSOR and record["reader"] == source
+        assert record["predecessor"] == predecessor and record["reader"] == source
         assert record["supplied_request_binding"] == reader._request_context(binding)
         assert record["writer_acknowledgment"] == "not_established" and record["recorded_publication_acknowledged"] is True
         assert record["proof"] == "verified_publication_derived_not_independent_provider_authentication"
@@ -244,9 +277,11 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
             "grading_launched", "invoice_complete"))
         assert [(revision, paths) for revision, paths in transport.path_reads if revision == retained.BRANCH] == [
             (retained.BRANCH, (producer.TERMINAL,))]
+    with capsys.disabled():
+        print("BOUNDARY failed/stopped observation: four cases, three control bodies each, no payload verification or grading readiness")
 
     for terminal in (False, True):
-        for job in (reader.TASK5_FRESH_R1.execution_job_id, True, float(binding.execution_job_id)):
+        for job in (reader.TASK5_KEEP_R2.execution_job_id, True, float(binding.execution_job_id)):
             bad = make(terminal=terminal)
             for authority in (bad.claim["authority"], bad.terminal["authority"]):
                 authority["provider_job_id"] = job
@@ -261,17 +296,17 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
             ("predecessor", "fresh_result_predecessor_mismatch")):
             bad = make(terminal=terminal)
             if fault in {"source", "cell", "cleanup", "grade"}:
-                key, value = {"source": ("source_sha", reader.TASK5_FRESH_R1.expectation.source_sha),
-                    "cell": ("cell_id", reader.TASK5_FRESH_R1.expectation.cell_id), "cleanup": ("cleanup_confirmed", 1),
+                key, value = {"source": ("source_sha", reader.TASK5_KEEP_R2.expectation.source_sha),
+                    "cell": ("cell_id", reader.TASK5_KEEP_R2.expectation.cell_id), "cleanup": ("cleanup_confirmed", 1),
                     "grade": ("grade", 0)}[fault]
                 bad.summary[key] = value
             elif fault == "request":
-                bad.terminal["request_sha256"] = reader.TASK5_FRESH_R1.expectation.request_sha256
+                bad.terminal["request_sha256"] = reader.TASK5_KEEP_R2.expectation.request_sha256
             elif fault == "run":
                 for authority in (bad.claim["authority"], bad.terminal["authority"]):
-                    authority["provider_run_id"] = reader.TASK5_FRESH_R1.run_id
+                    authority["provider_run_id"] = reader.TASK5_KEEP_R2.run_id
             elif fault == "predecessor":
-                bad.claim["predecessor"]["execution_job_id"] = float(producer.PREDECESSOR["execution_job_id"])
+                bad.claim["predecessor"]["execution_job_id"] = float(predecessor["execution_job_id"])
             else:
                 bad.claim["expected_parent"] = ("76f51d0464b3c90d9ff80b78b656b9e7d45a0b6e" if fault == "parent-grade"
                                                 else "e55fac5d60191167dd66688510ec0fef472e594d")
@@ -371,17 +406,19 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
             read(ambiguous, "ambiguous-" + str(terminal), terminal=terminal)
         assert ambiguous.calls == calls
 
-    # Source-only compatibility checks, not replays of any old delivered suite.
+    with capsys.disabled():
+        print("BOUNDARY identity/history/payload refusals and marker no-clobber/readback ambiguity: passed without remote writes or replay")
+    # Current-source/default checks only; no older delivered result is replayed.
     fixed_readers = (reader.FRESH_R1, reader.FRESH_R2, reader.KEEP_R2, reader.TASK5_FRESH_R1,
-                     binding, reader.TASK5_KEEP_R2, reader.TASK5_FRESH_R2)
+                     reader.TASK5_KEEP_R1, reader.TASK5_KEEP_R2, binding)
     assert reader.FRESH_R1.expectation is reader.EXPECTATION
+    assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
     for old in fixed_readers:
         checked, registered, cell = reader._binding(old.expectation, source["module_sha256"], TERMINAL_HEAD, False,
             **({} if old is reader.FRESH_R1 else {"binding": old}))
         assert cell["index"] == old.ordinal and registered["order"][old.ordinal] == old.expectation.cell_id
         assert {name: checked[name] for name in reader._frozen(old)} == {
             name: pin[1] for name, pin in reader._frozen(old).items()}
-    assert reader.TASK5_FRESH_R1.materialized_grader_source_sha256 == "a820cd9e3a8e74e684aa65a710e5a7b0649ce0435fe425a070a0eb6d8b30145e"
     bridge = observer.bridge
     historical_adapter = bridge._fixed("retention/keep-r2")
     historical = deepcopy((bridge.RESULT, bridge.PARENT, bridge.READER,
@@ -395,7 +432,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
         assert hashlib.sha256((bridge.ROOT / "batch-runner" / name).read_bytes()).hexdigest() == digest
     common = tmp_path / "git-common"
     common.mkdir()
-    expected = "a" * 40  # Synthetic exact-checkout identity, never provider evidence.
+    expected = "a" * 40  # Synthetic checkout transport, not a real reviewed HEAD.
     state = {"head": expected, "diff": b"", "status": b"", "config": b""}
 
     def git(path, *command, ok=(0,)):
@@ -407,7 +444,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
             ("status", "--porcelain", "--untracked-files=normal"): state["status"],
             ("config", "--name-only", "--get-regexp",
              r"^(filter\.|include\.|includeif\.|extensions\.partialclone$|remote\..*\.promisor$|core\.alternaterefscommand$)"): state["config"]}
-        assert command in answers  # Only transport is synthetic; checkout/hash guards are real.
+        assert command in answers
         return SimpleNamespace(stdout=answers[command], returncode=0)
 
     with monkeypatch.context() as current:
@@ -423,7 +460,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
             def changed_current(path, **kwargs):
                 if Path(path) == Path(reader.__file__):
                     if missing:
-                        raise FileNotFoundError("synthetic missing dependency")
+                        raise FileNotFoundError("synthetic missing current reader")
                     return real_bytes(path, **kwargs) + b"\n"
                 return real_bytes(path, **kwargs)
 
@@ -446,11 +483,12 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
             state[key] = before
     assert historical == (bridge.RESULT, bridge.PARENT, bridge.READER,
         historical_adapter.RESULT, historical_adapter.PARENT, historical_adapter.READER)
+    assert predecessor == producer.PREDECESSOR
 
-    # Pure assertion helpers were imported at collection; guards stay active.
+    # Pure helper assertions run with process/network/model guards still active.
     assert subprocess.Popen is not REAL_POPEN and subprocess.Popen.__name__ == "blocked"
     workflow_contract._assert_retention_execution_workflow_contract()
-    workflow_contract._assert_retention_mode_routes()  # 288 exact mode/cell cases.
+    workflow_contract._assert_retention_mode_routes()  # 288 cases, including spurious request outputs.
     workflow = yaml.safe_load((ci.ROOT / ci.WORKFLOW).read_bytes())
     steps = workflow["jobs"][ci.PREPARE_JOB]["steps"]
     read_group = " && (" + " || ".join("inputs.cell_id == '" + fixed.expectation.cell_id + "'"
@@ -460,8 +498,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
     assert steps[13]["if"] == steps[14]["if"] == (
         "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
     assert steps[9]["run"] == steps[13]["run"]
-    expected_pins = {"batch-runner/" + Path(path).name: digest
-                     for path, digest in reader._frozen(reader.TASK5_FRESH_R2).values()}
+    expected_pins = {"batch-runner/" + Path(path).name: digest for path, digest in reader._frozen(binding).values()}
     expected_pins["batch-runner/" + Path(reader.__file__).name] = source["module_sha256"]
     for index, mode in ((9, "--read"), (13, "--observe-terminal")):
         preflight, read_step = steps[index:index + 2]
@@ -477,7 +514,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
         expected_case = (binding.expectation.cell_id + ")\n"
             "    retention_read_source=" + binding.expectation.source_sha + "\n"
             "    retention_read_request=" + binding.expectation.request_sha256 + "\n"
-            "    retention_read_namespace=retention-task5-keep-r1 ;;")
+            "    retention_read_namespace=retention-task5-fresh-r2 ;;")
         assert expected_case in read_step["run"] and "*) exit 2 ;;" in read_step["run"]
         command = shlex.split(next(line for line in read_step["run"].replace("\\\n", "").splitlines()
                                   if line.startswith("env -u ")))
@@ -488,7 +525,7 @@ def test_task5_keep_r1_reader_is_fixed_model_free_and_closed(tmp_path, monkeypat
         assert command[command.index("--expected-reader-sha256") + 1] == source["module_sha256"]
         assert "stderr.log" not in read_step["run"].split("# Only the reviewed reader")[1]
     assert not effects and all(not api.commits for api in transports)
-    print(json.dumps({"scope": "synthetic_task5_keep_r1_fixed_reader", "success_payload_verified": True,
+    print(json.dumps({"scope": "synthetic_task5_fresh_r2_fixed_reader", "success_payload_verified": True,
         "failed_stopped_three_controls_only": True, "identity_history_payload_refusals": True,
         "marker_no_clobber_unresolved_ack": True, "current_source_historical_evidence_separated": True,
         "old_defaults_preserved": True, "mode_cases": 288, "live_effects": len(effects)}, sort_keys=True))

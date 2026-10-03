@@ -1,4 +1,4 @@
-"""Read fixed Task4 successors or Task5 fresh/r1 and KEEP publications; never execute.
+"""Read fixed Task4 successors or Task5 keep/fresh publications; never execute.
 
 One terminal-path discovery is allowed, then only immutable declared reads.
 The fixed producer/request expectations are independent of fetched records.
@@ -113,11 +113,21 @@ TASK5_KEEP_R2 = ReadBinding(ci.TerminalExpectation(
     "retention-task5-keep-r2-terminal-observation-v1", "retention-task5-keep-r2-terminal-observation.json", "keep")
 TASK5_KEEP_R2_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task5_keep_r2.py"),
                              "7ac1e8d8014e7fff765c65a80774d808a8b34d2cc2d88af8ef9ba8580ad820af")
+TASK5_FRESH_R2 = ReadBinding(ci.TerminalExpectation(
+    "797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a",
+    "dfa812a2b7ad10b1aa3c7e873b4fabef9b195bd6", intake.controller.TASK5_FRESH_R2_CELL_ID),
+    7, 2, "37101934436", 111147701025,
+    "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+    "9f656008909dbaf1e299cf42fecfabce11ced81a01d9aeff335a13d8e55d2cca",
+    "retention-task5-fresh-r2-result-intake-v1", "retention-task5-fresh-r2-result-intake.json",
+    "retention-task5-fresh-r2-terminal-observation-v1", "retention-task5-fresh-r2-terminal-observation.json")
+TASK5_FRESH_R2_PRODUCER_PIN = (Path(__file__).with_name("codex_retention_task5_fresh_r2.py"),
+                              "6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd")
 
 
 def _fixed_binding(binding):
     require(type(binding) is ReadBinding and any(binding is fixed for fixed in
-            (FRESH_R1, FRESH_R2, KEEP_R2, TASK5_FRESH_R1, TASK5_KEEP_R1, TASK5_KEEP_R2)),
+            (FRESH_R1, FRESH_R2, KEEP_R2, TASK5_FRESH_R1, TASK5_KEEP_R1, TASK5_KEEP_R2, TASK5_FRESH_R2)),
             "fixed_fresh_read_binding_required")
     return binding
 
@@ -127,14 +137,16 @@ def _frozen(binding):
     if binding is FRESH_R1:
         return FROZEN
     pins = {**FROZEN, "producer_r2_sha256": R2_PRODUCER_PIN}
-    if binding is KEEP_R2 or binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2:
+    if binding is KEEP_R2 or binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2 or binding is TASK5_FRESH_R2:
         pins["producer_keep_r2_sha256"] = KEEP_R2_PRODUCER_PIN
-    if binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2:
+    if binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2 or binding is TASK5_FRESH_R2:
         pins["producer_task5_fresh_r1_sha256"] = TASK5_PRODUCER_PIN
-    if binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2:
+    if binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2 or binding is TASK5_FRESH_R2:
         pins["producer_task5_keep_r1_sha256"] = TASK5_KEEP_PRODUCER_PIN
-    if binding is TASK5_KEEP_R2:
+    if binding is TASK5_KEEP_R2 or binding is TASK5_FRESH_R2:
         pins["producer_task5_keep_r2_sha256"] = TASK5_KEEP_R2_PRODUCER_PIN
+    if binding is TASK5_FRESH_R2:
+        pins["producer_task5_fresh_r2_sha256"] = TASK5_FRESH_R2_PRODUCER_PIN
     return pins
 
 
@@ -143,6 +155,8 @@ def _producer(binding):
     if binding is FRESH_R1:
         return fresh
     pins = ((R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN, TASK5_PRODUCER_PIN, TASK5_KEEP_PRODUCER_PIN,
+             TASK5_KEEP_R2_PRODUCER_PIN, TASK5_FRESH_R2_PRODUCER_PIN) if binding is TASK5_FRESH_R2 else
+            (R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN, TASK5_PRODUCER_PIN, TASK5_KEEP_PRODUCER_PIN,
              TASK5_KEEP_R2_PRODUCER_PIN) if binding is TASK5_KEEP_R2 else
             (R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN, TASK5_PRODUCER_PIN, TASK5_KEEP_PRODUCER_PIN) if binding is TASK5_KEEP_R1 else
             (R2_PRODUCER_PIN, KEEP_R2_PRODUCER_PIN, TASK5_PRODUCER_PIN) if binding is TASK5_FRESH_R1 else
@@ -152,7 +166,9 @@ def _producer(binding):
                 "fresh_result_reader_bytes_mismatch")
     # Frozen successor producers import this reader for earlier cells.
     # Hash every dependency before resolving the cycle through a lazy import.
-    if binding is TASK5_KEEP_R2:
+    if binding is TASK5_FRESH_R2:
+        import codex_retention_task5_fresh_r2 as producer
+    elif binding is TASK5_KEEP_R2:
         import codex_retention_task5_keep_r2 as producer
     elif binding is TASK5_KEEP_R1:
         import codex_retention_task5_keep_r1 as producer
@@ -276,7 +292,7 @@ def _summary(summary, *, binding=FRESH_R1):
     require(summary["status"] == "succeeded" and (summary["exit_code"] is None
             or (type(summary["exit_code"]) is int and summary["exit_code"] == 0)), "fresh_result_success_required")
     receipt, names = _summary_files(summary)
-    if binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2:
+    if binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2 or binding is TASK5_FRESH_R2:
         require(intake.RESULT in names, "retention_result_payload_required")
         roles, deliverables = _declared_roles(summary, binding=binding)
     else:
@@ -291,7 +307,7 @@ def _declared_roles(summary, *, binding):
     """Keep the existing role/privacy checks; only the closed task scope varies."""
     _fixed_binding(binding)
     task_id = (fresh._publication_task_id(_producer(binding)._publication_binding())
-               if binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2 else intake.registration.TASK4)
+               if binding is TASK5_FRESH_R1 or binding is TASK5_KEEP_R1 or binding is TASK5_KEEP_R2 or binding is TASK5_FRESH_R2 else intake.registration.TASK4)
     roles = {item["path"]: item for item in summary["files"]}
     deliverables = []
     for name, record in roles.items():
@@ -551,7 +567,8 @@ def main(argv=None, *, _test_api=None) -> int:
         selection.add_argument("--discover-terminal", action="store_true")
         args = parser.parse_args(argv)
         observing = args.observe_terminal
-        binding = (TASK5_KEEP_R2 if args.cell_id == TASK5_KEEP_R2.expectation.cell_id else
+        binding = (TASK5_FRESH_R2 if args.cell_id == TASK5_FRESH_R2.expectation.cell_id else
+                   TASK5_KEEP_R2 if args.cell_id == TASK5_KEEP_R2.expectation.cell_id else
                    TASK5_KEEP_R1 if args.cell_id == TASK5_KEEP_R1.expectation.cell_id else
                    TASK5_FRESH_R1 if args.cell_id == TASK5_FRESH_R1.expectation.cell_id else
                    KEEP_R2 if args.cell_id == KEEP_R2.expectation.cell_id else
