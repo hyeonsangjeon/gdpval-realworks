@@ -488,29 +488,36 @@ def test_task5_fresh_r2_reader_is_fixed_model_free_and_closed(tmp_path, monkeypa
     # Pure helper assertions run with process/network/model guards still active.
     assert subprocess.Popen is not REAL_POPEN and subprocess.Popen.__name__ == "blocked"
     workflow_contract._assert_retention_execution_workflow_contract()
-    workflow_contract._assert_retention_mode_routes()  # 288 cases, including spurious request outputs.
+    workflow_contract._assert_retention_mode_routes()  # 576 cases, including spurious request outputs.
     workflow = yaml.safe_load((ci.ROOT / ci.WORKFLOW).read_bytes())
     steps = workflow["jobs"][ci.PREPARE_JOB]["steps"]
     read_group = " && (" + " || ".join("inputs.cell_id == '" + fixed.expectation.cell_id + "'"
                                       for fixed in fixed_readers) + ")"
     assert steps[9]["if"] == steps[10]["if"] == (
-        "inputs.read_result && !inputs.observe_terminal && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
+        "inputs.read_result && !inputs.observe_terminal && !inputs.observe_budget && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
     assert steps[13]["if"] == steps[14]["if"] == (
-        "inputs.observe_terminal && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
-    assert steps[9]["run"] == steps[13]["run"]
+        "((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && inputs.cell_id == '"
+        + reader.TASK5_FRESH_R2.expectation.cell_id + "')) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator" + read_group)
+    assert steps[13]["run"] == steps[9]["run"] + (
+        'if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n'
+        "  printf '%s\\n' '" + reader.BUDGET_PROJECTOR_PIN[1] + "  batch-runner/codex_budget_pilot_grade_readout.py' | sha256sum --check --status\nfi\n")
     expected_pins = {"batch-runner/" + Path(path).name: digest for path, digest in reader._frozen(binding).values()}
     expected_pins["batch-runner/" + Path(reader.__file__).name] = source["module_sha256"]
     for index, mode in ((9, "--read"), (13, "--observe-terminal")):
         preflight, read_step = steps[index:index + 2]
-        assert "env" not in preflight and "secrets." not in preflight["run"]
+        assert preflight.get("env", {}) == ({} if index == 9 else {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"})
+        assert "secrets." not in preflight["run"]
         assert '"$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA"' in preflight["run"]
         assert "git status --porcelain=v1 --untracked-files=all" in preflight["run"]
         pins = re.findall(r"'([0-9a-f]{64})  (batch-runner/[^']+)'", preflight["run"])
-        assert len(pins) == 11 and {path: digest for digest, path in pins} == expected_pins
+        expected = {**expected_pins, **({} if index == 9 else {
+            "batch-runner/codex_budget_pilot_grade_readout.py": reader.BUDGET_PROJECTOR_PIN[1]})}
+        assert len(pins) == len(expected) and {path: digest for digest, path in pins} == expected
         for digest, path in pins:
             assert hashlib.sha256((ci.ROOT / path).read_bytes()).hexdigest() == digest
-        assert preflight["run"].count("sha256sum --check --status") == 7
-        assert read_step["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"} and read_step["timeout-minutes"] == 4
+        assert preflight["run"].count("sha256sum --check --status") == (7 if index == 9 else 8)
+        assert read_step["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}", **({} if index == 9 else {
+            "OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"})} and read_step["timeout-minutes"] == 4
         expected_case = (binding.expectation.cell_id + ")\n"
             "    retention_read_source=" + binding.expectation.source_sha + "\n"
             "    retention_read_request=" + binding.expectation.request_sha256 + "\n"
@@ -521,11 +528,13 @@ def test_task5_fresh_r2_reader_is_fixed_model_free_and_closed(tmp_path, monkeypa
         assert command[:16] == ["env", "-u", "GITHUB_TOKEN", "-u", "GH_TOKEN", "-u", "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
             "-u", "ACTIONS_ID_TOKEN_REQUEST_URL", "-u", "ACTIONS_RUNTIME_TOKEN", "timeout", "--signal=KILL", "180s",
             "python3", "batch-runner/codex_retention_fresh_r1_result_intake.py"]
-        assert command[16:18] == [mode, "--discover-terminal"]
+        assert command[16:18] == ([mode, "--discover-terminal"] if index == 9 else ["${retention_terminal_args[@]}", "--expected-producer-source"])
+        if index == 13:
+            assert "retention_terminal_args=(--observe-terminal --discover-terminal)" in read_step["run"]
         assert command[command.index("--expected-reader-sha256") + 1] == source["module_sha256"]
         assert "stderr.log" not in read_step["run"].split("# Only the reviewed reader")[1]
     assert not effects and all(not api.commits for api in transports)
     print(json.dumps({"scope": "synthetic_task5_fresh_r2_fixed_reader", "success_payload_verified": True,
         "failed_stopped_three_controls_only": True, "identity_history_payload_refusals": True,
         "marker_no_clobber_unresolved_ack": True, "current_source_historical_evidence_separated": True,
-        "old_defaults_preserved": True, "mode_cases": 288, "live_effects": len(effects)}, sort_keys=True))
+        "old_defaults_preserved": True, "mode_cases": 576, "live_effects": len(effects)}, sort_keys=True))
