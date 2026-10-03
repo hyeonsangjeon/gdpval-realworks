@@ -67,10 +67,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     assert preflight["if"] == read["if"] == read_condition + " && inputs.cell_id == '" + reader.controller.FIRST_CELL_ID + "'"
     assert fresh_preflight["if"] == fresh_read["if"] == read_condition + fresh_condition
     assert terminal_preflight["if"] == terminal_read["if"] == (
-        "((inputs.observe_terminal && !inputs.observe_budget) || (inputs.observe_budget && !inputs.observe_terminal && (inputs.cell_id == '"
-        + fresh_reader.TASK5_FRESH_R2.expectation.cell_id + "' || inputs.cell_id == '" + fresh_reader.TASK5_KEEP_R2.expectation.cell_id
-        + "'))) && !inputs.read_result && !inputs.prepare && !inputs.execute && !inputs.observe_locator"
-        + fresh_condition)
+        workflow_observation._terminal_observation_condition() + fresh_condition)
     assert set(preflight) == {"name", "if", "shell", "run"} and preflight["shell"] == "bash"
     assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert set(read) == {"name", "if", "timeout-minutes", "env", "shell", "run"}
@@ -88,7 +85,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # Eight execution cells, eight result cells, seven terminal cells, two budget
+    # Eight execution cells, eight result cells, seven terminal cells, four budget
     # cells and an unsupported selector, with all 64 mode combinations,
     # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.
@@ -118,7 +115,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
                 and not (terminal and (prepared or observed or executed or reading))
                 and not (observed and (prepared or executed)) and (not observed or selected == cells[0])
                 and not (budget and (prepared or observed or executed or reading or terminal))
-                and (not budget or selected in cells[6:8])
+                and (not budget or selected in workflow_observation._BUDGET_CELLS)
                 and (not terminal or selected in cells[1:]) and (not reading or selected in cells))
             assert admitted_route is expected
             reachable = [index for index, step in enumerate(steps)
@@ -256,17 +253,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
     terminal_script = terminal_script.replace("retention_result_parent", "retention_terminal_parent").replace("/payload", "/evidence")
     terminal_script = terminal_script.replace('retention_terminal_parent="$(mktemp',
         'retention_terminal_args=(--observe-terminal --discover-terminal)\n'
-        'if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n'
-        '  case "$SELECTED_CELL" in\n'
-        '    ' + fresh_reader.TASK5_FRESH_R2.expectation.cell_id + ')\n'
-        '      retention_read_namespace=retention-task5-fresh-r2-budget\n'
-        '      retention_terminal_args=(--observe-budget --terminal-revision 4fdd9c2e3da1dbd7ef30d335d5fe378a4cddc84c) ;;\n'
-        '    ' + fresh_reader.TASK5_KEEP_R2.expectation.cell_id + ')\n'
-        '      retention_read_namespace=retention-task5-keep-r2-budget\n'
-        '      retention_terminal_args=(--observe-budget --terminal-revision 3be1c0b892a199fdfccf3d5c4379d40c782119e5) ;;\n'
-        '    *) exit 2 ;;\n'
-        '  esac\n'
-        'fi\nretention_terminal_parent="$(mktemp')
+        + workflow_observation._budget_terminal_selection() + 'retention_terminal_parent="$(mktemp')
     assert terminal_read["run"] == terminal_script
     fresh_argv = argv.copy()
     for index, arg in enumerate(fresh_argv):

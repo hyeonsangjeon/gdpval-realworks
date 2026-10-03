@@ -83,9 +83,13 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     monkeypatch.setattr(reader, "observe_terminal", observed)
     binding = reader.TASK5_FRESH_R2
     fixed = deepcopy(reader.TASK5_FRESH_R2_BUDGET_CONTROLS)
-    row = json.loads((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes())["cells"][7]
-    assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes()).hexdigest() == (
-        "394d96519362164bc5edd5994600fffe349b1273a491761200c1ee266cdcfd4b")
+    readout = json.loads((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes())
+    row = readout["cells"][7]
+    prior = deepcopy(readout)
+    for index in (6, 7):
+        prior["cells"][index].pop("current_budget_observation")
+    canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+    assert hashlib.sha256(canonical).hexdigest() == "aaea03354686ada4e716b4eb0eb24b9c1ab964d8e4e4e4210e5b960519dfdd89"
     assert binding.expectation == ci.TerminalExpectation(
         "797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a",
         "dfa812a2b7ad10b1aa3c7e873b4fabef9b195bd6",
@@ -483,8 +487,7 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
         for index in (9, 10, 11, 12, 13, 14):
             expected = ((reading and selected in cells[1:]) if index in (9, 10) else
                         (reading and selected == cells[0]) if index in (11, 12) else
-                        ((terminal and selected in cells[1:]) or (budget and selected in (
-                            binding.expectation.cell_id, reader.TASK5_KEEP_R2.expectation.cell_id))))
+                        ((terminal and selected in cells[1:]) or (budget and selected in workflow_contract._BUDGET_CELLS)))
             assert workflow_contract._boolean(steps[index]["if"], values) is expected
     preflight, step = steps[13:15]
     assert preflight["env"] == {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
@@ -505,16 +508,7 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     assert step["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}", "OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
     assert step["timeout-minutes"] == 4 and jobs[ci.PREPARE_JOB]["timeout-minutes"] == 20
     assert "retention_terminal_args=(--observe-terminal --discover-terminal)" in step["run"]
-    assert ('if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n'
-        '  case "$SELECTED_CELL" in\n'
-        '    ' + binding.expectation.cell_id + ')\n'
-        '      retention_read_namespace=retention-task5-fresh-r2-budget\n'
-        '      retention_terminal_args=(--observe-budget --terminal-revision ' + fixed["terminal_commit"] + ') ;;\n'
-        '    ' + reader.TASK5_KEEP_R2.expectation.cell_id + ')\n'
-        '      retention_read_namespace=retention-task5-keep-r2-budget\n'
-        '      retention_terminal_args=(--observe-budget --terminal-revision '
-        + reader.TASK5_KEEP_R2_BUDGET_CONTROLS["terminal_commit"] + ') ;;\n'
-        '    *) exit 2 ;;\n  esac\nfi\n') in step["run"]
+    assert workflow_contract._budget_terminal_selection() in step["run"]
     command = shlex.split(next(line for line in step["run"].replace("\\\n", "").splitlines() if line.startswith("env -u ")))
     assert command[:17] == ["env", "-u", "GITHUB_TOKEN", "-u", "GH_TOKEN", "-u", "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
         "-u", "ACTIONS_ID_TOKEN_REQUEST_URL", "-u", "ACTIONS_RUNTIME_TOKEN", "timeout", "--signal=KILL", "180s",
