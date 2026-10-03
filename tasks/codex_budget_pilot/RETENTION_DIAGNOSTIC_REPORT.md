@@ -225,15 +225,45 @@ result/prepared fingerprints and sealed configuration hashes without changing
 the terminal-only evidence. KEEP/r1's supplied-grader field remains null,
 distinct from the later preparation hash documented above.
 
-| Stored measurement | Task5 fresh/r1 | Task5 keep/r1 | Task5 keep/r2 | Task5 fresh/r2 | Boundary for all four points |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Remaining seconds | 4909.906562328339 | 7373.157982349396 | 0.0 | 10724.012340545654 | Zero-clamped, not exact uncapped elapsed time |
-| Wait seconds | 3781.06050658226 | 2580.858815908432 | 8742.75936126709 | 0.0 | Retry backoff only |
-| Native admissions | 18 | 13 | 38 | 1 | Not model calls |
-| Confirmed native resumes | 0 | 12 | 37 | 0 | Not HTTP requests |
+The leader's 2026-10-04 02:23 KST supplement supplies both Task4 FRESH points
+at source `c4828cc83892fb9f844599bb6c3be3d66500d9e8`, using reader
+`9359eab1be22b54bc6f18092560308058a820dde0a55c365a9ee263f6f9c0f09`
+and the unchanged projector. FRESH/r1 [run 37138725894](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37138725894),
+read job `111248535588`, succeeded at `2026-10-03T16:59:36.1876048Z`;
+FRESH/r2 [run 37138900161](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37138900161),
+read job `111249054328`, succeeded at `2026-10-03T17:02:20.9246243Z`.
+Approval/execution were skipped. Observation SHA256 values are
+`d2b354bc9ad165fc18d90318dac3eb852e64f455f0fa31f89de3f2330f9c896c`
+and `7304dd060ec089542085d8156f295f20fd8e3bdfd9ead8af5766894a59c17c83`.
 
-All four source outcomes remain failed/exit 1/cleanup true/grade null; no inference
-cost or grade changed. All four receipts verify only RESULT bodies, not ledger,
+The verified Task4 FRESH/r1 RESULT is 7771 bytes, SHA256
+`b93c0d4b0d629ea8f351b60865eb7aa49c2a52e8634c73206d026aebd5112b5f`;
+FRESH/r2 is 7737 bytes, SHA256
+`c865b09977ca9a904c979531057f573ccc0c5358e20cfec90197853011afbf42`.
+Both record 10800 total seconds and `missing={}`. FRESH/r1 records
+`started_unix=1790850168.3271084`, `expires_unix=1790860968.3271084`;
+FRESH/r2 records `started_unix=1790881801.5121758`,
+`expires_unix=1790892601.5121758`. The new `cells[1:3].current_budget_observation`
+fields retain exact result/prepared fingerprints, sealed configurations and
+the newly derived authority digests
+`220b35dec4130fb5c83ffa3a1367f7acab41c9e3e3f740e228628df30de866c0`
+and `dfee46e28de07e107384fb986bdc9c0d4d43e21fbefd200818a9004893a396a2`.
+Those digests belong only to these new observations; the older terminal-only
+records still have no separately supplied authority digest.
+
+| Recorded point | Remaining seconds | Retry-backoff wait seconds | Native admissions | Confirmed native resumes |
+| --- | ---: | ---: | ---: | ---: |
+| Task4 fresh/r1 | 0.0 | 8983.719460487366 | 39 | 0 |
+| Task4 fresh/r2 | 0.0 | 8985.385900974274 | 39 | 0 |
+| Task5 fresh/r1 | 4909.906562328339 | 3781.06050658226 | 18 | 0 |
+| Task5 keep/r1 | 7373.157982349396 | 2580.858815908432 | 13 | 12 |
+| Task5 keep/r2 | 0.0 | 8742.75936126709 | 38 | 37 |
+| Task5 fresh/r2 | 10724.012340545654 | 0.0 | 1 | 0 |
+
+Remaining time is zero-clamped, not exact uncapped elapsed time. Wait is retry
+backoff only. Native admissions and confirmed resumes are not model calls or
+HTTP requests. All six source outcomes remain failed/exit 1/cleanup true/grade null;
+no inference cost or grade changed. All six receipts verify only RESULT bodies, not ledger,
 deliverables or overall payload, and none establishes grading readiness or
 independent provider/input/CAS authentication. Detailed failure/recovery exposure
 remains unavailable. The stored differences do not
@@ -241,9 +271,10 @@ identify a failure cause, absence of provider errors or a causal retention effec
 Observer `writer_acknowledgment=not_established` remains distinct from producer
 acknowledgment.
 
-Both r2 budget observations are consumed, as are both r1 observations. None was
-queried or replayed here, and no raw payload was supplied. All Task4 budget values
-remain unobserved. These four stored points do not complete the card's realized
+Both r2 budget observations are consumed, as are both Task5 r1 and both Task4
+FRESH observations. None was queried or replayed here, and no raw payload was
+supplied. Both successful Task4 KEEP budgets remain unobserved. These six
+stored points do not complete the card's realized
 budget, wait, admission,
 resume and attribution criteria; the finite execution/accounting closeout is
 unchanged.

@@ -40,6 +40,70 @@ from .test_codex_retention_result_intake import FILE, PRIVATE
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
 
+def _assert_task4_fresh_observations(readout):
+    """Keep later supplied RESULT receipts separate from older controls-only evidence."""
+    prior = deepcopy(readout)
+    added = [prior["cells"][index].pop("current_budget_observation") for index in (1, 2)]
+    canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+    assert hashlib.sha256(canonical).hexdigest() == "6b3830c740ffe6a540990c299887eb4f205e82eb42e71cce8b99e8c3e7feeffe"
+    expected = (
+        (reader.FRESH_R1, "37138725894", 111248535588, "2026-10-03T16:59:36.1876048Z",
+         "d2b354bc9ad165fc18d90318dac3eb852e64f455f0fa31f89de3f2330f9c896c",
+         "220b35dec4130fb5c83ffa3a1367f7acab41c9e3e3f740e228628df30de866c0",
+         {"sha256": "b93c0d4b0d629ea8f351b60865eb7aa49c2a52e8634c73206d026aebd5112b5f", "size": 7771,
+          "result_fingerprint": "bbbf5016111f61f15723a91f1ea792eee000e428c032efde88f37324f1cd0968",
+          "recorded_prepared_fingerprint": "12055455235092daec59388f3f84bec93a602674eddac6ad064b7620201c426f",
+          "registered_config_sha256": "5993b6d0c94ef1d56e808fab07941daed6e77d3f7adf7e055d9329043af63e02"},
+         {"total_seconds": 10800, "started_unix": 1790850168.3271084, "expires_unix": 1790860968.3271084,
+          "remaining_seconds": 0.0, "wait_seconds": 8983.719460487366,
+          "attempts_admitted": 39, "native_resumes": 0, "missing": {}}),
+        (reader.FRESH_R2, "37138900161", 111249054328, "2026-10-03T17:02:20.9246243Z",
+         "7304dd060ec089542085d8156f295f20fd8e3bdfd9ead8af5766894a59c17c83",
+         "dfee46e28de07e107384fb986bdc9c0d4d43e21fbefd200818a9004893a396a2",
+         {"sha256": "c865b09977ca9a904c979531057f573ccc0c5358e20cfec90197853011afbf42", "size": 7737,
+          "result_fingerprint": "6cf30c822000e29627ff28b70a8e6626c9f15e639515f295c4ef8008489a6124",
+          "recorded_prepared_fingerprint": "2282906d3e47322497c96707a3931e892ef99309ebb89f7f97b888fea18da340",
+          "registered_config_sha256": "7148453eb16dd8a0c6737bffe2fc5df42319dbb1a11afba2cdc2b90b649f305d"},
+         {"total_seconds": 10800, "started_unix": 1790881801.5121758, "expires_unix": 1790892601.5121758,
+          "remaining_seconds": 0.0, "wait_seconds": 8985.385900974274,
+          "attempts_admitted": 39, "native_resumes": 0, "missing": {}}),
+    )
+    for actual, (profile, run, job, timestamp, digest, authority, result, snapshot) in zip(added, expected):
+        row = readout["cells"][profile.ordinal]
+        assert actual["source_addendum"] == (
+            "Project5 leader order 2026-10-04 02:23 KST; actual RESULT-only receipt supplied by the leader, not a worker live read")
+        assert actual["historical_scope"] == (
+            "read_terminal_details_and_original_limits_preserved_as_terminal_only_evidence_not_backfilled")
+        assert (actual["mode"], actual["source_sha"], actual["run_id"], actual["job_id"], actual["receipt_utc"]) == (
+            "observe_budget", "c4828cc83892fb9f844599bb6c3be3d66500d9e8", run, job, timestamp)
+        assert actual["outcome"] == "budget_observation_verified" and actual["approval_execution_skipped"] is True
+        assert actual["marker_sha256"] == digest
+        assert actual["historical_reader_sha256"] == "9359eab1be22b54bc6f18092560308058a820dde0a55c365a9ee263f6f9c0f09"
+        assert actual["budget_projector_sha256"] == "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815"
+        assert actual["result"] == result
+        assert owned._canonical_json(actual["inference_budget_snapshot"]) == owned._canonical_json(snapshot)
+        assert actual["terminal_commit"] == row["terminal"]["revision"]
+        assert actual["output_commit"] == row["output_manifest"]["revision"]
+        assert actual["retained_authority_sha256"] == authority
+        assert actual["retained_authority_provenance"] == (
+            "newly_derived_for_this_observation_not_backfilled_into_digest_absent_historical_read")
+        assert "retained_authority_sha256" not in row["read"]
+        fixed = reader.FRESH_R1_BUDGET_CONTROLS if profile is reader.FRESH_R1 else reader.FRESH_R2_BUDGET_CONTROLS
+        assert "retained_authority_sha256" not in fixed
+        assert actual["supplied_request_binding"] == reader._request_context(profile)
+        assert actual["result_body_verified"] is True and actual["payload_verification_scope"] == "inference_result_only"
+        for key in ("payload_bodies_verified", "ledger_body_verified", "deliverable_bodies_verified", "grading_input_ready",
+                    "fresh_origin_authentication", "prepared_input_independently_verified", "git_parent_cas_independently_verified",
+                    "live_read_repeated_here", "replay_authorized"):
+            assert actual[key] is False
+        assert (actual["status"], actual["exit_code"], actual["cleanup_confirmed"], actual["grade"]) == ("failed", 1, True, None)
+        assert actual["writer_acknowledgment"] == "not_established" and actual["recorded_publication_acknowledged"] is True
+        assert actual["measurement_limits"] == readout["cells"][7]["current_budget_observation"]["measurement_limits"]
+        assert actual["unavailable"] == readout["cells"][7]["current_budget_observation"]["unavailable"]
+        assert row["terminal_details"]["budget"] is None and row["read"]["payload_bodies_verified"] is False
+    assert all("current_budget_observation" not in readout["cells"][index] for index in (0, 3))
+
+
 def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch, capsys):
     effects, transports, failures = [], [], []
 
@@ -143,11 +207,12 @@ def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypa
         assert cell["config_sha256"] == intake.registration.seal(cell["config"]) == config_hash
     assert reader.FRESH_R1_CONFIG_SHA256 == profiles[0][-1] and reader.FRESH_R2_CONFIG_SHA256 == profiles[1][-1]
     assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
+    _assert_task4_fresh_observations(readout)
     _assert_task5_r1_observations(readout)
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/REPORT.md").read_bytes()).hexdigest() == (
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
-    assert "All Task4 budget values remain unobserved" in " ".join(report.split())
+    assert "Both successful Task4 KEEP budgets remain unobserved" in " ".join(report.split())
     for index in (4, 5):
         actual = readout["cells"][index]["current_budget_observation"]
         for value in actual["inference_budget_snapshot"].values():
@@ -536,8 +601,8 @@ def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypa
     workflow = yaml.safe_load((ci.ROOT / ci.WORKFLOW).read_bytes())
     jobs, cells = workflow["jobs"], tuple(plan["order"])
     steps = jobs[ci.PREPARE_JOB]["steps"]
-    budget_cells = {cells[1], cells[2], *cells[4:8]}
-    assert len(workflow_contract._BUDGET_CELLS) == 6 and set(workflow_contract._BUDGET_CELLS) == budget_cells
+    budget_cells = {cells[1], cells[2], cells[3], *cells[4:8]}
+    assert len(workflow_contract._BUDGET_CELLS) == 7 and set(workflow_contract._BUDGET_CELLS) == budget_cells
     names = ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget")
     mode_cases = 0
     for selected, flags in itertools.product((*cells, "unknown"), itertools.product((False, True), repeat=6)):
@@ -581,10 +646,10 @@ def test_task4_fresh_budgets_are_fixed_private_and_model_free(tmp_path, monkeypa
     assert subprocess.Popen is not REAL_POPEN and subprocess.Popen.__name__ == socket.create_connection.__name__ == "blocked"
     with capsys.disabled():
         print(json.dumps({"scope": "synthetic_combined_task4_fresh_result_only_budget_observation", "new_profiles": 2,
-            "closed_budget_profiles": 6, "mode_cases": mode_cases, "fixed_controls_before_result": True,
+            "closed_budget_profiles": 7, "mode_cases": mode_cases, "fixed_controls_before_result": True,
             "authority_bound_by_exact_terminal_bytes": True, "sealed_task4_configs": True,
             "missing_null_zero_preserved": True, "private_marker_readback_no_replay": True,
             "unchanged_task5_controls_only_paid_isolation": True, "current_historical_pins_separate": True,
             "actual_task5_r1_receipts_separate_from_synthetic_proof": True,
             "prior_json_fields_r2_receipts_original_pilot_unchanged": True,
-            "task4_budget_values_unobserved": True, "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))
+            "successful_task4_keep_budgets_unobserved": True, "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))

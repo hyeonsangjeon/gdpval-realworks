@@ -39,6 +39,9 @@ ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output,
 def _assert_task5_r1_observations(readout):
     """Check the supplied additions without treating synthetic reads as evidence."""
     prior = deepcopy(readout)
+    # The later Task4 FRESH observations are not part of this historical snapshot.
+    for index in (1, 2):
+        prior["cells"][index].pop("current_budget_observation")
     added = [prior["cells"][index].pop("current_budget_observation") for index in (4, 5)]
     canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
     assert hashlib.sha256(canonical).hexdigest() == "eaefa00b1a8db81b9a12dd914135c0fbf2c279d09697b4cb1cb499e983d369de"
@@ -90,7 +93,7 @@ def _assert_task5_r1_observations(readout):
         assert actual["unavailable"] == readout["cells"][7]["current_budget_observation"]["unavailable"]
         assert row["terminal_details"]["budget"] is None and row["read"]["payload_bodies_verified"] is False
     assert added[1]["supplied_request_binding"]["materialized_grader_source_sha256"] is None
-    assert all("current_budget_observation" not in row for row in readout["cells"][:4])
+    assert all("current_budget_observation" not in readout["cells"][index] for index in (0, 3))
 
 
 def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch, capsys):
@@ -183,8 +186,8 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
     # Only the newly supplied KEEP receipt may differ from the delivered JSON.
     # This is evidence preservation inside the new selector, not a report rerun.
     prior = deepcopy(readout)
-    # Exclude the later, explicitly supplied r1 observations from this older snapshot.
-    for index in (4, 5):
+    # Exclude the later Task4 FRESH and Task5 r1 observations from this older snapshot.
+    for index in (1, 2, 4, 5):
         prior["cells"][index].pop("current_budget_observation")
     actual = prior["cells"][6].pop("current_budget_observation")
     canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
@@ -223,7 +226,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
     assert "Both r2 budget observations are consumed" in report
-    assert "All Task4 budget values remain unobserved" in " ".join(report.split())
+    assert "Both successful Task4 KEEP budgets remain unobserved" in " ".join(report.split())
     for value in actual["inference_budget_snapshot"].values():
         if type(value) in (int, float):
             assert str(value) in report
@@ -591,7 +594,7 @@ def test_task5_r1_budgets_are_fixed_private_and_model_free(tmp_path, monkeypatch
     workflow = yaml.safe_load((ci.ROOT / ci.WORKFLOW).read_bytes())
     jobs, cells = workflow["jobs"], tuple(plan["order"])
     steps = jobs[ci.PREPARE_JOB]["steps"]
-    assert set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], *cells[4:8]} and len(workflow_contract._BUDGET_CELLS) == 6
+    assert set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], cells[3], *cells[4:8]} and len(workflow_contract._BUDGET_CELLS) == 7
     names = ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget")
     mode_cases = 0
     for selected, flags in itertools.product((*cells, "unknown"), itertools.product((False, True), repeat=6)):

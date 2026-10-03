@@ -93,6 +93,41 @@
       "read": {"mode": "observe_terminal", "source_sha": "910cbdbc49da764a76932bab3af4af231a0b6771", "run_id": "36884357472", "job_id": 110443771878, "receipt_utc": "2026-10-01T15:29:46.3223244Z", "marker_sha256": "36df4b36135d0c45db53a23c4f88fde360695f80bad0437735436516ebb626ea", "historical_reader_sha256": "bbb46c87ac840317a4f41959d2278677ed29e52e7ae28f49cf47db7a464eaafa", "payload_bodies_verified": false, "successful_intake_established": false, "grading_input_ready": false, "writer_acknowledgment": "not_established", "approval_execution_skipped": true},
       "declared_roles": {"results": 1, "ledgers": 1, "deliverables": 0, "objects_including_manifest": 3},
       "supplied_materialized_grader_source_sha256": "298da1d3a36482cf87e7f896d47c8c6c64bf5e1df91dd244847640d9d00a3689",
+      "current_budget_observation": {
+        "source_addendum": "Project5 leader order 2026-10-04 02:23 KST; actual RESULT-only receipt supplied by the leader, not a worker live read",
+        "historical_scope": "read_terminal_details_and_original_limits_preserved_as_terminal_only_evidence_not_backfilled",
+        "mode": "observe_budget", "source_sha": "c4828cc83892fb9f844599bb6c3be3d66500d9e8",
+        "run_id": "37138725894", "job_id": 111248535588, "receipt_utc": "2026-10-03T16:59:36.1876048Z",
+        "outcome": "budget_observation_verified", "approval_execution_skipped": true,
+        "marker_sha256": "d2b354bc9ad165fc18d90318dac3eb852e64f455f0fa31f89de3f2330f9c896c",
+        "historical_reader_sha256": "9359eab1be22b54bc6f18092560308058a820dde0a55c365a9ee263f6f9c0f09",
+        "budget_projector_sha256": "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815",
+        "terminal_commit": "45f54eb0a24aee5d40dd41b276ff5df777f06d73", "output_commit": "3b27e0a7e9d05c9ecfb400040bd8c025bc7f2484",
+        "retained_authority_sha256": "220b35dec4130fb5c83ffa3a1367f7acab41c9e3e3f740e228628df30de866c0",
+        "retained_authority_provenance": "newly_derived_for_this_observation_not_backfilled_into_digest_absent_historical_read",
+        "supplied_request_binding": {
+          "original_input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+          "materialized_grader_source_sha256": "298da1d3a36482cf87e7f896d47c8c6c64bf5e1df91dd244847640d9d00a3689"
+        },
+        "result": {
+          "sha256": "b93c0d4b0d629ea8f351b60865eb7aa49c2a52e8634c73206d026aebd5112b5f", "size": 7771,
+          "result_fingerprint": "bbbf5016111f61f15723a91f1ea792eee000e428c032efde88f37324f1cd0968",
+          "recorded_prepared_fingerprint": "12055455235092daec59388f3f84bec93a602674eddac6ad064b7620201c426f",
+          "registered_config_sha256": "5993b6d0c94ef1d56e808fab07941daed6e77d3f7adf7e055d9329043af63e02"
+        },
+        "inference_budget_snapshot": {"total_seconds": 10800, "started_unix": 1790850168.3271084, "expires_unix": 1790860968.3271084, "remaining_seconds": 0.0, "wait_seconds": 8983.719460487366, "attempts_admitted": 39, "native_resumes": 0, "missing": {}},
+        "status": "failed", "exit_code": 1, "cleanup_confirmed": true, "grade": null,
+        "result_body_verified": true, "payload_verification_scope": "inference_result_only", "payload_bodies_verified": false,
+        "ledger_body_verified": false, "deliverable_bodies_verified": false, "grading_input_ready": false,
+        "writer_acknowledgment": "not_established", "recorded_publication_acknowledged": true,
+        "fresh_origin_authentication": false, "prepared_input_independently_verified": false, "git_parent_cas_independently_verified": false,
+        "unavailable": {
+          "detailed_failure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"},
+          "recovery_exposure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"}
+        },
+        "measurement_limits": ["remaining_seconds_is_zero_clamped_not_uncapped_elapsed_or_failure_cause", "wait_seconds_is_retry_backoff_only", "admissions_and_confirmed_native_resumes_are_not_model_or_HTTP_calls", "snapshot_does_not_establish_absence_of_provider_errors_or_unrecorded_recovery"],
+        "live_read_repeated_here": false, "replay_authorized": false
+      },
       "inference": {"model_calls": 39, "known_cost_usd": "0.303358", "estimated_cost_usd": null, "runtime_cost_usd": null, "http_request_count": null, "invoice_complete": false, "cost_status": "partial", "missing_reasons": ["call_reachability_unknown", "usage_absent"], "usage": {"input_tokens": 104289, "cached_input_tokens": 22144, "output_tokens": 6164, "reasoning_tokens": 3863}, "recorded_component_calls": {"infrastructure_retry": 38, "generation": 1}},
       "terminal_details": {"detailed_failure": null, "budget": null, "recovery_exposure": null, "missing_reason": "not_recorded_in_terminal_controls"},
       "grade": null, "grade_missing_reason": "failed_no_successful_intake_or_grade"
@@ -110,6 +145,41 @@
       "read": {"mode": "observe_terminal", "source_sha": "0f68701d62ae7d86a95ba8fd6b9f1cc65a4cf2d6", "run_id": "36936506988", "job_id": 110617920889, "receipt_utc": "2026-10-01T22:43:16.1975611Z", "marker_sha256": "50f13364c7a261010f210959d425420509bf879040257daeec9b16fea025e9d3", "historical_reader_sha256": "5bfba1a2cb4d4f5190b0d146fd7b2b890c72ecf3904974d37babfea9ed8661f0", "payload_bodies_verified": false, "successful_intake_established": false, "grading_input_ready": false, "writer_acknowledgment": "not_established", "approval_execution_skipped": true},
       "declared_roles": {"results": 1, "ledgers": 1, "deliverables": 0, "objects_including_manifest": 3},
       "supplied_materialized_grader_source_sha256": "4860a408791b7b313e2c06c2863b4a1ddbae467c8425365af8908be7a3c032d6",
+      "current_budget_observation": {
+        "source_addendum": "Project5 leader order 2026-10-04 02:23 KST; actual RESULT-only receipt supplied by the leader, not a worker live read",
+        "historical_scope": "read_terminal_details_and_original_limits_preserved_as_terminal_only_evidence_not_backfilled",
+        "mode": "observe_budget", "source_sha": "c4828cc83892fb9f844599bb6c3be3d66500d9e8",
+        "run_id": "37138900161", "job_id": 111249054328, "receipt_utc": "2026-10-03T17:02:20.9246243Z",
+        "outcome": "budget_observation_verified", "approval_execution_skipped": true,
+        "marker_sha256": "7304dd060ec089542085d8156f295f20fd8e3bdfd9ead8af5766894a59c17c83",
+        "historical_reader_sha256": "9359eab1be22b54bc6f18092560308058a820dde0a55c365a9ee263f6f9c0f09",
+        "budget_projector_sha256": "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815",
+        "terminal_commit": "1d5133590911f3704fc2a65279d4b64bee77c1d6", "output_commit": "46fff9e31bc844a55ced352926aba49479869624",
+        "retained_authority_sha256": "dfee46e28de07e107384fb986bdc9c0d4d43e21fbefd200818a9004893a396a2",
+        "retained_authority_provenance": "newly_derived_for_this_observation_not_backfilled_into_digest_absent_historical_read",
+        "supplied_request_binding": {
+          "original_input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3",
+          "materialized_grader_source_sha256": "4860a408791b7b313e2c06c2863b4a1ddbae467c8425365af8908be7a3c032d6"
+        },
+        "result": {
+          "sha256": "c865b09977ca9a904c979531057f573ccc0c5358e20cfec90197853011afbf42", "size": 7737,
+          "result_fingerprint": "6cf30c822000e29627ff28b70a8e6626c9f15e639515f295c4ef8008489a6124",
+          "recorded_prepared_fingerprint": "2282906d3e47322497c96707a3931e892ef99309ebb89f7f97b888fea18da340",
+          "registered_config_sha256": "7148453eb16dd8a0c6737bffe2fc5df42319dbb1a11afba2cdc2b90b649f305d"
+        },
+        "inference_budget_snapshot": {"total_seconds": 10800, "started_unix": 1790881801.5121758, "expires_unix": 1790892601.5121758, "remaining_seconds": 0.0, "wait_seconds": 8985.385900974274, "attempts_admitted": 39, "native_resumes": 0, "missing": {}},
+        "status": "failed", "exit_code": 1, "cleanup_confirmed": true, "grade": null,
+        "result_body_verified": true, "payload_verification_scope": "inference_result_only", "payload_bodies_verified": false,
+        "ledger_body_verified": false, "deliverable_bodies_verified": false, "grading_input_ready": false,
+        "writer_acknowledgment": "not_established", "recorded_publication_acknowledged": true,
+        "fresh_origin_authentication": false, "prepared_input_independently_verified": false, "git_parent_cas_independently_verified": false,
+        "unavailable": {
+          "detailed_failure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"},
+          "recovery_exposure": {"status": "unavailable", "value": null, "reason": "not_recorded_in_terminal_controls"}
+        },
+        "measurement_limits": ["remaining_seconds_is_zero_clamped_not_uncapped_elapsed_or_failure_cause", "wait_seconds_is_retry_backoff_only", "admissions_and_confirmed_native_resumes_are_not_model_or_HTTP_calls", "snapshot_does_not_establish_absence_of_provider_errors_or_unrecorded_recovery"],
+        "live_read_repeated_here": false, "replay_authorized": false
+      },
       "inference": {"model_calls": 39, "known_cost_usd": "0.29944", "estimated_cost_usd": null, "runtime_cost_usd": null, "http_request_count": null, "invoice_complete": false, "cost_status": "partial", "missing_reasons": ["call_reachability_unknown", "usage_absent"], "usage": {"input_tokens": 105233, "cached_input_tokens": 27648, "output_tokens": 6571, "reasoning_tokens": 3979}, "recorded_components": [{"role": "infrastructure_retry", "model_calls": 38, "known_cost_usd": "0.253777"}, {"role": "generation", "model_calls": 1, "known_cost_usd": "0.045663"}]},
       "terminal_details": {"detailed_failure": null, "budget": null, "recovery_exposure": null, "missing_reason": "not_recorded_in_terminal_controls"},
       "grade": null, "grade_missing_reason": "failed_no_successful_intake_or_grade"
