@@ -85,7 +85,7 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     fixed = deepcopy(reader.TASK5_FRESH_R2_BUDGET_CONTROLS)
     row = json.loads((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes())["cells"][7]
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes()).hexdigest() == (
-        "42839c92b3aac1c36a3bd3b3afa0930f1bd1f882d711cf12bb78bf4fbc832f5c")
+        "394d96519362164bc5edd5994600fffe349b1273a491761200c1ee266cdcfd4b")
     assert binding.expectation == ci.TerminalExpectation(
         "797141f8291078b82cf0d7a31c20fdadb5105bd0ad45d58f1225b8a39658c05a",
         "dfa812a2b7ad10b1aa3c7e873b4fabef9b195bd6",
@@ -483,7 +483,8 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
         for index in (9, 10, 11, 12, 13, 14):
             expected = ((reading and selected in cells[1:]) if index in (9, 10) else
                         (reading and selected == cells[0]) if index in (11, 12) else
-                        ((terminal and selected in cells[1:]) or (budget and selected == binding.expectation.cell_id)))
+                        ((terminal and selected in cells[1:]) or (budget and selected in (
+                            binding.expectation.cell_id, reader.TASK5_KEEP_R2.expectation.cell_id))))
             assert workflow_contract._boolean(steps[index]["if"], values) is expected
     preflight, step = steps[13:15]
     assert preflight["env"] == {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
@@ -505,9 +506,15 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     assert step["timeout-minutes"] == 4 and jobs[ci.PREPARE_JOB]["timeout-minutes"] == 20
     assert "retention_terminal_args=(--observe-terminal --discover-terminal)" in step["run"]
     assert ('if [[ "$OBSERVE_BUDGET_ONLY" == true ]]; then\n'
-        '  [[ "$SELECTED_CELL" == ' + binding.expectation.cell_id + ' ]]\n'
-        '  retention_read_namespace=retention-task5-fresh-r2-budget\n'
-        '  retention_terminal_args=(--observe-budget --terminal-revision ' + fixed["terminal_commit"] + ')\nfi\n') in step["run"]
+        '  case "$SELECTED_CELL" in\n'
+        '    ' + binding.expectation.cell_id + ')\n'
+        '      retention_read_namespace=retention-task5-fresh-r2-budget\n'
+        '      retention_terminal_args=(--observe-budget --terminal-revision ' + fixed["terminal_commit"] + ') ;;\n'
+        '    ' + reader.TASK5_KEEP_R2.expectation.cell_id + ')\n'
+        '      retention_read_namespace=retention-task5-keep-r2-budget\n'
+        '      retention_terminal_args=(--observe-budget --terminal-revision '
+        + reader.TASK5_KEEP_R2_BUDGET_CONTROLS["terminal_commit"] + ') ;;\n'
+        '    *) exit 2 ;;\n  esac\nfi\n') in step["run"]
     command = shlex.split(next(line for line in step["run"].replace("\\\n", "").splitlines() if line.startswith("env -u ")))
     assert command[:17] == ["env", "-u", "GITHUB_TOKEN", "-u", "GH_TOKEN", "-u", "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
         "-u", "ACTIONS_ID_TOKEN_REQUEST_URL", "-u", "ACTIONS_RUNTIME_TOKEN", "timeout", "--signal=KILL", "180s",
