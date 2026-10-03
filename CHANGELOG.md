@@ -27,15 +27,28 @@ entries land under a fresh dated heading the day they merge to `main`.
   current executable pins and directly coupled test expectations migrate;
   historical producer/grading evidence and report artifacts remain unchanged.
 
-  Implementation HEAD `64bcb21c8d6ad04b6999dfb214576397d89bfb7d` is pinned but
-  untested. The single token-free proof launcher exited 127 at line 5 because
-  `/usr/bin/time` is absent; log-capture exit was 0. Python 3.10.12 / pytest
-  9.1.1 passed the prerequisite check, but pytest, collection, offline fixtures,
-  the timeout command and all selector assertions were unreached. There is no
-  test duration or passing selector result, and no retry occurred. Original
-  log SHA256 `4406ff374092e54cb7d6383d83fea174581b0770e6b4a35ecfb03a369cc7ecd5`;
-  the [current task record](tasks/LATEST_TASK_RESULT/README.md) retains the
-  exact command, failure boundary, script/status hashes and current-pin mapping.
+  Implementation HEAD `64bcb21c8d6ad04b6999dfb214576397d89bfb7d` is unchanged.
+  The original token-free launcher exited 127 at line 5 because `/usr/bin/time`
+  is absent; log-capture exit was 0. Python 3.10.12 / pytest 9.1.1 passed the
+  prerequisite check, but pytest, collection, offline fixtures, the timeout
+  command and every selector assertion were unreached by that attempt. It has
+  no pytest result or duration. Original log SHA256
+  `4406ff374092e54cb7d6383d83fea174581b0770e6b4a35ecfb03a369cc7ecd5` is preserved.
+
+  The leader's 2026-10-03 19:09 KST steer authorized the first actual selector
+  invocation after removing only the timing wrapper and its format arguments
+  from the test command. The prerequisite probe was not repeated. At tested
+  checkout `db48f5ec661ad20bbf422ab4bc00a4bd564b715c`, all non-record bytes
+  match the pinned implementation. The selector passed 1 test in 9.50s, with
+  test/log-capture exits 0 and no timeout under the unchanged 180-second guard.
+  The 9.50s is pytest's duration; outer elapsed time is unavailable. It reached
+  fixed-control/RESULT-only verification, identity/history/snapshot refusals,
+  null/zero distinctions, private marker/readback/no-replay, old controls-only
+  behavior and 576 mode cases with zero network/model/writer/child/paid effects.
+  Corrected log SHA256
+  `2cee50d40a6fdbdb28566c27f344f94e17cedfab7f0be4030d3898de25198528`;
+  the [current task record](tasks/LATEST_TASK_RESULT/README.md) retains both
+  exact commands, separate boundaries, script/status hashes and current pins.
 
   The 2026-10-03 18:38 KST APPROVE-WITH-CONDITIONS decision is a direct leader
   pre-edit decision, not a returned memo-agent verdict. Accepted report HEAD
@@ -44,9 +57,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   and all nine applicable checks are prior evidence only. All eight outcomes,
   164 recorded inference calls / known partial USD 5.206594, separate grading,
   original proof failures and three failed memo streams remain unchanged.
-  `experiment-design` preserves the measurement/registration boundary;
-  `experiment-report-en` then protected `im-not-ai-en` apply to records only.
-  A corrected proof invocation needs leader direction. Final immutable-source
+  The implementation's `experiment-design` use preserved the measurement/
+  registration boundary; this continuation applies only `experiment-report-en`
+  then protected `im-not-ai-en` to changed record passages. Final immutable-source
   review, same-HEAD CI, delivery and separate live-read authorization remain.
   No realized budget fields were observed. Budget/wait/admission/resume and
   attribution criteria are still open; the whole card is not complete. The

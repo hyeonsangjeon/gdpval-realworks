@@ -2,14 +2,20 @@
 
 ## PROJECT5-TASK5-FRESH-R2-BUDGET-OBSERVATION-20261003-1838
 
-Implemented the fixed final Task5 fresh/r2 budget-observation path, but its
-offline proof did not start. Implementation HEAD
-`64bcb21c8d6ad04b6999dfb214576397d89bfb7d` was pinned with a clean worktree
-before the single proof-launch attempt. The launcher exited 127 because
-`/usr/bin/time` is absent. Python 3.10.12 and pytest 9.1.1 passed the prerequisite
-check; pytest, collection, fixtures and the 180-second timeout command were
-not reached. No assertion or reader behavior has been validated by this attempt.
-The original launcher and failure log are preserved without a repair or retry.
+The fixed final Task5 fresh/r2 budget-observation path passed its first actual
+offline selector invocation after the leader's 2026-10-03 19:09 KST steer:
+1 passed in 9.50s, with test/log-capture exits 0 and no timeout. This is pytest's
+reported duration; outer elapsed time is unavailable. Pinned implementation
+`64bcb21c8d6ad04b6999dfb214576397d89bfb7d` remains unchanged. The actual tested
+checkout was `db48f5ec661ad20bbf422ab4bc00a4bd564b715c`, which differs from it
+only in the two completion records. No retained budget fields were read.
+
+The original launcher exited 127 because `/usr/bin/time` is absent, before
+pytest, collection, fixtures or the 180-second timeout command ran. That
+attempt has no pytest result or duration. Its launcher, log and statuses remain
+intact. The already-passed Python 3.10.12 / pytest 9.1.1 prerequisite probe was
+not repeated. Only the optional timing wrapper and its format arguments were
+removed from the test command; no production, workflow, test or pin bytes changed.
 
 Work started in the new clean branch/worktree
 `codex-retention-task5-fresh-r2-budget-observation-20261003-1838` from exact
@@ -53,8 +59,8 @@ model calls are not native admissions. Missing observability is not a guessed
 zero; invalid identity, structure or numeric types must refuse the read. The
 new private marker reports RESULT-only verification, never ledger/deliverable
 body verification, grading readiness, independent provider/input authentication
-or a writer-acknowledgment upgrade. These are implementation properties awaiting
-the unused selector's execution, not newly observed final-cell measurements.
+or a writer-acknowledgment upgrade. The synthetic selector exercised these
+properties; it did not observe the final cell's stored budget measurements.
 
 Static serialization evidence permits this read: `step2_run_inference.py`
 lines 1231–1244 retain `task_deadline` in row observability, the failed-row path
@@ -73,11 +79,13 @@ existing read step; GitHub/OIDC/runtime tokens are stripped and only the safe
 receipt is published. Coupled test expectations and necessary current hashes
 were migrated; no historical producer or grading evidence was repinned.
 
-### Single proof-launch failure
+### Validation evidence
 
-The intended tested SHA is
-`64bcb21c8d6ad04b6999dfb214576397d89bfb7d`; it remains untested. The exact
-token-free launch command was:
+#### Preserved launcher failure
+
+Implementation `64bcb21c8d6ad04b6999dfb214576397d89bfb7d` was pinned with a
+clean worktree before the original launch attempt. That launcher never ran
+pytest. Its exact token-free launch command was:
 
 ```text
 env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-retention-task5-fresh-r2-budget-observation-20261003-1838/batch-runner bash /tmp/retention-task5-fresh-r2-budget-20261003-1838.auHJC5/run-proof.sh
@@ -91,13 +99,14 @@ The preserved wrapper's line 5 attempted the following command from
 ```
 
 The exact failure was `run-proof.sh: line 5: /usr/bin/time: No such file or directory`.
-Launcher exit was 127; log-capture exit was 0. There is no pytest result, test
-duration or assertion stack. The failure occurred before the timeout command,
+Launcher exit was 127; log-capture exit was 0. That attempt has no pytest result,
+test duration or assertion stack. The failure occurred before the timeout command,
 not through a timeout. Collection-time helper imports, process/network/model
 fixtures, control/RESULT validators, snapshot cases, no-clobber/readback and
 576 routing cases were all unreached. The failure is in the local proof wrapper,
 not evidence of a reader or producer failure. No runtime or dependency was
-installed or changed, and no second invocation was attempted.
+installed or changed. No second invocation was attempted before the separate
+19:09 KST authorization below.
 
 | Local evidence | SHA256 |
 | --- | --- |
@@ -109,7 +118,63 @@ These files remain in `/tmp/retention-task5-fresh-r2-budget-20261003-1838.auHJC5
 `git diff --check` passed before the implementation commit. A bounded path
 comparison found no changes to the producer chain, controller, original intake,
 publication helpers, projector, registered configuration or report artifacts.
-Neither static check establishes the unexecuted runtime proof.
+Neither static check substitutes for the selector execution below.
+
+#### First actual selector invocation
+
+The leader's 2026-10-03 19:09 KST steer authorized removal of only
+`/usr/bin/time -f 'wall_seconds=%e'` from the test command. The corrected wrapper
+omits the already-passed prerequisite probe, as directed, and uses separate
+log/status files. The token-free environment, absolute interpreter, selector,
+offline guards and original `timeout --signal=KILL 180s` command are unchanged.
+The original guard had no separate `--kill-after` option. No timing utility was
+installed and no additional wrapper framework was added.
+
+The exact corrected invocation was:
+
+```text
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-retention-task5-fresh-r2-budget-observation-20261003-1838/batch-runner bash /tmp/retention-task5-fresh-r2-budget-20261003-1838.auHJC5/run-proof-corrected-1909.sh
+```
+
+From `batch-runner`, the corrected wrapper ran this command and captured both
+the command and log-capture statuses:
+
+```text
+timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_codex_retention_task5_fresh_r2_budget.py::test_final_task5_budget_observation_is_fixed_private_and_model_free --tb=short
+```
+
+Actual tested checkout HEAD was `db48f5ec661ad20bbf422ab4bc00a4bd564b715c`.
+A local comparison confirmed that all non-record bytes matched pinned
+implementation `64bcb21c8d6ad04b6999dfb214576397d89bfb7d`. The result was
+1 passed in 9.50s, as reported by pytest, with test exit 0, log-capture exit 0
+and no timeout. Outer elapsed time is unavailable because the optional timing
+utility was omitted. This was one actual pytest invocation, not a rerun of a
+passed selector or any consumed producer, reader, report or grading proof.
+
+The selector reached the following synthetic boundaries:
+
+- Exact final binding/configuration/current-pin refusals before lazy imports
+  and private/session effects.
+- Three immutable controls followed by only the declared RESULT body; budget
+  projection and private no-clobber marker/readback verification.
+- Source/task/configuration/hash/fingerprint/history refusals, with missing,
+  unavailable and recorded-zero snapshot semantics preserved.
+- Unresolved marker/readback remaining unverified and non-replayable, unchanged
+  controls-only/default behavior, and separate historical/current source pins.
+- All 576 mode cases, with zero network/model/writer/child/paid effects under
+  the active offline guards.
+
+These are synthetic reader checks, not a live budget observation, independent
+source review, realized recovery measurement or new execution authority.
+
+| Corrected local evidence | SHA256 |
+| --- | --- |
+| `proof-corrected-1909.log` | `2cee50d40a6fdbdb28566c27f344f94e17cedfab7f0be4030d3898de25198528` |
+| `run-proof-corrected-1909.sh` | `8a21a5f941b42d4394ce7c0883c15f6f2a1daa51ad9a4c18e3159ec5ca173463` |
+| `status-corrected-1909.txt` | `efcc32872ebd2ff7620b538ec980fab2614614b8fec099cef21b6db2e4cdf2e7` |
+
+The corrected evidence is retained beside the original launcher-failure files;
+the original files and their hashes are unchanged.
 
 ### Outcomes and accounting
 
@@ -208,7 +273,7 @@ the unchanged projector hash. All other current dependency values remain exact.
 | Grade observer with only its current-reader pin migrated | `5edaa76392ddecf6c7d7b84487ee50880693f1d4797a77b12df2fdcf04d9a4db` |
 | Existing workflow with the opt-in route | `4c3ffcd26f8f61f7f835f42b04ecffc255bf72e72a3d9ad2c7c54e9c70820f2f` |
 | Unchanged budget-projector module | `96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815` |
-| Unexecuted new selector source | `4d18da713064d05f18e778d8a6a936c26bb5da8985c6f94c4785f06fcb184905` |
+| New selector source, exercised once | `4d18da713064d05f18e778d8a6a936c26bb5da8985c6f94c4785f06fcb184905` |
 
 Historical producer/`RESULT`/`PARENT`/`READER` values are not current executable
 pins. The grading digests remain
@@ -265,27 +330,29 @@ those streams nor their accepted later proofs were repeated here.
 
 ### Skill application and remaining boundary
 
-The complete skill catalog was inspected once. `experiment-design` was limited
-to preserving the registered measurement and stopping boundaries: GPT-5.4 /
+During implementation, `experiment-design` was limited to preserving the
+registered measurement and stopping boundaries: GPT-5.4 /
 direct-v1 / xhigh, SDK/CLI 0.147.0, mechanical B/no C, one concurrent inference,
 10800 cumulative seconds from first admission including waits/recovery/downtime
 without reset, and a 1800-second native-turn wait, not an all-in attempt ceiling.
 KEEP/FRESH remain guarded within-cell state treatments, with no admission-count
 or automatic monetary cap. No design or runtime axis was added.
 
-`experiment-report-en` then protected `im-not-ai-en` apply only to these record
-passages. They distinguish the failed launcher from an unexecuted selector,
-preserve the metric/provenance ledger, and keep the leader's direct decision
-separate from the failed memo streams. Tables, identities, units, commands and
-uncertainty are protected from style changes. Editorial checks are not reader
-tests or an independent source review. No UI/animation skill, repository audit,
-agent-policy edit or new memo request applies.
+The complete skill catalog was inspected once for the 19:09 KST continuation.
+`experiment-report-en` then protected `im-not-ai-en` apply only to the changed
+record passages. They distinguish the original launcher failure from the first
+actual selector pass, preserve the metric/provenance ledger, and keep the
+leader's direct decision separate from the failed memo streams. Tables,
+identities, units, commands and uncertainty are protected from style changes.
+Editorial checks are not reader tests or an independent source review. No new
+experiment-design scope, UI/animation skill, repository audit, agent-policy edit
+or memo request applies to this continuation.
 
-The immediate blocker is proof-launch validation. Any corrected single-selector
-invocation needs leader direction; no retry is included here. Final independent
-immutable-HEAD source review, applicable same-HEAD CI and delivery still precede
-one separately authorized model-free budget read. No budget fields have been
-observed in this task and no live-read authority is granted.
+The launcher blocker is resolved by the separately authorized first selector
+invocation. Final independent immutable-HEAD source review, applicable same-HEAD
+CI and delivery still precede one separately authorized model-free budget read.
+No stored final-cell budget fields have been observed in this task and no
+live-read authority is granted.
 
 Only this diagnostic's finite execution and available accounting are closed,
 not the whole Project5 card. Realized budget/wait/admission/resume measurements
@@ -299,5 +366,6 @@ and it was not rechecked or replaced with another runtime. Neither the original
 
 The existing Git identity remains `hyeonsangjeon <wingnut0310@gmail.com>` without
 attribution trailers. No Project edit, merge, Azure/HF/outcome query, inference,
-grading, regrade, dispatch, replay, package install, pytest invocation, prior
-proof rerun or monitoring occurred. These records stop at pre-merge facts.
+grading, regrade, dispatch, replay, package install, prior proof rerun or
+monitoring occurred. Only the newly authorized synthetic selector ran, once.
+These records stop at pre-merge facts.
