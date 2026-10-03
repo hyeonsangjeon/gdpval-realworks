@@ -1,32 +1,115 @@
 # Latest task result
 
-## PROJECT5-RETENTION-DIAGNOSTIC-REPORT-20261003-1705
+## PROJECT5-TASK5-FRESH-R2-BUDGET-OBSERVATION-20261003-1838
 
-Completed the documentation/data closeout of the eight-cell retention
-diagnostic. The [result-first report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
-and [compact JSON readout](../codex_budget_pilot/retention_diagnostic_readout.json)
-cover all eight registered producer outcomes: two succeeded and six failed.
-The original local consistency check passed in 0.289s, check exit 0,
-log-capture exit 0 and no timeout under its 180-second bound. It was a static
-document/data check, not a producer, reader, grade, pytest or build invocation.
-The 17:36 KST supplement below records the supplied final exit code and its
-separate narrow check; the original proof was not rerun.
+Implemented the fixed final Task5 fresh/r2 budget-observation path, but its
+offline proof did not start. Implementation HEAD
+`64bcb21c8d6ad04b6999dfb214576397d89bfb7d` was pinned with a clean worktree
+before the single proof-launch attempt. The launcher exited 127 because
+`/usr/bin/time` is absent. Python 3.10.12 and pytest 9.1.1 passed the prerequisite
+check; pytest, collection, fixtures and the 180-second timeout command were
+not reached. No assertion or reader behavior has been validated by this attempt.
+The original launcher and failure log are preserved without a repair or retry.
 
-Work started in a new clean branch/worktree
-`codex-retention-diagnostic-report-20261003-1705` from exact main
-`f7439da4f3443ea67dc02ddea0cb3a1806622e0d`. The one duplicate-open-PR inspection
-returned none. The preserved checkout, all older worktrees and
+Work started in the new clean branch/worktree
+`codex-retention-task5-fresh-r2-budget-observation-20261003-1838` from exact
+main `2f1b83439f2eebfb7230a00e460f8ab83af02b5a`. The one duplicate-open-PR
+inspection returned none. The preserved checkout, all older worktrees and
 `wip/local-main-preserved-20260719` were not changed.
 
-The leader supplied accepted PR729 reader HEAD
-`70c80baa5c150d1734bb77de7fac1ebaac17b303`, owner review
-[5399481664](https://github.com/hyeonsangjeon/gdpval-realworks/pull/729#pullrequestreview-5399481664)
-and all ten checks. Its 17.09s proof at
-`245fbd54abbfb6a9d7420c3e73ec27ce643fd0e5`, log SHA256
-`9655c23bb2b7ce0f304a8e92bc92f580ebccdfd113cdbb608f9c20bc86fecd50`, remains
-accepted historical reader evidence and was not rerun or reviewed again. It
-does not approve this report. No architecture memo or agent request was needed
-for this documentation/data-only scope.
+The leader supplied accepted report HEAD
+`47978bdcd8b6026f9bd35ff24e94e8771a672544`, owner review
+[5399909431](https://github.com/hyeonsangjeon/gdpval-realworks/pull/730#pullrequestreview-5399909431)
+and all nine applicable checks. The [report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
+and [eight-row JSON](../codex_budget_pilot/retention_diagnostic_readout.json)
+remain byte-identical. They close only finite execution and available accounting;
+the card's realized budget, wait, admission, resume and attribution criteria
+remain open. No report proof or consumed producer/reader/grade was replayed.
+
+### Implementation scope and direct pre-edit decision
+
+The leader's 2026-10-03 18:38 KST APPROVE-WITH-CONDITIONS decision applies only
+to this fixed read-only extension. It is a direct Project5 leader decision,
+not a returned subagent verdict. No memo transport was retried. The decision
+does not replace final immutable-source review, same-HEAD CI or separate live
+authorization.
+
+The new false-default `observe_budget` workflow input and `--observe-budget`
+reader flag opt into `TASK5_FRESH_R2` only. They reuse the existing terminal
+reader and its two workflow steps. The path requires the recorded failed
+terminal, claim, manifest, object identities and immutable history before
+fetching only the declared inference RESULT at output commit
+`ddf15bff98aede8c714c5c3611ff30ee3e09afd9`. It checks RESULT size/hash,
+fingerprint, task, source and registered configuration before using the unchanged
+`codex_budget_pilot_grade_readout._budget_snapshot` projection. Its source hash
+is checked before lazy import. There is no new branch-tip discovery, cell
+profile, producer, grader, writer or child authority.
+
+The projected fields are `total_seconds`, `started_unix`, `expires_unix`,
+`remaining_seconds`, `wait_seconds`, `attempts_admitted` and `native_resumes`,
+with the projector's existing `missing` reasons. Remaining time is zero-clamped;
+wait means retry backoff only, resumes mean confirmed native bindings, and
+model calls are not native admissions. Missing observability is not a guessed
+zero; invalid identity, structure or numeric types must refuse the read. The
+new private marker reports RESULT-only verification, never ledger/deliverable
+body verification, grading readiness, independent provider/input authentication
+or a writer-acknowledgment upgrade. These are implementation properties awaiting
+the unused selector's execution, not newly observed final-cell measurements.
+
+Static serialization evidence permits this read: `step2_run_inference.py`
+lines 1231–1244 retain `task_deadline` in row observability, the failed-row path
+uses that projection, `_public_persisted_results` preserves the row, and lines
+4907–4968 serialize the results and fingerprint. Publication validation retains
+bounded observability. This establishes that the fields can be stored, not that
+they exist in the unread final RESULT.
+
+The eight execution bindings, three jobs, permissions, secret scopes,
+concurrency/cancellation, producer/controller/publication code and experiment
+configuration remain unchanged. Both read modes keep their prior default
+behavior; explicit budget mode is mutually exclusive with every other mode,
+including paid routing with spurious nonempty request outputs. The read command
+retains its 180-second bound and four-minute step limit. Credentials stay in the
+existing read step; GitHub/OIDC/runtime tokens are stripped and only the safe
+receipt is published. Coupled test expectations and necessary current hashes
+were migrated; no historical producer or grading evidence was repinned.
+
+### Single proof-launch failure
+
+The intended tested SHA is
+`64bcb21c8d6ad04b6999dfb214576397d89bfb7d`; it remains untested. The exact
+token-free launch command was:
+
+```text
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-retention-task5-fresh-r2-budget-observation-20261003-1838/batch-runner bash /tmp/retention-task5-fresh-r2-budget-20261003-1838.auHJC5/run-proof.sh
+```
+
+The preserved wrapper's line 5 attempted the following command from
+`batch-runner`, piping its output to the retained log:
+
+```text
+/usr/bin/time -f 'wall_seconds=%e' timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_codex_retention_task5_fresh_r2_budget.py::test_final_task5_budget_observation_is_fixed_private_and_model_free --tb=short
+```
+
+The exact failure was `run-proof.sh: line 5: /usr/bin/time: No such file or directory`.
+Launcher exit was 127; log-capture exit was 0. There is no pytest result, test
+duration or assertion stack. The failure occurred before the timeout command,
+not through a timeout. Collection-time helper imports, process/network/model
+fixtures, control/RESULT validators, snapshot cases, no-clobber/readback and
+576 routing cases were all unreached. The failure is in the local proof wrapper,
+not evidence of a reader or producer failure. No runtime or dependency was
+installed or changed, and no second invocation was attempted.
+
+| Local evidence | SHA256 |
+| --- | --- |
+| Original `proof.log` | `4406ff374092e54cb7d6383d83fea174581b0770e6b4a35ecfb03a369cc7ecd5` |
+| Original `run-proof.sh` | `d6949d80396845f34bb28b42d4e3f130808b8cfe1e1d2a7ae04c6431578ff6e1` |
+| Original `status.txt` | `8389d3ed1e18e260af21b3ff2ff52c59270cd9b2dc2269911a10d1b16ba936d8` |
+
+These files remain in `/tmp/retention-task5-fresh-r2-budget-20261003-1838.auHJC5`.
+`git diff --check` passed before the implementation commit. A bounded path
+comparison found no changes to the producer chain, controller, original intake,
+publication helpers, projector, registered configuration or report artifacts.
+Neither static check establishes the unexecuted runtime proof.
 
 ### Outcomes and accounting
 
@@ -55,14 +138,14 @@ keep/r1 and 91 for keep/r2, `price_missing`, null known/model/estimated/runtime
 costs, null HTTP counts and `invoice_complete=false`. No global grade average,
 cost-efficiency ranking, regrade or price reconstruction was added.
 
-The original [pilot report](../codex_budget_pilot/REPORT.md) gains only a concise
-diagnostic link and follow-up note. Every original byte outside that addition
-is unchanged. Its 30 original IDs still comprise 24 epoch04 outcomes
+The original [pilot report](../codex_budget_pilot/REPORT.md) retains its concise
+diagnostic link and follow-up note without any change in this task. Its 30
+original IDs still comprise 24 epoch04 outcomes
 (18 graded / 6 model-free UNGRADED) plus 6 frozen epoch03 failures, not 30
 identical-source successes. Its results and budget snapshots were not replayed
 or recomputed.
 
-### Final failed outcome replaces the pending status
+### Retained final failed outcome
 
 The leader's 2026-10-03 17:05 KST order supplies the final producer outcome,
 not this report's local check. Producer
@@ -112,77 +195,46 @@ identify timeout, rate limiting or another cause. Observer
 acknowledgment; publication-derived proof does not independently authenticate
 provider activity, original inputs or actual CAS.
 
-### Original bounded local consistency check
+### Current pins and accepted historical evidence
 
-The checked HEAD was the unchanged base
-`f7439da4f3443ea67dc02ddea0cb3a1806622e0d` with the new report documents in the
-working tree. No implementation commit or new runtime test is claimed. The
-checked artifact hashes below identify the original pre-supplement candidate
-bytes, not the corrected JSON. That single invocation was not rerun.
-The existing absolute interpreter reported Python 3.10.12 without installation.
-Exactly one consistency invocation ran:
+Only the shared reader's current executable hash changes in the observer's
+separate `CURRENT_DEPENDENCIES` map. The workflow's two shared-reader preflight
+pins and two CLI pins use that same new hash. The budget-only preflight adds
+the unchanged projector hash. All other current dependency values remain exact.
 
-```text
-env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=10s 180s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/retention-diagnostic-report-20261003-1705.OKM4o0/check.py /ai-work/copilot/worktrees/codex-retention-diagnostic-report-20261003-1705 /tmp/retention-diagnostic-report-20261003-1705.OKM4o0
-```
-
-Result: PASS, elapsed 0.289s, check exit 0, log-capture exit 0, no timeout.
-The checker used only the standard library, static AST reads and local files;
-it did not import production modules. An audit guard disallowed network/process
-effects. It checked eight unique registered rows/order, source/run/job/request
-and seven predecessor tuples, the supplied final tuple, control identities,
-missing reasons, grade denominators, Decimal partial-cost/call totals,
-report/table equality, local links, disclosure limits and unchanged original
-pilot bytes outside the one note. The protected no-strengthening check includes
-a same-session source-to-candidate review, not an independent causal or source
-review. No conflict was found between the brief's numeric summary and retained
-evidence; the older pending status is a superseded observation.
-
-| Checked artifact | SHA256 |
+| Current executable | SHA256 |
 | --- | --- |
-| `RETENTION_DIAGNOSTIC_REPORT.md` | `bef7a3b13b74d6d7790d99603ea5e9fc00076d7fe8ef06fc598a495c8120f240` |
-| `retention_diagnostic_readout.json` | `f62fde4905df8fb20e46098d892d5b7fee60c5c539de2ddfd080cc1f0d2bc3dd` |
-| Original pilot report with only its added note | `88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e` |
-| Local `check.py` | `1336148fceeed9147f940ee7dfef2a70a6354a746efb8421d45ea8493fc5a282` |
-| Local `check.log` | `896e281a5b6b7e9e29736cc066e21bf98e97047ec81cc05d113ca54aab2f7080` |
-| Local `run-check.sh` | `cc25e48d9d0039e350829598fb2f200cd883de4b9c14083be0691689ae989119` |
+| Shared result/terminal/budget reader | `55ca5ddb1d692e95f3602d180a6553bc23de154bab3a40065d16a46c2e549928` |
+| Grade observer with only its current-reader pin migrated | `5edaa76392ddecf6c7d7b84487ee50880693f1d4797a77b12df2fdcf04d9a4db` |
+| Existing workflow with the opt-in route | `4c3ffcd26f8f61f7f835f42b04ecffc255bf72e72a3d9ad2c7c54e9c70820f2f` |
+| Unchanged budget-projector module | `96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815` |
+| Unexecuted new selector source | `4d18da713064d05f18e778d8a6a936c26bb5da8985c6f94c4785f06fcb184905` |
 
-The checker, log, status record, supplied-evidence transcription and editorial
-checkpoints are retained in `/tmp/retention-diagnostic-report-20261003-1705.OKM4o0`.
-The status record SHA256 is
-`9d1c133c52bb78e2dc500ec410c277cd345d1aa7794eff400baa23509a70ccc2`.
-This task changed only the two new report/data files, the bounded pilot-report
-note and the two completion records. Production, workflows, tests, dependency
-manifests, current pins and historical `RESULT`/`PARENT`/`READER` evidence remain
-byte-identical to base. Historical grading digests remain
+Historical producer/`RESULT`/`PARENT`/`READER` values are not current executable
+pins. The grading digests remain
 `25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0` and
 `1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a56d`; intake remains
 `4d33c1160fe27af76fa37cf1360d85e7cdeb92992ccfaf748ee65bb6c80c84a4`.
 
-### Narrow 17:36 KST addendum check
+The [accepted report record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/47978bdcd8b6026f9bd35ff24e94e8771a672544/tasks/LATEST_TASK_RESULT/README.md)
+retains the exact earlier commands, snapshots and disclosure checks. Its
+original local consistency pass was 0.289s at base
+`f7439da4f3443ea67dc02ddea0cb3a1806622e0d` with report artifacts in the working
+tree, check/log-capture exits 0 and no timeout; log SHA256
+`896e281a5b6b7e9e29736cc066e21bf98e97047ec81cc05d113ca54aab2f7080`.
+The separate 17:36 KST exit-code addendum pass was 0.001517s against
+`c5ea85c83a0cf26eb2cc74f6c8bb15929346e972`, check/log-capture exits 0 and no
+timeout; log SHA256 `6c88bb666a2e1036d56fa708beb42c03f215b1a753f02e9e2705a8041a049af1`.
+The first pass did not cover the corrected JSON. The current unchanged JSON
+hash is `42839c92b3aac1c36a3bd3b3afa0930f1bd1f882d711cf12bb78bf4fbc832f5c`.
 
-The leader reviewed report HEAD `c5ea85c83a0cf26eb2cc74f6c8bb15929346e972`
-before supplying the exit-code supplement. One local comparison against that
-HEAD's JSON passed in 0.001517s, check/log-capture exits 0, no timeout under
-30 seconds. It verified integer 1, removal of the obsolete missing reason,
-the unchanged final producer/observer/control tuple, and deep plus byte
-equality except for the declared exit-code and addendum-provenance changes.
-The report prose and original pilot artifact hashes remain unchanged.
-
-```text
-env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=5s 30s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/retention-diagnostic-addendum-20261003-1736.F617e0/addendum-check.py /ai-work/copilot/worktrees/codex-retention-diagnostic-report-20261003-1705 /tmp/retention-diagnostic-addendum-20261003-1736.F617e0
-```
-
-Corrected JSON SHA256:
-`42839c92b3aac1c36a3bd3b3afa0930f1bd1f882d711cf12bb78bf4fbc832f5c`.
-New check-log SHA256:
-`6c88bb666a2e1036d56fa708beb42c03f215b1a753f02e9e2705a8041a049af1`.
-The checker, log, status and editorial checkpoints are retained in
-`/tmp/retention-diagnostic-addendum-20261003-1736.F617e0`. This supplement changes
-only the JSON and these two completion records; it does not extend the original
-0.289s proof to new bytes. The catalog was read once for this continuation;
-`experiment-report-en` then protected `im-not-ai-en` applied only to the changed
-passages, with no new design, workflow, memo, UI or repository audit.
+Accepted PR729 reader HEAD `70c80baa5c150d1734bb77de7fac1ebaac17b303`, review
+[5399481664](https://github.com/hyeonsangjeon/gdpval-realworks/pull/729#pullrequestreview-5399481664)
+and all ten checks remain prior evidence. Its 17.09s proof at
+`245fbd54abbfb6a9d7420c3e73ec27ce643fd0e5`, log SHA256
+`9655c23bb2b7ce0f304a8e92bc92f580ebccdfd113cdbb608f9c20bc86fecd50`, was not
+rerun or reviewed again. None of these accepted passes validates this new
+budget path or establishes a realized budget measurement.
 
 ### Historical failures remain failures
 
@@ -213,27 +265,39 @@ those streams nor their accepted later proofs were repeated here.
 
 ### Skill application and remaining boundary
 
-The complete skill catalog was inspected once. `experiment-report-en` established
-the metric/provenance protection brief and structural difference ledger, then
-protected `im-not-ai-en` checked the bounded English passages. Tables, JSON,
-identities, units, hedges and evidence boundaries were not style-edited. Saved
-untouched/structural/candidate checkpoints, literal/date/link/hedge inventories,
-the fidelity gate and reverse-condition review preserve the distinction between
-observations, calculations and unknowns. The protected copyedit required no
-factual changes. `repo-readiness` was limited to disclosure, links and the
-boundary between reproducible table arithmetic and unavailable private/live
-evidence; it was not a repository audit. Experiment-design, backend/workflow,
-agent-policy and UI/animation work did not apply.
+The complete skill catalog was inspected once. `experiment-design` was limited
+to preserving the registered measurement and stopping boundaries: GPT-5.4 /
+direct-v1 / xhigh, SDK/CLI 0.147.0, mechanical B/no C, one concurrent inference,
+10800 cumulative seconds from first admission including waits/recovery/downtime
+without reset, and a 1800-second native-turn wait, not an all-in attempt ceiling.
+KEEP/FRESH remain guarded within-cell state treatments, with no admission-count
+or automatic monetary cap. No design or runtime axis was added.
 
-Only this diagnostic's finite execution and available accounting are closed.
-Post-selection, two repetitions, fixed order/service variation, source-wrapper
-evolution, unavailable realized budget/recovery and uncalibrated judging still
-prevent causal retention or model-performance claims. Missing prices, exclusion
-causes/item overlap and intermediate-input comparisons remain gaps. Independent
-immutable-HEAD report review and applicable same-HEAD CI still precede the
-leader's card decision. No new live or paid scope is authorized.
+`experiment-report-en` then protected `im-not-ai-en` apply only to these record
+passages. They distinguish the failed launcher from an unexecuted selector,
+preserve the metric/provenance ledger, and keep the leader's direct decision
+separate from the failed memo streams. Tables, identities, units, commands and
+uncertainty are protected from style changes. Editorial checks are not reader
+tests or an independent source review. No UI/animation skill, repository audit,
+agent-policy edit or new memo request applies.
+
+The immediate blocker is proof-launch validation. Any corrected single-selector
+invocation needs leader direction; no retry is included here. Final independent
+immutable-HEAD source review, applicable same-HEAD CI and delivery still precede
+one separately authorized model-free budget read. No budget fields have been
+observed in this task and no live-read authority is granted.
+
+Only this diagnostic's finite execution and available accounting are closed,
+not the whole Project5 card. Realized budget/wait/admission/resume measurements
+and attribution remain open. Post-selection, two repetitions, fixed order/service
+variation, source-wrapper evolution, unavailable realized recovery and
+uncalibrated judging prevent causal retention or model-performance claims.
+Missing prices, exclusion causes/item overlap and intermediate-input comparisons
+remain gaps. The GHCP Sol VM card stays blocked: no KVM/image handoff exists,
+and it was not rechecked or replaced with another runtime. Neither the original
+30-cell pilot nor the eight-cell inference sequence is reopened.
 
 The existing Git identity remains `hyeonsangjeon <wingnut0310@gmail.com>` without
 attribution trailers. No Project edit, merge, Azure/HF/outcome query, inference,
-grading, regrade, dispatch, replay, package install, prior test rerun or monitoring
-occurred. These records stop at pre-merge facts.
+grading, regrade, dispatch, replay, package install, pytest invocation, prior
+proof rerun or monitoring occurred. These records stop at pre-merge facts.
