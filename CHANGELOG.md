@@ -57,6 +57,23 @@ entries land under a fresh dated heading the day they merge to `main`.
   `394d96519362164bc5edd5994600fffe349b1273a491761200c1ee266cdcfd4b`.
   All prior JSON fields and original-pilot bytes were confirmed unchanged.
 
+  Correct the six missed coupled test expectations identified by the leader at
+  `a67911109c3a768b74f068520f2a72338e04001c`: the budget predicate now expects
+  exactly KEEP/r2 and FRESH/r2, including the central CI-read test's admission
+  pair and fixed terminal-revision shell cases. This was a static mismatch,
+  not an observed CI failure. One authorized CI-read selector passed at test-only
+  HEAD `1e775e4338046632a4f66f387eb4fccad4b0f699`: 1 passed in 5.29s, 576 mode
+  cases, test/log-capture exits 0, no timeout and zero live effects under the
+  existing token-free/offline guards and 180-second bound. Log SHA256
+  `3b71391b4887693392963a829ac3bae160f594890a08edc6d136ca66b58e0783`;
+  the task record retains its exact command and source/script/status hashes.
+  The other five corrected test files were not executed. The 7.26s proof above
+  was not rerun. Runtime, workflow, producer, projector, current pins, report/JSON,
+  fixed tuples and observed values stay byte-identical to the cited correction
+  base. Only `experiment-report-en` then protected `im-not-ai-en` apply to this
+  continuation's record edits. Final new-HEAD review and same-HEAD CI remain
+  leader-owned; no live authority is added.
+
   Accepted PR731 HEAD `c84c406b8c41a6998fc6311b675b8b8708f1f026`, review
   [5400379821](https://github.com/hyeonsangjeon/gdpval-realworks/pull/731#pullrequestreview-5400379821)
   and all ten checks remain prior evidence. Its launcher-127 failure preceded

@@ -2,13 +2,20 @@
 
 ## PROJECT5-TASK5-KEEP-R2-BUDGET-OBSERVATION-20261003-2011
 
-The paired Task5 keep/r2 retained-budget extension passed its one new offline
-selector at implementation HEAD `417db02a9433efe312202a4da6535979eeb7deda`:
-1 passed in 7.26s, with 576 mode cases, test/log-capture exits 0 and no timeout.
-The 7.26s is pytest's duration; outer elapsed time is unavailable. The selector
-reported zero network/model/writer/child/paid effects. Only the two completion
-records are edited after that proof; tested executable, test, report and JSON
-bytes remain unchanged.
+The 2026-10-03 21:13 KST compatibility correction passed its one authorized
+offline selector at test-only HEAD `1e775e4338046632a4f66f387eb4fccad4b0f699`:
+1 passed in 5.29s, with 576 mode cases, test/log-capture exits 0 and no timeout.
+The 5.29s is pytest's duration; outer elapsed time is unavailable. The selector
+reported zero live effects under the existing process/network/model guards.
+Six test files now expect the two closed r2 budget profiles. Runtime, workflow,
+producer, projector, current pins, report/JSON and fixed evidence remain
+byte-identical to `a67911109c3a768b74f068520f2a72338e04001c`.
+
+The earlier new-feature proof remains 1 passed in 7.26s at implementation HEAD
+`417db02a9433efe312202a4da6535979eeb7deda`, with 576 mode cases, test/log-capture
+exits 0, no timeout and zero network/model/writer/child/paid effects. It was not
+rerun. Only the two completion records are edited after the new 5.29s proof;
+tested executable, test, report and JSON bytes remain unchanged after that proof.
 
 This unit adds only the exact KEEP/r2 profile to the accepted optional budget
 path. It also records the leader's first actual fresh/r2 RESULT-only budget
@@ -16,7 +23,7 @@ receipt as a separate later observation in the [report](../codex_budget_pilot/RE
 and [JSON](../codex_budget_pilot/retention_diagnostic_readout.json). The paired
 KEEP budget remains unobserved. No live read or new experiment ran here.
 
-Work started in the new clean branch/worktree
+Original extension work started in the new clean branch/worktree
 `codex-retention-task5-keep-r2-budget-observation-20261003-2011`, from delivered
 main `9a509c6259c5e20d74a86e973a48ec5a160da098`. The one duplicate-open-PR
 inspection returned none. The preserved checkout, all earlier worktrees and
@@ -143,7 +150,53 @@ preparation hash `75f38c05e5c348e481e54f4c0b2000772c2414d7bae7519b1f2a38d92e1e0d
 does not rewrite it. KEEP/r2's supplied grader hash
 `81bfae73b21f260ffd4985d701631f53c4ee7cb67e4d1a7ff39a7563598bbc6f` also remains exact.
 
-### One new bounded offline proof
+### Bounded compatibility correction and proof
+
+The leader identified stale FRESH-only expectations at
+`a67911109c3a768b74f068520f2a72338e04001c`. This was static test/YAML mismatch
+evidence, not an observed CI failure. The correction changes only the quoted
+budget predicates in `test_codex_retention_ci_read_result.py`,
+`test_codex_retention_task5_fresh_r2_read.py`, `test_codex_retention_task5_keep_r1.py`,
+`test_codex_retention_task5_keep_r1_read.py`, `test_codex_retention_task5_keep_r2.py`
+and `test_codex_retention_task5_keep_r2_read.py`. The central CI-read test also
+expects exactly `cells[6:8]` and the existing two fixed terminal-revision shell
+cases with their distinct namespaces and unknown-cell refusal. All mode
+exclusions and assertions remain active. The test-only commit changes six files,
+with 30 insertions and 18 deletions; it changes no runtime or data bytes.
+
+The same worktree was clean at tested HEAD
+`1e775e4338046632a4f66f387eb4fccad4b0f699`. No new worktree, duplicate-PR search,
+prerequisite probe, collection probe or CI query was performed. The exact
+token-free invocation was:
+
+```text
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-retention-task5-keep-r2-budget-observation-20261003-2011/batch-runner bash /tmp/retention-budget-compatibility-20261003-2113.x6nLAd/run-proof.sh
+```
+
+The retained launcher ran only this command from `batch-runner`:
+
+```text
+timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_codex_retention_ci_read_result.py::test_retention_result_read_workflow_is_fixed_and_model_free --tb=short
+```
+
+It collected exactly one test and passed in 5.29s, with test/log-capture exits 0
+and no timeout. Python 3.10.12 / pytest 9.1.1 were reported by this invocation.
+The selector reached all 576 mode cases, including spurious nonempty request
+outputs; exact paired predicates and shell cases; unchanged job/permission/
+credential/private-output bounds; current pins before credentials; and fixed
+reader refusals without credentials. It reported `live_effects=0`. Collection-time
+helper imports and existing offline guards remained active. The other five
+corrected test files were not executed; no lifecycle/intake suite, earlier
+new-feature selector or consumed producer/reader/grade proof was rerun.
+
+| Compatibility evidence | SHA256 |
+| --- | --- |
+| `proof.log` | `3b71391b4887693392963a829ac3bae160f594890a08edc6d136ca66b58e0783` |
+| `run-proof.sh` | `a0c120f423e421bc5fa73c5190c9a76c9bfc4b90f54eebf1212b5265fffcf691` |
+| `status.txt` | `efcc32872ebd2ff7620b538ec980fab2614614b8fec099cef21b6db2e4cdf2e7` |
+| Exercised CI-read selector source | `aad3e06627db7a2669ee8baa1a90818e8bf51ecc00f4fd132479ba61e9812dac` |
+
+### Preserved 7.26s new-feature proof
 
 The worktree was clean at tested HEAD `417db02a9433efe312202a4da6535979eeb7deda`.
 The exact token-free invocation was:
@@ -158,6 +211,7 @@ The retained launcher runs this command from `batch-runner`, without a timing wr
 timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_codex_retention_task5_keep_r2_budget.py::test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free --tb=short
 ```
 
+The 7.26s is pytest's duration; outer elapsed time is unavailable.
 It collected exactly one test and passed in 7.26s, with test exit 0,
 log-capture exit 0 and no timeout. Python 3.10.12 / pytest 9.1.1 were reported
 by this invocation; no prerequisite probe was repeated. The original selector,
@@ -181,7 +235,7 @@ The original pilot report remains byte-identical, SHA256
 This local consistency evidence is not authentication of the supplied private
 receipt or a new realized KEEP measurement.
 
-| New local evidence | SHA256 |
+| Original new-feature evidence | SHA256 |
 | --- | --- |
 | `proof.log` | `c5065d19a0a3d042ed98d13cb268a243b3cef582168adcb012b368e93f200254` |
 | `run-proof.sh` | `214f3e09f54b75450edd63db3e418c023523db7be5241effba8bda891f3ae23a` |
@@ -192,10 +246,12 @@ receipt or a new realized KEEP measurement.
 
 ### Current pins and immutable evidence
 
-Only the shared reader hash changes in the observer's separate
-`CURRENT_DEPENDENCIES`. Both workflow shared-reader preflight and CLI pin pairs
-use it. All other current dependency values, including the budget projector,
-remain exact; historical producer/`RESULT`/`PARENT`/`READER` evidence is not repinned.
+In the original paired extension, only the shared reader hash changed in the
+observer's separate `CURRENT_DEPENDENCIES`. Both workflow shared-reader preflight
+and CLI pin pairs use it. The compatibility correction changes none of these
+current hashes. All other current dependency values, including the budget
+projector, remain exact; historical producer/`RESULT`/`PARENT`/`READER` evidence
+is not repinned.
 
 | Current executable | SHA256 |
 | --- | --- |
@@ -286,7 +342,10 @@ transport substitutions, not returned agent verdicts. Those failures stay failur
 
 ### Skills and remaining work
 
-The complete catalog was inspected once. `experiment-design` preserved the
+The complete catalog was inspected once for this correction. Only
+`experiment-report-en` then protected `im-not-ai-en` apply to the changed
+completion passages; no new design, workflow/memo, UI or audit scope was added.
+The original extension's `experiment-design` use preserved the
 measurement/registration boundary only: GPT-5.4 / direct-v1 / xhigh,
 SDK/CLI 0.147.0, mechanical B/no C, one concurrent inference, 10800 cumulative
 seconds from first admission including waits/recovery/downtime without reset,
@@ -294,8 +353,7 @@ and 1800-second native-turn wait, not an all-in attempt ceiling. KEEP/FRESH
 remain guarded within-cell treatments with no fixed admission or automatic
 monetary cap. No design, provider, runtime or budget axis changed.
 
-`experiment-report-en` then protected `im-not-ai-en` apply to changed evidence
-passages. Source/structural/candidate checkpoints, a factual-change ledger,
+Source/structural/candidate checkpoints, a factual-change ledger,
 literal/date/link/hedge reconciliation and reverse-condition review preserve
 the distinction between actual supplied evidence and synthetic proof, original
 terminal-only missingness and later RESULT-only measurement. The protected
@@ -303,8 +361,9 @@ copyedit makes no factual changes. This bounded same-session editorial review
 is not independent source approval. No UI/animation skill, repository audit,
 agent-policy change or memo request was used.
 
-Final independent immutable-HEAD review, applicable same-HEAD CI and delivery
-still precede any separately authorized paired KEEP model-free read. Its budget
+Final independent review of the new immutable HEAD, applicable same-HEAD CI and
+delivery remain leader-owned and still precede any separately authorized paired
+KEEP model-free read. Its budget
 has not been observed and no live-read authority is granted. Only finite
 execution and available accounting are closed, not the whole Project5 card.
 Realized budget/wait/admission/resume and attribution gaps remain. Post-selection,
