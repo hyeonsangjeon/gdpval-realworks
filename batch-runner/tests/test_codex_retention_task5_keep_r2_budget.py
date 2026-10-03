@@ -503,7 +503,7 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
     workflow_contract._assert_retention_mode_routes()
     workflow = yaml.safe_load((ci.ROOT / ci.WORKFLOW).read_bytes())
     jobs, cells = workflow["jobs"], tuple(plan["order"])
-    assert len(workflow_contract._BUDGET_CELLS) == 7 and set(workflow_contract._BUDGET_CELLS) == {cells[1], cells[2], cells[3], *cells[4:8]}
+    assert len(workflow_contract._BUDGET_CELLS) == 8 and set(workflow_contract._BUDGET_CELLS) == set(cells)
     steps = jobs[ci.PREPARE_JOB]["steps"]
     names = ("prepare", "execute", "observe_locator", "read_result", "observe_terminal", "observe_budget")
     for selected, flags in itertools.product((*cells, "unknown"), itertools.product((False, True), repeat=6)):
@@ -513,8 +513,8 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
         reading, terminal, budget = (modes[name] and sum(flags) == 1 for name in ("read_result", "observe_terminal", "observe_budget"))
         for index in (9, 10, 11, 12, 13, 14):
             expected = ((reading and selected in cells[1:]) if index in (9, 10) else
-                        (reading and selected == cells[0]) if index in (11, 12) else
-                        ((terminal and selected in cells[1:]) or (budget and selected in workflow_contract._BUDGET_CELLS)))
+                        ((reading or budget) and selected == cells[0]) if index in (11, 12) else
+                        ((terminal or budget) and selected in cells[1:]))
             assert workflow_contract._boolean(steps[index]["if"], values) is expected
     preflight, step = steps[13:15]
     assert "secrets." not in preflight["run"]

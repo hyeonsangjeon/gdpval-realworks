@@ -64,18 +64,19 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         fresh_reader.FRESH_R1, fresh_reader.FRESH_R2, fresh_reader.KEEP_R2, fresh_reader.TASK5_FRESH_R1,
         fresh_reader.TASK5_KEEP_R1, fresh_reader.TASK5_KEEP_R2, fresh_reader.TASK5_FRESH_R2))
     fresh_condition = " && (" + " || ".join("inputs.cell_id == '" + cell + "'" for cell in fresh_cells) + ")"
-    assert preflight["if"] == read["if"] == read_condition + " && inputs.cell_id == '" + reader.controller.FIRST_CELL_ID + "'"
+    assert preflight["if"] == read["if"] == workflow_observation._first_intake_condition()
     assert fresh_preflight["if"] == fresh_read["if"] == read_condition + fresh_condition
     assert terminal_preflight["if"] == terminal_read["if"] == (
         workflow_observation._terminal_observation_condition() + fresh_condition)
-    assert set(preflight) == {"name", "if", "shell", "run"} and preflight["shell"] == "bash"
-    assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+    assert set(preflight) == {"name", "if", "shell", "run", "env"} and preflight["shell"] == "bash"
+    assert preflight["env"] == {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
+    assert read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}", **preflight["env"]}
     assert set(read) == {"name", "if", "timeout-minutes", "env", "shell", "run"}
     assert read["shell"] == "bash" and read["timeout-minutes"] == 4
-    assert set(fresh_preflight) == set(preflight) and fresh_preflight["shell"] == "bash"
-    assert set(fresh_read) == set(read) and fresh_read["env"] == read["env"]
+    assert set(fresh_preflight) == set(preflight) - {"env"} and fresh_preflight["shell"] == "bash"
+    assert set(fresh_read) == set(read) and fresh_read["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert fresh_read["shell"] == "bash" and fresh_read["timeout-minutes"] == 4
-    assert set(terminal_preflight) == set(preflight) | {"env"} and terminal_preflight["shell"] == "bash"
+    assert set(terminal_preflight) == set(preflight) and terminal_preflight["shell"] == "bash"
     assert terminal_preflight["env"] == {"OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
     assert set(terminal_read) == set(read) and terminal_read["env"] == {
         **read["env"], "OBSERVE_BUDGET_ONLY": "${{ inputs.observe_budget }}"}
@@ -85,7 +86,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         for job in (approve, execute) for step in job["steps"])
     assert all("upload-artifact" not in step.get("uses", "") for job in jobs.values() for step in job["steps"])
 
-    # Eight execution cells, eight result cells, seven terminal cells, seven budget
+    # Eight execution cells, eight result cells, seven terminal cells, eight budget
     # cells and an unsupported selector, with all 64 mode combinations,
     # using the actual YAML and source-gate expressions.
     # Read exclusion must hold even if a request output is spuriously nonempty.
@@ -125,9 +126,9 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
             elif reading:
                 assert reachable == [0, 1, 2, 3, *( (11, 12) if selected == cells[0] else (9, 10))]
                 assert [steps[index].get("env") for index in reachable
-                        if "HF_TOKEN" in steps[index].get("env", {})] == [read["env"]]
+                        if "HF_TOKEN" in steps[index].get("env", {})] == [read["env"] if selected == cells[0] else fresh_read["env"]]
             elif terminal or budget:
-                assert reachable == [0, 1, 2, 3, 13, 14]
+                assert reachable == [0, 1, 2, 3, *((11, 12) if selected == cells[0] else (13, 14))]
                 assert [steps[index].get("env") for index in reachable
                         if "HF_TOKEN" in steps[index].get("env", {})] == [terminal_read["env"]]
             elif prepared or observed or executed:
@@ -152,8 +153,16 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "  '" + module_hash + "  batch-runner/codex_retention_result_intake.py' \\",
         "  '" + verifier_hash + "  batch-runner/codex_retention_ci.py' \\",
         "  | sha256sum --check --status",
-    ]
-    lines = read["run"].splitlines()
+    ] + workflow_observation._first_budget_preflight().splitlines()
+    selection = workflow_observation._first_budget_selection()
+    assert read["run"].splitlines()[2:10] == selection.splitlines()
+    # Prove the ordinary branch remains the exact legacy command and private
+    # output contract after the separately authored budget selection is removed.
+    legacy_script = read["run"].replace(selection, "").replace(
+        "$retention_read_namespace-result.XXXXXXXX", "retention-result.XXXXXXXX").replace(
+        '"${retention_first_command[@]}"', "python3 batch-runner/codex_retention_result_intake.py --read --discover-terminal").replace(
+        '"$retention_reader_sha"', module_hash)
+    lines = legacy_script.splitlines()
     assert lines[:8] == [
         "set -euo pipefail", "umask 077",
         '[[ -d "$RUNNER_TEMP" && ! -L "$RUNNER_TEMP" && -O "$RUNNER_TEMP" ]]',
@@ -173,7 +182,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "fi",
         'exit "$retention_receipt_status"',
     ]
-    command_line = next(line for line in read["run"].replace("\\\n", "").splitlines() if line.startswith("env -u "))
+    command_line = next(line for line in legacy_script.replace("\\\n", "").splitlines() if line.startswith("env -u "))
     command = shlex.split(command_line)
     stripped = ("GITHUB_TOKEN", "GH_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_RUNTIME_TOKEN")
     prefix = ["env", *itertools.chain.from_iterable(("-u", name) for name in stripped),
@@ -216,7 +225,7 @@ def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp
         "  printf '%s\\n' '6f1b78b8956e58b147802921e69d3009fd9ad774fced22037dbd112ecddcd4bd  batch-runner/codex_retention_task5_fresh_r2.py' | sha256sum --check --status",
         "fi",
     ]
-    fresh_script = read["run"].replace("codex_retention_result_intake.py", "codex_retention_fresh_r1_result_intake.py")
+    fresh_script = legacy_script.replace("codex_retention_result_intake.py", "codex_retention_fresh_r1_result_intake.py")
     selection_lines = ['case "$SELECTED_CELL" in']
     for binding in (fresh_reader.FRESH_R1, fresh_reader.FRESH_R2, fresh_reader.KEEP_R2, fresh_reader.TASK5_FRESH_R1,
                     fresh_reader.TASK5_KEEP_R1, fresh_reader.TASK5_KEEP_R2, fresh_reader.TASK5_FRESH_R2):
