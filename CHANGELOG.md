@@ -13,7 +13,72 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add only the legacy first Task4 KEEP/r1 budget facade, ordinal0/repetition1,
+- Consolidate the [retention-budget report](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
+  and its [machine-readable evidence](tasks/codex_budget_pilot/retention_diagnostic_readout.json)
+  after the leader's05:28/05:59 KST supplements. Add only the two successful
+  Task4 KEEP observations at cells[3] and cells[0]; all eight RESULT-only
+  budget points are now verified and consumed, not eight successful tasks.
+  Original fields, historical missingness, six earlier observations and all
+  outcomes/grades/costs remain exact. First-cell exit0, claim hash/size and
+  object/authority digests remain only in its new observation, not backfilled
+  into the historical row. Both KEEP receipts establish no new full intake,
+  delivery, grading readiness, grade or independent provider/input/CAS proof.
+
+  KEEP/r1 observer37151823235/read111287106594, receipt
+  `2026-10-03T20:33:49.6433784Z`, records remaining7912.227738618851,
+  backoff1860.7502946853638,10 native admissions/9 resumes. KEEP/r2
+  observer37146242626/read111270679161, receipt
+  `2026-10-03T19:01:45.8846626Z`, records remaining9564.73209309578,
+  backoff900.3846650123596,6 admissions/5 resumes. Both use10800 cumulative
+  seconds and empty missing fields. Approval/execution were skipped; no live
+  read occurred here. Zero-clamped remaining is not uncapped elapsed, backoff
+  is not all downtime and native counts are not HTTP/model calls.
+
+  One new offline metadata/report selector passed:1 passed in1.61s, test/log
+  exits0, no timeout and zero recorded network/model/writer/child/paid effects.
+  Tested candidate tree`1025cbadd7e96448e071e6d04b9662205df06839` was frozen
+  on base HEAD`8494f7c9602c90a9cc354db8b683e9ab01b14426` before the requested
+  single commit; the base HEAD alone does not contain the tested draft.
+  Proof log SHA256`e9fb8bb7e5a746b7a5c3ab784d4369df0d2f6bded684df841b4f69bee3b76f71`.
+  Report SHA256`8f9ecada7ce17d88700a4fcd759ee72cc74af0651af21fbe53a31d7e2644c400`;
+  JSON SHA256`cda3068a6f46ab8395aac0127e5f2252847e1f6d9af475d3d96068179bd12287`.
+  The check covers all eight points, original evidence/grade/cost preservation,
+  both new observations, four historical canonical scopes, ten frozen source
+  files and report limits. Six coupled old evidence-test sites now distinguish
+  historical snapshots from current documents without dropping assertions or
+  repinning old raw/canonical hashes. No old selector was invoked. Only this
+  changelog and the [latest record](tasks/LATEST_TASK_RESULT/README.md) change
+  after validation; exact command/source/log identities are retained there.
+
+  Accepted PR736 HEAD`fc0c9795864ab73b2a998e8baf7ecffcfd3e522b`, owner
+  review[5402409555](https://github.com/hyeonsangjeon/gdpval-realworks/pull/736#pullrequestreview-5402409555)
+  and all10 checks remain prior acceptance evidence, not review of this report.
+  Its14.34s and earlier proofs, launcher127 and all failed memo streams remain
+  historical and were not repeated. experiment-report-en then protected
+  im-not-ai-en preserved source/structural/candidate checkpoints and completed
+  literal, fidelity and reverse-condition reconciliation without optional
+  restyling. The fresh read-only editorial reviewer failed before findings
+  with `stream disconnected before completion: response.failed event received`;
+  no retry/verdict is claimed, and the completed fallback is explicitly
+  same-session reconciliation, not independent source review or a memo.
+
+  The report answers the original card with the closed30-ID A/B/C pilot versus
+  the separate eight-cell KEEP/FRESH diagnostic, keeping24 epoch04 outcomes
+  (18 graded/6 model-free UNGRADED) separate from6 frozen epoch03 failures and
+  retaining the negative descriptive C-versus-B finding. Original pilot bytes,
+  runtime, workflows, readers, grading, configuration and budget stay unchanged.
+  Diagnostic outcomes remain2 successes/6 null failure grades;164 calls and
+  USD5.206594 remain known partial inference, with grading separate. Five
+  implementation criteria and measurement/tradeoff criteria are mapped to
+  supported/partial/unavailable evidence. Complete retained-field coverage
+  does not establish recovery exposure, all downtime, a complete bill, causal
+  benefit or whole-card completion. Independent immutable-HEAD review,
+  applicable same-HEAD CI and leader acceptance remain; no Project decision,
+  live operation, regrade, replay or30/220-task expansion is authorized.
+  The Sol VM card remains blocked without KVM/image handoff and was not rechecked.
+
+- Prior legacy first-cell extension (accepted PR736; code-only historical scope):
+  add only the legacy first Task4 KEEP/r1 budget facade, ordinal0/repetition1,
   for `3baa0009-5a60-4ae8-ae99-4955cb328ff3_retention_bundle_v1_keep_r1`.
   Exactly eight budget paths are now eligible: this facade and the seven
   unchanged successor profiles. Reuse the existing first-intake workflow step

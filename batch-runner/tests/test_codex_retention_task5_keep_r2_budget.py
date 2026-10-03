@@ -29,6 +29,7 @@ from . import test_codex_retention_ci_observation as workflow_contract
 from . import test_codex_retention_fresh_r1_result_intake as fixtures
 from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
 from .test_codex_retention_result_intake import PRIVATE
+from .retention_budget_report_evidence import before_success_budget_observations, assert_consolidated_report
 
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
@@ -119,9 +120,9 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
     assert reader.TASK5_KEEP_R1.materialized_grader_source_sha256 is None
     assert row["current_budget_observation"]["mode"] == "observe_budget"
 
-    # All six later leader-supplied receipts are separate from the original rows.
-    # Removing only those fields must reproduce the canonical historical JSON.
-    prior = deepcopy(readout)
+    # Check the two successful additions separately, then preserve the original
+    # six-observation stripping and its immutable historical canonical hash.
+    prior = before_success_budget_observations(readout)
     for index in (1, 2, 4, 5, 6):
         prior["cells"][index].pop("current_budget_observation")
     actual = prior["cells"][7].pop("current_budget_observation")
@@ -154,8 +155,7 @@ def test_paired_task5_keep_r2_budget_is_fixed_private_and_model_free(tmp_path, m
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/REPORT.md").read_bytes()).hexdigest() == (
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
-    assert "Both r2 budget observations are consumed" in report
-    assert "Both successful Task4 KEEP budgets remain unobserved" in " ".join(report.split())
+    assert_consolidated_report(report, readout)
     for value in actual["inference_budget_snapshot"].values():
         if type(value) in (int, float):
             assert str(value) in report

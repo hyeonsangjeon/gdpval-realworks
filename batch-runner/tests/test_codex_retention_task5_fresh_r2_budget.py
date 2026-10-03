@@ -28,6 +28,7 @@ from . import test_codex_retention_ci_observation as workflow_contract
 from . import test_codex_retention_fresh_r1_result_intake as fixtures
 from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
 from .test_codex_retention_result_intake import PRIVATE
+from .retention_budget_report_evidence import before_success_budget_observations
 
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
@@ -85,8 +86,8 @@ def test_final_task5_budget_observation_is_fixed_private_and_model_free(tmp_path
     fixed = deepcopy(reader.TASK5_FRESH_R2_BUDGET_CONTROLS)
     readout = json.loads((ci.ROOT / "tasks/codex_budget_pilot/retention_diagnostic_readout.json").read_bytes())
     row = readout["cells"][7]
-    prior = deepcopy(readout)
-    # Remove the six explicitly added later observations, not historical data.
+    prior = before_success_budget_observations(readout)
+    # Then remove the six earlier additions for this original historical scope.
     for index in (1, 2, 4, 5, 6, 7):
         prior["cells"][index].pop("current_budget_observation")
     canonical = (json.dumps(prior, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()

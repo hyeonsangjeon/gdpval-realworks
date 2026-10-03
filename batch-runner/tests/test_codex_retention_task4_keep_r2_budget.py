@@ -36,6 +36,7 @@ from .test_codex_retention_task5_fresh_r1_read import _task5_fixture, TASK5_FILE
 from .test_codex_retention_task5_r1_budget import _assert_task5_r1_observations
 from .test_codex_retention_task4_fresh_budget import _assert_task4_fresh_observations
 from .test_codex_retention_result_intake import FILE, PRIVATE
+from .retention_budget_report_evidence import before_success_budget_observations, assert_consolidated_report
 
 ci, retained, output, owned, intake = reader.ci, reader.retained, reader.output, reader.owned, reader.intake
 
@@ -154,11 +155,12 @@ def test_task4_keep_r2_success_budget_is_fixed_private_and_model_free(tmp_path, 
     assert (historical_grade["score"], historical_grade["included_max"], historical_grade["included_percent"],
             historical_grade["full_percent"]) == ("30.35", "45", "67.44", "54.20")
     assert readout["cells"][3]["read"]["successful_intake_established"] is True
-    assert "current_budget_observation" not in readout["cells"][3]
+    prior = before_success_budget_observations(readout)
+    assert "current_budget_observation" not in prior["cells"][3]
     assert hashlib.sha256((ci.ROOT / "tasks/codex_budget_pilot/REPORT.md").read_bytes()).hexdigest() == (
         "88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e")
     report = (ci.ROOT / "tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md").read_text()
-    assert "Both successful Task4 KEEP budgets remain unobserved" in " ".join(report.split())
+    assert_consolidated_report(report, readout)
     for index in (1, 2, 4, 5, 6, 7):
         actual = readout["cells"][index]["current_budget_observation"]
         for value in actual["inference_budget_snapshot"].values():
@@ -642,4 +644,4 @@ def test_task4_keep_r2_success_budget_is_fixed_private_and_model_free(tmp_path, 
             "six_failed_budget_paths_unchanged": True, "missing_null_zero_preserved": True,
             "private_marker_readback_no_replay": True, "current_historical_pins_separate": True,
             "two_actual_task4_fresh_observations_separate": True, "prior_json_grade_and_pilot_unchanged": True,
-            "successful_task4_keep_budgets_unobserved": True, "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))
+            "successful_task4_keep_result_only_observations_preserved": True, "network_model_writer_child_paid_effects": len(effects)}, sort_keys=True))
