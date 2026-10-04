@@ -85,6 +85,52 @@ entries land under a fresh dated heading the day they merge to `main`.
   after the new proof. Final corrected-HEAD review, applicable CI and leader
   acceptance remain on HOLD; no launch or workflow-change authority is granted.
 
+  Repair the shared CURRENT-observer compatibility boundary without changing
+  historical paid/source evidence. Only the current disposable-checkout binding
+  in `codex_retention_grade_readout.py` and its directly coupled current-checkout
+  assertions change; the native-resume and shared synthetic-originals expectations
+  now retain all three local-helper refusals in manifest order. Historical
+  `RESULT/PARENT/READER`, paid source checks, registrations, fixed-evidence digests,
+  the baseline pin-set, template closure, input identities and consumed outcomes
+  are unchanged. Unknown current-source changes still refuse before private effects;
+  current reader compatibility does not authorize paid replay.
+
+  The leader read generic pytest run37234180917/job111529908938 at unchanged
+  source-reviewed `133e0bd86feaf1acd3d190b5d36c319ad572612f`: 23 failed,
+  13366 passed, 64 skipped, 46 deselected and 1 warning in 1650.26s, within the
+  45-minute ceiling. Its job interval was 20:58:43Z–21:28:33Z; all other applicable
+  checks passed and deploy was skipped. This does not explain the earlier
+  cancellation. The CI split is deferred; workflows, ceilings and selectors
+  remain unchanged. No CI log was fetched or job polled for this repair.
+
+  Targeted coverage uses two separate invocations at unchanged correction HEAD
+  `c19e08d5c77b07e249fa1c4a10ec0ca4db88905a`, tree
+  `f34bc5937873fa46497ed2f5113a28905c99144a`. The first 24-node invocation hit
+  its 300-second bound, exit 124, with no final pytest summary. Command SHA256 is
+  `7ae37f9b86784f0af431d0a22956ab7a781ce66ced9706cc88510f187aca5f7a`, log SHA256
+  is `d8be33407a61f692cfff837438fad6d533b0944e643b61144d308e7bc71bf00b`, and
+  receipt SHA256 is
+  `2e43e9c0209f9c6d667826ec1a9e29fcc351c0699325077fe7215a1fd6c7fed2`.
+  Its exact command order and module dots establish ten completed nodes, not
+  a passed total inferred from progress. The interrupted node was uncompleted,
+  not failed or passed; the original evidence remains unchanged and INCOMPLETE.
+
+  The separately authorized 600-second continuation ran only the 14 remaining
+  nodes with verbose output: 14 passed in 257.93s, exit 0. Both invocations kept
+  the 5-second termination grace. Continuation command SHA256 is
+  `6c455dbd3a3eaec737adf1cc746d170b682b29fcc01f507b50d082418a82476b`, log SHA256
+  is `a941f1464d6fc441be463cd6a5f8a413317e8407b0d8789f1b8ee49a53aa503b`, and
+  continuation/reconciliation receipt SHA256 is
+  `048eceb68591ddb3d01265c64d22c2d9a75f70170a5eeb9a05686a14ed18fe59`.
+  The completion record retains the exact node sets and continuation command.
+  The sets are disjoint and cover exactly the original 24 selected IDs; there
+  is no combined pytest summary. These are offline synthetic regressions, not
+  real input, observation, grading or inference runs. The bounds are not CI or
+  experiment budgets. The 60-case, 2-case and 5-case proofs above remain distinct
+  and were not rerun. Only this entry and the single current task record change
+  after the proof. Corrected final-HEAD owner review, applicable CI and leader
+  acceptance remain on HOLD; all launch/auth/dispatcher/native-cap gates remain.
+
 ### Fixed
 
 - Separate local original-input bundle registration from runnable comparison
