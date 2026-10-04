@@ -13,6 +13,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record the leader-verified Project5 comparison-card repair. The original
+  body contained136778 characters/261398 UTF-8 bytes, above GitHub's65536-character
+  write limit. The leader retained the original UTF-8 body in a private mode0600
+  archive plus a separate private JSON snapshot outside the repository.
+  Original-body/text-backup SHA256 is
+  `09219eef7e1d28992aed7618d8db840a8e9b265d07dc00d491979af596605ec1`.
+  Only the editable body was replaced with a3319-character operational index;
+  new-body/readback SHA256 is
+  `db7a8ae79f857003053927b0b2213531a7fb7ab8c3ef0ea6680d1dcb368ddbee`.
+  The leader confirmed exact returned bytes and unchanged title under
+  hyeonsangjeon. No raw archive was published or inspected by this task, and
+  the index does not fully reproduce the privately preserved history.
+
+  Status remains `blocked/차단됨`. NAS's required reviewer ended `response.failed`
+  before a decision; the separate leader-side request could not start with its
+  unavailable Claude Opus4.7 display-name preset. The repository reviewer
+  charter has no model pin; no common root cause, valid review or waiver is
+  established. Reviewer-route, input-intake, command-dispatch and native-cap
+  requirements remain open. The20-observation comparison stays unexecuted and
+  launch-blocked; the separate30-cell pilot and8-cell retention study remain
+  finished and consumed. This is not a budget-approval request or card completion.
+  Only the two records change. Literal/unit and whitespace checks passed; the
+  LATEST candidate passed fidelity, while the full-CHANGELOG fidelity scan
+  failed at its safe complexity limit with exit3 and was not retried. The new
+  entry received manual review; no runtime test or reviewer retry occurred.
+  The [completion record](tasks/LATEST_TASK_RESULT/README.md)
+  preserves exact provenance, privacy limits and remaining review/CI gates.
+
 - Clarify the retention report's error/retry criterion by distinguishing the
   accepted core/runner taxonomy, the unchanged `rate_limited`/`turn_start_failed`
   recovery allowlist and optional offline-derived `output_limit_exceeded`.
