@@ -678,7 +678,8 @@ def _record(
 
 
 def observe_stream(
-    events: Iterable[Any], *, turn_id: str
+    events: Iterable[Any], *, turn_id: str,
+    on_usage: Callable[[Any], None] | None = None,
 ) -> tuple[dict[str, Any], Any, Any]:
     """Consume a turn's notifications, keeping what the SDK throws away.
 
@@ -686,6 +687,9 @@ def observe_stream(
     triple of the ``ThreadTokenUsage``, the thread settings and the agent
     messages seen going past. Nothing is raised on a failed turn: the failure
     *is* the result here.
+
+    The optional callback retains each matching usage update even if the
+    iterator later blocks or raises; the synchronous return contract is unchanged.
 
     The agent messages are returned rather than folded into the summary because
     the summary is published in the artifact and their text is the model's
@@ -727,6 +731,8 @@ def observe_stream(
             if getattr(payload, "turn_id", None) == turn_id:
                 usage = getattr(payload, "token_usage", None)
                 usage_updates += 1
+                if on_usage is not None:
+                    on_usage(usage)
             continue
         if isinstance(payload, ThreadSettingsUpdatedNotification):
             thread_settings = getattr(payload, "thread_settings", None)
@@ -794,14 +800,22 @@ def _observe_native_stream(handle: Any, timeout: float) -> tuple[Any, dict[str, 
     """
     state: dict[str, Any] = {
         "result": None, "failure": None, "close_failed": False, "finished_at": None,
+        "usage": None,
     }
     deadline = monotonic() + timeout
+
+    def retain_usage(usage: Any) -> None:
+        # Publish a new projection, never a mutable SDK object or an in-place
+        # update. A receipt can snapshot it even if cleanup cannot stop the worker.
+        state["usage"] = _usage_record(usage)
 
     def consume() -> None:
         stream = None
         try:
             stream = handle.stream()
-            state["result"] = observe_stream(stream, turn_id=handle.id)
+            state["result"] = observe_stream(
+                stream, turn_id=handle.id, on_usage=retain_usage,
+            )
         except Exception as exc:  # noqa: BLE001 - reported through the redactor
             state["failure"] = exc
         finally:
@@ -1080,6 +1094,13 @@ def probe(
         )
         if not cleaned and record is None:
             raise RuntimeError("native session cleanup failed") from None
+    if stream_state is not None:
+        # Keep the latest received usage through the existing cleanup bound,
+        # including failure returns built before cleanup. Later worker updates
+        # replace the state slot and cannot mutate this receipt's snapshot.
+        observed["usage"] = stream_state["usage"]
+        if record is not None:
+            record["observed"]["usage"] = observed["usage"]
     if not cleaned:
         observed["error"] = {
             "stage": "cleanup",

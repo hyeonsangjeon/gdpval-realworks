@@ -2405,6 +2405,8 @@ def test_native_only_evidence_still_runs_the_real_redaction_check(tmp_path, unsa
     "stalled", "cumulative_events", "interrupt_failure", "interrupt_stalled",
     "close_failure", "close_stalled", "stream_close_failure",
     "stream_close_stalled", "workspace_cleanup_failure",
+    "no_usage_stalled", "unrelated_usage_stalled", "latest_usage_stalled",
+    "zero_usage_stalled", "usage_during_cleanup", "usage_after_cleanup_grace",
 ])
 def test_native_stream_deadline_and_cleanup_are_bounded(
     case, monkeypatch, capsys, tmp_path,
@@ -2456,7 +2458,11 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
     ):
         monkeypatch.setattr(module, name, forbidden("legacy_probe"))
 
-    stalled = case in {"stalled", "interrupt_failure", "interrupt_stalled"}
+    stalled = case in {
+        "stalled", "interrupt_failure", "interrupt_stalled", "no_usage_stalled",
+        "unrelated_usage_stalled", "latest_usage_stalled", "zero_usage_stalled",
+        "usage_during_cleanup", "usage_after_cleanup_grace",
+    }
     timeout = 0.03 if stalled or case == "stream_close_stalled" else 120
     grace = 0.08
     monkeypatch.setattr(module, "DEFAULT_TIMEOUT_SECONDS", timeout)
@@ -2499,6 +2505,28 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
             reasoning_output_tokens=1, total_tokens=14,
         ),
     )
+    latest_usage = ThreadTokenUsage(
+        total=TokenUsageBreakdown(
+            input_tokens=61, cached_input_tokens=5, output_tokens=13,
+            reasoning_output_tokens=4, total_tokens=74,
+        ),
+        last=TokenUsageBreakdown(
+            input_tokens=19, cached_input_tokens=1, output_tokens=5,
+            reasoning_output_tokens=2, total_tokens=24,
+        ),
+    )
+    zero_usage = ThreadTokenUsage(**{
+        name: TokenUsageBreakdown(
+            input_tokens=0, cached_input_tokens=0, output_tokens=0,
+            reasoning_output_tokens=0, total_tokens=0,
+        ) for name in ("total", "last")
+    })
+
+    def usage_event(value, turn_id="turn-1"):
+        return _event(ThreadTokenUsageUpdatedNotification(
+            thread_id="thread-1", turn_id=turn_id, token_usage=value,
+        ), method="thread/tokenUsage/updated")
+
     completed = _turn([_agent_message("CONNECTED")])
     if case == "failed_turn":
         completed = _turn([], status="failed")
@@ -2509,15 +2537,23 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
             self.events = self.notifications()
 
         def notifications(self):
-            yield _event(ThreadTokenUsageUpdatedNotification(
-                thread_id="thread-1", turn_id="turn-1", token_usage=usage,
-            ), method="thread/tokenUsage/updated")
+            if case == "unrelated_usage_stalled":
+                yield usage_event(usage, turn_id="turn-other")
+            elif case != "no_usage_stalled":
+                yield usage_event(usage)
+            if case in {"latest_usage_stalled", "zero_usage_stalled"}:
+                yield usage_event(latest_usage if case == "latest_usage_stalled" else zero_usage)
             if case == "cumulative_events":
                 for _ in range(3):
                     clock[0] += 60  # Each gap <120; the combined180 is >120.
                     yield _event(None, method="synthetic/progress")
             if stalled:
                 assert stream_release.wait(0.75), "fake stream was not cancelled/closed"
+                if case in {"usage_during_cleanup", "usage_after_cleanup_grace"}:
+                    yield usage_event(latest_usage)
+                    yield _event(TurnCompletedNotification(
+                        thread_id="thread-1", turn=completed,
+                    ), method="turn/completed")
                 return
             if case == "no_completion":
                 return
@@ -2557,12 +2593,14 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
                 raise RuntimeError(private_error)
             if case == "interrupt_stalled":
                 assert interrupt_release.wait(0.75), "stuck interrupt prevented close"
-            stream_release.set()
+            if case != "usage_after_cleanup_grace":
+                stream_release.set()
 
     class NativeRuntime:
         def close(self):
             counts["runtime_close"] += 1
-            stream_release.set()
+            if case != "usage_after_cleanup_grace":
+                stream_release.set()
             stream_close_release.set()
             interrupt_release.set()
             if case == "close_stalled":
@@ -2601,6 +2639,16 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
             raise RuntimeError(private_error)
 
     monkeypatch.setattr(runner_module.CodexWorkspace, "cleanup", cleanup_workspace)
+    probe_records = []
+    original_probe = module.probe
+
+    def capture_probe(*args, **kwargs):
+        result = original_probe(*args, **kwargs)
+        probe_records.append(result)
+        return result
+
+    monkeypatch.setattr(module, "probe", capture_probe)
+    returned_snapshot = None
     out = tmp_path / "native-deadline.json"
     try:
         code, record = _run(
@@ -2609,6 +2657,8 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
         )
         written = out.read_text(encoding="utf-8")
         assert json.loads(written) == record
+        assert probe_records == [record]
+        returned_snapshot = json.dumps(probe_records[0], sort_keys=True)
         assert not capsys.readouterr().err
         assert record["schema"] == "codex_foundry_connection/3"
         assert record["settings"] == describe_settings(_settings())
@@ -2620,7 +2670,8 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
         assert record["not_established"] == list(NOT_ESTABLISHED_BY_A_TEXT_TURN)
         assert fake.timeout == timeout
         assert counts["open"] == counts["thread"] == counts["turn"] == counts["stream"] == 1
-        assert counts["runtime_close"] == counts["stream_close"] == 1
+        assert counts["runtime_close"] == 1
+        assert counts["stream_close"] == int(case != "usage_after_cleanup_grace")
         assert counts["interrupt"] == int(stalled or case == "stream_close_stalled")
         assert all(worker.daemon for worker in workers)
         stream_joins = [bound for name, bound in joins if name == "foundry-native-stream"]
@@ -2629,11 +2680,14 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
         assert 0 <= stream_joins[1] <= grace
         assert all(bound <= grace for name, bound in joins if name != "foundry-native-stream")
         assert counts["workspace_cleanup"] == int(case != "close_stalled")
-        assert all(not worker.is_alive() for worker in workers) is (case != "close_stalled")
+        assert all(not worker.is_alive() for worker in workers) is (
+            case not in {"close_stalled", "usage_after_cleanup_grace"}
+        )
 
         cleanup_failure = case in {
             "interrupt_failure", "close_failure", "close_stalled",
             "stream_close_failure", "workspace_cleanup_failure",
+            "usage_after_cleanup_grace",
         }
         expected_verdict = (
             VERDICT_UNCLASSIFIED_FAILURE if cleanup_failure or case == "stream_failure"
@@ -2649,6 +2703,23 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
         assert observed["thread_started"] is observed["turn_sent"] is True
         assert observed["served_model"] is None
         assert observed["tool_execution_observed"] is False
+        expected_usage = (
+            None if case in {"no_usage_stalled", "unrelated_usage_stalled"}
+            else latest_usage if case in {"latest_usage_stalled", "usage_during_cleanup"}
+            else zero_usage if case == "zero_usage_stalled"
+            else usage
+        )
+        assert observed["usage"] == module._usage_record(expected_usage)
+        if expected_usage is not None:
+            # These are two observed counters, not a sum, difference or price.
+            assert (
+                observed["usage"]["thread_total"]["input_tokens"],
+                observed["usage"]["most_recent_request"]["input_tokens"],
+            ) == (
+                (61, 19) if case in {"latest_usage_stalled", "usage_during_cleanup"}
+                else (0, 0) if case == "zero_usage_stalled"
+                else (37, 11)
+            )
         if case == "completed":
             expected_observed = _empty_observation()
             expected_observed.update({
@@ -2670,21 +2741,31 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
             )
             assert observed["usage"]["thread_total"]["input_tokens"] == 37
             assert observed["usage"]["most_recent_request"]["input_tokens"] == 11
+            # The default synchronous parser still returns the same triple.
+            assert module.observe_stream([
+                usage_event(usage),
+                _event(TurnCompletedNotification(thread_id="thread-1", turn=completed),
+                       method="turn/completed"),
+            ], turn_id="turn-1") == (
+                expected_observed["streaming"], completed, (usage, None, []),
+            )
         if cleanup_failure:
             assert observed["error"] == {
                 "stage": "cleanup",
                 "message": "native session cleanup failed or exceeded its grace period",
             }
             assert "cleanup was not established" in record["note"]
-        if case in {"stalled", "cumulative_events", "interrupt_stalled", "stream_close_stalled"}:
+        if (stalled or case in {"cumulative_events", "stream_close_stalled"}) and not cleanup_failure:
             assert observed["error"]["stage"] == "turn"
             assert "cumulative timeout" in observed["error"]["message"]
-            assert observed["usage"] is None  # Unknown, never a guessed zero or price.
             assert observed["final_response_present"] is False
         if case == "cumulative_events":
             assert counts["events"] == 5 and clock[0] == 1180
             assert observed["turn_status"] is None  # Late completion cannot become success.
-        if case == "interrupt_failure":
+        if case in {"usage_during_cleanup", "usage_after_cleanup_grace"}:
+            assert observed["turn_status"] is None
+            assert observed["final_response_present"] is False
+        if case in {"interrupt_failure", "usage_after_cleanup_grace"}:
             assert "native stream deadline expired" in record["note"]
         if case == "stream_failure":
             assert "<url redacted>" in observed["error"]["message"]
@@ -2694,6 +2775,7 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
         assert not any(effects.values()), effects
         print(f"native-deadline case={case} verdict={expected_verdict} exit={code} "
               f"fake_turns=1 cleanup_boundary={observed['error']['stage'] if cleanup_failure else 'returned'} "
+              f"usage={'missing' if observed['usage'] is None else 'retained'} "
               "live_effects=0")
     finally:
         for release in (stream_release, interrupt_release, stream_close_release, close_release):
@@ -2702,5 +2784,11 @@ def test_native_stream_deadline_and_cleanup_are_bounded(
             threading.Thread.join(worker, 0.8)
         assert all(not worker.is_alive() for worker in workers), "fake worker survived teardown"
         assert counts["workspace_cleanup"] == 1
+        assert counts["stream_close"] == 1
         assert all(not workspace.root.exists() for workspace in fake.workspaces)
+        if returned_snapshot is not None:
+            # Even a worker that finishes after failed cleanup cannot mutate
+            # the returned receipt or revive its late completion as connected.
+            assert json.dumps(probe_records[0], sort_keys=True) == returned_snapshot
+            assert out.read_text(encoding="utf-8") == written
         assert not any(effects.values()), effects
