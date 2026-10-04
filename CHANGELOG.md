@@ -11,6 +11,26 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a separately named prospective source profile for local GPT-5.4 comparison
+  preparation. The three existing preparation helpers forward an explicit
+  manifest path and bind it to the caller-reviewed commit's tracked bytes and
+  existing bundle markers. The historical manifest and compiler, configuration,
+  ABBA20, input identities, runtime/workflow selection and launch refusals remain
+  unchanged. Only the new profile binds the reviewed runtime sources, changed
+  local helpers and recomputed full grader template closure.
+
+  One offline selector passed 60 tests, with 47 deselected, in 40.70s, exit 0,
+  at HEAD `ad584b2d07143e27ea9af6e8c54abf6e6754a70f`, tree
+  `631099a87abeddd7547420e8f0d74a0c80288169`. Log SHA256 is
+  `22bc7eab4d1e11ad8bdeb5e5450a1bb16e8a20fc9e650e815b838f53077e6b0b`.
+  Current-source compilation is genuine; input/publication cases use synthetic
+  fixtures. No private original was reopened, imported or prepared. The
+  [completion record](tasks/LATEST_TASK_RESULT/README.md) preserves the exact
+  command, source-review basis and remaining review/CI, separate real-preparation,
+  credentialed-CI, dispatcher, native-cap and launch requirements.
+
 ### Fixed
 
 - Separate local original-input bundle registration from runnable comparison
