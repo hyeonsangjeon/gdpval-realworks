@@ -23,7 +23,7 @@ from gpt54_comparison_preflight import (
 )
 from gpt54_prepared_input_attestation import _SourceSnapshot, _identity, _json_object, _same, _source_snapshot
 from gpt54_run_config_bundle import (
-    MANIFEST_PATH, READY_PATH as CONFIG_READY_PATH, _held_parents, _path, _root,
+    MANIFEST_PATH, READY_PATH as CONFIG_READY_PATH, _held_parents, _manifest_file, _path, _root,
     verify_run_config_bundle,
 )
 from gpt54_v2_grading_input import _read_bytes
@@ -38,13 +38,15 @@ class RunInputBundleRefused(ValueError):
     """The local inputs cannot be published or used as a comparison bundle."""
 
 
-def _configuration(root: Path, run_id: str, condition: str) -> tuple[
+def _configuration(root: Path, run_id: str, condition: str, manifest_path: str = MANIFEST_PATH) -> tuple[
     ComparisonGradingPlan, ComparisonRunSpec, dict[str, Any], dict[str, Any],
 ]:
-    config = verify_run_config_bundle(checkout=root, run_id=run_id, condition=condition)
+    config = verify_run_config_bundle(
+        checkout=root, run_id=run_id, condition=condition, manifest_path=manifest_path,
+    )
     identity = _identity(_canonical_json(config).encode("utf-8"))
     _read_bytes(root / CONFIG_READY_PATH, **identity)
-    manifest = yaml.safe_load(_read_bytes(root / MANIFEST_PATH))
+    manifest = yaml.safe_load(_read_bytes(_manifest_file(root, manifest_path)))
     plan = compile_grading_plan(manifest)
     run = next(run for run in plan.dispatch.runs if run.run_id == run_id)
     _same("input bundle condition", condition, run.condition)
@@ -211,6 +213,7 @@ def materialize_run_input_bundle(
     dispatch_run: ComparisonRunSpec, *, manifest: dict[str, Any], combined_plan: dict[str, Any],
     checkout: Path, dataset_parquet: Path, reference_root: Path,
     step0_manifest: Path | None = None,
+    manifest_path: str = MANIFEST_PATH,
 ) -> dict[str, Any]:
     """Install exact local inputs, including Codex's full canonical Step 0 manifest.
 
@@ -222,6 +225,7 @@ def materialize_run_input_bundle(
             reference tree. They must not overlap the destination input tree.
         step0_manifest: Explicit local canonical manifest required for Codex;
             absent for V2. No bootstrap, download or manifest generation occurs.
+        manifest_path: The explicit source role already sealed by the config bundle.
 
     Returns:
         The canonical input-ready document, containing local identities only.
@@ -237,7 +241,9 @@ def materialize_run_input_bundle(
         if type(dispatch_run) is not ComparisonRunSpec:
             raise RunInputBundleRefused("an exact typed dispatch recipe is required")
         manifest = json.loads(_canonical_json(manifest))
-        plan, run, actual_manifest, config = _configuration(root, dispatch_run.run_id, dispatch_run.condition)
+        plan, run, actual_manifest, config = _configuration(
+            root, dispatch_run.run_id, dispatch_run.condition, manifest_path,
+        )
         _same("dispatch recipe", dispatch_run.as_dict(), run.as_dict())
         _same("input manifest", manifest, actual_manifest)
         _same("input combined plan", combined_plan, plan.as_dict())
@@ -259,7 +265,7 @@ def materialize_run_input_bundle(
             _same("source snapshot before publication", _marker(
                 plan, run, _source_snapshot(plan, parquet, references), config, _step0_bytes(step0, snapshot),
             ), marker)
-            _same("config before input publication", _configuration(root, run.run_id, run.condition)[3], config)
+            _same("config before input publication", _configuration(root, run.run_id, run.condition, manifest_path)[3], config)
             _absent(root, run)
             check_source()
             check()
@@ -290,7 +296,7 @@ def materialize_run_input_bundle(
             _same("source snapshot after publication", _marker(
                 plan, run, _source_snapshot(plan, parquet, references), config, _step0_bytes(step0, snapshot),
             ), marker)
-            _same("config after input publication", _configuration(root, run.run_id, run.condition)[3], config)
+            _same("config after input publication", _configuration(root, run.run_id, run.condition, manifest_path)[3], config)
             _read_bytes(root / RESERVATION_PATH, **_identity(_reservation(marker_data)))
             check_source()
             check()
@@ -302,11 +308,13 @@ def materialize_run_input_bundle(
         raise RunInputBundleRefused("run input bundle publication refused") from error
 
 
-def verify_run_input_bundle(*, checkout: Path, run_id: str, condition: str) -> dict[str, Any]:
+def verify_run_input_bundle(
+    *, checkout: Path, run_id: str, condition: str, manifest_path: str = MANIFEST_PATH,
+) -> dict[str, Any]:
     """Require both ready markers and exact installed inputs before construction."""
     try:
         root = _root(checkout)
-        plan, run, _, config = _configuration(root, run_id, condition)
+        plan, run, _, config = _configuration(root, run_id, condition, manifest_path)
         snapshot = _installed_snapshot(root, plan)
         step0 = root / STEP0_MANIFEST_PATH if run.condition == "codex" else None
         marker = _marker(plan, run, snapshot, config, _step0_bytes(step0, snapshot))
@@ -322,7 +330,7 @@ def verify_run_input_bundle(*, checkout: Path, run_id: str, condition: str) -> d
             _same("input snapshot during verification", _marker(
                 plan, run, current, config, _step0_bytes(step0, current),
             ), marker)
-            _same("config during input verification", _configuration(root, run_id, condition)[3], config)
+            _same("config during input verification", _configuration(root, run_id, condition, manifest_path)[3], config)
             check()
             return marker
     except RunInputBundleRefused:

@@ -55,6 +55,15 @@ def _path(root: Path, role: str) -> Path:
     return root / role
 
 
+def _manifest_file(root: Path, manifest_path: str = MANIFEST_PATH) -> Path:
+    """Select an explicit source role; never resolve an external manifest URL."""
+    path = _path(root, manifest_path)
+    if path.parent != root / ENVELOPE or path.suffix != ".yaml":
+        raise RunConfigBundleRefused("manifest must be a repository-relative execution_envelope YAML file")
+    _assert_no_symlink_ancestors(path)
+    return path
+
+
 @contextmanager
 def _held_parents(root: Path, roles: tuple[str, ...]) -> Iterator[Callable[[], None]]:
     """Hold existing parent directories; refuse replacement before publication."""
@@ -109,16 +118,18 @@ def _files(plan: ComparisonGradingPlan, run_id: str) -> dict[str, bytes]:
     }
 
 
-def _sources(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+def _sources(
+    root: Path, manifest: dict[str, Any], manifest_path: str = MANIFEST_PATH,
+) -> dict[str, Any]:
     """Check the target's pinned bytes, not only the compiler's own checkout."""
-    manifest_data = _read_bytes(_path(root, MANIFEST_PATH))
+    manifest_data = _read_bytes(_manifest_file(root, manifest_path))
     _same("checkout manifest", yaml.safe_load(manifest_data), manifest)
     source_files = {
         name: _identity(_read_bytes(_path(root, name), sha256=digest))
         for name, digest in sorted(manifest["source_pins"].items())
     }
     return {
-        "manifest_file": {"path": MANIFEST_PATH, **_identity(manifest_data)},
+        "manifest_file": {"path": manifest_path, **_identity(manifest_data)},
         "source_files": source_files,
     }
 
@@ -166,6 +177,7 @@ def _check_members(root: Path, plan: ComparisonGradingPlan, files: dict[str, byt
 def materialize_run_config_bundle(
     dispatch_run: ComparisonRunSpec, grading_run: ComparisonGradingRunSpec, *,
     manifest: dict[str, Any], combined_plan: dict[str, Any], checkout: Path,
+    manifest_path: str = MANIFEST_PATH,
 ) -> dict[str, Any]:
     """Publish four exact files and the final marker, or refuse without overwrite.
 
@@ -173,6 +185,7 @@ def materialize_run_config_bundle(
         checkout: An existing disposable source tree with all parent directories.
         dispatch_run, grading_run: The matching typed compiler recipes.
         manifest, combined_plan: The exact preregistration and combined document.
+        manifest_path: Explicit tracked source role; defaults to the historical profile.
 
     Returns:
         The canonical ready document. It contains linkage, not an attestation or
@@ -192,7 +205,7 @@ def materialize_run_config_bundle(
         files = _files(plan, dispatch_run.run_id)
         roles = tuple(files) + (READY_PATH,)
         with _held_parents(root, roles) as check_parents:
-            sources = _sources(root, manifest)
+            sources = _sources(root, manifest, manifest_path)
             reserved = set(roles) | {run.experiment_config_path for run in plan.runs}
             if any(os.path.lexists(_path(root, name)) for name in reserved):
                 raise RunConfigBundleRefused("bundle target already exists; partial trees cannot be reused")
@@ -203,7 +216,7 @@ def materialize_run_config_bundle(
                 _write_no_clobber(_path(root, name), data)
             check_parents()
             _check_members(root, plan, files)
-            _same("checkout sources after publication", _sources(root, manifest), sources)
+            _same("checkout sources after publication", _sources(root, manifest, manifest_path), sources)
             check_parents()
             # The only completion signal is last. No in-place cleanup, adoption,
             # replace fallback, source edit or fallible verification follows it.
@@ -215,7 +228,9 @@ def materialize_run_config_bundle(
         raise RunConfigBundleRefused("run config bundle publication refused") from error
 
 
-def verify_run_config_bundle(*, checkout: Path, run_id: str, condition: str) -> dict[str, Any]:
+def verify_run_config_bundle(
+    *, checkout: Path, run_id: str, condition: str, manifest_path: str = MANIFEST_PATH,
+) -> dict[str, Any]:
     """Recompile and check marker and every byte before a comparison capture.
 
     This is read-only. A forged marker with hashes matching altered files is not
@@ -223,19 +238,19 @@ def verify_run_config_bundle(*, checkout: Path, run_id: str, condition: str) -> 
     """
     try:
         root = _root(checkout)
-        manifest = yaml.safe_load(_read_bytes(root / MANIFEST_PATH))
+        manifest = yaml.safe_load(_read_bytes(_manifest_file(root, manifest_path)))
         plan = compile_grading_plan(manifest)
         run = next(run for run in plan.dispatch.runs if run.run_id == run_id)
         _same("bundle condition", condition, run.condition)
         files = _files(plan, run.run_id)
         with _held_parents(root, tuple(files) + (READY_PATH,)) as check_parents:
-            sources = _sources(root, manifest)
+            sources = _sources(root, manifest, manifest_path)
             marker = _marker(plan, run.run_id, files, sources)
             expected = _canonical_json(marker).encode("utf-8")
             if _read_bytes(root / READY_PATH, **_identity(expected)) != expected:
                 raise RunConfigBundleRefused("ready marker bytes mismatch")
             _check_members(root, plan, files)
-            _same("checkout sources during verification", _sources(root, manifest), sources)
+            _same("checkout sources during verification", _sources(root, manifest, manifest_path), sources)
             check_parents()
             return marker
     except RunConfigBundleRefused:

@@ -33,6 +33,7 @@ from gpt54_run_config_bundle import (
     READY_PATH as CONFIG_READY_PATH,
     _files,
     _held_parents,
+    _manifest_file,
     _path,
     _root,
     _sources,
@@ -158,7 +159,9 @@ def _compiled(
 
 def _reviewed_commit(
     repository: Path, sha: str, manifest: dict[str, Any], plan: ComparisonGradingPlan,
+    manifest_path: str = MANIFEST_PATH,
 ) -> dict[str, Any]:
+    manifest_source = _manifest_file(repository, manifest_path)
     if type(sha) is not str or re.fullmatch(r"[0-9a-f]{40}", sha) is None:
         raise DisposableCheckoutRefused("a caller-reviewed full lowercase 40-hex commit SHA is required")
     if sha == plan.dispatch.source_base_sha:
@@ -192,8 +195,9 @@ def _reviewed_commit(
     def blob(name: str) -> bytes:
         return _git(repository, "cat-file", "blob", entries[name]).stdout
 
-    manifest_data = blob(MANIFEST_PATH)
+    manifest_data = blob(manifest_path)
     _same("reviewed commit manifest", yaml.safe_load(manifest_data), manifest)
+    _read_bytes(manifest_source, **_identity(manifest_data))
     sources = {}
     for name, expected in sorted(manifest["source_pins"].items()):
         identity = _identity(blob(name))
@@ -201,7 +205,7 @@ def _reviewed_commit(
         sources[name] = identity
     return {
         "tree_sha": _git(repository, "rev-parse", sha + "^{tree}").stdout.decode("ascii").strip(),
-        "manifest_file": {"path": MANIFEST_PATH, **_identity(manifest_data)},
+        "manifest_file": {"path": manifest_path, **_identity(manifest_data)},
         "source_files": sources,
     }
 
@@ -263,7 +267,7 @@ def _checkout_state(
     _registered_gitdir(root, common)
     if _git(root, "status", "--porcelain=v1", "--untracked-files=no", "--ignore-submodules=none").stdout:
         raise DisposableCheckoutRefused("checkout tracked tree is dirty")
-    _same("checkout pinned source bytes", _sources(root, manifest), {
+    _same("checkout pinned source bytes", _sources(root, manifest, reviewed["manifest_file"]["path"]), {
         name: reviewed[name] for name in ("manifest_file", "source_files")
     })
 
@@ -292,10 +296,15 @@ def _reservation(plan: ComparisonGradingPlan, index: int, sha: str) -> bytes:
 def _marker(
     destination: Path, plan: ComparisonGradingPlan, index: int, sha: str,
     reviewed: dict[str, Any],
+    manifest_path: str = MANIFEST_PATH,
 ) -> dict[str, Any]:
     run = plan.dispatch.runs[index]
-    config = verify_run_config_bundle(checkout=destination, run_id=run.run_id, condition=run.condition)
-    inputs = verify_run_input_bundle(checkout=destination, run_id=run.run_id, condition=run.condition)
+    config = verify_run_config_bundle(
+        checkout=destination, run_id=run.run_id, condition=run.condition, manifest_path=manifest_path,
+    )
+    inputs = verify_run_input_bundle(
+        checkout=destination, run_id=run.run_id, condition=run.condition, manifest_path=manifest_path,
+    )
     markers = {}
     for name, path, value in (("config", CONFIG_READY_PATH, config), ("input", INPUT_READY_PATH, inputs)):
         expected = _canonical_json(value).encode("utf-8")
@@ -397,6 +406,7 @@ def verify_runtime_checkout(*, checkout: Path, run_id: str, condition: str) -> d
 def verify_disposable_checkout(
     dispatch_run: ComparisonRunSpec, *, repository: Path, reviewed_source_sha: str,
     destination: Path, manifest: dict[str, Any], combined_plan: dict[str, Any],
+    manifest_path: str = MANIFEST_PATH,
 ) -> dict[str, Any]:
     """Read-only exact marker/bundle/HEAD check; does not grant launch permission."""
     try:
@@ -406,12 +416,12 @@ def verify_disposable_checkout(
         reservation, quarantine = _sidecars(destination)
         if os.path.lexists(quarantine):
             raise DisposableCheckoutRefused("quarantined checkout cannot be used")
-        reviewed = _reviewed_commit(repository, reviewed_source_sha, manifest, plan)
+        reviewed = _reviewed_commit(repository, reviewed_source_sha, manifest, plan, manifest_path)
         expected_reservation = _reservation(plan, index, reviewed_source_sha)
         _read_bytes(reservation, **_identity(expected_reservation))
         with _held_parents(destination, (READY_PATH,)) as check:
             _checkout_state(repository, destination, common, reviewed_source_sha, manifest, reviewed)
-            marker = _marker(destination, plan, index, reviewed_source_sha, reviewed)
+            marker = _marker(destination, plan, index, reviewed_source_sha, reviewed, manifest_path)
             expected = _canonical_json(marker).encode("utf-8")
             if _read_bytes(destination / READY_PATH, **_identity(expected)) != expected:
                 raise DisposableCheckoutRefused("checkout-ready marker mismatch")
@@ -431,6 +441,7 @@ def prepare_disposable_checkout(
     destination: Path, manifest: dict[str, Any], combined_plan: dict[str, Any],
     dataset_parquet: Path, reference_root: Path,
     step0_manifest: Path | None = None,
+    manifest_path: str = MANIFEST_PATH,
 ) -> dict[str, Any]:
     """Create one detached checkout and seal its exact config and five-task inputs.
 
@@ -439,6 +450,8 @@ def prepare_disposable_checkout(
     paths for manual disposal; there is no retry, cleanup or execution fallback.
     Codex additionally requires explicit local canonical ``step0_manifest``
     bytes. V2 does not consume this input. Nothing is discovered or downloaded.
+    ``manifest_path`` selects a tracked repository-relative YAML in the exact
+    reviewed commit; omitting it retains the historical local-preparation path.
     """
     from gpt54_codex_input_capture import _write_no_clobber
 
@@ -459,7 +472,7 @@ def prepare_disposable_checkout(
         destination = _destination(destination, repository, _root(TRUSTED_ROOT), common, parquet, references,
                                    *([step0] if step0 is not None else []))
         _absent(destination)
-        reviewed = _reviewed_commit(repository, reviewed_source_sha, manifest, plan)
+        reviewed = _reviewed_commit(repository, reviewed_source_sha, manifest, plan, manifest_path)
         snapshot = _source_snapshot(plan, parquet, references)
         step0_data = _step0_bytes(step0, snapshot)
         reservation, quarantine = _sidecars(destination)
@@ -491,7 +504,7 @@ def prepare_disposable_checkout(
                 phase = "config_bundle"
                 materialize_run_config_bundle(
                     dispatch_run, plan.runs[index], manifest=manifest,
-                    combined_plan=combined_plan, checkout=destination,
+                    combined_plan=combined_plan, checkout=destination, manifest_path=manifest_path,
                 )
                 check_parent()
                 check_destination()
@@ -500,6 +513,7 @@ def prepare_disposable_checkout(
                     dispatch_run, manifest=manifest, combined_plan=combined_plan,
                     checkout=destination, dataset_parquet=parquet, reference_root=references,
                     step0_manifest=step0,
+                    manifest_path=manifest_path,
                 )
                 check_parent()
                 check_destination()
@@ -509,7 +523,7 @@ def prepare_disposable_checkout(
                 if _step0_bytes(step0, snapshot) != step0_data:
                     raise DisposableCheckoutRefused("Step 0 source changed after publication")
                 _checkout_state(repository, destination, common, reviewed_source_sha, manifest, reviewed)
-                marker = _marker(destination, plan, index, reviewed_source_sha, reviewed)
+                marker = _marker(destination, plan, index, reviewed_source_sha, reviewed, manifest_path)
                 _read_bytes(reservation, **_identity(intent))
                 if os.path.lexists(quarantine):
                     raise DisposableCheckoutRefused("checkout has been quarantined")
@@ -522,6 +536,7 @@ def prepare_disposable_checkout(
                 result = verify_disposable_checkout(
                     dispatch_run, repository=repository, reviewed_source_sha=reviewed_source_sha,
                     destination=destination, manifest=manifest, combined_plan=combined_plan,
+                    manifest_path=manifest_path,
                 )
                 check_parent()
                 check_destination()
@@ -562,7 +577,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repository", required=True, type=Path)
     parser.add_argument("--reviewed-source-sha", required=True)
     parser.add_argument("--destination", required=True, type=Path)
-    parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument("--manifest", required=True, type=Path,
+                        help="Tracked execution_envelope YAML, repository-relative or inside --repository")
     parser.add_argument("--combined-plan", required=True, type=Path)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--dataset-parquet", required=True, type=Path)
@@ -571,7 +587,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="Explicit local canonical schema-4 manifest (required for Codex only)")
     args = parser.parse_args(argv)
     try:
-        manifest = yaml.safe_load(_read_bytes(args.manifest))
+        repository = _root(args.repository)
+        if ".." in args.manifest.parts:
+            raise DisposableCheckoutRefused("manifest parent traversal is forbidden")
+        manifest_path = (args.manifest.relative_to(repository) if args.manifest.is_absolute()
+                         else args.manifest).as_posix()
+        manifest = yaml.safe_load(_read_bytes(_manifest_file(repository, manifest_path)))
         combined = yaml.safe_load(_read_bytes(args.combined_plan))
         plan = compile_grading_plan(manifest)
         run = next(run for run in plan.dispatch.runs if run.run_id == args.run_id)
@@ -580,6 +601,7 @@ def main(argv: list[str] | None = None) -> int:
             destination=args.destination, manifest=manifest, combined_plan=combined,
             dataset_parquet=args.dataset_parquet, reference_root=args.reference_root,
             step0_manifest=args.step0_manifest,
+            manifest_path=manifest_path,
         )
     except (OSError, ValueError, TypeError, KeyError, StopIteration, yaml.YAMLError) as error:
         detail = str(error) if isinstance(error, DisposableCheckoutRefused) else "invalid local preparation inputs"

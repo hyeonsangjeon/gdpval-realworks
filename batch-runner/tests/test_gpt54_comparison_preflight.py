@@ -47,6 +47,9 @@ def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch,
     current = inspect_plan(load_plan())
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:batch-runner/gpt54_run_config_bundle.py",
+        "source_pin:batch-runner/gpt54_run_input_bundle.py",
+        "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
         "source_pin:batch-runner/core/codex_task_deadline.py",
