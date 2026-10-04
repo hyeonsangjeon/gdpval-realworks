@@ -11,6 +11,126 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a separately named prospective source profile for local GPT-5.4 comparison
+  preparation. The three existing preparation helpers forward an explicit
+  manifest path and bind it to the caller-reviewed commit's tracked bytes and
+  existing bundle markers. The historical manifest and compiler, configuration,
+  ABBA20, input identities, runtime/workflow selection and launch refusals remain
+  unchanged. Only the new profile binds the reviewed runtime sources, changed
+  local helpers and recomputed full grader template closure.
+
+  One offline selector passed 60 tests, with 47 deselected, in 40.70s, exit 0,
+  at HEAD `ad584b2d07143e27ea9af6e8c54abf6e6754a70f`, tree
+  `631099a87abeddd7547420e8f0d74a0c80288169`. Log SHA256 is
+  `22bc7eab4d1e11ad8bdeb5e5450a1bb16e8a20fc9e650e815b838f53077e6b0b`.
+  Current-source compilation is genuine; input/publication cases use synthetic
+  fixtures. No private original was reopened, imported or prepared. The
+  [completion record](tasks/LATEST_TASK_RESULT/README.md) preserves the exact
+  command, source-review basis and remaining review/CI, separate real-preparation,
+  credentialed-CI, dispatcher, native-cap and launch requirements.
+
+  Correct only the coupled legacy Foundry-preflight refusal-list expectation by
+  adding the config-bundle and input-bundle helper entries in their actual order.
+  The leader read failed CI run37227851802/job111511173523
+  (`pilot-preflight-contracts`): 2 failed, 196 passed, 143 deselected in 1099.90s.
+  Both failures were the `current` and `stale_expected_hash` cases of
+  `test_active_grader_template_source_foundry_preflight`. Frozen-source
+  ineligibility, genuine template checks and all launch refusals are unchanged.
+
+  One separate offline invocation of that function passed both cases:
+  2 passed in 2.08s, exit 0, at test-only HEAD
+  `8f0319cd5e924520dacb339717ceb490ead054ef`, tree
+  `9643b6ad14d508528d5edf731a7f3257d9efd886`. Log SHA256 is
+  `09446771488fc7d5fd4c81e3c3dadaefccea5a372aaaaf245d2dfe06aaa74d1c`;
+  exact command SHA256 is
+  `8136d9983b18bf04cb0b8068b5eee527ff43ce84b04a53400ed6e053fdebe3ac`.
+  The completion record includes the executable command and private receipt
+  identity. The original 60-case proof above and failed CI remain distinct;
+  neither the original selector nor the full CI job was rerun. After this proof,
+  only this entry and the current completion record change. No production,
+  manifest, source-pin or historical-hash change is included in this correction.
+  The editorial checker hit its Markdown complexity limit (exit 3) and was not
+  retried; bounded record comparisons passed separately. Corrected final-HEAD
+  review, applicable CI and leader acceptance remain pending; no live authority
+  is granted.
+
+  Correct a separate historical-fixture root mismatch in the comparison preflight
+  test. Both its active-manifest read and reader-byte equality now use the
+  fixture-bound root; historical pins, the 37-source inventory, all four negative
+  cases, canonical Step0 and launch refusals are unchanged. The leader read
+  comparison-contracts run37229871352/job111517151450: 1 failed, 1004 passed in
+  1363.11s, solely the `None-valid` case. Source-reviewed HEAD
+  `6ed5773a9a10f922001eb37e74dfabf1011e2f49` remains on delivery HOLD.
+
+  The separate generic pytest job111517151329 was cancelled for exceeding
+  45m0s, with job interval 19:51:56Z–20:37:15Z and last logged progress 48%.
+  Accepted PR743 pytest job111476125137 succeeded with job interval
+  16:11:51Z–16:47:25Z. These are leader-read job intervals, not attributed test
+  durations or a basis for projecting runtime from progress. The generic command
+  excludes the repaired module; this test correction does not fix its cancellation.
+  The 45-minute ceiling and workflow selectors remain unchanged.
+
+  One separate offline invocation passed the five fixture-root cases:
+  5 passed in 2.19s, exit 0, at test-only HEAD
+  `b46347d975e7a50fca3dcc4b7242819c85bbf936`, tree
+  `69ec2a2adcc5a0b97329110304e547da5fcb5c66`. Log SHA256 is
+  `ec72a74175d3bd30f7c4d171bd03064d2c929149bc7057d5052a7651354395f7`;
+  exact command SHA256 is
+  `c26d2894ab6687f2a91ba422df0cdbf1db25bdd71c07015605870a2a03b46dba`.
+  The completion record retains the command and receipt identity. The 60-case
+  and 2-case proofs above remain unchanged; neither selector nor full CI job
+  was rerun. Only this entry and the single current completion record change
+  after the new proof. Final corrected-HEAD review, applicable CI and leader
+  acceptance remain on HOLD; no launch or workflow-change authority is granted.
+
+  Repair the shared CURRENT-observer compatibility boundary without changing
+  historical paid/source evidence. Only the current disposable-checkout binding
+  in `codex_retention_grade_readout.py` and its directly coupled current-checkout
+  assertions change; the native-resume and shared synthetic-originals expectations
+  now retain all three local-helper refusals in manifest order. Historical
+  `RESULT/PARENT/READER`, paid source checks, registrations, fixed-evidence digests,
+  the baseline pin-set, template closure, input identities and consumed outcomes
+  are unchanged. Unknown current-source changes still refuse before private effects;
+  current reader compatibility does not authorize paid replay.
+
+  The leader read generic pytest run37234180917/job111529908938 at unchanged
+  source-reviewed `133e0bd86feaf1acd3d190b5d36c319ad572612f`: 23 failed,
+  13366 passed, 64 skipped, 46 deselected and 1 warning in 1650.26s, within the
+  45-minute ceiling. Its job interval was 20:58:43Z–21:28:33Z; all other applicable
+  checks passed and deploy was skipped. This does not explain the earlier
+  cancellation. The CI split is deferred; workflows, ceilings and selectors
+  remain unchanged. No CI log was fetched or job polled for this repair.
+
+  Targeted coverage uses two separate invocations at unchanged correction HEAD
+  `c19e08d5c77b07e249fa1c4a10ec0ca4db88905a`, tree
+  `f34bc5937873fa46497ed2f5113a28905c99144a`. The first 24-node invocation hit
+  its 300-second bound, exit 124, with no final pytest summary. Command SHA256 is
+  `7ae37f9b86784f0af431d0a22956ab7a781ce66ced9706cc88510f187aca5f7a`, log SHA256
+  is `d8be33407a61f692cfff837438fad6d533b0944e643b61144d308e7bc71bf00b`, and
+  receipt SHA256 is
+  `2e43e9c0209f9c6d667826ec1a9e29fcc351c0699325077fe7215a1fd6c7fed2`.
+  Its exact command order and module dots establish ten completed nodes, not
+  a passed total inferred from progress. The interrupted node was uncompleted,
+  not failed or passed; the original evidence remains unchanged and INCOMPLETE.
+
+  The separately authorized 600-second continuation ran only the 14 remaining
+  nodes with verbose output: 14 passed in 257.93s, exit 0. Both invocations kept
+  the 5-second termination grace. Continuation command SHA256 is
+  `6c455dbd3a3eaec737adf1cc746d170b682b29fcc01f507b50d082418a82476b`, log SHA256
+  is `a941f1464d6fc441be463cd6a5f8a413317e8407b0d8789f1b8ee49a53aa503b`, and
+  continuation/reconciliation receipt SHA256 is
+  `048eceb68591ddb3d01265c64d22c2d9a75f70170a5eeb9a05686a14ed18fe59`.
+  The completion record retains the exact node sets and continuation command.
+  The sets are disjoint and cover exactly the original 24 selected IDs; there
+  is no combined pytest summary. These are offline synthetic regressions, not
+  real input, observation, grading or inference runs. The bounds are not CI or
+  experiment budgets. The 60-case, 2-case and 5-case proofs above remain distinct
+  and were not rerun. Only this entry and the single current task record change
+  after the proof. Corrected final-HEAD owner review, applicable CI and leader
+  acceptance remain on HOLD; all launch/auth/dispatcher/native-cap gates remain.
+
 ### Fixed
 
 - Separate local original-input bundle registration from runnable comparison

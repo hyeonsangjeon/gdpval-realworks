@@ -56,7 +56,7 @@ CURRENT_DEPENDENCIES = {
     "codex_budget_pilot_grading.py": "7ae99e053d11f9a21d6b4db27f390366e70df278a414b0f78db0fe82344bf989",
     "codex_budget_pilot_output.py": "635966f42c0310c9093d59e8f417259a0625b847c52f73342c07ec6c64fa2fdb",
     "codex_budget_pilot_retention.py": "147f3a03b5efeb86e9d0fabe8abbf7c41302816fa136548d512a8f67e97c5bcd",
-    "gpt54_disposable_checkout.py": "0dbbab8911e1cba106745087aed471dca0a8b7f904058b4958df1e07864bb885",
+    "gpt54_disposable_checkout.py": "3b4ae25c5683722a6e490e316a32024a03a1e9a3380c3b02098226f2eac5b5db",
 }
 require = output._require
 

@@ -190,8 +190,44 @@ python codex_ci_input_bundle.py import --bundle "$PRIVATE_ARCHIVE" --expected-sh
 The metadata receipt is not publication clearance, even when its sensitive-field
 screen is false. Local materialization does not prove CI-read authority, served
 identity, wire consumption, native caps or comparison launch readiness. See the
-[current correction record](../tasks/LATEST_TASK_RESULT/README.md) for the bounded
+[local-input correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/5fcf254f4146734493e7390b110ad56189c836ae/tasks/LATEST_TASK_RESULT/README.md#project5-local-original-input-registration-correction--2026-10-04) for the bounded
 proof, real-import identities and remaining gates.
+
+#### Prospective source profile for local comparison preparation
+
+The [local-source profile](experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml)
+uses the existing comparison schema, model/effort, input identities, task order,
+ABBA20, run IDs and limits. It changes only the reviewed runtime source bindings,
+the three local preparation helper fingerprints and the actual full grader
+template closure. The historical manifest and compiler remain unchanged; the
+template closure is not a materialized-grader identity or a grading result.
+
+After separate fixed-HEAD review and authorization, use the preparer's existing
+`--manifest` argument to select the tracked profile. This argument fragment is
+documentation, not permission to prepare or run a comparison:
+
+```text
+--manifest batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml
+```
+
+The CLI accepts that repository-relative path or its absolute path inside
+`--repository`. Local preparation/verification APIs accept the same
+repository-relative string as `manifest_path`. The top-level
+`gpt54_disposable_checkout` forwards it to `gpt54_run_config_bundle` and
+`gpt54_run_input_bundle`; direct helper calls must use the same selection.
+The caller's full reviewed commit must contain the
+regular tracked manifest blob. Its bytes, source pins, detached checkout HEAD
+and existing `manifest_file.path`/digest evidence must agree. External paths,
+URLs, traversal, symlink substitution and unreviewed bytes are refused.
+
+Omitting the API keyword preserves the historical path. Runtime and workflow
+callers do not discover or select this profile. Existing canonical Step0 checks,
+no-clobber publication, reservations and quarantine remain in force. The
+[source-profile proof](../tasks/LATEST_TASK_RESULT/README.md#project5-prospective-local-preparation-source-profile--2026-10-04)
+uses genuine current-source compilation and synthetic preparation fixtures,
+not the private originals. Real local preparation needs a separate instruction;
+credentialed CI authority, dispatch, native call/token caps and launch gates
+remain unresolved.
 
 ### Step 1: Prepare Tasks (`step1_prepare_tasks.py`)
 

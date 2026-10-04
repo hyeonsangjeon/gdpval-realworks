@@ -46,6 +46,69 @@ _FIXTURE_ENV = {
     "GIT_COMMITTER_DATE": "2026-09-19T00:00:00+00:00",
 }
 _PREPARER_SOURCE = "batch-runner/gpt54_disposable_checkout.py"
+_PROSPECTIVE_MANIFEST = preflight.ENVELOPE + "gpt54_sandboxv2_codex_comparison_local_source.yaml"
+
+
+def test_prospective_source_profile_real_tracked_compilation_and_refusals(monkeypatch, capsys):
+    """Current tracked production bytes, not the synthetic plumbing source below."""
+    import codex_ci_input_bundle as originals
+    import step8_grade as grading
+
+    root = Path(__file__).resolve().parents[2]
+    assert preflight.ROOT == preparer.TRUSTED_ROOT == root
+    head = preparer._git(root, "rev-parse", "--verify", "HEAD").stdout.decode().strip()
+    tree = preparer._git(root, "rev-parse", "HEAD^{tree}").stdout.decode().strip()
+    tracked = preparer._git(root, "cat-file", "blob", head + ":" + _PROSPECTIVE_MANIFEST).stdout
+    assert len(head) == len(tree) == 40
+    assert (root / _PROSPECTIVE_MANIFEST).read_bytes() == tracked
+
+    forbidden = _guards(monkeypatch)
+    historical = preflight.load_plan()
+    assert _identity(preflight.PLAN.read_bytes())["sha256"] == (
+        "3d88bcb0c4eeeb9dad2c9ee7cb88db1b7ff49145f9264d9d284178f167a76ed1"
+    )
+    manifest = preflight.load_plan(root / _PROSPECTIVE_MANIFEST)
+    changed_sources = {
+        "batch-runner/gpt54_run_config_bundle.py",
+        "batch-runner/gpt54_run_input_bundle.py", _PREPARER_SOURCE,
+        "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+        "batch-runner/core/codex_task_deadline.py",
+    }
+    assert set(manifest["source_pins"]) == set(historical["source_pins"])
+    assert {name for name in manifest["source_pins"]
+            if manifest["source_pins"][name] != historical["source_pins"][name]} == changed_sources
+    closure = grading.compute_grader_source_hash(
+        root / preflight.GRADER, preflight.load_plan(root / preflight.GRADER),
+        batch_root=root / "batch-runner",
+    )
+    assert manifest["shared"]["grading"]["template_source_sha256"] == closure
+    expected = deepcopy(historical)
+    for name in changed_sources:
+        expected["source_pins"][name] = manifest["source_pins"][name]
+    expected["shared"]["grading"]["template_source_sha256"] = closure
+    assert manifest == expected  # All controls, input hashes, schema and run IDs remain unchanged.
+
+    plan = preflight.compile_grading_plan(manifest)  # No patched pins, compiler or closure.
+    assert [run.condition for run in plan.dispatch.runs] == ["sandbox_v2", "codex", "codex", "sandbox_v2"]
+    assert sum(len(run.task_ids) for run in plan.dispatch.runs) == 20
+    assert all(run.output.materialized_grader_source_hash is None for run in plan.runs)
+    assert plan.as_dict()["launch_allowed"] is plan.as_dict()["full_220_allowed"] is False
+    assert preflight.main(["--plan", str(root / _PROSPECTIVE_MANIFEST)]) == 2
+    inspection = json.loads(capsys.readouterr().out)
+    assert inspection["configuration_valid"] is True
+    assert inspection["grading_plan"] == plan.as_dict()
+    assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
+    assert inspection["launch_blockers"] == list(preflight.LAUNCH_BLOCKERS)
+
+    registration, _, roles = originals._local_registered()
+    assert json.loads(registration.dataset_json) == historical["shared"]["dataset"]
+    assert len(roles) == 4 and not hasattr(registration, "dispatch")
+    with pytest.raises(preflight.DispatchPlanRefused) as refused:
+        originals._registered()  # Credentialed/default full-plan registration still refuses.
+    assert str(refused.value) == "comparison refused: " + ", ".join(
+        "source_pin:" + name for name in historical["source_pins"] if name in changed_sources
+    )
+    assert forbidden == []
 
 
 @pytest.fixture
@@ -117,6 +180,139 @@ def test_step0_manifest_disposable_checkout_and_cli(case, _step0_manifest_checko
     assert marker["reviewed_source_sha"] == fixture["reviewed_sha"]
     assert not _sidecars(destination)[1].exists()
     assert sum(args[0] == "worktree" for _, args in fixture["git_calls"]) == 1
+
+
+@pytest.mark.parametrize("case", [
+    "api", "cli_relative", "cli_absolute", "legacy_default",
+    "traversal_api", "traversal_cli", "url", "external_cli", "absolute_api",
+    "wrong_directory", "missing_manifest", "untracked_manifest",
+    "symlink_file", "symlink_parent", "hardlink_file", "working_blob_drift", "wrong_commit",
+])
+def test_prospective_source_profile_explicit_path_and_blob_binding(
+    case, _step0_manifest_checkout, tmp_path, capsys,
+):
+    """Tiny synthetic inputs exercise selection; they are not the private originals."""
+    fixture = _step0_manifest_checkout
+    repository, destination = fixture["repository"], fixture["destination"]
+    inputs, run = fixture["inputs"], fixture["run"]
+    historical_bytes = (repository / config_bundle.MANIFEST_PATH).read_bytes()
+    profile = repository / _PROSPECTIVE_MANIFEST
+    profile_bytes = b"# Synthetic selectable source fixture\n" + historical_bytes
+    profile.write_bytes(profile_bytes)
+    reviewed_sha = _commit_fixture(repository, "Synthetic explicit local source profile")
+    reviewed_tree = _fixture_git(repository, "rev-parse", reviewed_sha + "^{tree}").stdout.decode().strip()
+    manifest_path = _PROSPECTIVE_MANIFEST
+    if case.startswith("traversal_"):
+        manifest_path = preflight.ENVELOPE + "../execution_envelope/" + profile.name
+    elif case == "url":
+        manifest_path = "https://example.invalid/manifest.yaml"
+    elif case in {"external_cli", "absolute_api"}:
+        manifest_path = str(tmp_path / "external.yaml" if case == "external_cli" else profile)
+    elif case == "wrong_directory":
+        manifest_path = "batch-runner/other.yaml"
+        (repository / manifest_path).write_bytes(profile_bytes)
+    elif case in {"missing_manifest", "untracked_manifest"}:
+        manifest_path = preflight.ENVELOPE + "unreviewed.yaml"
+        if case == "untracked_manifest":
+            (repository / manifest_path).write_bytes(profile_bytes)
+    elif case in {"symlink_file", "hardlink_file"}:
+        held = profile.with_name("held.yaml")
+        profile.rename(held)
+        if case == "symlink_file":
+            profile.symlink_to(held)
+        else:
+            profile.hardlink_to(held)
+    elif case == "symlink_parent":
+        held = tmp_path / "held-envelope"
+        profile.parent.rename(held)
+        profile.parent.symlink_to(held, target_is_directory=True)
+    elif case == "working_blob_drift":
+        profile.write_bytes(profile_bytes + b"\n# Same parsed values, different unreviewed bytes\n")
+    elif case == "wrong_commit":
+        reviewed_sha = fixture["reviewed_sha"]  # The selected role is absent from this earlier commit.
+    elif case == "legacy_default":
+        manifest_path = config_bundle.MANIFEST_PATH
+
+    kwargs = {
+        "repository": repository, "reviewed_source_sha": reviewed_sha, "destination": destination,
+        "manifest": inputs["manifest"], "combined_plan": inputs["combined_plan"],
+    }
+    if case != "legacy_default":
+        kwargs["manifest_path"] = manifest_path
+    cli = case in {"cli_relative", "cli_absolute", "traversal_cli", "external_cli", "url"}
+    command = []
+    if cli:
+        combined = tmp_path / "combined.json"
+        combined.write_bytes(_json(inputs["combined_plan"]))
+        command = [
+            "--repository", str(repository), "--reviewed-source-sha", reviewed_sha,
+            "--destination", str(destination),
+            "--manifest", str(profile) if case == "cli_absolute" else manifest_path,
+            "--combined-plan", str(combined), "--run-id", run.run_id,
+            "--dataset-parquet", str(inputs["dataset_parquet"]),
+            "--reference-root", str(inputs["reference_root"]),
+            "--step0-manifest", str(fixture["step0_manifest"]),
+        ]
+
+    def prepare():
+        return preparer.prepare_disposable_checkout(
+            run, **kwargs, dataset_parquet=inputs["dataset_parquet"],
+            reference_root=inputs["reference_root"], step0_manifest=fixture["step0_manifest"],
+        )
+
+    source_before = _source_state(repository)
+    inputs_before = _tree_snapshot(inputs["dataset_parquet"].parent)
+    if case not in {"api", "cli_relative", "cli_absolute", "legacy_default"}:
+        before = _tree_snapshot(tmp_path)
+        if cli:
+            capsys.readouterr()
+            assert preparer.main(command) == 2
+            output = capsys.readouterr()
+            assert json.loads(output.out)["prepared"] is False
+            assert output.err == ""
+        else:
+            with pytest.raises(preparer.DisposableCheckoutRefused):
+                prepare()
+        assert _tree_snapshot(tmp_path) == before
+        assert not destination.exists() and all(not path.exists() for path in _sidecars(destination))
+        assert not any(args[0] == "worktree" for _, args in fixture["git_calls"])
+    else:
+        if cli:
+            capsys.readouterr()
+            assert preparer.main(command) == 0
+            marker = json.loads(capsys.readouterr().out)
+        else:
+            marker = prepare()
+        config = json.loads((destination / config_bundle.READY_PATH).read_bytes())
+        input_ready = json.loads((destination / input_bundle.READY_PATH).read_bytes())
+        assert config["manifest_file"] == {
+            "path": manifest_path,
+            **_identity(historical_bytes if case == "legacy_default" else profile_bytes),
+        }
+        assert input_ready["config_bundle"] == {
+            "path": config_bundle.READY_PATH,
+            **_identity((destination / config_bundle.READY_PATH).read_bytes()),
+        }
+        assert marker["reviewed_source_sha"] == reviewed_sha
+        assert marker["reviewed_tree_sha"] == reviewed_tree
+        assert marker["task_ids"] == list(run.task_ids)
+        assert (destination / config_bundle.MANIFEST_PATH).read_bytes() == historical_bytes
+        assert (destination / _PROSPECTIVE_MANIFEST).read_bytes() == profile_bytes
+        assert (destination / input_bundle.STEP0_MANIFEST_PATH).read_bytes() == fixture["step0_manifest"].read_bytes()
+        before_verify = _tree_snapshot(tmp_path)
+        assert preparer.verify_disposable_checkout(run, **kwargs) == marker
+        if case != "legacy_default":
+            # Neither omitted-path local verification nor the runtime gate discovers a profile.
+            omitted = {key: value for key, value in kwargs.items() if key != "manifest_path"}
+            with pytest.raises(preparer.DisposableCheckoutRefused):
+                preparer.verify_disposable_checkout(run, **omitted)
+            with pytest.raises(preparer.DisposableCheckoutRefused):
+                preparer.verify_runtime_checkout(checkout=destination, run_id=run.run_id, condition=run.condition)
+        assert _tree_snapshot(tmp_path) == before_verify
+        assert not _sidecars(destination)[1].exists()
+        assert sum(args[0] == "worktree" for _, args in fixture["git_calls"]) == 1
+    assert _source_state(repository) == source_before
+    assert _tree_snapshot(inputs["dataset_parquet"].parent) == inputs_before
 
 
 def _git_prefix() -> list[str]:
@@ -242,6 +438,7 @@ def _assert_ready(
     reviewed_sha: str, reviewed_tree: str, plan: Any, index: int,
     manifest: dict[str, Any], inputs: dict[str, Any], oracle: dict[str, Any],
     records: dict[str, Any], reviewed_files: dict[str, bytes],
+    manifest_path: str = config_bundle.MANIFEST_PATH,
 ) -> None:
     run, grading_run = plan.dispatch.runs[index], plan.runs[index]
     config_bytes = (destination / config_bundle.READY_PATH).read_bytes()
@@ -283,6 +480,9 @@ def _assert_ready(
         "ready_path": "comparison-checkout-ready.json", "state": "reserved_not_ready", **intent,
     })
     assert not quarantine.exists()
+    assert config_marker["manifest_file"] == {
+        "path": manifest_path, **_identity(reviewed_files[manifest_path]),
+    }
     assert config_marker["attestation_linkage"] == linkage
     assert config_bytes == _json(config_marker) and input_bytes == _json(input_marker)
     assert input_marker["input_identity"] == {key: oracle[key] for key in (
@@ -323,6 +523,10 @@ def _assert_ready(
     assert (destination / "batch-runner/workspace").exists() is (run.condition == "codex")
 
 
+@pytest.mark.parametrize("manifest_path", [
+    pytest.param(None, id="historical_default"),
+    pytest.param(_PROSPECTIVE_MANIFEST, id="prospective_source_profile"),
+])
 @pytest.mark.parametrize("case", [
     "v2_r1", "codex_r1", "codex_r2", "v2_r2",
     "moving_branch_dirty_pins", "ambient_environment_and_hooks",
@@ -337,7 +541,7 @@ def _assert_ready(
     "failure_input_after", "failure_final_verification", "bundle_markers_drift",
 ])
 def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
-    case: str, tmp_path: Path, monkeypatch: Any, _input_bundle_seed: Any, capsys: Any,
+    case: str, manifest_path: str | None, tmp_path: Path, monkeypatch: Any, _input_bundle_seed: Any, capsys: Any,
 ) -> None:
     forbidden, git_calls = _allow_only_temporary_git(monkeypatch, tmp_path)
     _input_bundle_seed.install(monkeypatch)
@@ -350,6 +554,9 @@ def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
     manifest, combined = deepcopy(inputs["manifest"]), plan.as_dict()
     repository, destination = tmp_path / "caller-repository", tmp_path / "reviewed-run"
     _bundle_fixture(repository, manifest=manifest, combined_plan=combined, run=run, materialize=False)
+    if manifest_path is not None:
+        # Plumbing only: a second tracked role with the same synthetic contract.
+        (repository / manifest_path).write_bytes(b"# Synthetic selectable source fixture\n" + _json(manifest))
     note = repository / "tracked-note.txt"
     note.write_bytes(b"reviewed commit bytes\n")
     if case == "committed_symlink":
@@ -366,6 +573,8 @@ def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
     reviewed_tree = _fixture_git(repository, "rev-parse", reviewed_sha + "^{tree}").stdout.decode().strip()
     reviewed_files = {name: (repository / name).read_bytes()
                       for name in (*manifest["source_pins"], config_bundle.MANIFEST_PATH, "tracked-note.txt")}
+    if manifest_path is not None:
+        reviewed_files[manifest_path] = (repository / manifest_path).read_bytes()
     if case == "moving_branch_dirty_pins":
         note.write_bytes(b"later source branch commit\n")
         assert _commit_fixture(repository, "Move temporary caller branch") != reviewed_sha
@@ -443,6 +652,8 @@ def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
         "repository": repository, "reviewed_source_sha": supplied_sha, "destination": destination,
         "manifest": manifest, "combined_plan": combined,
     }
+    if manifest_path is not None:
+        kwargs["manifest_path"] = manifest_path
     if case == "sha_ref":
         cli_plan = tmp_path / "cli-combined-plan.json"
         cli_plan.write_bytes(_json(combined))
@@ -481,7 +692,7 @@ def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
             assert preparer.main([
                 "--repository", str(repository), "--reviewed-source-sha", "HEAD",
                 "--destination", str(destination),
-                "--manifest", str(repository / config_bundle.MANIFEST_PATH),
+                "--manifest", str(repository / (manifest_path or config_bundle.MANIFEST_PATH)),
                 "--combined-plan", str(cli_plan), "--run-id", run.run_id,
                 "--dataset-parquet", str(inputs["dataset_parquet"]),
                 "--reference-root", str(inputs["reference_root"]),
@@ -564,6 +775,7 @@ def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
             destination, marker, repository=repository, reviewed_sha=reviewed_sha,
             reviewed_tree=reviewed_tree, plan=plan, index=index, manifest=manifest,
             inputs=inputs, oracle=captures[index], records=records, reviewed_files=reviewed_files,
+            manifest_path=manifest_path or config_bundle.MANIFEST_PATH,
         )
         if case == "v2_r1":
             inspection = preflight.inspect_plan(manifest, grading_plan=combined)
@@ -606,6 +818,8 @@ def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
         elif case == "different_common_directory":
             other = tmp_path / "independent-repository"
             _bundle_fixture(other, manifest=manifest, combined_plan=combined, run=run, materialize=False)
+            if manifest_path is not None:
+                (other / manifest_path).write_bytes(reviewed_files[manifest_path])
             (other / "tracked-note.txt").write_bytes(b"reviewed commit bytes\n")
             _fixture_git(other, "init", "--quiet", "--initial-branch=fixture-main", "--object-format=sha1", "--template=")
             assert _commit_fixture(other, "Reviewed temporary source") == reviewed_sha
