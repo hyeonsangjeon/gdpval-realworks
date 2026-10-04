@@ -204,7 +204,7 @@ live path or causal claim is established. "Partial" retains an explicit gap;
 | --- | --- | --- |
 | Cumulative external limits without reset | Supported in source/offline proof; realized allocation partial | The [deadline store][deadline-source] persists the original start/expiry and charges waits to it; the [final producer proof][producer-proof] covered the cumulative clock and settled accounting through guarded FRESH recovery. The diagnostic retains 10800 cumulative seconds and a 1800-second native-turn wait, not an all-in attempt ceiling. Stored remaining time does not measure uncapped elapsed time or all downtime. |
 | Authority separation | Supported for the fixed workflow/read boundaries | The [accepted first-cell reader record][first-budget-proof] documents the separation of source/request approval and paid execution from fixed read routes, with precredential hashes and private safe receipts preserved. It records all576 mode cases with zero recorded paid effects. Publication-derived controls do not independently authenticate the provider, original input or actual CAS. |
-| Error/retry classification and retry hints | Partial; typed retry hints unavailable | The [accepted host classification contract][recovery-source] admits only `rate_limited` and `turn_start_failed` as eligible recovery categories. SDK 0.147.0 supplies no typed Retry-After/retry guidance in this contract; free-form messages are not instructions. This implemented classification is not a diagnosis of the six failures, whose detailed failure/recovery fields remain unavailable. |
+| Error/retry classification and retry hints | Partial; typed retry hints unavailable | The accepted [core classifier][core-classification-source] and [runner][runner-classification-source] distinguish `rate_limited`, `transport_error`, `timeout`, `content_filtered` and other failures, retaining unknown fallbacks `execution_error`/`turn_failed`. The unchanged [recovery allowlist][recovery-source] admits only `rate_limited` and `turn_start_failed`; it is not the full failure taxonomy. The [offline analyzer][offline-classification-source] optionally adds `output_limit_exceeded` only with a complete explicit local reason and an unknown recorded fallback; known categories and recorded fields remain unchanged. This is not runtime output-limit emission or new recovery eligibility. SDK 0.147.0 supplies no typed Retry-After/retry guidance in this contract; free-form messages are not instructions. The separate [exp035 compact observation][compact-classification-evidence] of 3 diagnoses in220 rows does not diagnose the 30-cell pilot or eight-cell retention study. Detailed causes and recovery exposure of the six retention failures remain unavailable. |
 | State preservation and no replay | Supported in source/offline proof; realized exposure partial | The [owned retirement contract][retirement-source] preserves host accounting and the clock while retiring only an eligible FRESH cell's owned state. KEEP retains its own state, never its predecessor's. The [producer proof][producer-proof] exercised current-parent CAS, child completion, terminal acknowledgment, lost-ack reconciliation, no replay and timeout/cleanup. The budget receipts do not reveal every realized recovery opportunity. |
 | Offline fault injection | Supported for the tested synthetic boundaries | The accepted [producer][producer-proof], [successful KEEP/r2 budget][success-budget-proof] and [legacy first-cell budget][first-budget-proof] selectors covered identity/metadata refusals, interrupted or lost acknowledgments, no-clobber/readback and mode isolation at their recorded scopes. Synthetic tests do not reproduce live provider failures or prove an outcome cause. None was rerun here. |
 
@@ -228,9 +228,24 @@ and all10 checks are the supplied acceptance evidence for this draft's base
 | Usage and cost | Partial; complete bill unavailable | The diagnostic retains164 inference calls and known partialUSD5.206594, per-cell usage/missing reasons and separate93/91 grade-call counts. Missing prices, usage and reachability remain unknown. Neither the pilot nor this diagnostic supplies a full invoice or a cost-efficiency ranking. |
 | Retention/feedback tradeoff and attribution | Unavailable as a causal estimate | Original-pilot A/B mixes retry policy and retention; its C-versus-B findings do not establish feedback benefit. The separate KEEP/FRESH observations have post-selection, two repeats, fixed order, service/source variation and uncalibrated judging. Complete snapshot coverage does not isolate a causal effect or justify expansion. |
 
-The finite execution/accounting closeout therefore remains narrower than the
-card's measurement and attribution criteria. The leader owns acceptance and
-any future scope; neither a 30-task nor a 220-task expansion is authorized.
+All 30 original pilot outcomes, all eight separate diagnostic outcomes and all
+eight diagnostic budget reads are finished and consumed, including failures.
+An inconclusive result is not an unexecuted cell. The finite execution/accounting
+closeout remains narrower than the card's measurement and attribution criteria.
+Missing detailed failure/recovery exposure, complete costs, independent
+authentication and causal attribution are historical evidence limitations,
+not unfinished cells. Rewriting records cannot supply those measurements.
+The epoch split, post-selection, two repeats, service/source variation and
+uncalibrated judging remain unchanged.
+
+The dispositions above remain in force; this mapping establishes no additional
+undelivered implementation. Typed retry hints remain unavailable in the pinned
+SDK, and offline diagnosis does not supply them. Separately, the leader-reported
+Foundry5.6 private deployment binding and Sol VM KVM/image handoff remain
+external-input blockers for their own work, not missing pilot or retention
+results. The leader owns acceptance against the original criteria and any future
+scope; neither a 30-task nor a 220-task expansion is authorized. This
+clarification authorizes no experiment or replay.
 
 ## Final outcome and evidence boundaries
 
@@ -531,6 +546,10 @@ expansion is authorized.
 
 [deadline-source]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/8494f7c9602c90a9cc354db8b683e9ab01b14426/batch-runner/core/codex_task_deadline.py#L519
 [recovery-source]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/8494f7c9602c90a9cc354db8b683e9ab01b14426/batch-runner/core/codex_task_deadline.py#L204
+[core-classification-source]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a999a74d767cd52e2963259a0f0d1832a420740f/batch-runner/core/execution_errors.py#L83
+[runner-classification-source]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a999a74d767cd52e2963259a0f0d1832a420740f/batch-runner/core/codex_runner.py#L527
+[offline-classification-source]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a999a74d767cd52e2963259a0f0d1832a420740f/batch-runner/scripts/analyze_codex_run.py#L112
+[compact-classification-evidence]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/0f9162093444e3143960e631a95edac6e46f3b29/batch-runner/docs/analyze_codex_run.md#L46
 [retirement-source]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/8494f7c9602c90a9cc354db8b683e9ab01b14426/batch-runner/core/codex_task_deadline.py#L601
 [producer-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/d34dc6e0426239f0707327160eb0967ae8fa7c26/tasks/LATEST_TASK_RESULT/README.md
 [success-budget-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/c0b5ea5f1f14036d011609ddf887de533bc8d0d1/tasks/LATEST_TASK_RESULT/README.md
