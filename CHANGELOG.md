@@ -31,6 +31,31 @@ entries land under a fresh dated heading the day they merge to `main`.
   command, source-review basis and remaining review/CI, separate real-preparation,
   credentialed-CI, dispatcher, native-cap and launch requirements.
 
+  Correct only the coupled legacy Foundry-preflight refusal-list expectation by
+  adding the config-bundle and input-bundle helper entries in their actual order.
+  The leader read failed CI run37227851802/job111511173523
+  (`pilot-preflight-contracts`): 2 failed, 196 passed, 143 deselected in 1099.90s.
+  Both failures were the `current` and `stale_expected_hash` cases of
+  `test_active_grader_template_source_foundry_preflight`. Frozen-source
+  ineligibility, genuine template checks and all launch refusals are unchanged.
+
+  One separate offline invocation of that function passed both cases:
+  2 passed in 2.08s, exit 0, at test-only HEAD
+  `8f0319cd5e924520dacb339717ceb490ead054ef`, tree
+  `9643b6ad14d508528d5edf731a7f3257d9efd886`. Log SHA256 is
+  `09446771488fc7d5fd4c81e3c3dadaefccea5a372aaaaf245d2dfe06aaa74d1c`;
+  exact command SHA256 is
+  `8136d9983b18bf04cb0b8068b5eee527ff43ce84b04a53400ed6e053fdebe3ac`.
+  The completion record includes the executable command and private receipt
+  identity. The original 60-case proof above and failed CI remain distinct;
+  neither the original selector nor the full CI job was rerun. After this proof,
+  only this entry and the current completion record change. No production,
+  manifest, source-pin or historical-hash change is included in this correction.
+  The editorial checker hit its Markdown complexity limit (exit 3) and was not
+  retried; bounded record comparisons passed separately. Corrected final-HEAD
+  review, applicable CI and leader acceptance remain pending; no live authority
+  is granted.
+
 ### Fixed
 
 - Separate local original-input bundle registration from runnable comparison
