@@ -13,33 +13,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Classify the explicit `Incomplete response returned, reason: max_output_tokens`
-  error as `output_limit_exceeded`, grounded in an existing recorded message.
-  Require the full phrase and reason delimiter; preserve earlier categories,
-  structured HTTP429 precedence, context/input-limit and unknown fallbacks.
-  This is diagnostic-only: both recovery allowlists, content-filter handling,
-  runner/deadline code, budgets, workflows, current/historical pins and all
-  completed experiment reports/data remain unchanged. No historical failure
-  cause, measured improvement or new recovery permission is claimed.
+- Move PR738's output-limit diagnostic into the existing offline analyzer.
+  Restore `core/execution_errors.py` and its original test to exact
+  base`9f9b33aa2c86ea77e97624fa58d5d6dc67122f25` bytes; runtime classification
+  and recovery deliberately keep their old behavior. Only a complete supported
+  local error message and recorded unknown fallback can add the fixed derived
+  category/provenance/missingness. Known categories and structured HTTP429 win;
+  absent/redacted text, context/input limits, ordinary prose and conflicting
+  wrappers add nothing. Collection/report/CLI preserve recorded fields,
+  artifact bytes and legacy calculations. No raw error text is reported.
 
-  One offline selector passed:1 passed in0.34s at clean implementation HEAD
-  `7ca9f67acf3db16686ae749ecd82356c55e5203b`, selector/log/status-capture exits0,
-  no timeout and zero guarded live effects. It checked8 positive shapes,
-  25 negative/fallback shapes,18 existing-message cases in3 variants,
-  structured HTTP429, fixed-category publication and unchanged recovery rules.
-  Proof log SHA256`f05f97d1b7d210a020ffed1b8a47f63066d76c6ed1295a902ffe89d97f30ac46`.
-  The0.34s is pytest duration, not outer elapsed or a model measurement. The
-  [latest record](tasks/LATEST_TASK_RESULT/README.md) retains the exact command,
-  artifact hashes, source grounding, skill reconciliation and remaining gates.
+  The earlier1 passed in0.34s at`7ca9f67acf3db16686ae749ecd82356c55e5203b`
+  remains a narrow proof, not coverage of the grader closure. Its log
+  SHA256`f05f97d1b7d210a020ffed1b8a47f63066d76c6ed1295a902ffe89d97f30ac46`
+  is preserved. Leader-supplied actual CI run37160002142/job111311298024 had
+  36 failed,13299 passed,64 skipped,46 deselected in1074.71s, principally
+  `grader_baseline_closure_mismatch` with downstream safe-receipt failures.
+  Review5403354146 was conditional on CI, not merge authority. Neither the
+  old selector nor that CI was rerun or queried here.
 
-  Base main`9f9b33aa2c86ea77e97624fa58d5d6dc67122f25` delivered accepted
-  PR737 HEAD`0f105b3e8dea9697749cb23278b7dbba662c4b27`, owner review5402995317
-  and all10 checks. Its1.61s and earlier proofs, launcher127 and failed memo
-  history were not repeated. All30 original outcomes, eight diagnostic outcomes
-  and eight consumed budget observations stay fixed. experiment-design kept
-  the policy boundary; experiment-report-en then protected im-not-ai-en kept
-  the numerical evidence and limits. Final immutable-HEAD review, same-HEAD CI
-  and leader acceptance remain; no Project decision or live action is granted.
+  One new offline selector passed:1 passed in1.85s at clean implementation
+  HEAD`1f057120b8f1e634df4f6b03b493bbd608eea7c4`, tree
+  `1a8884706a2ffd4309b9167791392773aec474f1`, exits0 and no timeout. It covered
+  132 authored cases/16 explicit diagnostics, restored/frozen runtime and report
+  files, all24 workflows, unchanged artifact/record/calculation behavior and
+  zero guarded network/model/grade/writer/child/sleep effects. Exactly one real
+  `registration.compile_plan()` verified all source roles and grader closure
+  `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce` without
+  changing or mocking historical pins. New proof log
+  SHA256`7130cf7b0340632c9b05fc1934e8fa220a456498d43f9c4ed206cc5bce188a96`.
+  The1.85s is pytest duration, not measured outer elapsed or model performance.
+
+  The [latest record](tasks/LATEST_TASK_RESULT/README.md) retains exact commands,
+  restored/current hashes, prior proof/failed-CI evidence and skill reconciliation.
+  Accepted PR737 HEAD`0f105b3e8dea9697749cb23278b7dbba662c4b27`, owner
+  review5402995317/all10 checks and earlier proof/launcher127/failed memo history
+  remain prior provenance. Original30 outcomes, eight diagnostic outcomes and
+  eight consumed budget points stay fixed; no historical failure is relabeled.
+  experiment-design kept policy/measurement scope fixed; experiment-report-en
+  then protected im-not-ai-en preserved numbers and limits. The fresh editorial
+  checker failed before findings with `stream disconnected before completion: response.failed event received`;
+  no retry/verdict is claimed, and reverse-condition reconciliation is
+  explicitly same-session. Final immutable-HEAD
+  review, same-HEAD CI and leader acceptance remain. No Project decision, live
+  action, experiment expansion, causal finding or complete invoice is claimed.
 
 - Consolidate the [retention-budget report](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
   and its [machine-readable evidence](tasks/codex_budget_pilot/retention_diagnostic_readout.json)
