@@ -1,180 +1,146 @@
 # Latest task result
 
-## PROJECT5-PR738-REMOVE-ACCIDENTAL-GLOBAL-FREEZE-20261004-0904
+## PROJECT5-COMPACT-OUTCOME-DIAGNOSTICS-20261004-1006
 
-PR738's analyzer test no longer freezes unrelated report/test bytes or the
-workflow directory. The one new invocation passed:1 passed in1.85s at
-`efad4a792f9e4922a73f51060d7c718a5c1e76f4`, with all invocation/log/status-capture
-exits0, no timeout and zero guarded live effects. The real registration compiler
-still verified the unchanged grader closure and source roles. This is a focused
-local pass, not final-HEAD CI or leader acceptance.
+The explicit compact-outcomes mode passed its one bounded offline selector:
+1 passed in1.76s at implementation`cab506a72d6d25d1b73246ae8d66e4eaad86fb97`.
+All invocation/selector/log/status-capture exits were0, with no timeout and
+zero guarded live effects. Its single compact-mode execution on the retained exp035 snapshot
+produced3 fixed derived diagnoses while preserving all220 recorded rows.
+This is a local consumer proof and retrospective evidence, not new inference,
+runtime category emission, independent cause attribution or final-HEAD CI.
 
-The leader reviewed HEAD`7ff95f698401bfc9821bcf9d9bb75ca5b52da06a` as HOLD for
-the accidental global freeze, not approval. The test-only correction deletes50
-lines: the ad hoc `frozen_sha256`, `expected_workflows` and `actual_workflows`
-inventories, their assertions/comments and obsolete printed boundary. It adds
-no replacement inventory, helper or snapshot. The real `registration.compile_plan()`,
-historical closure/source-role checks, no-launch assertions,132 analyzer cases/16
-positive additions, artifact/legacy-output invariants and live-effect guards
-remain intact. No unrelated import or test was refactored.
+### Separate compact consumer
 
-The earlier correction restored the shared runtime classifier and its original test to exact
-base`9f9b33aa2c86ea77e97624fa58d5d6dc67122f25` bytes. The diagnostic now lives
-only in `scripts/analyze_codex_run.py`; runtime category emission and recovery
-policy deliberately retain their old behavior. No historical hash was changed,
-excluded or mocked to make the closure pass. This continuation changes no
-analyzer, runtime, registration, workflow, historical report/data or retry policy.
+`scripts/analyze_codex_run.py --outcomes-json PATH` accepts a local compact
+outcomes list, mutually exclusive with the existing Step2-root path. It checks
+the compact schema, unique canonical task IDs, recorded status/outcome and
+types, then maps only present status/reason/message fields to the unchanged
+`_derived_output_limit_diagnostic`. It does not invent Step2 observability,
+HTTP evidence or ledger entries. Known reasons retain precedence; missing,
+null, redacted and unsupported text does not become a guessed failure cause.
 
-### Offline diagnosis, not a recorded outcome
+The report identifies source bytes by SHA256/size and preserves row/task
+denominators and recorded status/outcome/reason/attempted fields. It emits
+only safe recorded labels and the separately labeled fixed derived
+category/provenance/missingness. No provider message, endpoint, credential,
+task body, note or private input path is reported. Malformed/ambiguous input
+fails explicitly, without a partial report. Compact calls/attempts/costs are
+not converted into Step2 ledger rows or substituted totals. Failure metadata
+does not exclude rows or imply that no model work occurred.
 
-The analyzer can add `derived_output_limit_diagnostic` only when a local result
-has status`error`, recorded category`turn_failed` or`execution_error`, no
-structured HTTP429 and the complete supported output-limit message. The phrase
-is grounded in this existing
-[recorded message](https://github.com/hyeonsangjeon/gdpval-realworks/blob/9f9b33aa2c86ea77e97624fa58d5d6dc67122f25/batch-runner/docs/run_records/exp035_run34685779030_partial/outcomes.json#L6145),
-not a new provider observation. The derived fields contain only the fixed
-category`output_limit_exceeded`, provenance`offline_local_result_error_explicit_reason`
-and null`missing_reason`; the report labels them as offline derived diagnosis.
-Recorded category/status, denominators, usage, costs and source artifact bytes
-remain unchanged. The report never prints the underlying error text.
+The existing Step2 collector, accounting, report and default CLI behavior are
+unchanged. No shared classifier, core/runtime, registration, workflow, grader,
+historical data or recovery policy was edited. No global byte inventory,
+alternate grader fingerprint or new framework was introduced. See the
+[analyzer usage and input contract](../../batch-runner/docs/analyze_codex_run.md).
 
-Missing/redacted text, ordinary token or configuration prose, context/input
-limits, longer reason codes, traceback examples and conflicting wrappers add
-nothing. Known categories and structured HTTP429 take precedence. When no
-additional signal is present, legacy output stays unchanged; this absence does
-not establish that an output limit never occurred. No SDK field, runtime hook or general parser was
-added. The fixtures establish this analyzer contract, not an independent cause
-for any of the six retained failures or a measured improvement.
+### Retained evidence, separate from authored fixtures
 
-### Distinct earlier proofs and failed CI
+The one new-mode execution read the existing local
+`batch-runner/docs/run_records/exp035_run34685779030_partial/outcomes.json`,
+SHA256`9e98e98d3dbd0a9030c95642388ccb53b210a5e8f4cbc685b13391e67b4a8d6b`.
+The selector verified unchanged source bytes and preserved all220 unique tasks.
 
-The leader supplied actual [CI run37160002142/job111311298024](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37160002142/job/111311298024):
-36 failed,13299 passed,64 skipped,46 deselected in1074.71s. The principal error
-was `grader_baseline_closure_mismatch`; downstream safe-receipt assertions also
-failed. This was not queried again. `step8_grade.py` includes every core Python
-file in the frozen grader closure, so the earlier shared-classifier edit
-violated that contract. The correction restores those bytes instead of changing
-the registration or moving the edit elsewhere inside the frozen runtime.
-
-The previous1 passed in0.34s at implementation
-`7ca9f67acf3db16686ae749ecd82356c55e5203b` remains a successful narrow classifier
-proof. It did not cover the grader closure and was not rerun or relabeled.
-Its log SHA256 remains
-`f05f97d1b7d210a020ffed1b8a47f63066d76c6ed1295a902ffe89d97f30ac46` under
-`/tmp/output-limit-classification-20261004-0732.MZ4Ywh`.
-The [prior completion record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/3fb34977a7af27d31b4c1b03a429381243f8c902/tasks/LATEST_TASK_RESULT/README.md)
-retains its exact source, command and coverage. Review[5403354146](https://github.com/hyeonsangjeon/gdpval-realworks/pull/738#pullrequestreview-5403354146)
-was conditional on CI, not merge authority or approval of this correction.
-
-The previous analyzer/closure proof also passed1 test in1.85s, at
-`1f057120b8f1e634df4f6b03b493bbd608eea7c4`, tree
-`1a8884706a2ffd4309b9167791392773aec474f1`. It covered132 authored cases/16
-explicit diagnostics and one real compiler call, but also contained the ad hoc
-freeze checks rejected by the later source review. Its log SHA256 remains
-`7130cf7b0340632c9b05fc1934e8fa220a456498d43f9c4ed206cc5bce188a96` under
-`/tmp/output-limit-analyzer-correction-20261004-0834.RXNVIf`.
-The [immutable previous record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/7ff95f698401bfc9821bcf9d9bb75ca5b52da06a/tasks/LATEST_TASK_RESULT/README.md)
-preserves its exact command, snapshot hashes and reached boundaries. That proof
-was not rerun or relabeled. The new invocation happens to have the same pytest
-duration; its changed test commit and distinct log below identify the new proof.
-
-### Tested source and one new proof
-
-Clean implementation commit`efad4a792f9e4922a73f51060d7c718a5c1e76f4`, tree
-`0ba81c52af63084be0d607fdfb354e833434e3d3`, contains only the50-line test deletion.
-Its parent is the held HEAD`7ff95f698401bfc9821bcf9d9bb75ca5b52da06a`.
-After validation, code/test bytes remain fixed; only this record and the
-current CHANGELOG.md entry change.
-
-The exact token-free invocation was:
-
-```text
-env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-output-limit-classification-20261004-0732/batch-runner bash /tmp/output-limit-test-boundary-20261004-0904.zGrkfQ/run-selector.sh
-```
-
-From batch-runner, the retained launcher ran exactly:
-
-```text
-timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_an_unanswerable_question_is_declined.py::test_local_output_limit_diagnostic_preserves_records_and_grader_closure --tb=short
-```
-
-The invocation collected one item under Python3.10.12/pytest9.1.1, with no
-prerequisite probe or timing wrapper. It covered132 authored local-artifact
-cases through collection/report/CLI, including16 explicit diagnostics across
-the two unknown fallbacks, negative/missing-text and precedence cases, fixed
-safe labels, unchanged recorded fields/artifact bytes and legacy calculations.
-It called the real `registration.compile_plan()` exactly once. The grader closure remained
-`37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`; all registered
-source roles and the two recovery-eligible categories were verified without
-launch authority. Network/model/grade/writer/child/sleep guards recorded zero
-effects. The selector, launcher, log and status-capture exits were all0. The
-new1.85s is pytest duration; outer elapsed was not measured. This proof does not
-test or freeze all24 workflows. Unchanged non-PR files are a source-diff fact,
-not a new permanent test contract.
-
-| New evidence | SHA256 |
+| Observed compact field/result | Count and scope |
 | --- | --- |
-| selector.log | 6347b7f9182a64ae2c757ee9f35fbeb350913a88a83fe21a7210c1906c1fe19f |
+| Recorded `success` / `ok` | 150/220 rows |
+| Recorded `error` / `failed` | 70/220 rows, none excluded |
+| Full-match derived output-limit diagnostic | 3/220 rows, indices151/152/198 |
+| Diagnosis unavailable/no addition | 217/220 rows, not217 failures |
+
+The3 indices retain task IDs`a95a5829-34bb-40f3-993b-558aed6dcdef`,
+`a97369c7-e5cf-40ca-99e8-d06f81c57d53` and
+`eb54f575-93f9-408b-b9e0-f1208a0b6759`. Each retains its recorded
+status`error`, outcome`failed` and reason`turn_failed`. The existing matcher
+qualified all3 complete messages; the test did not assume that3 substring
+hits must qualify. The added values are fixed category`output_limit_exceeded`,
+provenance`offline_local_result_error_explicit_reason` and null`missing_reason`.
+The other217 rows receive no added output-limit diagnosis. This absence is not
+proof that an output limit never occurred, and it does not diagnose a cause.
+
+Separately,55 authored compact fixtures covered8 expected additions, missing/
+null/false distinctions, known reasons, wrappers and private-output boundaries.
+35 invalid sources and4 CLI exclusions failed as required. Legacy Step2 data,
+output, help and error behavior were checked within the same new selector;
+the accepted old selector and real compiler proof were not rerun. Fixture
+counts are not added to the220 retained outcomes or treated as provider events.
+
+### Exact tested state and proof
+
+Clean implementation HEAD`cab506a72d6d25d1b73246ae8d66e4eaad86fb97`, tree
+`025e8349c39bc75b1f5814ff2140d5b36092b259`, parent
+`0bc016935ff0b16d8fc9907f1fcf0637c92c3417`. It changes only the analyzer and
+existing analyzer test module. Code/test bytes remain fixed after the proof;
+the follow-up adds only usage documentation and completion records.
+
+Exact token-free invocation:
+
+```text
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-compact-outcome-diagnostics-20261004-1006/batch-runner bash /tmp/compact-outcome-diagnostics-20261004-1006.qcj1vk/run-selector.sh
+```
+
+From `batch-runner`, the launcher ran exactly:
+
+```text
+timeout --signal=KILL 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -s tests/test_an_unanswerable_question_is_declined.py::test_compact_outcomes_mode_is_separate_and_safe --tb=short
+```
+
+It collected one item under Python3.10.12/pytest9.1.1 and passed in1.76s.
+Selector, launcher and every log/status-capture exit were0; no timeout.
+Network/model/grade/writer/child/sleep guards recorded zero effects. The test
+guard also prevented a repeat of `registration.compile_plan()`. No prerequisite
+probe, timing wrapper, dependency install or broad suite ran. The1.76s is
+pytest duration; outer elapsed was not measured and no model latency is claimed.
+
+| Evidence | SHA256 |
+| --- | --- |
+| selector.log | e1db302188eff55503d38dec380b946bde7631cfd2b99caf364d88b991aba9a3 |
 | selector.status | 67a36859a82b6160ea609eaaf16718f72f3f10a3a68f46c8fa2cac3c8548ee0a |
-| invocation.log | 0d37929fbf75b81c702e4a213e314fd2d93e4cc292b1b645a9cfa31ba80d3c86 |
+| invocation.log | 7a7ebb991ec325d20e7d9146bf2e22172abdf79044ab602b2473079b89588e2e |
 | invocation.status | 0ee12bd089d3b9d1d70110bee6408ea428e19d53dea06f206ca30aa55330c463 |
-| run-selector.sh | ba8f7348fd27c27bec79a7333bca543e74fcbc83027d6a5c969507175c51e079 |
-| tested-state.md | f853c8f6d898ae7015c8858086402849a0353b34a4f9514cc620a5245d0a1aaa |
-| tests/test_an_unanswerable_question_is_declined.py | fec750e1523133c2abb253cc548bea65646ac472c2247d944d8112f303cbec76 |
+| run-selector.sh | 9cf5fc1a0ad2364a80991471fea1e1ec118fdb3405ab71e7c8439fedd8853831 |
+| tested-state.md | f18e312bc6c51f44657f6049e9b648c9239c2cd917bd7ae94cf06eee10713454 |
 
-Exact command/source/skill checkpoints and log files remain under
-`/tmp/output-limit-test-boundary-20261004-0904.zGrkfQ`. Earlier hashes retain
-their historical scope in the immutable previous record; none was repinned.
+Logs, the sanitized `retained-aggregate.json`, exact source state and protected
+reporting checkpoints remain under
+`/tmp/compact-outcome-diagnostics-20261004-1006.qcj1vk`. The aggregate was
+extracted from the captured proof log, not produced by another analyzer read.
 
-### Unchanged policy and historical evidence
+### Prior acceptance and remaining gates
 
-`codex_runner.py`, Step2 and the cumulative deadline code are byte-identical.
-Both retry allowlists remain exactly `rate_limited`/`turn_start_failed`;
-`content_filtered` remains the sole non-resumable category. The offline derived
-diagnostic adds no retry eligibility, native continuation or filter bypass.
-Clocks, quotas, budgets, models/settings, source/credential permissions, result
-selection, workflows, HF upload, QA and all historical pins remain unchanged.
-No source-pin sweep, historical reclassification or report/data rewrite occurred.
+The leader supplied accepted PR738 HEAD`a999a74d767cd52e2963259a0f0d1832a420740f`,
+tree`075241af2523162ab8a7ab9e78e67440577903db`, owner
+review[5403614723](https://github.com/hyeonsangjeon/gdpval-realworks/pull/738#pullrequestreview-5403614723)
+and all10 applicable checks, delivered as current main
+`0bc016935ff0b16d8fc9907f1fcf0637c92c3417`. This is prior source acceptance,
+not approval of the new consumer. The
+[accepted prior completion](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a999a74d767cd52e2963259a0f0d1832a420740f/tasks/LATEST_TASK_RESULT/README.md)
+retains the distinct earlier proofs, failed CI, held source review, launcher
+failure and editorial/memo transport history. None was retried or relabeled.
 
-This correction continues the same worktree/branch/PR738, originally based on
-`9f9b33aa2c86ea77e97624fa58d5d6dc67122f25`. Accepted PR737 HEAD
-`0f105b3e8dea9697749cb23278b7dbba662c4b27`, owner
-review[5402995317](https://github.com/hyeonsangjeon/gdpval-realworks/pull/737#pullrequestreview-5402995317)
-and all10 checks are leader-supplied prior acceptance, not review of this change.
-No duplicate search was repeated, and no new branch/worktree or PR was created.
-Older worktrees and `wip/local-main-preserved-20260719` remain intact.
+This exp035 population is separate from the original30-cell pilot and8-cell
+retention study. Their accepted outcomes, grades, costs, epoch03/epoch04
+boundaries and consumed budget observations remain unchanged in the
+[consolidated report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md).
+No cohorts or costs are combined. No causal retention benefit, independent
+provider authentication, complete invoice, regrade or whole-card completion
+is established here.
 
-The [accepted prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0f105b3e8dea9697749cb23278b7dbba662c4b27/tasks/LATEST_TASK_RESULT/README.md)
-preserves the1.61s report proof, earlier exact proofs, separate launcher127,
-failed memo/reviewer streams and reached/unreached boundaries. None was rerun,
-retried or relabeled. The [consolidated report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
-and [JSON](../codex_budget_pilot/retention_diagnostic_readout.json) remain fixed:
-eight diagnostic outcomes,2 successes/6 null failure grades,164 recorded model
-calls/known partial inferenceUSD5.206594, separate grading and eight consumed
-RESULT-only budget points. The original pilot remains24 epoch04 outcomes
-(18 graded/6 model-free UNGRADED) plus6 frozen epoch03 failures. These are not
-complete invoices, causal retention evidence or permission to reopen either
-sequence. No failure cause or measured improvement is assigned here.
+The full skill catalog was reviewed once. experiment-report-en followed by
+protected im-not-ai-en handled the numerical output, usage text and completion
+records. Source/structural/candidate checkpoints, a difference ledger and
+literal/fidelity checks are retained; reverse-condition reconciliation is
+explicitly same-session. No previously failed editorial transport was retried
+and no independent editorial/source-review verdict is claimed. experiment-design,
+UI/animation, repository audit and provider research are not applicable: no
+experiment/configuration axis or recovery policy changes in this consumer.
 
-### Completion and remaining gates
-
-The full skill catalog was reviewed once for this continuation.
-experiment-report-en then protected im-not-ai-en handled only the numerical
-completion passages and PR description. experiment-design is not applicable:
-this removes an accidental test restriction without redesigning measurement or
-recovery policy. Repository audit, UI, workflow and memo work are also outside
-this correction's scope. No optional literal restyling was applied.
-Source/structural/candidate checkpoints, an explicit change ledger and
-literal/fidelity checks are retained. The previous fresh read-only editorial checker
-failed before findings with `stream disconnected before completion: response.failed event received`.
-That transport was not retried and no verdict is claimed; the reverse-condition reconciliation
-is explicitly same-session. These editorial checks are not independent source
-review or a returned memo verdict; no failed memo transport was retried.
-
-Independent immutable-HEAD review, applicable same-HEAD CI and leader acceptance
-remain required. The leader owns Project/card decisions; no whole-card or
-Project5 completion is claimed. The Sol VM card remains blocked without the
-KVM/image handoff and was not rechecked. The existing owner Git identity is
-preserved without attribution trailers. No live operation, inference, grade,
-Project edit, merge, Azure/HF query, replay, dispatch, install or CI polling
-occurred. These records stop at pre-merge facts.
+One new clean worktree/branch started at the supplied main after one duplicate
+check found no open PRs. Finished worktrees and the preserved wip checkout
+remain intact. Owner identity remains hyeonsangjeon <wingnut0310@gmail.com>,
+without attribution trailers. Final immutable-HEAD review, applicable same-HEAD
+CI and leader acceptance remain required. No Project mutation, merge, live
+observation, model call, grading, dispatch, replay or experiment expansion
+occurred. These records stop at pre-merge facts; no carrying-PR future merge
+state, SHA or time is recorded.

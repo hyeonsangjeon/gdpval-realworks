@@ -62,12 +62,14 @@ What it will not do
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import statistics
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+from uuid import UUID
 
 #: The header's boundary, restated so the comparison is reproducible.
 SHORT_STATEMENT_CHARS = 2000
@@ -139,6 +141,132 @@ def _derived_output_limit_diagnostic(result: dict) -> dict | None:
         "provenance": "offline_local_result_error_explicit_reason",
         "missing_reason": None,
     }
+
+
+def collect_compact_outcomes(path: Path) -> dict:
+    """Read compact recorded outcomes, without Step2 discovery or accounting."""
+    def unique_fields(pairs):
+        fields = {}
+        for key, value in pairs:
+            if key in fields:
+                raise ValueError("duplicate JSON field")
+            fields[key] = value
+        return fields
+
+    def reject_constant(_value):
+        raise ValueError("non-finite JSON number")
+
+    try:
+        body = path.read_bytes()
+        payload = json.loads(
+            body.decode("utf-8"), object_pairs_hook=unique_fields,
+            parse_constant=reject_constant,
+        )
+    except (OSError, UnicodeError, ValueError):
+        raise SystemExit("cannot read a valid compact outcomes JSON file") from None
+    if not isinstance(payload, list):
+        raise SystemExit("compact outcomes JSON must be a top-level list")
+
+    rows = []
+    task_ids = set()
+    for index, row in enumerate(payload):
+        def invalid(field):
+            # Only the index and an authored field name may leave this path.
+            raise SystemExit(f"invalid compact outcome row {index}: {field}")
+
+        if not isinstance(row, dict):
+            invalid("expected an object")
+        task_id = row.get("task_id")
+        try:
+            canonical_task_id = str(UUID(task_id)) if isinstance(task_id, str) else None
+        except ValueError:
+            canonical_task_id = None
+        if canonical_task_id is None or task_id != canonical_task_id:
+            invalid("task_id must be a canonical UUID")
+        if task_id in task_ids:
+            invalid("duplicate task_id")
+        status = row.get("status")
+        if status not in ("success", "error"):
+            invalid("status must be success or error")
+        if row.get("outcome") != ("ok" if status == "success" else "failed"):
+            invalid("outcome does not match recorded status")
+        if "attempted" in row and row["attempted"] is not None and type(row["attempted"]) is not bool:
+            invalid("attempted must be a boolean or null")
+        reason = row.get("reason")
+        if reason is not None and (
+            not isinstance(reason, str)
+            or (reason != "" and not (
+                reason.isascii() and reason.isidentifier() and reason.islower()
+                and len(reason) <= 64
+            ))
+        ):
+            invalid("reason must be a category label or null")
+        if row.get("message") is not None and not isinstance(row["message"], str):
+            invalid("message must be a string or null")
+        if any(key in row for key in ("observability", "error", "http_status_code")):
+            invalid("Step2 fields are not compact outcomes")
+
+        # Map only present recorded fields. This does not assert that the source
+        # carried Step2 observability/error fields, HTTP evidence or ledger rows.
+        mapped = {"status": status}
+        if "reason" in row:
+            mapped["observability"] = {"error_category": reason}
+        if "message" in row:
+            mapped["error"] = row["message"]
+        recorded = {key: row[key] for key in (
+            "task_id", "status", "outcome", "reason", "attempted",
+        ) if key in row}
+        recorded["row_index"] = index
+        diagnostic = _derived_output_limit_diagnostic(mapped)
+        if diagnostic is not None:
+            recorded["derived_output_limit_diagnostic"] = diagnostic
+        rows.append(recorded)
+        task_ids.add(task_id)
+
+    return {
+        "source": {
+            "kind": "compact_outcomes_json",
+            "sha256": hashlib.sha256(body).hexdigest(),
+            "size_bytes": len(body),
+        },
+        "row_count": len(rows),
+        "task_count": len(task_ids),
+        "rows": rows,
+    }
+
+
+def report_compact_outcomes(data: dict) -> None:
+    """Print only validated recorded labels and the existing fixed diagnostic."""
+    rows = data["rows"]
+    source = data["source"]
+    print("=== compact outcomes (local recorded evidence) ===")
+    print(f"source_sha256 : {source['sha256']}")
+    print(f"source_bytes  : {source['size_bytes']}")
+    print(f"rows          : {data['row_count']}   unique_tasks: {data['task_count']}")
+    print("recorded_status :", dict(Counter(row["status"] for row in rows)))
+    print("recorded_outcome:", dict(Counter(row["outcome"] for row in rows)))
+    print("No failures excluded by failure_class or notes. Compact accounting is not "
+          "a Step2 ledger; calls, attempts and costs are not aggregated here.")
+    print("=== per recorded row ===")
+    for row in rows:
+        reason = json.dumps(row["reason"]) if "reason" in row else "NOT_RECORDED"
+        attempted = json.dumps(row["attempted"]) if "attempted" in row else "NOT_RECORDED"
+        print(f"{row['row_index']} {row['task_id']} status={row['status']} "
+              f"outcome={row['outcome']} reason={reason} attempted={attempted}")
+    derived = [row for row in rows if row.get("derived_output_limit_diagnostic")]
+    print("=== offline derived output-limit diagnostic ===")
+    print(f"derived_rows: {len(derived)}/{len(rows)}   "
+          f"unavailable_rows: {len(rows) - len(derived)}/{len(rows)}")
+    print("Recorded status/outcome/reason unchanged. Only present status/reason/message "
+          "fields map to the existing matcher; not runtime category emission or "
+          "independent failure-cause attribution.")
+    for row in derived:
+        print(f"{row['row_index']} {row['task_id']} category=output_limit_exceeded "
+              "provenance=offline_local_result_error_explicit_reason missing_reason=None")
+    print("Unlisted rows: diagnosis UNAVAILABLE; "
+          "missing_reason=not_established_by_recorded_status_reason_message. "
+          "Absent, redacted or unsupported evidence is not proof that an output limit "
+          "never occurred. No cohort comparison, grade or invoice is established.")
 
 
 def _items_seen_is_measured(task: dict) -> bool:
@@ -511,6 +639,20 @@ def report(data: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = sys.argv[1:] if argv is None else argv
+    options = arguments[:arguments.index("--")] if "--" in arguments else arguments
+    if any(arg == "--outcomes-json" or arg.startswith("--outcomes-json=") for arg in options):
+        parser = argparse.ArgumentParser(description="Report local compact outcomes without Step2 accounting.")
+        parser.add_argument("--outcomes-json", type=Path, action="append", required=True)
+        parser.add_argument("artifact", nargs="?", type=Path)
+        args = parser.parse_args(arguments)
+        if args.artifact is not None:
+            parser.error("--outcomes-json and the Step2 artifact path are mutually exclusive")
+        if len(args.outcomes_json) != 1:
+            parser.error("supply exactly one --outcomes-json path")
+        report_compact_outcomes(collect_compact_outcomes(args.outcomes_json[0]))
+        return 0
+
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "artifact",

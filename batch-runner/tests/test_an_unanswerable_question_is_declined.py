@@ -709,3 +709,338 @@ def test_local_output_limit_diagnostic_preserves_records_and_grader_closure(
         print(f"BOUNDARY local collect/report/CLI: {len(cases)} authored cases; {2 * len(positives)} explicit diagnostics")
         print("BOUNDARY missing/redacted/context/input/wrapper/known-category/HTTP429 refusals; recorded fields and artifact bytes unchanged")
         print("BOUNDARY fixed labels only; legacy output/denominators/usage/costs unchanged; zero network/model/grade/writer/child/sleep effects")
+
+
+def test_compact_outcomes_mode_is_separate_and_safe(tmp_path, monkeypatch, capsys):
+    """Authored compact contracts plus exactly one retained exp035 mode read."""
+    reason = "Incomplete response returned, reason: max_output_tokens"
+    missing = object()
+    cases = []
+
+    def add_case(category, message, expected=False, *, status="error", attempted=True):
+        row = {
+            "task_id": f"{len(cases) + 1:08x}-0000-4000-8000-000000000000",
+            "status": status,
+            "outcome": "ok" if status == "success" else "failed",
+            "failure_class": "execution_environment",
+            "failure_class_note": "PRIVATE_NOTE_DO_NOT_PRINT",
+            "task_body": "PRIVATE_TASK_BODY_DO_NOT_PRINT",
+            "deployment": "SECRET_ENDPOINT",
+            "calls": 71, "attempts": 19, "model_cost_usd": None,
+            "cost_note": "SECRET_CREDENTIAL",
+            "derived_output_limit_diagnostic": {"category": "SECRET_CREDENTIAL"},
+        }
+        if category is not missing:
+            row["reason"] = category
+        if message is not missing:
+            row["message"] = message
+        if attempted is not missing:
+            row["attempted"] = attempted
+        cases.append((row, expected))
+
+    positives = (
+        reason, f"the Codex turn failed: {reason}",
+        f"stream disconnected before completion: {reason}",
+        f"the Codex turn failed: stream disconnected before completion: {reason}, mem=187MB",
+    )
+    negatives = (
+        missing, None, "", "[redacted]", "tokens max_tokens output length",
+        "max_output_tokens", "reason: max_output_tokens",
+        "Incomplete response returned, reason: contextWindowExceeded",
+        "Incomplete response returned, reason: max_input_tokens",
+        f"{reason}_per_turn", f'Example: "{reason}"', f"{reason}, [redacted]",
+        f"{reason}\nRuntimeError: wrapper failed", f"RuntimeError: wrapper failed\n{reason}",
+        f"{reason}, endpoint=https://private.invalid/SECRET_ENDPOINT",
+        f"{reason}, api_key=SECRET_CREDENTIAL",
+    )
+    for category in ("turn_failed", "execution_error"):
+        for message in positives:
+            add_case(category, message, True)
+        for message in negatives:
+            add_case(category, message)
+    for category in (
+        "rate_limit", "content_filter", "transport_error", "timeout",
+        "rate_limited", "content_filtered", "turn_start_failed", "unknown", None, "",
+    ):
+        add_case(category, reason)
+    add_case(missing, reason)
+    add_case("turn_failed", reason, status="success")
+    for attempted in (missing, None, False):
+        add_case(None, missing, attempted=attempted)
+    assert len(cases) == 55
+    fixture = tmp_path / "PRIVATE_INPUT_PATH.json"
+    fixture.write_text(json.dumps([row for row, _ in cases]), encoding="utf-8")
+    empty = tmp_path / "empty.json"
+    empty.write_text("[]", encoding="utf-8")
+
+    valid = {key: value for key, value in cases[0][0].items()
+             if key in ("task_id", "status", "outcome", "reason", "message", "attempted")}
+    invalid_payloads = [
+        {"results": [valid]}, None, "PRIVATE_TASK_BODY_DO_NOT_PRINT", [None], [True],
+        [valid, valid],
+    ]
+    for key in ("task_id", "status", "outcome"):
+        row = dict(valid)
+        del row[key]
+        invalid_payloads.append([row])
+    for key, value in (
+        ("task_id", "https://private.invalid/SECRET_ENDPOINT"),
+        ("task_id", 1), ("status", ["error"]), ("status", "failed"),
+        ("outcome", "ok"), ("attempted", 1), ("attempted", "true"),
+        ("reason", False), ("reason", []), ("reason", {}),
+        ("reason", "https://private.invalid/SECRET_ENDPOINT"),
+        ("reason", "PRIVATE_TASK_BODY_DO_NOT_PRINT"), ("reason", "a" * 65),
+        ("message", 0), ("message", False), ("message", {}), ("message", []),
+        ("observability", {"error_category": "rate_limited"}),
+        ("error", reason), ("http_status_code", 429),
+    ):
+        invalid_payloads.append([{**valid, key: value}])
+    invalid_paths = []
+    for index, payload in enumerate(invalid_payloads):
+        path = tmp_path / f"invalid-{index}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        invalid_paths.append(path)
+    invalid_bodies = (
+        b"{PRIVATE_TASK_BODY_DO_NOT_PRINT", b"\xff",
+        ('[{"reason":"turn_failed","reason":"rate_limit"}]').encode(),
+        ('[{"model_cost_usd":NaN}]').encode(),
+    )
+    for index, body in enumerate(invalid_bodies):
+        path = tmp_path / f"invalid-bytes-{index}.json"
+        path.write_bytes(body)
+        invalid_paths.append(path)
+    invalid_paths += [tmp_path / "SECRET_CREDENTIAL-missing.json", tmp_path]
+
+    legacy = build(tmp_path / "legacy", [
+        ("step2ok", "success", None, 1, 0, None),
+        ("step2bad", "error", "rate_limited", 2, 0, None),
+    ])
+    # Presence of a compact file must not change default artifact discovery.
+    (legacy / "outcomes.json").write_bytes(fixture.read_bytes())
+    local_before = {str(path.relative_to(tmp_path)): hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in tmp_path.rglob("*") if path.is_file()}
+    retained = (Path(__file__).resolve().parents[1]
+                / "docs/run_records/exp035_run34685779030_partial/outcomes.json")
+    retained_sha256 = "9e98e98d3dbd0a9030c95642388ccb53b210a5e8f4cbc685b13391e67b4a8d6b"
+    retained_body = retained.read_bytes()
+    assert hashlib.sha256(retained_body).hexdigest() == retained_sha256
+    retained_rows = json.loads(retained_body)
+    assert len(retained_rows) == 220
+    candidate_indices = {index for index, row in enumerate(retained_rows)
+                         if reason in row["message"]}
+    assert candidate_indices == {151, 152, 198}
+    assert [retained_rows[index]["task_id"] for index in sorted(candidate_indices)] == [
+        "a95a5829-34bb-40f3-993b-558aed6dcdef",
+        "a97369c7-e5cf-40ca-99e8-d06f81c57d53",
+        "eb54f575-93f9-408b-b9e0-f1208a0b6759",
+    ]
+
+    effects = []
+
+    def forbidden(*args, **kwargs):
+        effects.append("forbidden")
+        raise AssertionError("compact analyzer crossed a live/write/Step2 boundary")
+
+    for owner, names in (
+        (subprocess, ("Popen", "run", "check_call", "check_output")),
+        (socket.socket, ("connect", "connect_ex")),
+        (socket, ("create_connection", "getaddrinfo")),
+        (os, ("system",)), (time, ("sleep",)),
+        (Path, ("write_bytes", "write_text")),
+        (registration, ("compile_plan",)),
+        (codex_azure_token, ("acquire_token", "get_bearer_token_provider")),
+    ):
+        for name in names:
+            monkeypatch.setattr(owner, name, forbidden)
+    for constructor in (
+        azure_ai_clients.AzureAIClientFactory, azure_ai_clients.OpenAI,
+        azure_ai_clients.AzureOpenAI, azure_ai_clients.DefaultAzureCredential,
+        step8_grade.Grader, Codex, CodexClient,
+    ):
+        monkeypatch.setattr(constructor, "__init__", forbidden)
+    for module in (builtins, io):
+        original_open = module.open
+
+        def read_only_open(file, mode="r", *args, _open=original_open, **kwargs):
+            if any(flag in mode for flag in "wax+"):
+                forbidden()
+            return _open(file, mode, *args, **kwargs)
+
+        monkeypatch.setattr(module, "open", read_only_open)
+    for name in ("OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "HF_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    legacy_data = analyzer.collect(legacy)
+    assert [(row["task_id"], row["status"], row["error_category"], row["attempts"],
+             row["settled"], row["known_cost_usd"]) for row in legacy_data["tasks"]] == [
+        ("step2ok", "success", None, 1, 1, None),
+        ("step2bad", "error", "rate_limited", 2, 2, None),
+    ]
+    assert len(legacy_data["ledger"]) == 3
+    analyzer.report(legacy_data)
+    legacy_output = capsys.readouterr().out
+    assert "=== outcome ===  success 1/2 = 50.0%" in legacy_output
+    assert "UNDETERMINED, which is not zero" in legacy_output
+    assert "derived output-limit" not in legacy_output
+    assert "compact outcomes" not in legacy_output
+    for arguments in ([str(legacy)], ["--", str(legacy)]):
+        assert analyzer.main(arguments) == 0
+        assert capsys.readouterr().out == legacy_output
+    with monkeypatch.context() as legacy_cli:
+        legacy_cli.setattr(sys, "argv", ["analyze_codex_run.py", str(legacy)])
+        assert analyzer.main() == 0
+        assert capsys.readouterr().out == legacy_output
+    old_parser = analyzer.argparse.ArgumentParser(description=analyzer.__doc__.splitlines()[0])
+    old_parser.add_argument("artifact", type=Path,
+                           help="directory holding an unpacked run artifact (workspace/ and results/)")
+    with pytest.raises(SystemExit) as help_exit:
+        analyzer.main(["--help"])
+    assert help_exit.value.code == 0
+    assert capsys.readouterr().out == old_parser.format_help()
+    with pytest.raises(SystemExit) as old_error:
+        old_parser.parse_args([])
+    old_error_output = capsys.readouterr().err
+    with pytest.raises(SystemExit) as current_error:
+        analyzer.main([])
+    assert current_error.value.code == old_error.value.code == 2
+    assert capsys.readouterr().err == old_error_output
+    with pytest.raises(SystemExit) as missing_legacy:
+        analyzer.main([str(tmp_path / "absent-root")])
+    assert missing_legacy.value.code == f"not a directory: {tmp_path / 'absent-root'}"
+
+    expected_diagnostic = {
+        "category": "output_limit_exceeded",
+        "provenance": "offline_local_result_error_explicit_reason", "missing_reason": None,
+    }
+    actual_reads = []
+    mapped_hashes = []
+    original_collect = analyzer.collect_compact_outcomes
+    original_matcher = analyzer._derived_output_limit_diagnostic
+
+    def capture_collect(path):
+        data = original_collect(path)
+        if path == retained:
+            actual_reads.append(data)
+        return data
+
+    def capture_mapping(mapped):
+        mapped_hashes.append(hashlib.sha256(json.dumps(mapped, sort_keys=True).encode()).hexdigest())
+        return original_matcher(mapped)
+
+    with monkeypatch.context() as compact_only:
+        for name in ("collect", "report", "_find", "_load_json", "_load_jsonl"):
+            compact_only.setattr(analyzer, name, forbidden)
+        compact_only.setattr(analyzer, "collect_compact_outcomes", capture_collect)
+        compact_only.setattr(analyzer, "_derived_output_limit_diagnostic", capture_mapping)
+        data = analyzer.collect_compact_outcomes(fixture)
+        assert set(data) == {"source", "row_count", "task_count", "rows"}
+        assert data["row_count"] == data["task_count"] == len(cases)
+        assert data["source"] == {
+            "kind": "compact_outcomes_json", "size_bytes": fixture.stat().st_size,
+            "sha256": hashlib.sha256(fixture.read_bytes()).hexdigest(),
+        }
+        assert len(mapped_hashes) == len(cases)
+        for index, ((row, expected), actual) in enumerate(zip(cases, data["rows"])):
+            recorded = {key: row[key] for key in ("task_id", "status", "outcome", "reason", "attempted")
+                        if key in row}
+            copy = dict(actual)
+            assert copy.pop("row_index") == index
+            assert copy.pop("derived_output_limit_diagnostic", None) == (expected_diagnostic if expected else None)
+            assert copy == recorded, ("recorded fields", index)
+            mapped = {"status": row["status"]}
+            if "reason" in row:
+                mapped["observability"] = {"error_category": row["reason"]}
+            if "message" in row:
+                mapped["error"] = row["message"]
+            assert mapped_hashes[index] == hashlib.sha256(json.dumps(mapped, sort_keys=True).encode()).hexdigest(), index
+        analyzer.report_compact_outcomes(data)
+        output = capsys.readouterr().out
+        assert "rows          : 55   unique_tasks: 55" in output
+        assert "derived_rows: 8/55   unavailable_rows: 47/55" in output
+        assert output.count("category=output_limit_exceeded ") == 8
+        assert output.count("status=error outcome=failed") == 54
+        assert "attempted=false" in output and "attempted=null" in output
+        assert "attempted=NOT_RECORDED" in output and "reason=NOT_RECORDED" in output
+        assert "reason=null" in output and 'reason=""' in output
+        assert "No failures excluded by failure_class or notes" in output
+        assert "calls, attempts and costs are not aggregated here" in output
+        assert "missing_reason=not_established_by_recorded_status_reason_message" in output
+        assert analyzer.main([f"--outcomes-json={fixture}"]) == 0
+        assert capsys.readouterr().out == output
+        assert analyzer.main(["--outcomes-json", str(empty)]) == 0
+        empty_output = capsys.readouterr().out
+        assert "rows          : 0   unique_tasks: 0" in empty_output
+        assert "0%" not in empty_output
+
+        for path in invalid_paths:
+            with pytest.raises(SystemExit) as error:
+                analyzer.main(["--outcomes-json", str(path)])
+            assert isinstance(error.value.code, str)
+            assert error.value.code.startswith(("invalid compact outcome row", "compact outcomes JSON must", "cannot read a valid compact"))
+            assert capsys.readouterr().out == ""
+            assert "SECRET" not in error.value.code and "PRIVATE" not in error.value.code
+        for arguments in (
+            [str(legacy), "--outcomes-json", str(fixture)],
+            ["--outcomes-json", str(fixture), str(legacy)],
+            ["--outcomes-json", str(fixture), "--outcomes-json", str(empty)],
+            ["--outcomes-json"],
+        ):
+            with pytest.raises(SystemExit) as error:
+                analyzer.main(arguments)
+            assert error.value.code == 2
+            captured = capsys.readouterr()
+            assert captured.out == "" and "error:" in captured.err
+            assert "SECRET" not in captured.err and "PRIVATE" not in captured.err
+
+        # The sole new-mode execution on retained data. A substring is not an
+        # expected diagnostic; the accepted full matcher decides the count.
+        assert actual_reads == []
+        assert analyzer.main(["--outcomes-json", str(retained)]) == 0
+        retained_output = capsys.readouterr().out
+        assert len(actual_reads) == 1
+        actual = actual_reads[0]
+        assert actual["source"]["sha256"] == retained_sha256
+        assert actual["source"]["size_bytes"] == len(retained_body)
+        assert actual["row_count"] == actual["task_count"] == 220
+        for index, (original, row) in enumerate(zip(retained_rows, actual["rows"])):
+            assert row["row_index"] == index
+            for key in ("task_id", "status", "outcome", "reason", "attempted"):
+                assert row[key] == original[key], ("retained field", index, key)
+        derived_indices = {row["row_index"] for row in actual["rows"]
+                           if row.get("derived_output_limit_diagnostic")}
+        assert derived_indices <= candidate_indices
+        assert all(row["derived_output_limit_diagnostic"] == expected_diagnostic
+                   for row in actual["rows"] if row["row_index"] in derived_indices)
+        statuses = dict(analyzer.Counter(row["status"] for row in actual["rows"]))
+        outcomes = dict(analyzer.Counter(row["outcome"] for row in actual["rows"]))
+        assert statuses == {"success": 150, "error": 70}
+        assert outcomes == {"ok": 150, "failed": 70}
+        assert retained_output.count("status=error outcome=failed") == 70
+        assert retained_output.count("status=success outcome=ok") == 150
+        assert retained_output.count("category=output_limit_exceeded ") == len(derived_indices)
+        for row in retained_rows:
+            message_exposed = bool(row["message"]) and row["message"] in retained_output
+            assert not message_exposed, "provider message exposed"
+        assert str(retained) not in retained_output
+
+    for private in (reason, "mem=187MB", "SECRET_ENDPOINT", "SECRET_CREDENTIAL",
+                    "private.invalid", "PRIVATE_TASK_BODY_DO_NOT_PRINT", "PRIVATE_NOTE_DO_NOT_PRINT",
+                    str(fixture), "failure_class_note", "model_cost_usd", "ledger rows"):
+        assert private not in output
+        assert private not in json.dumps(data)
+    assert hashlib.sha256(retained.read_bytes()).hexdigest() == retained_sha256
+    assert local_before == {str(path.relative_to(tmp_path)): hashlib.sha256(path.read_bytes()).hexdigest()
+                            for path in tmp_path.rglob("*") if path.is_file()}
+    assert effects == []
+    with capsys.disabled():
+        print(f"BOUNDARY compact fixtures: {len(cases)} cases/8 explicit additions; {len(invalid_paths)} invalid sources/4 CLI exclusions; missing/null/known/wrapper/private mapping passed")
+        print("BOUNDARY legacy Step2 data/output/help/errors unchanged; no compact ledger substitution; source bytes unchanged; zero guarded network/model/grade/writer/child/sleep effects")
+        print("RETAINED_COMPACT " + json.dumps({
+            "cohort": "exp035_run34685779030_partial", "source_sha256": retained_sha256,
+            "rows": actual["row_count"], "unique_tasks": actual["task_count"],
+            "recorded_status": statuses, "recorded_outcome": outcomes,
+            "substring_candidates": len(candidate_indices),
+            "derived_count": len(derived_indices), "derived_indices": sorted(derived_indices),
+            "unavailable_count": len(actual["rows"]) - len(derived_indices),
+        }, sort_keys=True))
+        print("BOUNDARY retained exp035 local evidence only; fixed offline diagnosis is not independent cause attribution, a grade, an invoice or a pilot/retention outcome change")
