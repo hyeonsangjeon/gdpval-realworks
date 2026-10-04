@@ -11,6 +11,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Separate local original-input bundle registration from runnable comparison
+  compilation. The local CLI validates the pinned catalog/envelope and reuses
+  the original parquet, cohort, reference and canonical Step0 readers. Existing
+  credentialed intake keeps its full-source gate; existing attestation/readers,
+  runtime, workflows, graders, registration and source pins are unchanged.
+
+  One bounded bundle selector passed73 tests with1 expected negative-fixture
+  warning in7.60s, exit0, at HEAD`6d3805f507d291f094df2beecf3b5a378c4313ec`,
+  tree`a4312618812545c2f1dd31817ee2e66a707c58fc`; log SHA256
+  `fad1209a6015f64375bf7f799ee59be1fcf6ac6e2b503ae0d74a6651f67e4b0e`.
+  Only afterward, one corrected real local import verified the2519040-byte
+  archive, all four original roles and installed readback, exit0 with empty
+  stderr. Safe stdout SHA256 is
+  `b785be846a68f38a0fefa7e7e97f877ddd3298dcaaa4960fc335a4edac1029d1`.
+  The initial import2 and read-only `DispatchPlanRefused` diagnosis remain
+  separate unchanged evidence. Raw inputs/private paths stay outside Git;
+  credentialed CI intake remains rejected and comparison launch remains blocked.
+  The [completion record](tasks/LATEST_TASK_RESULT/README.md) retains commands,
+  role identities, privacy limits and remaining final-HEAD review/CI/acceptance.
+
 ### Changed
 
 - Record the leader-verified Project5 comparison-card repair. The original

@@ -1,94 +1,124 @@
 # Latest task result
 
-## PROJECT5-COMPARISON-CARD-RECOVERY-RECORDS-20261004-1649
+## Project5 local original-input registration correction — 2026-10-04
 
-The leader repaired the Project5 comparison card's body-update failure. The
-leader's status readback is `blocked/차단됨` because the mandatory pre-edit
-review remains unavailable. This records-only change does not complete the
-card, relax its criteria or authorize comparison execution.
+The corrected local importer materialized the four registered originals once,
+with exit0 and installed-input readback. This is local input verification, not
+comparison preparation, CI-read authority or launch authorization.
 
-### Leader-verified repair and privacy boundary
+Only `codex_ci_input_bundle.py` changes production behavior. Its local CLI
+checks the catalog/envelope input pins, derives the score-free cohort and
+validates the registered dataset, task order and prompt/reference identities.
+It reuses the existing parquet, cohort-binding, reference and canonical Step0
+readers without constructing a comparison dispatch/grading plan. The private
+data contract carries no dispatch commands or comparison provenance.
+Credentialed intake retains `_registered()` and the public `import_bundle()`
+full-source gate. Existing attestation/LocalTransport and lower-level readers,
+core/runtime, workflows, graders, registration and source pins are unchanged;
+no prospective helper-pin update is needed.
 
-The following backup, remote mutation and readback facts were supplied and
-verified by the leader, not independently inspected or repeated in this task.
-They concern DraftIssue `DI_lAHOAYHuTs4BhAhrzgK-ge4`, item
-`PVTI_lAHOAYHuTs4BhAhrzg3lcBE`.
+### Distinct evidence
 
-- The original body contained136778 characters and261398 UTF-8 bytes,
-  exceeding GitHub's65536-character write limit. The leader preserved its
-  UTF-8 bytes in the private mode0600 archive
-  `project5-comparison-card-history-pre-compact-20261004-1649.md` and retained
-  a separate private JSON snapshot. Both backups are outside the repository.
-  The original
-  body/text-backup SHA256 is
-  `09219eef7e1d28992aed7618d8db840a8e9b265d07dc00d491979af596605ec1`;
-  no separate JSON-container hash was supplied.
-- The leader replaced only the editable body with a3319-character current
-  operational index linking the immutable [Section14 specification][section14]
-  and [registered plan][plan]. New-body/readback SHA256 is
-  `db7a8ae79f857003053927b0b2213531a7fb7ab8c3ef0ea6680d1dcb368ddbee`.
-  GitHub returned exactly those bytes and the unchanged title under
-  hyeonsangjeon. A new UTF-8 byte count was not supplied.
+- The accepted owner-mediated transfer remains the source of the archive;
+  this task made no download. The initial import exited2 with
+  `original_or_archive_verification_failed`. Its unchanged receipt SHA256 is
+  `9f212ee1b087e668b71ebfa0bad46712d48384f8ac93586885d26353fdd8d826`;
+  stderr SHA256 is
+  `f1be4ec7f2c014bee8e3a9c0263fe836716b4be98ca7f6788b9ab223736e5dd4`.
+- The accepted read-only diagnosis exited2 with `DispatchPlanRefused` in
+  `_registered()`, before `_unpack` or publication. Receipt SHA256 is
+  `bd01e99de1440a5c8506f6c36633a277616558e08943a6a34cc0fb41c8dcbb7a`.
+  The full compiler rejected the runtime pins for `core/codex_runner.py`,
+  `step2_run_inference.py` and `core/codex_task_deadline.py`. That refusal
+  remains intact; it was not evidence of corrupt archive bytes or a missing parent.
+- One new bounded bundle selector passed: **73 passed, 1 warning in 7.60s**,
+  exit0. The warning belongs to the deliberately mismatched Step0-policy
+  fixture. Log SHA256 is
+  `fad1209a6015f64375bf7f799ee59be1fcf6ac6e2b503ae0d74a6651f67e4b0e`.
+  Tests cover real current registration, genuine readers with explicitly
+  synthetic input pins, malformed definitions/rows/Step0/archives,
+  credentialed-gate separation, path safety and retained reservations.
+- After that proof, one corrected real local import exited0 with empty
+  stderr. Safe stdout SHA256 is
+  `b785be846a68f38a0fefa7e7e97f877ddd3298dcaaa4960fc335a4edac1029d1`;
+  stderr SHA256 is
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+  Archive/member checks, canonical Step0 and installed-input readback passed
+  before the new ready marker. The old failed destination was not reused.
 
-No raw archive was published. This task did not access or copy either private
-backup. The full history remains in the private archive; the shorter index
-does not claim to reproduce it fully. Characters, UTF-8 bytes and the character
-write limit remain distinct units.
+The real archive is2519040 bytes, SHA256
+`757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+These identities come from the real import, not its synthetic tests:
 
-### Review failures and remaining requirements
+| Original role | Bytes | SHA256 |
+|---|---:|---|
+| Original parquet | 1913489 | `f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202` |
+| Declared reference 1 | 47850 | `901e943a97328a661f9e704ae43eeea167e7805385a99322f1c24f8e159125c4` |
+| Declared reference 2 | 329418 | `bb09ca2a9999b404d7fced9202b42949cd9f142f39554e254bac77b3686dae9e` |
+| Full canonical schema4 Step0 | 218405 | `463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512` |
 
-The two failed review routes remain distinct:
+The separate logical role manifest is844 bytes, SHA256
+`d5e77412993344e6a8510113d9969cb72157643e9cde63e27e51107b624fb0df`;
+it is not a fifth original. Raw inputs, archive bytes, exact private paths and
+the metadata-only handoff remain outside Git. The handoff SHA256 is
+`b5b3b95b7da05f7a0af868196ef8bc7df5cdd40c03c6a5c83971eb088589a965`.
+The import's sensitive-field screen returned false; that is not publication
+clearance. No raw original or private locator is published by these records.
 
-- NAS's required reviewer ended with `response.failed` before a decision.
-- A separate, narrower leader-side request could not start because its harness
-  selected the unavailable Claude Opus4.7 display-name preset.
+### Tested source and commands
 
-The repository's [extreme-reasoner charter][reviewer] has no model pin at the
-supplied source. No repository model change or common root cause has been
-established. Neither failure supplies a valid review or permission waiver;
-no reviewer was retried or model preference overridden in this task.
+Base main: `a7e20de5dc798f7cd77b2b0808d4d1b4902d12d0`.
+Both proof and real import used clean implementation HEAD
+`6d3805f507d291f094df2beecf3b5a378c4313ec`, tree
+`a4312618812545c2f1dd31817ee2e66a707c58fc`. Subsequent edits are records/usage
+documentation only. No passed selector or earlier runtime proof was repeated.
 
-The registered GPT-5.4 SandboxV2/Codex comparison remains unexecuted and
-launch-blocked:four ABBA runs of five tasks =20 observations. It still requires
-a working mandatory reviewer route and valid pre-edit decision, original-input
-intake wired into comparison preparation, a command dispatcher for
-`gpt54_workflow_gate`, and implemented native call/token caps. The gate still
-refuses launch. This is not a generic budget-approval request. The separate
-30-cell pilot and8-cell retention study remain finished and consumed.
+Both commands used `env -i`, `PATH=/usr/bin:/bin`, `LANG=C.UTF-8`,
+`HF_HUB_OFFLINE=1`, `HF_DATASETS_OFFLINE=1`, `HF_HUB_DISABLE_TELEMETRY=1`,
+`HF_HUB_DISABLE_IMPLICIT_TOKEN=1`, `DO_NOT_TRACK=1`,
+`PYTHONDONTWRITEBYTECODE=1` and `PYTHONNOUSERSITE=1`.
+The selector additionally used `PYTHONPATH=.` and
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` from `batch-runner/`; import used
+`PYTHONPATH=batch-runner` from the source root. The argument views below redact
+private path values; the environment is listed above. Exact shell lines and
+output redirections are retained privately, with command SHA256 identities below.
 
-### Documentation scope and validation
+```bash
+timeout --kill-after=5s 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -ra -x --tb=short -p no:cacheprovider --basetemp="$PRIVATE_EVIDENCE/pytest" tests/test_codex_ci_input_bundle.py
+timeout --kill-after=5s 180s /ai-work/venvs/gdpval-realworks-py310/bin/python batch-runner/codex_ci_input_bundle.py import --bundle "$PRIVATE_ARCHIVE" --expected-sha256 757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3 --out "$NEW_PRIVATE_OUTPUT"
+```
 
-This clean documentation branch starts at supplied main
-`55b9cf5d1559d21433cfac2c7904fb838ae9ad88`. Only this record and the corresponding
-CHANGELOG.md Unreleased entry change. The blocked input-intake worktree,
-completed worktrees and preserved checkout remain untouched. No runtime,
-workflow, source-pin, agent/model configuration or historical-data edit,
-Project operation, secret retrieval, live call or experiment replay occurred.
+Selector command SHA256:
+`52a5d353ed963eb78e15fe49904663f35616c11efa598d5f5ae2b75b353710ea`.
+Import command SHA256:
+`56db91202bfc5510992d6714f89d7772ae68bf1957c2ea1e896a78408bc452f0`.
+The180-second bound and5-second kill grace apply to these local operations,
+not to comparison/model execution limits.
 
-Literal/unit reconciliation and `git diff --check` passed. The LATEST candidate
-passed the fidelity verifier; the full-CHANGELOG scan failed with exit3:
-`Markdown literal scanning exceeded the safe complexity limit.` That failure
-is retained without retry. The new entry was reviewed manually, and removing
-only that addition restored the prior changelog bytes. These are documentation
-checks, not runtime proof; no runtime suite or old selector was run.
+### Remaining gates and record boundary
 
-The full skill catalog was inspected once. experiment-report-en then protected
-im-not-ai-en preserve attribution, exact values and conditions; reverse-condition review
-is same-session, not independent approval. experiment-design is not applicable
-because no experiment or configuration is being designed. No failed editorial
-transport was retried. Source/structural/candidate checkpoints and the change
-ledger and separate pass/failure logs are retained under
-`/tmp/comparison-card-recovery-records-20261004-1649.iJ8Yel`.
+Credentialed comparison-workflow intake remains **REJECTED**; no HF-token
+binding, new privilege or Actions draft-asset access is established. The
+comparison still needs approved input-read authority and preparation wiring,
+a command dispatcher, implemented native call/token caps and resolution of
+its existing full-source/launch refusals. No served identity or input wire
+consumption was observed. Four ABBA runs of five tasks =20 observations remain
+unexecuted and launch-blocked. The separate30-cell pilot and8-cell retention
+study remain finished and consumed. No model, grading, replay or new experiment
+ran; no workflow, permission, Project or historical-data mutation occurred.
 
-Prior PR741 reviewed HEAD`5a69d46e3dcf44d6a833a3381e02f3f2440a65ea` and owner
-[review5404449148][prior-review] are accepted history, not review of these
-records. Its [immutable completion record][prior-record] retains the earlier
-proof; that proof was not rerun. Final-HEAD review, applicable CI and leader
-acceptance of these records remain outstanding. No carrying-PR future merge
-state, SHA or time is claimed.
+The full skill catalog was inspected once. experiment-report-en followed by protected
+im-not-ai-en applies only to these new passages. Literal/condition reconciliation
+uses source, structural and candidate checkpoints plus a change ledger;
+reverse-condition review is same-session, not independent approval. No matching
+backend/data-integrity skill is supplied; experiment-design and UI skills are
+not applicable. No failed editorial transport or full-changelog scan was retried.
 
-[section14]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/55b9cf5d1559d21433cfac2c7904fb838ae9ad88/tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md#L8259
-[plan]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/55b9cf5d1559d21433cfac2c7904fb838ae9ad88/batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml
-[reviewer]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/55b9cf5d1559d21433cfac2c7904fb838ae9ad88/.github/agents/extreme-reasoner.md
+The [earlier card-control record][prior-record] preserves its separate failed
+review routes and leader-verified repair. Prior PR741 reviewed
+`5a69d46e3dcf44d6a833a3381e02f3f2440a65ea`/[review5404449148][prior-review]
+remains accepted history, not review of this implementation. Final-HEAD owner
+review, applicable CI and leader acceptance remain outstanding.
+
+[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a7e20de5dc798f7cd77b2b0808d4d1b4902d12d0/tasks/LATEST_TASK_RESULT/README.md
 [prior-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/741#pullrequestreview-5404449148
-[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/5a69d46e3dcf44d6a833a3381e02f3f2440a65ea/tasks/LATEST_TASK_RESULT/README.md
