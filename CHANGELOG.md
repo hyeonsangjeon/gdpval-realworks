@@ -13,6 +13,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Clarify the retention report's error/retry criterion by distinguishing the
+  accepted core/runner taxonomy, the unchanged `rate_limited`/`turn_start_failed`
+  recovery allowlist and optional offline-derived `output_limit_exceeded`.
+  Preserve missing typed Retry-After evidence and unknown detailed causes and
+  recovery exposure of the six retention failures. The separate exp035
+  3-diagnosis/220-row observation does not diagnose either budget cohort.
+  The closeout distinguishes all30 original outcomes, all8 diagnostic outcomes
+  and all8 consumed budget reads from historical attribution/accounting gaps
+  and separate external-input blockers. Original criteria and leader-only
+  acceptance remain unchanged. Only the classification row, its references,
+  the short closeout and directly coupled qualitative expectations changed.
+
+  One existing bounded offline report selector passed:1 passed in1.54s at
+  HEAD`2285197946e97719137d5fd1f8cc5819e5399c92`, tree
+  `1c9338ba8a14fc0173eb390846a39b87843bd047`, exit0 with all capture exits0,
+  no timeout and zero guarded live/process effects. Log SHA256
+  `2fa35bb93df3ba61e64210478ac9bf5ff101c55bb48f27527b39f1ff6525c768`.
+  The1.54s is local test duration, not a new measurement. Numerical tables,
+  retention JSON, original pilot, runtime, workflows, grading and source pins
+  remain unchanged. Prior reviewed PR740 HEAD`02b1ddc1a8ba666db4982ae9350f007d73f80ff8`,
+  review5404310007/all10 checks and its19-case1.69s/prior13-case history remain
+  accepted evidence by reference, not rerun proof. Protected reporting and
+  reverse-condition reconciliation retain the cohort and missingness limits.
+  Exact commands, evidence and final-HEAD review/CI/leader-acceptance gates are
+  in the [completion record](tasks/LATEST_TASK_RESULT/README.md). No new live
+  authority or carrying-PR future merge fact is claimed.
+
 - Enforce the existing120-second timeout over the native Foundry diagnostic's
   stream as one cumulative monotonic deadline. Reuse the runner's daemon-worker
   and bounded-join pattern in the script only; events cannot refresh the limit.
