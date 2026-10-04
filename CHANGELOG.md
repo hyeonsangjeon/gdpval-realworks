@@ -13,6 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add an explicit `--outcomes-json` mode to the offline Codex run analyzer,
+  separate from the unchanged Step2 path and accounting. It validates compact
+  recorded fields and reuses the existing full-match diagnostic without another
+  taxonomy, runtime change or fabricated ledger totals. It preserves every row
+  and recorded status/outcome/reason, reports source/hash and row/task counts,
+  and never prints provider messages, credentials, task bodies or private paths.
+  Malformed/ambiguous input fails explicitly; failure metadata does not exclude
+  rows or imply no model work. See the
+  [usage contract](batch-runner/docs/analyze_codex_run.md).
+
+  One new bounded selector passed:1 passed in1.76s at clean implementation
+  HEAD`cab506a72d6d25d1b73246ae8d66e4eaad86fb97`, tree
+  `025e8349c39bc75b1f5814ff2140d5b36092b259`; all invocation/log/status-capture
+  exits0, no timeout and zero guarded live effects. It covered55 authored cases/
+  8 additions,35 invalid sources,4 CLI exclusions and legacy Step2 behavior.
+  Its one compact-mode execution on retained exp035 preserved220 rows/220 tasks,150 recorded success/
+  ok and70 error/failed. The existing matcher qualified3 rows at indices151/152/198;
+  the other217 rows received no added diagnosis, not217 failure outcomes.
+  Snapshot SHA256`9e98e98d3dbd0a9030c95642388ccb53b210a5e8f4cbc685b13391e67b4a8d6b`;
+  proof log SHA256`e1db302188eff55503d38dec380b946bde7631cfd2b99caf364d88b991aba9a3`.
+  Fixture evidence and retained-data observation remain distinct. The1.76s is
+  pytest duration, not model latency or measured improvement.
+
+  Prior PR738 HEAD`a999a74d767cd52e2963259a0f0d1832a420740f`, owner review5403614723/
+  all10 applicable checks are accepted history. The [latest completion](tasks/LATEST_TASK_RESULT/README.md)
+  records exact commands and links the prior proof/failure provenance without
+  rerunning it. experiment-report-en then protected im-not-ai-en preserved
+  numbers and limits; reverse review is same-session, with no failed editorial
+  transport retry. No design/configuration axis, runtime/workflow/grader or
+  historical data changed. This retrospective exp035 result does not combine
+  the30-cell pilot or8-cell retention study, attribute independent causes or
+  establish an invoice. Final immutable-HEAD review, same-HEAD CI and leader
+  acceptance remain; no Project/live authority or future merge fact is claimed.
+
 - Move PR738's output-limit diagnostic into the existing offline analyzer.
   Restore `core/execution_errors.py` and its original test to exact
   base`9f9b33aa2c86ea77e97624fa58d5d6dc67122f25` bytes; runtime classification
