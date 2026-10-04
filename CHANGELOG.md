@@ -13,6 +13,58 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Enforce the existing120-second timeout over the native Foundry diagnostic's
+  stream as one cumulative monotonic deadline. Reuse the runner's daemon-worker
+  and bounded-join pattern in the script only; events cannot refresh the limit.
+  Cleanup attempts turn interruption if the stream worker is still active.
+  Interruption, runtime close and workspace cleanup share the existing
+  default20-second grace. A timeout reports `turn_timed_out`; cleanup failure
+  reports `unclassified_failure`/`cleanup`, never a retained success.
+  Ordinary successful records, the public schema, native-only routing and retry
+  settings remain unchanged. Core, workflows, graders, registration/source pins,
+  historical data and deployment/auth settings were not edited. See the
+  [diagnostic usage boundary](batch-runner/docs/codex_foundry_connection.md).
+
+  Retain the latest actually received usage on timeout, later stream error and
+  cleanup failure. The existing parser publishes fresh `_usage_record`
+  projections, and the receipt snapshots the latest one after bounded cleanup.
+  Without a matching usage event, usage remains null; recorded zero remains zero.
+  Thread-total and most-recent-request counters stay separate, without a price
+  or invoice.
+  Late worker updates cannot mutate the returned receipt or restore success.
+  Reviewed HEAD`025a1c122d5c03bf56d8d4781dc5c98fd40391c5` is HOLD for loss of
+  observed failure usage, not approval. One newly authorized invocation of the
+  changed selector passed:19 passed in1.69s at implementation
+  HEAD`a2f36d9bdde300446c981fc0dd1b7195596fa9b6`, tree
+  `ee5e643e76ea9413e1ce732e5ae767c958613b4e`; all invocation/capture exits0,
+  no timeout and zero guarded live effects. Log SHA256
+  `02087cfcf3ee689d491a51547c93b1fcef88754ae77153fda5a7df56f40cbfee`.
+  The19 authored fake-stream cases retained usage in17 receipts and left2
+  without matching usage null. The1.69s is pytest duration, not live latency.
+
+  The original deadline proof remains separate:13 passed in1.40s at implementation
+  HEAD`a243203e11b7f96125c47d14fa116add39810d1a`, tree
+  `7673f5b4634c65b690d8b14755e5fa816f7a9e4b`. Selector, invocation and all log/status
+  capture exits were0; no timeout and zero guarded live effects. The13 cases use
+  local fake streams and short bounded synchronization, not native/model/HTTP
+  calls. They preserve normal output and distinguish stalled streams, cumulative
+  expiry, interruption and cleanup failures. Log SHA256
+  `c886afb2e217f348c4c5a89ac67a6d270f608d1808fed0e75b775863295d8e60`.
+  The1.40s is pytest duration, not live latency or measured model improvement.
+
+  The earlier120-second argument was ineffective on this direct-stream path;
+  the20-minute job limit was its only effective outer cap. That job limit does
+  not establish successful child cleanup, and setup remains outside the new
+  stream deadline. Handoff SHA256
+  `71d1979ec1e5158118033747134fc00284775dd0cb65bb7f86047c131dcee502`
+  remains source-inspection evidence, not a successful live test. Prior PR739
+  HEAD`0f9162093444e3143960e631a95edac6e46f3b29`/review5403796916/all10 checks and
+  proof history remain accepted by reference in the
+  [completion record](tasks/LATEST_TASK_RESULT/README.md). Reporting skills
+  preserve the numerical and no-live boundaries. Final-HEAD review/CI, leader
+  acceptance and the approved private deployment binding remain outstanding;
+  no carrying-PR future merge fact or live authority is claimed.
+
 - Add an explicit `--outcomes-json` mode to the offline Codex run analyzer,
   separate from the unchanged Step2 path and accounting. It validates compact
   recorded fields and reuses the existing full-match diagnostic without another
