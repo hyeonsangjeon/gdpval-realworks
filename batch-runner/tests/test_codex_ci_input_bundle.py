@@ -1,8 +1,8 @@
-"""Local archive boundary with synthetic provenance, real byte/publish guards.
+"""Local registration and archive guards; no inference or credentialed intake.
 
-Only the registered provenance supplier/transport is synthetic. The CLI,
-canonical Step0 reader, reference-tree/current-byte checks, USTAR encoding,
-external digest, member checks and no-clobber publication stay real.
+Legacy archive cases substitute provenance only. Input-only cases check the
+real current registration separately, then use explicitly synthetic input
+pins with the real catalog, parquet, binding, reference and Step0 readers.
 """
 
 from __future__ import annotations
@@ -18,11 +18,14 @@ import stat
 import tarfile
 from types import SimpleNamespace
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 import codex_budget_pilot as pilot
 import codex_ci_input_bundle as bundle
 from core import repo_bootstrapper
+from core.source_identity import SOURCE_PROJECTION_FIELDS, source_task_projection_sha256
 from gpt54_prepared_input_attestation import _reference_snapshot
 from gpt54_run_input_bundle import _step0_bytes
 from .test_codex_budget_pilot import offline  # noqa: F401
@@ -69,6 +72,7 @@ def originals(tmp_path, monkeypatch, request):
     plan = object()
     revision = "b" * 40
     monkeypatch.setattr(bundle, "_registered", lambda: (plan, revision, copy.deepcopy(specs)))
+    monkeypatch.setattr(bundle, "_local_registered", lambda: (plan, revision, copy.deepcopy(specs)))
 
     class SyntheticProvenance(pilot.LocalTransport):
         def __init__(self):
@@ -140,6 +144,273 @@ def test_ci_input_bundle_real_registration_matches_approved_pins(approved_pilot_
     assert specs[bundle.PARQUET] == {"role": "normalized_original_parquet", **bundle.PARQUET_PIN}
     assert specs[bundle.STEP0] == {"role": "canonical_schema4_deliverable_only_step0", **bundle.STEP0_PIN}
     assert len([name for name in specs if name.startswith("reference-only/reference_files/")]) == 2
+
+
+def test_ci_input_bundle_current_input_registration_does_not_compile_dispatch():
+    import gpt54_comparison_preflight as comparison
+
+    registration, revision, specs = bundle._local_registered()
+    dataset = json.loads(registration.dataset_json)
+    assert revision == "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+    assert dataset == comparison.load_plan()["shared"]["dataset"]
+    assert dataset["catalog_sha256"] == "5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb"
+    assert registration.task_ids == (
+        "02aa1805-c658-4069-8a6a-02dec146063a", "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
+        "2ea2e5b5-257f-42e6-a7dc-93763f28b19d", "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+        "0818571f-5ff7-4d39-9d2c-ced5ae44299e",
+    )
+    assert set(vars(registration)) == {"dataset_json", "catalog", "task_ids"}
+    assert not hasattr(registration, "dispatch") and not hasattr(registration, "canonical_bytes")
+    assert specs[bundle.PARQUET] == {"role": "normalized_original_parquet", **bundle.PARQUET_PIN}
+    assert specs[bundle.STEP0] == {"role": "canonical_schema4_deliverable_only_step0", **bundle.STEP0_PIN}
+    assert len(specs) == 4
+    with pytest.raises(comparison.DispatchPlanRefused) as refused:
+        bundle._registered()  # Real full compiler; no source hash or fingerprint substitution.
+    assert str(refused.value) == (
+        "comparison refused: source_pin:batch-runner/core/codex_runner.py, "
+        "source_pin:batch-runner/step2_run_inference.py, "
+        "source_pin:batch-runner/core/codex_task_deadline.py"
+    )
+
+
+def test_ci_input_bundle_credentialed_callers_keep_full_registration(tmp_path, monkeypatch):
+    import codex_ci_input_intake as intake
+
+    calls = []
+
+    def full_registration():
+        calls.append("full_registration")
+        raise bundle.InputBundleRefused("fixture_full_registration_refusal")
+
+    monkeypatch.setattr(bundle, "_registered", full_registration)
+    archive = tmp_path / "synthetic-archive.tar"
+    archive.write_bytes(b"not reached: registration precedes unpack")
+    output = tmp_path / "not-created"
+    with pytest.raises(bundle.InputBundleRefused, match="fixture_full_registration_refusal"):
+        bundle.import_bundle(bundle=archive, expected_sha256=bundle._identity(archive.read_bytes())["sha256"],
+                             output=output, transport=pilot.LocalTransport())
+    monkeypatch.setenv("GITHUB_REPOSITORY", intake.REPOSITORY)
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    with pytest.raises(bundle.InputBundleRefused, match="fixture_full_registration_refusal"):
+        intake.intake_hf_originals(expected_sha256=intake.BUNDLE_SHA256,
+                                  bundle_out=tmp_path / "never-downloaded.tar", output=output,
+                                  transport=pilot.LocalTransport())
+    assert calls == ["full_registration", "full_registration"]
+    assert not output.exists() and not reservation(output).exists()
+    assert not (tmp_path / "never-downloaded.tar").exists()
+
+
+@pytest.fixture
+def local_originals(tmp_path, monkeypatch, request):
+    """Author synthetic bytes at existing input-pin seams, never real originals.
+
+    The catalog keeps all 220 metadata rows; selected prompts come from the
+    existing source fixture. Rubric/reference bodies and parquet/Step0 digests
+    are synthetic. No compiler, reader, binding or canonical validator is mocked.
+    """
+    source_root = bundle.ROOT
+    manifest = copy.deepcopy(bundle.load_plan())
+    catalog_name = bundle.ENVELOPE + "gdpval_task_catalog.json"
+    envelope_name = bundle.ENVELOPE + "advance_check_plan.yaml"
+    catalog = json.loads((source_root / catalog_name).read_bytes())
+    by_id = {row["task_id"]: row for row in catalog["tasks"]}
+    task_ids = [row["task_id"] for row in manifest["shared"]["dataset"]["tasks"]]
+    prepared = json.loads((source_root / "batch-runner/tests/fixtures/run_record/step1_tasks_prepared.json").read_bytes())
+    assert [row["task_id"] for row in prepared["tasks"]] == task_ids
+    references = tmp_path / "references"
+    references.mkdir()
+    records, rows = {}, []
+    for index, task in enumerate(prepared["tasks"]):
+        for name in task["reference_files"]:
+            path = references / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"synthetic local reference {index}\n".encode())
+            records[name] = bundle._identity(path.read_bytes())
+        rows.append({
+            "task_id": task["task_id"], "prompt": task["instruction"],
+            "sector": task["sector"], "occupation": task["occupation"],
+            "rubric_json": '[{"criterion":"synthetic, not a grading result"}]',
+            "rubric_pretty": "Synthetic rubric only.\n",
+            "reference_files": task["reference_files"], "reference_file_urls": task["reference_file_urls"],
+            "reference_file_hf_uris": [f"hf://datasets/openai/gdpval@{catalog['dataset_revision']}/{name}"
+                                      for name in task["reference_files"]],
+            "deliverable_files": ["synthetic-answer-name"] if by_id[task["task_id"]]["deliverable_file_extensions"] else [],
+        })
+    parquet_rows = copy.deepcopy(rows)
+    defect = getattr(request, "param", None)
+    if defect == "missing_task":
+        parquet_rows.pop()
+    elif defect == "duplicate_task":
+        parquet_rows.append(copy.deepcopy(parquet_rows[0]))
+    elif defect == "wrong_task":
+        parquet_rows[0]["task_id"] = "not-a-registered-task"
+    elif defect in {"prompt", "occupation", "rubric_json"}:
+        parquet_rows[0][defect] = "changed"
+    elif defect == "reference_assignment":
+        parquet_rows[0]["reference_files"] = list(records)[-1:]
+    parquet = tmp_path / "synthetic-original.parquet"
+    pq.write_table(pa.Table.from_pylist(list(reversed(parquet_rows))), parquet)
+    parquet_pin = bundle._identity(parquet.read_bytes())
+    catalog["dataset_file_sha256"] = parquet_pin["sha256"]
+    registered_root = tmp_path / "registered-input-fixture"
+    catalog_path = registered_root / catalog_name
+    catalog_path.parent.mkdir(parents=True)
+    catalog_path.write_text(bundle._canonical_json(catalog))
+    versions = {catalog["dataset_repo_id"] + "@" + catalog["dataset_revision"]: parquet_pin["sha256"],
+                **{name: identity["sha256"] for name, identity in records.items()}}
+    envelope = copy.deepcopy(bundle.load_plan(source_root / envelope_name))
+    envelope["model_run_conditions"]["shared"]["input_file_versions"] = versions
+    envelope_path = registered_root / envelope_name
+    envelope_path.write_text(bundle._canonical_json(envelope))
+    manifest["source_pins"].update({name: bundle._identity((registered_root / name).read_bytes())["sha256"]
+                                    for name in (catalog_name, envelope_name)})
+    manifest["shared"]["dataset"].update(
+        parquet_sha256=parquet_pin["sha256"], input_file_versions=versions,
+        catalog_sha256=manifest["source_pins"][catalog_name],
+    )
+    step0_value = {
+        "_schema_version": 4, "_summary": {"active_policy": "deliverable_only"},
+        "_total_tasks": len(rows) + 1,
+        "tasks": {row["task_id"]: {
+            "needs_files": bool(row["deliverable_files"]),
+            "source_projection_sha256": source_task_projection_sha256(**{key: row[key] for key in SOURCE_PROJECTION_FIELDS}),
+        } for row in rows},
+        "reference_files": records,
+    }
+    step0_value["tasks"]["unselected-fixture-task"] = {
+        "needs_files": False, "source_projection_sha256": "d" * 64,
+    }
+    step0 = tmp_path / "synthetic-full-step0.json"
+    step0.write_bytes(bundle._canonical_json(step0_value).encode())
+    monkeypatch.setattr(bundle, "ROOT", registered_root)
+    loader = bundle.load_plan
+    monkeypatch.setattr(bundle, "load_plan", lambda path=None: copy.deepcopy(manifest) if path is None else loader(path))
+    monkeypatch.setattr(bundle, "PARQUET_PIN", parquet_pin)
+    monkeypatch.setattr(bundle, "STEP0_PIN", bundle._identity(step0.read_bytes()))
+    monkeypatch.setattr(repo_bootstrapper, "CANONICAL_MANIFEST_SHA256_BY_POLICY", {
+        **repo_bootstrapper.CANONICAL_MANIFEST_SHA256_BY_POLICY,
+        "deliverable_only": bundle.STEP0_PIN["sha256"],
+    })
+    monkeypatch.setattr(repo_bootstrapper, "NEEDS_FILES_POLICY", "deliverable_only")
+    monkeypatch.setenv("NEEDS_FILES_POLICY", "deliverable_only")
+    return SimpleNamespace(parent=tmp_path, parquet=parquet, references=references, step0=step0,
+                           transport=pilot.LocalTransport(), manifest=manifest, catalog=catalog_path,
+                           envelope=envelope_path, task_ids=task_ids, step0_value=step0_value)
+
+
+def test_ci_input_bundle_local_readers_roundtrip_preserves_full_step0(local_originals, capsys):
+    case = local_originals
+    registration, _, _ = bundle._local_registered()
+    verified = bundle._original_inputs(registration, pilot.InputSources(case.parquet, case.references, case.step0))
+    assert verified.snapshot.bound.task_ids == tuple(case.task_ids)
+    assert set(verified.snapshot.shared_binding) == {"needs_files_policy"}
+    assert [row["task_id"] for row in verified.snapshot.projections] == case.task_ids
+    before = {name: data for name, data in verified.files.items()}
+    archive, output = case.parent / "local-originals.tar", case.parent / "local-import"
+    assert produce(case, archive) == 0
+    produced = json.loads(capsys.readouterr().out)
+    assert import_local(case, archive, output) == 0
+    assert json.loads(capsys.readouterr().out) == produced
+    assert (output / bundle.STEP0).read_bytes() == case.step0.read_bytes()
+    assert "unselected-fixture-task" in json.loads((output / bundle.STEP0).read_bytes())["tasks"]
+    assert (output / bundle.PARQUET).read_bytes() == before[bundle.PARQUET_PATH]
+    for name, data in before.items():
+        if name not in (bundle.PARQUET_PATH, bundle.STEP0_MANIFEST_PATH):
+            assert (output / bundle.REFERENCES / name.removeprefix(bundle.DATASET_ROOT + "/")).read_bytes() == data
+    assert (output / bundle.READY).is_file() and reservation(output).is_file()
+    assert str(case.parent) not in json.dumps(produced)
+
+
+@pytest.mark.parametrize("defect", [
+    "repo_id", "revision", "parquet_sha256", "catalog_sha256", "cohort", "task_order", "task_id",
+    "prompt", "reference_digest", "reference_path", "catalog_pin", "envelope_pin", "catalog_bytes", "envelope_bytes",
+])
+def test_ci_input_bundle_local_registration_refuses_changed_input_definition(local_originals, defect):
+    case = local_originals
+    dataset = case.manifest["shared"]["dataset"]
+    if defect in {"repo_id", "revision", "parquet_sha256", "catalog_sha256", "cohort"}:
+        dataset[defect] = "changed"
+    elif defect == "task_order":
+        dataset["tasks"].reverse()
+    elif defect == "task_id":
+        dataset["tasks"][0]["task_id"] = "not-a-registered-task"
+    elif defect == "prompt":
+        dataset["tasks"][0]["prompt_sha256"] = "0" * 64
+    elif defect in {"reference_digest", "reference_path"}:
+        versions = dataset["input_file_versions"]
+        name = next(key for key in versions if key.startswith("reference_files/"))
+        if defect == "reference_digest":
+            versions[name] = "0" * 64
+        else:
+            versions["reference_files/wrong.txt"] = versions.pop(name)
+    elif defect.endswith("_pin"):
+        path = case.catalog if defect == "catalog_pin" else case.envelope
+        case.manifest["source_pins"][path.relative_to(bundle.ROOT).as_posix()] = "0" * 64
+    else:
+        path = case.catalog if defect == "catalog_bytes" else case.envelope
+        path.write_bytes(path.read_bytes() + b" ")
+    output = case.parent / "refused.tar"
+    assert produce(case, output) == 2
+    assert not output.exists() and not reservation(output).exists()
+
+
+@pytest.mark.parametrize("local_originals", [
+    "missing_task", "duplicate_task", "wrong_task", "prompt", "occupation", "rubric_json", "reference_assignment",
+], indirect=True)
+def test_ci_input_bundle_local_original_reader_refuses_bad_bound_rows(local_originals):
+    case = local_originals
+    output = case.parent / "refused.tar"
+    assert produce(case, output) == 2
+    assert not output.exists() and not reservation(output).exists()
+
+
+@pytest.mark.parametrize("defect", ["digest", "schema", "policy", "projection", "needs_files", "reference"])
+def test_ci_input_bundle_local_canonical_step0_refuses_before_publication(local_originals, monkeypatch, defect):
+    case = local_originals
+    value = case.step0_value
+    if defect == "digest":
+        case.step0.write_bytes(case.step0.read_bytes() + b" ")
+    else:
+        if defect == "schema":
+            value["_schema_version"] = 3
+        elif defect == "policy":
+            value["_summary"]["active_policy"] = "reference_or_deliverable"
+        elif defect == "projection":
+            value["tasks"][case.task_ids[0]]["source_projection_sha256"] = "0" * 64
+        elif defect == "needs_files":
+            value["tasks"][case.task_ids[0]]["needs_files"] = False
+        else:
+            value["reference_files"][next(iter(value["reference_files"]))]["sha256"] = "0" * 64
+        case.step0.write_bytes(bundle._canonical_json(value).encode())
+        # Rebind only this authored fixture's canonical bytes to reach the
+        # genuine schema/policy/projection checks; production pins stay fixed.
+        monkeypatch.setattr(bundle, "STEP0_PIN", bundle._identity(case.step0.read_bytes()))
+        monkeypatch.setattr(repo_bootstrapper, "CANONICAL_MANIFEST_SHA256_BY_POLICY", {
+            **repo_bootstrapper.CANONICAL_MANIFEST_SHA256_BY_POLICY,
+            "deliverable_only": bundle.STEP0_PIN["sha256"],
+        })
+    output = case.parent / "refused.tar"
+    assert produce(case, output) == 2
+    assert not output.exists() and not reservation(output).exists()
+
+
+@pytest.mark.parametrize("defect", ["parquet", "step0", "role", "external_digest"])
+def test_ci_input_bundle_local_bad_archive_refused_before_publication(local_originals, capsys, defect):
+    case = local_originals
+    archive, output = case.parent / "synthetic-source.tar", case.parent / "refused-import"
+    assert produce(case, archive) == 0
+    capsys.readouterr()
+    if defect != "external_digest":
+        _, revision, specs = bundle._local_registered()
+        manifest, files = bundle._unpack(archive.read_bytes(), revision, specs)
+        if defect == "role":
+            manifest["files"][0]["role"] = "model_output"
+        else:
+            files[bundle.PARQUET if defect == "parquet" else bundle.STEP0] += b"corrupt"
+        archive.write_bytes(bundle._archive({bundle.MANIFEST: bundle._canonical_json(manifest).encode(), **files}))
+    assert import_local(case, archive, output, "0" * 64 if defect == "external_digest" else None) == 2
+    assert capsys.readouterr().out == ""
+    assert not output.exists() and not reservation(output).exists()
 
 
 def test_ci_input_bundle_deterministic_roundtrip_real_cli_and_verifier(originals, capsys):

@@ -8,6 +8,7 @@ is implemented. An importer requires an externally supplied archive SHA256.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import io
 import json
 import logging
@@ -17,18 +18,27 @@ import re
 import stat
 import sys
 import tarfile
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Callable
 
 import yaml
 
-from codex_budget_pilot import InputSources, LocalTransport
+from codex_budget_pilot import InputSources, LocalTransport, VerifiedInputs
+from core.agentic_v2_manifest_binding import ManifestRefused, bind_stage
+from core.execution_envelope_tasks import (
+    TaskCatalog, catalog_sha256, check_catalog_carries_no_scores,
+    load_task_catalog, select_advance_check_tasks,
+)
 from core.inference_manifest import _assert_no_symlink_ancestors
 from core.reference_integrity import validate_reference_relative_path
+from core.source_identity import source_task_projection_sha256
 from gpt54_codex_input_capture import DATASET_ROOT, _write_no_clobber
-from gpt54_comparison_preflight import ROOT, _canonical_json, compile_grading_plan, load_plan
-from gpt54_prepared_input_attestation import _identity, _json_object, _same
+from gpt54_comparison_preflight import ENVELOPE, ROOT, _canonical_json, compile_grading_plan, load_plan
+from gpt54_prepared_input_attestation import (
+    _SourceSnapshot, _dataset_tasks, _identity, _json_object, _reference_snapshot, _same,
+)
 from gpt54_run_config_bundle import _held_parents, _path
-from gpt54_run_input_bundle import PARQUET_PATH, STEP0_MANIFEST_PATH, _publication_parents
+from gpt54_run_input_bundle import PARQUET_PATH, STEP0_MANIFEST_PATH, _publication_parents, _step0_bytes
 from gpt54_v2_grading_input import _read_bytes
 
 MANIFEST = "input-bundle-manifest.json"
@@ -48,12 +58,10 @@ class InputBundleRefused(ValueError):
     """A closed refusal code; partial reservations must not be adopted."""
 
 
-def _registered() -> tuple[Any, str, dict[str, dict]]:
-    """Read the genuine registered contract, without inputs, auth or execution."""
+def _original_specs(dataset: dict) -> tuple[str, dict[str, dict]]:
+    """The same four original roles for local transport and full-plan intake."""
     from core.repo_bootstrapper import CANONICAL_MANIFEST_SHA256_BY_POLICY
 
-    plan = compile_grading_plan(load_plan())
-    dataset = json.loads(plan.dispatch.controls_json)["dataset"]
     _same("registered original parquet", dataset["parquet_sha256"], PARQUET_PIN["sha256"])
     _same("registered canonical Step0", CANONICAL_MANIFEST_SHA256_BY_POLICY["deliverable_only"], STEP0_PIN["sha256"])
     references = dict(dataset["input_file_versions"])
@@ -67,7 +75,90 @@ def _registered() -> tuple[Any, str, dict[str, dict]]:
             raise InputBundleRefused("registered_reference_role_refused")
         specs[REFERENCES + "/" + name] = {"role": "declared_reference", "sha256": digest, "size": None}
     specs[STEP0] = {"role": "canonical_schema4_deliverable_only_step0", **STEP0_PIN}
-    return plan, dataset["revision"], specs
+    return dataset["revision"], specs
+
+
+def _registered() -> tuple[Any, str, dict[str, dict]]:
+    """Keep the full source gate for existing credentialed intake callers."""
+    plan = compile_grading_plan(load_plan())
+    revision, specs = _original_specs(json.loads(plan.dispatch.controls_json)["dataset"])
+    return plan, revision, specs
+
+
+@dataclass(frozen=True)
+class _OriginalRegistration:
+    """Private original-data contract, not dispatch or comparison provenance."""
+
+    dataset_json: str
+    catalog: TaskCatalog
+    task_ids: tuple[str, ...]
+
+
+def _local_registered() -> tuple[_OriginalRegistration, str, dict[str, dict]]:
+    """Validate only fixed input registration for the local produce/import CLI."""
+    registration = load_plan()
+    catalog_name = ENVELOPE + "gdpval_task_catalog.json"
+    envelope_name = ENVELOPE + "advance_check_plan.yaml"
+    # Positive input-document scope, not exceptions to the runtime source seal.
+    for name in (catalog_name, envelope_name):
+        _read_bytes(ROOT / name, sha256=registration["source_pins"][name])
+    catalog_path = ROOT / catalog_name
+    _same("score-free original catalog", check_catalog_carries_no_scores(catalog_path), [])
+    catalog = load_task_catalog(catalog_path)
+    catalog_digest = catalog_sha256(catalog_path)
+    selection = select_advance_check_tasks(catalog, catalog_fingerprint=catalog_digest)
+    by_id = catalog.by_task_id()
+    envelope = load_plan(ROOT / envelope_name)
+    dataset = {
+        "repo_id": catalog.dataset_repo_id, "revision": catalog.dataset_revision,
+        "parquet_sha256": catalog.dataset_file_sha256, "catalog_sha256": catalog_digest,
+        "cohort": "advance_check_5",
+        "tasks": [{"task_id": task_id, "prompt_sha256": by_id[task_id].prompt_sha256}
+                  for task_id in selection.task_ids],
+        "input_file_versions": envelope["model_run_conditions"]["shared"]["input_file_versions"],
+    }
+    _same("registered original dataset", registration["shared"]["dataset"], dataset)
+    revision, specs = _original_specs(dataset)
+    return _OriginalRegistration(_canonical_json(dataset), catalog, selection.task_ids), revision, specs
+
+
+def _original_inputs(registration: _OriginalRegistration, sources: InputSources) -> VerifiedInputs:
+    """Reuse the genuine readers without manufacturing comparison-plan fields."""
+    dataset = json.loads(registration.dataset_json)
+    parquet_data = _read_bytes(sources.parquet, **PARQUET_PIN)
+    projections, needs_files = _dataset_tasks(parquet_data, registration.task_ids)
+    try:
+        bound = bind_stage(
+            dataset["cohort"], dataset_tasks=[SimpleNamespace(**row) for row in projections],
+            catalog=registration.catalog, catalog_digest=dataset["catalog_sha256"],
+        )
+    except ManifestRefused as error:
+        raise InputBundleRefused("original_dataset_binding_refused") from error
+    versions = dict(dataset["input_file_versions"])
+    _same("dataset input version", versions.pop(dataset["repo_id"] + "@" + dataset["revision"]),
+          dataset["parquet_sha256"])
+    paths = [name for row in projections for name in row["reference_files"]]
+    if len(paths) != len(set(paths)):
+        raise InputBundleRefused("duplicate_or_cross_task_reference_path")
+    _same("registered reference paths", sorted(paths), sorted(versions))
+    references = _reference_snapshot(sources.references, versions)
+    # Only the data-derived fields consumed by the existing canonical Step0
+    # reader are supplied. No manifest/combined-plan/source-pin provenance.
+    snapshot = _SourceSnapshot(
+        {"needs_files_policy": "deliverable_only"},
+        [{"projection": row, "source_projection_sha256": source_task_projection_sha256(**row),
+          "reference_file_records": [{"path": name, **references[name]} for name in row["reference_files"]]}
+         for row in projections],
+        projections, references, needs_files, bound,
+    )
+    manifest = _step0_bytes(sources.manifest, snapshot)
+    files = {
+        PARQUET_PATH: _read_bytes(sources.parquet, **_identity(parquet_data)),
+        STEP0_MANIFEST_PATH: manifest,
+        **{DATASET_ROOT + "/" + name: _read_bytes(sources.references / name, **identity)
+           for name, identity in references.items()},
+    }
+    return VerifiedInputs(snapshot, files)
 
 
 def _safe_path(path: Path) -> Path:
@@ -95,8 +186,9 @@ def _destination(path: Path, sources: tuple[Path, ...]) -> tuple[Path, Path]:
 
 
 def _read_originals(plan: Any, sources: InputSources, transport: LocalTransport) -> dict[str, bytes]:
-    """Reuse source_snapshot, exact references and the real canonical Step0 reader."""
-    verified = transport.inputs(plan, sources)
+    """Reuse original/reference/Step0 readers; keep full-plan callers intact."""
+    verified = (_original_inputs(plan, sources) if isinstance(plan, _OriginalRegistration)
+                else transport.inputs(plan, sources))
     expected = {PARQUET_PATH, STEP0_MANIFEST_PATH, *(
         DATASET_ROOT + "/" + name for name in verified.snapshot.references
     )}
@@ -198,7 +290,7 @@ def _report(archive: bytes, manifest: dict, files: dict[str, bytes]) -> dict:
 
 def produce(*, sources: InputSources, output: Path, transport: LocalTransport) -> dict:
     """Verify approved originals, then reserve and publish one absent archive."""
-    plan, revision, specs = _registered()
+    plan, revision, specs = _local_registered()
     inputs = (sources.parquet, sources.references, sources.manifest)
     output, reservation = _destination(output, inputs)
     files = _read_originals(plan, sources, transport)
@@ -219,6 +311,19 @@ def produce(*, sources: InputSources, output: Path, transport: LocalTransport) -
 
 
 def import_bundle(*, bundle: Path, expected_sha256: str, output: Path, transport: LocalTransport) -> dict:
+    """Existing credentialed intake retains its full comparison source gate."""
+    return _import_bundle(bundle=bundle, expected_sha256=expected_sha256, output=output,
+                          transport=transport, registered=_registered)
+
+
+def _import_local_bundle(*, bundle: Path, expected_sha256: str, output: Path, transport: LocalTransport) -> dict:
+    """Local CLI only; no credentials, origins, dispatch or source-gate waiver."""
+    return _import_bundle(bundle=bundle, expected_sha256=expected_sha256, output=output,
+                          transport=transport, registered=_local_registered)
+
+
+def _import_bundle(*, bundle: Path, expected_sha256: str, output: Path, transport: LocalTransport,
+                   registered: Callable[[], tuple[Any, str, dict[str, dict]]]) -> dict:
     """Validate an external trust anchor and all members before private publication."""
     if re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
         raise InputBundleRefused("external_bundle_sha256_required")
@@ -227,7 +332,7 @@ def import_bundle(*, bundle: Path, expected_sha256: str, output: Path, transport
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_BUNDLE_BYTES:
         raise InputBundleRefused("bundle_type_or_size_refused")
     archive = _read_bytes(bundle, sha256=expected_sha256, size=metadata.st_size)
-    plan, revision, specs = _registered()
+    plan, revision, specs = registered()
     manifest, files = _unpack(archive, revision, specs)
     output, reservation = _destination(output, (bundle,))
     # A sibling reservation survives even failure of the first directory write.
@@ -273,7 +378,8 @@ def main(argv: list[str] | None = None, *, _test_transport: LocalTransport | Non
             report = produce(sources=InputSources(args.dataset_parquet, args.reference_root, args.step0_manifest),
                              output=args.out, transport=transport)
         else:
-            report = import_bundle(bundle=args.bundle, expected_sha256=args.expected_sha256, output=args.out, transport=transport)
+            report = _import_local_bundle(bundle=args.bundle, expected_sha256=args.expected_sha256,
+                                          output=args.out, transport=transport)
         sys.stdout.write(_canonical_json(report) + "\n")
         return 0
     except (OSError, ValueError, TypeError, KeyError, AttributeError, StopIteration, tarfile.TarError, yaml.YAMLError) as error:
