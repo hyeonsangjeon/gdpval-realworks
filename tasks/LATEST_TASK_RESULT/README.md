@@ -125,12 +125,57 @@ This corrective proof is separate from the failed CI and the original
 60-case proof above. Neither that selector nor the full CI job was rerun.
 No private input or real preparation was used.
 
+### Historical fixture-root correction and separate CI cancellation
+
+The leader source-reviewed HEAD `6ed5773a9a10f922001eb37e74dfabf1011e2f49`,
+tree `09087bbbedba41def495e5dc98baae9e8f26f71d`. Delivery remains on HOLD.
+The leader read [run37229871352/job111517151450][local-profile-comparison-ci]
+(`comparison-contracts`): 1 failed, 1004 passed in 1363.11s. Its only failure was
+`test_step0_manifest_canonical_readers_are_pinned_without_launch_waiver[None-valid]`,
+line 150. The test selected the historical fixture but read the active manifest
+and reader bytes through the current checkout's stale imported `ROOT`.
+
+Only that function now reads both through fixture-bound `preflight.ROOT`.
+Historical byte equality, the required 37-source inventory, all four missing/drift
+negative cases, canonical Step0 and launch refusals are preserved. No production,
+manifest, source pin or historical expected hash changed.
+
+The separate generic [pytest job111517151329][local-profile-cancelled-ci] was
+cancelled; the leader read GitHub's annotation that the maximum execution time
+of 45m0s was exceeded. Its job interval was 19:51:56Z–20:37:15Z, and the last
+logged progress was 48%. The accepted PR743 pytest job111476125137 succeeded
+with job interval 16:11:51Z–16:47:25Z. These are job intervals, not attributed
+test durations; 48% is not a basis for projecting completion time. The current
+generic command already excludes this comparison module. This assertion repair
+does not resolve or explain that cancellation. The 45-minute workflow ceiling,
+selectors and permissions are unchanged. No CI job was retried or polled.
+
+The fixture-root correction was committed before its sole offline invocation at
+HEAD `b46347d975e7a50fca3dcc4b7242819c85bbf936`, tree
+`69ec2a2adcc5a0b97329110304e547da5fcb5c66`. The worktree was clean before and
+after validation. From `batch-runner/`, the exact executable command was:
+
+```bash
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 timeout --kill-after=5s 180s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q -ra -x --tb=short -p no:cacheprovider tests/test_gpt54_comparison_preflight.py::test_step0_manifest_canonical_readers_are_pinned_without_launch_waiver
+```
+
+Result: 5 passed in 2.19s, exit 0. Combined stdout/stderr log SHA256 is
+`ec72a74175d3bd30f7c4d171bd03064d2c929149bc7057d5052a7651354395f7`.
+The command text, including its final newline, has SHA256
+`c26d2894ab6687f2a91ba422df0cdbf1db25bdd71c07015605870a2a03b46dba`.
+Private validation receipt SHA256 is
+`ed6855562ea9639fe3b53d8ebb1e2b8bc3d2fa3fac0cbb92ab2e1439eec747f4`.
+The 180-second bound and 5-second kill grace apply only to this local test.
+This is historical-fixture regression evidence, not real-input preparation or
+a fix for the generic job's runtime. The original 60-case and later 2-case proofs
+above remain unchanged and were not rerun; neither full CI job was rerun.
+
 ### Remaining gates and record boundary
 
-The post-proof delta from the corrective tested HEAD is limited to this
+The post-proof delta from the fixture-root tested HEAD is limited to this
 completion entry and CHANGELOG; production, test and manifest bytes are unchanged.
-Corrected final-HEAD owner review, applicable CI and leader acceptance remain
-outstanding. Real local preparation requires the leader's subsequent
+Delivery remains on HOLD. Corrected final-HEAD owner review, applicable CI and
+leader acceptance remain outstanding. Real local preparation requires the leader's subsequent
 fixed-HEAD review and separate direction. Credentialed comparison-workflow
 intake remains REJECTED; no HF-token binding or Actions draft-asset authority
 is established. The dispatcher and native call/token caps remain unimplemented,
@@ -157,3 +202,5 @@ retried. Bounded byte, literal and link comparisons passed separately.
 [local-profile-prior-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/743#pullrequestreview-5407286936
 [local-profile-prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/5fcf254f4146734493e7390b110ad56189c836ae/tasks/LATEST_TASK_RESULT/README.md
 [local-profile-failed-ci]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37227851802/job/111511173523
+[local-profile-comparison-ci]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37229871352/job/111517151450
+[local-profile-cancelled-ci]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37229871352/job/111517151329

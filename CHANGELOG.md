@@ -56,6 +56,35 @@ entries land under a fresh dated heading the day they merge to `main`.
   review, applicable CI and leader acceptance remain pending; no live authority
   is granted.
 
+  Correct a separate historical-fixture root mismatch in the comparison preflight
+  test. Both its active-manifest read and reader-byte equality now use the
+  fixture-bound root; historical pins, the 37-source inventory, all four negative
+  cases, canonical Step0 and launch refusals are unchanged. The leader read
+  comparison-contracts run37229871352/job111517151450: 1 failed, 1004 passed in
+  1363.11s, solely the `None-valid` case. Source-reviewed HEAD
+  `6ed5773a9a10f922001eb37e74dfabf1011e2f49` remains on delivery HOLD.
+
+  The separate generic pytest job111517151329 was cancelled for exceeding
+  45m0s, with job interval 19:51:56Z–20:37:15Z and last logged progress 48%.
+  Accepted PR743 pytest job111476125137 succeeded with job interval
+  16:11:51Z–16:47:25Z. These are leader-read job intervals, not attributed test
+  durations or a basis for projecting runtime from progress. The generic command
+  excludes the repaired module; this test correction does not fix its cancellation.
+  The 45-minute ceiling and workflow selectors remain unchanged.
+
+  One separate offline invocation passed the five fixture-root cases:
+  5 passed in 2.19s, exit 0, at test-only HEAD
+  `b46347d975e7a50fca3dcc4b7242819c85bbf936`, tree
+  `69ec2a2adcc5a0b97329110304e547da5fcb5c66`. Log SHA256 is
+  `ec72a74175d3bd30f7c4d171bd03064d2c929149bc7057d5052a7651354395f7`;
+  exact command SHA256 is
+  `c26d2894ab6687f2a91ba422df0cdbf1db25bdd71c07015605870a2a03b46dba`.
+  The completion record retains the command and receipt identity. The 60-case
+  and 2-case proofs above remain unchanged; neither selector nor full CI job
+  was rerun. Only this entry and the single current completion record change
+  after the new proof. Final corrected-HEAD review, applicable CI and leader
+  acceptance remain on HOLD; no launch or workflow-change authority is granted.
+
 ### Fixed
 
 - Separate local original-input bundle registration from runnable comparison
