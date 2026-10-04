@@ -23,6 +23,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   wrappers add nothing. Collection/report/CLI preserve recorded fields,
   artifact bytes and legacy calculations. No raw error text is reported.
 
+  Remove only the analyzer test's ad hoc file/workflow inventories and their
+  assertions/comments/printed boundary,50 deleted lines with no replacement
+  freeze. Leader-reviewed HEAD`7ff95f698401bfc9821bcf9d9bb75ca5b52da06a` is HOLD
+  for that accidental global restriction, not approval. Analyzer behavior,
+  runtime, registration, workflows, historical report/data and retry policy
+  remain unchanged by this continuation. The real compiler/source-role checks,
+  no-launch assertions and all analyzer/live-effect guards remain intact.
+
   The earlier1 passed in0.34s at`7ca9f67acf3db16686ae749ecd82356c55e5203b`
   remains a narrow proof, not coverage of the grader closure. Its log
   SHA256`f05f97d1b7d210a020ffed1b8a47f63066d76c6ed1295a902ffe89d97f30ac46`
@@ -32,26 +40,36 @@ entries land under a fresh dated heading the day they merge to `main`.
   Review5403354146 was conditional on CI, not merge authority. Neither the
   old selector nor that CI was rerun or queried here.
 
-  One new offline selector passed:1 passed in1.85s at clean implementation
+  The earlier analyzer/closure selector passed:1 passed in1.85s at implementation
   HEAD`1f057120b8f1e634df4f6b03b493bbd608eea7c4`, tree
-  `1a8884706a2ffd4309b9167791392773aec474f1`, exits0 and no timeout. It covered
-  132 authored cases/16 explicit diagnostics, restored/frozen runtime and report
-  files, all24 workflows, unchanged artifact/record/calculation behavior and
-  zero guarded network/model/grade/writer/child/sleep effects. Exactly one real
+  `1a8884706a2ffd4309b9167791392773aec474f1`. It included the now-rejected freeze
+  checks; its original scope and snapshot hashes remain historical, not approval
+  or a proof of this edit. Its log remains
+  SHA256`7130cf7b0340632c9b05fc1934e8fa220a456498d43f9c4ed206cc5bce188a96`.
+
+  The one new invocation also passed1 test in1.85s at clean test-only HEAD
+  `efad4a792f9e4922a73f51060d7c718a5c1e76f4`, tree
+  `0ba81c52af63084be0d607fdfb354e833434e3d3`, all invocation/log/status-capture
+  exits0 and no timeout. It covered132 authored cases/16 explicit diagnostics,
+  unchanged artifact/record/calculation behavior and zero guarded
+  network/model/grade/writer/child/sleep effects. Exactly one real
   `registration.compile_plan()` verified all source roles and grader closure
   `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce` without
   changing or mocking historical pins. New proof log
-  SHA256`7130cf7b0340632c9b05fc1934e8fa220a456498d43f9c4ed206cc5bce188a96`.
-  The1.85s is pytest duration, not measured outer elapsed or model performance.
+  SHA256`6347b7f9182a64ae2c757ee9f35fbeb350913a88a83fe21a7210c1906c1fe19f`.
+  The equal1.85s durations identify distinct proofs by commit/log, not a rerun
+  or relabel. The new proof does not test or freeze all24 workflows. Pytest
+  duration is not measured outer elapsed or model performance.
 
   The [latest record](tasks/LATEST_TASK_RESULT/README.md) retains exact commands,
-  restored/current hashes, prior proof/failed-CI evidence and skill reconciliation.
+  scoped hashes, prior proof/failed-CI evidence and skill reconciliation.
   Accepted PR737 HEAD`0f105b3e8dea9697749cb23278b7dbba662c4b27`, owner
   review5402995317/all10 checks and earlier proof/launcher127/failed memo history
   remain prior provenance. Original30 outcomes, eight diagnostic outcomes and
   eight consumed budget points stay fixed; no historical failure is relabeled.
-  experiment-design kept policy/measurement scope fixed; experiment-report-en
-  then protected im-not-ai-en preserved numbers and limits. The fresh editorial
+  experiment-report-en then protected im-not-ai-en preserved numbers and limits.
+  experiment-design, repository audit and UI/workflow work are not applicable
+  to removing this test restriction. The previous fresh editorial
   checker failed before findings with `stream disconnected before completion: response.failed event received`;
   no retry/verdict is claimed, and reverse-condition reconciliation is
   explicitly same-session. Final immutable-HEAD

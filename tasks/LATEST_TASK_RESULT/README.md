@@ -1,17 +1,29 @@
 # Latest task result
 
-## PROJECT5-OFFLINE-OUTPUT-LIMIT-CORRECTION-20261004-0834
+## PROJECT5-PR738-REMOVE-ACCIDENTAL-GLOBAL-FREEZE-20261004-0904
 
-PR738's correction passed its one authorized offline selector:1 passed in1.85s,
-selector/log/status-capture exits0, no timeout and zero guarded live effects.
-The real registration compiler verified the unchanged grader closure and
-source pins. This is a focused local pass, not a replacement for final-HEAD CI.
+PR738's analyzer test no longer freezes unrelated report/test bytes or the
+workflow directory. The one new invocation passed:1 passed in1.85s at
+`efad4a792f9e4922a73f51060d7c718a5c1e76f4`, with all invocation/log/status-capture
+exits0, no timeout and zero guarded live effects. The real registration compiler
+still verified the unchanged grader closure and source roles. This is a focused
+local pass, not final-HEAD CI or leader acceptance.
 
-The shared runtime classifier and its original test are restored to exact
+The leader reviewed HEAD`7ff95f698401bfc9821bcf9d9bb75ca5b52da06a` as HOLD for
+the accidental global freeze, not approval. The test-only correction deletes50
+lines: the ad hoc `frozen_sha256`, `expected_workflows` and `actual_workflows`
+inventories, their assertions/comments and obsolete printed boundary. It adds
+no replacement inventory, helper or snapshot. The real `registration.compile_plan()`,
+historical closure/source-role checks, no-launch assertions,132 analyzer cases/16
+positive additions, artifact/legacy-output invariants and live-effect guards
+remain intact. No unrelated import or test was refactored.
+
+The earlier correction restored the shared runtime classifier and its original test to exact
 base`9f9b33aa2c86ea77e97624fa58d5d6dc67122f25` bytes. The diagnostic now lives
 only in `scripts/analyze_codex_run.py`; runtime category emission and recovery
 policy deliberately retain their old behavior. No historical hash was changed,
-excluded or mocked to make the closure pass.
+excluded or mocked to make the closure pass. This continuation changes no
+analyzer, runtime, registration, workflow, historical report/data or retry policy.
 
 ### Offline diagnosis, not a recorded outcome
 
@@ -34,7 +46,7 @@ not establish that an output limit never occurred. No SDK field, runtime hook or
 added. The fixtures establish this analyzer contract, not an independent cause
 for any of the six retained failures or a measured improvement.
 
-### Failed CI and the earlier narrow pass
+### Distinct earlier proofs and failed CI
 
 The leader supplied actual [CI run37160002142/job111311298024](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37160002142/job/111311298024):
 36 failed,13299 passed,64 skipped,46 deselected in1074.71s. The principal error
@@ -54,18 +66,30 @@ The [prior completion record](https://github.com/hyeonsangjeon/gdpval-realworks/
 retains its exact source, command and coverage. Review[5403354146](https://github.com/hyeonsangjeon/gdpval-realworks/pull/738#pullrequestreview-5403354146)
 was conditional on CI, not merge authority or approval of this correction.
 
+The previous analyzer/closure proof also passed1 test in1.85s, at
+`1f057120b8f1e634df4f6b03b493bbd608eea7c4`, tree
+`1a8884706a2ffd4309b9167791392773aec474f1`. It covered132 authored cases/16
+explicit diagnostics and one real compiler call, but also contained the ad hoc
+freeze checks rejected by the later source review. Its log SHA256 remains
+`7130cf7b0340632c9b05fc1934e8fa220a456498d43f9c4ed206cc5bce188a96` under
+`/tmp/output-limit-analyzer-correction-20261004-0834.RXNVIf`.
+The [immutable previous record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/7ff95f698401bfc9821bcf9d9bb75ca5b52da06a/tasks/LATEST_TASK_RESULT/README.md)
+preserves its exact command, snapshot hashes and reached boundaries. That proof
+was not rerun or relabeled. The new invocation happens to have the same pytest
+duration; its changed test commit and distinct log below identify the new proof.
+
 ### Tested source and one new proof
 
-Clean implementation commit`1f057120b8f1e634df4f6b03b493bbd608eea7c4`, tree
-`1a8884706a2ffd4309b9167791392773aec474f1`, contains the restoration and complete
-analyzer/test change. Its parent is`3fb34977a7af27d31b4c1b03a429381243f8c902`.
+Clean implementation commit`efad4a792f9e4922a73f51060d7c718a5c1e76f4`, tree
+`0ba81c52af63084be0d607fdfb354e833434e3d3`, contains only the50-line test deletion.
+Its parent is the held HEAD`7ff95f698401bfc9821bcf9d9bb75ca5b52da06a`.
 After validation, code/test bytes remain fixed; only this record and the
 current CHANGELOG.md entry change.
 
 The exact token-free invocation was:
 
 ```text
-env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-output-limit-classification-20261004-0732/batch-runner bash /tmp/output-limit-analyzer-correction-20261004-0834.RXNVIf/run-selector.sh
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/ai-work/copilot/worktrees/codex-output-limit-classification-20261004-0732/batch-runner bash /tmp/output-limit-test-boundary-20261004-0904.zGrkfQ/run-selector.sh
 ```
 
 From batch-runner, the retained launcher ran exactly:
@@ -79,27 +103,28 @@ prerequisite probe or timing wrapper. It covered132 authored local-artifact
 cases through collection/report/CLI, including16 explicit diagnostics across
 the two unknown fallbacks, negative/missing-text and precedence cases, fixed
 safe labels, unchanged recorded fields/artifact bytes and legacy calculations.
-It verified8 frozen runtime/test/report files and all24 workflow files against
-base identities, then called the real `registration.compile_plan()` exactly
-once. The grader closure remained
+It called the real `registration.compile_plan()` exactly once. The grader closure remained
 `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`; all registered
 source roles and the two recovery-eligible categories were verified without
 launch authority. Network/model/grade/writer/child/sleep guards recorded zero
-effects. The1.85s is pytest duration; outer elapsed was not measured.
+effects. The selector, launcher, log and status-capture exits were all0. The
+new1.85s is pytest duration; outer elapsed was not measured. This proof does not
+test or freeze all24 workflows. Unchanged non-PR files are a source-diff fact,
+not a new permanent test contract.
 
 | New evidence | SHA256 |
 | --- | --- |
-| selector.log | 7130cf7b0340632c9b05fc1934e8fa220a456498d43f9c4ed206cc5bce188a96 |
+| selector.log | 6347b7f9182a64ae2c757ee9f35fbeb350913a88a83fe21a7210c1906c1fe19f |
 | selector.status | 67a36859a82b6160ea609eaaf16718f72f3f10a3a68f46c8fa2cac3c8548ee0a |
-| run-selector.sh | 3f87b586a733c040b0aecce31cc680c153056acaa33a3c1f460ef1525f27a1e9 |
-| tested-state.md | 23e7e80d99ca7f73c43cf234162d6d620415d85d083e9edbbb0827d15d21754f |
-| scripts/analyze_codex_run.py | 074198dbbbf3423803b8a272ee1eebc45da23795dee18bb15af442e43aa5c4cc |
-| tests/test_an_unanswerable_question_is_declined.py | 0090bd2a429143e268c2b963870bfd2bacf5c6eb7d213726a8e7c980852b1741 |
-| restored core/execution_errors.py | b3eb94fb60b4d5a57e3fd367e77d51122d624c33e93fa4badec60446e1f96321 |
-| restored tests/test_execution_errors.py | a04fafe0d299740f6a8920f9ab42f386128aaec9fe86957d206cb40d4a9a6705 |
+| invocation.log | 0d37929fbf75b81c702e4a213e314fd2d93e4cc292b1b645a9cfa31ba80d3c86 |
+| invocation.status | 0ee12bd089d3b9d1d70110bee6408ea428e19d53dea06f206ca30aa55330c463 |
+| run-selector.sh | ba8f7348fd27c27bec79a7333bca543e74fcbc83027d6a5c969507175c51e079 |
+| tested-state.md | f853c8f6d898ae7015c8858086402849a0353b34a4f9514cc620a5245d0a1aaa |
+| tests/test_an_unanswerable_question_is_declined.py | fec750e1523133c2abb253cc548bea65646ac472c2247d944d8112f303cbec76 |
 
 Exact command/source/skill checkpoints and log files remain under
-`/tmp/output-limit-analyzer-correction-20261004-0834.RXNVIf`.
+`/tmp/output-limit-test-boundary-20261004-0904.zGrkfQ`. Earlier hashes retain
+their historical scope in the immutable previous record; none was repinned.
 
 ### Unchanged policy and historical evidence
 
@@ -133,13 +158,16 @@ sequence. No failure cause or measured improvement is assigned here.
 
 ### Completion and remaining gates
 
-The matching catalog skills were applied to this correction. experiment-design
-kept measurement and recovery policy fixed; experiment-report-en then protected
-im-not-ai-en handled only the corrected completion passages and PR description.
+The full skill catalog was reviewed once for this continuation.
+experiment-report-en then protected im-not-ai-en handled only the numerical
+completion passages and PR description. experiment-design is not applicable:
+this removes an accidental test restriction without redesigning measurement or
+recovery policy. Repository audit, UI, workflow and memo work are also outside
+this correction's scope. No optional literal restyling was applied.
 Source/structural/candidate checkpoints, an explicit change ledger and
-literal/fidelity checks are retained. The fresh read-only editorial checker
+literal/fidelity checks are retained. The previous fresh read-only editorial checker
 failed before findings with `stream disconnected before completion: response.failed event received`.
-No retry or verdict is claimed; the completed reverse-condition reconciliation
+That transport was not retried and no verdict is claimed; the reverse-condition reconciliation
 is explicitly same-session. These editorial checks are not independent source
 review or a returned memo verdict; no failed memo transport was retried.
 
