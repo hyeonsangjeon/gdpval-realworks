@@ -2398,3 +2398,309 @@ def test_native_only_evidence_still_runs_the_real_redaction_check(tmp_path, unsa
     summary = _run_native_only_summary(tmp_path, record=record, leak="failure" if unsafe else "success")
     assert ENDPOINT not in summary
     assert ("Evidence: withheld" in summary) is unsafe
+
+
+@pytest.mark.parametrize("case", [
+    "completed", "failed_turn", "no_completion", "stream_failure",
+    "stalled", "cumulative_events", "interrupt_failure", "interrupt_stalled",
+    "close_failure", "close_stalled", "stream_close_failure",
+    "stream_close_stalled", "workspace_cleanup_failure",
+])
+def test_native_stream_deadline_and_cleanup_are_bounded(
+    case, monkeypatch, capsys, tmp_path,
+):
+    """One new offline selector: real script/CLI, local fake SDK streams only.
+
+    Event waits are bounded fixture synchronization, not monitoring. A virtual
+    monotonic clock makes three individually sub-limit events exceed the one
+    cumulative deadline deterministically; no elapsed-time tolerance proves it.
+    """
+    import threading
+    import time
+
+    import core.codex_runner as runner_module
+    import core.codex_runtime_config as runtime_config
+    import openai_codex
+    import scripts.diagnose_codex_foundry_connection as module
+    from openai_codex.generated.v2_all import (
+        ThreadTokenUsage,
+        ThreadTokenUsageUpdatedNotification,
+        TokenUsageBreakdown,
+        TurnCompletedNotification,
+    )
+
+    effects = {name: 0 for name in (
+        "network", "child", "token", "runtime", "legacy_probe", "sleep",
+    )}
+
+    def forbidden(name):
+        def refuse(*args, **kwargs):
+            effects[name] += 1
+            raise AssertionError(f"offline native-deadline test reached {name}")
+        return refuse
+
+    monkeypatch.setattr(socket, "socket", forbidden("network"))
+    monkeypatch.setattr(socket, "create_connection", forbidden("network"))
+    monkeypatch.setattr(subprocess, "run", forbidden("child"))
+    monkeypatch.setattr(subprocess, "Popen", forbidden("child"))
+    for name in ("system", "popen", "fork", "posix_spawn", "posix_spawnp"):
+        if hasattr(os, name):
+            monkeypatch.setattr(os, name, forbidden("child"))
+    monkeypatch.setattr(time, "sleep", forbidden("sleep"))
+    monkeypatch.setattr(openai_codex, "Codex", forbidden("runtime"))
+    monkeypatch.setattr(runtime_config, "discover_azure_cli_config_dir", forbidden("token"))
+    monkeypatch.setattr(module, "mint_token_the_way_codex_does", forbidden("token"))
+    for name in (
+        "read_only_probe", "auth_discriminator_probe", "transmission_sweep",
+        "valid_request_probe", "closing_sweep_probe",
+    ):
+        monkeypatch.setattr(module, name, forbidden("legacy_probe"))
+
+    stalled = case in {"stalled", "interrupt_failure", "interrupt_stalled"}
+    timeout = 0.03 if stalled or case == "stream_close_stalled" else 120
+    grace = 0.08
+    monkeypatch.setattr(module, "DEFAULT_TIMEOUT_SECONDS", timeout)
+    monkeypatch.setattr(runner_module, "CODEX_INTERRUPT_GRACE_SECONDS", grace)
+    monkeypatch.setattr(runner_module, "resolve_run_root_base", lambda: tmp_path / "workspaces")
+    clock = [1000.0]
+    if case == "cumulative_events":
+        monkeypatch.setattr(module, "monotonic", lambda: clock[0])
+
+    stream_release = threading.Event()
+    interrupt_release = threading.Event()
+    stream_close_release = threading.Event()
+    close_release = threading.Event()
+    workers = []
+    joins = []
+    counts = {name: 0 for name in (
+        "open", "thread", "turn", "stream", "events", "interrupt",
+        "stream_close", "runtime_close", "workspace_cleanup",
+    )}
+    private_error = f"failure at {ENDPOINT} Authorization: Bearer synthetic-private-token"
+
+    class TrackedThread(threading.Thread):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            workers.append(self)
+
+        def join(self, timeout=None):
+            assert timeout is not None and timeout >= 0
+            joins.append((self.name, timeout))
+            return super().join(timeout)
+
+    monkeypatch.setattr(module, "threading", SimpleNamespace(Thread=TrackedThread))
+    usage = ThreadTokenUsage(
+        total=TokenUsageBreakdown(
+            input_tokens=37, cached_input_tokens=3, output_tokens=7,
+            reasoning_output_tokens=2, total_tokens=44,
+        ),
+        last=TokenUsageBreakdown(
+            input_tokens=11, cached_input_tokens=0, output_tokens=3,
+            reasoning_output_tokens=1, total_tokens=14,
+        ),
+    )
+    completed = _turn([_agent_message("CONNECTED")])
+    if case == "failed_turn":
+        completed = _turn([], status="failed")
+        completed.error = _TurnError(info=_Root(_ErrorName.bad_request))
+
+    class NativeStream:
+        def __init__(self):
+            self.events = self.notifications()
+
+        def notifications(self):
+            yield _event(ThreadTokenUsageUpdatedNotification(
+                thread_id="thread-1", turn_id="turn-1", token_usage=usage,
+            ), method="thread/tokenUsage/updated")
+            if case == "cumulative_events":
+                for _ in range(3):
+                    clock[0] += 60  # Each gap <120; the combined180 is >120.
+                    yield _event(None, method="synthetic/progress")
+            if stalled:
+                assert stream_release.wait(0.75), "fake stream was not cancelled/closed"
+                return
+            if case == "no_completion":
+                return
+            if case == "stream_failure":
+                raise RuntimeError(private_error)
+            yield _event(TurnCompletedNotification(
+                thread_id="thread-1", turn=completed,
+            ), method="turn/completed")
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            event = next(self.events)
+            counts["events"] += 1
+            return event
+
+        def close(self):
+            assert threading.current_thread().name == "foundry-native-stream"
+            counts["stream_close"] += 1
+            self.events.close()
+            if case == "stream_close_stalled":
+                assert stream_close_release.wait(0.75), "runtime close was not reached"
+            if case == "stream_close_failure":
+                raise RuntimeError(private_error)
+
+    class NativeHandle:
+        id = "turn-1"
+
+        def stream(self):
+            counts["stream"] += 1
+            return NativeStream()
+
+        def interrupt(self):
+            counts["interrupt"] += 1
+            if case == "interrupt_failure":
+                raise RuntimeError(private_error)
+            if case == "interrupt_stalled":
+                assert interrupt_release.wait(0.75), "stuck interrupt prevented close"
+            stream_release.set()
+
+    class NativeRuntime:
+        def close(self):
+            counts["runtime_close"] += 1
+            stream_release.set()
+            stream_close_release.set()
+            interrupt_release.set()
+            if case == "close_stalled":
+                assert close_release.wait(0.75), "fixture teardown did not release close"
+            if case == "close_failure":
+                raise RuntimeError(private_error)
+
+    native = NativeRuntime()
+    fake = _FakeRunner(_probe())
+
+    def open_runtime(workspace):
+        counts["open"] += 1
+        assert workspace in fake.workspaces
+        return native
+
+    def start_thread(codex, workspace):
+        counts["thread"] += 1
+        assert codex is native and workspace in fake.workspaces
+
+        def turn(prompt):
+            counts["turn"] += 1
+            assert prompt == PROMPT
+            return NativeHandle()
+
+        return SimpleNamespace(turn=turn)
+
+    fake.open_runtime = open_runtime
+    fake.start_thread = start_thread
+    monkeypatch.setattr(runner_module, "CodexAgentRunner", fake)
+    original_cleanup = runner_module.CodexWorkspace.cleanup
+
+    def cleanup_workspace(workspace):
+        counts["workspace_cleanup"] += 1
+        original_cleanup(workspace)
+        if case == "workspace_cleanup_failure":
+            raise RuntimeError(private_error)
+
+    monkeypatch.setattr(runner_module.CodexWorkspace, "cleanup", cleanup_workspace)
+    out = tmp_path / "native-deadline.json"
+    try:
+        code, record = _run(
+            ["--deployment", DEPLOYMENT, "--send-request", "--out", str(out)],
+            ROUTED, monkeypatch, capsys,
+        )
+        written = out.read_text(encoding="utf-8")
+        assert json.loads(written) == record
+        assert not capsys.readouterr().err
+        assert record["schema"] == "codex_foundry_connection/3"
+        assert record["settings"] == describe_settings(_settings())
+        assert record["request"] == request_plan(describe_settings(_settings()))
+        assert record["request"]["turns_sent"] == 1
+        assert record["request"]["retries_configured"] == {
+            "request_max_retries": 0, "stream_max_retries": 0,
+        }
+        assert record["not_established"] == list(NOT_ESTABLISHED_BY_A_TEXT_TURN)
+        assert fake.timeout == timeout
+        assert counts["open"] == counts["thread"] == counts["turn"] == counts["stream"] == 1
+        assert counts["runtime_close"] == counts["stream_close"] == 1
+        assert counts["interrupt"] == int(stalled or case == "stream_close_stalled")
+        assert all(worker.daemon for worker in workers)
+        stream_joins = [bound for name, bound in joins if name == "foundry-native-stream"]
+        assert len(stream_joins) == 2  # One stream wait, then bounded cleanup; no event resets.
+        assert 0 <= stream_joins[0] <= timeout
+        assert 0 <= stream_joins[1] <= grace
+        assert all(bound <= grace for name, bound in joins if name != "foundry-native-stream")
+        assert counts["workspace_cleanup"] == int(case != "close_stalled")
+        assert all(not worker.is_alive() for worker in workers) is (case != "close_stalled")
+
+        cleanup_failure = case in {
+            "interrupt_failure", "close_failure", "close_stalled",
+            "stream_close_failure", "workspace_cleanup_failure",
+        }
+        expected_verdict = (
+            VERDICT_UNCLASSIFIED_FAILURE if cleanup_failure or case == "stream_failure"
+            else VERDICT_CONNECTED if case == "completed"
+            else VERDICT_REQUEST_SHAPE_REJECTED if case == "failed_turn"
+            else module.VERDICT_TURN_TIMED_OUT
+        )
+        assert record["verdict"] == expected_verdict
+        assert code == int(case != "completed")
+        assert record["provider_answered"] is (case in {"completed", "failed_turn"})
+        observed = record["observed"]
+        assert set(observed) == set(_empty_observation())
+        assert observed["thread_started"] is observed["turn_sent"] is True
+        assert observed["served_model"] is None
+        assert observed["tool_execution_observed"] is False
+        if case == "completed":
+            expected_observed = _empty_observation()
+            expected_observed.update({
+                "auth_command": _probe().as_record(), "thread_started": True,
+                "turn_sent": True, "turn_status": "completed",
+                "final_response_present": True, "final_response_source": "turn_items",
+                "final_response_matched_instruction": True,
+                "streaming": {
+                    "notifications": 2,
+                    "by_method": {"thread/tokenUsage/updated": 1, "turn/completed": 1},
+                    "usage_updates": 1, "item_types": [], "thread_settings_seen": False,
+                },
+                "usage": module._usage_record(usage),
+            })
+            assert record == _record(
+                verdict=VERDICT_CONNECTED, description=describe_settings(_settings()),
+                observed=expected_observed,
+                note="the model leg answered under these settings; the tool leg was not exercised",
+            )
+            assert observed["usage"]["thread_total"]["input_tokens"] == 37
+            assert observed["usage"]["most_recent_request"]["input_tokens"] == 11
+        if cleanup_failure:
+            assert observed["error"] == {
+                "stage": "cleanup",
+                "message": "native session cleanup failed or exceeded its grace period",
+            }
+            assert "cleanup was not established" in record["note"]
+        if case in {"stalled", "cumulative_events", "interrupt_stalled", "stream_close_stalled"}:
+            assert observed["error"]["stage"] == "turn"
+            assert "cumulative timeout" in observed["error"]["message"]
+            assert observed["usage"] is None  # Unknown, never a guessed zero or price.
+            assert observed["final_response_present"] is False
+        if case == "cumulative_events":
+            assert counts["events"] == 5 and clock[0] == 1180
+            assert observed["turn_status"] is None  # Late completion cannot become success.
+        if case == "interrupt_failure":
+            assert "native stream deadline expired" in record["note"]
+        if case == "stream_failure":
+            assert "<url redacted>" in observed["error"]["message"]
+            assert "<token redacted>" in observed["error"]["message"]
+        for private in (ENDPOINT, ACCOUNT, PROJECT, "synthetic-private-token", private_error):
+            assert private not in written
+        assert not any(effects.values()), effects
+        print(f"native-deadline case={case} verdict={expected_verdict} exit={code} "
+              f"fake_turns=1 cleanup_boundary={observed['error']['stage'] if cleanup_failure else 'returned'} "
+              "live_effects=0")
+    finally:
+        for release in (stream_release, interrupt_release, stream_close_release, close_release):
+            release.set()
+        for worker in workers:
+            threading.Thread.join(worker, 0.8)
+        assert all(not worker.is_alive() for worker in workers), "fake worker survived teardown"
+        assert counts["workspace_cleanup"] == 1
+        assert all(not workspace.root.exists() for workspace in fake.workspaces)
+        assert not any(effects.values()), effects

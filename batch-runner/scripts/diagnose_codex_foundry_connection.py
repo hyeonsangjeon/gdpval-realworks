@@ -77,8 +77,10 @@ import json
 import os
 import re
 import sys
+import threading
 from collections.abc import Mapping, Sequence
 from enum import Enum
+from time import monotonic
 from typing import Any, Callable, Iterable, Iterator
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -783,6 +785,101 @@ def _usage_record(usage: Any) -> dict[str, Any] | None:
     }
 
 
+def _observe_native_stream(handle: Any, timeout: float) -> tuple[Any, dict[str, Any], bool]:
+    """Bound the blocking SDK iterator as a whole, like the runner's worker.
+
+    The worker owns and closes the iterator. Its deadline is set once, before
+    starting it; notifications never extend that deadline. Session cleanup
+    below interrupts/closes the runtime if the worker is still blocked.
+    """
+    state: dict[str, Any] = {
+        "result": None, "failure": None, "close_failed": False, "finished_at": None,
+    }
+    deadline = monotonic() + timeout
+
+    def consume() -> None:
+        stream = None
+        try:
+            stream = handle.stream()
+            state["result"] = observe_stream(stream, turn_id=handle.id)
+        except Exception as exc:  # noqa: BLE001 - reported through the redactor
+            state["failure"] = exc
+        finally:
+            try:
+                close = getattr(stream, "close", None)
+                if close is not None:
+                    close()
+            except Exception:  # noqa: BLE001 - fixed cleanup failure, never raw text
+                state["close_failed"] = True
+            state["finished_at"] = monotonic()
+
+    worker = threading.Thread(target=consume, name="foundry-native-stream", daemon=True)
+    worker.start()
+    worker.join(max(0.0, deadline - monotonic()))
+    timed_out = (
+        worker.is_alive()
+        or state["finished_at"] is None
+        or state["finished_at"] > deadline
+    )
+    return worker, state, timed_out
+
+
+def _cleanup_native_session(
+    codex: Any, workspace: Any, handle: Any, worker: Any, state: dict[str, Any] | None,
+) -> bool:
+    """Attempt interruption and existing close/cleanup under one grace bound.
+
+    A stuck interrupt must not prevent runtime close. Only the stream worker
+    closes its iterator; closing a generator from another thread is unsafe.
+    Daemon workers keep a stuck SDK close from blocking process exit, but their
+    survival is a cleanup failure, not evidence that a child was terminated.
+    """
+    from core.codex_runner import CODEX_INTERRUPT_GRACE_SECONDS
+
+    deadline = monotonic() + CODEX_INTERRUPT_GRACE_SECONDS
+    failures: list[bool] = []
+    interrupter = None
+    if worker is not None and worker.is_alive():
+        def interrupt() -> None:
+            try:
+                handle.interrupt()
+            except Exception:  # noqa: BLE001 - do not expose runtime error text
+                failures.append(True)
+
+        interrupter = threading.Thread(
+            target=interrupt, name="foundry-native-interrupt", daemon=True,
+        )
+        interrupter.start()
+        # Reserve part of the same grace period for close even if interrupt hangs.
+        interrupter.join(max(0.0, (deadline - monotonic()) / 2))
+
+    def close_session() -> None:
+        try:
+            if codex is not None:
+                codex.close()
+        except Exception:  # noqa: BLE001
+            failures.append(True)
+        finally:
+            try:
+                workspace.cleanup()
+            except Exception:  # noqa: BLE001
+                failures.append(True)
+
+    closer = threading.Thread(
+        target=close_session, name="foundry-native-cleanup", daemon=True,
+    )
+    closer.start()
+    for pending in (closer, worker, interrupter):
+        if pending is not None:
+            pending.join(max(0.0, deadline - monotonic()))
+    return not (
+        failures
+        or any(pending is not None and pending.is_alive()
+               for pending in (closer, worker, interrupter))
+        or (state is not None and state["close_failed"])
+    )
+
+
 def probe(
     settings: CodexProviderSettings,
     *,
@@ -815,7 +912,13 @@ def probe(
 
     workspace = CodexWorkspace.create(task_id="foundry-connection-probe")
     codex: Any = None
-    try:
+    handle: Any = None
+    stream_worker: Any = None
+    stream_state: dict[str, Any] | None = None
+    timed_out = False
+
+    def send() -> dict[str, Any]:
+        nonlocal codex, handle, stream_worker, stream_state, timed_out
         # Asked and recorded before anything is sent, and recorded whichever
         # way it answers. A turn started on a sign-in that cannot mint reaches
         # the deployment carrying an empty bearer and is refused there, and the
@@ -874,13 +977,32 @@ def probe(
             )
 
         observed["turn_sent"] = True
-        stream: Iterator[Any] = handle.stream()
-        try:
-            summary, turn, extras = observe_stream(stream, turn_id=handle.id)
-        finally:
-            close = getattr(stream, "close", None)
-            if close is not None:
-                close()
+        stream_worker, stream_state, timed_out = _observe_native_stream(handle, timeout)
+        if timed_out:
+            observed["error"] = {
+                "stage": "turn",
+                "message": "the native stream exceeded the configured cumulative timeout",
+            }
+            return _record(
+                verdict=VERDICT_TURN_TIMED_OUT,
+                description=description,
+                observed=observed,
+                note=(
+                    "the turn was sent and did not finish within its deadline; "
+                    "a cost may exist here that this run cannot measure"
+                ),
+            )
+        if stream_state["failure"] is not None:
+            observed["error"] = {
+                "stage": "turn", "message": redact(stream_state["failure"]),
+            }
+            return _record(
+                verdict=VERDICT_UNCLASSIFIED_FAILURE,
+                description=description,
+                observed=observed,
+                note="the turn stream failed; it may still have been billed",
+            )
+        summary, turn, extras = stream_state["result"]
 
         usage, thread_settings, agent_messages = extras
         observed["streaming"] = summary
@@ -949,13 +1071,31 @@ def probe(
             observed=observed,
             note="the turn was sent and failed; it may still have been billed",
         )
+    record = None
+    try:
+        record = send()
     finally:
-        if codex is not None:
-            try:
-                codex.close()
-            except Exception:  # noqa: BLE001 - closing must not mask a result
-                pass
-        workspace.cleanup()
+        cleaned = _cleanup_native_session(
+            codex, workspace, handle, stream_worker, stream_state,
+        )
+        if not cleaned and record is None:
+            raise RuntimeError("native session cleanup failed") from None
+    if not cleaned:
+        observed["error"] = {
+            "stage": "cleanup",
+            "message": "native session cleanup failed or exceeded its grace period",
+        }
+        # A prior connected result must not hide failed or incomplete cleanup.
+        return _record(
+            verdict=VERDICT_UNCLASSIFIED_FAILURE,
+            description=description,
+            observed=observed,
+            note=(
+                ("the native stream deadline expired; " if timed_out else "")
+                + "cleanup was not established; a sent turn may still have been billed"
+            ),
+        )
+    return record
 
 
 def _select_final_answer(items: Sequence[Any]) -> str | None:
