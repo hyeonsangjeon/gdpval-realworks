@@ -38,6 +38,11 @@ ledger rows (which is the attempt count), and the cost state. Then it answers
 the three registered questions directly, and prints the contingency table the
 first one turns on.
 
+For an unknown recorded failure category only, a complete explicit output-limit
+reason in the local result's error field can add a separate offline diagnostic.
+It does not replace recorded categories, change recovery policy, or establish
+an independent failure cause. Absent or redacted text adds nothing.
+
 What it will not do
 -------------------
 * **It does not score.** Success here means the pipeline produced a
@@ -58,6 +63,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 import sys
 from collections import Counter, defaultdict
@@ -101,6 +107,38 @@ PRE_STREAM_FAILURE_CATEGORIES = frozenset(
         "turn_start_failed",
     }
 )
+
+
+def _derived_output_limit_diagnostic(result: dict) -> dict | None:
+    """Recognize only the complete local reason; never return provider text.
+
+    The phrase and optional wrappers/memory suffix are grounded in
+    docs/run_records/exp035_run34685779030_partial/outcomes.json:6145.
+    Full matching refuses quoted examples, earlier traceback causes, redacted
+    suffixes and different final exceptions. This is not a runtime classifier.
+    """
+    observability = result.get("observability") or {}
+    category = observability.get("error_category")
+    if result.get("status") != "error" or category not in ("turn_failed", "execution_error"):
+        return None
+    codex = observability.get("codex") or {}
+    if codex.get("http_status_code", result.get("http_status_code")) == 429:
+        return None
+    error = result.get("error")
+    if not isinstance(error, str) or re.fullmatch(
+        r"(?:the Codex turn failed: )?"
+        r"(?:stream disconnected before completion: )?"
+        r"Incomplete response returned, reason: max_output_tokens"
+        r"(?:, mem=[0-9]+MB)?",
+        error.strip(),
+        re.IGNORECASE,
+    ) is None:
+        return None
+    return {
+        "category": "output_limit_exceeded",
+        "provenance": "offline_local_result_error_explicit_reason",
+        "missing_reason": None,
+    }
 
 
 def _items_seen_is_measured(task: dict) -> bool:
@@ -237,6 +275,9 @@ def collect(root: Path) -> dict:
                 "sector": sectors.get(tid, ""),
             }
         )
+        diagnostic = _derived_output_limit_diagnostic(result)
+        if diagnostic is not None:
+            tasks[-1]["derived_output_limit_diagnostic"] = diagnostic
     return {"meta": payload, "tasks": tasks, "ledger": ledger}
 
 
@@ -455,6 +496,18 @@ def report(data: dict) -> None:
         print("  -> the run's dollar cost is UNDETERMINED, which is not zero.")
     elif known:
         print(f"  model cost USD  : {sum(known)}")
+
+    derived = [t for t in tasks if t.get("derived_output_limit_diagnostic")]
+    if derived:
+        print()
+        print("=== offline derived output-limit diagnostic ===")
+        print("  Recorded category/status unchanged; not runtime category emission "
+              "or independent failure-cause attribution.")
+        for task in derived:
+            # Only fixed diagnostic labels leave this path, never the error.
+            print(f"  {task['task_id'][:8]}  category=output_limit_exceeded "
+                  "provenance=offline_local_result_error_explicit_reason "
+                  "missing_reason=None")
 
 
 def main(argv: list[str] | None = None) -> int:

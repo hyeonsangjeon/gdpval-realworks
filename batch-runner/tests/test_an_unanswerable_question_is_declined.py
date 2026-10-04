@@ -35,8 +35,16 @@ cost and the analyzer never adds the two together.
 
 from __future__ import annotations
 
+import builtins
+import hashlib
+import io
 import json
+import os
+import socket
+import subprocess
 import sys
+import time
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -45,6 +53,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import analyze_codex_run as analyzer  # noqa: E402
+# Import real compiler/client types before the new selector's offline guards.
+import codex_retention_diagnostic as registration  # noqa: E402
+import step8_grade  # noqa: E402
+from core import azure_ai_clients, codex_azure_token  # noqa: E402
+from openai_codex import Codex  # noqa: E402
+from openai_codex.client import CodexClient  # noqa: E402
 
 
 def build(root: Path, spec: list[tuple]) -> Path:
@@ -483,3 +497,215 @@ def test_the_statement_field_this_dataset_uses_is_the_one_read(tmp_path, capsys)
     build(tmp_path, [("aaaa1111", "success", None, 1, 0, 1)])
     out = run(tmp_path, capsys)
     assert "cannot test" in out
+
+
+def test_local_output_limit_diagnostic_preserves_records_and_grader_closure(
+    tmp_path, monkeypatch, capsys,
+):
+    """One local-artifact selector; no historical outcome is reclassified."""
+    reason = "Incomplete response returned, reason: max_output_tokens"
+    # This exact message is retained at exp035_run34685779030_partial/
+    # outcomes.json:6145. All variations below are authored contracts, not
+    # claims about what happened in the retention diagnostic.
+    recorded = (
+        "the Codex turn failed: stream disconnected before completion: "
+        "Incomplete response returned, reason: max_output_tokens, mem=187MB"
+    )
+    positives = (
+        recorded, reason, f"stream disconnected before completion: {reason}",
+        f"the Codex turn failed: {reason}", f"{reason}, mem=188MB",
+        f" \t{reason} \t", reason.upper(),
+        f"the Codex turn failed: stream disconnected before completion: {reason}",
+    )
+    missing = object()
+    negatives = (
+        missing, None, "", " \t", "[redacted]", "pilot_task_failed", 0, False,
+        {"message": reason}, [reason], "the stream ended",
+        "tokens max_tokens output length", '{"max_output_tokens": 2400}',
+        "max_output_tokens", "reason: max_output_tokens",
+        "ValueError: max_tokens must be positive",
+        "RuntimeError: report output length exceeds the requested width",
+        'File "output_length.py", line 429, in max_tokens',
+        'File "run.py", line 8192, in max_output_tokens\nTypeError: bad argument',
+        "contextWindowExceeded",
+        "context_length_exceeded: input and max_output_tokens exceed the context window",
+        "Incomplete response returned, reason: contextWindowExceeded",
+        "Incomplete response returned, reason: max_input_tokens",
+        "Incomplete response returned, reason: max_tokens",
+        "sessionBudgetExceeded", "usageLimitExceeded",
+        f"{reason}_per_turn", f"{reason}.per_turn", f"{reason}-per-turn",
+        f"{reason}2", f"{reason}=2400", f"{reason} would be a configuration example",
+        f'Example: "{reason}"', f"{reason}, [redacted]", f"{reason}, mem=unknown",
+        f"RuntimeError: {reason}\nRuntimeError: wrapper failed",
+        f"{reason}\nRuntimeError: wrapper failed",
+        f"RuntimeError: wrapper failed\n{reason}",
+        f"Traceback (most recent call last):\n  {reason}",
+        f"{reason}, endpoint=https://private.invalid/SECRET_ENDPOINT",
+        f"{reason}, api_key=SECRET_CREDENTIAL",
+    )
+    # category, local error, expected addition, status, structured HTTP status
+    cases = [
+        (category, error, True, "error", None)
+        for category in ("turn_failed", "execution_error") for error in positives
+    ]
+    cases += [
+        (category, error, False, "error", None)
+        for category in ("turn_failed", "execution_error") for error in negatives
+    ]
+    known_categories = (
+        "rate_limited", "content_filtered", "transport_error", "timeout",
+        "out_of_memory", "syntax_error", "schema_error", "value_error",
+        "runtime_unavailable", "session_start_failed", "turn_start_failed",
+        "pilot_task_budget_exhausted", "output_limit_exceeded", None, "", "unknown",
+    )
+    cases += [(category, recorded, False, "error", None) for category in known_categories]
+    known_messages = (
+        "HTTP 429 returned by the provider", "rate limit reached; timed out",
+        "reason: content_filter", "Transport error: timed out",
+        "error decoding response body", "execution timeout", "timeout exceeded",
+    )
+    cases += [
+        ("turn_failed", text, False, "error", None)
+        for message in known_messages
+        for text in (f"{message} {reason}", f"{reason}\n{message}")
+    ]
+    cases += [
+        ("turn_failed", recorded, False, "success", None),
+        ("execution_error", recorded, False, "timeout", None),
+        ("turn_failed", recorded, False, "error", 429),
+        ("execution_error", recorded, False, "error", 429),
+    ]
+    spec = [
+        (f"case{index:04d}", status, category, 2, 900, 7, http_status)
+        for index, (category, _, _, status, http_status) in enumerate(cases)
+    ]
+    baseline_root = build(tmp_path / "legacy", spec)
+    artifact_root = build(tmp_path / "local", spec)
+    for root in (baseline_root, artifact_root):
+        path = root / "workspace/step2_inference_results.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for index, result in enumerate(payload["results"]):
+            result["grade"] = None
+            result["usage"] = {"input_tokens": 20, "output_tokens": 4}
+            if index == 0:
+                result["problem_solving_cost"]["known_cost_usd"] = 0.125
+            if root == artifact_root:
+                if cases[index][1] is not missing:
+                    result["error"] = cases[index][1]
+                # Untrusted extra fields cannot manufacture a derived result.
+                result["derived_output_limit_diagnostic"] = {"category": "SECRET_CREDENTIAL"}
+                result["provider_error"] = reason
+            if index == len(cases) - 1:
+                # Exercise the same legacy top-level HTTP fallback as collect.
+                result["http_status_code"] = result["observability"]["codex"].pop("http_status_code")
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        prepared_path = root / "workspace/step1_tasks_prepared.json"
+        prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+        prepared["tasks"][0]["instruction"] = "PRIVATE_TASK_BODY_DO_NOT_PRINT"
+        prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+    artifact_before = {
+        str(path.relative_to(artifact_root)): path.read_bytes()
+        for path in artifact_root.rglob("*") if path.is_file()
+    }
+    effects = []
+
+    def forbidden(*args, **kwargs):
+        effects.append("forbidden")
+        raise AssertionError("offline analyzer selector crossed a live/write boundary")
+
+    for owner, names in (
+        (subprocess, ("Popen", "run", "check_call", "check_output")),
+        (socket.socket, ("connect", "connect_ex")),
+        (socket, ("create_connection", "getaddrinfo")),
+        (os, ("system",)), (time, ("sleep",)),
+        (Path, ("write_bytes", "write_text")),
+        (codex_azure_token, ("acquire_token", "get_bearer_token_provider")),
+    ):
+        for name in names:
+            monkeypatch.setattr(owner, name, forbidden)
+    for constructor in (
+        azure_ai_clients.AzureAIClientFactory, azure_ai_clients.OpenAI,
+        azure_ai_clients.AzureOpenAI, azure_ai_clients.DefaultAzureCredential,
+        step8_grade.Grader, Codex, CodexClient,
+    ):
+        monkeypatch.setattr(constructor, "__init__", forbidden)
+    for module in (builtins, io):
+        original_open = module.open
+
+        def read_only_open(file, mode="r", *args, _open=original_open, **kwargs):
+            if any(flag in mode for flag in "wax+"):
+                forbidden()
+            return _open(file, mode, *args, **kwargs)
+
+        monkeypatch.setattr(module, "open", read_only_open)
+    for name in ("OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "HF_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    repo = Path(__file__).resolve().parents[2]
+    assert registration.ROOT == repo
+    plan = registration.compile_plan()  # Exactly one real call, including the grader closure.
+    closure = "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"
+    assert plan["grading"]["template_source_sha256"] == closure
+    assert registration.BASE_GRADER_TEMPLATE_SOURCE_SHA256 == closure
+    assert plan["cell_count"] == 8
+    assert plan["launch_authorized"] is plan["compiler_reviewed"] is False
+    assert plan["commands"] == []
+    assert plan["common"]["recovery_failure_categories"] == ["rate_limited", "turn_start_failed"]
+    for role, paths in registration.SOURCE_ROLES.items():
+        assert set(plan["source_pins"][role]) == set(paths)
+        for relative in paths:
+            assert hashlib.sha256((repo / relative).read_bytes()).hexdigest() == plan["source_pins"][role][relative]
+    with capsys.disabled():
+        print(f"BOUNDARY one real compile_plan: grader closure {closure}; all source roles verified; no launch authority")
+
+    baseline = analyzer.collect(baseline_root)
+    data = analyzer.collect(artifact_root)
+    expected_diagnostic = {
+        "category": "output_limit_exceeded",
+        "provenance": "offline_local_result_error_explicit_reason",
+        "missing_reason": None,
+    }
+    assert data["meta"] == json.loads(artifact_before["workspace/step2_inference_results.json"])
+    assert data["ledger"] == baseline["ledger"]
+    assert len(data["tasks"]) == len(cases)
+    for index, (task, original, case) in enumerate(zip(data["tasks"], baseline["tasks"], cases)):
+        copy = deepcopy(task)
+        diagnostic = copy.pop("derived_output_limit_diagnostic", None)
+        assert diagnostic == (expected_diagnostic if case[2] else None), ("diagnostic", index)
+        assert copy == original, ("recorded fields", index)
+        assert task["error_category"] == case[0] and task["status"] == case[3]
+        assert task["attempts"] == task["settled"] == 2
+        assert task["known_cost_usd"] == (0.125 if index == 0 else None)
+    assert all("derived_output_limit_diagnostic" not in t for t in baseline["tasks"])
+    analyzer.report(baseline)
+    baseline_output = capsys.readouterr().out
+    analyzer.report(data)
+    output = capsys.readouterr().out
+    marker = "\n=== offline derived output-limit diagnostic ===\n"
+    legacy_output, separator, derived_output = output.partition(marker)
+    assert separator == marker and legacy_output == baseline_output
+    assert "not runtime category emission or independent failure-cause attribution" in derived_output
+    assert derived_output.count("category=output_limit_exceeded ") == 2 * len(positives)
+    for index, case in enumerate(cases):
+        assert (f"case{index:04d}  category=" in derived_output) is case[2], ("report", index)
+    assert "=== outcome ===  success 1/" in output
+    assert "UNDETERMINED, which is not zero" in output
+    assert "task-solving only; grading is a separate run" in output
+    for private in (reason, "mem=187MB", "SECRET_ENDPOINT", "SECRET_CREDENTIAL",
+                    "private.invalid", "PRIVATE_TASK_BODY_DO_NOT_PRINT", str(artifact_root)):
+        assert private not in output
+        assert private not in json.dumps(data["tasks"])
+    assert analyzer.main([str(artifact_root)]) == 0
+    assert capsys.readouterr().out == output
+    assert analyzer.main([str(baseline_root)]) == 0
+    assert capsys.readouterr().out == baseline_output
+    assert marker not in baseline_output
+    assert artifact_before == {
+        str(path.relative_to(artifact_root)): path.read_bytes()
+        for path in artifact_root.rglob("*") if path.is_file()
+    }
+    assert effects == []
+    with capsys.disabled():
+        print(f"BOUNDARY local collect/report/CLI: {len(cases)} authored cases; {2 * len(positives)} explicit diagnostics")
+        print("BOUNDARY missing/redacted/context/input/wrapper/known-category/HTTP429 refusals; recorded fields and artifact bytes unchanged")
+        print("BOUNDARY fixed labels only; legacy output/denominators/usage/costs unchanged; zero network/model/grade/writer/child/sleep effects")
