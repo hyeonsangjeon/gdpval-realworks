@@ -121,6 +121,7 @@ def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch,
       for change in ("missing", "drift")),
 ])
 def test_step0_manifest_canonical_readers_are_pinned_without_launch_waiver(source, change, monkeypatch):
+    import gpt54_comparison_preflight as preflight
     from .test_gpt54_run_config_bundle import _guards
 
     forbidden = _guards(monkeypatch)
@@ -145,9 +146,9 @@ def test_step0_manifest_canonical_readers_are_pinned_without_launch_waiver(sourc
         assert report["launch_allowed"] is report["full_220_allowed"] is False
         assert report["launch_blockers"] == list(LAUNCH_BLOCKERS)
         assert len(LAUNCH_BLOCKERS) == 6 and manifest["launch_enabled"] is False
-        active = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml")
+        active = load_plan(preflight.ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml")
         for role in ("batch-runner/gpt54_comparison_preflight.py", "batch-runner/gpt54_run_input_bundle.py"):
-            assert active["source_pins"][role] == hashlib.sha256((ROOT / role).read_bytes()).hexdigest()
+            assert active["source_pins"][role] == hashlib.sha256((preflight.ROOT / role).read_bytes()).hexdigest()
     assert forbidden == []
 
 
