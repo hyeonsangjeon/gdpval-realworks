@@ -190,7 +190,7 @@ python codex_ci_input_bundle.py import --bundle "$PRIVATE_ARCHIVE" --expected-sh
 The metadata receipt is not publication clearance, even when its sensitive-field
 screen is false. Local materialization does not prove CI-read authority, served
 identity, wire consumption, native caps or comparison launch readiness. See the
-[local-input correction record](../tasks/LATEST_TASK_RESULT/README.md#project5-local-original-input-registration-correction--2026-10-04) for the bounded
+[local-input correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/5fcf254f4146734493e7390b110ad56189c836ae/tasks/LATEST_TASK_RESULT/README.md#project5-local-original-input-registration-correction--2026-10-04) for the bounded
 proof, real-import identities and remaining gates.
 
 #### Prospective source profile for local comparison preparation
