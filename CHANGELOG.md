@@ -25,7 +25,24 @@ entries land under a fresh dated heading the day they merge to `main`.
   historical data and deployment/auth settings were not edited. See the
   [diagnostic usage boundary](batch-runner/docs/codex_foundry_connection.md).
 
-  One new bounded offline selector passed:13 passed in1.40s at implementation
+  Retain the latest actually received usage on timeout, later stream error and
+  cleanup failure. The existing parser publishes fresh `_usage_record`
+  projections, and the receipt snapshots the latest one after bounded cleanup.
+  Without a matching usage event, usage remains null; recorded zero remains zero.
+  Thread-total and most-recent-request counters stay separate, without a price
+  or invoice.
+  Late worker updates cannot mutate the returned receipt or restore success.
+  Reviewed HEAD`025a1c122d5c03bf56d8d4781dc5c98fd40391c5` is HOLD for loss of
+  observed failure usage, not approval. One newly authorized invocation of the
+  changed selector passed:19 passed in1.69s at implementation
+  HEAD`a2f36d9bdde300446c981fc0dd1b7195596fa9b6`, tree
+  `ee5e643e76ea9413e1ce732e5ae767c958613b4e`; all invocation/capture exits0,
+  no timeout and zero guarded live effects. Log SHA256
+  `02087cfcf3ee689d491a51547c93b1fcef88754ae77153fda5a7df56f40cbfee`.
+  The19 authored fake-stream cases retained usage in17 receipts and left2
+  without matching usage null. The1.69s is pytest duration, not live latency.
+
+  The original deadline proof remains separate:13 passed in1.40s at implementation
   HEAD`a243203e11b7f96125c47d14fa116add39810d1a`, tree
   `7673f5b4634c65b690d8b14755e5fa816f7a9e4b`. Selector, invocation and all log/status
   capture exits were0; no timeout and zero guarded live effects. The13 cases use

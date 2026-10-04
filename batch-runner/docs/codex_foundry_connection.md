@@ -35,6 +35,15 @@ with error stage `cleanup` and exit1. Fixed cleanup wording does not expose SDK
 error text. A previously completed turn cannot retain a `connected` verdict
 when cleanup was not established. Missing usage stays unknown, not zero cost.
 
+The receipt retains the latest matching usage notification actually received
+through the bounded cleanup attempt, even when the stream times out, later
+raises, or cleanup fails. The existing parser publishes a fresh `_usage_record`
+projection for each update; the final receipt snapshots it without another
+wait. A worker surviving cleanup cannot mutate that receipt with later updates
+or turn a late completion into success. No matching usage event leaves `usage`
+null; recorded zero counters remain zero. Thread-total and most-recent-request
+counters stay separate and are not combined into a price or invoice.
+
 Authentication, runtime initialization and thread/turn-start handshakes remain
 outside the stream deadline. The20-minute workflow cap remains an outer limit,
 not proof that a child was successfully terminated. A daemon worker that does
@@ -49,6 +58,11 @@ The focused offline selector
 uses local fake streams, bounded event synchronization and a virtual monotonic
 clock. It covers normal completion, cumulative expiry despite individual events
 arriving within the limit, stalled reads, cancellation, and cleanup failures.
+The usage-retention correction also covers usage before a stall or stream
+error, true missingness, wrong-turn notifications, latest and zero-valued
+updates, and receipt stability after the cleanup grace. The earlier13-case1.40s
+deadline proof remains separate history; the changed19-case selector passed
+in1.69s. These are authored fixtures and pytest durations, not live observations.
 Its exact source state, command, result and log identities are in the
 [latest completion record](../../tasks/LATEST_TASK_RESULT/README.md).
 
