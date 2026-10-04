@@ -160,6 +160,39 @@ before paid capacity-sensitive experiments.
   Use a new disposable target or remove the inspected partial/legacy repository
   explicitly.
 
+#### Local transport of the registered originals
+
+`codex_ci_input_bundle.py produce` verifies an existing local original parquet,
+the two declared references and the full canonical schema4 Step0 before making
+a deterministic archive. It does not generate Step0 or acquire a missing input.
+`import` requires an independently supplied archive SHA256 and a new absent
+private output root whose parent already exists outside the source checkout.
+Archive/member checks, genuine input readers and installed readback precede
+the ready marker. An interrupted reservation is retained and cannot be adopted
+or retried in place.
+
+The local CLI validates the catalog/envelope input pins and derives the fixed
+score-free cohort without compiling a comparison dispatch/grading plan.
+Original revision, parquet, catalog, task order, prompt/reference identities
+and canonical Step0 checks remain in force. The shared comparison attester is
+unchanged. Credentialed intake still uses the full-source `_registered()` and
+`import_bundle()` path; the local CLI does not waive its authority requirements.
+
+Run only under separately authorized, token-free/offline local conditions. The
+following argument forms are documentation, not authorization to repeat a
+completed transfer or import; keep actual input paths and bytes private:
+
+```bash
+python codex_ci_input_bundle.py produce --dataset-parquet "$PRIVATE_PARQUET" --reference-root "$PRIVATE_REFERENCES" --step0-manifest "$PRIVATE_STEP0" --out "$NEW_PRIVATE_ARCHIVE"
+python codex_ci_input_bundle.py import --bundle "$PRIVATE_ARCHIVE" --expected-sha256 "$APPROVED_ARCHIVE_SHA256" --out "$NEW_PRIVATE_OUTPUT"
+```
+
+The metadata receipt is not publication clearance, even when its sensitive-field
+screen is false. Local materialization does not prove CI-read authority, served
+identity, wire consumption, native caps or comparison launch readiness. See the
+[current correction record](../tasks/LATEST_TASK_RESULT/README.md) for the bounded
+proof, real-import identities and remaining gates.
+
 ### Step 1: Prepare Tasks (`step1_prepare_tasks.py`)
 
 Reads experiment YAML config → loads dataset → applies filters (sector, sample_size) → saves task list + condition configs to `workspace/step1_tasks_prepared.json`.
