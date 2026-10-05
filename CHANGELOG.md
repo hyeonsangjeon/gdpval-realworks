@@ -13,6 +13,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Register the separate prospective `gpt54_sandboxv2_codex_time_budget_v1`
+  configuration-bundle comparison, with four noncolliding ABBA run IDs, the same
+  five approved tasks and GPT-5.4/direct-v1/xhigh binding, at most 20 generation
+  observations and inference concurrency 1. Each observation has one external
+  attempt, without replay/resume/retry. Intent is 1200 elapsed seconds from first
+  generation start including waits/native recovery, followed by at most 20
+  separately recorded seconds of local cleanup. The 1220-second planned host
+  lifecycle is not a remote billing or server-side cancellation guarantee.
+
+  The isolated strict parser/compiler reuses genuine source, task and frozen-judge
+  validation without changing either prior comparison manifest or its compiler.
+  Its output separates registered intent, unimplemented executor policy and false
+  launch authority; it contains no dispatch commands or runtime configs. Native
+  request/token counters are observation-only or explicitly unavailable, with no
+  shared native or money hard-cap claim. V2's 9-turn/8192-output settings remain
+  V2-specific. One grading attempt, retained failed/missing outcomes and a fixed
+  descriptive paired analysis prohibit score-dependent regrading or repeats.
+  Core, grader, workflows, capture/launch guards and historical paid evidence are
+  unchanged; the 30-cell/8-cell studies remain closed.
+
+  One offline `time_budget_registration` selector passed **75 cases in 7.54s**,
+  exit 0, at implementation HEAD `10c475a1f50355643a2a9ea937fc235d8ad9b19f`,
+  tree `af670c70fa90316d486313738dbdd99f9701a852`. Its 300-second outer limit
+  and 5-second termination grace are test-only. Exact-command SHA256 is
+  `37c0ae9db22d135e0b560a3bbcf969349241aea9419c869faf7bcc728992e806`;
+  combined-log SHA256 is
+  `221f4966e26ca6aabc17cac8bdcd79ffe688f11813f78269c5025c4606c481cb`;
+  private receipt SHA256 is
+  `042aee2775343f67996853350a55598d5be2c24c699460c78d09dad3b2cd66ab`.
+  The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-prospective-time-budget-comparison-registration--2026-10-05)
+  preserves the exact command with private locators redacted, accepted
+  `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2` basis and evidence boundary.
+  Only README/CHANGELOG/LATEST documentation follows the proof. Fixed-HEAD review,
+  applicable CI and acceptance remain pending. The single next integration unit,
+  `time_budget_observation_deadline`, would wire the existing host deadline;
+  no deadline/counter enforcement or execution authority is claimed here.
+
 - Bind the local model-free workflow gate to an explicitly selected comparison
   manifest and the independently validated request SHA. The optional API
   `manifest_path` and local CLI `--manifest-path` reuse the accepted path/blob
@@ -41,7 +78,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   `5135bcf0a846c4f6c53d8367e75f2de2bb5bfcaf56a0d3380c684fe96d1895a1`;
   private receipt SHA256 is
   `09a1c10f72f6eb0f46188a93cf2a589f99cf9d91b6605846eff2df998a78c59b`.
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05)
+  The [immutable task record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2/tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05)
   preserves the exact command, accepted `3419e7db30784bd89034b95253f9f4698acae6f2`
   source basis, synthetic-input boundary and immutable prior evidence.
   Only README/CHANGELOG/LATEST records follow the pinned proof. Final-HEAD

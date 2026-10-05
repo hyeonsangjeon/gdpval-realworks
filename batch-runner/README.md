@@ -304,11 +304,69 @@ unchanged, and verification writes nothing.
 launch flags; this gate has no dispatcher. Even after valid model-free
 preparation, the local CLI returns status 2 through that mandatory refusal.
 Both direct comparison runtime guards remain unchanged. The [workflow handoff
-proof](../tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05)
+proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2/tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05)
 uses synthetic original inputs and real temporary Git/source validators,
 not private inputs or an executed comparison. Actual Actions/capture profile
 selection, native call/token caps, dispatcher, credentialed-CI input authority
 and launch authorization remain unresolved.
+
+#### Separate prospective time-budget registration
+
+The [time-budget registration](experiments/execution_envelope/gpt54_sandboxv2_codex_time_budget_v1.yaml)
+defines study `gpt54_sandboxv2_codex_time_budget_v1`. It asks which tested GPT-5.4
+configuration produces usable, graded work within the same external generation
+time budget. This is a configuration-bundle comparison, not isolated harness
+causality or equal native compute. It does not replace either existing comparison
+manifest or pool outcomes with the closed 30-cell/8-cell studies.
+
+The same five approved tasks, GPT-5.4/direct-v1/xhigh binding, two repeats in ABBA
+order and inference concurrency 1 give at most 20 generation observations. Its
+four run IDs begin `gpt54_time_budget_v1_`, distinct from the old comparison.
+Each observation has one external attempt, with no external replay, resume or
+retry after failure. The registered deadline is 1200 elapsed seconds from first
+generation start, including waits and native internal recovery. At the deadline,
+request interruption and allow at most 20 additional seconds of local cleanup,
+recorded separately. The 1220-second maximum planned host lifecycle is neither
+a remote billing bound nor a server-side cancellation guarantee.
+
+Native model-attempt/repeated-request counts and input/output/written tokens are
+observation-only when available; missing values remain explicitly unavailable.
+Cumulative snapshots are differenced, and cached-input/reasoning breakdowns are
+not added again to their parent totals. Native retries and partial usage remain
+visible. There is no shared native request/token or money hard-cap claim. V2's
+9-turn/8192-output settings remain named V2-specific settings; a Codex native
+turn is not the equivalent unit. All existing template bytes remain sealed.
+
+`gpt54_time_budget_comparison.compile_registration` validates this versioned
+policy separately. It reuses the unchanged comparison compiler to check the
+37 source pins, catalog/cohort/input identities and real whole grader TEMPLATE
+closure before reusing model, dataset, judge, result and cost facts. Unknown
+fields, contradictory hard caps, changed scope and ambiguous YAML refuse. The
+compiled object separates registered intent, implementation status and false
+launch authority. It has no commands, runtime configs or preparation recipes.
+
+For offline registration inspection only, from `batch-runner/`:
+
+```bash
+python gpt54_time_budget_comparison.py
+```
+
+The CLI returns status 2 even when `registration_valid` is true. Deadline/cleanup
+enforcement and dispatch/capture integration are not implemented for this study;
+measurement availability remains unverified. Do not pass this manifest to the old
+preparer or runtime as an execution config. Existing launch refusals remain.
+
+Grading is one attempt per resulting observation with the same source-bound
+frozen judge. Failed/missing outcomes are retained; scores never trigger regrading
+or extra repeats. Analysis is descriptive paired outcome/grade differences and
+within-condition spread over the fixed observations. Two repeats do not support
+precise uncertainty or isolated causal claims.
+
+The [registration proof](../tasks/LATEST_TASK_RESULT/README.md#project5-prospective-time-budget-comparison-registration--2026-10-05)
+is an offline software proof, not a live outcome. After fixed-source review, the
+single next integration unit is `time_budget_observation_deadline`: wire the
+existing host deadline to the new observation identities and separate cleanup
+accounting. This registration does not authorize that integration or execution.
 
 #### Direct comparison runtime launch refusal
 
