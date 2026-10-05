@@ -500,7 +500,7 @@ def test_the_statement_field_this_dataset_uses_is_the_one_read(tmp_path, capsys)
 
 
 def test_local_output_limit_diagnostic_preserves_records_and_grader_closure(
-    tmp_path, monkeypatch, capsys,
+    tmp_path, monkeypatch, capsys, historical_retention_source,
 ):
     """One local-artifact selector; no historical outcome is reclassified."""
     reason = "Incomplete response returned, reason: max_output_tokens"
@@ -641,7 +641,7 @@ def test_local_output_limit_diagnostic_preserves_records_and_grader_closure(
     for name in ("OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "HF_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         monkeypatch.delenv(name, raising=False)
 
-    repo = Path(__file__).resolve().parents[2]
+    repo = historical_retention_source
     assert registration.ROOT == repo
     plan = registration.compile_plan()  # Exactly one real call, including the grader closure.
     closure = "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"

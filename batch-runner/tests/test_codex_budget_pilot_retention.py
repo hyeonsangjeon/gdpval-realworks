@@ -39,7 +39,7 @@ TOKEN_KEYS = {"HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}
 
 
 @pytest.fixture(autouse=True)
-def offline(monkeypatch):
+def offline(monkeypatch, historical_retention_source):
     # This family uses fake children and must not require a native SDK install
     # merely to forbid one. Block the existing repository constructors as well
     # as all process/socket/auth/data boundaries; do not fabricate an SDK module.

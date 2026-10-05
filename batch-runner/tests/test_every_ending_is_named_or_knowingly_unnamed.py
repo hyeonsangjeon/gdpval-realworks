@@ -176,7 +176,10 @@ def test_the_ceiling_the_map_names_is_not_one_the_loop_can_raise():
     """
     from core import agentic_v2_conversation
 
-    loop = inspect.getsource(agentic_v2_conversation.run_model_conversation)
+    # The public wrapper adds optional observation supervision; ceilings remain
+    # in the same real loop that both controlled and omitted-control calls use.
+    assert "_run_model_conversation" in agentic_v2_conversation.run_model_conversation.__code__.co_names
+    loop = inspect.getsource(agentic_v2_conversation._run_model_conversation)
     assert "TOOL_CALL_LIMIT_REACHED" not in loop
     assert "TURN_LIMIT_REACHED" in loop
 

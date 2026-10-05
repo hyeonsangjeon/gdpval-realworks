@@ -2,8 +2,17 @@
 
 import hashlib
 import json
+import io
+import os
+import signal
+import socket
+import subprocess
+import sys
+import tarfile
+from copy import deepcopy
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,15 +24,109 @@ from gpt54_codex_input_capture import (
     require_comparison_runtime_launch,
 )
 from .test_gpt54_run_config_bundle import _guards
+from . import test_codex_retention_task4_fresh_r1 as retained_fixture
+from . import test_codex_retention_budget_report as retention_report
+
+_REAL_RUN, _REAL_POPEN = subprocess.run, subprocess.Popen
+
+
+@pytest.fixture(scope="module")
+def dual_roots(tmp_path_factory):
+    """Real local commit objects and source-only exports; never private inputs."""
+    from .test_gpt54_disposable_checkout import _FIXTURE_ENV
+
+    repository = Path(__file__).resolve().parents[2]
+    environment = {**_FIXTURE_ENV, "GIT_ALLOW_PROTOCOL": "file"}
+
+    def git(*command):
+        return _REAL_RUN(["git", *command], check=True, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, env=environment, timeout=30).stdout
+
+    runtime_sha = git("-C", str(repository), "rev-parse", "HEAD").decode().strip()
+    roots = {}
+    gitdirs = {}
+    for role, sha in (("runtime", runtime_sha), ("frozen", prospective.ACCEPTED_BASE_SHA), ("substitute", runtime_sha)):
+        parent = tmp_path_factory.mktemp("deadline-" + role)
+        root, owner = parent / "source", parent / "source-objects"
+        git("clone", "--shared", "--no-checkout", "--", str(repository), str(owner))
+        git("-C", str(owner), "worktree", "add", "--detach", "--no-checkout", str(root), sha)
+        archive = git("-C", str(repository), "archive", "--format=tar", sha, "batch-runner", ".github/workflows")
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source:
+            assert source.pax_headers["comment"] == sha
+            assert all(not Path(member.name).is_absolute() and ".." not in Path(member.name).parts
+                       and (member.isdir() or member.isfile()) for member in source.getmembers())
+            source.extractall(root)
+        roots[role] = root
+        gitdirs[role] = Path(git("-C", str(root), "rev-parse", "--absolute-git-dir").decode().strip())
+    substituted = roots["substitute"]
+    role = "batch-runner/core/codex_runner.py"
+    changed = (substituted / role).read_bytes() + b"\n# synthetic coherent replacement\n"
+    (substituted / role).write_bytes(changed)
+    manifest = prospective.load_registration(substituted / prospective.REGISTRATION_PATH)
+    manifest["source_pins"][role] = hashlib.sha256(changed).hexdigest()
+    (substituted / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
+    git("-C", str(substituted), "read-tree", runtime_sha)
+    git("-C", str(substituted), "add", "--", role, prospective.REGISTRATION_PATH)
+    git("-C", str(substituted), "commit", "-m", "test: coherent synthetic source substitution")
+    replacement = git("-C", str(substituted), "rev-parse", "HEAD").decode().strip()
+    git("-C", str(roots["runtime"]), "tag", "-a", "synthetic-review-tag", "-m", "synthetic tag", runtime_sha)
+    tag = git("-C", str(roots["runtime"]), "rev-parse", "synthetic-review-tag").decode().strip()
+    return {**roots, "gitdirs": gitdirs, "runtime_sha": runtime_sha, "substitute_sha": replacement, "tag_sha": tag}
+
+
+def _anchors(roots):
+    return dict(runtime_root=roots["runtime"], expected_reviewed_source_sha=roots["runtime_sha"],
+                frozen_grader_root=roots["frozen"], expected_grader_source_sha=prospective.ACCEPTED_BASE_SHA)
+
+
+def _compile(plan, roots):
+    return prospective.compile_registration(plan, **_anchors(roots))
 
 
 @pytest.fixture(autouse=True)
-def model_free(monkeypatch):
-    calls = _guards(monkeypatch)
+def model_free(monkeypatch, request, dual_roots):
+    deadline_case = "time_budget_observation_deadline" in request.node.name
+    if deadline_case:
+        # Exercise the ownership checks through a deterministic kernel adapter.
+        # Never change the pytest host's subreaper state or signal its children.
+        request.getfixturevalue("observation_kernel")
+        calls = []
+    else:
+        calls = _guards(monkeypatch)
 
     def forbidden(*args, **kwargs):
         calls.append(True)
-        pytest.fail("registration attempted private input or preparation")
+        pytest.fail("deadline contract attempted network/auth/private input/preparation")
+
+    if deadline_case:
+        from core import azure_ai_clients, codex_azure_token
+        from openai_codex import Codex
+        from openai_codex.client import CodexClient
+        import step8_grade
+
+        for owner, names in ((subprocess, ("run", "Popen", "check_call", "check_output")),
+                             (socket.socket, ("connect", "connect_ex")),
+                             (socket, ("create_connection",)), (os, ("system",)),
+                             (codex_azure_token, ("acquire_token", "get_bearer_token_provider"))):
+            for name in names:
+                monkeypatch.setattr(owner, name, forbidden)
+        for constructor in (azure_ai_clients.AzureAIClientFactory, azure_ai_clients.OpenAI,
+                            azure_ai_clients.AzureOpenAI, azure_ai_clients.DefaultAzureCredential,
+                            Codex, CodexClient, step8_grade.Grader, step8_grade.RubricLoader):
+            monkeypatch.setattr(constructor, "__init__", forbidden)
+
+    def local_git(command, **kwargs):
+        assert command[:2] == ["/usr/bin/git", "--no-replace-objects"]
+        position = command.index("-C")
+        assert Path(command[position + 1]) in (dual_roots["runtime"], dual_roots["frozen"], dual_roots["substitute"], historical.ROOT)
+        assert command[position + 2] in {"rev-parse", "config", "ls-tree", "cat-file"}
+        assert kwargs["env"]["GIT_ALLOW_PROTOCOL"] == "" and kwargs["env"]["GIT_NO_LAZY_FETCH"] == "1"
+        assert kwargs["timeout"] == 60
+        with monkeypatch.context() as child:
+            child.setattr(subprocess, "Popen", _REAL_POPEN)
+            return _REAL_RUN(command, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", local_git)
 
     for name in (
         "gpt54_disposable_checkout.prepare_disposable_checkout",
@@ -35,16 +138,17 @@ def model_free(monkeypatch):
     assert calls == []
 
 
-def test_time_budget_registration_genuine_source_and_finite_scope():
+def test_time_budget_registration_genuine_source_and_finite_scope(dual_roots):
     plan = prospective.load_registration()
-    compiled = prospective.compile_registration(plan)
+    compiled = _compile(plan, dual_roots)
     report = compiled.as_dict()
     intent = report["registered_intent"]
     profile = historical.load_plan(historical.ROOT / prospective.SOURCE_PROFILE)
     # Genuine unchanged full-source validation, including the real template
     # closure, occurs inside compile_registration. No pin/helper is replaced.
-    assert len(report["source_evidence"]["validated_source_pins"]) == 37
-    assert report["source_evidence"]["validated_source_pins"] == profile["source_pins"]
+    assert len(report["source_evidence"]["validated_source_pins"]) == 41
+    assert report["source_evidence"]["validated_source_pins"] == plan["source_pins"]
+    assert len(report["source_evidence"]["frozen_grader"]["source_files"]) == 37
     assert intent["shared"] == {name: profile["shared"][name] for name in prospective.SHARED_FACTS}
     assert intent["shared"]["grading"]["template_source_sha256"] == (
         "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"
@@ -84,16 +188,16 @@ def test_time_budget_registration_genuine_source_and_finite_scope():
     # Returned JSON cannot mutate the sealed result; key order is not evidence.
     report["registered_intent"]["scope"]["inference_concurrency"] = 99
     reordered = json.loads(json.dumps(plan, sort_keys=True))
-    assert prospective.compile_registration(reordered).canonical_bytes() == compiled.canonical_bytes()
+    assert _compile(reordered, dual_roots).canonical_bytes() == compiled.canonical_bytes()
     with pytest.raises(FrozenInstanceError):
         compiled.runs[0].repeat = 3
 
 
-def test_time_budget_registration_labels_intent_without_enforcement_or_launch(capsys):
+def test_time_budget_registration_labels_intent_without_enforcement_or_launch(capsys, dual_roots):
     assert prospective.main([]) == 2
     report = json.loads(capsys.readouterr().out)
-    assert report["registration_valid"] is True
-    document = report["compiled"]
+    assert report == {"registration_valid": False, "reason": "manifest_fields", "compiled": None}
+    document = _compile(prospective.load_registration(), dual_roots).as_dict()
     intent = document["registered_intent"]
     budget = intent["generation_budget"]
     assert budget == {
@@ -132,14 +236,15 @@ def test_time_budget_registration_labels_intent_without_enforcement_or_launch(ca
         "equal_native_compute_claim": False,
     }
     assert document["implementation_status"] == {
-        "registration_compiler": "implemented_offline", "generation_deadline": "not_integrated",
-        "cleanup_grace": "not_integrated", "native_measurement_availability": "not_verified",
+        "registration_compiler": "implemented_offline", "generation_deadline": "opt_in_host_control",
+        "cleanup_grace": "one_absolute_cleanup_deadline", "host_control_selected_by_executor": False,
+        "native_measurement_availability": "not_verified",
         "executor_enforces_registered_policy": False,
         "dispatch_and_capture": "not_integrated_for_this_study", "observations_executed_by_compiler": 0,
     }
     assert document["launch_authority"] == {
         "launch_allowed": False, "execution_enabled": False, "full_220_allowed": False,
-        "blockers": list(prospective.LAUNCH_BLOCKERS),
+        "blockers": ["time_budget_dispatch_must_select_observation_control", *prospective.LAUNCH_BLOCKERS[1:]],
     }
     with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
         require_comparison_runtime_launch()
@@ -195,14 +300,14 @@ def test_time_budget_registration_labels_intent_without_enforcement_or_launch(ca
     (("runs", 0, "run_id"), "gpt54_v2_codex_v1_v2_r1", "repetition_matrix"),
     (("runs", 0, "task_count"), 6, "repetition_matrix"),
 ])
-def test_time_budget_registration_rejects_changed_controls(path, value, reason):
+def test_time_budget_registration_rejects_changed_controls(path, value, reason, dual_roots):
     plan = prospective.load_registration()
     target = plan
     for key in path[:-1]:
         target = target[key]
     target[path[-1]] = value
     with pytest.raises(prospective.TimeBudgetRegistrationRefused, match=f"^{reason}$"):
-        prospective.compile_registration(plan)
+        _compile(plan, dual_roots)
 
 
 @pytest.mark.parametrize("container,key,value,reason", [
@@ -216,21 +321,21 @@ def test_time_budget_registration_rejects_changed_controls(path, value, reason):
     (("native_measurements",), "max_repeats_of_one_request", 2, "native_measurements"),
     (("conditions", "codex"), "local_settings", {"max_model_turns": 9}, "condition_settings"),
 ])
-def test_time_budget_registration_rejects_unknown_hard_cap_claims(container, key, value, reason):
+def test_time_budget_registration_rejects_unknown_hard_cap_claims(container, key, value, reason, dual_roots):
     plan = prospective.load_registration()
     target = plan
     for part in container:
         target = target[part]
     target[key] = value
     with pytest.raises(prospective.TimeBudgetRegistrationRefused, match=f"^{reason}$"):
-        prospective.compile_registration(plan)
+        _compile(plan, dual_roots)
 
 
 @pytest.mark.parametrize("change,reason", [
     ("missing_field", "manifest_fields"), ("reordered_tasks", "shared_facts"),
     ("reordered_runs", "repetition_matrix"), ("extra_run", "repetition_matrix"),
 ])
-def test_time_budget_registration_rejects_missing_or_changed_inventory(change, reason):
+def test_time_budget_registration_rejects_missing_or_changed_inventory(change, reason, dual_roots):
     plan = prospective.load_registration()
     if change == "missing_field":
         plan.pop("execution_enabled")
@@ -241,7 +346,7 @@ def test_time_budget_registration_rejects_missing_or_changed_inventory(change, r
     else:
         plan["runs"].append(dict(plan["runs"][0]))
     with pytest.raises(prospective.TimeBudgetRegistrationRefused, match=f"^{reason}$"):
-        prospective.compile_registration(plan)
+        _compile(plan, dual_roots)
 
 
 @pytest.mark.parametrize("text,reason", [
@@ -261,28 +366,24 @@ def test_time_budget_registration_strict_yaml(text, reason, tmp_path):
 
 
 @pytest.mark.parametrize("role,reason", [
-    (prospective.SOURCE_PROFILE, "source_profile_bytes"),
-    (prospective.COMPILER, "source_basis"),
-    ("batch-runner/core/codex_runner.py", "source_contract_refused"),
+    (prospective.SOURCE_PROFILE, "source_differs_from_reviewed_blob"),
+    (prospective.COMPILER, "source_differs_from_reviewed_blob"),
+    ("batch-runner/core/codex_runner.py", "source_differs_from_reviewed_blob"),
 ])
-def test_time_budget_registration_real_source_guard_rejects_drift(role, reason, monkeypatch):
+def test_time_budget_registration_real_source_guard_rejects_drift(role, reason, dual_roots):
     plan = prospective.load_registration()
-    read_bytes = Path.read_bytes
-    target = prospective.ROOT / role
-
-    def drift(path):
-        raw = read_bytes(path)
-        return raw + b"\n# synthetic source drift\n" if path == target else raw
-
-    monkeypatch.setattr(Path, "read_bytes", drift)
-    with pytest.raises(prospective.TimeBudgetRegistrationRefused, match=f"^{reason}$") as caught:
-        prospective.compile_registration(plan)
-    if reason == "source_contract_refused":
-        assert isinstance(caught.value.__cause__, historical.DispatchPlanRefused)
-        assert f"source_pin:{role}" in str(caught.value.__cause__)
+    root = dual_roots["frozen"] if role == prospective.SOURCE_PROFILE else dual_roots["runtime"]
+    target = root / role
+    before = target.read_bytes()
+    try:
+        target.write_bytes(before + b"\n# synthetic source drift\n")
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused, match=f"^{reason}$"):
+            _compile(plan, dual_roots)
+    finally:
+        target.write_bytes(before)
 
 
-def test_time_budget_registration_preserves_historical_and_default_refusals():
+def test_time_budget_registration_preserves_historical_and_default_refusals(monkeypatch, frozen_local_comparison_source):
     assert hashlib.sha256(historical.PLAN.read_bytes()).hexdigest() == (
         "3d88bcb0c4eeeb9dad2c9ee7cb88db1b7ff49145f9264d9d284178f167a76ed1"
     )
@@ -295,6 +396,7 @@ def test_time_budget_registration_preserves_historical_and_default_refusals():
             "gpt54_codex_input_capture.py", "gpt54_v2_input_capture.py",
             "gpt54_run_config_bundle.py", "gpt54_run_input_bundle.py",
             "gpt54_disposable_checkout.py", "gpt54_workflow_gate.py",
+            "core/agentic_v2_conversation_runner.py",
             "core/codex_runner.py", "step2_run_inference.py", "core/codex_task_deadline.py",
         )
     ]
@@ -302,7 +404,11 @@ def test_time_budget_registration_preserves_historical_and_default_refusals():
     assert report["launch_blockers"] == list(historical.LAUNCH_BLOCKERS)
     with pytest.raises(historical.DispatchPlanRefused, match="comparison refused:"):
         historical.compile_dispatch_plan(historical.load_plan())
-    local = historical.compile_dispatch_plan(historical.load_plan(profile_path)).as_dict()
+    with pytest.raises(historical.DispatchPlanRefused, match="source_pin:batch-runner/core/agentic_v2_conversation_runner.py"):
+        historical.compile_dispatch_plan(historical.load_plan(profile_path))
+    with monkeypatch.context() as frozen:
+        frozen.setattr(historical, "ROOT", frozen_local_comparison_source)
+        local = historical.compile_dispatch_plan(historical.load_plan(profile_path)).as_dict()
     assert local["launch_allowed"] is False
     assert local["shared_controls"]["limits"] == {
         "max_model_turns": 9, "max_written_tokens_per_turn": 8192, "max_seconds": 1200.0,
@@ -324,3 +430,1388 @@ def test_time_budget_registration_cli_refusal_has_no_launch_fallback(tmp_path, c
     assert json.loads(capsys.readouterr().out) == {
         "registration_valid": False, "reason": "manifest_fields", "compiled": None,
     }
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+class _ObservationKernel:
+    """Controlled Linux child/subreaper/pidfd semantics, with no real signals."""
+
+    def __init__(self, monkeypatch):
+        import core.time_budget_observation_deadline as deadline
+
+        self.host = os.getpid()
+        self.subreaper = 0
+        self.one_thread = True
+        self.processes = {}
+        self.handles = {}
+        self.signals = []
+        self.reaped = []
+        self.next_pid = 424242
+        self.on_signal = None
+        self.on_blocking_wait = None
+        self.candidates = None
+        monkeypatch.setattr(deadline, "_child_subreaper", self.prctl)
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_process_owner", None)
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_subreaper_host", None)
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_released_hosts", {})
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_single_threaded", staticmethod(lambda: self.one_thread))
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_child_pids", staticmethod(self.child_pids))
+        monkeypatch.setattr(os, "pidfd_open", self.pidfd_open, raising=False)
+        monkeypatch.setattr(signal, "pidfd_send_signal", self.send_signal, raising=False)
+        monkeypatch.setattr(os, "waitid", self.waitid)
+
+    def prctl(self, enable=None):
+        if enable is not None:
+            self.subreaper = int(enable)
+        return self.subreaper
+
+    def spawn(self, parent=None, *, pid=None):
+        pid = self.next_pid if pid is None else pid
+        self.next_pid = max(self.next_pid, pid + 1)
+        child = SimpleNamespace(pid=pid, parent=self.host if parent is None else parent, alive=True)
+        self.processes[pid] = child
+        return child
+
+    def exit(self, child):
+        child.alive = False
+        for descendant in self.processes.values():
+            if descendant.parent == child.pid:
+                descendant.parent = self.host if self.subreaper else 1
+
+    def child_pids(self):
+        if self.candidates is not None:
+            return set(self.candidates)
+        return {child.pid for child in self.processes.values() if child.parent == self.host}
+
+    def pidfd_open(self, pid):
+        child = None if pid == self.host else self.processes.get(pid)
+        if pid != self.host and child is None:
+            raise ProcessLookupError
+        # An actual local fd keeps close() real; the mapping pins the object,
+        # not its replaceable PID, just as the kernel pidfd does.
+        handle = os.open(os.devnull, os.O_RDONLY)
+        self.handles[handle] = child
+        return handle
+
+    def send_signal(self, handle, sig):
+        child = self.handles[handle]
+        if sig == 0:
+            assert child is None
+            return
+        assert child is not None and child.parent == self.host
+        self.signals.append((child.pid, sig))
+        if self.on_signal is not None:
+            self.on_signal(child, sig)
+        if sig == signal.SIGKILL:
+            self.exit(child)
+
+    def waitid(self, kind, target, options):
+        from core.time_budget_observation_deadline import _WAIT_ALL_CHILDREN
+
+        assert options & _WAIT_ALL_CHILDREN and options & os.WEXITED
+        if kind == os.P_PIDFD:
+            child = self.handles[target]
+            if child is None or child.parent != self.host or self.processes.get(child.pid) is not child:
+                raise ChildProcessError
+            children = [child]
+        else:
+            assert kind == os.P_ALL and target == 0
+            children = [child for child in self.processes.values() if child.parent == self.host]
+        if not children:
+            raise ChildProcessError
+        if not options & os.WNOHANG and self.on_blocking_wait is not None:
+            self.on_blocking_wait()
+        exited = next((child for child in children if not child.alive), None)
+        if exited is None:
+            assert options & os.WNOHANG, "controlled blocking wait has no scheduled exit"
+            return None
+        if not options & os.WNOWAIT:
+            self.reaped.append(exited.pid)
+            del self.processes[exited.pid]
+        return SimpleNamespace(si_pid=exited.pid)
+
+
+@pytest.fixture
+def observation_kernel(monkeypatch):
+    return _ObservationKernel(monkeypatch)
+
+
+def _observation(tmp_path, condition="codex", *, clock=None, task_index=0):
+    from core.time_budget_observation_deadline import ObservationIdentity, STUDY_ID, TASK_IDS, TimeBudgetObservation
+
+    clock = _Clock() if clock is None else clock
+    store = tmp_path / "host-observations"
+    store.mkdir(mode=0o700, exist_ok=True)
+    identity = ObservationIdentity(
+        STUDY_ID, f"gpt54_time_budget_v1_{'v2' if condition == 'sandbox_v2' else 'codex'}_r1",
+        condition, 1, TASK_IDS[task_index], "1" * 40, "2" * 40,
+        hashlib.sha256(b"synthetic registration").hexdigest(), hashlib.sha256(b"synthetic input").hexdigest(),
+    )
+    return TimeBudgetObservation(store, identity, clock=clock), clock
+
+
+def _claim(control):
+    control.claim(run_id=control.identity.run_id, condition=control.identity.condition,
+                  task_id=control.identity.task_id)
+
+
+@pytest.mark.parametrize("when", ["before_cleanup", "during_termination"])
+def test_time_budget_observation_deadline_process_ownership_reparenting(tmp_path, monkeypatch, observation_kernel, when):
+    kernel = observation_kernel
+    unrelated = kernel.spawn(parent=1)
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    assert kernel.subreaper == 1 and control.first_start is None
+    parent = kernel.spawn()
+    orphan = None
+    if when == "before_cleanup":
+        orphan = kernel.spawn(parent=parent.pid)
+        kernel.exit(parent)
+        assert orphan.alive and orphan.parent == kernel.host
+    else:
+        def fork_during_term(child, sig):
+            nonlocal orphan
+            if child is parent and sig == signal.SIGTERM:
+                orphan = kernel.spawn(parent=parent.pid)
+
+        kernel.on_signal = fork_during_term
+    for name in ("kill", "killpg"):
+        monkeypatch.setattr(os, name, lambda *args: pytest.fail("bare PID/group signalling is not ownership"))
+    control.terminal("completed")
+    end = control.cleanup_deadline
+    assert control.stop_owned_processes()
+    assert orphan is not None and not orphan.alive
+    assert set(kernel.reaped) == {parent.pid, orphan.pid}
+    assert all(pid != unrelated.pid for pid, _ in kernel.signals)
+    assert (orphan.pid, signal.SIGKILL) in kernel.signals
+    control.finish_cleanup(True)
+    assert control.cleanup_deadline == end == clock.now + 20
+    assert control.as_record()["host_reusable"] is True
+    assert control.as_record()["owned_processes_stopped"] is True
+    assert kernel.subreaper == 0  # No new-mode process setting leaks to legacy work.
+    assert kernel.processes == {unrelated.pid: unrelated} and unrelated.alive
+
+
+@pytest.mark.parametrize("case", [
+    "preexisting_child", "preexisting_zombie", "another_thread", "foreign_subreaper",
+    "pidfd_missing", "pidfd_enosys", "pidfd_denied", "signal_denied", "waitid_unsupported",
+    "subreaper_denied", "subreaper_unconfirmed", "nonlinux", "sigchld_ignored",
+])
+def test_time_budget_observation_deadline_process_ownership_admission_refuses(tmp_path, monkeypatch, observation_kernel, case):
+    import errno
+    import core.time_budget_observation_deadline as deadline
+
+    kernel = observation_kernel
+    before = None
+
+    def denied(*args, **kwargs):
+        raise OSError(errno.ENOSYS if case in ("pidfd_enosys", "waitid_unsupported") else errno.EPERM, "synthetic unsupported interface")
+
+    if case in ("preexisting_child", "preexisting_zombie"):
+        before = kernel.spawn()
+        if case == "preexisting_zombie":
+            kernel.exit(before)
+    elif case == "another_thread":
+        kernel.one_thread = False
+    elif case == "foreign_subreaper":
+        kernel.subreaper = 1
+    elif case == "pidfd_missing":
+        monkeypatch.delattr(os, "pidfd_open")
+    elif case in ("pidfd_enosys", "pidfd_denied"):
+        monkeypatch.setattr(os, "pidfd_open", denied)
+    elif case == "signal_denied":
+        monkeypatch.setattr(signal, "pidfd_send_signal", denied)
+    elif case == "waitid_unsupported":
+        monkeypatch.setattr(os, "waitid", denied)
+    elif case == "subreaper_denied":
+        monkeypatch.setattr(deadline, "_child_subreaper", denied)
+    elif case == "subreaper_unconfirmed":
+        monkeypatch.setattr(deadline, "_child_subreaper", lambda **kwargs: 0)
+    elif case == "nonlinux":
+        monkeypatch.setattr(sys, "platform", "unsupported")
+    elif case == "sigchld_ignored":
+        getsignal = signal.getsignal
+        monkeypatch.setattr(signal, "getsignal", lambda sig: signal.SIG_IGN if sig == signal.SIGCHLD else getsignal(sig))
+    with pytest.raises(deadline.ObservationDeadlineRefused, match=deadline.OWNERSHIP_REQUIRED):
+        _observation(tmp_path)
+    assert list((tmp_path / "host-observations").iterdir()) == []
+    assert kernel.signals == kernel.reaped == []
+    if before is not None:
+        assert kernel.processes == {before.pid: before}
+
+
+@pytest.mark.parametrize("case", ["stale_candidate", "pid_reused_before_open", "pid_reused_after_open"])
+def test_time_budget_observation_deadline_process_ownership_pidfd_child_identity(tmp_path, monkeypatch, observation_kernel, case):
+    kernel = observation_kernel
+    outside = kernel.spawn(parent=1)
+    control, _ = _observation(tmp_path)
+    _claim(control)
+    owned = kernel.spawn()
+    stale_pid = outside.pid
+    if case != "stale_candidate":
+        original = kernel.spawn()
+        stale_pid = original.pid
+        opener = os.pidfd_open
+
+        def substitute(pid):
+            if pid != stale_pid:
+                return opener(pid)
+            if case == "pid_reused_after_open":
+                handle = opener(pid)
+            kernel.exit(original)
+            del kernel.processes[pid]
+            kernel.spawn(parent=1, pid=pid)
+            return handle if case == "pid_reused_after_open" else opener(pid)
+
+        monkeypatch.setattr(os, "pidfd_open", substitute)
+    kernel.candidates = {owned.pid, stale_pid}
+    control.terminal("completed")
+    assert control.stop_owned_processes()
+    control.finish_cleanup(True)
+    assert control.cleanup_complete
+    assert kernel.signals == [(owned.pid, signal.SIGTERM), (owned.pid, signal.SIGKILL)]
+    assert kernel.processes[stale_pid].alive and outside.alive
+
+
+@pytest.mark.parametrize("case", [
+    "wait_expiry", "empty_proc_listing", "new_child_after_stop", "thread_not_joined",
+    "signal_denied", "child_wait_denied",
+])
+def test_time_budget_observation_deadline_process_ownership_incomplete_refuses_reuse(tmp_path, monkeypatch, observation_kernel, case):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT
+
+    kernel = observation_kernel
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(1200)
+        control.terminal(TIMEOUT)
+    end = control.cleanup_deadline
+    if case in ("wait_expiry", "empty_proc_listing"):
+        child = kernel.spawn()
+        if case == "empty_proc_listing":
+            kernel.candidates = set()
+
+        def expire():
+            assert control._supervising > 0
+            clock.advance(control.remaining_cleanup())
+            signal.raise_signal(signal.SIGALRM)
+
+        kernel.on_blocking_wait = expire
+        assert control.stop_owned_processes() is False
+        assert child.pid in kernel.processes  # No confirmed reap, even after KILL.
+    elif case in ("signal_denied", "child_wait_denied"):
+        child = kernel.spawn()
+
+        def denied(*args, **kwargs):
+            raise PermissionError("synthetic child ownership/termination uncertainty")
+
+        if case == "signal_denied":
+            monkeypatch.setattr(signal, "pidfd_send_signal", denied)
+        else:
+            waitid = os.waitid
+            monkeypatch.setattr(os, "waitid", lambda kind, target, options: denied() if kind == os.P_PIDFD else waitid(kind, target, options))
+        assert control.stop_owned_processes() is False
+        assert child.alive
+    else:
+        assert control.stop_owned_processes()
+        if case == "new_child_after_stop":
+            kernel.spawn()
+        else:
+            kernel.one_thread = False
+    control.finish_cleanup(True)
+    assert control.cleanup_deadline == end == control.first_start + 1220
+    assert not control.as_record()["host_reusable"] and not control.cleanup_complete
+    assert control.cleanup_expired is (case in ("wait_expiry", "empty_proc_listing"))
+    assert (control.directory / "host-lease.json").exists()
+    receipt = control.directory / (control.identity.key + ".cleanup.json")
+    if receipt.exists():
+        durable = json.loads(receipt.read_bytes())
+        assert durable["cleanup_complete"] is durable["host_reusable"] is False
+    else:
+        assert control.cleanup_expired  # Expiry does not start unbounded receipt I/O.
+    kernel.one_thread = True
+    # Changing the private receipt directory cannot discharge kernel ownership.
+    other = tmp_path / "another-directory"
+    other.mkdir(mode=0o700)
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(other, clock=clock, task_index=1)
+    assert list((other / "host-observations").iterdir()) == []
+
+
+@pytest.mark.parametrize("case", ["subreaper_removed", "forked_host", "sigchld_changed"])
+def test_time_budget_observation_deadline_process_ownership_authority_lost(tmp_path, monkeypatch, observation_kernel, case):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, OWNERSHIP_REQUIRED
+
+    control, _ = _observation(tmp_path)
+    if case == "subreaper_removed":
+        observation_kernel.subreaper = 0
+    elif case == "forked_host":
+        monkeypatch.setattr(os, "getpid", lambda: observation_kernel.host + 1)
+    else:
+        getsignal = signal.getsignal
+        monkeypatch.setattr(signal, "getsignal", lambda sig: signal.SIG_IGN if sig == signal.SIGCHLD else getsignal(sig))
+    with pytest.raises(ObservationDeadlineRefused, match=OWNERSHIP_REQUIRED):
+        _claim(control)
+    assert control.first_start is None and not control.cleanup_complete
+    assert (control.directory / "host-lease.json").exists()
+    assert observation_kernel.signals == observation_kernel.reaped == []
+
+
+def test_time_budget_observation_deadline_process_ownership_release_and_exclusivity(tmp_path, observation_kernel):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused
+
+    kernel = observation_kernel
+    control, clock = _observation(tmp_path)
+    other = tmp_path / "other-host-name"
+    other.mkdir(mode=0o700)
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(other, clock=clock, task_index=1)
+    _claim(control)
+    child = kernel.spawn()
+    control.terminal("completed")
+
+    class UntrustedSDKHandle:
+        def __getattr__(self, name):
+            pytest.fail("SDK handle is not ownership/kill/wait authority")
+
+    assert control.stop_owned_processes(UntrustedSDKHandle())
+    assert kernel.reaped == [child.pid]
+    control.finish_cleanup(True)
+    assert control.cleanup_complete and kernel.subreaper == 0
+    next_control, _ = _observation(tmp_path, clock=clock, task_index=1)
+    assert next_control.first_start is None and kernel.subreaper == 1
+    next_control.terminal("abandoned")
+    next_control.finish_cleanup(True)
+    assert next_control.cleanup_complete and kernel.subreaper == 0
+
+
+def test_time_budget_observation_deadline_process_ownership_source_pin():
+    source = historical.ROOT / "batch-runner/core/time_budget_observation_deadline.py"
+    manifest = prospective.load_registration()
+    assert manifest["source_pins"]["batch-runner/core/time_budget_observation_deadline.py"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert prospective.ACCEPTED_BASE_SHA == "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2"
+    assert hashlib.sha256((historical.ROOT / prospective.SOURCE_PROFILE).read_bytes()).hexdigest() == "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
+
+
+def test_time_budget_observation_deadline_process_ownership_platform_contract(tmp_path):
+    """One short real-kernel lifecycle OR explicit unsupported-host refusal.
+
+    This child imports only the helper, uses synthetic identity/files, and has
+    no provider, credentials, network, private inputs or long-running worker.
+    The daemon has a five-second test failsafe in addition to parent supervision.
+    """
+    script = r'''
+import json, os, signal, sys
+from pathlib import Path
+from core.time_budget_observation_deadline import (
+    ObservationIdentity, TimeBudgetObservation, ObservationDeadlineRefused,
+    OWNERSHIP_REQUIRED, STUDY_ID, TASK_IDS,
+)
+directory = Path(sys.argv[1]) / "synthetic-owned-host"
+directory.mkdir(mode=0o700)
+identity = ObservationIdentity(STUDY_ID, "gpt54_time_budget_v1_codex_r1", "codex", 1,
+    TASK_IDS[0], "1" * 40, "2" * 40, "3" * 64, "4" * 64)
+try:
+    control = TimeBudgetObservation(directory, identity)
+except ObservationDeadlineRefused as error:
+    assert str(error) == OWNERSHIP_REQUIRED
+    assert list(directory.iterdir()) == []
+    print(json.dumps({"platform_result": "admission_refused", "reason": str(error),
+        "cause_type": type(error.__cause__).__name__, "errno": getattr(error.__cause__, "errno", None)}))
+    sys.exit(0)
+control.claim(run_id=identity.run_id, condition=identity.condition, task_id=identity.task_id)
+with control.supervise():
+    control.start()
+reader, writer = os.pipe()
+parent = os.fork()
+if parent == 0:
+    orphan = os.fork()
+    if orphan == 0:
+        os.close(reader)
+        os.setsid()
+        signal.alarm(5)
+        os.write(writer, str(os.getpid()).encode() + b"\n")
+        os.close(writer)
+        signal.pause()
+        os._exit(90)
+    os._exit(0)
+os.close(writer)
+os.waitpid(parent, 0)
+with os.fdopen(reader, "rb") as pipe:
+    orphan = int(pipe.readline(64))
+assert orphan in control._child_pids()
+fields = Path(f"/proc/{orphan}/stat").read_bytes().rsplit(b")", 1)[1].split()
+assert int(fields[1]) == os.getpid()  # Parent exit and setsid did not escape ownership.
+control.terminal("completed")
+assert control.stop_owned_processes()
+control.finish_cleanup(True)
+assert control.cleanup_complete and control._no_kernel_children()
+assert not (directory / "host-lease.json").exists()
+print(json.dumps({"platform_result": "real_reparenting_confirmed", "host_reusable": True}))
+'''
+    process = _REAL_POPEN([sys.executable, "-c", script, str(tmp_path)],
+                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=10)
+    except BaseException:
+        process.kill()
+        process.communicate(timeout=2)
+        raise
+    assert process.returncode == 0, stderr.decode(errors="replace")[:4000]
+    outcome = json.loads(stdout)
+    assert outcome["platform_result"] in {"admission_refused", "real_reparenting_confirmed"}
+    print(json.dumps(outcome, sort_keys=True))
+
+
+@pytest.mark.parametrize("phase", ["admitted", "started", "terminal", "abandoned"])
+def test_time_budget_observation_deadline_nonrenewable_admission(tmp_path, phase):
+    from dataclasses import replace
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TimeBudgetObservation
+
+    control, clock = _observation(tmp_path)
+    assert control.first_start is None
+    assert (control.directory / (control.identity.key + ".admitted.json")).is_file()
+    clock.advance(5000)  # Preparation is not generation.
+    if phase != "admitted":
+        _claim(control)
+        with control.supervise():
+            control.start()
+            assert control.first_start == clock.now
+            if phase == "terminal":
+                control.terminal("completed")
+        if phase == "terminal":
+            control.finish_cleanup(True)
+            assert control.cleanup_complete
+    # Neither a new runner/control nor changed bindings mint a retry.
+    for identity in (control.identity, replace(control.identity, reviewed_source_sha="3" * 40),
+                     replace(control.identity, input_sha256="4" * 64)):
+        with pytest.raises(ObservationDeadlineRefused):
+            TimeBudgetObservation(control.directory, identity, clock=clock)
+    if phase != "terminal":
+        with pytest.raises(ObservationDeadlineRefused):
+            _observation(tmp_path, clock=clock, task_index=1)
+    else:
+        other, _ = _observation(tmp_path, clock=clock, task_index=1)
+        assert other.first_start is None
+
+
+@pytest.mark.parametrize("terminal", ["completed", "timeout"])
+def test_time_budget_observation_deadline_one_cleanup_remainder(tmp_path, terminal, monkeypatch):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, ObservationTimedOut, TIMEOUT
+
+    monkeypatch.setenv("CODEX_INTERRUPT_GRACE", "999999")
+    monkeypatch.setenv("CODEX_TURN_TIMEOUT", "999999")
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        first = control.first_start
+        clock.advance(1200 if terminal == "timeout" else 4)
+        if terminal == "timeout":
+            with pytest.raises(ObservationTimedOut):
+                control.check_generation()
+            assert control.terminal_reason == TIMEOUT
+            assert control.cleanup_deadline == first + 1220
+        else:
+            control.terminal("completed")
+            assert control.cleanup_deadline == first + 24
+    events = []
+    for stage, elapsed in (("interrupt", 8), ("join", 7), ("close", 4), ("remove", 2)):
+        before = control.remaining_cleanup()
+
+        def operation():
+            events.append((stage, before))
+            clock.advance(elapsed)
+            return stage == "interrupt" or None
+
+        assert control.cleanup(operation, interruption=stage == "interrupt") is (stage != "remove")
+    assert [remaining for _, remaining in events] == [20, 12, 5, 1]
+    assert control.cleanup(lambda: pytest.fail("expired cleanup restarted")) is False
+    control.finish_cleanup(True)
+    # An expired observation must not start receipt I/O outside its deadline.
+    record = control.as_record()
+    assert not (control.directory / (control.identity.key + ".cleanup.json")).exists()
+    assert record["cleanup_expired"] is True and record["host_reusable"] is False
+    assert record["interruption_attempted"] is record["interruption_acknowledged"] is True
+    assert record["remote_cancellation_confirmed"] is record["remote_billing_bound"] is False
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(tmp_path, clock=clock, task_index=1)
+
+
+def test_time_budget_observation_deadline_interrupt_latch_and_owned_child(tmp_path, observation_kernel):
+    from core.time_budget_observation_deadline import ObservationTimedOut, TIMEOUT
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(1200)
+        with pytest.raises(ObservationTimedOut):
+            signal.raise_signal(signal.SIGALRM)  # Deliver the active owned-host alarm, no wall-clock wait.
+    assert control.terminal_reason == TIMEOUT
+    assert json.loads((control.directory / (control.identity.key + ".terminal.json")).read_bytes())["reason"] == TIMEOUT
+    control.terminal("completed")  # A late result cannot replace the timeout latch.
+    assert control.terminal_reason == TIMEOUT
+    child = observation_kernel.spawn()
+    assert control.stop_owned_processes()
+    assert observation_kernel.signals == [(child.pid, signal.SIGTERM), (child.pid, signal.SIGKILL)]
+    control.finish_cleanup(True)
+    assert control.cleanup_complete and not observation_kernel.processes
+
+
+@pytest.mark.parametrize("case", ["claimed_elsewhere", "timer_in_use", "backwards_clock", "lease_replaced"])
+def test_time_budget_observation_deadline_refuses_unsafe_host_state(tmp_path, monkeypatch, case):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused
+
+    control, clock = _observation(tmp_path)
+    if case == "timer_in_use":
+        monkeypatch.setattr(signal, "getitimer", lambda timer: (1.0, 0.0))
+        with pytest.raises(ObservationDeadlineRefused, match="owned_host_supervision_required"):
+            _claim(control)
+        assert control.first_start is None
+    elif case == "claimed_elsewhere":
+        (control.directory / (control.identity.key + ".claimed.json")).write_text("{}")
+        with pytest.raises(ObservationDeadlineRefused):
+            _claim(control)
+        assert control.first_start is None
+    elif case == "backwards_clock":
+        _claim(control)
+        clock.advance(-1)
+        with pytest.raises(ObservationDeadlineRefused, match="monotonic_clock_refused"):
+            with control.supervise():
+                control.start()
+    else:
+        _claim(control)
+        control.terminal("abandoned")
+        (control.directory / "host-lease.json").write_text("{}")
+        with pytest.raises(ObservationDeadlineRefused):
+            control.finish_cleanup(True)
+        assert not (control.directory / (control.identity.key + ".cleanup.json")).exists()
+    assert (control.directory / "host-lease.json").exists()
+
+
+def test_time_budget_observation_deadline_unconfirmed_cleanup_cannot_release_host(tmp_path):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(1200)
+        control.terminal(TIMEOUT)
+    assert control.cleanup(lambda: clock.advance(0.6), interruption=True, step_seconds=0.5) is False
+    assert 19 < control.remaining_cleanup() < 20
+    assert control.stop_owned_processes()  # Still use the remainder to remove owned workers.
+    control.finish_cleanup(True)
+    assert control.interruption_attempted and not control.interruption_acknowledged
+    assert not control.cleanup_complete and not control.cleanup_expired
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(tmp_path, clock=clock, task_index=1)
+
+
+def test_time_budget_observation_deadline_timeout_receipt_failure_still_interrupts(tmp_path, monkeypatch):
+    from core.time_budget_observation_deadline import ObservationTimedOut, TIMEOUT
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    write = control._write
+
+    def fail_terminal(name, value):
+        if name.endswith(".terminal.json"):
+            raise OSError("synthetic durable-record failure")
+        return write(name, value)
+
+    with control.supervise():
+        control.start()
+        monkeypatch.setattr(control, "_write", fail_terminal)
+        clock.advance(1200)
+        with pytest.raises(ObservationTimedOut):
+            signal.raise_signal(signal.SIGALRM)
+    assert control.terminal_reason == TIMEOUT and control.interruption_attempted
+    assert control.cleanup_failed
+    control.finish_cleanup(True)
+    assert not control.cleanup_complete and (control.directory / "host-lease.json").exists()
+
+
+def _assert_finalization_refused(tmp_path, control, clock, *, lease_present):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused
+
+    record = control.as_record()
+    assert record["cleanup_expired"] is True
+    assert record["cleanup_complete"] is record["host_reusable"] is False
+    assert record["cleanup_finished_monotonic"] is None
+    assert control.cleanup_failed
+    assert (control.directory / "host-lease.json").exists() is lease_present
+    admitted = control.directory / (control.identity.key + ".admitted.json")
+    assert json.loads(admitted.read_bytes())["run_id"] == control.identity.run_id
+    receipt = control.directory / (control.identity.key + ".cleanup.json")
+    if receipt.exists():
+        durable = json.loads(receipt.read_bytes())
+        assert durable["cleanup_complete"] is durable["host_reusable"] is False
+        assert durable["finalization_pending"] is True
+        assert durable["cleanup_finished_monotonic"] is None
+    before = {path.name: path.read_bytes() for path in control.directory.iterdir()}
+    # Both the same observation and a different task refuse, including after
+    # unlink succeeded but its fsync/finalization did not finish in time.
+    for task_index in (0, 1):
+        with pytest.raises(ObservationDeadlineRefused):
+            _observation(tmp_path, clock=clock, task_index=task_index)
+    with pytest.raises(ObservationDeadlineRefused):
+        control.finish_cleanup(True)
+    assert {path.name: path.read_bytes() for path in control.directory.iterdir()} == before
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("entry", ["generation_alarm", "outside_supervisor"])
+@pytest.mark.parametrize("stage", ["file_fsync", "directory_fsync"])
+def test_time_budget_observation_deadline_finalization_terminal_persistence(tmp_path, monkeypatch, entry, stage):
+    import stat
+    from core.time_budget_observation_deadline import ObservationCleanupExpired, TIMEOUT
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+    first = control.first_start
+    fsync = os.fsync
+    pending = []
+
+    def pending_fsync(fd):
+        file = stat.S_ISREG(os.fstat(fd).st_mode)
+        if file == (stage == "file_fsync"):
+            # The generation alarm is one-shot: its handler must already have
+            # armed the original cleanup end BEFORE entering this pending I/O.
+            assert control._supervising > 0
+            assert 0 < signal.getitimer(signal.ITIMER_REAL)[0] <= 20
+            assert control.cleanup_deadline == first + 1220
+            assert control.remaining_cleanup() == 20
+            pending.append(stage)
+            clock.advance(20)
+            signal.raise_signal(signal.SIGALRM)
+            pytest.fail("pending terminal persistence escaped cleanup expiry")
+        return fsync(fd)
+
+    with monkeypatch.context() as io_patch:
+        io_patch.setattr(os, "fsync", pending_fsync)
+        with pytest.raises(ObservationCleanupExpired):
+            if entry == "generation_alarm":
+                with control.supervise():
+                    clock.advance(1200)
+                    signal.raise_signal(signal.SIGALRM)
+            else:
+                clock.advance(1200)
+                control.terminal(TIMEOUT)
+        assert control.interruption_attempted is (entry == "generation_alarm")
+        assert pending == [stage]
+        assert control.terminal_reason == TIMEOUT
+        assert control.cleanup_deadline == first + 1220
+        io_patch.setattr(control, "_write", lambda *args: pytest.fail("post-expiry receipt I/O"))
+        assert control.finish_cleanup(True) is None
+    assert not (control.directory / (control.identity.key + ".cleanup.json")).exists()
+    _assert_finalization_refused(tmp_path, control, clock, lease_present=True)
+
+
+@pytest.mark.parametrize("expiry", ["alarm", "late_return"])
+@pytest.mark.parametrize("stage", [
+    "directory_open", "receipt_write", "receipt_file_fsync", "receipt_directory_fsync",
+    "lease_unlink", "lease_directory_fsync", "directory_close",
+])
+def test_time_budget_observation_deadline_finalization_io_expiry(tmp_path, monkeypatch, stage, expiry):
+    import stat
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(3)
+        control.terminal("completed")
+    end = control.cleanup_deadline
+    clock.advance(19)
+    assert control.remaining_cleanup() == 1
+    directory_fd, write, fsync, unlink, close = control._directory_fd, control._write, os.fsync, os.unlink, os.close
+    state = {"parent": None, "writing": False, "unlinked": False, "expired": False}
+
+    def cross_deadline():
+        assert not state["expired"]
+        assert control._supervising > 0
+        assert 0 < signal.getitimer(signal.ITIMER_REAL)[0] <= 1
+        assert not control.cleanup_complete
+        state["expired"] = True
+        clock.advance(1)
+        if expiry == "alarm":
+            signal.raise_signal(signal.SIGALRM)
+
+    def open_parent():
+        parent = directory_fd()
+        if state["parent"] is None:
+            state["parent"] = parent
+            if stage == "directory_open":
+                try:
+                    cross_deadline()
+                except BaseException:
+                    close(parent)
+                    raise
+        return parent
+
+    def receipt_write(name, value):
+        assert name.endswith(".cleanup.json")
+        assert value["cleanup_complete"] is value["host_reusable"] is False
+        assert value["finalization_pending"] is True
+        state["writing"] = True
+        try:
+            result = write(name, value)
+            if stage == "receipt_write":
+                cross_deadline()
+            return result
+        finally:
+            state["writing"] = False
+
+    def delayed_fsync(fd):
+        assert clock.now < end
+        file = stat.S_ISREG(os.fstat(fd).st_mode)
+        result = fsync(fd)
+        if ((state["writing"] and stage == ("receipt_file_fsync" if file else "receipt_directory_fsync"))
+                or (state["unlinked"] and stage == "lease_directory_fsync")):
+            cross_deadline()
+        return result
+
+    def delayed_unlink(name, **kwargs):
+        assert clock.now < end
+        assert name == "host-lease.json" and not state["writing"]
+        result = unlink(name, **kwargs)
+        state["unlinked"] = True
+        if stage == "lease_unlink":
+            cross_deadline()
+        return result
+
+    def delayed_close(fd):
+        result = close(fd)
+        if fd == state["parent"] and stage == "directory_close":
+            cross_deadline()
+        return result
+
+    with monkeypatch.context() as io_patch:
+        io_patch.setattr(control, "_directory_fd", open_parent)
+        io_patch.setattr(control, "_write", receipt_write)
+        io_patch.setattr(os, "fsync", delayed_fsync)
+        io_patch.setattr(os, "unlink", delayed_unlink)
+        io_patch.setattr(os, "close", delayed_close)
+        assert control.finish_cleanup(True) is None
+    assert state["expired"]
+    assert control.cleanup_deadline == end == 123
+    assert control.terminal_reason == "completed"  # Finalization failed, not generation.
+    _assert_finalization_refused(tmp_path, control, clock, lease_present=not state["unlinked"])
+
+
+@pytest.mark.parametrize("reuse", ["same_host", "lost_confirmation", "forked_host"])
+def test_time_budget_observation_deadline_finalization_before_deadline(tmp_path, monkeypatch, reuse):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TimeBudgetObservation
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(4)
+        control.terminal("completed")
+    clock.advance(15)
+    fsync = os.fsync
+    persisted = []
+
+    def finite_fsync(fd):
+        assert control._supervising > 0
+        assert not control.cleanup_complete
+        persisted.append(control.remaining_cleanup())
+        result = fsync(fd)
+        clock.advance(1)
+        return result
+
+    with monkeypatch.context() as io_patch:
+        io_patch.setattr(os, "fsync", finite_fsync)
+        assert control.finish_cleanup(True) is None
+    assert persisted == [5, 4, 3]
+    record = control.as_record()
+    assert record["cleanup_complete"] is record["host_reusable"] is True
+    assert record["cleanup_expired"] is False
+    assert record["cleanup_finished_monotonic"] == 122 < control.cleanup_deadline == 124
+    assert record["cleanup_elapsed_seconds"] == 18
+    assert not (control.directory / "host-lease.json").exists()
+    durable = json.loads((control.directory / (control.identity.key + ".cleanup.json")).read_bytes())
+    assert durable["cleanup_complete"] is durable["host_reusable"] is False
+    assert durable["finalization_pending"] is True
+    assert durable["cleanup_finished_monotonic"] is None
+    with pytest.raises(ObservationDeadlineRefused):
+        control.cleanup(lambda: pytest.fail("finalized observation restarted cleanup"))
+    clock.advance(100)  # Returning/reading evidence later does not redo cleanup.
+    assert control.as_record()["cleanup_elapsed_seconds"] == 18
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(tmp_path, clock=clock)
+    if reuse == "same_host":
+        other, _ = _observation(tmp_path, clock=clock, task_index=1)
+        assert other.first_start is None
+        with pytest.raises(ObservationDeadlineRefused):
+            _observation(tmp_path, clock=clock, task_index=2)
+    else:
+        if reuse == "lost_confirmation":
+            monkeypatch.setattr(TimeBudgetObservation, "_released_hosts", {})
+        else:
+            pid = os.getpid()
+            monkeypatch.setattr(os, "getpid", lambda: pid + 1)
+        with pytest.raises(ObservationDeadlineRefused):
+            _observation(tmp_path, clock=clock, task_index=1)
+        assert not (control.directory / "host-lease.json").exists()
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("case", ["success", "late_success", "tool_wait", "blocking_responses"])
+def test_time_budget_observation_deadline_v2_actual_factory(tmp_path, monkeypatch, case):
+    from core.agentic_v2_conversation import AskForTool, StopReason
+    from core.agentic_v2_conversation_runner import PerTaskCeilings, TaskConversations, build_runner_factory
+    from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
+    from core.agentic_v2_model_voice import AzureFoundryVoice
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT
+    from .test_agentic_v2_conversation_runner import PROFILE
+
+    control, clock = _observation(tmp_path, "sandbox_v2")
+    held = TaskConversations(PerTaskCeilings(9, 8192, 1200.0, 9, 737280, 73728, 2))
+    calls, reservations = [], []
+    clock.advance(2000)
+
+    class Backend(AgenticV2FixtureBackend):
+        def start(self, timeout):
+            assert control.first_start is None
+            clock.advance(500)
+            return super().start(timeout)
+
+        def workspace_apply(self, arguments):
+            clock.advance(800 if case == "tool_wait" else 100)
+            return super().workspace_apply(arguments)
+
+        def close(self):
+            clock.advance(1)
+            super().close()
+
+    def close_client():
+        calls.append("client_close")
+        clock.advance(1)
+
+    class Voice:
+        makes_paid_calls = False
+        client = SimpleNamespace(close=close_client)
+
+        def next_turn(self, request):
+            assert reservations[-1] == request.turn
+            assert control.first_start == 2600
+            calls.append(request.turn)
+            clock.advance(400 if request.turn == 1 else 701 if case == "late_success" else 200)
+            if request.turn == 1:
+                return AskForTool("write", "workspace_apply", {"operation": "write", "path": "report.txt", "content": "synthetic"},
+                                  input_tokens=20, output_tokens=10)
+            return AskForTool("finalize", "finalize", {"deliverables": ["report.txt"], "summary": "synthetic"},
+                              input_tokens=30, output_tokens=15)
+
+    def voice_for(budget):
+        if case != "blocking_responses":
+            return Voice()
+
+        def create(**payload):
+            assert reservations == [1] and control.first_start == 2600
+            assert payload["max_output_tokens"] == 8192
+            calls.append("responses.create")
+            clock.advance(1200)
+            signal.raise_signal(signal.SIGALRM)
+            pytest.fail("blocking generation was not interrupted")
+
+        # The real next_turn/Responses.create path, but a controlled in-memory
+        # transport. No Azure client, endpoint, credential or model is created.
+        return AzureFoundryVoice(
+            client=SimpleNamespace(responses=SimpleNamespace(create=create), close=close_client),
+            deployment="gpt-5.4", resource="synthetic", budget=budget, instructions="synthetic",
+            max_output_tokens_per_turn=8192, replay_format="faithful", reasoning_effort="xhigh",
+        )
+
+    def reserve(turn):
+        assert control._claimed and (control.directory / (control.identity.key + ".admitted.json")).is_file()
+        if turn == 1:
+            assert control.first_start is None
+        reservations.append(turn)
+
+    factory = build_runner_factory(
+        backend_factory=lambda **kwargs: Backend(root=tmp_path / "backend", **kwargs),
+        profile=PROFILE, conversations=held, attempt_of=lambda task: 1, voice_for=voice_for,
+        before_model_call_for=lambda task, attempt: reserve, observation_for=lambda task, attempt: control,
+    )
+    runner = factory(SimpleNamespace(task_id=control.identity.task_id))
+    result = runner.run("synthetic", run_id=control.identity.run_id,
+                        condition_name="sandbox_v2", task_id=control.identity.task_id)
+    assert result["success"] is (case == "success")
+    outcome = held.outcome_of(control.identity.task_id, 1)
+    if case != "success":
+        assert outcome.stop_reason is StopReason.TIME_LIMIT_REACHED
+        assert control.terminal_reason == TIMEOUT and result["error"] == "task_wall_time_exhausted"
+        assert len(outcome.turns) == (0 if case == "blocking_responses" else 2 if case == "late_success" else 1)
+    assert runner.last_observation_deadline["cleanup_complete"] is True
+    assert control.first_start == 2600
+    assert not (control.directory / "host-lease.json").exists()
+    before = list(calls)
+    with pytest.raises(ObservationDeadlineRefused):
+        runner.run("no restart", run_id=control.identity.run_id, condition_name="sandbox_v2", task_id=control.identity.task_id)
+    with pytest.raises(ObservationDeadlineRefused):
+        factory(SimpleNamespace(task_id=control.identity.task_id))
+    assert calls == before
+
+
+@pytest.mark.parametrize("case", ["success", "creation_timeout", "native_recovery", "late_success", "cleanup_expired"])
+def test_time_budget_observation_deadline_codex_actual_entry(tmp_path, monkeypatch, observation_kernel, case):
+    import core.codex_runner as native
+    from core.codex_runtime_config import LoopbackCodexProvider
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT, CLEANUP_UNCONFIRMED
+    from openai_codex.generated.v2_all import TurnInterruptResponse
+
+    control, clock = _observation(tmp_path)
+    events = []
+
+    class Process:
+        child = None
+
+        @property
+        def alive(self):
+            return self.child is not None and self.child.alive
+
+    process = Process()
+
+    def signalled(child, sig):
+        if child is process.child and sig == signal.SIGKILL:
+            events.append("kill_owned_process")
+
+    def reaping():
+        assert control._supervising and control.remaining_cleanup() > 0
+        events.append("bounded_wait")
+        clock.advance(0.25)
+
+    observation_kernel.on_signal = signalled
+    observation_kernel.on_blocking_wait = reaping
+
+    def cleanup():
+        events.append("remove")
+        clock.advance(20 if case == "cleanup_expired" else 1)
+
+    def collect():
+        events.append("collect")
+        assert not process.alive
+        clock.advance(1)
+        return []
+
+    workspace = SimpleNamespace(stage_references=lambda refs: events.append("stage_synthetic"), cleanup=cleanup,
+                                collect_deliverables=collect)
+    monkeypatch.setattr(native.CodexWorkspace, "create", lambda **kwargs: workspace)
+    usage = SimpleNamespace(total=SimpleNamespace(input_tokens=100, cached_input_tokens=20,
+                            output_tokens=40, reasoning_output_tokens=10, cache_write_input_tokens=None))
+
+    class Turn:
+        id = "synthetic-turn"
+
+        def stream(self):
+            yield SimpleNamespace(method="thread/tokenUsage/updated", payload=SimpleNamespace(token_usage=usage))
+            for _ in range(3):
+                clock.advance(300 if case == "native_recovery" else 10)
+                yield SimpleNamespace(method="item/completed", payload=None)
+            if case == "native_recovery":
+                clock.advance(100)  # 200 creation + 900 recovery + 100 final wait == 1200.
+                signal.raise_signal(signal.SIGALRM)
+            if case == "late_success":
+                clock.advance(971)
+
+        def interrupt(self):
+            events.append("interrupt")
+            assert control.terminal_reason == TIMEOUT
+            assert (control.directory / (control.identity.key + ".terminal.json")).is_file()
+            clock.advance(0.25)
+            return TurnInterruptResponse()
+
+    def turn(text):
+        events.append("turn_create")
+        assert control.first_start == 2600 and control._claimed
+        clock.advance(1200 if case == "creation_timeout" else 200)
+        if case == "creation_timeout":
+            signal.raise_signal(signal.SIGALRM)
+            pytest.fail("turn creation survived the observation deadline")
+        return Turn()
+
+    def collector(stream, turn_id):
+        list(stream)
+        return SimpleNamespace(id=turn_id, usage=usage, final_response="synthetic success")
+
+    monkeypatch.setattr(native, "_load_turn_collector", lambda: collector)
+    runner = native.CodexAgentRunner(LoopbackCodexProvider(1, model="gpt-5.4"), verify_runtime=False, preflight_auth=False,
+                                   run_id=control.identity.run_id, condition_name="codex", observation_control=control)
+    monkeypatch.setattr(runner, "build_task_text", lambda *args, **kwargs: "synthetic")
+
+    def open_runtime(*args, **kwargs):
+        assert control.first_start is None
+        process.child = observation_kernel.spawn()
+        clock.advance(2000)
+        return SimpleNamespace(_client=SimpleNamespace(_proc=process), close=lambda: events.append("close_sdk"))
+
+    def start_thread(*args, **kwargs):
+        assert control.first_start is None
+        clock.advance(500)
+        return SimpleNamespace(id="synthetic-thread", turn=turn)
+
+    monkeypatch.setattr(runner, "open_runtime", open_runtime)
+    monkeypatch.setattr(runner, "start_thread", start_thread)
+    monkeypatch.setattr(native, "CODEX_INTERRUPT_GRACE_SECONDS", 999999)
+    result = runner.run("synthetic", task_id=control.identity.task_id)
+    assert control.first_start == 2600 and events.count("turn_create") == 1
+    assert result["success"] is (case == "success")
+    if case in ("creation_timeout", "native_recovery", "late_success"):
+        assert result["error_category"] == TIMEOUT and control.terminal_reason == TIMEOUT
+        assert control.cleanup_deadline == 3820
+    elif case == "cleanup_expired":
+        assert result["error_category"] == CLEANUP_UNCONFIRMED
+        assert result["time_budget_observation"]["host_reusable"] is False
+    assert events.index("kill_owned_process") < events.index("close_sdk") < events.index("collect") < events.index("remove")
+    if case == "native_recovery":
+        measured = runner.last_run_diagnostics["usage_delta"]
+        assert measured["input_tokens"] == 100 and measured["cached_input_tokens"] == 20
+        assert measured["output_tokens"] == 40 and measured["reasoning_output_tokens"] == 10
+        assert control.interruption_acknowledged is True  # app-server acknowledgement only
+    if case == "creation_timeout":
+        assert runner.last_run_diagnostics["usage_delta"]["input_tokens"] is None
+        assert control.interruption_attempted and not control.interruption_acknowledged
+    before = list(events)
+    with pytest.raises(ObservationDeadlineRefused):
+        runner.run("no external retry", task_id=control.identity.task_id)
+    with pytest.raises(ObservationDeadlineRefused):
+        native.CodexAgentRunner(LoopbackCodexProvider(1), verify_runtime=False, preflight_auth=False,
+                               run_id=control.identity.run_id, condition_name="codex", observation_control=control)
+    assert events == before
+
+
+def test_time_budget_observation_deadline_omission_preserves_legacy_paths(tmp_path, monkeypatch):
+    from core.agentic_v2_conversation import ScriptedVoice
+    from core.agentic_v2_conversation_runner import TaskConversations, build_runner_factory
+    from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
+    from .test_agentic_v2_conversation_runner import PROFILE, CEILINGS, _write, _finalize
+    from core.codex_runner import CodexAgentRunner
+    from core.codex_runtime_config import LoopbackCodexProvider
+    import core.codex_runner as native
+
+    held = TaskConversations(CEILINGS)
+    factory = build_runner_factory(backend_factory=lambda **kw: AgenticV2FixtureBackend(root=tmp_path / "old-v2", **kw),
+                                   profile=PROFILE, conversations=held, attempt_of=lambda task: 1,
+                                   voice=ScriptedVoice([_write(), _finalize()]))
+    runner = factory(SimpleNamespace(task_id="legacy-task"))
+    assert runner.run("synthetic", task_id="legacy-task")["success"] is True
+    assert runner.last_observation_deadline is None and not (tmp_path / "host-observations").exists()
+    monkeypatch.setattr(native, "_load_turn_collector", lambda: None)
+    native_runner = CodexAgentRunner(LoopbackCodexProvider(1), verify_runtime=False, preflight_auth=False, timeout=7)
+    result = SimpleNamespace(final_response="synthetic")
+    observed = native_runner._await_turn(SimpleNamespace(run=lambda: result))
+    assert observed.result is result and not observed.timed_out
+    assert native_runner.observation_control is native_runner.last_observation_deadline is None
+
+
+def test_time_budget_frozen_judge_binding_genuine_dual_roots(dual_roots, tmp_path, monkeypatch):
+    from step8_grade import compute_grader_source_hash
+    import gpt54_run_config_bundle as bundle
+    from gpt54_disposable_checkout import DisposableCheckoutRefused
+
+    plan = prospective.load_registration()
+    report = _compile(plan, dual_roots).as_dict()
+    evidence = report["source_evidence"]
+    assert evidence["runtime"]["source_sha"] == dual_roots["runtime_sha"]
+    assert evidence["frozen_grader"]["source_sha"] == prospective.ACCEPTED_BASE_SHA
+    assert evidence["frozen_grader"]["source_tree"] == prospective.ACCEPTED_BASE_TREE
+    assert evidence["frozen_grader"]["template_source_sha256"] == prospective.FROZEN_TEMPLATE_SHA256
+    assert evidence["frozen_grader"]["materialized_grader_source_sha256"] is None
+    assert evidence["frozen_grader"]["materialized_config_path"] is None
+    assert report["launch_authority"]["launch_allowed"] is report["launch_authority"]["execution_enabled"] is False
+    assert report["implementation_status"]["host_control_selected_by_executor"] is False
+    assert report["registered_intent"]["scope"]["max_generation_observations"] == 20
+    assert report["registered_intent"]["generation_budget"]["seconds_per_observation"] == 1200
+    runtime, frozen = dual_roots["runtime"], dual_roots["frozen"]
+    assert compute_grader_source_hash(runtime / historical.GRADER, historical.load_plan(runtime / historical.GRADER),
+                                      batch_root=runtime / "batch-runner") != prospective.FROZEN_TEMPLATE_SHA256
+    config = historical.load_plan(frozen / historical.GRADER)
+    # A test-owned materialized config has its actual new path AND new bytes in
+    # the unchanged whole-closure algorithm. Nothing executes this grader.
+    materialized = frozen / "batch-runner" / "synthetic-materialized-grader.json"
+    config["rubric"]["revision"] = plan["shared"]["dataset"]["revision"]
+    try:
+        materialized.write_text(json.dumps(config, sort_keys=True))
+        actual = compute_grader_source_hash(materialized, config, batch_root=frozen / "batch-runner")
+        assert actual != prospective.FROZEN_TEMPLATE_SHA256
+    finally:
+        materialized.unlink()
+    with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
+        require_comparison_runtime_launch()
+
+    # Complete the identity checks that the first failed positive could not
+    # reach: its clone was not a registered detached linked worktree. Do not
+    # mistake that early layout refusal for tracked-blob/anchor evidence.
+    for case in ("swapped_roots", "wrong_runtime_commit", "coherent_substitution"):
+        candidate, anchors = deepcopy(plan), _anchors(dual_roots)
+        if case == "swapped_roots":
+            anchors["runtime_root"], anchors["frozen_grader_root"] = frozen, runtime
+        elif case == "wrong_runtime_commit":
+            anchors["expected_reviewed_source_sha"] = prospective.ACCEPTED_BASE_SHA
+        else:
+            anchors["runtime_root"] = dual_roots["substitute"]
+            candidate = prospective.load_registration(dual_roots["substitute"] / prospective.REGISTRATION_PATH)
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused) as refused:
+            prospective.compile_registration(candidate, **anchors)
+        assert isinstance(refused.value.__cause__, DisposableCheckoutRefused)
+        assert str(refused.value.__cause__) == "runtime checkout HEAD must be the reviewed detached commit"
+
+    for field, reason in (("runtime_digest", "runtime_source_roles"), ("judge_digest", "shared_facts")):
+        candidate = deepcopy(plan)
+        if field == "runtime_digest":
+            candidate["source_pins"][prospective.COMPILER] = "0" * 64
+        else:
+            candidate["shared"]["grading"]["template_source_sha256"] = "0" * 64
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^" + reason + "$"):
+            _compile(candidate, dual_roots)
+
+    for root in (runtime, frozen):
+        target = root / "batch-runner/core/codex_runner.py"
+        before = target.read_bytes()
+        try:
+            target.write_bytes(before + b"\n# synthetic runtime/judge substitution\n")
+            with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^source_differs_from_reviewed_blob$"):
+                _compile(plan, dual_roots)
+        finally:
+            target.write_bytes(before)
+
+    untracked = runtime / "batch-runner/core/untracked_deadline.py"
+    try:
+        untracked.write_text("# synthetic untracked source\n")
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^source_core_inventory$"):
+            _compile(plan, dual_roots)
+    finally:
+        untracked.unlink()
+
+    target = runtime / prospective.REGISTRATION_PATH
+    before = target.read_bytes()
+    try:
+        target.write_bytes(before + b"\n# synthetic unreviewed manifest bytes\n")
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^source_differs_from_reviewed_blob$"):
+            _compile(plan, dual_roots)
+    finally:
+        target.write_bytes(before)
+
+    for substitution in ("symlink", "hardlink"):
+        target = runtime / historical.GRADER
+        before = target.read_bytes()
+        external = tmp_path / (substitution + "-grader.yaml")
+        try:
+            if substitution == "symlink":
+                external.write_bytes(before)
+                target.unlink()
+                target.symlink_to(external)
+            else:
+                os.link(target, external)
+            with pytest.raises(prospective.TimeBudgetRegistrationRefused) as refused:
+                _compile(plan, dual_roots)
+            assert "detached checkout registration mismatch" not in str(refused.value.__cause__)
+            assert "regular" in str(refused.value.__cause__) or "symlink" in str(refused.value.__cause__)
+        finally:
+            if substitution == "symlink":
+                target.unlink()
+                target.write_bytes(before)
+            external.unlink()
+
+    for race in ("final_reread", "held_parent", "head_substitution"):
+        target = runtime / "batch-runner/core/codex_runner.py"
+        before = target.read_bytes()
+        head = dual_roots["gitdirs"]["runtime"] / "HEAD"
+        before_head = head.read_bytes()
+        moved = None
+        sources = bundle._sources
+
+        def raced(root, manifest, locator):
+            nonlocal moved
+            actual = sources(root, manifest, locator)
+            if root == runtime:
+                if race == "held_parent":
+                    parent = runtime / "batch-runner/core"
+                    moved = parent.with_name("held-original-core")
+                    parent.rename(moved)
+                    parent.mkdir()
+                elif race == "head_substitution":
+                    head.write_text(prospective.ACCEPTED_BASE_SHA + "\n")
+                else:
+                    target.write_bytes(before + b"\n# final reread race\n")
+            return actual
+
+        try:
+            with monkeypatch.context() as guarded:
+                guarded.setattr(bundle, "_sources", raced)
+                with pytest.raises(prospective.TimeBudgetRegistrationRefused) as refused:
+                    _compile(plan, dual_roots)
+                assert str(refused.value) == "registration_cannot_be_compiled"
+                assert "detached checkout registration mismatch" not in str(refused.value.__cause__)
+        finally:
+            if moved is not None:
+                (runtime / "batch-runner/core").rmdir()
+                moved.rename(runtime / "batch-runner/core")
+            target.write_bytes(before)
+            head.write_bytes(before_head)
+
+
+@pytest.mark.parametrize("case", ["missing_runtime", "missing_judge", "wrong_runtime", "ref", "short", "uppercase", "tag",
+                                  "wrong_judge", "swapped_roots", "same_root", "wrong_template", "coherent_substitution"])
+def test_time_budget_frozen_judge_binding_anchor_refusals(dual_roots, case):
+    plan, anchors = prospective.load_registration(), _anchors(dual_roots)
+    if case == "missing_runtime":
+        anchors["expected_reviewed_source_sha"] = None
+    elif case == "missing_judge":
+        anchors["expected_grader_source_sha"] = None
+    elif case == "wrong_runtime":
+        anchors["expected_reviewed_source_sha"] = prospective.ACCEPTED_BASE_SHA
+    elif case in ("ref", "short", "uppercase"):
+        anchors["expected_reviewed_source_sha"] = {"ref": "HEAD", "short": dual_roots["runtime_sha"][:8],
+                                                    "uppercase": dual_roots["runtime_sha"].upper()}[case]
+    elif case == "wrong_judge":
+        anchors["expected_grader_source_sha"] = dual_roots["runtime_sha"]
+    elif case == "tag":
+        anchors["expected_reviewed_source_sha"] = dual_roots["tag_sha"]
+    elif case == "coherent_substitution":
+        anchors["runtime_root"] = dual_roots["substitute"]
+        plan = prospective.load_registration(dual_roots["substitute"] / prospective.REGISTRATION_PATH)
+        assert dual_roots["substitute_sha"] != anchors["expected_reviewed_source_sha"]
+    elif case == "swapped_roots":
+        anchors["runtime_root"], anchors["frozen_grader_root"] = anchors["frozen_grader_root"], anchors["runtime_root"]
+    elif case == "same_root":
+        anchors["frozen_grader_root"] = anchors["runtime_root"]
+    else:
+        plan["shared"]["grading"]["template_source_sha256"] = "0" * 64
+    with pytest.raises(prospective.TimeBudgetRegistrationRefused):
+        prospective.compile_registration(plan, **anchors)
+
+
+@pytest.mark.parametrize("case", ["runtime_core", "frozen_core", "manifest", "untracked_core", "symlink",
+                                  "hardlink", "compiler_digest", "held_parent", "final_reread", "head_substitution"])
+def test_time_budget_frozen_judge_binding_tracked_bytes_and_races(dual_roots, tmp_path, monkeypatch, case):
+    import gpt54_run_config_bundle as bundle
+
+    plan = prospective.load_registration()
+    root = dual_roots["frozen"] if case == "frozen_core" else dual_roots["runtime"]
+    role = historical.GRADER if case == "symlink" else "batch-runner/core/codex_runner.py"
+    if case == "manifest":
+        role = prospective.REGISTRATION_PATH
+    target = root / role
+    original = target.read_bytes()
+    extras = []
+    moved = None
+    try:
+        if case in ("runtime_core", "frozen_core", "manifest"):
+            target.write_bytes(original + b"\n# synthetic substitution\n")
+        elif case == "untracked_core":
+            path = root / "batch-runner/core/untracked_deadline.py"
+            path.write_text("# untracked source\n")
+            extras.append(path)
+        elif case == "symlink":
+            outside = tmp_path / "external.yaml"
+            outside.write_bytes(original)
+            target.unlink()
+            target.symlink_to(outside)
+        elif case == "hardlink":
+            extra = tmp_path / "linked-runtime.py"
+            os.link(target, extra)
+            extras.append(extra)
+        elif case == "compiler_digest":
+            plan["source_pins"][prospective.COMPILER] = "0" * 64
+        elif case == "head_substitution":
+            # A coherent other HEAD has no authority to substitute for the
+            # independently supplied R. The new value is a real local commit.
+            head = dual_roots["gitdirs"]["runtime"] / "HEAD"
+            original_head = head.read_bytes()
+            head.write_text(prospective.ACCEPTED_BASE_SHA + "\n")
+        else:
+            sources = bundle._sources
+
+            def raced(selected, manifest, locator):
+                nonlocal moved
+                evidence = sources(selected, manifest, locator)
+                if selected == root:
+                    if case == "held_parent":
+                        parent = root / "batch-runner/core"
+                        moved = parent.with_name("held-original-core")
+                        parent.rename(moved)
+                        parent.mkdir()
+                    else:
+                        target.write_bytes(original + b"\n# final read race\n")
+                return evidence
+
+            monkeypatch.setattr(bundle, "_sources", raced)
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused):
+            _compile(plan, dual_roots)
+    finally:
+        if moved is not None:
+            (root / "batch-runner/core").rmdir()
+            moved.rename(root / "batch-runner/core")
+        if case == "symlink":
+            target.unlink()
+        for extra in extras:
+            extra.unlink()
+        target.write_bytes(original)
+        if case == "head_substitution":
+            head.write_bytes(original_head)
+
+
+def test_time_budget_legacy_role_compatibility_frozen_profile(monkeypatch, frozen_local_comparison_source):
+    test_time_budget_registration_preserves_historical_and_default_refusals(monkeypatch, frozen_local_comparison_source)
+
+
+def test_time_budget_legacy_role_compatibility_closed_retention(historical_retention_source):
+    import codex_retention_diagnostic as closed
+
+    plan = closed.compile_plan()
+    assert closed.ROOT == historical_retention_source
+    assert plan["grading"]["template_source_sha256"] == prospective.FROZEN_TEMPLATE_SHA256
+    assert plan["cell_count"] == 8 and plan["launch_authorized"] is False
+    assert plan["common"]["cumulative_seconds"] == 10800
+
+
+def test_time_budget_legacy_role_compatibility_shared_retained_source(tmp_path, historical_retention_source):
+    from step8_grade import compute_grader_source_hash
+
+    root = tmp_path / "synthetic-retained-source"
+    retained_fixture._source_tree(root)  # Shared old fresh/keep fixture, not a live preparation.
+    template = root / historical.GRADER
+    template.parent.mkdir(parents=True)
+    with template.open("xb") as target:
+        target.write((historical_retention_source / historical.GRADER).read_bytes())
+    for name in (historical_retention_source / "batch-runner/core").rglob("*.py"):
+        assert (root / name.relative_to(historical_retention_source)).read_bytes() == name.read_bytes()
+    assert compute_grader_source_hash(root / historical.GRADER, historical.load_plan(root / historical.GRADER),
+                                      batch_root=root / "batch-runner") == prospective.FROZEN_TEMPLATE_SHA256
+    for role, digest in retention_report.FROZEN_SOURCE.items():
+        assert hashlib.sha256((historical_retention_source / role).read_bytes()).hexdigest() == digest
+    for role, digest in retention_report.CURRENT_SOURCE.items():
+        assert hashlib.sha256((retained_fixture.REAL_ROOT / role).read_bytes()).hexdigest() == digest
+
+
+def test_time_budget_legacy_role_compatibility_workflow_profile(monkeypatch, frozen_local_comparison_source):
+    from .test_gpt54_workflow_gate import test_workflow_profile_anchor_current_source_and_frozen_refusals
+
+    test_workflow_profile_anchor_current_source_and_frozen_refusals(monkeypatch, frozen_local_comparison_source)
+
+
+def test_time_budget_legacy_role_compatibility_disposable_profile(monkeypatch, capsys, frozen_local_comparison_source):
+    from .test_gpt54_disposable_checkout import test_prospective_source_profile_real_tracked_compilation_and_refusals
+
+    test_prospective_source_profile_real_tracked_compilation_and_refusals(monkeypatch, capsys, frozen_local_comparison_source)

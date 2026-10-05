@@ -305,6 +305,7 @@ def conversation_seam(
     cancel_requested: Optional[Callable[[], bool]] = None,
     before_model_call: Optional[Callable[[int], None]] = None,
     on_outcome: Optional[Callable[[Any], None]] = None,
+    observation_control=None,
 ) -> Callable[[str, Callable[..., Any]], Any]:
     """A callable the runner can hand its dispatch function to.
 
@@ -328,9 +329,28 @@ def conversation_seam(
             tools_available=tools_available,
             cancel_requested=cancel_requested,
             before_model_call=before_model_call,
+            observation_control=observation_control,
         )
+        if observation_control is not None:
+            # The host clock also bounds closing the blocking Responses client.
+            # A close returning None is not server-side cancellation evidence.
+            client = getattr(voice, "client", None)
+            if client is not None:
+                from core.time_budget_observation_deadline import TIMEOUT
+
+                close = getattr(client, "close", None)
+                if not callable(close):
+                    observation_control.cleanup_failed = True
+                else:
+                    observation_control.cleanup(
+                        close, interruption=observation_control.terminal_reason == TIMEOUT,
+                        step_seconds=2.0,
+                    )
         if on_outcome is not None:
-            on_outcome(outcome)
+            if observation_control is None:
+                on_outcome(outcome)
+            else:
+                observation_control.cleanup(lambda: on_outcome(outcome))
         return outcome
 
     return converse
@@ -352,6 +372,7 @@ def build_runner_factory(
     ] = None,
     tools_available: Sequence[str] = TOOL_NAMES,
     admitted_identity: Optional[Mapping[str, Any]] = None,
+    observation_for: Optional[Callable[[str, int], Any]] = None,
 ) -> Callable[[Any], AgenticV2ScriptedRunner]:
     """A ``runner_factory`` for :func:`core.agentic_v2_run_driver.run_manifest`.
 
@@ -404,6 +425,15 @@ def build_runner_factory(
             raise ConversationRunnerRefused(refusal)
         task_id = str(getattr(task, "task_id", "unknown-task"))
         attempt = int(attempt_of(task_id))
+        observation = None if observation_for is None else observation_for(task_id, attempt)
+        if observation is not None:
+            from core.time_budget_observation_deadline import TimeBudgetObservation
+
+            if (type(observation) is not TimeBudgetObservation
+                    or observation.identity.task_id != task_id
+                    or observation.identity.condition != "sandbox_v2"):
+                raise ConversationRunnerRefused("time_budget_observation_identity_refused")
+            observation.require_unclaimed()
         limits = conversations.limits_for(task_id, attempt)
         if voice_for is not None:
             assert limits.budget is not None  # limits_for always builds one
@@ -427,6 +457,7 @@ def build_runner_factory(
                     if before_model_call_for is None
                     else before_model_call_for(task_id, attempt)
                 ),
+                observation_control=observation,
                 on_outcome=lambda outcome: conversations.record(
                     task_id, attempt, outcome
                 ),
@@ -436,6 +467,7 @@ def build_runner_factory(
             cancel_requested=cancel_requested,
             required_backend_type=required_backend_type,
             admitted_identity=admitted_identity,
+            observation_control=observation,
         )
 
     return build

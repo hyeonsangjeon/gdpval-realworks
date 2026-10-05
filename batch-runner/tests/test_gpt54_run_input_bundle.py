@@ -381,16 +381,15 @@ def _make_input_bundle_seed(tmp_path_factory, source, manifest_path=None):
     root = tmp_path_factory.mktemp("run-input-bundle-seed")
     oracle = root / "oracle"
     oracle.mkdir()
+    selected_plan = source / (manifest_path or config_bundle.MANIFEST_PATH)
     with pytest.MonkeyPatch.context() as setup:
         # Source pins always bind real bytes: the historical default or an
-        # explicitly selected current profile. Only original-data pins below
+        # explicitly selected frozen local profile. Only original-data pins below
         # describe synthetic inputs, never production/private originals.
         setup.setattr(preflight, "ROOT", source)
-        if manifest_path is not None:
-            load_plan = preflight.load_plan
-            setup.setattr(preflight, "load_plan", lambda path=preflight.PLAN: load_plan(
-                source / manifest_path if path == preflight.PLAN else path,
-            ))
+        setup.setattr(preflight, "PLAN", selected_plan)
+        load_plan = preflight.load_plan
+        setup.setattr(preflight, "load_plan", lambda path=selected_plan: load_plan(path))
         forbidden = _guards(setup)
         install_cache = _compiler_cache()
         install_cache(setup)
@@ -421,7 +420,7 @@ def _make_input_bundle_seed(tmp_path_factory, source, manifest_path=None):
         assert case == "identical"  # Invalid oracle variants must never use this seed.
         _copy_files(directory, oracle_files)
         manifest, combined, bindings, payloads, sources, references = json.loads(documents)
-        monkeypatch.setattr(preflight, "load_plan", lambda path=preflight.PLAN: deepcopy(fixture_plan(path)))
+        monkeypatch.setattr(preflight, "load_plan", lambda path=selected_plan: deepcopy(fixture_plan(path)))
         for module in (preflight, attester):
             monkeypatch.setattr(module, "load_task_catalog", lambda: catalog)
             monkeypatch.setattr(module, "catalog_sha256", lambda: catalog_digest)
@@ -456,6 +455,7 @@ def _make_input_bundle_seed(tmp_path_factory, source, manifest_path=None):
     def install(monkeypatch):
         # Consumers recompile against the exact same source as this seed.
         monkeypatch.setattr(preflight, "ROOT", source)
+        monkeypatch.setattr(preflight, "PLAN", selected_plan)
         install_cache(monkeypatch)
         # These are fixture suppliers, not runtime/compiler validators. Other
         # selectors get their unmodified helpers back at each case's teardown.

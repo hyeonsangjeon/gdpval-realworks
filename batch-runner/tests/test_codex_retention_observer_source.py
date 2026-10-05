@@ -19,7 +19,7 @@ KEEP_EVIDENCE = "25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca
 
 def test_anchored_prospective_verification_current_binding_remains_unpaid(tmp_path, monkeypatch):
     """Only the CURRENT helper/facade identity advances, never a paid receipt."""
-    from .test_codex_retention_budget_report import FROZEN_SOURCE
+    from .test_codex_retention_budget_report import CURRENT_SOURCE
 
     fixed = bridge._fixed("retention/keep-r2")
     historical = deepcopy((bridge.RESULT, bridge.PARENT, bridge.READER, fixed.RESULT, fixed.PARENT, fixed.READER))
@@ -28,7 +28,7 @@ def test_anchored_prospective_verification_current_binding_remains_unpaid(tmp_pa
     helper = bridge.ROOT / "batch-runner/gpt54_disposable_checkout.py"
     assert hashlib.sha256(helper.read_bytes()).hexdigest() == reader.CURRENT_DEPENDENCIES[helper.name]
     facade = "batch-runner/codex_retention_grade_readout.py"
-    assert hashlib.sha256((bridge.ROOT / facade).read_bytes()).hexdigest() == FROZEN_SOURCE[facade]
+    assert hashlib.sha256((bridge.ROOT / facade).read_bytes()).hexdigest() == CURRENT_SOURCE[facade]
     effects = []
 
     def forbidden(*args, **kwargs):
