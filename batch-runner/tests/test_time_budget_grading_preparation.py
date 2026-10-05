@@ -15,7 +15,7 @@ import step8_grade
 from core.agentic_v2_preregistration import seal
 from core.result_fingerprint import inference_result_fingerprint
 from core.rubric_loader import RubricLoader
-from core.time_budget_observation_deadline import ObservationIdentity, TimeBudgetObservation
+from core.time_budget_observation_deadline import TIMEOUT, ObservationIdentity, TimeBudgetObservation
 from gpt54_comparison_preflight import GRADER, _canonical_json, load_plan
 from gpt54_prepared_input_attestation import _identity
 from .test_gpt54_time_budget_comparison import (
@@ -120,6 +120,53 @@ def _unpublished(arguments):
     output = arguments["destination"]
     assert not output.exists()
     assert not output.with_name(output.name + preparation.RESERVATION_SUFFIX).exists()
+
+
+@pytest.mark.parametrize("condition,reason,valid", [
+    pytest.param("sandbox_v2", "running", False, id="v2-running-refused"),
+    pytest.param("codex", "pending", False, id="codex-pending-refused"),
+    pytest.param("codex", "unknown-terminal", False, id="codex-unknown-refused"),
+    pytest.param("sandbox_v2", "completed", True, id="v2-completed-error"),
+    pytest.param("codex", "failed", True, id="codex-failed-error"),
+    pytest.param("sandbox_v2", "cancelled", True, id="v2-cancelled-error"),
+    pytest.param("codex", "abandoned", True, id="codex-abandoned-error"),
+    pytest.param("sandbox_v2", TIMEOUT, True, id="v2-timeout-error"),
+])
+def test_time_budget_f_grading_preparation_terminal_reason(
+    handoff_sources, tmp_path, offline, condition, reason, valid,
+):
+    arguments, payload, _ = _case(handoff_sources, tmp_path, condition=condition, status="error")
+    payload["time_budget_observation"]["terminal_reason"] = reason
+    _store_result(arguments, payload)  # Coherent identity does not prove terminal semantics.
+    result_data = arguments["result_path"].read_bytes()
+    assert arguments["expected_result_identity"] == _identity(result_data)
+    assert payload["result_fingerprint"] == inference_result_fingerprint(payload)
+    if not valid:
+        with pytest.raises(preparation.GradingPreparationRefused, match="^terminal_observation_required$"):
+            preparation.prepare_observation_grading(handoff_sources.plan, **arguments)
+        _unpublished(arguments)
+    else:
+        marker = preparation.prepare_observation_grading(handoff_sources.plan, **arguments)
+        output = arguments["destination"]
+        assert marker == json.loads((output / preparation.READY).read_bytes())
+        assert marker["result"]["terminal_reason"] == reason
+        assert marker["result"]["status"] == "error"
+        assert marker["result_identity"] == arguments["expected_result_identity"]
+        assert (output / preparation.RESULT).read_bytes() == result_data
+        assert payload["results"][0]["error"] == "synthetic_missing_output"
+        assert payload["results"][0]["deliverable_file_records"] == []
+        assert payload["time_budget_observation"]["cleanup_complete"] is False
+        assert payload["time_budget_observation"]["host_reusable"] is False
+        config = json.loads((output / preparation.CONFIG).read_bytes())
+        materialized = step8_grade.compute_grader_source_hash(
+            config_path=output / preparation.CONFIG, config=config, batch_root=output / "source/batch-runner")
+        assert materialized == marker["grader"]["materialized_source_sha256"] != registration.FROZEN_TEMPLATE_SHA256
+        assert (output / marker["grader"]["entrypoint"]).read_bytes() == (
+            handoff_sources.frozen / "batch-runner/step8_grade.py").read_bytes()
+        assert marker["grader"]["execution_source"] == "source"
+        assert marker["launch_allowed"] is marker["execution_enabled"] is False
+    assert arguments["result_path"].read_bytes() == result_data
+    assert offline == []
 
 
 @pytest.mark.parametrize("condition,status", [

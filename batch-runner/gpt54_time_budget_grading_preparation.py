@@ -22,7 +22,7 @@ from core.agentic_v2_preregistration import seal
 from core.inference_manifest import canonicalize_inference_payload
 from core.reference_integrity import validate_reference_record
 from core.result_fingerprint import validate_inference_result_fingerprint
-from core.time_budget_observation_deadline import ObservationIdentity
+from core.time_budget_observation_deadline import TIMEOUT, ObservationIdentity
 from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
 from gpt54_comparison_preflight import GRADER, _canonical_json, load_plan
 from gpt54_prepared_input_attestation import _identity
@@ -104,7 +104,8 @@ def _result(path: Path, identity: dict, observation: ObservationIdentity,
     _same("result observation", control["identity"], asdict(observation))
     _same("result deadline policy", control["policy"], "time_budget_observation_deadline_v1")
     _same("result admission", control["admitted"], True)
-    _require(type(control["terminal_reason"]) is str and bool(control["terminal_reason"]),
+    _require(type(control["terminal_reason"]) is str and control["terminal_reason"] in {
+        "completed", "failed", "cancelled", "abandoned", TIMEOUT},
              "terminal_observation_required")
     rows = payload["results"]
     _same("result task scope", [row["task_id"] for row in rows], [observation.task_id])
