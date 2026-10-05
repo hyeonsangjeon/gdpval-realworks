@@ -24,11 +24,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   immediately before V2's first `voice.next_turn` or Codex's `thread.turn`, after
   reservation; turn creation, waits, tool work and native recovery share 1200
   seconds. Timeout latches before interruption and rejects late success. All
-  interruption, waits, close, orphan checks, collection and removal spend one cleanup
-  remainder: first start plus 1220 seconds after timeout, or at most 20 seconds
-  after an earlier terminal result. Unconfirmed cleanup remains a non-success and
-  retains the host lease. No environment enlargement or independent reset grace
-  is available. The control requires an owned Linux/POSIX main-thread host;
+  interruption, waits, close, orphan checks, collection, removal and finalization
+  spend one cleanup remainder: first start plus 1220 seconds after timeout, or at
+  most 20 seconds after an earlier terminal result. Unconfirmed cleanup remains a
+  non-success; retained lease or admission uncertainty prevents host reuse. No
+  environment enlargement or independent reset grace is available. The control
+  requires an owned Linux/POSIX main-thread host;
   omitted behavior and the closed 10800-second deadline store are unchanged.
 
   `compile_registration` requires both explicit roots and both independent full
@@ -65,26 +66,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   Git layout. Initial early-layout refusals are not claimed as those deeper proofs.
   No passed node was repeated and no aggregate 51-pass/fixed-HEAD result is claimed.
 
-  Both token-free Python 3.10.12 invocations used fake clocks, controlled
-  transports, synthetic inputs and real temporary Git identities, each within
-  300 seconds plus 5 seconds of test-only termination grace. First command/log/
-  receipt SHA256 values are
-  `e13e9b5563233fee086e74d6d749dc5216b111791847142e1d76edd31a810a7d`,
-  `7fb1fd2e018df4356a9a79e1e0b0e5daa9718665d28588f1914c21bd10601f9f`,
-  `a68a2c3f4d5c68b3d150ab76abc15884a3003837d34457b14339394f5c114c29`.
-  Continuation command/log/receipt SHA256 values are
-  `66c00e910a970fb33ee4803fb4a5c3c679f37fb55048d248b1de4ec0ffe1f5e1`,
-  `d97043efafc16676c0cef92dbf043843d81ac7ecf23526eabef2728739c151a2`,
-  `6554f195f1d30738e5b6db423f5fd48de9b43c8b06100f2844ab312da57379cd`.
-  Exact private command hashes are not hashes of the redacted public displays.
+  The leader's first runtime review of
+  `969aabfda810dfb0477c8ca55cbe2918f005666a` found unsupervised terminal
+  persistence and premature finalization/reuse claims; the whole-PR source review
+  is incomplete. The correction arms the original cleanup deadline before terminal
+  receipt I/O and supervises finalization through lease unlink/fsync and close.
+  Unbuffered writes avoid another flush while unwinding. Final deadline checks
+  precede completion, and expired cleanup starts no new receipt I/O. Durable cleanup
+  snapshots remain explicitly pending and non-reusable. Ordinary same-host reuse
+  requires a one-use confirmation issued after all I/O and tied to the process and directory.
+  Retained admission history blocks reuse after an interrupted unlink, including
+  a restarted or forked host. This changes only the helper, its existing test
+  surface and its one prospective runtime pin; F and historical profiles stay fixed.
+
+  The new correction at `d6bff25dc037c96bccf418a0fe06b00402592bc7`, tree
+  `fd2c78441106f4f1aba1cf7a0067dc214fb2d447`, selected only
+  `time_budget_observation_deadline_finalization`: **21 passed, 126 deselected in
+  6.51s**, exit 0. This one token-free/offline Python 3.10.12 invocation used fake
+  clocks and controlled I/O under a 300-second limit plus 5-second termination
+  grace. It covers pending terminal persistence, late finalization, returned and
+  durable non-reusable state, admission refusal and ordinary completion. No earlier
+  successful target was repeated. The directly coupled expired-cleanup assertion
+  now checks returned failure and absent post-deadline persistence; that earlier
+  target was not rerun. New command/log/receipt SHA256 values are
+  `99a7bfab57f45553aeb111ea85cb2441cefb24d085c7fe510f5a49e8adc845f9`,
+  `1ad7ac04a51e9958ae13986704702f5808f0b8697304715212e3132d8db20a5a`,
+  `06734fc949875629881844709de26e575416277c4e3cb5b4a2765ac0f435a6f4`.
+  Exact private command hashes are not hashes of redacted public displays.
 
   Only CHANGELOG and the single [current task record](tasks/LATEST_TASK_RESULT/README.md)
-  follow the corrective proof. The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/d901b119443a843784d81717943622f577fb43b4/tasks/LATEST_TASK_RESULT/README.md)
-  retains the separate registration's 75-case proof and CI repairs. Current
-  delivery remains **HOLD** for final-HEAD review and applicable CI. Dispatcher/
+  follow this new proof. The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/969aabfda810dfb0477c8ca55cbe2918f005666a/tasks/LATEST_TASK_RESULT/README.md)
+  retains the original failed and continued proofs, command/log/receipt identities,
+  passed-node inventory and earlier evidence links. Those files remain untouched.
+  Delivery remains **HOLD** for full corrected-HEAD review and applicable CI. Dispatcher/
   capture selection, verified credentialed inputs, F-derived grading materialization
-  and a source-bound live direction remain. This software proof does not establish
-  live enforcement, remote cancellation or billing. No private input, consumed
+  and a source-bound live direction remain. Signal supervision does not establish
+  a hard real-time bound on an uninterruptible kernel stall or descheduled host.
+  These synthetic software cases do not establish live enforcement, remote
+  cancellation or billing. No private input, consumed
   artifact, real preparation, provider/model/grader/HF/Azure operation, CI query/
   dispatch/retry, Project edit or merge occurred. The closed 30-cell/8-cell studies
   and all previous worktrees remain untouched.

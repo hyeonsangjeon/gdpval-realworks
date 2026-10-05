@@ -1,151 +1,97 @@
 # Latest task result
 
-## Project5 observation deadline and frozen-judge source binding — 2026-10-05
+## PR750 deadline persistence and finalization correction — 2026-10-05
 
-The prospective time-budget study now has an optional observation control in the
-existing V2 and native Codex runners, plus independently anchored runtime and
-frozen-judge source validation. No dispatcher or capture path selects this control
-yet. Every existing launch refusal and execution-enable flag remains closed.
-Delivery is **HOLD** for final-source review and applicable CI acceptance.
+The diagnosed persistence and finalization gaps are repaired. One new offline
+selector at the pinned correction reported **21 passed, 126 deselected in 6.51s**,
+exit 0. No previously successful target was rerun. Delivery remains **HOLD** for
+full-HEAD source review and applicable CI acceptance; the leader's first runtime
+review found these gaps and did not complete the whole-PR review.
 
-Two separately pinned invocations provide the offline evidence. The first
-reported **5 failed, 46 passed, 75 deselected in 8.35s**, exit 1. After a narrow
-repair, exactly its five failed node IDs passed in **7.55s**, exit 0. The original
-failure is preserved; this is not a single 51-pass run or a full fixed-HEAD proof.
-No passed node was rerun.
+### Correction scope
 
-### Scope and implementation
+`TimeBudgetObservation.terminal()` now arms supervision against the original
+absolute cleanup deadline before terminal receipt I/O, including calls from the
+one-shot generation alarm and calls outside a generation supervisor. Timeout
+remains latched before interruption. Receipt writes use unbuffered I/O so alarm
+unwinding cannot initiate another buffered flush. Intermediate deadline checks
+catch an I/O operation that returns after expiry even without a delivered alarm.
 
-The separate `gpt54_sandboxv2_codex_time_budget_v1` registration keeps GPT-5.4,
-direct-v1/xhigh, five tasks, SandboxV2 versus native Codex, two ABBA repeats,
-at most 20 observations and inference concurrency 1. There is no external
-replay, resume or retry. V2's 9-turn/8192-output settings remain V2-specific.
-Native request/retry/token counts are observation-only when available, otherwise
-unavailable; no shared native request/token or money hard cap is claimed.
-The original comparison and closed 30-cell/8-cell studies remain separate.
+`finish_cleanup()` supervises directory and lease checks, cleanup receipt
+persistence, lease unlink/fsync and directory close. It samples time again after
+supervisor teardown and confirms completion only when all finalization I/O has
+returned before the same deadline. `cleanup_finished_monotonic` records that
+confirmation; completed cleanup elapsed time is not extended by later readouts.
+An already expired observation performs no new receipt write. Persistence errors
+remain refusals, and timed-out finalization remains a non-success.
 
-`TimeBudgetObservation` in `core/time_budget_observation_deadline.py` persists
-exclusive admission before preparation. Its identity binds study, run, condition,
-repeat, task, reviewed source SHA/tree and registration/input digests. The durable
-key excludes those digests so changing them cannot mint another attempt at the
-same observation. Existing admissions are not adopted, even by a new runner.
+Durable `.cleanup.json` snapshots explicitly retain `finalization_pending=true`,
+`cleanup_complete=false` and `host_reusable=false`. A snapshot cannot attest to
+completion of its own fsync. Same-host reuse therefore needs a one-use in-memory
+confirmation issued after finalization, bound to the process and held directory
+identity. If unlink succeeds but fsync or close expires, retained admission history
+still blocks another observation even though the lease pathname may be absent.
+A restarted or forked host cannot adopt that uncertainty or infer release from a
+receipt. Ordinary before-deadline completion still permits the same host process
+to admit a different registered observation; it never permits an observation retry.
 
-V2's `build_runner_factory`, `conversation_seam`, `run_model_conversation` and
-`AgenticV2ScriptedRunner` share one control. The monotonic clock starts immediately
-before the first `voice.next_turn`, after reservation. Codex starts supervision
-before `thread.turn`, covering turn creation, `_await_turn` and native recovery.
-Preparation does not start or spend the generation clock. Turns, waits and tool
-work consume the same nonrenewable 1200 seconds.
+Only the deadline helper, its existing test module and its one prospective source
+pin changed before proof. The helper's SHA256 is
+`7ba7bffc898868a33a25b701af2335db8310cecbae3eac9e1e749ca84d33e9a3`;
+the prospective manifest's SHA256 is
+`f323937c6e7815f89a53d1d50da473d9fa0c7f8b4c58c60b2e68b6a816a1f94b`.
+The existing expired-cleanup contract now checks the returned negative record and
+absence of a post-deadline receipt instead of requiring an out-of-budget write.
+That earlier target was not rerun in this selector.
 
-The timeout is latched before interruption; a late answer cannot replace it.
-Interruption, process waits, close, orphan checks, collection and removal spend
-one cleanup remainder: first start plus 1220 seconds after timeout, or at most
-20 seconds after an earlier terminal result. Substage limits only shorten that
-remainder. No environment setting enlarges it. Unconfirmed cleanup is a
-non-success and retains the host lease. Records distinguish the first start,
-elapsed time, terminal reason, interruption attempt/acknowledgement and cleanup
-completion/expiry without credentials or original bodies.
+The 1200-second generation budget and 20-second cleanup allowance are unchanged.
+Timeout cleanup still ends at first start plus 1220 seconds; earlier terminal
+outcomes retain at most 20 seconds. Finalization time is included, not excluded or
+given a renewed grace period. The fixed 20-observation GPT-5.4/direct-v1/xhigh
+configuration comparison still has five tasks, ABBA, two repeats, concurrency 1
+and no external replay/resume/retry. Native counters remain observation-only when
+available, with no native request/token or money hard-cap claim. The existing
+runner callbacks, omitted-control paths and launch refusals were not changed.
 
-Supervision requires an owned Linux/POSIX main-thread host, `/proc` visibility and
-no pre-existing real-time alarm. It interrupts blocking local generation I/O and
-bounds owned-process teardown; it does not leave a daemon generation watchdog or
-use an unbounded final join. Omitted-control behavior and the closed 10800-second
-`CodexTaskDeadlineStore` contract remain unchanged. Local interruption and cleanup
-evidence do not prove backend cancellation, live enforcement or a billing bound.
+### Source and review identities
 
-### Independent runtime and judge identities
-
-The prospective `compile_registration` API takes `runtime_root`,
-`expected_reviewed_source_sha`, `frozen_grader_root` and
-`expected_grader_source_sha`. All four must be supplied together. There is no
-HEAD, marker or environment fallback. Both roots use registered detached linked
-worktrees, independently checked commit/tree identities, regular tracked blobs,
-held directories and final byte/HEAD rereads.
-
-Runtime R supplies current runtime facts and 41 prospective source bindings.
-Frozen judge F is commit `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. F supplies the unchanged 37-pin
-local-source profile and genuine whole grader TEMPLATE closure
-`37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
-The unchanged `compute_grader_source_hash` receives `config_path=F/GRADER` and
-`batch_root=F/batch-runner`. R's changed core does not have F's template identity.
-
-Compiled evidence names both roots and separates the template from a materialized
-grader. Materialized config path/fingerprint fields remain null. A synthetic test
-proves that actual materialized config bytes/path have a distinct fingerprint.
-Future grading must execute from F-derived source, not hash F while executing R.
-No production ROOT mutation, fabricated legacy grading plan, reduced hash scope
-or historical fingerprint replacement is introduced. The omitted compiler and
-historical runtime/workflow paths retain their refusals.
-
-Only the six directly changed prospective runtime/compiler bindings advance.
-The final time-budget manifest SHA256 is
-`5520212d2c704ee0e4c9397619298f793586e03e099c8aea287e3467bb8c9e36`.
-The original comparison manifest remains
-`3d88bcb0c4eeeb9dad2c9ee7cb88db1b7ff49145f9264d9d284178f167a76ed1`;
-the local-source profile remains
-`81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe`.
-The legacy compiler, core deadline store, Step2, grader, capture guards and workflow
-files are unchanged. Paid RESULT/PARENT/READER bindings, frozen registrations,
-input identities and historical evidence are untouched.
-
-### Reviewed basis and source-role audit
-
-This fresh worktree started at accepted main
+The leader's finding is against PR750
+`969aabfda810dfb0477c8ca55cbe2918f005666a`, tree
+`3636cc62a40ed10128393e29e22e3fd02fdec190`. This correction uses the same
+branch and worktree. Accepted main remains
 `f609aff0deefd3c5afd7a6322ba6473c8b3e6c98`, tree
-`3b318f9d70cbf2a080de28ff76fdfd5e278e1264`. The leader supplied PR749's
-reviewed `d901b119443a843784d81717943622f577fb43b4`, owner
-[review 5411970743][prior-review], all 11 applicable checks successful and
-PR-only deploy skipped. These are prior-source facts, not approval or CI for
-this new change. Previous worktrees and the consumed 14d artifact were untouched.
+`3b318f9d70cbf2a080de28ff76fdfd5e278e1264`.
 
-Before coupled edits, the established same-session architecture and grading/source
-charters and the consolidated grading specification were applied. The accepted
-clock-placement and two-root decisions were implemented without another capability
-or study-design investigation. The review required the whole F closure, distinct
-materialized identity, genuine current-source refusals and unchanged launch gates.
-It was not an independent external review or approval of this new runtime source.
+The independent runtime/frozen-judge binding is unchanged. Frozen F remains
+`882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
+`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, with genuine whole TEMPLATE
+closure `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
+The historical comparison profiles, compiler, grader, paid RESULT/PARENT/READER
+bindings, input identities, frozen receipts and closed 30-cell/8-cell studies are unchanged.
+The accepted architecture/source-provenance decisions were not reopened. This
+repair advances only the genuinely changed prospective helper pin, not F or a
+historical fingerprint.
 
-The current-versus-frozen consumer audit kept historical hashes intact. Shared
-legacy fixtures now explicitly demonstrate current R's refusal before compiling
-their genuine frozen F bytes. Retained synthetic source trees copy F's complete
-core closure. CURRENT observer/report expectations remain separately named; no
-production CURRENT dependency repin was needed. The known default-comparison
-refusal lists include the newly changed V2 conversation runner in manifest order.
-Existing sentinels and source validators remain active.
+### New targeted proof
 
-### Exact offline evidence
+The clean tested correction is `d6bff25dc037c96bccf418a0fe06b00402592bc7`,
+tree `fd2c78441106f4f1aba1cf7a0067dc214fb2d447`. The invocation ran from
+2026-10-05T10:58:22Z to 2026-10-05T10:58:29Z using Python 3.10.12, with a
+300-second outer limit and 5-second termination grace. Those limits apply only to
+this software proof, not the study or CI.
 
-Both invocations used Python 3.10.12, an empty token-free/offline environment,
-synthetic inputs, fake monotonic clocks, controlled interruptible transports and
-real temporary Git objects. Each had a 300-second outer limit and 5-second
-termination grace. These are software-test limits, not experiment budgets or CI
-timeout changes. No real input, prepared artifact, receipt, provider, model or
-grader was accessed or executed.
+The 21 selected cases comprise four pending terminal-persistence cases, fourteen
+finalization I/O-expiry cases and three ordinary-completion/reuse cases. They use
+fake monotonic clocks, controlled I/O and synthetic fixtures. Expiry is exercised
+both through the alarm and through late-return checks. Failure assertions cover
+returned and durable non-reusable state, retained admission/lease uncertainty and
+refusal of a new observation. Successful finalization, lost process confirmation
+and inherited fork state are distinguished. Provider/auth/private-input guards
+remain active. There was no provider run, live filesystem stall or long sleep.
 
-| Invocation | Tested HEAD | Tested tree | Actual result |
-| --- | --- | --- | --- |
-| Combined selector | `1d5a9c2472e17fde1c0ad2dc1a0f3300772b5c95` | `20c0d2d4ddd60d2f67c88dee7105d22bd522345f` | 5 failed, 46 passed, 75 deselected in 8.35s; exit 1 |
-| Failed-target continuation | `73a86933934ac0a9cc260a963f042414b61bc151` | `cae6626dfba04eb6d2caad83fe725e72dcb1243e` | 5 passed in 7.55s; exit 0 |
-
-The first failure exposed three V2 timeout results mapped to `runner_internal_error`
-instead of the existing control-stage `task_wall_time_exhausted`, a source fixture
-that was not a registered linked worktree, and a shared-fixture import after the
-process sentinel had replaced `Popen`. The correction changes only the timeout
-result branch, its prospective pin and those directly coupled tests.
-
-The first source-negative cases passed at an early layout refusal; they are not
-claimed as deeper blob-check evidence. The repaired positive binding target first
-establishes valid anchored roots, then completes the previously unreached checks
-for swapped/coherently substituted roots/commits/digests, modified or untracked
-source, symlink/hardlink substitutions and final byte/parent/HEAD races. It keeps
-template and materialized fingerprints distinct and checks the unchanged launch
-refusal. Neither the anchor nor a validation verdict is mocked away.
-
-Public command displays below redact private executable, worktree and evidence
-locators. The SHA256 values identify the exact private command scripts, not these
-redacted displays. From the source worktree's `batch-runner` directory, each script
-uses this environment and bound:
+This public command display redacts private executable, worktree and evidence
+locators. Its text is not the exact private script identified by the hash below.
+From the worktree's `batch-runner` directory:
 
 ```bash
 env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TMPDIR=<private-evidence-directory> \
@@ -155,60 +101,50 @@ env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TMPDIR=<private-evidence-directory> \
   DO_NOT_TRACK=1 GIT_NO_LAZY_FETCH=1 \
   timeout --kill-after=5s 300s <existing-py310> -m pytest \
   -vv -ra --tb=short --color=no -p no:cacheprovider -m 'not integration' \
-  --basetemp <new-private-directory> <selection-below>
+  --basetemp <new-private-directory> tests/test_gpt54_time_budget_comparison.py \
+  -k time_budget_observation_deadline_finalization
 ```
 
-The first selection was:
-
-```text
-tests/test_gpt54_time_budget_comparison.py
--k 'time_budget_observation_deadline or time_budget_frozen_judge_binding or time_budget_legacy_role_compatibility'
-```
-
-The continuation selected exactly these five node IDs, without `-x`:
-
-```text
-tests/test_gpt54_time_budget_comparison.py::test_time_budget_observation_deadline_v2_actual_factory[late_success]
-tests/test_gpt54_time_budget_comparison.py::test_time_budget_observation_deadline_v2_actual_factory[tool_wait]
-tests/test_gpt54_time_budget_comparison.py::test_time_budget_observation_deadline_v2_actual_factory[blocking_responses]
-tests/test_gpt54_time_budget_comparison.py::test_time_budget_frozen_judge_binding_genuine_dual_roots
-tests/test_gpt54_time_budget_comparison.py::test_time_budget_legacy_role_compatibility_shared_retained_source
-```
-
-The explicit log node IDs show that the continuation equals the first failed set
-and is disjoint from its 46 passed nodes. Together the records account for all
-51 originally selected IDs, but they do not constitute a fabricated combined
-pytest summary or evidence that every node ran at the corrected HEAD.
-
-| Evidence | First invocation SHA256 | Continuation SHA256 |
+| New evidence | SHA256 | Bytes |
 | --- | --- | --- |
-| Exact private command | `e13e9b5563233fee086e74d6d749dc5216b111791847142e1d76edd31a810a7d` | `66c00e910a970fb33ee4803fb4a5c3c679f37fb55048d248b1de4ec0ffe1f5e1` |
-| Combined stdout/stderr log | `7fb1fd2e018df4356a9a79e1e0b0e5daa9718665d28588f1914c21bd10601f9f` | `d97043efafc16676c0cef92dbf043843d81ac7ecf23526eabef2728739c151a2` |
-| Private receipt | `a68a2c3f4d5c68b3d150ab76abc15884a3003837d34457b14339394f5c114c29` | `6554f195f1d30738e5b6db423f5fd48de9b43c8b06100f2844ab312da57379cd` |
+| Exact private command | `99a7bfab57f45553aeb111ea85cb2441cefb24d085c7fe510f5a49e8adc845f9` | 807 |
+| Combined stdout/stderr log | `1ad7ac04a51e9958ae13986704702f5808f0b8697304715212e3132d8db20a5a` | 3583 |
+| Private receipt with all 21 passed node IDs | `06734fc949875629881844709de26e575416277c4e3cb5b4a2765ac0f435a6f4` | 4721 |
 
-Command/log/receipt sizes are 883/13475/1497 bytes for the first invocation and
-1312/1056/1945 bytes for the continuation. All original evidence files are retained.
-Only CHANGELOG and this single current LATEST record change after the continuation.
-Usage documentation was included before proof.
+### Prior evidence stays separate
 
-### Remaining work
+The [immutable prior record][prior-record] retains the original command/log/receipt
+identities, exact passed/failed-node inventory, reviewed basis and prior scope.
+Those local evidence files remain untouched.
 
-The next execution integration unit is a reviewed dispatcher/capture path that
-selects this persisted control, supplies independently reviewed R/F roots and
-binds verified inputs. Credentialed-input/CI authority, served-model identity,
-F-derived grading materialization and a separate source-bound live direction
-remain unresolved. Existing launch gates must remain closed until their own
-requirements are met. No delegated spending decision is being reopened.
+| Earlier proof | Tested HEAD | Actual result |
+| --- | --- | --- |
+| Original combined selector | `1d5a9c2472e17fde1c0ad2dc1a0f3300772b5c95` | 5 failed, 46 passed, 75 deselected in 8.35s; exit 1 |
+| Five-failed-target continuation | `73a86933934ac0a9cc260a963f042414b61bc151` | 5 passed in 7.55s; exit 0 |
 
-Final-HEAD review, applicable CI and delivery acceptance are pending. No CI job
-was queried, polled, dispatched or retried. No successful prior registration/HF
-selector or broad suite was repeated. The [immutable PR749 record][prior-record]
-retains its original 75-case proof, separate CI corrections and historical detail.
+These are not an aggregate 51-pass result or a whole-HEAD proof. The new selector
+does not replace either earlier observation or turn the original failure into a
+pass. Only `CHANGELOG.md` and this single current task record follow the new proof.
 
-The catalog was inspected once. `experiment-design` preserved the fixed study
-controls during prospective binding changes; `im-not-ai-en` was applied to the
-bounded English documentation and records. Unrelated UI/animation, experiment
-reporting and renewed native-SDK capability work were not used.
+### Remaining limits and gates
 
-[prior-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/749#pullrequestreview-5411970743
-[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/d901b119443a843784d81717943622f577fb43b4/tasks/LATEST_TASK_RESULT/README.md
+The software supervision assumes an owned Linux/POSIX main-thread host and
+signal-interruptible local I/O. SIGALRM does not establish a hard real-time bound
+on uninterruptible kernel stalls or a descheduled host. These fake-I/O cases do
+not measure that behavior, live enforcement, backend cancellation or billing.
+Unconfirmed finalization provides no reusable-host authority.
+
+Full corrected-HEAD source review, applicable CI and delivery acceptance remain
+pending. Dispatcher/capture selection, verified credentialed inputs, F-derived
+grading materialization and a separately reviewed source-bound live direction
+remain unresolved. Every launch gate stays closed. No CI job was queried,
+polled, dispatched or rerun; no Node/HF test, broad suite or earlier successful
+selector was repeated. No private original, consumed artifact, real preparation,
+provider/model/grader/HF/Azure call, Project edit or merge occurred.
+
+The catalog was inspected once. The existing `experiment-design` guardrails kept
+the study fixed during the prospective pin update; `im-not-ai-en` preserved the
+facts, hashes and evidence limits in these English records. No unrelated skill or
+new study-design investigation was used.
+
+[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/969aabfda810dfb0477c8ca55cbe2918f005666a/tasks/LATEST_TASK_RESULT/README.md
