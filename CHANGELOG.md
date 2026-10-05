@@ -11,6 +11,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct the prospective time-budget registration's CI partition and public
+  artifact test transport. Add the existing registration module, sorted, to both
+  the generic pytest ignore list and comparison-job selection, with the strict
+  inventory count updated from 11 to 12. The pre-edit same-session
+  extreme-reasoner charter review required unchanged marker/source-SHA/security
+  gates, permissions, concurrency and workflow timeouts. No deploy workflow or
+  experiment policy is changed. Its private memo SHA256 is
+  `bbdafb85dfc7b9ad84e30445ccdd4133ec10ad6634940c6016ec99f9616c56e3`.
+
+  Leader-read backend run `37269485572`, job `111633237507`, reported
+  **1 failed, 13464 passed, 64 skipped, 46 deselected in 1663.84s** at the stale
+  count. Frontend run `37269485559`, validate jobs `111633237134` and
+  `111635977167`, attempts 1 and 2, failed the pinned artifact test with
+  `TimeoutError` at **10060ms** and **10064ms**. The owner retry was already
+  consumed; these failures do not establish a latency cause or model error.
+  The test retains all six revision-pinned public URLs, lengths/hashes, streaming
+  caps and structure assertions. Each request now has one 30-second allowance
+  inside a 45-second test, with safe artifact/stage/status/elapsed context and
+  bounded abort handling. No retry, credential, skip or cached-success fallback.
+
+  One combined target at HEAD `fd910be79992d08e1006622e227e542f8ad0cb78`, tree
+  `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, failed: **1 failed in 0.24s,
+  exit 1**. The partition node stopped at its CURRENT whole-workflow digest
+  assertion, which the pre-edit review missed. No partition collection, Node
+  fake case or live artifact request ran. The exact private command SHA256 is
+  `a1e5a323abeafc9561fd542d50b6e542d7d840d859db0492d65169aa3f45d364`;
+  combined-log SHA256 is
+  `e8e6488b6a603356644ff1845b210de33c948de47d5ce4e7d21e4f28b27de308`;
+  receipt SHA256 is
+  `52f82edf52f76cf68a59fa4cad1aab70723ec46197f5b8fb0b1c439f5ef07ee3`.
+
+  A separate, unvalidated one-line correction at
+  `0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18`, tree
+  `e2c51219d5e027ea6bf2c1911db4874690d08d22`, binds only the CURRENT test
+  `WORKFLOW_SHA256` to the edited workflow. No historical pin or assertion was
+  weakened. No second validation ran. The post-proof delta is this test literal
+  plus CHANGELOG/LATEST records, not records alone. The leader's six-file source
+  review `5410467314` at `c5217b19f79a44787ae08fafecc28dae3ab145b1` and the
+  original 75-case proof below remain distinct and unchanged. Delivery stays
+  **HOLD** for completed targeted validation, corrected-HEAD review, applicable
+  CI and acceptance. The [current task record](tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation)
+  preserves the redacted command boundary and remaining deadline/source-closure
+  work. No deadline integration or execution authority is added.
+
 ### Added
 
 - Register the separate prospective `gpt54_sandboxv2_codex_time_budget_v1`
@@ -30,8 +76,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   shared native or money hard-cap claim. V2's 9-turn/8192-output settings remain
   V2-specific. One grading attempt, retained failed/missing outcomes and a fixed
   descriptive paired analysis prohibit score-dependent regrading or repeats.
-  Core, grader, workflows, capture/launch guards and historical paid evidence are
-  unchanged; the 30-cell/8-cell studies remain closed.
+  Core, grader, capture/launch guards and historical paid evidence are unchanged;
+  the 30-cell/8-cell studies remain closed. The registration itself changed no
+  workflow; its later backend-CI correction is recorded under Fixed above.
 
   One offline `time_budget_registration` selector passed **75 cases in 7.54s**,
   exit 0, at implementation HEAD `10c475a1f50355643a2a9ea937fc235d8ad9b19f`,
@@ -45,8 +92,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-prospective-time-budget-comparison-registration--2026-10-05)
   preserves the exact command with private locators redacted, accepted
   `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2` basis and evidence boundary.
-  Only README/CHANGELOG/LATEST documentation follows the proof. Fixed-HEAD review,
-  applicable CI and acceptance remain pending. The single next integration unit,
+  The original post-proof delta contained only README/CHANGELOG/LATEST
+  documentation. The separate CI correction and failed local target are recorded
+  above; final corrected-HEAD review, applicable CI and acceptance remain pending.
+  The single next integration unit,
   `time_budget_observation_deadline`, would wire the existing host deadline;
   no deadline/counter enforcement or execution authority is claimed here.
 

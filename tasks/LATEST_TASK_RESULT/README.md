@@ -8,6 +8,12 @@ graded work within the same external generation-time budget. It compares
 configuration bundles, not isolated harness effects or equal native compute.
 There is no new execution route, preparation or live observation.
 
+Delivery remains **HOLD** after the CI correction. The registration implementation
+and its original 75-case proof are unchanged. The one new combined validation
+command failed at a CURRENT workflow-digest assertion before partition checks or
+Node tests ran. That digest was then corrected without a rerun; the final
+correction has no passing targeted proof yet.
+
 The existing historical comparison and local-source profile keep their intent,
 controls, run IDs and launch refusals. The closed 30-cell external-budget pilot
 and 8-cell retention diagnostic are neither reopened nor pooled with this study.
@@ -90,10 +96,12 @@ model override or renewed budget-approval request was used. The accepted SDK
 | Unchanged whole grader TEMPLATE closure | `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce` |
 
 The template closure is not a materialized-grader identity. No old source pin or
-CURRENT observer binding changed. Historical compiler/core/Step2/grader/workflow/capture
+CURRENT observer binding changed. Historical compiler/core/Step2/grader/capture
 files, paid `RESULT/PARENT/READER`, closed registrations, fixed evidence, original
-input hashes and canonical Step0 remain untouched. This study has separate IDs
-and does not retroactively relabel any consumed source or prepared artifact.
+input hashes and canonical Step0 remain untouched. The CI correction below changes
+only the backend test workflow and its CURRENT test fingerprint, not either
+historical execution workflow or a study source binding. This study has separate
+IDs and does not retroactively relabel any consumed source or prepared artifact.
 
 ### Pinned offline proof
 
@@ -127,16 +135,118 @@ profile's unchanged caps and false-launch output. This is software-contract
 evidence, not measured deadline enforcement, runtime equivalence, served identity,
 wire consumption, model quality, grades or cost.
 
+### CI correction and incomplete local validation
+
+The leader reviewed all six registration/source/record files at
+`c5217b19f79a44787ae08fafecc28dae3ab145b1`, tree
+`7e8e5d0d4cd987c16fe84fba924f3aa2e94cce3f`, in
+[review5410467314][registration-review]. The original 75-case proof and its
+documentation-only post-proof delta were accepted at their software-evidence
+scope. That review does not cover the CI correction below.
+
+The leader supplied these failed CI outcomes; no CI logs were fetched or jobs
+queried, dispatched or retried for this correction:
+
+- Backend run `37269485572`, job `111633237507`: **1 failed, 13464 passed,
+  64 skipped, 46 deselected in 1663.84s**. The only failure was the partition
+  node at line 556, where discovery found 12 comparison modules but the guard
+  expected 11. The new registration module was absent from both explicit
+  workflow command lists.
+- Frontend run `37269485559`, validate jobs `111633237134` and `111635977167`,
+  attempts 1 and 2: the pinned HF artifact test failed with `TimeoutError` at
+  **10060ms** and **10064ms**. The leader's one retry was already consumed.
+  These are test-I/O failures, not model errors or a demonstrated latency cause.
+
+Before editing the workflow, the same-session extreme-reasoner charter review
+approved moving the existing registration module into the comparison job on
+condition that both command lists remain sorted and exactly-once coverage,
+marker exclusions, source-SHA checks, permissions, checkout controls, concurrency
+and all job timeouts remain intact. It was not an independent review. The private
+pre-edit memo is 3126 bytes, SHA256
+`bbdafb85dfc7b9ad84e30445ccdd4133ec10ad6634940c6016ec99f9616c56e3`.
+The review missed the imported CURRENT whole-workflow digest expectation; the
+local failure below exposed that omission.
+
+The correction adds `tests/test_gpt54_time_budget_comparison.py` to the generic
+ignore list and comparison job selection, and changes the strict module count
+from 11 to 12. No job, marker, workflow timeout, security gate or deployment
+workflow is changed. The Node test keeps the same six public URLs at revision
+`47aed3c0b13eaa90eb02803bec9d5c75e559f416`, exact lengths/hashes, streaming caps
+and all selected manifest/grade/structure assertions. Each request has one
+30-second allowance inside a 45-second test bound. Failures report artifact key,
+stage, HTTP status when available, elapsed time and a safe error class, without
+response bodies, raw causes or signed redirects. Requests and readers are
+aborted/released on exit; sibling requests are aborted on rejection. There is no
+retry, skip, credential, alternate source, cache fallback or replacement of the
+live hash check. Tiny local fake cases cover the changed handling but have not
+run yet. No dependency was installed; Node uses the existing owner workspace
+dependencies through an ignored worktree link.
+
+The correction was pinned at HEAD `fd910be79992d08e1006622e227e542f8ad0cb78`,
+tree `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, clean before and after the
+single combined command. Its result was **1 failed in 0.24s; exit 1**, with
+process timestamps 2026-10-05T06:42:49Z–2026-10-05T06:42:50Z. Python 3.10.12
+and pytest 9.1.1 stopped at line 391 of
+`test_backend_jobs_partition_the_comparison_contracts`: the edited workflow's
+SHA256 was `3f7d6bf0112a4d669b4144a60a248d55ecb654d4b883c6e62e7e145d8bdf2f9b`,
+but the imported `WORKFLOW_SHA256` still expected
+`b617f79a09427f9b877e9fef214bdf2fe96ba817fc8debf5369b4f172640f9da`.
+The partition assertions and their nested collect-only checks were not reached.
+The shell stopped before Node, so **zero live requests and zero local fake cases
+ran**. This is a failed, incomplete validation, not a combined pass or a new
+observation about the public artifact service.
+
+The command below is a redacted display, not a ready-to-run command. Only the
+worktree and private evidence locators are replaced by angle-bracket placeholders.
+The command digest describes the exact private 1033-byte script, including its
+final newline, not this display. Its environment was token-free; Python was
+offline. Node would have used only the six authorized public reads, without auth.
+
+```bash
+#!/bin/bash
+set -euo pipefail
+cd <private-worktree>
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TMPDIR=<private-evidence-root> PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_NO_LAZY_FETCH=1 timeout --kill-after=5s 300s /bin/bash <<'TARGETS'
+set -euo pipefail
+cd batch-runner
+env PYTHONPATH=. HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -vv -ra -x --tb=short --color=no -p no:cacheprovider -m "not integration" --basetemp <private-evidence-root>/pytest tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+cd ..
+node --test --test-name-pattern='^(pinned HF artifact transport |pinned HF artifacts match recorded hashes and selected manifest structure$)' scripts/__tests__/aggregate-success-note.test.mjs
+TARGETS
+```
+
+| CI-correction evidence | Bytes | SHA256 |
+| --- | ---: | --- |
+| Exact combined command script | 1033 | `a1e5a323abeafc9561fd542d50b6e542d7d840d859db0492d65169aa3f45d364` |
+| Combined stdout/stderr | 1802 | `e8e6488b6a603356644ff1845b210de33c948de47d5ce4e7d21e4f28b27de308` |
+| Metadata-only receipt | 2393 | `52f82edf52f76cf68a59fa4cad1aab70723ec46197f5b8fb0b1c439f5ef07ee3` |
+
+The first command/log/receipt remain unchanged. No second invocation or remote
+attempt followed. A separate ordinary correction commit,
+`0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18`, tree
+`e2c51219d5e027ea6bf2c1911db4874690d08d22`, updates only the CURRENT
+`WORKFLOW_SHA256` in `tests/test_ghcp_vm_gate_contract.py` to those edited workflow
+bytes. Its `HISTORICAL_SHA256` and `FOUNDRY_SHA256` and all substantive assertions
+remain unchanged. This post-proof one-line correction is **not revalidated**.
+Only CHANGELOG and this record follow that correction commit. Relative to the
+tested HEAD, the post-proof delta includes that one test literal and these two
+records; it is not a records-only delta.
+
 ### Remaining work
 
-Only `batch-runner/README.md`, `CHANGELOG.md` and this single current task record
-change after the proof. Final fixed-HEAD review, applicable CI and leader
-acceptance remain pending. The single next execution integration unit is
-`time_budget_observation_deadline`: bind the existing host deadline to these
-observation identities, including all waits/native recovery and separately
-recorded cleanup. That unit requires subsequent source review and direction;
-the owner's design/budget choice is already delegated, not an open approval
-question. This registration authorizes no execution.
+Final corrected-HEAD review, completed targeted validation, applicable CI and
+leader acceptance remain pending. Delivery is **HOLD**. The local artifact
+check was not reached, so its external status is unknown here; the two supplied
+CI timeouts remain the last live evidence. No check was disabled to claim success.
+
+The later execution integration unit remains `time_budget_observation_deadline`.
+Its accepted source-analysis memo identifies first generation at V2's first
+`voice.next_turn(request)` and Codex's `thread.turn(turn_input)`, one observation
+clock across turns/waits/native recovery, and one shared cleanup deadline.
+It requires core changes and a prospective whole-grader/source binding; it is
+not implemented by changing CI timeouts or refreshing historical pins. That
+investigation was not repeated. The owner's design/budget choice remains
+delegated, not an open approval question. This registration authorizes no execution.
 
 Dispatch/capture integration and credentialed-CI input authority remain unresolved,
 and every launch refusal remains in force. The earlier credentialed workflow
@@ -144,15 +254,19 @@ intake proposal remains REJECTED. The old comparison's native-cap requirement is
 unchanged; this new study makes no native hard-cap claim. No private original input,
 retained input receipt, original archive or consumed prepared artifact was read,
 imported, prepared or relabeled.
-No model/grader, HF/Azure, CI dispatch/query or Project operation occurred.
+No model/grader, HF/Azure, CI dispatch/query/retry, Project or merge operation
+occurred during this correction. The authorized local HF check was never reached.
 
-experiment-design kept the new time-policy question distinct from historical
-studies and separated intent from enforcement. im-not-ai-en protected exact
-scope, evidence, uncertainty and refusal conditions in these bounded English
-records. UI/animation and experiment-result-reporting skills were not applied;
-there are no experiment results to report. The [immutable prior record][prior-record]
+For the original registration, experiment-design kept the new time-policy
+question distinct from historical studies and separated intent from enforcement.
+For this CI correction, the full skill catalog was inspected once; im-not-ai-en
+protected exact scope, failed/incomplete evidence and refusal conditions in the
+bounded English records. Experiment-design was not retriggered because no
+experiment/config policy changed. UI/animation and experiment-result reporting
+were not applied; there are no experiment results to report. The [immutable prior record][prior-record]
 retains earlier source/verification evidence. This page replaces stale status
 instead of appending prior full task histories.
 
 [prior-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/748#pullrequestreview-5410023630
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2/tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05
+[registration-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/749#pullrequestreview-5410467314
