@@ -8,13 +8,14 @@ graded work within the same external generation-time budget. It compares
 configuration bundles, not isolated harness effects or equal native compute.
 There is no new execution route, preparation or live observation.
 
-Delivery remains **HOLD** for remaining CI and final-record acceptance. The
-registration implementation and its original 75-case proof are unchanged. After
-the CURRENT workflow-digest correction, the unfinished Python partition node
-passed once at the leader-reviewed correction HEAD. Separately, the leader
-supplied successful CI evidence for the transport fakes and live artifact check.
-The first failed local combined attempt remains a failure; no local Node or HF
-check was repeated.
+Delivery remains **HOLD** for corrected-HEAD review and applicable CI. The five
+newly demonstrated CI test-contract failures are repaired in tests only: the
+canonical reconstruction accounts for exactly two known inventory additions,
+and CURRENT workflow expectations are separate from frozen-fixture expectations.
+All five authorized regression nodes passed once at the pinned correction commit.
+The registration implementation and original 75-case proof are unchanged. Earlier
+local failures, the passing partition continuation and supplied Node CI evidence
+remain separate observations; no local Node or HF check was repeated.
 
 The existing historical comparison and local-source profile keep their intent,
 controls, run IDs and launch refusals. The closed 30-cell external-budget pilot
@@ -100,10 +101,12 @@ model override or renewed budget-approval request was used. The accepted SDK
 The template closure is not a materialized-grader identity. No old source pin or
 CURRENT observer binding changed. Historical compiler/core/Step2/grader/capture
 files, paid `RESULT/PARENT/READER`, closed registrations, fixed evidence, original
-input hashes and canonical Step0 remain untouched. The CI correction below changes
-only the backend test workflow and its CURRENT test fingerprint, not either
-historical execution workflow or a study source binding. This study has separate
-IDs and does not retroactively relabel any consumed source or prepared artifact.
+input hashes and canonical Step0 remain untouched. The earlier CI correction
+changed the backend test workflow and its CURRENT test fingerprint, not either
+historical execution workflow or a study source binding. The latest repair changes
+only tests and completion records; those workflow bytes remain unchanged. This
+study has separate IDs and does not retroactively relabel any consumed source or
+prepared artifact.
 
 ### Pinned offline proof
 
@@ -137,168 +140,159 @@ profile's unchanged caps and false-launch output. This is software-contract
 evidence, not measured deadline enforcement, runtime equivalence, served identity,
 wire consumption, model quality, grades or cost.
 
-### CI correction and prior local failure
+### Earlier CI corrections and distinct proof
 
-The leader reviewed all six registration/source/record files at
-`c5217b19f79a44787ae08fafecc28dae3ab145b1`, tree
-`7e8e5d0d4cd987c16fe84fba924f3aa2e94cce3f`, in
-[review5410467314][registration-review]. The original 75-case proof and its
-documentation-only post-proof delta were accepted at their software-evidence
-scope. That review did not cover the CI correction below. The leader subsequently
-reviewed all six correction files at
-`369817bf919eb04632ad0af78160d3a33b5d5692`, tree
-`0bd9f2bbd1c837994d655ad328857082e4988a38`, and accepted the source correction
-with no blocking source finding. Delivery remains subject to the remaining gates.
-
-The leader supplied these failed CI outcomes; no CI logs were fetched or jobs
-queried, dispatched or retried for this correction:
-
-- Backend run `37269485572`, job `111633237507`: **1 failed, 13464 passed,
-  64 skipped, 46 deselected in 1663.84s**. The only failure was the partition
-  node at line 556, where discovery found 12 comparison modules but the guard
-  expected 11. The new registration module was absent from both explicit
-  workflow command lists.
-- Frontend run `37269485559`, validate jobs `111633237134` and `111635977167`,
-  attempts 1 and 2: the pinned HF artifact test failed with `TimeoutError` at
-  **10060ms** and **10064ms**. The leader's one retry was already consumed.
-  These are test-I/O failures, not model errors or a demonstrated latency cause.
-
-Before editing the workflow, the same-session extreme-reasoner charter review
-approved moving the existing registration module into the comparison job on
-condition that both command lists remain sorted and exactly-once coverage,
-marker exclusions, source-SHA checks, permissions, checkout controls, concurrency
-and all job timeouts remain intact. It was not an independent review. The private
-pre-edit memo is 3126 bytes, SHA256
+The leader's six-file [review5410467314][registration-review] covered registration
+HEAD `c5217b19f79a44787ae08fafecc28dae3ab145b1`, tree
+`7e8e5d0d4cd987c16fe84fba924f3aa2e94cce3f`, and its records-only post-proof
+delta. The [immutable correction record][ci-correction-record] retains the
+subsequent backend inventory and bounded public-artifact transport repair. That
+repair kept sorted exactly-once selection, all workflow security/marker/source-SHA
+gates and timeouts, and the six pinned live-artifact hashes and structure checks.
+Its pre-edit same-session workflow review missed the imported CURRENT digest;
+the private 3126-byte memo has SHA256
 `bbdafb85dfc7b9ad84e30445ccdd4133ec10ad6634940c6016ec99f9616c56e3`.
-The review missed the imported CURRENT whole-workflow digest expectation; the
-local failure below exposed that omission.
 
-The correction adds `tests/test_gpt54_time_budget_comparison.py` to the generic
-ignore list and comparison job selection, and changes the strict module count
-from 11 to 12. No job, marker, workflow timeout, security gate or deployment
-workflow is changed. The Node test keeps the same six public URLs at revision
-`47aed3c0b13eaa90eb02803bec9d5c75e559f416`, exact lengths/hashes, streaming caps
-and all selected manifest/grade/structure assertions. Each request has one
-30-second allowance inside a 45-second test bound. Failures report artifact key,
-stage, HTTP status when available, elapsed time and a safe error class, without
-response bodies, raw causes or signed redirects. Requests and readers are
-aborted/released on exit; sibling requests are aborted on rejection. There is no
-retry, skip, credential, alternate source, cache fallback or replacement of the
-live hash check. The tiny transport-fake cases did not run in the local combined
-attempt; their later CI result is recorded below. No dependency was installed;
-Node uses the existing owner workspace dependencies through an ignored worktree
-link.
+The earlier evidence remains distinct:
 
-The correction was pinned at HEAD `fd910be79992d08e1006622e227e542f8ad0cb78`,
-tree `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, clean before and after the
-single combined command. Its result was **1 failed in 0.24s; exit 1**, with
-process timestamps 2026-10-05T06:42:49Z–2026-10-05T06:42:50Z. Python 3.10.12
-and pytest 9.1.1 stopped at line 391 of
-`test_backend_jobs_partition_the_comparison_contracts`: the edited workflow's
-SHA256 was `3f7d6bf0112a4d669b4144a60a248d55ecb654d4b883c6e62e7e145d8bdf2f9b`,
-but the imported `WORKFLOW_SHA256` still expected
-`b617f79a09427f9b877e9fef214bdf2fe96ba817fc8debf5369b4f172640f9da`.
-The partition assertions and their nested collect-only checks were not reached.
-The shell stopped before Node, so **zero live requests and zero local fake cases
-ran**. This is a failed, incomplete validation, not a combined pass or a new
-observation about the public artifact service.
+- Leader-read backend run `37269485572`, job `111633237507`: **1 failed,
+  13464 passed, 64 skipped, 46 deselected in 1663.84s**, at the stale 11-file
+  inventory. Validate jobs `111633237134` and `111635977167` in run
+  `37269485559`, attempts 1 and 2, failed the pinned HF test at **10060ms** and
+  **10064ms**. The owner retry was consumed; no latency cause was established.
+- The local combined attempt at `fd910be79992d08e1006622e227e542f8ad0cb78`,
+  tree `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, failed **1 case in 0.24s,
+  exit 1**, before partition collection or any Node fake/live request. Commit
+  `0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18`, tree
+  `e2c51219d5e027ea6bf2c1911db4874690d08d22`, corrected the CURRENT digest.
+  That failed command was not rerun or relabeled as a pass.
+- At leader-reviewed `369817bf919eb04632ad0af78160d3a33b5d5692`, tree
+  `0bd9f2bbd1c837994d655ad328857082e4988a38`, the separately authorized
+  Python partition continuation passed **1 case in 15.32s, exit 0**, including
+  its scoped collect-only checks. Only CHANGELOG/LATEST changed from that proof
+  to `18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4`. Its full command and scope
+  remain in the [immutable continuation record][continuation-record].
 
-The [immutable correction record][ci-correction-record] preserves that attempt's
-command display with private locators redacted. The command digest below identifies
-the exact private 1033-byte script, including its final newline, not the redacted
-display. Its environment was token-free; Python was offline. All original failed
-command, log and receipt files remain unchanged.
-
-| CI-correction evidence | Bytes | SHA256 |
+| Prior private evidence | Bytes | SHA256 |
 | --- | ---: | --- |
-| Exact combined command script | 1033 | `a1e5a323abeafc9561fd542d50b6e542d7d840d859db0492d65169aa3f45d364` |
-| Combined stdout/stderr | 1802 | `e8e6488b6a603356644ff1845b210de33c948de47d5ce4e7d21e4f28b27de308` |
-| Metadata-only receipt | 2393 | `52f82edf52f76cf68a59fa4cad1aab70723ec46197f5b8fb0b1c439f5ef07ee3` |
+| Failed combined command | 1033 | `a1e5a323abeafc9561fd542d50b6e542d7d840d859db0492d65169aa3f45d364` |
+| Failed combined log | 1802 | `e8e6488b6a603356644ff1845b210de33c948de47d5ce4e7d21e4f28b27de308` |
+| Failed combined receipt | 2393 | `52f82edf52f76cf68a59fa4cad1aab70723ec46197f5b8fb0b1c439f5ef07ee3` |
+| One-node continuation command | 992 | `1814661791a888232a78504f1c8e85ee8f169fe94b7fa468da388cca84bf1290` |
+| One-node continuation log | 552 | `d9488c9f39a5d63d76a1e27fd74d8dd3b774b084a480fd86a4534c1590aef87f` |
+| One-node continuation receipt | 2295 | `3aaef590fc6effaea58b81d7895e2a555b285515b50363cea41c108772971976` |
 
-A separate ordinary correction commit,
-`0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18`, tree
-`e2c51219d5e027ea6bf2c1911db4874690d08d22`, updates only the CURRENT
-`WORKFLOW_SHA256` in `tests/test_ghcp_vm_gate_contract.py` to those edited workflow
-bytes. Its `HISTORICAL_SHA256` and `FOUNDRY_SHA256` and all substantive assertions
-remain unchanged. No further local test or remote attempt ran in that correction
-turn. Only CHANGELOG and this record changed between that commit and
-`369817bf919eb04632ad0af78160d3a33b5d5692`. Relative to the failed
-`fd910be79992d08e1006622e227e542f8ad0cb78` proof, the delta includes the test
-literal and records; it is not records alone. The separately authorized
-continuation below validates the corrected partition without rewriting that
-failed attempt.
+These command digests identify exact private scripts, not redacted public text.
+All earlier command/log/receipt files remain intact.
 
-### One-node Python continuation
+Separately, at the same `369817bf919eb04632ad0af78160d3a33b5d5692` HEAD,
+the leader supplied [validate run `37274687663`, job `111649027037`][transport-ci],
+attempt 1: **556 Node cases passed, 0 failed**. The ten transport-fake cases
+and live six-artifact hash/structure test passed; the live test took
+**494.959834ms**. The 125654-byte CI log has SHA256
+`dc07a93374aac5c78ad9c9369fb6fd6faee0bac0a2e93dccc1af1cfe3742e13e`.
+The [immutable CI transport record][transport-record] names the fake cases.
+This is supplied CI evidence, not a local rerun or an explanation of the earlier
+timeouts. It does not turn the failed local combined attempt into a pass.
 
-The existing worktree was clean at HEAD
-`369817bf919eb04632ad0af78160d3a33b5d5692`, tree
-`0bd9f2bbd1c837994d655ad328857082e4988a38`, before and after the one-node
-continuation. Python 3.10.12 and pytest 9.1.1 reported **1 passed in 15.32s;
-exit 0**. Process timestamps were 2026-10-05T07:07:56Z–2026-10-05T07:08:11Z.
-The node's own scoped collect-only checks completed as part of that invocation.
-No Node command, HF request, registration selector, other suite or build ran.
+### Five-failure CI result and pre-edit source-role review
 
-The token-free/offline command used a 300-second outer bound and 5-second
-termination grace. These are software-validation bounds, not a CI timeout or
-experiment budget. The following display redacts only the worktree and private
-evidence locators; it is not ready to run. The digest identifies the exact private
-992-byte script, including its final newline, not this redacted text.
+The leader's conditional [review5411311343][conditional-review] covered HEAD
+`18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4`, tree
+`bcd47929dd12f0be0d9987e7de29001dbe95c470`. It did not waive the subsequent
+pytest failure. The leader read [run `37276590021`, job `111654931251`][contract-ci],
+attempt 1: **5 failed, 13385 passed, 64 skipped, 46 deselected in 1962.91s**.
+The log SHA256 is
+`645d67b70bada9c41ad01cc63dbeda48e3d69444220f087fbbc604ecbc69e83e`.
+Ten applicable checks passed and deploy skipped at that HEAD; only pytest failed.
+No CI query, raw-log retrieval or retry was performed for this repair.
+
+Before editing, the same-session source-provenance charter review classified
+the three identities below. This was a read-only role review, not a separately
+spawned or independent reviewer. Its decision was APPROVE-WITH-CONDITIONS for a
+test-only repair preserving production/workflow/fixture bytes, historical digests
+and launch guards.
+
+| Role | Bound source or reconstruction | SHA256 |
+| --- | --- | --- |
+| CURRENT workflow | Current checkout's unchanged backend workflow | `3f7d6bf0112a4d669b4144a60a248d55ecb654d4b883c6e62e7e145d8bdf2f9b` |
+| Frozen pilot fixture workflow | Git blob at `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`, the unchanged `approved_pilot_source` anchor | `b617f79a09427f9b877e9fef214bdf2fe96ba817fc8debf5369b4f172640f9da` |
+| Historical pre-readout baseline | Canonical JSON reconstruction, not current workflow bytes | `fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47` |
+
+The shared-symbol audit found three CURRENT assertions in the existing gate and
+partition helpers, and two frozen consumers in native-resume/recovery-feedback
+tests. They now use `CURRENT_WORKFLOW_SHA256` and
+`FROZEN_PILOT_WORKFLOW_SHA256` respectively. The frozen expectation was confirmed
+from its immutable Git blob, never derived from the mutable file under test.
+Fixture commits/bytes, positive/stale whole-grader assertions, source inventories,
+historical manifests and launch refusals remain unchanged.
+
+The canonical-baseline failure reconstructed
+`4f81d97517086195dcf47f92f342ceb93936c8eb4b6bf209d0a7f9f6d82a3acf` because it
+retained PR749's two comparison-file-list additions. The corrected test asserts
+exactly two filename occurrences and exactly one correctly formed token in each
+named command before removing those two literal tokens from a copied workflow.
+It then checks the unchanged `fd2871a0…` baseline. It does not strip unrelated
+changes, replace the baseline digest or relax current coverage/security checks.
+
+### Five-node corrective proof
+
+The ordinary test-only correction is HEAD
+`ca0e72e7d771b4a4851b2c8e15bdbb29c8bc7aed`, tree
+`ec441d48e5063a78c14a55ae177c168246c2c67d`. Four test files changed from
+the reviewed `18cfee10…` basis; no production, workflow, fixture, manifest, HF-test
+or policy bytes changed. The worktree was clean before and after one invocation
+of exactly the three failing functions, without `-x`. Python 3.10.12 and pytest
+9.1.1 reported **5 passed in 5.72s; exit 0**. Process timestamps were
+2026-10-05T08:14:07Z–2026-10-05T08:14:14Z.
+
+All five nodes completed: the budget-readout canonical partition check;
+native-resume `[current]` and `[pre_resume]`; and recovery-feedback `[current]`
+and `[pre_feedback]`. Verbose output identifies each PASS. Existing process,
+network, credential/provider and grader guards remained in place. Only local
+source fixtures and synthetic data were used; no private input was read.
+
+The 300-second outer bound and 5-second termination grace apply only to this
+software proof. The command below redacts only private worktree/evidence locators
+and is not ready to run. Its displayed bytes are not the hashed private script.
 
 ```bash
 #!/bin/bash
 set -euo pipefail
 cd <private-worktree>/batch-runner
-test "$(git rev-parse HEAD)" = 369817bf919eb04632ad0af78160d3a33b5d5692
-test "$(git rev-parse HEAD^{tree})" = 0bd9f2bbd1c837994d655ad328857082e4988a38
-git diff --quiet
-git diff --cached --quiet
-env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TMPDIR=<private-evidence-root> PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_NO_LAZY_FETCH=1 PYTHONPATH=. HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 timeout --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -vv -ra -x --tb=short --color=no -p no:cacheprovider -m "not integration" --basetemp <private-evidence-root>/pytest tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+test "$(git rev-parse HEAD)" = ca0e72e7d771b4a4851b2c8e15bdbb29c8bc7aed
+test "$(git rev-parse HEAD^{tree})" = ec441d48e5063a78c14a55ae177c168246c2c67d
+test -z "$(git status --porcelain --untracked-files=normal)"
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TMPDIR=<private-evidence-root> PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_NO_LAZY_FETCH=1 PYTHONPATH=. HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 timeout --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -vv -ra --tb=short --color=no -p no:cacheprovider -m "not integration" --basetemp <private-evidence-root>/pytest tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_budget_readout_partition_preserves_exact_commands_and_guards tests/test_codex_native_resume.py::test_native_resume_active_grader_template_source_bindings tests/test_codex_recovery_feedback.py::test_recovery_feedback_active_grader_template_source_bindings
 ```
 
-| Continuation evidence | Bytes | SHA256 |
+| Corrective evidence | Bytes | SHA256 |
 | --- | ---: | --- |
-| Exact private command script | 992 | `1814661791a888232a78504f1c8e85ee8f169fe94b7fa468da388cca84bf1290` |
-| Combined pytest stdout/stderr | 552 | `d9488c9f39a5d63d76a1e27fd74d8dd3b774b084a480fd86a4534c1590aef87f` |
-| Metadata-only receipt | 2295 | `3aaef590fc6effaea58b81d7895e2a555b285515b50363cea41c108772971976` |
+| Exact private command script, including final newline | 1220 | `e0dd4803e00da3556a8a920d03148b3f6de83031fae97f23e694cdf7474086fe` |
+| Combined pytest stdout/stderr | 1054 | `3fd03641afe7f3927668f305038e21c3d2bae435f3af33551e64ec22d6549a15` |
+| Metadata-only receipt | 2290 | `ff7a57681a1561b96833ba961599703ee40403e5bafcb5934986fce47f89530f` |
 
-Only CHANGELOG and this current record change after that passing proof. Source,
-tests, workflows, manifests and budget/deadline policy remain unchanged.
-
-### Separately supplied successful CI transport evidence
-
-At that same `369817bf919eb04632ad0af78160d3a33b5d5692` HEAD, the leader
-read completed [validate run `37274687663`, job `111649027037`][transport-ci],
-attempt 1, **SUCCESS**. The retained log is 125654 bytes, SHA256
-`dc07a93374aac5c78ad9c9369fb6fd6faee0bac0a2e93dccc1af1cfe3742e13e`.
-Its full Node result is **556 passed, 0 failed**. The ten transport-fake cases
-passed: retains-exact-bytes; the six failure stages `http_status`,
-`content_length`, `response_body`, `stream`, `byte_length` and `sha256`;
-request/stream timeout redaction; and parent-abort/no-retry. The live six-artifact
-hash/structure test passed in **494.959834ms**.
-
-This is leader-supplied CI evidence, not a locally repeated Node/HF check. No CI
-log was fetched or job queried for this continuation. The successful check is
-newer live evidence than the two earlier 10-second CI timeouts; it does not
-establish why those requests timed out or make the failed local combined command
-a pass. The registration proof, failed local attempt, Python continuation and CI
-transport result remain separate evidence.
+Evidence was retained in a fresh private directory; log capture used umask 077
+and no-clobber creation. No earlier evidence was overwritten. No prior successful selector,
+Node/HF check, broader suite or CI job was repeated. Only CHANGELOG and this
+single current task record change after the five-node proof.
 
 ### Remaining work
 
-The leader accepted the source correction at
-`369817bf919eb04632ad0af78160d3a33b5d5692`; its Python partition proof is now
-complete, and the supplied validate job passed. Remaining CI jobs, the final
-records HEAD and delivery still need acceptance. Delivery stays **HOLD**. No
-combined local pass or all-checks-success claim is made.
+The new test-only correction and records need final fixed-HEAD review and
+applicable CI acceptance. Delivery stays **HOLD**. The five-node local pass does
+not rewrite the supplied failing CI result or establish all-checks success.
 
 The later execution integration unit remains `time_budget_observation_deadline`.
 Its accepted source-analysis memo identifies first generation at V2's first
 `voice.next_turn(request)` and Codex's `thread.turn(turn_input)`, one observation
 clock across turns/waits/native recovery, and one shared cleanup deadline.
-It requires core changes and a prospective whole-grader/source binding; it is
-not implemented by changing CI timeouts or refreshing historical pins. That
-investigation was not repeated. The owner's design/budget choice remains
-delegated, not an open approval question. This registration authorizes no execution.
+It requires core changes and the accepted two-root source binding in the same
+coherent deadline patch: frozen F at `882868cc…`/tree `45d024f1…` retains TEMPLATE
+`37e1791d…`, independently of a future reviewed runtime R. Neither that binding
+nor deadline integration is implemented here. The prior investigation was not
+repeated. The owner's design/budget choice remains delegated, not an open approval
+question. This registration authorizes no execution.
 
 Dispatch/capture integration and credentialed-CI input authority remain unresolved,
 and every launch refusal remains in force. The earlier credentialed workflow
@@ -307,14 +301,14 @@ unchanged; this new study makes no native hard-cap claim. No private original in
 retained input receipt, original archive or consumed prepared artifact was read,
 imported, prepared or relabeled.
 No model/grader, HF/Azure, CI dispatch/query/retry, Project or merge operation
-occurred during this correction or continuation. The original local HF check was
-never reached, and no local HF check ran in the continuation.
+occurred during this test-contract repair. The original local HF check was never
+reached, and no local HF check ran in either Python-only follow-up.
 
 For the original registration, experiment-design kept the new time-policy
 question distinct from historical studies and separated intent from enforcement.
-For this continuation, the full skill catalog was inspected once. im-not-ai-en
-protected exact scope and refusal conditions while keeping the failed local
-attempt, passing continuation and supplied CI evidence distinct. Experiment-design
+For this repair, the full skill catalog was inspected once. im-not-ai-en
+protected exact scope, digests, commands and refusal conditions while keeping the
+failed local attempt, passing proofs and supplied CI evidence distinct. Experiment-design
 was not retriggered because no experiment/config policy changed. UI/animation and
 experiment-result reporting were not applied; there are no experiment results to
 report. The [immutable prior record][prior-record]
@@ -325,4 +319,8 @@ instead of appending prior full task histories.
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2/tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05
 [registration-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/749#pullrequestreview-5410467314
 [ci-correction-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/369817bf919eb04632ad0af78160d3a33b5d5692/tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation
+[continuation-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4/tasks/LATEST_TASK_RESULT/README.md#one-node-python-continuation
+[transport-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4/tasks/LATEST_TASK_RESULT/README.md#separately-supplied-successful-ci-transport-evidence
 [transport-ci]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37274687663/job/111649027037
+[conditional-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/749#pullrequestreview-5411311343
+[contract-ci]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37276590021/job/111654931251

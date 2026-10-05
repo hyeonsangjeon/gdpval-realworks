@@ -13,77 +13,88 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Correct the prospective time-budget registration's CI partition and public
-  artifact test transport. Add the existing registration module, sorted, to both
-  the generic pytest ignore list and comparison-job selection, with the strict
-  inventory count updated from 11 to 12. The pre-edit same-session
-  extreme-reasoner charter review required unchanged marker/source-SHA/security
-  gates, permissions, concurrency and workflow timeouts. No deploy workflow or
-  experiment policy is changed. Its private memo SHA256 is
+- Correct the prospective time-budget registration's CI partition, public-artifact
+  transport and coupled workflow test contracts. The latest repair changes four
+  test files only, followed by CHANGELOG/LATEST. Workflow bytes, registration,
+  core/grader/runtime, HF tests, source fixtures and experiment policy are unchanged
+  by this test-contract correction.
+
+  At reviewed HEAD `18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4`, tree
+  `bcd47929dd12f0be0d9987e7de29001dbe95c470`, leader-read pytest run
+  `37276590021`, job `111654931251`, attempt 1, reported **5 failed, 13385 passed,
+  64 skipped, 46 deselected in 1962.91s**. Log SHA256 is
+  `645d67b70bada9c41ad01cc63dbeda48e3d69444220f087fbbc604ecbc69e83e`.
+  Ten applicable checks passed and deploy skipped; conditional review `5411311343`
+  did not waive these five failures.
+
+  The pre-edit same-session source-provenance charter review classified the
+  CURRENT workflow digest `3f7d6bf0…` separately from frozen `b617f79a…`, confirmed
+  from the immutable Git blob at the unchanged fixture anchor
+  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`. The shared-symbol audit found
+  three CURRENT assertions and two frozen consumers. Explicit
+  `CURRENT_WORKFLOW_SHA256` and `FROZEN_PILOT_WORKFLOW_SHA256` expectations now
+  preserve both roles. No mutable-file-derived expectation, fixture repin or
+  weakening of positive/stale-grader assertions is introduced.
+
+  The budget-readout reconstruction retains the historical canonical baseline
+  `fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47`.
+  Before normalization, it asserts exactly two known filename occurrences and
+  exactly one matching token in each named command. Only the generic ignore token
+  and comparison-selection token added by PR749 are removed from the copied
+  reconstruction. Every other baseline field and all current coverage/security
+  guards remain strict.
+
+  Test-only HEAD `ca0e72e7d771b4a4851b2c8e15bdbb29c8bc7aed`, tree
+  `ec441d48e5063a78c14a55ae177c168246c2c67d`, passed the three specified
+  functions, **5 cases in 5.72s, exit 0**, in one token-free/offline Python 3.10.12
+  invocation without `-x`. Its 300-second outer bound and 5-second termination
+  grace are test-only. Exact private command SHA256 is
+  `e0dd4803e00da3556a8a920d03148b3f6de83031fae97f23e694cdf7474086fe`;
+  combined-log SHA256 is
+  `3fd03641afe7f3927668f305038e21c3d2bae435f3af33551e64ec22d6549a15`;
+  receipt SHA256 is
+  `ff7a57681a1561b96833ba961599703ee40403e5bafcb5934986fce47f89530f`.
+  The command digest identifies the exact private script, not the redacted public
+  display. Only CHANGELOG and the single current LATEST record change after this
+  proof. No successful selector, Node/HF check, broad suite or CI job was repeated.
+
+  Earlier corrections remain separate evidence. Backend run `37269485572`, job
+  `111633237507`, reported **1 failed, 13464 passed, 64 skipped, 46 deselected in
+  1663.84s** at the stale 11-file inventory. The prior repair added the existing
+  registration module to both sorted workflow command lists and made the strict
+  inventory 12. Its pre-edit workflow review preserved marker/source-SHA/security
+  gates, permissions, concurrency and timeouts but missed the imported CURRENT
+  digest. That private memo's SHA256 is
   `bbdafb85dfc7b9ad84e30445ccdd4133ec10ad6634940c6016ec99f9616c56e3`.
+  The local combined attempt at `fd910be79992d08e1006622e227e542f8ad0cb78`,
+  tree `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, failed **1 case in 0.24s,
+  exit 1**, before the partition's scoped collection or any Node fake/live request. Commit
+  `0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18` corrected the CURRENT digest.
+  The [immutable correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/369817bf919eb04632ad0af78160d3a33b5d5692/tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation)
+  preserves exact failed-command/log/receipt identities and the review omission.
 
-  Leader-read backend run `37269485572`, job `111633237507`, reported
-  **1 failed, 13464 passed, 64 skipped, 46 deselected in 1663.84s** at the stale
-  count. Frontend run `37269485559`, validate jobs `111633237134` and
-  `111635977167`, attempts 1 and 2, failed the pinned artifact test with
-  `TimeoutError` at **10060ms** and **10064ms**. The owner retry was already
-  consumed; these failures do not establish a latency cause or model error.
-  The test retains all six revision-pinned public URLs, lengths/hashes, streaming
-  caps and structure assertions. Each request now has one 30-second allowance
-  inside a 45-second test, with safe artifact/stage/status/elapsed context and
-  bounded abort handling. No retry, credential, skip or cached-success fallback.
+  At leader-reviewed `369817bf919eb04632ad0af78160d3a33b5d5692`, tree
+  `0bd9f2bbd1c837994d655ad328857082e4988a38`, the authorized Python partition
+  continuation passed **1 case in 15.32s, exit 0**, including its scoped collection.
+  The [immutable continuation record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4/tasks/LATEST_TASK_RESULT/README.md#one-node-python-continuation)
+  retains its exact private command/log/receipt identities. Separately, supplied
+  validate run `37274687663`, job `111649027037`, attempt 1, at that same HEAD
+  passed **556 Node cases, 0 failed**, including ten transport fakes and the live
+  six-artifact hash/structure check in **494.959834ms**. Its 125654-byte log SHA256
+  is `dc07a93374aac5c78ad9c9369fb6fd6faee0bac0a2e93dccc1af1cfe3742e13e`.
+  This newer CI evidence does not explain the earlier **10060ms/10064ms** timeouts
+  in validate jobs `111633237134`/`111635977167`, run `37269485559`, attempts 1/2,
+  or turn the failed local combined attempt into a pass. The bounded transport
+  repair retains six pinned URLs, exact hashes/lengths, streaming caps and all
+  structure assertions, with one 30-second request allowance inside 45 seconds,
+  safe error context and bounded abort, without retries or a cached-success fallback.
 
-  One combined target at HEAD `fd910be79992d08e1006622e227e542f8ad0cb78`, tree
-  `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, failed: **1 failed in 0.24s,
-  exit 1**. The partition node stopped at its CURRENT whole-workflow digest
-  assertion, which the pre-edit review missed. No partition collection, Node
-  fake case or live artifact request ran. The exact private command SHA256 is
-  `a1e5a323abeafc9561fd542d50b6e542d7d840d859db0492d65169aa3f45d364`;
-  combined-log SHA256 is
-  `e8e6488b6a603356644ff1845b210de33c948de47d5ce4e7d21e4f28b27de308`;
-  receipt SHA256 is
-  `52f82edf52f76cf68a59fa4cad1aab70723ec46197f5b8fb0b1c439f5ef07ee3`.
-
-  A separate one-line correction at
-  `0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18`, tree
-  `e2c51219d5e027ea6bf2c1911db4874690d08d22`, binds only the CURRENT test
-  `WORKFLOW_SHA256` to the edited workflow. No historical pin or assertion was
-  weakened. It was initially unvalidated; no second invocation ran in that
-  correction turn. Relative to the failed proof, the delta includes this test
-  literal plus CHANGELOG/LATEST, not records alone. The leader's six-file source
-  review `5410467314` at `c5217b19f79a44787ae08fafecc28dae3ab145b1` and the
-  original 75-case proof below remain distinct and unchanged. The
-  [immutable correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/369817bf919eb04632ad0af78160d3a33b5d5692/tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation)
-  preserves the earlier failed command and review boundary.
-
-  The leader subsequently reviewed all six correction files at HEAD
-  `369817bf919eb04632ad0af78160d3a33b5d5692`, tree
-  `0bd9f2bbd1c837994d655ad328857082e4988a38`, and accepted the source
-  correction. At that unchanged clean HEAD, one separately authorized Python
-  partition-node continuation passed **1 case in 15.32s, exit 0**, including its
-  scoped collect-only checks. Python 3.10.12 ran token-free/offline with a
-  300-second outer bound and 5-second termination grace. No Node/HF check or
-  successful registration selector was repeated. Exact private command SHA256 is
-  `1814661791a888232a78504f1c8e85ee8f169fe94b7fa468da388cca84bf1290`;
-  combined-log SHA256 is
-  `d9488c9f39a5d63d76a1e27fd74d8dd3b774b084a480fd86a4534c1590aef87f`;
-  receipt SHA256 is
-  `3aaef590fc6effaea58b81d7895e2a555b285515b50363cea41c108772971976`.
-  The command digest identifies the private script, not its redacted public
-  display. Only CHANGELOG/LATEST change after this passing proof.
-
-  Separately, the leader supplied successful validate run `37274687663`, job
-  `111649027037`, attempt 1, at that same HEAD: **556 passed, 0 failed** in Node,
-  including the ten transport-fake cases and the live six-artifact hash/structure
-  test, which took **494.959834ms**. The completed CI log is 125654 bytes,
-  SHA256 `dc07a93374aac5c78ad9c9369fb6fd6faee0bac0a2e93dccc1af1cfe3742e13e`.
-  This newer live evidence does not establish why the earlier requests timed out
-  or turn the failed local combined attempt into a pass. No CI query or local
-  Node/HF rerun occurred. Remaining CI jobs, the final records HEAD and delivery
-  still need acceptance; delivery stays **HOLD**. The
-  [current task record](tasks/LATEST_TASK_RESULT/README.md#one-node-python-continuation)
-  preserves the separate evidence and remaining deadline/source-closure work.
-  No deadline integration or execution authority is added.
+  Source review `5410467314` at `c5217b19f79a44787ae08fafecc28dae3ab145b1`
+  and the original 75-case registration proof below remain unchanged. Final
+  corrected-HEAD review and applicable CI acceptance remain pending; delivery
+  stays **HOLD**. The [current task record](tasks/LATEST_TASK_RESULT/README.md#five-node-corrective-proof)
+  preserves exact commands, separate outcomes and remaining deadline/source-binding
+  work. No deadline integration, source relabeling or execution authority is added.
 
 ### Added
 
