@@ -13,6 +13,47 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Require positive owned-host evidence from the existing real-kernel platform
+  case in the comparison-contracts Linux job. The same ordinary pytest selection
+  runs it once; local unsupported-host refusal coverage remains valid but cannot
+  satisfy this CI gate. The probe now records a JSON-valued JUnit property. A
+  small metadata-only verifier requires one completed, non-skipped/non-error
+  case with `platform_result=real_reparenting_confirmed` and `host_reusable=true`,
+  plus a successful comparison step. Missing, duplicate, malformed, refused or
+  failed evidence fails explicitly.
+
+  JUnit stays temporary, without captured logs. The verifier accepts at most
+  8 MiB of XML and a 1024-byte outcome, and retains only a JSON receipt of at most
+  4096 bytes in the job summary. It validates the checked-out commit/tree against
+  the CI-supplied SHA, checks tracked cleanliness and rereads source identity.
+  Run/job/attempt and allowlisted runner provenance are bound; the runner name is
+  hashed, not retained verbatim. The receipt says synthetic/model-free, not a
+  study observation or live authorization. No new job, upload action, permission,
+  secret, provider call or probe retry was added. Existing checkout/integration
+  guards, job timeouts and the probe's short timeout/orphan failsafe remain.
+
+  The same-session extreme-reasoner CI/cost/source-provenance review preceded
+  workflow edits and approved only this bounded change with conditions. Only
+  the CURRENT workflow digest advances. Reconstruction explicitly checks and
+  removes the exact metadata additions before comparing with the unchanged
+  historical canonical baseline; frozen workflow bytes and hashes are unchanged.
+  Core runtime/ownership/finalization, the whole-grader hash algorithm, profiles,
+  study policy and launch gates are untouched.
+
+  One token-free/offline Python 3.10.12 invocation at
+  `b091071f19ca24f973101af67ed5b25e3ac500f2`, tree
+  `6a416fda9cf47b521951bcb9eeee7ecb665c399b`, reported **46 passed in 15.76s**,
+  exit 0: 43 synthetic extractor/receipt/wiring cases and three existing workflow
+  contracts, under 300 seconds plus 5-second termination grace, without `-x`.
+  The real platform probe was not run locally. Command/log/receipt identities
+  and the exact selector are in the single [current record](tasks/LATEST_TASK_RESULT/README.md).
+  Only that record and CHANGELOG follow the pinned proof. Prior software proofs
+  and the NAS errno-2 admission refusal remain separate in the
+  [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/50d7c11a027396d838a838ce2168f266774df61a/tasks/LATEST_TASK_RESULT/README.md).
+  Host support is not established: the actual positive CI receipt, final source
+  review and applicable CI acceptance remain pending. No CI query, dispatch,
+  retry or wait occurred; all live-execution gates remain closed.
+
 - Align PR750's time-budget usage paragraph with source-reviewed
   `67f2ef7c94665fbe5d302040a757402873790cfc`, tree
   `cd34fd6cd3e3d74e3b927eb8732ae72fd3d0331d`. It now names exclusive Linux
