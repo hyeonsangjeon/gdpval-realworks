@@ -198,9 +198,11 @@ proof, real-import identities and remaining gates.
 The [local-source profile](experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml)
 uses the existing comparison schema, model/effort, input identities, task order,
 ABBA20, run IDs and limits. It changes only the reviewed runtime source bindings,
-the three local preparation helper fingerprints and the actual full grader
-template closure. The historical manifest and compiler remain unchanged; the
-template closure is not a materialized-grader identity or a grading result.
+the three local preparation helper fingerprints, the two capture-module bindings
+and the actual full grader template closure. The capture-only launch refusal
+does not change that closure. The historical manifest and compiler remain
+unchanged; the template closure is not a materialized-grader identity or a
+grading result.
 
 After separate fixed-HEAD review and authorization, use the preparer's existing
 `--manifest` argument to select the tracked profile. This argument fragment is
@@ -223,11 +225,34 @@ URLs, traversal, symlink substitution and unreviewed bytes are refused.
 Omitting the API keyword preserves the historical path. Runtime and workflow
 callers do not discover or select this profile. Existing canonical Step0 checks,
 no-clobber publication, reservations and quarantine remain in force. The
-[source-profile proof](../tasks/LATEST_TASK_RESULT/README.md#project5-prospective-local-preparation-source-profile--2026-10-04)
+[source-profile proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/fd903b96dc8d4622470b6971fde820334c16396b/tasks/LATEST_TASK_RESULT/README.md#project5-prospective-local-preparation-source-profile--2026-10-04)
 uses genuine current-source compilation and synthetic preparation fixtures,
 not the private originals. Real local preparation needs a separate instruction;
 credentialed CI authority, dispatch, native call/token caps and launch gates
 remain unresolved.
+
+#### Direct comparison runtime launch refusal
+
+`verify_codex_input_capture` and `capture_v2_pre_execution_input` share the
+argument-free `require_comparison_runtime_launch` guard. After their local
+source/input checks, valid comparison evidence still refuses with
+`comparison_runtime_launch_refused`; invalid evidence may refuse earlier.
+The V2 refusal precedes capture publication and probes. Both direct runtime
+paths remain blocked before provider/auth/model-child setup. No caller argument,
+environment variable, manifest or marker enables this route.
+
+Absent/non-comparison behavior and model-free bundle verification/materialization
+APIs are unchanged. Runtime profile recognition remains deferred. The
+[launch-boundary proof](../tasks/LATEST_TASK_RESULT/README.md#project5-independent-comparison-runtime-launch-refusal--2026-10-05)
+uses synthetic inputs and forbidden-effect sentinels, not private originals or
+an executed comparison.
+
+The [first local V2 preparation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c6fbf893595336e0a89ceb122ac5859991487144/tasks/LATEST_TASK_RESULT/README.md)
+remains bound to its reviewed `14d7579c2578cb2a09397b5d42f41e7b5daaf2d7`
+source. Its consumed one-operation permission does not allow adopting or
+relabeling that artifact. Any later preparation requires a newly reviewed source
+and separate direction; native call/token caps, dispatcher, credentialed-CI
+authority and launch authorization remain unresolved.
 
 ### Step 1: Prepare Tasks (`step1_prepare_tasks.py`)
 
