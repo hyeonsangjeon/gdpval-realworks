@@ -11,6 +11,71 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add `gpt54_time_budget_comparison.prepare_observation_handoff` for exactly
+  one registered run/task. It checks independent R/F anchors and an explicitly
+  supplied input-registration source, reuses only equal dataset/cohort facts,
+  and publishes a configuration envelope, model-safe task payload, selected
+  references and a final preparation marker. Codex verifies canonical Step0;
+  V2 neither accepts nor reads it. The output binds source/template/config/input
+  identities and requires observation control, without creating admission,
+  provider, clock, grader config or launch authority. Existing held-directory,
+  no-clobber and final-reread primitives are reused; partial reservations remain.
+
+  The same-session source/architecture/grading charter review preceded edits.
+  Only the prospective compiler binding advances, with one real pin added for
+  the reused, unchanged publication helper; the current inventory is 42.
+  Core/runtime/ownership, workflows, the frozen F/template, historical profiles,
+  paid evidence, study policy and every launch refusal remain unchanged.
+
+  The single bounded offline selector at
+  `ccf6e880caa8e5b3dfccea5139fe2c114baa4602`, tree
+  `407f36bb0848811191cbabe0a45469356a09949b`, reported **38 passed, 9 failed,
+  177 deselected in 19.00s**, exit 1. All nine failures were a fixture
+  `IndexError` before the API: the first selected task has no references.
+  Four passing handoffs covered tasks without references. Test-only correction
+  `184cba2e042518c0e22af104c42e5ef0b099f4a9`, tree
+  `63b03670161112bb0e5c4b3ab678e0dadd4b9ed0`, selects a declared reference task
+  and adds two positive reference-payload cases. The nine repaired cases and two
+  new positives were not rerun locally. They are covered by the supplied
+  successful corrected-HEAD CI, not an aggregate local pass. The exact private
+  command/log/receipt identities and failed-node inventory remain in the
+  [immutable local-proof record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/865c37fe662af11850cc2681f53bf136fdc65444/tasks/LATEST_TASK_RESULT/README.md).
+  Its command digest identifies the private script, not the redacted display.
+
+  The leader completed source review at
+  `865c37fe662af11850cc2681f53bf136fdc65444`, tree
+  `ae71f34e1d3787e584c05220de5b7780da19bab2`, with no blocking source finding.
+  All 11 applicable checks at that HEAD succeeded; PR-only deploy was skipped.
+  The leader-read [comparison job](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37345048041/job/111881404006),
+  run `37345048041`, job `111881404006`, attempt 1, reported **1410 passed in
+  1008.64s**, with no failed, skipped or deselected cases in its final result.
+  Its log SHA256 is
+  `da26d6a2768d32eeefe073ea451cb35e4f67d566e71a4f5e76a889c19d19a2d1`.
+  The same job emitted a positive model-free owned-host receipt at source
+  `55ee47386c97058863a5ceefb6c1e358f7f41940`, tree
+  `ae71f34e1d3787e584c05220de5b7780da19bab2`. The receipt's source commit differs
+  from the reviewed PR HEAD; their supplied trees are equal. This is CI host
+  evidence, not a study observation or live authority.
+
+  Between the local proof and the reviewed HEAD, only the test correction and
+  two completion records changed. Production, manifest and usage README bytes
+  still matched the tested implementation. This reconciliation changes
+  only CHANGELOG and LATEST; all source/test/config/pin/usage README bytes remain
+  unchanged. The [current record](tasks/LATEST_TASK_RESULT/README.md) keeps these
+  evidence stages distinct.
+  The accepted basis is `36ba69e59e4196d653ca046e064809ca2a8f5bb3`, tree
+  `2d96778657188d7a80c32076fd6121707eb790f0`, following the supplied PR751 source
+  and actual-host receipt reviews. [Prior proofs, PR751 host evidence and the
+  distinct NAS refusal](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0e270b67b3c7f63b8f94f945c4839b778c7572b/tasks/LATEST_TASK_RESULT/README.md)
+  remain immutable and separate. Final docs-HEAD review and applicable CI
+  acceptance remain pending. The next execution integration is one handoff
+  consumer supplying the required control; host/input/provider/live-dispatch/
+  capture and F-derived grading gates remain closed. No test, platform probe,
+  real preparation, provider call or CI query/dispatch/rerun occurred in this
+  records-only update.
+
 ### Fixed
 
 - Require positive owned-host evidence from the existing real-kernel platform

@@ -85,6 +85,8 @@ def _compile(plan, roots):
 
 @pytest.fixture(autouse=True)
 def model_free(monkeypatch, request, dual_roots):
+    handoff_case = "time_budget_observation_handoff" in request.node.name
+    handoff = request.getfixturevalue("handoff_source_seed") if handoff_case else None
     deadline_case = "time_budget_observation_deadline" in request.node.name
     if deadline_case:
         # Exercise the ownership checks through a deterministic kernel adapter.
@@ -118,7 +120,10 @@ def model_free(monkeypatch, request, dual_roots):
     def local_git(command, **kwargs):
         assert command[:2] == ["/usr/bin/git", "--no-replace-objects"]
         position = command.index("-C")
-        assert Path(command[position + 1]) in (dual_roots["runtime"], dual_roots["frozen"], dual_roots["substitute"], historical.ROOT)
+        permitted = [dual_roots["runtime"], dual_roots["frozen"], dual_roots["substitute"], historical.ROOT]
+        if handoff is not None:
+            permitted.extend((handoff.runtime, handoff.frozen))
+        assert Path(command[position + 1]) in permitted
         assert command[position + 2] in {"rev-parse", "config", "ls-tree", "cat-file"}
         assert kwargs["env"]["GIT_ALLOW_PROTOCOL"] == "" and kwargs["env"]["GIT_NO_LAZY_FETCH"] == "1"
         assert kwargs["timeout"] == 60
@@ -134,6 +139,10 @@ def model_free(monkeypatch, request, dual_roots):
         "pandas.read_parquet",
     ):
         monkeypatch.setattr(name, forbidden)
+    if handoff_case:
+        from core.time_budget_observation_deadline import TimeBudgetObservation
+
+        monkeypatch.setattr(TimeBudgetObservation, "__init__", forbidden)
     yield
     assert calls == []
 
@@ -146,7 +155,7 @@ def test_time_budget_registration_genuine_source_and_finite_scope(dual_roots):
     profile = historical.load_plan(historical.ROOT / prospective.SOURCE_PROFILE)
     # Genuine unchanged full-source validation, including the real template
     # closure, occurs inside compile_registration. No pin/helper is replaced.
-    assert len(report["source_evidence"]["validated_source_pins"]) == 41
+    assert len(report["source_evidence"]["validated_source_pins"]) == 42
     assert report["source_evidence"]["validated_source_pins"] == plan["source_pins"]
     assert len(report["source_evidence"]["frozen_grader"]["source_files"]) == 37
     assert intent["shared"] == {name: profile["shared"][name] for name in prospective.SHARED_FACTS}
@@ -1817,3 +1826,552 @@ def test_time_budget_legacy_role_compatibility_disposable_profile(monkeypatch, c
     from .test_gpt54_disposable_checkout import test_prospective_source_profile_real_tracked_compilation_and_refusals
 
     test_prospective_source_profile_real_tracked_compilation_and_refusals(monkeypatch, capsys, frozen_local_comparison_source)
+
+
+@pytest.fixture(scope="module")
+def handoff_source_seed(tmp_path_factory, dual_roots):
+    """Explicit synthetic input declarations in genuine temporary R/F commits.
+
+    Only dataset/catalog/envelope/profile metadata is changed in synthetic F;
+    its real core/grader/template closure is untouched. No validator returns a
+    mocked success. No production or original/private input is read or repinned.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import yaml
+    from core.source_identity import SOURCE_PROJECTION_FIELDS, source_task_projection_sha256
+    from gpt54_prepared_input_attestation import _identity
+    from .test_gpt54_disposable_checkout import _FIXTURE_ENV
+
+    repository = Path(__file__).resolve().parents[2]
+    parent = tmp_path_factory.mktemp("synthetic-observation-inputs")
+    environment = {**_FIXTURE_ENV, "GIT_ALLOW_PROTOCOL": "file"}
+
+    def git(*command):
+        return _REAL_RUN(["git", *command], check=True, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, env=environment, timeout=30).stdout
+
+    def export(role, sha):
+        root, owner = parent / role, parent / (role + "-objects")
+        git("clone", "--shared", "--no-checkout", "--", str(repository), str(owner))
+        git("-C", str(owner), "worktree", "add", "--detach", "--no-checkout", str(root), sha)
+        archive = git("-C", str(repository), "archive", "--format=tar", sha, "batch-runner", ".github/workflows")
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source:
+            assert source.pax_headers["comment"] == sha
+            assert all(not Path(member.name).is_absolute() and ".." not in Path(member.name).parts
+                       and (member.isdir() or member.isfile()) for member in source.getmembers())
+            source.extractall(root)
+        git("-C", str(root), "read-tree", sha)
+        return root
+
+    runtime = export("runtime", dual_roots["runtime_sha"])
+    frozen = export("frozen", prospective.ACCEPTED_BASE_SHA)
+    catalog_role = historical.ENVELOPE + "gdpval_task_catalog.json"
+    envelope_role = historical.ENVELOPE + "advance_check_plan.yaml"
+    profile = historical.load_plan(frozen / prospective.SOURCE_PROFILE)
+    catalog = json.loads((frozen / catalog_role).read_bytes())
+    by_id = {row["task_id"]: row for row in catalog["tasks"]}
+    task_ids = tuple(row["task_id"] for row in profile["shared"]["dataset"]["tasks"])
+    references = parent / "references"
+    references.mkdir()
+    rows, records = [], {}
+    for index, task_id in enumerate(task_ids):
+        declaration = by_id[task_id]
+        prompt = f"Synthetic handoff task {index}: create a small example.\n"
+        declaration["prompt_sha256"] = hashlib.sha256(prompt.encode()).hexdigest()
+        declaration["prompt_character_count"] = len(prompt)
+        names = declaration["reference_file_paths"]
+        for name in names:
+            path = references / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"Synthetic reference for observation task {index}.\n".encode())
+            records[name] = _identity(path.read_bytes())
+        rows.append({
+            "task_id": task_id, "prompt": prompt,
+            "occupation": declaration["occupation"], "sector": declaration["sector"],
+            "rubric_json": '[{"criterion":"synthetic only; not a grade"}]',
+            "rubric_pretty": "Synthetic grading metadata; not model input.\n",
+            "reference_files": names, "reference_file_urls": [],
+            "reference_file_hf_uris": [],
+            "deliverable_files": ["synthetic-withheld-answer"] if declaration["deliverable_file_extensions"] else [],
+        })
+    parquet = parent / "synthetic-original.parquet"
+    pq.write_table(pa.Table.from_pylist(list(reversed(rows))), parquet)
+    catalog["dataset_file_sha256"] = _identity(parquet.read_bytes())["sha256"]
+    catalog_data = historical._canonical_json(catalog).encode()
+    versions = {catalog["dataset_repo_id"] + "@" + catalog["dataset_revision"]: catalog["dataset_file_sha256"],
+                **{name: record["sha256"] for name, record in records.items()}}
+    envelope = historical.load_plan(frozen / envelope_role)
+    envelope["model_run_conditions"]["shared"]["input_file_versions"] = versions
+    envelope_data = historical._canonical_json(envelope).encode()
+    dataset = profile["shared"]["dataset"]
+    dataset.update(parquet_sha256=catalog["dataset_file_sha256"], input_file_versions=versions,
+                   catalog_sha256=_identity(catalog_data)["sha256"],
+                   tasks=[{"task_id": task, "prompt_sha256": by_id[task]["prompt_sha256"]} for task in task_ids])
+    profile["source_pins"].update({catalog_role: _identity(catalog_data)["sha256"],
+                                   envelope_role: _identity(envelope_data)["sha256"]})
+    for root in (runtime, frozen):
+        (root / catalog_role).write_bytes(catalog_data)
+        (root / envelope_role).write_bytes(envelope_data)
+    profile_data = yaml.safe_dump(profile, sort_keys=False, allow_unicode=True).encode()
+    assert b"&id001" in profile_data and b"*id001" in profile_data
+    (frozen / prospective.SOURCE_PROFILE).write_bytes(profile_data)
+    input_only_role = historical.ENVELOPE + "synthetic-input-only.yaml"
+    (frozen / input_only_role).write_bytes(profile_data)
+    mismatch_role = historical.ENVELOPE + "synthetic-mismatched-input-only.yaml"
+    mismatch = deepcopy(profile)
+    mismatch["shared"]["dataset"]["cohort"] = "full_220"
+    (frozen / mismatch_role).write_bytes(historical._canonical_json(mismatch).encode())
+    git("-C", str(frozen), "add", "--", catalog_role, envelope_role, prospective.SOURCE_PROFILE,
+        input_only_role, mismatch_role)
+    git("-C", str(frozen), "commit", "-m", "test: declare synthetic input-only source")
+    frozen_sha = git("-C", str(frozen), "rev-parse", "HEAD").decode().strip()
+    frozen_tree = git("-C", str(frozen), "rev-parse", "HEAD^{tree}").decode().strip()
+    plan = prospective.load_registration(runtime / prospective.REGISTRATION_PATH)
+    plan["shared"]["dataset"] = dataset
+    plan["source_pins"].update({name: profile["source_pins"][name] for name in (catalog_role, envelope_role)})
+    basis = plan["source_basis"]
+    basis.update(accepted_base_sha=frozen_sha, accepted_base_tree=frozen_tree)
+    basis["source_profile"]["sha256"] = _identity(profile_data)["sha256"]
+    basis["frozen_grader"].update(source_sha=frozen_sha, source_tree=frozen_tree)
+    (runtime / prospective.REGISTRATION_PATH).write_bytes(historical._canonical_json(plan).encode())
+    git("-C", str(runtime), "add", "--", catalog_role, envelope_role, prospective.REGISTRATION_PATH)
+    git("-C", str(runtime), "commit", "-m", "test: bind prospective runtime to synthetic inputs")
+    runtime_sha = git("-C", str(runtime), "rev-parse", "HEAD").decode().strip()
+    runtime_tree = git("-C", str(runtime), "rev-parse", "HEAD^{tree}").decode().strip()
+    step0_value = {
+        "_schema_version": 4, "_summary": {"active_policy": "deliverable_only"},
+        "_total_tasks": 6,
+        "tasks": {row["task_id"]: {
+            "needs_files": bool(row["deliverable_files"]),
+            "source_projection_sha256": source_task_projection_sha256(**{name: row[name] for name in SOURCE_PROJECTION_FIELDS}),
+        } for row in rows}, "reference_files": records,
+    }
+    step0_value["tasks"]["unselected-synthetic-task"] = {
+        "needs_files": False, "source_projection_sha256": "e" * 64,
+    }
+    step0 = parent / "synthetic-canonical-step0.json"
+    step0.write_bytes(historical._canonical_json(step0_value).encode())
+    return SimpleNamespace(
+        runtime=runtime, runtime_sha=runtime_sha, runtime_tree=runtime_tree,
+        frozen=frozen, frozen_sha=frozen_sha, frozen_tree=frozen_tree,
+        profile_sha=_identity(profile_data)["sha256"], plan=plan,
+        parquet=parquet, references=references, step0=step0,
+        step0_sha=_identity(step0.read_bytes())["sha256"], rows=rows, records=records, task_ids=task_ids,
+        mismatch_role=mismatch_role, input_only_role=input_only_role,
+    )
+
+
+@pytest.fixture
+def handoff_sources(handoff_source_seed, monkeypatch):
+    from core import repo_bootstrapper
+
+    seed = handoff_source_seed
+    # Only explicit fixture identities differ. The tracked-blob/closure/input
+    # checks themselves are unmodified and must all succeed on actual bytes.
+    monkeypatch.setattr(prospective, "ACCEPTED_BASE_SHA", seed.frozen_sha)
+    monkeypatch.setattr(prospective, "ACCEPTED_BASE_TREE", seed.frozen_tree)
+    monkeypatch.setattr(prospective, "SOURCE_PROFILE_SHA256", seed.profile_sha)
+    monkeypatch.setattr(repo_bootstrapper, "CANONICAL_MANIFEST_SHA256_BY_POLICY", {
+        **repo_bootstrapper.CANONICAL_MANIFEST_SHA256_BY_POLICY, "deliverable_only": seed.step0_sha,
+    })
+    return seed
+
+
+def _handoff_arguments(seed, tmp_path, *, condition="sandbox_v2", repeat=1, task_index=0):
+    parent = tmp_path / "publications"
+    parent.mkdir(exist_ok=True)
+    return dict(
+        run_id=f"gpt54_time_budget_v1_{'v2' if condition == 'sandbox_v2' else 'codex'}_r{repeat}",
+        task_id=seed.task_ids[task_index], runtime_root=seed.runtime, expected_reviewed_source_sha=seed.runtime_sha,
+        frozen_grader_root=seed.frozen, expected_grader_source_sha=seed.frozen_sha,
+        input_registration_root=seed.frozen, expected_input_source_sha=seed.frozen_sha,
+        input_registration_path=prospective.SOURCE_PROFILE, dataset_parquet=seed.parquet,
+        reference_root=seed.references, destination=parent / "one-observation",
+        step0_manifest=seed.step0 if condition == "codex" else None,
+    )
+
+
+def _assert_unpublished(arguments):
+    output = arguments["destination"]
+    assert not output.exists()
+    assert not output.with_name(output.name + prospective.HANDOFF_RESERVATION_SUFFIX).exists()
+
+
+@pytest.mark.parametrize("condition,repeat,task_index", [
+    ("sandbox_v2", 1, 0), ("sandbox_v2", 2, 1), ("codex", 1, 0), ("codex", 2, 1),
+])
+def test_time_budget_observation_handoff_valid_exact_shape(handoff_sources, tmp_path, condition, repeat, task_index):
+    from core.agentic_v2_run_driver import TaskToRun
+    from core.experiment_config import ExperimentConfig
+    from core.time_budget_observation_deadline import ObservationIdentity
+    from gpt54_prepared_input_attestation import _identity
+
+    seed = handoff_sources
+    arguments = _handoff_arguments(seed, tmp_path, condition=condition, repeat=repeat, task_index=task_index)
+    if repeat == 2:
+        arguments["input_registration_path"] = seed.input_only_role
+    marker = prospective.prepare_observation_handoff(seed.plan, **arguments)
+    output = arguments["destination"]
+    assert marker == json.loads((output / prospective.HANDOFF_READY).read_bytes())
+    assert set(marker) == {
+        "preparation_version", "observation", "abba_index", "registration_file", "runtime_source",
+        "frozen_grader", "condition_template", "inputs", "observation_control", "files", "launch_authority",
+        "evidence_boundary",
+    }
+    assert marker["preparation_version"] == "gpt54-time-budget-observation-preparation-v1"
+    assert marker["evidence_boundary"] == "model_free_one_observation_preparation_not_execution"
+    compiled = prospective.compile_registration(seed.plan, runtime_root=seed.runtime,
+        expected_reviewed_source_sha=seed.runtime_sha, frozen_grader_root=seed.frozen,
+        expected_grader_source_sha=seed.frozen_sha)
+    expected_identity = {
+        "study_id": prospective.STUDY_ID, "run_id": arguments["run_id"], "condition": condition,
+        "repeat": repeat, "task_id": arguments["task_id"], "reviewed_source_sha": seed.runtime_sha,
+        "reviewed_source_tree": seed.runtime_tree, "registration_sha256": compiled.manifest_sha256,
+        "input_sha256": historical.seal(marker["inputs"]),
+    }
+    assert marker["observation"] == expected_identity
+    assert ObservationIdentity(**expected_identity).task_id == arguments["task_id"]
+    assert marker["abba_index"] == [row.run_id for row in compiled.runs].index(arguments["run_id"])
+    assert marker["runtime_source"] == {"source_sha": seed.runtime_sha, "source_tree": seed.runtime_tree}
+    assert marker["frozen_grader"] == {
+        "source_sha": seed.frozen_sha, "source_tree": seed.frozen_tree,
+        "template_source_sha256": prospective.FROZEN_TEMPLATE_SHA256,
+        "template_config_path": historical.GRADER, "materialized_config_path": None,
+        "materialized_grader_source_sha256": None, "execution_source": "frozen_source_only_not_runtime_root",
+    }
+    assert marker["registration_file"] == {"path": prospective.REGISTRATION_PATH,
+        **_identity((seed.runtime / prospective.REGISTRATION_PATH).read_bytes())}
+    role = seed.plan["conditions"][condition]["template"]
+    assert marker["condition_template"] == {"path": role, **_identity((seed.runtime / role).read_bytes())}
+    inputs = marker["inputs"]
+    assert inputs["registration"]["source_sha"] == seed.frozen_sha
+    assert inputs["registration"]["source_tree"] == seed.frozen_tree
+    assert inputs["registration"]["scope"] == "dataset_and_cohort_only_not_legacy_dispatch"
+    assert inputs["registration"]["manifest_path"] == arguments["input_registration_path"]
+    assert inputs["registration"]["files"] == {
+        role: _identity((seed.frozen / role).read_bytes()) for role in (
+            arguments["input_registration_path"], historical.ENVELOPE + "gdpval_task_catalog.json",
+            historical.ENVELOPE + "advance_check_plan.yaml",
+        )
+    }
+    assert inputs["dataset"]["parquet"] == _identity(seed.parquet.read_bytes())
+    assert inputs["step0_manifest"] == (_identity(seed.step0.read_bytes()) if condition == "codex" else None)
+    assert inputs["task_id"] == arguments["task_id"]
+    config = json.loads((output / prospective.HANDOFF_CONFIG).read_bytes())
+    assert set(config) == {"handoff_version", "factory", "configuration", "observation_control",
+                           "model_binding", "launch_allowed", "execution_enabled"}
+    assert config["model_binding"] == seed.plan["shared"]["model"]
+    assert config["launch_allowed"] is config["execution_enabled"] is False
+    assert config["observation_control"] == marker["observation_control"] == {
+        "required": True, "type": "core.time_budget_observation_deadline.TimeBudgetObservation",
+        "factory_argument": "observation_for" if condition == "sandbox_v2" else "observation_control",
+        "identity": expected_identity, "generation_seconds": 1200, "cleanup_seconds": 20,
+        "admission_reserved": False, "generation_started": False,
+    }
+    payload = json.loads((output / prospective.HANDOFF_TASK).read_bytes())
+    assert set(payload) == {"kind", "arguments", "reference_path_base", "reference_file_records"}
+    assert payload["reference_path_base"] == "handoff_directory"
+    assert payload["reference_file_records"] == inputs["reference_file_records"]
+    assert payload["arguments"]["task_id"] == arguments["task_id"]
+    if condition == "sandbox_v2":
+        assert config["factory"] == "core.agentic_v2_conversation_runner.build_runner_factory"
+        assert payload["kind"] == "sandbox_v2_task_to_run"
+        task = TaskToRun(**payload["arguments"])
+        assert task.prompt == seed.rows[task_index]["prompt"]
+        assert config["configuration"]["task_ids"] == [arguments["task_id"]]
+        assert config["configuration"]["model"]["reasoning_effort"] == "xhigh"
+        assert config["configuration"]["azure_connection"]["route_profile"] == "direct-v1"
+        assert config["configuration"]["fixed_settings"]["exec_run_open"] is False
+        assert config["configuration"]["cost"] == {"chosen_settings": {
+            "tool_calls_per_attempt": 8, "max_output_tokens_per_turn": 8192,
+        }}
+        assert config["configuration"]["profile"] == {
+            "tool_contract_version": "2.0", "policy_profile_id": "offline-full-v1", "foundation_only": True,
+        }
+        assert "approved_maximum_usd" not in (output / prospective.HANDOFF_CONFIG).read_text()
+    else:
+        assert config["factory"] == "core.codex_runner.CodexAgentRunner"
+        assert payload["kind"] == "codex_run_arguments"
+        assert payload["arguments"]["task_prompt"] == seed.rows[task_index]["prompt"]
+        assert payload["arguments"]["run_id"] == arguments["run_id"]
+        typed = ExperimentConfig.from_dict(config["configuration"])
+        assert typed.validate() == []
+        assert config["configuration"]["data"]["filter"]["task_ids"] == [arguments["task_id"]]
+        assert config["configuration"]["execution"]["max_retries"] == 0
+        assert config["configuration"]["execution"]["resume_max_rounds"] == 0
+        assert config["configuration"]["execution"]["codex"]["reasoning_effort"] == "xhigh"
+        assert config["configuration"]["execution"]["timeout"] == 1200
+    selected = seed.rows[task_index]["reference_files"]
+    assert set(marker["files"]) == {prospective.HANDOFF_CONFIG, prospective.HANDOFF_TASK, *selected}
+    assert {path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()} == {
+        *marker["files"], prospective.HANDOFF_READY,
+    }
+    for name, identity in marker["files"].items():
+        assert identity == _identity((output / name).read_bytes())
+        assert (output / name).stat().st_nlink == 1
+    assert "rubric" not in (output / prospective.HANDOFF_TASK).read_text()
+    assert "synthetic-withheld-answer" not in (output / prospective.HANDOFF_TASK).read_text()
+    assert not (output / "data").exists() and not (output / "workspace").exists()
+    assert marker["launch_authority"] == compiled.as_dict()["launch_authority"]
+    assert marker["launch_authority"]["launch_allowed"] is marker["launch_authority"]["execution_enabled"] is False
+    with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
+        require_comparison_runtime_launch()
+    before = {path: path.read_bytes() for path in output.rglob("*") if path.is_file()}
+    with pytest.raises(prospective.TimeBudgetPreparationRefused, match="^handoff_or_reservation_exists$"):
+        prospective.prepare_observation_handoff(seed.plan, **arguments)
+    assert before == {path: path.read_bytes() for path in output.rglob("*") if path.is_file()}
+
+
+@pytest.mark.parametrize("case,reason", [
+    ("unknown_run", "exactly_one_registered_observation_required"),
+    ("old_run", "exactly_one_registered_observation_required"),
+    ("unknown_task", "exactly_one_registered_observation_required"),
+    ("duplicate_selection", "exactly_one_registered_observation_required"),
+    ("duplicate_runs", "repetition_matrix"),
+    ("duplicate_tasks", "shared_facts"),
+    ("launch_toggle", "launch_enabled"),
+    ("missing_runtime_anchor", "explicit_source_and_input_anchors_required"),
+    ("missing_input_anchor", "explicit_source_and_input_anchors_required"),
+    ("input_ref_not_sha", "review_anchor_must_be_full_commit"),
+    ("runtime_ref_not_sha", "review_anchor_must_be_full_commit"),
+    ("wrong_frozen_anchor", "frozen_grader_review_anchor"),
+    ("wrong_runtime_anchor", "observation_handoff_refused"),
+    ("swapped_roots", "observation_handoff_refused"),
+    ("wrong_input_anchor", "observation_handoff_refused"),
+    ("input_facts_disagree", "input_registration_dataset"),
+    ("external_input_locator", "observation_handoff_refused"),
+    ("traversal_input_locator", "observation_handoff_refused"),
+    ("output_traversal", "handoff_parent_traversal"),
+    ("output_source_overlap", "handoff_source_overlap"),
+    ("v2_step0_supplied", "condition_specific_step0_required"),
+    ("codex_step0_missing", "condition_specific_step0_required"),
+])
+def test_time_budget_observation_handoff_invalid_selection_and_anchors(handoff_sources, tmp_path, case, reason):
+    seed = handoff_sources
+    plan = deepcopy(seed.plan)
+    arguments = _handoff_arguments(seed, tmp_path, condition="codex" if case == "codex_step0_missing" else "sandbox_v2")
+    if case in ("unknown_run", "old_run"):
+        arguments["run_id"] = "not-registered" if case == "unknown_run" else "gpt54_v2_codex_v1_v2_r1"
+    elif case == "unknown_task":
+        arguments["task_id"] = "not-registered"
+    elif case == "duplicate_selection":
+        arguments["task_id"] = [seed.task_ids[0], seed.task_ids[0]]
+    elif case == "duplicate_runs":
+        plan["runs"].append(deepcopy(plan["runs"][0]))
+    elif case == "duplicate_tasks":
+        plan["shared"]["dataset"]["tasks"].append(deepcopy(plan["shared"]["dataset"]["tasks"][0]))
+    elif case == "launch_toggle":
+        plan["launch_enabled"] = True
+    elif case.startswith("missing_"):
+        arguments["expected_reviewed_source_sha" if case == "missing_runtime_anchor" else "expected_input_source_sha"] = None
+    elif case in ("input_ref_not_sha", "runtime_ref_not_sha"):
+        arguments["expected_input_source_sha" if case == "input_ref_not_sha" else "expected_reviewed_source_sha"] = "HEAD"
+    elif case == "wrong_frozen_anchor":
+        arguments["expected_grader_source_sha"] = seed.runtime_sha
+    elif case == "wrong_runtime_anchor":
+        arguments["expected_reviewed_source_sha"] = "0" * 40
+    elif case == "wrong_input_anchor":
+        arguments["expected_input_source_sha"] = "0" * 40
+    elif case == "swapped_roots":
+        arguments.update(runtime_root=seed.frozen, frozen_grader_root=seed.runtime)
+    elif case == "input_facts_disagree":
+        arguments["input_registration_path"] = seed.mismatch_role
+    elif case == "external_input_locator":
+        arguments["input_registration_path"] = str(seed.frozen / prospective.SOURCE_PROFILE)
+    elif case == "traversal_input_locator":
+        arguments["input_registration_path"] = historical.ENVELOPE + "../execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml"
+    elif case == "output_traversal":
+        arguments["destination"] = arguments["destination"].parent / ".." / "escape"
+    elif case == "output_source_overlap":
+        arguments["destination"] = seed.runtime / "forbidden-handoff"
+    elif case == "v2_step0_supplied":
+        arguments["step0_manifest"] = tmp_path / "do-not-open-step0"
+    else:
+        arguments["step0_manifest"] = None
+    with pytest.raises(prospective.TimeBudgetRegistrationRefused, match=f"^{reason}$"):
+        prospective.prepare_observation_handoff(plan, **arguments)
+    _assert_unpublished(arguments)
+
+
+@pytest.mark.parametrize("case", [
+    "parquet_digest", "reference_digest", "step0_digest", "runtime_blob", "frozen_blob",
+    "input_registration_blob", "untracked_input_locator", "input_locator_symlink", "parquet_hardlink",
+    "reference_symlink", "output_symlink", "reserved_partial", "existing_destination",
+])
+def test_time_budget_observation_handoff_tamper_and_clobber(handoff_sources, tmp_path, case):
+    seed = handoff_sources
+    reference_index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
+    arguments = _handoff_arguments(
+        seed, tmp_path, condition="codex" if case == "step0_digest" else "sandbox_v2",
+        task_index=reference_index if case in ("reference_digest", "reference_symlink") else 0,
+    )
+    output = arguments["destination"]
+    reservation = output.with_name(output.name + prospective.HANDOFF_RESERVATION_SUFFIX)
+    target, original, extra = None, None, None
+    if case in ("parquet_digest", "parquet_hardlink"):
+        target = seed.parquet
+    elif case in ("reference_digest", "reference_symlink"):
+        target = seed.references / seed.rows[reference_index]["reference_files"][0]
+    elif case == "step0_digest":
+        target = seed.step0
+    elif case == "runtime_blob":
+        target = seed.runtime / "batch-runner/core/codex_runner.py"
+    elif case == "frozen_blob":
+        target = seed.frozen / historical.GRADER
+    elif case in ("input_registration_blob", "input_locator_symlink"):
+        # The explicit alternate locator is tracked but isn't in F's grader
+        # closure/profile, so refusal exercises the actual input-source stage.
+        target = seed.frozen / seed.input_only_role
+        arguments["input_registration_path"] = seed.input_only_role
+    if target is not None:
+        original = target.read_bytes()
+    try:
+        if case == "parquet_hardlink":
+            extra = tmp_path / "parquet-alias"
+            os.link(target, extra)
+        elif case in ("reference_symlink", "input_locator_symlink"):
+            extra = tmp_path / "external-target"
+            extra.write_bytes(original)
+            target.unlink()
+            target.symlink_to(extra)
+        elif target is not None:
+            target.write_bytes(original + b"\nchanged\n")
+        elif case == "untracked_input_locator":
+            extra = seed.frozen / historical.ENVELOPE / "untracked-input.yaml"
+            extra.write_bytes((seed.frozen / prospective.SOURCE_PROFILE).read_bytes())
+            arguments["input_registration_path"] = extra.relative_to(seed.frozen).as_posix()
+        elif case == "output_symlink":
+            extra = tmp_path / "external-output"
+            extra.mkdir()
+            output.symlink_to(extra, target_is_directory=True)
+        elif case == "reserved_partial":
+            reservation.write_bytes(b"retained incomplete reservation")
+        else:
+            output.mkdir()
+            (output / "owned-by-someone-else").write_bytes(b"untouched")
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused):
+            prospective.prepare_observation_handoff(seed.plan, **arguments)
+        assert not (output / prospective.HANDOFF_READY).exists()
+        if case == "reserved_partial":
+            assert reservation.read_bytes() == b"retained incomplete reservation"
+        elif case == "existing_destination":
+            assert (output / "owned-by-someone-else").read_bytes() == b"untouched"
+        elif case == "output_symlink":
+            assert list(extra.iterdir()) == []
+        else:
+            _assert_unpublished(arguments)
+    finally:
+        if target is not None:
+            if target.is_symlink():
+                target.unlink()
+            target.write_bytes(original)
+        if extra is not None and extra.is_file():
+            extra.unlink()
+
+
+@pytest.mark.parametrize("case", [
+    "parquet", "reference", "step0", "runtime_source", "input_source", "installed_config", "parent_swap",
+])
+def test_time_budget_observation_handoff_final_rereads_quarantine(handoff_sources, tmp_path, monkeypatch, case):
+    import ghcp_vm_input_bundle as publication
+
+    seed = handoff_sources
+    reference_index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
+    arguments = _handoff_arguments(seed, tmp_path, condition="codex" if case == "step0" else "sandbox_v2",
+                                   task_index=reference_index)
+    output = arguments["destination"]
+    target = {
+        "parquet": seed.parquet, "reference": seed.references / seed.rows[reference_index]["reference_files"][0],
+        "step0": seed.step0, "runtime_source": seed.runtime / "batch-runner/core/codex_runner.py",
+        "input_source": seed.frozen / prospective.SOURCE_PROFILE,
+        "installed_config": output / prospective.HANDOFF_CONFIG,
+    }.get(case)
+    original = None if target is None or case == "installed_config" else target.read_bytes()
+    write = publication._write_no_clobber
+    changed = []
+
+    def race(path, data, *, parent_fd):
+        write(path, data, parent_fd=parent_fd)
+        if path.name == prospective.HANDOFF_TASK and not changed:
+            changed.append(True)
+            if case == "parent_swap":
+                output.rename(output.with_name("held-original-output"))
+                output.mkdir()
+            else:
+                target.write_bytes(target.read_bytes() + b"\nchanged after member publication\n")
+
+    monkeypatch.setattr(publication, "_write_no_clobber", race)
+    try:
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused):
+            prospective.prepare_observation_handoff(seed.plan, **arguments)
+        assert changed == [True]  # A negative must reach the valid publication boundary.
+        assert not (output / prospective.HANDOFF_READY).exists()
+        assert not (output.with_name("held-original-output") / prospective.HANDOFF_READY).exists()
+        reservation = output.with_name(output.name + prospective.HANDOFF_RESERVATION_SUFFIX)
+        assert reservation.is_file()
+        before = reservation.read_bytes()
+        with pytest.raises(prospective.TimeBudgetPreparationRefused, match="^handoff_or_reservation_exists$"):
+            prospective.prepare_observation_handoff(seed.plan, **arguments)
+        assert reservation.read_bytes() == before
+    finally:
+        if original is not None:
+            target.write_bytes(original)
+
+
+def test_time_budget_observation_handoff_v2_never_reads_step0_and_stays_closed(handoff_sources, tmp_path, monkeypatch):
+    from core import repo_bootstrapper
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("V2 attempted a Codex-only canonical Step0 read")
+
+    monkeypatch.setattr(repo_bootstrapper, "require_canonical_manifest_bytes", forbidden)
+    for name in ("TIME_BUDGET_LAUNCH_ENABLED", "COMPARISON_LAUNCH_ALLOWED", "EXPECTED_REVIEWED_SOURCE_SHA"):
+        monkeypatch.setenv(name, "true")
+    seed = handoff_sources
+    arguments = _handoff_arguments(seed, tmp_path)
+    marker = prospective.prepare_observation_handoff(seed.plan, **arguments)
+    assert marker["inputs"]["step0_manifest"] is None
+    assert marker["launch_authority"]["launch_allowed"] is False
+    assert marker["observation_control"]["admission_reserved"] is False
+    with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
+        require_comparison_runtime_launch()
+    with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^manifest_fields$"):
+        prospective.compile_registration(seed.plan)
+    assert hashlib.sha256(historical.PLAN.read_bytes()).hexdigest() == (
+        "3d88bcb0c4eeeb9dad2c9ee7cb88db1b7ff49145f9264d9d284178f167a76ed1"
+    )
+    assert hashlib.sha256((historical.ROOT / prospective.SOURCE_PROFILE).read_bytes()).hexdigest() == (
+        "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
+    )
+
+
+@pytest.mark.parametrize("condition", ["sandbox_v2", "codex"])
+def test_time_budget_observation_handoff_valid_reference_payload(handoff_sources, tmp_path, condition):
+    """A reference-bearing baseline, separate from the four no-reference proofs."""
+    from gpt54_prepared_input_attestation import _identity
+
+    seed = handoff_sources
+    index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
+    assert seed.rows[index]["task_id"] == "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+    arguments = _handoff_arguments(seed, tmp_path, condition=condition, task_index=index)
+    marker = prospective.prepare_observation_handoff(seed.plan, **arguments)
+    output = arguments["destination"]
+    names = seed.rows[index]["reference_files"]
+    assert names and marker["observation"]["task_id"] == seed.rows[index]["task_id"]
+    assert set(marker["files"]) == {prospective.HANDOFF_CONFIG, prospective.HANDOFF_TASK, *names}
+    payload = json.loads((output / prospective.HANDOFF_TASK).read_bytes())
+    assert payload["arguments"]["reference_files"] == names
+    assert payload["reference_file_records"] == [{"path": name, **seed.records[name]} for name in names]
+    assert marker["inputs"]["reference_file_records"] == payload["reference_file_records"]
+    for name in names:
+        assert (output / name).read_bytes() == (seed.references / name).read_bytes()
+        assert marker["files"][name] == _identity((output / name).read_bytes())
+        assert (output / name).stat().st_nlink == 1 and not (output / name).is_symlink()
+    assert {path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()} == {
+        *marker["files"], prospective.HANDOFF_READY,
+    }
+    assert json.loads((output / prospective.HANDOFF_READY).read_bytes()) == marker
+    assert marker["launch_authority"]["launch_allowed"] is False
+    with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
+        require_comparison_runtime_launch()
