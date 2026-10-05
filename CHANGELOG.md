@@ -11,133 +11,84 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
-### Fixed
-
-- Correct the prospective time-budget registration's CI partition, public-artifact
-  transport and coupled workflow test contracts. The latest repair changes four
-  test files only, followed by CHANGELOG/LATEST. Workflow bytes, registration,
-  core/grader/runtime, HF tests, source fixtures and experiment policy are unchanged
-  by this test-contract correction.
-
-  At reviewed HEAD `18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4`, tree
-  `bcd47929dd12f0be0d9987e7de29001dbe95c470`, leader-read pytest run
-  `37276590021`, job `111654931251`, attempt 1, reported **5 failed, 13385 passed,
-  64 skipped, 46 deselected in 1962.91s**. Log SHA256 is
-  `645d67b70bada9c41ad01cc63dbeda48e3d69444220f087fbbc604ecbc69e83e`.
-  Ten applicable checks passed and deploy skipped; conditional review `5411311343`
-  did not waive these five failures.
-
-  The pre-edit same-session source-provenance charter review classified the
-  CURRENT workflow digest `3f7d6bf0…` separately from frozen `b617f79a…`, confirmed
-  from the immutable Git blob at the unchanged fixture anchor
-  `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`. The shared-symbol audit found
-  three CURRENT assertions and two frozen consumers. Explicit
-  `CURRENT_WORKFLOW_SHA256` and `FROZEN_PILOT_WORKFLOW_SHA256` expectations now
-  preserve both roles. No mutable-file-derived expectation, fixture repin or
-  weakening of positive/stale-grader assertions is introduced.
-
-  The budget-readout reconstruction retains the historical canonical baseline
-  `fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47`.
-  Before normalization, it asserts exactly two known filename occurrences and
-  exactly one matching token in each named command. Only the generic ignore token
-  and comparison-selection token added by PR749 are removed from the copied
-  reconstruction. Every other baseline field and all current coverage/security
-  guards remain strict.
-
-  Test-only HEAD `ca0e72e7d771b4a4851b2c8e15bdbb29c8bc7aed`, tree
-  `ec441d48e5063a78c14a55ae177c168246c2c67d`, passed the three specified
-  functions, **5 cases in 5.72s, exit 0**, in one token-free/offline Python 3.10.12
-  invocation without `-x`. Its 300-second outer bound and 5-second termination
-  grace are test-only. Exact private command SHA256 is
-  `e0dd4803e00da3556a8a920d03148b3f6de83031fae97f23e694cdf7474086fe`;
-  combined-log SHA256 is
-  `3fd03641afe7f3927668f305038e21c3d2bae435f3af33551e64ec22d6549a15`;
-  receipt SHA256 is
-  `ff7a57681a1561b96833ba961599703ee40403e5bafcb5934986fce47f89530f`.
-  The command digest identifies the exact private script, not the redacted public
-  display. Only CHANGELOG and the single current LATEST record change after this
-  proof. No successful selector, Node/HF check, broad suite or CI job was repeated.
-
-  Earlier corrections remain separate evidence. Backend run `37269485572`, job
-  `111633237507`, reported **1 failed, 13464 passed, 64 skipped, 46 deselected in
-  1663.84s** at the stale 11-file inventory. The prior repair added the existing
-  registration module to both sorted workflow command lists and made the strict
-  inventory 12. Its pre-edit workflow review preserved marker/source-SHA/security
-  gates, permissions, concurrency and timeouts but missed the imported CURRENT
-  digest. That private memo's SHA256 is
-  `bbdafb85dfc7b9ad84e30445ccdd4133ec10ad6634940c6016ec99f9616c56e3`.
-  The local combined attempt at `fd910be79992d08e1006622e227e542f8ad0cb78`,
-  tree `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, failed **1 case in 0.24s,
-  exit 1**, before the partition's scoped collection or any Node fake/live request. Commit
-  `0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18` corrected the CURRENT digest.
-  The [immutable correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/369817bf919eb04632ad0af78160d3a33b5d5692/tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation)
-  preserves exact failed-command/log/receipt identities and the review omission.
-
-  At leader-reviewed `369817bf919eb04632ad0af78160d3a33b5d5692`, tree
-  `0bd9f2bbd1c837994d655ad328857082e4988a38`, the authorized Python partition
-  continuation passed **1 case in 15.32s, exit 0**, including its scoped collection.
-  The [immutable continuation record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/18cfee10ab3a8de77b06e9d6c6daeca867b9d9c4/tasks/LATEST_TASK_RESULT/README.md#one-node-python-continuation)
-  retains its exact private command/log/receipt identities. Separately, supplied
-  validate run `37274687663`, job `111649027037`, attempt 1, at that same HEAD
-  passed **556 Node cases, 0 failed**, including ten transport fakes and the live
-  six-artifact hash/structure check in **494.959834ms**. Its 125654-byte log SHA256
-  is `dc07a93374aac5c78ad9c9369fb6fd6faee0bac0a2e93dccc1af1cfe3742e13e`.
-  This newer CI evidence does not explain the earlier **10060ms/10064ms** timeouts
-  in validate jobs `111633237134`/`111635977167`, run `37269485559`, attempts 1/2,
-  or turn the failed local combined attempt into a pass. The bounded transport
-  repair retains six pinned URLs, exact hashes/lengths, streaming caps and all
-  structure assertions, with one 30-second request allowance inside 45 seconds,
-  safe error context and bounded abort, without retries or a cached-success fallback.
-
-  Source review `5410467314` at `c5217b19f79a44787ae08fafecc28dae3ab145b1`
-  and the original 75-case registration proof below remain unchanged. Final
-  corrected-HEAD review and applicable CI acceptance remain pending; delivery
-  stays **HOLD**. The [current task record](tasks/LATEST_TASK_RESULT/README.md#five-node-corrective-proof)
-  preserves exact commands, separate outcomes and remaining deadline/source-binding
-  work. No deadline integration, source relabeling or execution authority is added.
-
 ### Added
 
-- Register the separate prospective `gpt54_sandboxv2_codex_time_budget_v1`
-  configuration-bundle comparison, with four noncolliding ABBA run IDs, the same
-  five approved tasks and GPT-5.4/direct-v1/xhigh binding, at most 20 generation
-  observations and inference concurrency 1. Each observation has one external
-  attempt, without replay/resume/retry. Intent is 1200 elapsed seconds from first
-  generation start including waits/native recovery, followed by at most 20
-  separately recorded seconds of local cleanup. The 1220-second planned host
-  lifecycle is not a remote billing or server-side cancellation guarantee.
+- Integrate the prospective time-budget observation control into the existing V2
+  and Codex runners, with independent runtime/frozen-judge source anchors. The
+  fixed 20-observation GPT-5.4/direct-v1/xhigh comparison retains five tasks, ABBA,
+  two repeats, concurrency 1 and no external replay/resume/retry. No dispatcher or
+  capture path selects the control; every launch refusal and execution flag stays
+  closed. There is no native request/token or money hard-cap claim.
 
-  The isolated strict parser/compiler reuses genuine source, task and frozen-judge
-  validation without changing either prior comparison manifest or its compiler.
-  Its output separates registered intent, unimplemented executor policy and false
-  launch authority; it contains no dispatch commands or runtime configs. Native
-  request/token counters are observation-only or explicitly unavailable, with no
-  shared native or money hard-cap claim. V2's 9-turn/8192-output settings remain
-  V2-specific. One grading attempt, retained failed/missing outcomes and a fixed
-  descriptive paired analysis prohibit score-dependent regrading or repeats.
-  Core, grader, capture/launch guards and historical paid evidence are unchanged;
-  the 30-cell/8-cell studies remain closed. The registration itself changed no
-  workflow; its later backend-CI correction is recorded under Fixed above.
+  Durable exclusive admission precedes preparation. One monotonic clock starts
+  immediately before V2's first `voice.next_turn` or Codex's `thread.turn`, after
+  reservation; turn creation, waits, tool work and native recovery share 1200
+  seconds. Timeout latches before interruption and rejects late success. All
+  interruption, waits, close, orphan checks, collection and removal spend one cleanup
+  remainder: first start plus 1220 seconds after timeout, or at most 20 seconds
+  after an earlier terminal result. Unconfirmed cleanup remains a non-success and
+  retains the host lease. No environment enlargement or independent reset grace
+  is available. The control requires an owned Linux/POSIX main-thread host;
+  omitted behavior and the closed 10800-second deadline store are unchanged.
 
-  One offline `time_budget_registration` selector passed **75 cases in 7.54s**,
-  exit 0, at implementation HEAD `10c475a1f50355643a2a9ea937fc235d8ad9b19f`,
-  tree `af670c70fa90316d486313738dbdd99f9701a852`. Its 300-second outer limit
-  and 5-second termination grace are test-only. Exact-command SHA256 is
-  `37c0ae9db22d135e0b560a3bbcf969349241aea9419c869faf7bcc728992e806`;
-  combined-log SHA256 is
-  `221f4966e26ca6aabc17cac8bdcd79ffe688f11813f78269c5025c4606c481cb`;
-  private receipt SHA256 is
-  `042aee2775343f67996853350a55598d5be2c24c699460c78d09dad3b2cd66ab`.
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-prospective-time-budget-comparison-registration--2026-10-05)
-  preserves the exact command with private locators redacted, accepted
-  `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2` basis and evidence boundary.
-  The original post-proof delta contained only README/CHANGELOG/LATEST
-  documentation. The separate CI correction, failed local target, passing Python
-  continuation and supplied CI transport proof are recorded above. Remaining CI,
-  final-record review and delivery acceptance remain pending.
-  The single next integration unit,
-  `time_budget_observation_deadline`, would wire the existing host deadline;
-  no deadline/counter enforcement or execution authority is claimed here.
+  `compile_registration` requires both explicit roots and both independent full
+  commit anchors together. Runtime R supplies 41 prospective bindings. Frozen F
+  is `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
+  `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, with the genuine unchanged
+  whole TEMPLATE closure
+  `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
+  Registered detached linked worktrees, tracked regular blobs, held parents and
+  final byte/HEAD rereads bind both sources. R cannot claim F's judge hash.
+  Materialized grader path/bytes require a distinct fingerprint and eventual
+  F-derived execution. Neither historical manifest, legacy compiler, grader,
+  Step2, workflow, capture guard nor historical paid binding changes. Current
+  refusals and frozen positive fixtures keep explicit, separate source roles.
+
+  The same-session architecture/grading/source-provenance review and consolidated
+  grading specification were applied before coupled edits. The accepted source
+  basis is `f609aff0deefd3c5afd7a6322ba6473c8b3e6c98`, tree
+  `3b318f9d70cbf2a080de28ff76fdfd5e278e1264`; the leader supplied reviewed
+  PR749 `d901b119443a843784d81717943622f577fb43b4`, owner review `5411970743`,
+  all 11 applicable checks successful and PR-only deploy skipped. Those prior
+  facts are not approval or CI evidence for this change.
+
+  The one combined offline selector at
+  `1d5a9c2472e17fde1c0ad2dc1a0f3300772b5c95`, tree
+  `20c0d2d4ddd60d2f67c88dee7105d22bd522345f`, reported **5 failed, 46 passed,
+  75 deselected in 8.35s**, exit 1. Its three V2 failures exposed control-stage
+  timeout mapping; the other two exposed synthetic Git layout and guarded fixture
+  import mistakes. The narrow correction at
+  `73a86933934ac0a9cc260a963f042414b61bc151`, tree
+  `cae6626dfba04eb6d2caad83fe725e72dcb1243e`, reran only those five failed
+  node IDs: **5 passed in 7.55s**, exit 0. The repaired positive source target also
+  completes the deep substitution/race checks previously blocked by the invalid
+  Git layout. Initial early-layout refusals are not claimed as those deeper proofs.
+  No passed node was repeated and no aggregate 51-pass/fixed-HEAD result is claimed.
+
+  Both token-free Python 3.10.12 invocations used fake clocks, controlled
+  transports, synthetic inputs and real temporary Git identities, each within
+  300 seconds plus 5 seconds of test-only termination grace. First command/log/
+  receipt SHA256 values are
+  `e13e9b5563233fee086e74d6d749dc5216b111791847142e1d76edd31a810a7d`,
+  `7fb1fd2e018df4356a9a79e1e0b0e5daa9718665d28588f1914c21bd10601f9f`,
+  `a68a2c3f4d5c68b3d150ab76abc15884a3003837d34457b14339394f5c114c29`.
+  Continuation command/log/receipt SHA256 values are
+  `66c00e910a970fb33ee4803fb4a5c3c679f37fb55048d248b1de4ec0ffe1f5e1`,
+  `d97043efafc16676c0cef92dbf043843d81ac7ecf23526eabef2728739c151a2`,
+  `6554f195f1d30738e5b6db423f5fd48de9b43c8b06100f2844ab312da57379cd`.
+  Exact private command hashes are not hashes of the redacted public displays.
+
+  Only CHANGELOG and the single [current task record](tasks/LATEST_TASK_RESULT/README.md)
+  follow the corrective proof. The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/d901b119443a843784d81717943622f577fb43b4/tasks/LATEST_TASK_RESULT/README.md)
+  retains the separate registration's 75-case proof and CI repairs. Current
+  delivery remains **HOLD** for final-HEAD review and applicable CI. Dispatcher/
+  capture selection, verified credentialed inputs, F-derived grading materialization
+  and a source-bound live direction remain. This software proof does not establish
+  live enforcement, remote cancellation or billing. No private input, consumed
+  artifact, real preparation, provider/model/grader/HF/Azure operation, CI query/
+  dispatch/retry, Project edit or merge occurred. The closed 30-cell/8-cell studies
+  and all previous worktrees remain untouched.
+
 
 - Bind the local model-free workflow gate to an explicitly selected comparison
   manifest and the independently validated request SHA. The optional API
