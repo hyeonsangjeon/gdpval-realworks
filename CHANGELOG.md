@@ -11,6 +11,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add `gpt54_time_budget_comparison.prepare_observation_handoff` for exactly
+  one registered run/task. It checks independent R/F anchors and an explicitly
+  supplied input-registration source, reuses only equal dataset/cohort facts,
+  and publishes a configuration envelope, model-safe task payload, selected
+  references and a final preparation marker. Codex verifies canonical Step0;
+  V2 neither accepts nor reads it. The output binds source/template/config/input
+  identities and requires observation control, without creating admission,
+  provider, clock, grader config or launch authority. Existing held-directory,
+  no-clobber and final-reread primitives are reused; partial reservations remain.
+
+  The same-session source/architecture/grading charter review preceded edits.
+  Only the prospective compiler binding advances, with one real pin added for
+  the reused, unchanged publication helper; the current inventory is 42.
+  Core/runtime/ownership, workflows, the frozen F/template, historical profiles,
+  paid evidence, study policy and every launch refusal remain unchanged.
+
+  The single bounded offline selector at
+  `ccf6e880caa8e5b3dfccea5139fe2c114baa4602`, tree
+  `407f36bb0848811191cbabe0a45469356a09949b`, reported **38 passed, 9 failed,
+  177 deselected in 19.00s**, exit 1. All nine failures were a fixture
+  `IndexError` before the API: the first selected task has no references.
+  Four passing handoffs covered tasks without references. Test-only correction
+  `184cba2e042518c0e22af104c42e5ef0b099f4a9`, tree
+  `63b03670161112bb0e5c4b3ab678e0dadd4b9ed0`, selects a declared reference task
+  and adds two positive reference-payload cases. The nine repaired and two new
+  cases are **unrun**, not a combined pass. No selector or successful subset was
+  repeated. The exact command/log/receipt identities and failed-node inventory
+  are in the single [current record](tasks/LATEST_TASK_RESULT/README.md).
+
+  The post-proof delta is the test correction and two completion records only;
+  production, manifest and usage README bytes still match the tested source.
+  The accepted basis is `36ba69e59e4196d653ca046e064809ca2a8f5bb3`, tree
+  `2d96778657188d7a80c32076fd6121707eb790f0`, following the supplied PR751 source
+  and actual-host receipt reviews. That positive model-free CI host receipt is
+  limited to its exact source/host; it is not this task's validation or launch
+  authority. [Prior proofs and the distinct NAS refusal](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0e270b67b3c7f63b8f94f945c4839b778c7572b/tasks/LATEST_TASK_RESULT/README.md)
+  remain immutable. Repaired-case evidence, full-HEAD review and applicable CI
+  acceptance are pending. The next execution integration is one handoff
+  consumer supplying the required control; host/input/live-dispatch/capture
+  and F-derived grading gates remain closed. No real preparation, provider call,
+  platform probe or CI query/dispatch occurred.
+
 ### Fixed
 
 - Require positive owned-host evidence from the existing real-kernel platform
