@@ -4,6 +4,9 @@ This is not the closed CodexTaskDeadlineStore, a model-request quota, a launch
 gate, or a remote cancellation guarantee. The caller reserves one observation
 in a host-owned directory before preparing it. An existing reservation is never
 adopted. A retained host lease means cleanup was not confirmed.
+Durable cleanup snapshots are never release authority. A missing lease after
+interrupted finalization is also uncertainty: reuse needs the same live host's
+one-use, before-deadline confirmation, not a receipt or a restarted process.
 
 Supervision belongs to the main thread of the owned POSIX host process. SIGALRM
 interrupts blocking local I/O, including turn creation and Responses.create;
@@ -119,6 +122,11 @@ class ObservationIdentity:
 class TimeBudgetObservation:
     """One reserved observation, including the host's final cleanup obligation."""
 
+    # No durable success bit can attest to the completion of its own fsync.
+    # Keep snapshots pessimistic and authorize reuse only after ALL finalization
+    # I/O returned within the deadline. PID binding rejects inherited fork state.
+    _released_hosts: dict[tuple[int, int, int, str], str] = {}
+
     def __init__(
         self,
         directory: Path,
@@ -159,7 +167,28 @@ class TimeBudgetObservation:
         self._cleanup_step_end: float | None = None
         self._before_processes: dict[int, tuple[int, str, str]] | None = None
         self._finished = False
+        self._cleanup_finished_at: float | None = None
+        self._host_key = (
+            os.getpid(),
+            self._directory_identity.st_dev,
+            self._directory_identity.st_ino,
+            str(self.directory),
+        )
         if os.path.lexists(self.directory / (identity.key + ".admitted.json")):
+            raise ObservationDeadlineRefused(REFUSED)
+        parent = self._directory_fd()
+        try:
+            admitted = {
+                name for name in os.listdir(parent) if name.endswith(".admitted.json")
+            }
+        finally:
+            os.close(parent)
+        released = self._released_hosts.pop(self._host_key, None)
+        if admitted and (
+            released is None or released + ".admitted.json" not in admitted
+        ):
+            # In particular, unlink may have succeeded before its fsync timed
+            # out. Absence of host-lease.json must not admit the next observation.
             raise ObservationDeadlineRefused(REFUSED)
         self._write("host-lease.json", {"observation": identity.key})
         # Failure between these writes deliberately retains the host lease.
@@ -191,19 +220,31 @@ class TimeBudgetObservation:
         return fd
 
     def _write(self, name: str, value: object) -> None:
+        payload = memoryview(_json(value))
+        self._arm()
         parent = self._directory_fd()
         try:
+            self._arm()
             fd = os.open(
                 name,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                 0o600,
                 dir_fd=parent,
             )
-            with os.fdopen(fd, "wb") as target:
-                target.write(_json(value))
-                target.flush()
+            # An alarm must not trigger another buffered flush while unwinding.
+            with os.fdopen(fd, "wb", buffering=0) as target:
+                self._arm()
+                while payload:
+                    written = target.write(payload)
+                    self._arm()
+                    if not written:
+                        raise ObservationDeadlineRefused(REFUSED)
+                    payload = payload[written:]
                 os.fsync(target.fileno())
+                self._arm()
+            self._arm()
             os.fsync(parent)
+            self._arm()
         except OSError as error:
             raise ObservationDeadlineRefused(REFUSED) from error
         finally:
@@ -289,16 +330,24 @@ class TimeBudgetObservation:
             if reason == TIMEOUT
             else now + CLEANUP_SECONDS
         )
-        self._write(
-            self.identity.key + ".terminal.json",
-            {
-                "reason": reason,
-                "terminal_monotonic": now,
-                "cleanup_deadline_monotonic": self.cleanup_deadline,
-            },
-        )
-        if self._supervising:
-            self._arm()
+        try:
+            # SIGALRM is one-shot. Arm the ORIGINAL absolute cleanup end before
+            # any terminal receipt I/O, including when called by the alarm or
+            # outside a generation supervisor. Persistence spends the remainder.
+            with self.supervise():
+                self._arm()
+                self._write(
+                    self.identity.key + ".terminal.json",
+                    {
+                        "reason": reason,
+                        "terminal_monotonic": now,
+                        "cleanup_deadline_monotonic": self.cleanup_deadline,
+                    },
+                )
+                self._arm()
+        except BaseException:
+            self.cleanup_failed = True
+            raise
 
     def remaining_cleanup(self) -> float:
         if self.cleanup_deadline is None:
@@ -307,6 +356,7 @@ class TimeBudgetObservation:
 
     def _alarm(self, signum, frame) -> None:
         if self.terminal_reason is None:
+            self.interruption_attempted = True
             try:
                 self.terminal(
                     TIMEOUT
@@ -317,10 +367,11 @@ class TimeBudgetObservation:
                 # terminal() has already latched the outcome in memory; never
                 # release this host without the missing durable evidence.
                 self.cleanup_failed = True
-            self.interruption_attempted = True
             raise ObservationTimedOut(TIMEOUT)
         self.cleanup_expired |= self.remaining_cleanup() <= 0
         self.cleanup_failed = True
+        self.cleanup_complete = False
+        self._released_hosts.pop(self._host_key, None)
         raise ObservationCleanupExpired(CLEANUP_UNCONFIRMED)
 
     def _arm(self) -> None:
@@ -376,6 +427,8 @@ class TimeBudgetObservation:
         step_seconds: float | None = None,
     ) -> bool:
         """All close/join/collect/remove stages spend this same remainder."""
+        if self._finished:
+            raise ObservationDeadlineRefused(REFUSED)
         if self.terminal_reason is None:
             self.terminal("failed")
         if interruption:
@@ -518,40 +571,73 @@ class TimeBudgetObservation:
     def finish_cleanup(self, confirmed: bool) -> None:
         if self._finished:
             raise ObservationDeadlineRefused(REFUSED)
-        if self.terminal_reason is None:
-            self.terminal("abandoned")
-        if self._before_processes is not None:
-            self.cleanup(
-                lambda: (
-                    not any(
-                        value[2] != "Z"
-                        and self._before_processes.get(pid, (None, None))[1] != value[1]
-                        for pid, value in self._descendants().items()
+        try:
+            if self.terminal_reason is None:
+                self.terminal("abandoned")
+            if self._before_processes is not None:
+                self.cleanup(
+                    lambda: (
+                        not any(
+                            value[2] != "Z"
+                            and self._before_processes.get(pid, (None, None))[1] != value[1]
+                            for pid, value in self._descendants().items()
+                        )
                     )
                 )
-            )
-        self.cleanup_expired |= self.remaining_cleanup() <= 0
-        parent = self._directory_fd()
-        try:
-            fd = os.open("host-lease.json", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
-            with os.fdopen(fd, "rb") as lease:
-                held = os.fstat(lease.fileno())
-                if (
-                    not stat.S_ISREG(held.st_mode)
-                    or held.st_nlink != 1
-                    or lease.read(4096) != _json({"observation": self.identity.key})
-                ):
-                    raise ObservationDeadlineRefused(REFUSED)
-            self.cleanup_complete = bool(
-                confirmed and not self.cleanup_failed and not self.cleanup_expired
-            )
-            self._write(self.identity.key + ".cleanup.json", self.as_record())
-            self._finished = True
-            if self.cleanup_complete:
-                os.unlink("host-lease.json", dir_fd=parent)
-                os.fsync(parent)
+            with self.supervise():
+                self._arm()
+                parent = self._directory_fd()
+                try:
+                    self._arm()
+                    fd = os.open("host-lease.json", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+                    with os.fdopen(fd, "rb") as lease:
+                        held = os.fstat(lease.fileno())
+                        if (
+                            not stat.S_ISREG(held.st_mode)
+                            or held.st_nlink != 1
+                            or lease.read(4096) != _json({"observation": self.identity.key})
+                        ):
+                            raise ObservationDeadlineRefused(REFUSED)
+                    self._arm()
+                    releasable = bool(
+                        confirmed and not self.cleanup_failed and not self.cleanup_expired
+                    )
+                    # This snapshot precedes its own write/fsync and lease I/O.
+                    # Never write optimistic reusable-host evidence that would
+                    # need an unbounded compensating write after expiry.
+                    snapshot = self.as_record()
+                    snapshot["finalization_pending"] = True
+                    self._write(self.identity.key + ".cleanup.json", snapshot)
+                    self._arm()
+                    if releasable:
+                        os.unlink("host-lease.json", dir_fd=parent)
+                        self._arm()
+                        os.fsync(parent)
+                        self._arm()
+                finally:
+                    os.close(parent)
+                self._arm()
+            # Include supervisor teardown, not just receipt persistence, in the
+            # final sample. No filesystem operation follows this confirmation.
+            finished = self._now()
+            if finished >= self.cleanup_deadline:
+                raise ObservationCleanupExpired(CLEANUP_UNCONFIRMED)
+            self._cleanup_finished_at = finished
+            self.cleanup_complete = releasable
+            if releasable:
+                self._released_hosts[self._host_key] = self.identity.key
+        except ObservationCleanupExpired:
+            self.cleanup_expired = True
+            self.cleanup_failed = True
+            self.cleanup_complete = False
+            self._released_hosts.pop(self._host_key, None)
+        except BaseException:
+            self.cleanup_failed = True
+            self.cleanup_complete = False
+            self._released_hosts.pop(self._host_key, None)
+            raise
         finally:
-            os.close(parent)
+            self._finished = True
 
     def as_record(self) -> dict:
         now = self._now()
@@ -568,9 +654,11 @@ class TimeBudgetObservation:
                 - self.first_start
             ),
             "cleanup_deadline_monotonic": self.cleanup_deadline,
+            "cleanup_finished_monotonic": self._cleanup_finished_at,
             "cleanup_elapsed_seconds": None
             if self.terminal_at is None
-            else now - self.terminal_at,
+            else (now if self._cleanup_finished_at is None else self._cleanup_finished_at)
+            - self.terminal_at,
             "interruption_attempted": self.interruption_attempted,
             "interruption_acknowledged": self.interruption_acknowledged,
             "interruption_acknowledgement_scope": "local_runtime_only_not_remote_cancellation",

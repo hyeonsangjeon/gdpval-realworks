@@ -523,7 +523,9 @@ def test_time_budget_observation_deadline_one_cleanup_remainder(tmp_path, termin
     assert [remaining for _, remaining in events] == [20, 12, 5, 1]
     assert control.cleanup(lambda: pytest.fail("expired cleanup restarted")) is False
     control.finish_cleanup(True)
-    record = json.loads((control.directory / (control.identity.key + ".cleanup.json")).read_bytes())
+    # An expired observation must not start receipt I/O outside its deadline.
+    record = control.as_record()
+    assert not (control.directory / (control.identity.key + ".cleanup.json")).exists()
     assert record["cleanup_expired"] is True and record["host_reusable"] is False
     assert record["interruption_attempted"] is record["interruption_acknowledged"] is True
     assert record["remote_cancellation_confirmed"] is record["remote_billing_bound"] is False
@@ -638,6 +640,235 @@ def test_time_budget_observation_deadline_timeout_receipt_failure_still_interrup
     assert control.cleanup_failed
     control.finish_cleanup(True)
     assert not control.cleanup_complete and (control.directory / "host-lease.json").exists()
+
+
+def _assert_finalization_refused(tmp_path, control, clock, *, lease_present):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused
+
+    record = control.as_record()
+    assert record["cleanup_expired"] is True
+    assert record["cleanup_complete"] is record["host_reusable"] is False
+    assert record["cleanup_finished_monotonic"] is None
+    assert control.cleanup_failed
+    assert (control.directory / "host-lease.json").exists() is lease_present
+    admitted = control.directory / (control.identity.key + ".admitted.json")
+    assert json.loads(admitted.read_bytes())["run_id"] == control.identity.run_id
+    receipt = control.directory / (control.identity.key + ".cleanup.json")
+    if receipt.exists():
+        durable = json.loads(receipt.read_bytes())
+        assert durable["cleanup_complete"] is durable["host_reusable"] is False
+        assert durable["finalization_pending"] is True
+        assert durable["cleanup_finished_monotonic"] is None
+    before = {path.name: path.read_bytes() for path in control.directory.iterdir()}
+    # Both the same observation and a different task refuse, including after
+    # unlink succeeded but its fsync/finalization did not finish in time.
+    for task_index in (0, 1):
+        with pytest.raises(ObservationDeadlineRefused):
+            _observation(tmp_path, clock=clock, task_index=task_index)
+    with pytest.raises(ObservationDeadlineRefused):
+        control.finish_cleanup(True)
+    assert {path.name: path.read_bytes() for path in control.directory.iterdir()} == before
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("entry", ["generation_alarm", "outside_supervisor"])
+@pytest.mark.parametrize("stage", ["file_fsync", "directory_fsync"])
+def test_time_budget_observation_deadline_finalization_terminal_persistence(tmp_path, monkeypatch, entry, stage):
+    import stat
+    from core.time_budget_observation_deadline import ObservationCleanupExpired, TIMEOUT
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+    first = control.first_start
+    fsync = os.fsync
+    pending = []
+
+    def pending_fsync(fd):
+        file = stat.S_ISREG(os.fstat(fd).st_mode)
+        if file == (stage == "file_fsync"):
+            # The generation alarm is one-shot: its handler must already have
+            # armed the original cleanup end BEFORE entering this pending I/O.
+            assert control._supervising > 0
+            assert 0 < signal.getitimer(signal.ITIMER_REAL)[0] <= 20
+            assert control.cleanup_deadline == first + 1220
+            assert control.remaining_cleanup() == 20
+            pending.append(stage)
+            clock.advance(20)
+            signal.raise_signal(signal.SIGALRM)
+            pytest.fail("pending terminal persistence escaped cleanup expiry")
+        return fsync(fd)
+
+    with monkeypatch.context() as io_patch:
+        io_patch.setattr(os, "fsync", pending_fsync)
+        with pytest.raises(ObservationCleanupExpired):
+            if entry == "generation_alarm":
+                with control.supervise():
+                    clock.advance(1200)
+                    signal.raise_signal(signal.SIGALRM)
+            else:
+                clock.advance(1200)
+                control.terminal(TIMEOUT)
+        assert control.interruption_attempted is (entry == "generation_alarm")
+        assert pending == [stage]
+        assert control.terminal_reason == TIMEOUT
+        assert control.cleanup_deadline == first + 1220
+        io_patch.setattr(control, "_write", lambda *args: pytest.fail("post-expiry receipt I/O"))
+        assert control.finish_cleanup(True) is None
+    assert not (control.directory / (control.identity.key + ".cleanup.json")).exists()
+    _assert_finalization_refused(tmp_path, control, clock, lease_present=True)
+
+
+@pytest.mark.parametrize("expiry", ["alarm", "late_return"])
+@pytest.mark.parametrize("stage", [
+    "directory_open", "receipt_write", "receipt_file_fsync", "receipt_directory_fsync",
+    "lease_unlink", "lease_directory_fsync", "directory_close",
+])
+def test_time_budget_observation_deadline_finalization_io_expiry(tmp_path, monkeypatch, stage, expiry):
+    import stat
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(3)
+        control.terminal("completed")
+    end = control.cleanup_deadline
+    clock.advance(19)
+    assert control.remaining_cleanup() == 1
+    directory_fd, write, fsync, unlink, close = control._directory_fd, control._write, os.fsync, os.unlink, os.close
+    state = {"parent": None, "writing": False, "unlinked": False, "expired": False}
+
+    def cross_deadline():
+        assert not state["expired"]
+        assert control._supervising > 0
+        assert 0 < signal.getitimer(signal.ITIMER_REAL)[0] <= 1
+        assert not control.cleanup_complete
+        state["expired"] = True
+        clock.advance(1)
+        if expiry == "alarm":
+            signal.raise_signal(signal.SIGALRM)
+
+    def open_parent():
+        parent = directory_fd()
+        if state["parent"] is None:
+            state["parent"] = parent
+            if stage == "directory_open":
+                try:
+                    cross_deadline()
+                except BaseException:
+                    close(parent)
+                    raise
+        return parent
+
+    def receipt_write(name, value):
+        assert name.endswith(".cleanup.json")
+        assert value["cleanup_complete"] is value["host_reusable"] is False
+        assert value["finalization_pending"] is True
+        state["writing"] = True
+        try:
+            result = write(name, value)
+            if stage == "receipt_write":
+                cross_deadline()
+            return result
+        finally:
+            state["writing"] = False
+
+    def delayed_fsync(fd):
+        assert clock.now < end
+        file = stat.S_ISREG(os.fstat(fd).st_mode)
+        result = fsync(fd)
+        if ((state["writing"] and stage == ("receipt_file_fsync" if file else "receipt_directory_fsync"))
+                or (state["unlinked"] and stage == "lease_directory_fsync")):
+            cross_deadline()
+        return result
+
+    def delayed_unlink(name, **kwargs):
+        assert clock.now < end
+        assert name == "host-lease.json" and not state["writing"]
+        result = unlink(name, **kwargs)
+        state["unlinked"] = True
+        if stage == "lease_unlink":
+            cross_deadline()
+        return result
+
+    def delayed_close(fd):
+        result = close(fd)
+        if fd == state["parent"] and stage == "directory_close":
+            cross_deadline()
+        return result
+
+    with monkeypatch.context() as io_patch:
+        io_patch.setattr(control, "_directory_fd", open_parent)
+        io_patch.setattr(control, "_write", receipt_write)
+        io_patch.setattr(os, "fsync", delayed_fsync)
+        io_patch.setattr(os, "unlink", delayed_unlink)
+        io_patch.setattr(os, "close", delayed_close)
+        assert control.finish_cleanup(True) is None
+    assert state["expired"]
+    assert control.cleanup_deadline == end == 123
+    assert control.terminal_reason == "completed"  # Finalization failed, not generation.
+    _assert_finalization_refused(tmp_path, control, clock, lease_present=not state["unlinked"])
+
+
+@pytest.mark.parametrize("reuse", ["same_host", "lost_confirmation", "forked_host"])
+def test_time_budget_observation_deadline_finalization_before_deadline(tmp_path, monkeypatch, reuse):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TimeBudgetObservation
+
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(4)
+        control.terminal("completed")
+    clock.advance(15)
+    fsync = os.fsync
+    persisted = []
+
+    def finite_fsync(fd):
+        assert control._supervising > 0
+        assert not control.cleanup_complete
+        persisted.append(control.remaining_cleanup())
+        result = fsync(fd)
+        clock.advance(1)
+        return result
+
+    with monkeypatch.context() as io_patch:
+        io_patch.setattr(os, "fsync", finite_fsync)
+        assert control.finish_cleanup(True) is None
+    assert persisted == [5, 4, 3]
+    record = control.as_record()
+    assert record["cleanup_complete"] is record["host_reusable"] is True
+    assert record["cleanup_expired"] is False
+    assert record["cleanup_finished_monotonic"] == 122 < control.cleanup_deadline == 124
+    assert record["cleanup_elapsed_seconds"] == 18
+    assert not (control.directory / "host-lease.json").exists()
+    durable = json.loads((control.directory / (control.identity.key + ".cleanup.json")).read_bytes())
+    assert durable["cleanup_complete"] is durable["host_reusable"] is False
+    assert durable["finalization_pending"] is True
+    assert durable["cleanup_finished_monotonic"] is None
+    with pytest.raises(ObservationDeadlineRefused):
+        control.cleanup(lambda: pytest.fail("finalized observation restarted cleanup"))
+    clock.advance(100)  # Returning/reading evidence later does not redo cleanup.
+    assert control.as_record()["cleanup_elapsed_seconds"] == 18
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(tmp_path, clock=clock)
+    if reuse == "same_host":
+        other, _ = _observation(tmp_path, clock=clock, task_index=1)
+        assert other.first_start is None
+        with pytest.raises(ObservationDeadlineRefused):
+            _observation(tmp_path, clock=clock, task_index=2)
+    else:
+        if reuse == "lost_confirmation":
+            monkeypatch.setattr(TimeBudgetObservation, "_released_hosts", {})
+        else:
+            pid = os.getpid()
+            monkeypatch.setattr(os, "getpid", lambda: pid + 1)
+        with pytest.raises(ObservationDeadlineRefused):
+            _observation(tmp_path, clock=clock, task_index=1)
+        assert not (control.directory / "host-lease.json").exists()
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
 
 
 @pytest.mark.parametrize("case", ["success", "late_success", "tool_wait", "blocking_responses"])
