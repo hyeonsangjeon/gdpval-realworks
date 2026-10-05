@@ -1,167 +1,212 @@
 # Latest task result
 
-## One-observation time-budget handoff — 2026-10-05
+## One-observation F-derived grading preparation — 2026-10-05
 
-The leader completed source review at
-`865c37fe662af11850cc2681f53bf136fdc65444`, tree
-`ae71f34e1d3787e584c05220de5b7780da19bab2`, with no blocking source finding.
-All 11 applicable checks at that HEAD succeeded; PR-only deploy was skipped.
-The supplied corrected-HEAD comparison CI covers the nine repaired cases and
-two added reference-payload positives. They were not rerun locally.
+`gpt54_time_budget_grading_preparation.prepare_observation_grading` now
+materializes a fixed grader config and its actual F-derived execution source
+for one registered observation. The sole offline selector reported **41 passed
+in 95.22s (0:01:35)**, exit 0. All 41 selected nodes completed, with no failures,
+skips, deselections or timeout. No test was rerun.
 
-The original local result remains **38 passed, 9 failed, 177 deselected in
-19.00s**, exit 1. It is a failed observation, not an aggregate local pass. This
-update reconciles only CHANGELOG and LATEST with the supplied review and CI
-evidence. Final docs-HEAD review and applicable CI acceptance remain pending.
+This is a separate main-based implementation, not a stack on PR753. PR753's
+reviewed branch remains untouched. Preparation does not create a provider,
+grader, grading admission, command or execution authority. Final-HEAD owner
+review and applicable CI acceptance remain pending.
 
-### Scope and prepared output
+### Inputs, bindings and output
 
-`gpt54_time_budget_comparison.prepare_observation_handoff` accepts the genuine
-time-budget registration, one `run_id`/`task_id`, explicit runtime R and frozen
-grader F roots/commit anchors, and an explicit input-registration path/root/full
-commit. The input registration supplies dataset/cohort facts only, after exact
-equality checks with this study. It does not supply legacy dispatch authority.
-The caller provides existing local parquet and reference bytes. Codex also
-requires the full canonical Step0 manifest; V2 requires it to be absent.
+The API requires the genuine registration, a caller-supplied typed
+`ObservationIdentity`, its independently supplied input binding, explicit
+runtime R/frozen F/input-registration roots and full commit anchors, local
+parquet/reference/result locators, independently expected result `sha256`/`size`,
+and the result's deliverable root. Result metadata is bounded to 8 MiB; this is
+an input-file safety bound, not a model or experiment budget. Codex must supply
+canonical Step0; V2 refuses it without reading it.
 
-The new destination has this finite shape:
+The existing compiler and input validators check registration/cohort equality,
+R/F Git commits and trees, tracked regular blobs, local input bytes and the
+sealed observation binding. The new helper also checks its own tracked bytes
+against R. The independently expected result must be canonical, have a valid
+result fingerprint, contain this exact terminal observation identity, and carry
+one matching task/model/condition row with exact deliverable hashes and sizes.
+Coherently changed metadata does not replace the independent anchors. A missing
+output is retained as a supplied terminal error row; the helper does not invent
+a result for an absent source file or discard a failed outcome.
+
+The destination must be new and disjoint from every source/input/result path.
+Held directories, single-link regular reads, no-clobber publication and final
+source/input/member rereads are reused. A retained sibling reservation blocks
+adoption after an interrupted or invalid publication. The marker is last.
 
 ```text
+<destination>.time-budget-grading-reserved.json
 <destination>/
-  configuration.json
-  task.json
-  reference_files/...  # only the selected task's files; absent when none
-  preparation.json    # completion marker, published last
-<destination>.time-budget-preparation-reserved.json
+  source/
+    batch-runner/
+      step8_grade.py                         # exact tracked F bytes
+      core/**/*.py                          # F's complete Python core
+      prompts/...; schemas/...; requirements*.txt
+      <other verified F batch-runner source/config roles>
+      grading_configs/default_v2_sol_max.yaml # unchanged F template
+      time-budget-grading.json              # materialized config
+      workspace/
+        step2_inference_results.json         # exact bound result bytes
+        upload/deliverable_files/<task>/...   # selected result files, if any
+    data/gdpval-local/
+      rubric_snapshots/<revision>/
+        data/registered.parquet              # exact verified input bytes
+        rubric_snapshot_manifest.json
+      datasets--openai--gdpval/snapshots/<revision>/reference_files/...
+  grading-preparation.json                   # final marker
 ```
 
-`configuration.json` is an envelope with actual template-derived factory
-settings, the registered model/route binding, and a required
-`TimeBudgetObservation` identity. V2 carries its existing local settings and
-factory profile, not the old stage plan's dollar approvals or escalation.
-Codex carries a typed, validated experiment config with one selected task and
-no external retry/resume. Neither envelope is a standalone CLI launch config.
+The source derivation contains verified F batch-runner roles and its whole
+Python core, not a Git checkout claiming a new commit. It copies no `.git`,
+workflow, credential or historical result files. The exact finite member set
+and each file's `sha256`/`size` are recorded under `files`. Only selected
+references/deliverables are copied; Step0 is verified but not copied for grading.
+The original F checkout is unchanged.
 
-`task.json` holds a model-safe V2 `TaskToRun` projection or Codex `run` arguments.
-Reference paths are relative to the handoff directory. Rubric and expert-answer
-bodies are excluded. The pinned parquet and Codex Step0 bytes are verified, not
-copied. No grader config, command, provider instance, admission, generation
-clock or execution capability is created.
+The returned marker binds the observation, registration file, R/F origin
+commits/trees, input registration and verified input bytes, result digest and
+fingerprint, terminal outcome, preparation-helper identity, reservation and
+exact output members. Its `grader` object names:
 
-The marker binds study/run/condition/repeat/task, registration digest, independent
-R commit/tree, frozen F/template identity, condition template and generated
-config digests, input-registration source, actual input-byte identities and the
-required observation control. The implementation uses existing tracked-blob,
-held-directory, hash/size, no-clobber and final-reread helpers. A retained sibling
-reservation blocks adoption after partial publication. The corrected
-final-reread/quarantine cases are covered by the supplied successful CI below,
-not by a local rerun.
+- `template_path` and `template_source_sha256` for the genuine F template;
+- `config_path` as the actual absolute path, with a relative `config_file`
+  identity containing its exact bytes/size;
+- `materialized_source_sha256`, calculated by the unchanged whole-closure
+  helper against the destination's actual config and copied F source;
+- `execution_source: source`, `working_directory: source/batch-runner` and
+  `entrypoint: source/batch-runner/step8_grade.py`.
 
-All launch authority and execution-enable fields remain false. No current
-runtime/workflow caller selects this API or changes its launch refusal. The
-fixed five-task, four-run ABBA/two-repeat/concurrency-1 study, at most 20
-observations, GPT-5.4/direct-v1/xhigh binding, 1200/20 policy and frozen judge are
-unchanged. No shared native request/token cap, money cap or backend-cancellation
-claim is added. No closed study is reopened or pooled.
+Only the rubric revision and local cache path are materialized from the frozen
+config. Judge, visual/audio routing, prompts, scoring and retry settings stay
+unchanged. The policy remains one grading attempt per resulting observation,
+with failed/missing outcomes retained and no score-driven regrade. The marker's
+`grading_attempt: 1` records that policy; preparation is not a grading claim or
+an executor's global one-attempt enforcement. `launch_allowed` and
+`execution_enabled` remain false.
 
-### Source identities and review basis
+### Source identities and reviewed basis
 
-- Accepted basis: `36ba69e59e4196d653ca046e064809ca2a8f5bb3`, tree
-  `2d96778657188d7a80c32076fd6121707eb790f0`, following PR751 source
-  `e0e270b67b3c7f63b8f94f945c4839b778c7572b`, source review `5416820324`
-  and actual-host receipt review `5417240401` supplied by the leader.
-- Locally tested implementation: `ccf6e880caa8e5b3dfccea5139fe2c114baa4602`, tree
-  `407f36bb0848811191cbabe0a45469356a09949b`.
-- Test-only correction, not rerun locally and covered by the later supplied CI:
-  `184cba2e042518c0e22af104c42e5ef0b099f4a9`, tree
-  `63b03670161112bb0e5c4b3ab678e0dadd4b9ed0`.
-- Frozen F remains `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-  `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, with genuine TEMPLATE
+- Accepted main: `a5a04701fed3067b56bd80af424824c447f3075e`, tree
+  `d36a356b0950bd44b0b789dfebf725035601d259`.
+- Independent tested implementation: `3e81b74be73ff1a7a925d7780c9fbd9b896d7d6d`,
+  tree `3e044527af08a438b5677e9f95be8d8ab3609e0e`.
+- Frozen F: `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
+  `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, TEMPLATE
   `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
-  No materialized-grader identity is claimed.
+- New helper SHA256:
+  `c1f8e8de571bf15a3ce80fd7c7fa0549d19769993376af9dd1a149463d39774c`.
+- Separate PR753 remains frozen at
+  `a9dd6d12ee52344d3f0e329d2d355d429a175df8`, tree
+  `f30a46e0960de628a7dc777ea2fc64a5167f107c`, with leader review `5420090699`.
+  It was not modified, pushed, stacked or cherry-picked here.
 
-The same-session architecture/source-provenance and grading charter review
-preceded edits. Its conditions required independent R/F/input anchors, reuse
-of input-only validators, one-task output, held/no-clobber publication, and no
-provider, grader or admission effect. This was the primary worker applying the
-charters, not independent owner approval. The consolidated grading specification
-was read; no grading policy or source closure was changed.
+Before edits, the consolidated grading specification and overview and the
+grading-engineer/source-provenance/architecture charters were read. The
+same-session decision was APPROVE-WITH-CONDITIONS for independent anchors,
+actual F execution bytes, distinct materialized hashing, fixed routing,
+validation before publication, retained partial state and synthetic proof.
+This was the primary worker applying the charters, not owner approval of this
+new implementation. The user's bounded offline scope excludes the charters'
+broad-suite and paid-smoke defaults.
 
-The directly coupled CURRENT consumers were audited once. The prospective
-compiler pin advances, and its new use of the existing
-`ghcp_vm_input_bundle.py` publication primitives adds that helper's real pin,
-bringing the prospective inventory to 42. Its bytes are unchanged. The
-corresponding test inventory and usage documentation are updated. Historical
-manifests, the 37-source frozen profile, core/runtime/ownership/finalization,
-workflows, grader algorithm and paid evidence remain unchanged.
+The directly coupled CURRENT/source roles were audited once. The new helper
+has an independent R tracked-blob check, so no comparison manifest or source-pin
+change is needed. The new `test_time_budget_grading_preparation.py` remains in
+ordinary backend discovery, outside the explicit `test_gpt54_*.py` comparison
+inventory. No workflow/selection guard changed. The comparison compiler and
+manifest, core/runtime/ownership, frozen F, grader hash scope, historical
+profiles, paid evidence, registered study/model/1200/20 policy and launch gates
+are unchanged.
 
-### Local proof and corrected-HEAD CI
+### One bounded offline proof
 
-The original Python 3.10.12 / pytest 9.1.1 invocation selected 47 nodes without
-`-x`, under a 300-second bound plus 5-second termination grace. All completed:
-**38 passed, 9 failed, 177 deselected in 19.00s**, exit 1. All nine failures were
-fixture `IndexError`s before the API call: the first selected task has no
-references. These failures are not successful refusal evidence. The test-only
-correction selects a declared reference-bearing task and adds two positive
-reference-payload cases; the four original passing handoffs had no references.
-None of these repaired or new cases was rerun locally.
+Python 3.10.12 / pytest 9.1.1 ran once at the clean tested HEAD, token-free and
+offline, with a 300-second outer limit plus 5-second termination grace and no
+`-x`. The 41 cases covered 4 positive materializations (both owners, success and
+failed/missing output), 26 pre-publication refusals, 2 existing-state refusals
+and 9 final-reread/partial-publication cases. The effect guards observed no
+provider, model, grader, network or observation-admission call.
 
-The [immutable local-proof record] retains the redacted command display, exact
-private command/log/receipt hashes, all nine failed node IDs and the original
-scope/review details. The command hash identifies the exact private script,
-including private paths and log capture; it is not a digest of the redacted
-public display. No old evidence file was reopened or changed for this update.
+Fixtures used actual temporary Git/config/source bytes and explicit synthetic
+input/result declarations. Only source metadata needed to declare synthetic
+inputs differed in their R/F/input commits; the real F grader closure retained
+TEMPLATE `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
+No successful source-validator or hasher verdict was mocked. Existing fixture
+helpers were reused; no prior selector or real platform case was run.
 
-The leader supplied the completed [PR752 comparison CI] result at reviewed HEAD
-`865c37fe662af11850cc2681f53bf136fdc65444`, tree
-`ae71f34e1d3787e584c05220de5b7780da19bab2`: run `37345048041`, job
-`111881404006`, attempt 1, **1410 passed in 1008.64s**, with no failed, skipped
-or deselected cases in the final result. The existing command selects
-`tests/test_gpt54_time_budget_comparison.py`, including all nine repaired cases
-and both added reference-payload positives. The completed log SHA256 is
-`da26d6a2768d32eeefe073ea451cb35e4f67d566e71a4f5e76a889c19d19a2d1`.
-This supplied CI result is separate from the failed local invocation; no
-aggregate local pass is claimed. CI was not queried, polled or rerun here.
+In the synthetic positive evidence, the materialized config was 2306 bytes,
+SHA256 `62a6d99d9e74d187e517d60d9a5afb112e38926917710ac6e6606eb28404dfa0`,
+with actual whole-source fingerprint
+`51d42b300d17d933fffbd73b2cdea645a803c63a4246af4f37cb193bf951bd7c`.
+The tests independently recomputed that fingerprint, the copied F template's
+original fingerprint and R's unequal template fingerprint. These are software
+identity observations, not preparation of real original assets or grading.
 
-That job also emitted a positive model-free owned-host receipt at source commit
-`55ee47386c97058863a5ceefb6c1e358f7f41940`, tree
-`ae71f34e1d3787e584c05220de5b7780da19bab2`. The receipt's source commit is not
-the reviewed PR HEAD; their supplied trees are equal. This is CI host evidence
-for that source/job, not a study observation, support for another host or live
-authority. No receipt or private input was read locally.
+Redacted command display follows. Only absolute local paths are redacted. The
+command digest identifies the exact private 928-byte script, including log
+capture, not a digest of this public display.
 
-From the local proof through reviewed HEAD `865c37fe662af11850cc2681f53bf136fdc65444`,
-the repository delta contained only the fixture correction and two new cases in
-`batch-runner/tests/test_gpt54_time_budget_comparison.py`, plus CHANGELOG and LATEST.
-Production, the prospective manifest and usage README still matched the locally
-tested implementation. This reconciliation adds only `CHANGELOG.md` and
-`tasks/LATEST_TASK_RESULT/README.md` changes. Every source/test/config/pin and
-usage README byte remains unchanged from the reviewed HEAD.
+```bash
+#!/bin/bash
+set -o pipefail
+cd "<worktree>/batch-runner" || exit 90
+timeout --signal=TERM --kill-after=5s 300s \
+  env -i PATH="<py310-bin>:/usr/bin:/bin" \
+  LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+  PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS= \
+  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 \
+  "<py310-bin>/python" -m pytest \
+  -o addopts= -p no:cacheprovider -m 'not integration' \
+  -vv --tb=short --color=no \
+  --basetemp="<proof>/pytest-tmp" \
+  --junitxml="<proof>/junit.xml" \
+  tests/test_time_budget_grading_preparation.py -k time_budget_f_grading_preparation \
+  2>&1 | tee "<proof>/pytest.log"
+```
 
-### Remaining work and evidence boundary
+| Preserved file | Bytes | SHA256 |
+| --- | ---: | --- |
+| `command.sh` | 928 | `b5c7df88221b858c66398765217204a15cb72f60821a4d69a55f3be2f028d096` |
+| `pytest.log` | 6087 | `542956190a00d7e677788a8e9aea3191d87d00ab8534d3feadc1a67d234cce72` |
+| `junit.xml` | 6890 | `8559514b53b7c1966e2117d4dd97356f4585fe6bc4117be7d90d8faa887931f0` |
+| `pre-edit-review.md` | 4985 | `bd52b3c3b71e5542057e3f31b09433b8051d5d9a0a899dc54c44de4d18bc8ec6` |
 
-Source review and the supplied successful checks apply to `865c37fe662af11850cc2681f53bf136fdc65444`.
-Final docs-HEAD review and applicable CI acceptance remain pending after this
-records-only commit. Earlier software proofs, the distinct NAS refusal and
-PR751's exact-source/host evidence remain separate in the [immutable prior
-record]. Neither that evidence nor the new PR752 host receipt authorizes a live
-study observation. No platform probe was run locally.
+### Separate prior evidence and remaining gates
 
-The single next execution wiring gap is a consumer that revalidates this
-one-observation handoff and supplies the required control to the existing V2 or
-Codex factory under a separately reviewed source-bound execution direction.
-That future work must still bind a usable host, verified credentialed originals,
-provider identity, live dispatch/capture and eventual F-derived grading. None
-is selected or enabled here; no spending-approval question is reopened.
+The [immutable PR753 record] preserves its 53-case software proof and links to
+earlier preparation, deadline, ownership and host evidence. Those observations
+are not repeated or pooled with this one. The leader supplied PR753 retry
+run `37364096520`, job `111963051664`, attempt 2: the runner received a shutdown
+signal, not a test assertion failure. The supplied GitHub status was Actions
+`major_outage`, [incident 3q1yb5m7ltvb], investigating hosted-runner assignment
+and failures. No CI/status query, retry, wait or weakening occurred here.
 
-This records-only update uses `im-not-ai-en` for one bounded changed-passage
-fidelity check, which passed with no failures or warnings. It preserves counts,
-source identities, provenance and the local/CI distinction without scanning the
-historical changelog. Experiment
-design and the earlier source review were not reopened. No pytest/Node/HF/build,
-platform probe, CI query/poll/dispatch/rerun, private input/receipt/preparation,
-provider/model/grader/Azure call, Project edit or merge occurred in this update.
+The post-proof delta is exactly `CHANGELOG.md` and
+`tasks/LATEST_TASK_RESULT/README.md`. The new helper and tests remain identical
+to the tested commit. These two completion records are the only shared surfaces
+with PR753; any later reconciliation belongs in substantive delivery.
 
-[PR752 comparison CI]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37345048041/job/111881404006
-[immutable local-proof record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/865c37fe662af11850cc2681f53bf136fdc65444/tasks/LATEST_TASK_RESULT/README.md
-[immutable prior record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0e270b67b3c7f63b8f94f945c4839b778c7572b/tasks/LATEST_TASK_RESULT/README.md
+Final-HEAD owner review and applicable CI remain outstanding. A future
+source-bound grading execution direction must consume/revalidate this exact
+preparation, enforce the one-attempt/no-score-regrade policy and invoke Step8
+from its F-derived source with the bound observation/result/input identities.
+No live caller, provider/credential selection, original input acquisition,
+generation/dispatch enablement or grading attempt is added. Host support,
+private-input authority and live grading evidence remain separate gates. The
+offline result does not establish live execution, backend cancellation or billing.
+
+The catalog was inspected once. `experiment-design` preserved fixed controls
+while checking the config mapping; it did not reopen study design or spending
+authority. The bounded `im-not-ai-en` changed-passage fidelity check passed
+with no failures or warnings, preserving the protected counts, source
+identities, links and evidence limits. No unrelated skill was applied. There was no private
+original/inference/receipt/consumed-artifact read, real preparation, paid call,
+HF/Azure operation, Project edit or merge.
+
+[immutable PR753 record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9dd6d12ee52344d3f0e329d2d355d429a175df8/tasks/LATEST_TASK_RESULT/README.md
+[incident 3q1yb5m7ltvb]: https://www.githubstatus.com/incidents/3q1yb5m7ltvb

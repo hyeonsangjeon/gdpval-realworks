@@ -13,6 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `gpt54_time_budget_grading_preparation.prepare_observation_grading` for
+  one independently bound time-budget observation. It verifies the registration,
+  R/F/input anchors, input binding, terminal result and exact deliverable bytes,
+  then publishes a no-clobber F-derived source tree, fixed grader config, local
+  rubric/result inputs and final preparation marker. Step8's designated source
+  is the copied F tree, never R. The unchanged whole-source hasher uses the
+  materialized config's actual path and bytes; its fingerprint is distinct from
+  TEMPLATE `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
+  Failed/missing-output rows remain intact, partial publication stays reserved,
+  and no grader, provider, grading admission or launch permission is created.
+
+  One offline Python 3.10.12 selector at
+  `3e81b74be73ff1a7a925d7780c9fbd9b896d7d6d`, tree
+  `3e044527af08a438b5677e9f95be8d8ab3609e0e`, reported **41 passed in 95.22s**,
+  exit 0, under a 300-second bound plus 5-second termination grace, without
+  `-x`. Actual temporary source/config bytes and explicitly synthetic inputs
+  exercised both owners, distinct fingerprints, association/source refusals,
+  no-clobber and final-reread/partial-publication paths. No successful hasher or
+  source-validator verdict was mocked, and no earlier selector was rerun.
+
+  This independent branch starts at accepted
+  `a5a04701fed3067b56bd80af424824c447f3075e`, tree
+  `d36a356b0950bd44b0b789dfebf725035601d259`. PR753 remains untouched at
+  reviewed `a9dd6d12ee52344d3f0e329d2d355d429a175df8`, review `5420090699`;
+  its consumer code is not included. Production edits are confined to the new
+  helper; the comparison compiler/manifest, core, frozen F, grader algorithm,
+  workflows, study policy and historical evidence are unchanged. The post-proof
+  delta is CHANGELOG and LATEST only. The [current record](tasks/LATEST_TASK_RESULT/README.md)
+  gives exact output/evidence identities and the pre-edit charter review;
+  [prior evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9dd6d12ee52344d3f0e329d2d355d429a175df8/tasks/LATEST_TASK_RESULT/README.md)
+  remains separate. Final-HEAD review, applicable CI and source-bound live
+  grading/input/provider gates remain pending. The leader-supplied Actions
+  shutdown/outage evidence was not queried, retried or treated as a test failure.
+
 - Add `gpt54_time_budget_comparison.prepare_observation_handoff` for exactly
   one registered run/task. It checks independent R/F anchors and an explicitly
   supplied input-registration source, reuses only equal dataset/cohort facts,
