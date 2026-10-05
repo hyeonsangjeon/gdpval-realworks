@@ -13,6 +13,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an explicitly anchored, model-free mode to
+  `gpt54_disposable_checkout.verify_runtime_checkout`. The independent caller
+  keyword `expected_reviewed_source_sha` binds the held ready marker, detached
+  HEAD, independently resolved tree and exact tracked manifest blob. The fixed
+  config marker supplies only a locator; mutable markers cannot supply review
+  authority. Genuine config/input validation uses the selected path,
+  with metadata-size bounds, held directories, reservation/quarantine checks
+  and final rereads. Verification writes nothing and returns the unchanged
+  canonical preparation marker, not approval or dispatch capability.
+
+  Omission retains the historical path. No runtime/workflow caller, capture
+  module or unconditional `comparison_runtime_launch_refused` guard changes.
+  Only the changed helper's prospective binding, its explicitly CURRENT
+  observer dependency and directly coupled CURRENT test/report expectations
+  advance. Historical manifest/compiler/core/Step2/grader/workflows, paid
+  bindings, fixed evidence, input identities, study controls and the full grader
+  TEMPLATE closure remain unchanged; the separate 30-cell/8-cell studies stay
+  closed.
+
+  One offline `anchored_prospective_verification` selector passed 57 cases,
+  with 51 deselected, in 104.75s, exit 0, at HEAD
+  `32f352679be102f193abce3d4710252bdb5f09f2`, tree
+  `5ea471a9c944d6b3f01dd1ab9d560ccdea220c81`. Its 300-second limit plus
+  5-second termination grace is test-only. Command SHA256 is
+  `5d5dea2b8baa9b911ac0923a555dde1adf02a0f37166d00be89d477bfa6fe522`;
+  combined-log SHA256 is
+  `0a91c29f8c204166b552fa4ece6938d95369b4fc843c79ca8217dacb2deba98b`, and
+  private receipt SHA256 is
+  `cf9fbef9163474dbaab66af817133a3cfe47207c5c7b51fbc959b324204debc3`.
+  This is a new synthetic-input regression proof, not a repeat of the prior
+  launch-boundary selector or a real preparation. The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-independently-anchored-prospective-profile-verification--2026-10-05)
+  records the exact command, accepted `c28847f1b0e3626a088a746558cda82aca67c127`
+  source basis, safe evidence and immutable prior references. Only
+  README/CHANGELOG/LATEST records follow this proof. Final-HEAD review,
+  applicable CI and leader acceptance remain pending. Runtime profile
+  selection, native caps, dispatcher, credentialed-CI authority and launch
+  permission remain unresolved. No private input or consumed artifact was
+  accessed, adopted or relabeled.
+
 - Add an independent, argument-free comparison runtime launch refusal shared by
   the Codex and V2 capture entrypoints. Valid local source/input evidence still
   refuses with `comparison_runtime_launch_refused`, before V2 capture
@@ -38,7 +77,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   `5e9cf35d75a264aed14a0bf3211cbd4ee778ca6331af70e82390634a784be328`, and
   private receipt SHA256 is
   `e9869b38bde30081f86325a82d3758f2a0d1048c16879c1e65850c0fcd11e1f4`.
-  The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-independent-comparison-runtime-launch-refusal--2026-10-05)
+  The [immutable task record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c28847f1b0e3626a088a746558cda82aca67c127/tasks/LATEST_TASK_RESULT/README.md#project5-independent-comparison-runtime-launch-refusal--2026-10-05)
   preserves the exact command, source/fixture distinction and safe evidence.
 
   Accepted base `c6fbf893595336e0a89ceb122ac5859991487144` has production code
