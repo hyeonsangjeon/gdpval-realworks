@@ -15,7 +15,6 @@ import pytest
 
 import gpt54_codex_input_capture as writer
 import gpt54_comparison_preflight as preflight
-import gpt54_prepared_input_attestation as attester
 import gpt54_v2_input_capture as capture
 from core.codex_runtime_config import CodexProviderSettings
 from scripts import run_agentic_v2_stage as runner
@@ -23,7 +22,7 @@ from .test_gpt54_codex_input_capture import (
     ProviderBoundary, test_codex_comparison_capture_gates_real_step1_and_step2 as _codex_regression,
 )
 from .test_gpt54_prepared_input_attestation import (
-    _bundle_fixture, _fixture, _identity, _input_bundle_fixture, _json, _tree_snapshot,
+    _bundle_fixture, _fixture, _input_bundle_fixture, _json, _tree_snapshot,
 )
 
 
@@ -75,7 +74,7 @@ def _record_conditions(linkage):
 
 @pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize("case", [
-    "r1", "r2", "relative_argv", "new_workspace", "default_absent_and_null",
+    "r1", "r2", "relative_argv", "new_workspace", "default_absent_and_null", "environment_enable",
     "control_empty", "control_bool", "control_list", "control_extra", "control_version",
     "control_removed", "control_null", "run_missing", "run_other", "run_codex", "run_whitespace",
     "stage", "shard", "dry_run", "rehearse", "isolated_approval", "workspace_missing", "dataset_missing",
@@ -136,7 +135,7 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         "--into": str(workspace), "--run-id": run.run_id,
     }
     flags = []
-    real_binding, real_write = capture._binding, writer._write_no_clobber
+    real_binding = capture._binding
 
     def observed_binding(*args, **kwargs):
         events.append("recompute" if kwargs.get("held_bound") is not None else "snapshot")
@@ -144,7 +143,7 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
 
     def observed_write(path, data):
         events.append("publish")
-        return real_write(path, data)
+        forbidden(path, data)
 
     monkeypatch.setattr(capture, "_binding", observed_binding)
     monkeypatch.setattr(writer, "_write_no_clobber", observed_write)
@@ -161,7 +160,8 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
     # The existing free budget/voice-safety preflight is not under test and can
     # construct stand-in voices. Substitute its verdict, not the capture gate,
     # source/compiler/projection, instructions, binding or CLI. No authorization
-    # is inferred from this fixture; the first real auth seam always stops.
+    # is inferred from this fixture. Comparison launch must now stop before
+    # this preflight; only the non-comparison regression may reach it.
     def free_preflight(plan, **kwargs):
         events.append("free_preflight")
         chosen = SimpleNamespace(**plan["cost"]["chosen_settings"])
@@ -206,7 +206,10 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         assert forbidden_calls == []
         return
 
-    if case.startswith("control_"):
+    if case == "environment_enable":
+        for name in ("COMPARISON_LAUNCH_ALLOWED", "COMPARISON_LAUNCH_ENABLED", "LAUNCH_ALLOWED", "LAUNCH_ENABLED"):
+            monkeypatch.setenv(name, "1")
+    elif case.startswith("control_"):
         plan = json.loads(run.config_json)
         control = plan["comparison_input_capture"]
         if case == "control_removed":
@@ -282,6 +285,12 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
             return bound, binding
 
         monkeypatch.setattr(capture, "_binding", changed_held_tasks)
+        # The runtime will refuse before publication/recomputation. Keep this
+        # separate, genuine read-only held-task check at the binding API.
+        changed, _ = changed_held_tasks(root, run.run_id, json.loads(run.config_json))
+        with pytest.raises(ValueError):
+            real_binding(root, run.run_id, json.loads(run.config_json), held_bound=changed)
+        events.clear()
     elif case.startswith("manifest_") or case.startswith("source_pin_"):
         manifest = json.loads(manifest_path.read_bytes())
         if case == "manifest_control":
@@ -363,35 +372,19 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         monkeypatch.setattr(writer, "_write_no_clobber", tamper_after_publish)
 
     before = _tree_snapshot(workspace) if workspace.exists() and not workspace.is_symlink() else None
-    if case in {"r1", "r2", "relative_argv", "new_workspace"}:
-        with pytest.raises(ProviderBoundary):
-            invoke()
-        assert events == ["snapshot", "publish", "recompute", "free_preflight", "backend_selection", "auth_boundary"]
-        assert capture_path.read_bytes() == _json(oracle)
-        assert capture_path.stat().st_nlink == 1
-        assert str(root).encode() not in capture_path.read_bytes()
-        index = 0 if run.repeat == 1 else 3
-        supplied = list(inputs["runs"])
-        supplied[index] = replace(supplied[index], generated_config=config_path, input_binding=capture_path)
-        attestation = attester.compile_prepared_input_attestation(**{**inputs, "runs": tuple(supplied)})
-        identity = _identity(capture_path.read_bytes())
-        assert len(observed_linkage) == 1
-        linkage = observed_linkage[0]
-        assert {key: linkage[key] for key in ("size", "sha256")} == identity
-        assert linkage["attestation_linkage"]["run_id"] == run.run_id
-        assert linkage["attestation_linkage"]["repeat"] == run.repeat
-        assert linkage["attestation_linkage"]["condition"] == "sandbox_v2"
-        assert linkage["attestation_linkage"]["config_sha256"] == _identity(config_path.read_bytes())["sha256"]
-        conditions = _record_conditions(linkage)
-        assert conditions["pre_execution_input_capture"] == linkage
-        # Existing V2 materialization reads plan_file relative to the dispatch
-        # working directory, not the capture's checkout-relative namespace.
-        assert conditions["plan_file"] == {
-            "path": Path(run.config_path).relative_to(run.working_directory).as_posix(),
-            "sha256": linkage["attestation_linkage"]["config_sha256"],
-        }
-        assert conditions["plan_file"]["path"] == "comparison-run.json"
-        assert attestation.as_dict()["runs"][index]["binding_file"] == identity
+    if case in {"r1", "r2", "relative_argv", "new_workspace", "environment_enable"}:
+        # Positive input verification remains model-free and does not stand in
+        # for the now-blocked public runtime route or manufacture its receipt.
+        _, binding = real_binding(root, run.run_id, json.loads(run.config_json))
+        assert _json(binding) == _json(oracle)
+        assert invoke() == 1
+        assert events == ["snapshot"]
+        assert not capture_path.exists()
+        assert observed_linkage == []
+        if case == "new_workspace":
+            assert not workspace.exists()
+        else:
+            assert _tree_snapshot(workspace) == before
         assert inputs["combined_plan"]["launch_allowed"] is inputs["combined_plan"]["full_220_allowed"] is False
         inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
         assert inspection["configuration_valid"] is True
@@ -405,9 +398,11 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         assert "backend_selection" not in events
         if before is not None and "publish" not in events:
             assert _tree_snapshot(workspace) == before
-        if case == "capture_race":
-            assert capture_path.read_bytes() == b"concurrent capture"
-        elif case.startswith("atomic_"):
+        # The former post-publication fault hooks are intentionally unreachable
+        # at this runtime API. Atomic writer failures remain exercised by the
+        # model-free Codex writer and bundle tests, without bypassing this gate.
+        assert "publish" not in events and observed_linkage == []
+        if case == "capture_race" or case.startswith("atomic_"):
             assert not capture_path.exists()
     if workspace.is_dir() and not workspace.is_symlink():
         assert not list(workspace.glob(".input-capture-*"))

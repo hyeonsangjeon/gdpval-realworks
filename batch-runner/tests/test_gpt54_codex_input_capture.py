@@ -2,6 +2,7 @@
 
 import ast
 import errno
+import inspect
 import json
 import os
 import shutil
@@ -28,6 +29,23 @@ from .test_gpt54_prepared_input_attestation import (
 
 class ProviderBoundary(BaseException):
     """Stop at the first auth/provider seam, before constructing anything."""
+
+
+@pytest.mark.parametrize("attempt", ["plain", "environment", "caller_flags"])
+def test_comparison_runtime_launch_boundary_has_no_enablement(attempt, monkeypatch):
+    assert not inspect.signature(capture.require_comparison_runtime_launch).parameters
+    if attempt == "environment":
+        for name in ("COMPARISON_LAUNCH_ALLOWED", "COMPARISON_LAUNCH_ENABLED",
+                     "CODEX_FOUNDRY_CONNECTION_CONFIRMED", "LAUNCH_ALLOWED", "LAUNCH_ENABLED"):
+            monkeypatch.setenv(name, "1")
+    elif attempt == "caller_flags":
+        for value in (True, False, None, {"launch_allowed": True, "verified": True}):
+            with pytest.raises(TypeError):
+                capture.require_comparison_runtime_launch(value)
+        with pytest.raises(TypeError):
+            capture.require_comparison_runtime_launch(launch_allowed=True)
+    with pytest.raises(capture.ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
+        capture.require_comparison_runtime_launch()
 
 
 def _runtime_fixture(tmp_path, monkeypatch, repeat):
@@ -86,7 +104,7 @@ def _final_output_bytes(linkage):
 
 @pytest.mark.usefixtures("historical_comparison_source")
 @pytest.mark.parametrize("case", [
-    "r1", "r2", "default_absent_and_null", "relocated",
+    "r1", "r2", "default_absent_and_null", "relocated", "environment_enable",
     "control_empty", "control_bool", "control_list", "control_extra", "control_version", "control_run",
     "capture_missing", "capture_extra", "capture_removed", "capture_null", "capture_duplicate_key",
     "capture_noncanonical", "capture_digest", "capture_symlink", "capture_hardlink",
@@ -227,7 +245,13 @@ def test_codex_comparison_capture_gates_real_step1_and_step2(case, tmp_path, mon
         assert forbidden_calls == boundary_calls == []
         return
 
-    if case == "relocated":
+    # Step 1's model-free writer above stays usable. Step 2 must never publish
+    # anything or reach the auth/provider boundary, even for a valid capture.
+    monkeypatch.setattr(capture, "_write_no_clobber", forbidden)
+    if case == "environment_enable":
+        for name in ("COMPARISON_LAUNCH_ALLOWED", "COMPARISON_LAUNCH_ENABLED", "LAUNCH_ALLOWED", "LAUNCH_ENABLED"):
+            monkeypatch.setenv(name, "1")
+    elif case == "relocated":
         relocated = tmp_path / "another-host-role"
         shutil.copytree(root, relocated)
         root = relocated
@@ -352,23 +376,26 @@ def test_codex_comparison_capture_gates_real_step1_and_step2(case, tmp_path, mon
         return
 
     before = _tree_snapshot(root)
-    if case in {"r1", "r2", "relocated"}:
-        linkage = step2._comparison_input_gate(payload, **kwargs)
-        assert linkage["sha256"] == _identity(capture_path.read_bytes())["sha256"]
-        assert linkage["attestation_linkage"]["run_id"] == run.run_id
-        assert linkage["attestation_linkage"]["repeat"] == run.repeat
+    if case in {"r1", "r2", "relocated", "environment_enable"}:
+        # This is a positive model-free binding/attestation check, not a
+        # successful public runtime capture or a fabricated runtime receipt.
+        path, binding = capture._binding(
+            CodexComparisonCapture.from_dict(payload["execution"]["comparison_input_capture"]),
+            workspace=root / "batch-runner/workspace", dataset_root=root / capture.DATASET_ROOT,
+            prepared=payload,
+        )
+        assert path.read_bytes() == _json(binding)
+        identity = _identity(path.read_bytes())
         supplied = list(inputs["runs"])
         supplied[run.repeat] = replace(supplied[run.repeat], input_binding=root / capture.CAPTURE_PATH,
                                       prepared_tasks=root / capture.PREPARED_PATH, generated_config=root / capture.CONFIG_PATH)
         attestation = attester.compile_prepared_input_attestation(**{**inputs, "runs": tuple(supplied)})
-        assert attestation.as_dict()["runs"][run.repeat]["binding_file"] == {key: linkage[key] for key in ("size", "sha256")}
-        output = json.loads(_final_output_bytes(linkage))
-        assert output["pre_execution_input_capture"] == linkage
-        assert _final_output_bytes({**linkage, "sha256": "0" * 64}) != _final_output_bytes(linkage)
-        with pytest.raises(ProviderBoundary):
+        assert attestation.as_dict()["runs"][run.repeat]["binding_file"] == identity
+        with pytest.raises(capture.ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
+            step2._comparison_input_gate(payload, **kwargs)
+        with pytest.raises(capture.ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
             step2.run_inference(**kwargs)
-        assert events == ["host_gate", "auth_boundary"]
-        assert boundary_calls == ["auth"]
+        assert events == boundary_calls == []
         assert inputs["combined_plan"]["launch_allowed"] is inputs["combined_plan"]["full_220_allowed"] is False
         assert "comparison_materialization_and_workflow_gates_not_wired" in preflight.LAUNCH_BLOCKERS
         if case == "r1":

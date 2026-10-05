@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 
@@ -34,6 +34,20 @@ MANIFEST_PATH = ENVELOPE + "gpt54_sandboxv2_codex_comparison.yaml"
 
 class CodexInputCaptureRefused(ValueError):
     """Local comparison inputs cannot cross the provider-construction gate."""
+
+
+class ComparisonRuntimeLaunchRefused(CodexInputCaptureRefused):
+    """Valid local comparison evidence is not permission to execute a run."""
+
+
+def require_comparison_runtime_launch() -> NoReturn:
+    """Refuse direct comparison launch independently of source/input validity.
+
+    There is no implemented launch authority for this route. No argument,
+    environment variable or marker can enable it; model-free bundle APIs do
+    not call this gate.
+    """
+    raise ComparisonRuntimeLaunchRefused("comparison_runtime_launch_refused")
 
 
 def read_codex_prepared(path: Path) -> dict[str, Any]:
@@ -176,7 +190,7 @@ def verify_codex_input_capture(
     condition_key: str, execution_mode: str | None, max_retries: int | None,
     resume_max_rounds: int | None, resume: bool, wall_timeout: int | None,
 ) -> dict[str, Any]:
-    """Recompute from current local bytes before provider/auth/client creation."""
+    """Validate local bytes, then refuse launch before provider/auth creation."""
     try:
         control = CodexComparisonCapture.from_dict(prepared["execution"].get("comparison_input_capture"))
         if control is None:
@@ -203,6 +217,7 @@ def verify_codex_input_capture(
         actual = _read_bytes(path, **identity)
         if actual != expected:
             raise CodexInputCaptureRefused("capture bytes mismatch")
+        require_comparison_runtime_launch()
         # No overall attestation digest exists until all four captures have
         # been supplied. These fields link this file to that future check.
         return {
@@ -217,5 +232,7 @@ def verify_codex_input_capture(
             },
             "evidence_boundary": "local_pre_execution_snapshot_consistency",
         }
+    except ComparisonRuntimeLaunchRefused:
+        raise
     except (OSError, ValueError, TypeError, KeyError, StopIteration, ManifestRefused) as error:
         raise CodexInputCaptureRefused("Codex pre-execution input verification refused") from error
