@@ -888,6 +888,22 @@ class AgenticV2ScriptedRunner:
             try:
                 if self.conversation is not None:
                     conversation = self.conversation(task_prompt, dispatch_one)
+                    if observation is not None:
+                        from core.time_budget_observation_deadline import TIMEOUT
+
+                        if observation.terminal_reason == TIMEOUT:
+                            # Timeout is a control ending, not a runtime/tool
+                            # failure. Keep it ahead of a late finalize or the
+                            # desk's pending ending, with the existing schema.
+                            failure_lifecycle = lifecycle
+                            if not lifecycle.terminal:
+                                lifecycle.transition(LifecycleState.FAILED)
+                            elif lifecycle.state is not LifecycleState.FAILED:
+                                failure_lifecycle = AgenticV2Lifecycle(LifecycleState.FAILED)
+                            return finish(_failure(
+                                "task_wall_time_exhausted", failure_lifecycle,
+                                audit_chain, public_chain, stage="control",
+                            ))
                     # The bookkeeping's own ending outranks the loop's verdict.
                     # The loop saw an exception come out of the desk and called
                     # it a broken desk; this is the desk, and it knows why it

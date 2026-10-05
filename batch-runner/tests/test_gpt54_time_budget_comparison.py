@@ -23,6 +23,8 @@ from gpt54_codex_input_capture import (
     require_comparison_runtime_launch,
 )
 from .test_gpt54_run_config_bundle import _guards
+from . import test_codex_retention_task4_fresh_r1 as retained_fixture
+from . import test_codex_retention_budget_report as retention_report
 
 _REAL_RUN, _REAL_POPEN = subprocess.run, subprocess.Popen
 
@@ -41,17 +43,20 @@ def dual_roots(tmp_path_factory):
 
     runtime_sha = git("-C", str(repository), "rev-parse", "HEAD").decode().strip()
     roots = {}
+    gitdirs = {}
     for role, sha in (("runtime", runtime_sha), ("frozen", prospective.ACCEPTED_BASE_SHA), ("substitute", runtime_sha)):
-        root = tmp_path_factory.mktemp("deadline-" + role) / "source"
-        git("clone", "--shared", "--no-checkout", "--", str(repository), str(root))
+        parent = tmp_path_factory.mktemp("deadline-" + role)
+        root, owner = parent / "source", parent / "source-objects"
+        git("clone", "--shared", "--no-checkout", "--", str(repository), str(owner))
+        git("-C", str(owner), "worktree", "add", "--detach", "--no-checkout", str(root), sha)
         archive = git("-C", str(repository), "archive", "--format=tar", sha, "batch-runner", ".github/workflows")
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source:
             assert source.pax_headers["comment"] == sha
             assert all(not Path(member.name).is_absolute() and ".." not in Path(member.name).parts
                        and (member.isdir() or member.isfile()) for member in source.getmembers())
             source.extractall(root)
-        git("-C", str(root), "update-ref", "--no-deref", "HEAD", sha)
         roots[role] = root
+        gitdirs[role] = Path(git("-C", str(root), "rev-parse", "--absolute-git-dir").decode().strip())
     substituted = roots["substitute"]
     role = "batch-runner/core/codex_runner.py"
     changed = (substituted / role).read_bytes() + b"\n# synthetic coherent replacement\n"
@@ -65,7 +70,7 @@ def dual_roots(tmp_path_factory):
     replacement = git("-C", str(substituted), "rev-parse", "HEAD").decode().strip()
     git("-C", str(roots["runtime"]), "tag", "-a", "synthetic-review-tag", "-m", "synthetic tag", runtime_sha)
     tag = git("-C", str(roots["runtime"]), "rev-parse", "synthetic-review-tag").decode().strip()
-    return {**roots, "runtime_sha": runtime_sha, "substitute_sha": replacement, "tag_sha": tag}
+    return {**roots, "gitdirs": gitdirs, "runtime_sha": runtime_sha, "substitute_sha": replacement, "tag_sha": tag}
 
 
 def _anchors(roots):
@@ -880,8 +885,10 @@ def test_time_budget_observation_deadline_omission_preserves_legacy_paths(tmp_pa
     assert native_runner.observation_control is native_runner.last_observation_deadline is None
 
 
-def test_time_budget_frozen_judge_binding_genuine_dual_roots(dual_roots, tmp_path):
+def test_time_budget_frozen_judge_binding_genuine_dual_roots(dual_roots, tmp_path, monkeypatch):
     from step8_grade import compute_grader_source_hash
+    import gpt54_run_config_bundle as bundle
+    from gpt54_disposable_checkout import DisposableCheckoutRefused
 
     plan = prospective.load_registration()
     report = _compile(plan, dual_roots).as_dict()
@@ -912,6 +919,117 @@ def test_time_budget_frozen_judge_binding_genuine_dual_roots(dual_roots, tmp_pat
         materialized.unlink()
     with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
         require_comparison_runtime_launch()
+
+    # Complete the identity checks that the first failed positive could not
+    # reach: its clone was not a registered detached linked worktree. Do not
+    # mistake that early layout refusal for tracked-blob/anchor evidence.
+    for case in ("swapped_roots", "wrong_runtime_commit", "coherent_substitution"):
+        candidate, anchors = deepcopy(plan), _anchors(dual_roots)
+        if case == "swapped_roots":
+            anchors["runtime_root"], anchors["frozen_grader_root"] = frozen, runtime
+        elif case == "wrong_runtime_commit":
+            anchors["expected_reviewed_source_sha"] = prospective.ACCEPTED_BASE_SHA
+        else:
+            anchors["runtime_root"] = dual_roots["substitute"]
+            candidate = prospective.load_registration(dual_roots["substitute"] / prospective.REGISTRATION_PATH)
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused) as refused:
+            prospective.compile_registration(candidate, **anchors)
+        assert isinstance(refused.value.__cause__, DisposableCheckoutRefused)
+        assert str(refused.value.__cause__) == "runtime checkout HEAD must be the reviewed detached commit"
+
+    for field, reason in (("runtime_digest", "runtime_source_roles"), ("judge_digest", "shared_facts")):
+        candidate = deepcopy(plan)
+        if field == "runtime_digest":
+            candidate["source_pins"][prospective.COMPILER] = "0" * 64
+        else:
+            candidate["shared"]["grading"]["template_source_sha256"] = "0" * 64
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^" + reason + "$"):
+            _compile(candidate, dual_roots)
+
+    for root in (runtime, frozen):
+        target = root / "batch-runner/core/codex_runner.py"
+        before = target.read_bytes()
+        try:
+            target.write_bytes(before + b"\n# synthetic runtime/judge substitution\n")
+            with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^source_differs_from_reviewed_blob$"):
+                _compile(plan, dual_roots)
+        finally:
+            target.write_bytes(before)
+
+    untracked = runtime / "batch-runner/core/untracked_deadline.py"
+    try:
+        untracked.write_text("# synthetic untracked source\n")
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^source_core_inventory$"):
+            _compile(plan, dual_roots)
+    finally:
+        untracked.unlink()
+
+    target = runtime / prospective.REGISTRATION_PATH
+    before = target.read_bytes()
+    try:
+        target.write_bytes(before + b"\n# synthetic unreviewed manifest bytes\n")
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^source_differs_from_reviewed_blob$"):
+            _compile(plan, dual_roots)
+    finally:
+        target.write_bytes(before)
+
+    for substitution in ("symlink", "hardlink"):
+        target = runtime / historical.GRADER
+        before = target.read_bytes()
+        external = tmp_path / (substitution + "-grader.yaml")
+        try:
+            if substitution == "symlink":
+                external.write_bytes(before)
+                target.unlink()
+                target.symlink_to(external)
+            else:
+                os.link(target, external)
+            with pytest.raises(prospective.TimeBudgetRegistrationRefused) as refused:
+                _compile(plan, dual_roots)
+            assert "detached checkout registration mismatch" not in str(refused.value.__cause__)
+            assert "regular" in str(refused.value.__cause__) or "symlink" in str(refused.value.__cause__)
+        finally:
+            if substitution == "symlink":
+                target.unlink()
+                target.write_bytes(before)
+            external.unlink()
+
+    for race in ("final_reread", "held_parent", "head_substitution"):
+        target = runtime / "batch-runner/core/codex_runner.py"
+        before = target.read_bytes()
+        head = dual_roots["gitdirs"]["runtime"] / "HEAD"
+        before_head = head.read_bytes()
+        moved = None
+        sources = bundle._sources
+
+        def raced(root, manifest, locator):
+            nonlocal moved
+            actual = sources(root, manifest, locator)
+            if root == runtime:
+                if race == "held_parent":
+                    parent = runtime / "batch-runner/core"
+                    moved = parent.with_name("held-original-core")
+                    parent.rename(moved)
+                    parent.mkdir()
+                elif race == "head_substitution":
+                    head.write_text(prospective.ACCEPTED_BASE_SHA + "\n")
+                else:
+                    target.write_bytes(before + b"\n# final reread race\n")
+            return actual
+
+        try:
+            with monkeypatch.context() as guarded:
+                guarded.setattr(bundle, "_sources", raced)
+                with pytest.raises(prospective.TimeBudgetRegistrationRefused) as refused:
+                    _compile(plan, dual_roots)
+                assert str(refused.value) == "registration_cannot_be_compiled"
+                assert "detached checkout registration mismatch" not in str(refused.value.__cause__)
+        finally:
+            if moved is not None:
+                (runtime / "batch-runner/core").rmdir()
+                moved.rename(runtime / "batch-runner/core")
+            target.write_bytes(before)
+            head.write_bytes(before_head)
 
 
 @pytest.mark.parametrize("case", ["missing_runtime", "missing_judge", "wrong_runtime", "ref", "short", "uppercase", "tag",
@@ -980,7 +1098,7 @@ def test_time_budget_frozen_judge_binding_tracked_bytes_and_races(dual_roots, tm
         elif case == "head_substitution":
             # A coherent other HEAD has no authority to substitute for the
             # independently supplied R. The new value is a real local commit.
-            head = root / ".git/HEAD"
+            head = dual_roots["gitdirs"]["runtime"] / "HEAD"
             original_head = head.read_bytes()
             head.write_text(prospective.ACCEPTED_BASE_SHA + "\n")
         else:
@@ -1030,12 +1148,10 @@ def test_time_budget_legacy_role_compatibility_closed_retention(historical_reten
 
 
 def test_time_budget_legacy_role_compatibility_shared_retained_source(tmp_path, historical_retention_source):
-    from .test_codex_retention_task4_fresh_r1 import _source_tree, REAL_ROOT
-    from .test_codex_retention_budget_report import FROZEN_SOURCE, CURRENT_SOURCE
     from step8_grade import compute_grader_source_hash
 
     root = tmp_path / "synthetic-retained-source"
-    _source_tree(root)  # Shared by the old fresh/keep fixture family, not a live preparation.
+    retained_fixture._source_tree(root)  # Shared old fresh/keep fixture, not a live preparation.
     template = root / historical.GRADER
     template.parent.mkdir(parents=True)
     with template.open("xb") as target:
@@ -1044,10 +1160,10 @@ def test_time_budget_legacy_role_compatibility_shared_retained_source(tmp_path, 
         assert (root / name.relative_to(historical_retention_source)).read_bytes() == name.read_bytes()
     assert compute_grader_source_hash(root / historical.GRADER, historical.load_plan(root / historical.GRADER),
                                       batch_root=root / "batch-runner") == prospective.FROZEN_TEMPLATE_SHA256
-    for role, digest in FROZEN_SOURCE.items():
+    for role, digest in retention_report.FROZEN_SOURCE.items():
         assert hashlib.sha256((historical_retention_source / role).read_bytes()).hexdigest() == digest
-    for role, digest in CURRENT_SOURCE.items():
-        assert hashlib.sha256((REAL_ROOT / role).read_bytes()).hexdigest() == digest
+    for role, digest in retention_report.CURRENT_SOURCE.items():
+        assert hashlib.sha256((retained_fixture.REAL_ROOT / role).read_bytes()).hexdigest() == digest
 
 
 def test_time_budget_legacy_role_compatibility_workflow_profile(monkeypatch, frozen_local_comparison_source):
