@@ -13,6 +13,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `gpt54_time_budget_comparison.consume_observation_handoff` to revalidate
+  one prepared run/task against an independent preparation digest/size and
+  explicit runtime, frozen-grader and input-source anchors. It checks the
+  reservation, exact members and bytes, configuration/task/reference bindings,
+  and final held-directory/source/input rereads before effects. A trusted,
+  separately supplied execution-direction checker is required; preparation
+  metadata cannot grant permission. No production checker or live entrypoint
+  is installed, and all existing launch flags and refusals remain unchanged.
+
+  After validation and direction checking, a permanent no-clobber consumption
+  record precedes observation admission. The same `TimeBudgetObservation`
+  reaches V2's existing `build_runner_factory` through `observation_for`, or
+  `CodexAgentRunner` through `observation_control`, with the verified
+  condition-specific arguments. V2 still neither accepts nor reads Step0.
+  Reuse and partial startup remain refused. Core deadline/ownership semantics,
+  the frozen judge, historical profiles, workflows and study policy are unchanged;
+  only the prospective helper's two existing digest bindings advance.
+
+  One offline Python 3.10.12 selector at
+  `b9daec496548293d7e0f316fd6d18f0c16b6ae2e`, tree
+  `e5a68af749c699ed5b5d6971cc0bd491dc73b3e8`, reported **53 passed,
+  226 deselected in 76.10s**, exit 0, under a 300-second bound plus 5-second
+  termination grace. Genuine temporary Git/source validators and explicitly
+  synthetic handoffs exercised both existing factories with controlled adapters;
+  this is software evidence, not a live observation or host-support claim.
+  The [current record](tasks/LATEST_TASK_RESULT/README.md) records the exact
+  private evidence identities, redacted command display and pre-edit charter
+  review. The command digest is not a hash of that display.
+
+  The accepted basis is `a5a04701fed3067b56bd80af424824c447f3075e`, tree
+  `d36a356b0950bd44b0b789dfebf725035601d259`, following delivered PR752 from
+  reviewed `bba2c6dc3a026ec744f12089ab6f037cfe15ee5e`, owner review `5418852580`.
+  [Prior preparation proof and CI host evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/bba2c6dc3a026ec744f12089ab6f037cfe15ee5e/tasks/LATEST_TASK_RESULT/README.md)
+  remain distinct. The post-proof delta is CHANGELOG and LATEST only; the usage
+  README was part of the tested commit. Final-HEAD review and applicable CI
+  remain pending, as do the separately reviewed execution direction, exact-source
+  host, provider, credentialed-input/capture and F-derived grading gates.
+
 - Add `gpt54_time_budget_comparison.prepare_observation_handoff` for exactly
   one registered run/task. It checks independent R/F anchors and an explicitly
   supplied input-registration source, reuses only equal dataset/cohort facts,
