@@ -34,7 +34,7 @@ def compiled_contracts(historical_budget_source):
 
 
 @pytest.fixture(scope="module")
-def retained_history(compiled_contracts, historical_budget_source):
+def retained_history(compiled_contracts, historical_budget_source, frozen_local_comparison_source):
     # Generate the same immutable fake history once; each case clones only its
     # fake server. Keep the genuine old local state alive for mutation checks.
     real_compile = pilot.compile_pilot
@@ -45,7 +45,9 @@ def retained_history(compiled_contracts, historical_budget_source):
         return real_compile(campaign, source)
 
     with pytest.MonkeyPatch.context() as patch:
-        base.offline.__wrapped__(patch)
+        # This module-scoped history uses the real session-scoped frozen source;
+        # the function-scoped retention fixture binds each requesting case.
+        base.offline.__wrapped__(patch, frozen_local_comparison_source)
         patch.setattr(pilot, "compile_pilot", compile_contract)
         patch.setattr(base, "SOURCE", PRODUCER)
         scenarios = base.scenario.__wrapped__(patch, historical_budget_source)

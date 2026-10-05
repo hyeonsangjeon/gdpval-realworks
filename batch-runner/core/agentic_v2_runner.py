@@ -587,7 +587,8 @@ class AgenticV2ScriptedRunner:
                 ))
             lifecycle.transition(LifecycleState.STARTED)
             startup_started = self.clock()
-            if expired():
+            # Legacy startup uses this one sample; observation mode owns its clock.
+            if (startup_started >= deadline if observation is None else expired()):
                 lifecycle.transition(LifecycleState.FAILED)
                 return finish(_failure(
                     "task_wall_time_exhausted", lifecycle, audit_chain, public_chain,

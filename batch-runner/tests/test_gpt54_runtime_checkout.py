@@ -394,11 +394,17 @@ def test_runtime_checkout_lineage_precedes_both_providers(
 
 
 @pytest.fixture(scope="module")
-def _anchored_input_seed(tmp_path_factory):
-    # Genuine current source pins and whole template closure; only original-data
-    # identities describe the existing tiny synthetic oracle. No private inputs.
+def _anchored_input_seed(tmp_path_factory, frozen_local_comparison_source):
+    # The sealed local-source profile is historical now. Current R must refuse
+    # it; F supplies real positive source/closure bytes, not replacement pins.
+    current = preflight.inspect_plan(preflight.load_plan(preflight.ROOT / _PROSPECTIVE_MANIFEST))
+    assert current["configuration_valid"] is current["launch_allowed"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
+        "source_pin:batch-runner/core/codex_runner.py",
+    ]
     yield from _make_input_bundle_seed(
-        tmp_path_factory, Path(__file__).resolve().parents[2], _PROSPECTIVE_MANIFEST,
+        tmp_path_factory, frozen_local_comparison_source, _PROSPECTIVE_MANIFEST,
     )
 
 
@@ -417,7 +423,7 @@ def _anchored_checkout(tmp_path, monkeypatch, seed, *, condition="sandbox_v2",
     manifest_path = config_bundle.MANIFEST_PATH if historical else _PROSPECTIVE_MANIFEST
     if not historical:
         assert inputs["manifest"]["source_pins"] == preflight.load_plan()["source_pins"]
-        (repository / manifest_path).write_bytes(b"# synthetic current-source profile\n" + _json(inputs["manifest"]))
+        (repository / manifest_path).write_bytes(b"# synthetic frozen-source profile\n" + _json(inputs["manifest"]))
         (repository / config_bundle.MANIFEST_PATH).write_bytes(
             (preflight.ROOT / config_bundle.MANIFEST_PATH).read_bytes(),
         )

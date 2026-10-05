@@ -35,6 +35,35 @@ SOURCE = "d" * 40  # Synthetic reviewed controller transport fact, not a live re
 RUN = {"id": "12345", "job": "pilot-live", "attempt": 1}
 
 
+@pytest.fixture
+def frozen_grading_source(monkeypatch, historical_retention_source):
+    """Use F's real closure for historical materialization, never current R.
+
+    Reader/controller bytes still use their existing independent checks. Only
+    source suppliers and the imported loader's default path are rebound; the
+    compiler, whole-closure hasher and materialized-entry validators stay real.
+    """
+    import gpt54_comparison_preflight as comparison
+
+    source = historical_retention_source
+    template = bridge.registration.BASE_GRADER_TEMPLATE_SOURCE_SHA256
+    for root, expected in ((comparison.ROOT, False), (source, True)):
+        config = comparison.load_plan(root / comparison.GRADER)
+        actual = base.step8.compute_grader_source_hash(
+            root / comparison.GRADER, config, batch_root=root / "batch-runner",
+        )
+        assert (actual == template) is expected
+    original_plan = source / bridge.configs.MANIFEST_PATH
+    assert original_plan.read_bytes() == comparison.PLAN.read_bytes()
+    assert pilot.load_plan is bridge.load_plan is comparison.load_plan
+    monkeypatch.setattr(pilot, "REGISTRATION", source / pilot.REGISTRATION.relative_to(pilot.ROOT))
+    monkeypatch.setattr(pilot, "ROOT", source)  # Child.checkout copies this real F closure.
+    monkeypatch.setattr(comparison, "ROOT", source)
+    monkeypatch.setattr(comparison, "PLAN", original_plan)
+    monkeypatch.setattr(comparison.load_plan, "__defaults__", (original_plan,))
+    return source
+
+
 def _environment(monkeypatch):
     env = {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": bridge.pilot_ci.REPOSITORY,
         "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main",
@@ -249,7 +278,10 @@ def test_retention_grade_ledger_binding_is_exact_and_legacy_defaults_stay_closed
         output._ledger(b"", legacy, grading_run_id=run_id, retention_first_cell_binding=binding)
 
 
-def test_first_retention_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch, capsys):
+def test_first_retention_fixed_grade_is_bound_one_use_and_private(
+    tmp_path, monkeypatch, capsys, frozen_grading_source,
+):
+    assert pilot.ROOT == frozen_grading_source
     # These are production expectations. Fixture-only identities below do not
     # change the registered configuration, reader/verifier or actual closure.
     assert bridge.RESULT["terminal_commit"] == "de50ff0aa6037c0ef6e3b713da519359abd1d08d"
@@ -402,6 +434,7 @@ def test_first_retention_fixed_grade_is_bound_one_use_and_private(tmp_path, monk
     prepared = bridge.prepare(context, root, _test_api=api, _test_transport=transport)
     assert materialization_calls == [root / "original-upload"]
     assert prepared["judge_ready"] is True and prepared["entry"]["grader_source_hash"] == bridge.GRADER_SHA256
+    assert prepared["entry"]["grader_source_hash"] != context.plan["grading"]["template_source_sha256"]
     assert prepared["entry"]["cost_run_id"] == base.step8.make_cost_run_id(
         experiment_yaml_name=bridge.SELECTOR, config_hash=prepared["entry"]["config_hash"],
         grader_source_hash=prepared["entry"]["grader_source_hash"])

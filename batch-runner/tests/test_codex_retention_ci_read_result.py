@@ -31,7 +31,12 @@ def _boolean(expression, replacements):
 from . import test_codex_retention_ci_observation as workflow_observation  # noqa: E402
 
 
-def test_retention_result_read_workflow_is_fixed_and_model_free(monkeypatch, tmp_path, capsys):
+def test_retention_result_read_workflow_is_fixed_and_model_free(
+    monkeypatch, tmp_path, capsys, historical_retention_source,
+):
+    # The fixture first proves the current-source refusal; only the real frozen
+    # registration may proceed to the unchanged explicit-token prerequisite.
+    assert reader.registration.ROOT == historical_retention_source
     workflow_observation._assert_retention_mode_routes()
     workflow = yaml.safe_load((reader.ci.ROOT / reader.ci.WORKFLOW).read_bytes())
     inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]

@@ -31,6 +31,7 @@ from core.task_checkpoint import (TaskProgressDraft, build_progress, checkpoint_
 from step2_run_inference import _build_execution_observability
 from . import test_codex_budget_pilot_grading as base
 from . import test_codex_retention_fixed_grade as first
+from .test_codex_retention_fixed_grade import frozen_grading_source  # noqa: F401
 from . import test_codex_retention_grade_readout as parent_fixture
 from .test_codex_budget_pilot_grading import boundaries  # noqa: F401
 from .test_codex_budget_pilot_retention import offline, TOKEN  # noqa: F401
@@ -175,7 +176,10 @@ def _capture(capsys, tmp_path):
     return json.loads(text.out)
 
 
-def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch, capsys):
+def test_keep_r2_fixed_grade_is_bound_one_use_and_private(
+    tmp_path, monkeypatch, capsys, frozen_grading_source,
+):
+    assert pilot.ROOT == frozen_grading_source
     assert fixed.SELECTOR == "retention/keep-r2"
     assert bridge.fixed_evidence_sha256() == FIRST_EVIDENCE
     assert bridge.fixed_evidence_sha256(fixed.SELECTOR) == EVIDENCE
@@ -256,6 +260,7 @@ def test_keep_r2_fixed_grade_is_bound_one_use_and_private(tmp_path, monkeypatch,
     assert prepared == bridge._ready(context, root) and prepared["judge_ready"] is True
     assert prepared["format"] == fixed.PREPARATION_FORMAT
     assert prepared["entry"]["grader_source_hash"] == fixed.GRADER_SHA256
+    assert prepared["entry"]["grader_source_hash"] != context.plan["grading"]["template_source_sha256"]
     assert uploads == [root / "original-upload"] and api.events == [] and transport.calls == 0
     leaves = _filename_leaves(prepared["entry"]["grade_path"], context.cell["task_id"])
     leaf_bytes = {name: len(value.encode("utf-8")) for name, value in leaves.items()}
