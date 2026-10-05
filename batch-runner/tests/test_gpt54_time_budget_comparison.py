@@ -2201,14 +2201,18 @@ def test_time_budget_observation_handoff_invalid_selection_and_anchors(handoff_s
 ])
 def test_time_budget_observation_handoff_tamper_and_clobber(handoff_sources, tmp_path, case):
     seed = handoff_sources
-    arguments = _handoff_arguments(seed, tmp_path, condition="codex" if case == "step0_digest" else "sandbox_v2")
+    reference_index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
+    arguments = _handoff_arguments(
+        seed, tmp_path, condition="codex" if case == "step0_digest" else "sandbox_v2",
+        task_index=reference_index if case in ("reference_digest", "reference_symlink") else 0,
+    )
     output = arguments["destination"]
     reservation = output.with_name(output.name + prospective.HANDOFF_RESERVATION_SUFFIX)
     target, original, extra = None, None, None
     if case in ("parquet_digest", "parquet_hardlink"):
         target = seed.parquet
     elif case in ("reference_digest", "reference_symlink"):
-        target = seed.references / seed.rows[0]["reference_files"][0]
+        target = seed.references / seed.rows[reference_index]["reference_files"][0]
     elif case == "step0_digest":
         target = seed.step0
     elif case == "runtime_blob":
@@ -2273,10 +2277,12 @@ def test_time_budget_observation_handoff_final_rereads_quarantine(handoff_source
     import ghcp_vm_input_bundle as publication
 
     seed = handoff_sources
-    arguments = _handoff_arguments(seed, tmp_path, condition="codex" if case == "step0" else "sandbox_v2")
+    reference_index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
+    arguments = _handoff_arguments(seed, tmp_path, condition="codex" if case == "step0" else "sandbox_v2",
+                                   task_index=reference_index)
     output = arguments["destination"]
     target = {
-        "parquet": seed.parquet, "reference": seed.references / seed.rows[0]["reference_files"][0],
+        "parquet": seed.parquet, "reference": seed.references / seed.rows[reference_index]["reference_files"][0],
         "step0": seed.step0, "runtime_source": seed.runtime / "batch-runner/core/codex_runner.py",
         "input_source": seed.frozen / prospective.SOURCE_PROFILE,
         "installed_config": output / prospective.HANDOFF_CONFIG,
@@ -2338,3 +2344,34 @@ def test_time_budget_observation_handoff_v2_never_reads_step0_and_stays_closed(h
     assert hashlib.sha256((historical.ROOT / prospective.SOURCE_PROFILE).read_bytes()).hexdigest() == (
         "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
     )
+
+
+@pytest.mark.parametrize("condition", ["sandbox_v2", "codex"])
+def test_time_budget_observation_handoff_valid_reference_payload(handoff_sources, tmp_path, condition):
+    """A reference-bearing baseline, separate from the four no-reference proofs."""
+    from gpt54_prepared_input_attestation import _identity
+
+    seed = handoff_sources
+    index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
+    assert seed.rows[index]["task_id"] == "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+    arguments = _handoff_arguments(seed, tmp_path, condition=condition, task_index=index)
+    marker = prospective.prepare_observation_handoff(seed.plan, **arguments)
+    output = arguments["destination"]
+    names = seed.rows[index]["reference_files"]
+    assert names and marker["observation"]["task_id"] == seed.rows[index]["task_id"]
+    assert set(marker["files"]) == {prospective.HANDOFF_CONFIG, prospective.HANDOFF_TASK, *names}
+    payload = json.loads((output / prospective.HANDOFF_TASK).read_bytes())
+    assert payload["arguments"]["reference_files"] == names
+    assert payload["reference_file_records"] == [{"path": name, **seed.records[name]} for name in names]
+    assert marker["inputs"]["reference_file_records"] == payload["reference_file_records"]
+    for name in names:
+        assert (output / name).read_bytes() == (seed.references / name).read_bytes()
+        assert marker["files"][name] == _identity((output / name).read_bytes())
+        assert (output / name).stat().st_nlink == 1 and not (output / name).is_symlink()
+    assert {path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()} == {
+        *marker["files"], prospective.HANDOFF_READY,
+    }
+    assert json.loads((output / prospective.HANDOFF_READY).read_bytes()) == marker
+    assert marker["launch_authority"]["launch_allowed"] is False
+    with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
+        require_comparison_runtime_launch()
