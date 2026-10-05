@@ -13,6 +13,74 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an independent, argument-free comparison runtime launch refusal shared by
+  the Codex and V2 capture entrypoints. Valid local source/input evidence still
+  refuses with `comparison_runtime_launch_refused`, before V2 capture
+  publication/probes or either runtime's provider/auth/model-child setup. No
+  caller argument, environment variable, manifest or marker can enable it.
+  Non-comparison behavior and model-free bundle APIs remain unchanged; profile
+  recognition is deferred.
+
+  Only the two production capture modules, their prospective-profile source
+  bindings and directly coupled test contracts change before proof. Frozen
+  refusal inventories retain genuine historical hashes. Historical compiler,
+  core, Step2, grader, workflow and paid-source evidence remain unchanged, as do
+  the full grader TEMPLATE closure, original inputs and closed 30-cell/8-cell
+  studies. No CURRENT observer registry repin was required.
+
+  One offline `comparison_runtime_launch_boundary` selector passed 57 tests,
+  with 185 deselected, in 52.69s, exit 0, at HEAD
+  `e2f04171f5812dd1f2044f6b807c62267efb3b64`, tree
+  `edb7d235274b8cec61e0197c7a1fff513cd45e01`. Its 300-second bound plus
+  5-second termination grace applies only to this test invocation. Command
+  SHA256 is `5a4be8ee555f2bf29188e51a9e0ab030f91499c1e2e57c4db6480e5141f91d4b`;
+  combined-log SHA256 is
+  `5e9cf35d75a264aed14a0bf3211cbd4ee778ca6331af70e82390634a784be328`, and
+  private receipt SHA256 is
+  `e9869b38bde30081f86325a82d3758f2a0d1048c16879c1e65850c0fcd11e1f4`.
+  The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-independent-comparison-runtime-launch-refusal--2026-10-05)
+  preserves the exact command, source/fixture distinction and safe evidence.
+
+  Accepted base `c6fbf893595336e0a89ceb122ac5859991487144` has production code
+  unchanged from reviewed source `14d7579c2578cb2a09397b5d42f41e7b5daaf2d7`.
+  The leader supplied prior PR745 evidence: reviewed
+  `78620a6b35e6ad4747f36feb41553fe9bff48fdc`, owner review5408853800 and all
+  9 applicable checks passed. That evidence is not review of this new code.
+  Only README/CHANGELOG/LATEST documentation changes followed that proof; final-HEAD
+  review, applicable CI and leader acceptance remain pending. Runtime profile
+  selection, native caps, dispatcher, credentialed-CI authority and separate
+  launch authorization remain unresolved. No private artifact was reopened,
+  prepared or relabeled, and no prior selector was rerun.
+
+  Correct the positive r1/r2 expectations in the existing runtime-checkout test
+  after leader-read comparison-contracts CI run37249091204/job111572837265:
+  4 failed, 1060 passed in 1450.43s. The four cases still expected a provider
+  boundary and, for V2, a capture after the intentional launch refusal. The
+  leader's source-reviewed basis is `07b83ef8944a1ac35e3721fda82efb81d53718bd`,
+  tree `133da32505dce5f30db502f4e96692daa87d6636`; no CI query or new production
+  change was made. The correction requires genuine lineage and input binding,
+  then the exact Codex refusal class/reason or V2 status 1 plus the same reason.
+  No host/auth/provider/free-safety boundary is reached, V2 leaves no capture or
+  new workspace artifact, and existing Codex model-free capture bytes remain
+  unchanged. Read-only Git checks, all negative lineage cases, the 37-source
+  inventory and false-launch assertions are preserved.
+
+  One separate offline invocation selected exactly those four parameterized
+  nodes: 4 passed in 9.81s, exit 0, at test-only HEAD
+  `90b9a50ec46411f8b11ee148be57e0511fd59471`, tree
+  `513ae06a80b088208230edb23110efd5140c8c17`. Its 300-second bound plus
+  5-second grace is test-only. Command SHA256 is
+  `e9aa74c37a831557b437077ef82d6cba88142ab269dd63e7fa033fa3f8243ed5`,
+  combined-log SHA256 is
+  `678f25b4fea7716030cb15f337543cd2552e11fc015289ccb89695d130b8091e`, and
+  private receipt SHA256 is
+  `26f136f442d93050671c4518e72cf4070dc29086fecee0ce681b40b19eafdec4`.
+  The current task record retains the exact command and immutable prior proof.
+  The original 57-case evidence above is unchanged and was not rerun. Only this
+  entry and the single current LATEST record follow the corrective proof;
+  corrected final-HEAD review and applicable CI remain pending. No production,
+  manifest, source-pin, runtime-selection or launch-gate change followed.
+
 - Record one successful model-free local preparation of
   `gpt54_v2_codex_v1_v2_r1`, `sandbox_v2`, repeat 1, five registered tasks, at
   reviewed source `14d7579c2578cb2a09397b5d42f41e7b5daaf2d7`, tree

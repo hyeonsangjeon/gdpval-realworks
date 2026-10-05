@@ -69,6 +69,8 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(monkey
     )
     manifest = preflight.load_plan(root / _PROSPECTIVE_MANIFEST)
     changed_sources = {
+        "batch-runner/gpt54_codex_input_capture.py",
+        "batch-runner/gpt54_v2_input_capture.py",
         "batch-runner/gpt54_run_config_bundle.py",
         "batch-runner/gpt54_run_input_bundle.py", _PREPARER_SOURCE,
         "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
@@ -109,6 +111,82 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(monkey
         "source_pin:" + name for name in historical["source_pins"] if name in changed_sources
     )
     assert forbidden == []
+
+
+def test_comparison_runtime_launch_boundary_current_source_bindings(monkeypatch, capsys):
+    """Real tracked current compilation; frozen comparison/pilot pins still refuse."""
+    import gpt56_sol_codex_pilot_preflight as pilot
+
+    test_prospective_source_profile_real_tracked_compilation_and_refusals(monkeypatch, capsys)
+    manifest = preflight.load_plan(preflight.ROOT / _PROSPECTIVE_MANIFEST)
+    assert manifest["shared"]["grading"]["template_source_sha256"] == (
+        "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"
+    )
+    current = pilot.inspect_plan(pilot.load_plan(pilot.PLAN))
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/gpt54_codex_input_capture.py",
+        "source_pin:batch-runner/gpt54_run_config_bundle.py",
+        "source_pin:batch-runner/gpt54_run_input_bundle.py",
+        "source_pin:batch-runner/core/codex_task_deadline.py",
+    ]
+    assert current["launch_allowed"] is current["full_220_allowed"] is False
+
+
+@pytest.mark.parametrize("harness,case", [
+    ("codex", case) for case in (
+        "r1", "r2", "relocated", "environment_enable", "default_absent_and_null",
+        "control_extra", "prepared_identity_removed", "prepared_forged_capture",
+        "changed_source_pin", "manifest_control", "combined_plan", "capture_digest",
+        "capture_symlink", "prepared_task_order", "parquet_bytes", "reference_bytes",
+        "cli_mode", "cli_retries", "cli_resume", "held_prepared_drift",
+        "capture_collision", "atomic_write_failure",
+    )
+] + [
+    ("v2", case) for case in (
+        "r1", "r2", "relative_argv", "new_workspace", "environment_enable", "default_absent_and_null",
+        "control_extra", "control_removed", "run_missing", "source_pin_changed",
+        "manifest_control", "combined_plan", "plan_task_order", "held_task_order",
+        "parquet_bytes", "reference_bytes", "plan_symlink", "isolated_approval",
+        "dry_run", "rehearse", "capture_collision", "capture_race",
+        "post_publish_reference_drift", "atomic_write_failure",
+    )
+])
+def test_comparison_runtime_launch_boundary_entrypoints(
+    harness, case, tmp_path, monkeypatch, _input_bundle_seed, capsys,
+):
+    """Actual runtime entrypoints, synthetic original bytes, no guard bypass.
+
+    These existing capture fixtures isolate Git lineage, not the new refusal
+    or the real source/input validators. The separate checkout cases below
+    retain genuine temporary Git, marker and no-clobber verification.
+    """
+    from .test_gpt54_codex_input_capture import (
+        test_codex_comparison_capture_gates_real_step1_and_step2 as codex_case,
+    )
+    from .test_gpt54_v2_input_capture import (
+        test_v2_comparison_capture_gates_stage_before_provider as v2_case,
+    )
+
+    _input_bundle_seed.install(monkeypatch)
+    (codex_case if harness == "codex" else v2_case)(case, tmp_path, monkeypatch)
+    if harness == "v2" and case in {"r1", "r2", "relative_argv", "new_workspace", "environment_enable"}:
+        assert "comparison_runtime_launch_refused" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("case", [
+    "v2_r1", "codex_r1", "pinned_source_drift", "bundle_markers_drift",
+    "wrong_or_attached_head", "failure_input_after", "existing_reservation",
+])
+def test_comparison_runtime_launch_boundary_model_free_bundles(
+    case, tmp_path, monkeypatch, _input_bundle_seed, capsys,
+):
+    """Local bundle APIs still work or retain their real refusal/partial state."""
+    test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
+        case, _PROSPECTIVE_MANIFEST, tmp_path, monkeypatch, _input_bundle_seed, capsys,
+    )
 
 
 @pytest.fixture

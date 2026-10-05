@@ -98,11 +98,11 @@ def capture_v2_pre_execution_input(
     dataset_root: Path | None, workspace: Path | None, shard: str | None,
     dry_run: bool, rehearse: bool, isolated_approval: Path | None,
 ) -> tuple[BoundManifest, dict[str, Any]] | None:
-    """Publish and immediately recompute the capture, returning the actual tasks.
+    """Validate local inputs, then refuse launch before capture publication.
 
     Absent/null controls are a no-op unless the reserved run id requires one.
-    A failed post-publication verification may leave a complete capture, never
-    a partial file; retry/resume must not overwrite it or adopt an old workspace.
+    Comparison launch remains blocked independently of valid local evidence;
+    no workspace or capture is published on that refusal.
     """
     if plan.get("comparison_input_capture") is None and run_id not in (
         *V2ComparisonCapture.RUN_IDS,
@@ -112,6 +112,7 @@ def capture_v2_pre_execution_input(
 
     from gpt54_codex_input_capture import (
         CAPTURE_PATH, CONFIG_PATH, DATASET_ROOT, PARQUET_NAME, _write_no_clobber,
+        ComparisonRuntimeLaunchRefused, require_comparison_runtime_launch,
     )
     from gpt54_comparison_preflight import _canonical_json
     from gpt54_prepared_input_attestation import _identity, _same
@@ -143,6 +144,7 @@ def capture_v2_pre_execution_input(
 
         verify_runtime_checkout(checkout=root, run_id=run_id, condition="sandbox_v2")
         bound, binding = _binding(root, run_id, plan)
+        require_comparison_runtime_launch()
         expected = _canonical_json(binding).encode("utf-8")
         identity = _identity(expected)
         workspace.mkdir(exist_ok=True)
@@ -167,5 +169,7 @@ def capture_v2_pre_execution_input(
             },
             "evidence_boundary": "local_pre_execution_snapshot_consistency",
         }
+    except ComparisonRuntimeLaunchRefused as error:
+        raise V2InputCaptureRefused(str(error)) from error
     except (OSError, ValueError, TypeError, KeyError, StopIteration, ManifestRefused, yaml.YAMLError) as error:
         raise V2InputCaptureRefused("V2 pre-execution input capture refused") from error

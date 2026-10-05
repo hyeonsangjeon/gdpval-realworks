@@ -391,7 +391,9 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
         with pytest.raises(comparison.DispatchPlanRefused) as changed_source:
             campaign.compile_pilot("offline-frozen-matrix", approved_sha)
         assert str(changed_source.value) == (
-            "comparison refused: source_pin:batch-runner/gpt54_run_config_bundle.py, "
+            "comparison refused: source_pin:batch-runner/gpt54_codex_input_capture.py, "
+            "source_pin:batch-runner/gpt54_v2_input_capture.py, "
+            "source_pin:batch-runner/gpt54_run_config_bundle.py, "
             "source_pin:batch-runner/gpt54_run_input_bundle.py, "
             "source_pin:batch-runner/gpt54_disposable_checkout.py, "
             "source_pin:batch-runner/core/codex_runner.py, "
