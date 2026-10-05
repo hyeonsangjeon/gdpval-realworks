@@ -46,11 +46,40 @@ entries land under a fresh dated heading the day they merge to `main`.
   The leader supplied prior PR745 evidence: reviewed
   `78620a6b35e6ad4747f36feb41553fe9bff48fdc`, owner review5408853800 and all
   9 applicable checks passed. That evidence is not review of this new code.
-  Only README/CHANGELOG/LATEST documentation changes follow the proof; final-HEAD
+  Only README/CHANGELOG/LATEST documentation changes followed that proof; final-HEAD
   review, applicable CI and leader acceptance remain pending. Runtime profile
   selection, native caps, dispatcher, credentialed-CI authority and separate
   launch authorization remain unresolved. No private artifact was reopened,
   prepared or relabeled, and no prior selector was rerun.
+
+  Correct the positive r1/r2 expectations in the existing runtime-checkout test
+  after leader-read comparison-contracts CI run37249091204/job111572837265:
+  4 failed, 1060 passed in 1450.43s. The four cases still expected a provider
+  boundary and, for V2, a capture after the intentional launch refusal. The
+  leader's source-reviewed basis is `07b83ef8944a1ac35e3721fda82efb81d53718bd`,
+  tree `133da32505dce5f30db502f4e96692daa87d6636`; no CI query or new production
+  change was made. The correction requires genuine lineage and input binding,
+  then the exact Codex refusal class/reason or V2 status 1 plus the same reason.
+  No host/auth/provider/free-safety boundary is reached, V2 leaves no capture or
+  new workspace artifact, and existing Codex model-free capture bytes remain
+  unchanged. Read-only Git checks, all negative lineage cases, the 37-source
+  inventory and false-launch assertions are preserved.
+
+  One separate offline invocation selected exactly those four parameterized
+  nodes: 4 passed in 9.81s, exit 0, at test-only HEAD
+  `90b9a50ec46411f8b11ee148be57e0511fd59471`, tree
+  `513ae06a80b088208230edb23110efd5140c8c17`. Its 300-second bound plus
+  5-second grace is test-only. Command SHA256 is
+  `e9aa74c37a831557b437077ef82d6cba88142ab269dd63e7fa033fa3f8243ed5`,
+  combined-log SHA256 is
+  `678f25b4fea7716030cb15f337543cd2552e11fc015289ccb89695d130b8091e`, and
+  private receipt SHA256 is
+  `26f136f442d93050671c4518e72cf4070dc29086fecee0ce681b40b19eafdec4`.
+  The current task record retains the exact command and immutable prior proof.
+  The original 57-case evidence above is unchanged and was not rerun. Only this
+  entry and the single current LATEST record follow the corrective proof;
+  corrected final-HEAD review and applicable CI remain pending. No production,
+  manifest, source-pin, runtime-selection or launch-gate change followed.
 
 - Record one successful model-free local preparation of
   `gpt54_v2_codex_v1_v2_r1`, `sandbox_v2`, repeat 1, five registered tasks, at

@@ -46,7 +46,7 @@ baseline pin-set, original input identities and canonical Step0 are unchanged.
 Model, effort, task order, ABBA20, limits, run IDs, schema and false-launch fields
 are unchanged. The separate 30-cell pilot and 8-cell retention study stay closed.
 
-### One pinned offline proof
+### Original pinned offline proof
 
 Implementation HEAD `e2f04171f5812dd1f2044f6b807c62267efb3b64`, tree
 `edb7d235274b8cec61e0197c7a1fff513cd45e01`, was clean before and after the
@@ -85,11 +85,58 @@ No real Step1/Step2/Step8, model, grading, HF/Azure call or workflow dispatch ra
 Evidence remains private; only safe identities and this non-input command are
 published.
 
+### Runtime-checkout contract correction and separate proof
+
+The leader reviewed immutable HEAD `07b83ef8944a1ac35e3721fda82efb81d53718bd`,
+tree `133da32505dce5f30db502f4e96692daa87d6636`, and supplied the actual
+comparison-contracts CI run37249091204/job111572837265 result: **4 failed,
+1060 passed in 1450.43s**. All four failures were the positive r1/r2 cases in
+`test_runtime_checkout_lineage_precedes_both_providers`. They still expected
+`ProviderBoundary` and a V2 capture after the new launch guard correctly refused.
+This is leader-read CI evidence, not a new local discovery or CI query. The
+[original proof and initial three-document delta][prior-launch-proof] remain
+separate, unchanged evidence; the 57-case selector was not rerun.
+
+Only that test function and its directly coupled assertions changed. Real
+temporary-Git lineage and input binding must both succeed before the explicit
+launch refusal. Codex must raise the exact `ComparisonRuntimeLaunchRefused`
+class with `comparison_runtime_launch_refused`; V2 must return CLI status 1
+with that exact output reason. No host/auth/provider/free-safety boundary may
+be reached. V2 publishes no capture or new workspace artifact, and Codex's
+existing model-free capture bytes remain unchanged. Full-tree equality includes
+directories. Read-only Git restrictions, the 37-source inventory, false-launch
+assertions and all negative lineage cases are preserved; the negative cases
+were not rerun in this four-case invocation. Production, both manifests,
+fingerprints, compiler, core, grader, workflows and runtime selection are
+unchanged from the leader's source-reviewed HEAD.
+
+The test-only correction was pinned at HEAD
+`90b9a50ec46411f8b11ee148be57e0511fd59471`, tree
+`513ae06a80b088208230edb23110efd5140c8c17`, with a clean worktree before and
+after proof. From `batch-runner/`, exactly these four node IDs ran once:
+
+```bash
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 GIT_NO_LAZY_FETCH=1 timeout --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -vv -ra -x --tb=short --color=no -p no:cacheprovider -m "not integration" 'tests/test_gpt54_runtime_checkout.py::test_runtime_checkout_lineage_precedes_both_providers[sandbox_v2-r1]' 'tests/test_gpt54_runtime_checkout.py::test_runtime_checkout_lineage_precedes_both_providers[codex-r1]' 'tests/test_gpt54_runtime_checkout.py::test_runtime_checkout_lineage_precedes_both_providers[codex-r2]' 'tests/test_gpt54_runtime_checkout.py::test_runtime_checkout_lineage_precedes_both_providers[sandbox_v2-r2]'
+```
+
+Result: **4 passed in 9.81s; exit 0.** Recorded UTC process times were
+2026-10-05T01:28:41Z–2026-10-05T01:28:51Z. The 300-second bound and 5-second
+termination grace apply only to this test invocation, not CI or experiment
+budgets. The log names each of the four completed cases. No retry, broader suite
+or real-input operation ran; synthetic fixtures are not comparison observations.
+
+| Private corrective evidence | Bytes | SHA256 |
+| --- | ---: | --- |
+| Exact command, including final newline | 851 | `e9aa74c37a831557b437077ef82d6cba88142ab269dd63e7fa033fa3f8243ed5` |
+| Combined pytest stdout/stderr | 905 | `678f25b4fea7716030cb15f337543cd2552e11fc015289ccb89695d130b8091e` |
+| Receipt | 1971 | `26f136f442d93050671c4518e72cf4070dc29086fecee0ce681b40b19eafdec4` |
+
 ### Remaining work and preserved evidence
 
-Only `batch-runner/README.md`, `CHANGELOG.md` and this single current task record
-change after the pinned proof. Final fixed-HEAD review, applicable CI and leader
-acceptance remain pending. No carrying-PR future merge state is asserted.
+Only `CHANGELOG.md` and this single current task record change after the
+four-case corrective proof; the pinned test bytes remain unchanged. Final
+corrected-HEAD review, applicable CI and leader acceptance remain pending.
+No carrying-PR future merge state is asserted.
 
 Runtime/workflow profile recognition, native call/token caps, dispatcher and
 credentialed-CI input authority remain unresolved. The credentialed workflow
@@ -115,3 +162,4 @@ records. No new experiment or configuration axis was added.
 [prior-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/745#pullrequestreview-5408853800
 [prior-preparation]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/c6fbf893595336e0a89ceb122ac5859991487144/tasks/LATEST_TASK_RESULT/README.md
 [prior-profile]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/fd903b96dc8d4622470b6971fde820334c16396b/tasks/LATEST_TASK_RESULT/README.md
+[prior-launch-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/07b83ef8944a1ac35e3721fda82efb81d53718bd/tasks/LATEST_TASK_RESULT/README.md
