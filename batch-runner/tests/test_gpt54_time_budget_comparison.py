@@ -805,7 +805,7 @@ def test_time_budget_observation_deadline_process_ownership_source_pin():
     assert hashlib.sha256((historical.ROOT / prospective.SOURCE_PROFILE).read_bytes()).hexdigest() == "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
 
 
-def test_time_budget_observation_deadline_process_ownership_platform_contract(tmp_path):
+def test_time_budget_observation_deadline_process_ownership_platform_contract(tmp_path, record_property):
     """One short real-kernel lifecycle OR explicit unsupported-host refusal.
 
     This child imports only the helper, uses synthetic identity/files, and has
@@ -828,7 +828,7 @@ try:
 except ObservationDeadlineRefused as error:
     assert str(error) == OWNERSHIP_REQUIRED
     assert list(directory.iterdir()) == []
-    print(json.dumps({"platform_result": "admission_refused", "reason": str(error),
+    print(json.dumps({"platform_result": "admission_refused", "host_reusable": False, "reason": str(error),
         "cause_type": type(error.__cause__).__name__, "errno": getattr(error.__cause__, "errno", None)}))
     sys.exit(0)
 control.claim(run_id=identity.run_id, condition=identity.condition, task_id=identity.task_id)
@@ -873,6 +873,8 @@ print(json.dumps({"platform_result": "real_reparenting_confirmed", "host_reusabl
     assert process.returncode == 0, stderr.decode(errors="replace")[:4000]
     outcome = json.loads(stdout)
     assert outcome["platform_result"] in {"admission_refused", "real_reparenting_confirmed"}
+    assert outcome["host_reusable"] is (outcome["platform_result"] == "real_reparenting_confirmed")
+    record_property("time_budget_owned_host_platform", json.dumps(outcome, sort_keys=True))
     print(json.dumps(outcome, sort_keys=True))
 
 
