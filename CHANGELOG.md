@@ -13,6 +13,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Align PR750's time-budget usage paragraph with source-reviewed
+  `67f2ef7c94665fbe5d302040a757402873790cfc`, tree
+  `cd34fd6cd3e3d74e3b927eb8732ae72fd3d0331d`. It now names exclusive Linux
+  child-subreaper ownership, one-kernel-thread/no-existing-children admission,
+  default `SIGCHLD` handling and the required proc/pidfd/waitid interfaces.
+  Termination uses kernel-confirmed child pidfds, not bare PID/group signalling;
+  unsupported or occupied hosts refuse admission. Admission history and process
+  ownership prevent reuse even if the lease was already unlinked. Successful
+  reuse requires same-process confirmation before the cleanup deadline.
+  Supported real-kernel cleanup remains unproved; the 1200/20 policy and limits
+  on remote-cancellation, billing and live-execution claims are unchanged.
+  One bounded `im-not-ai-en` changed-passage fidelity check passed with no
+  warnings; no implementation or test was rerun. This extra post-proof delta is
+  `batch-runner/README.md` and the two completion records only. The
+  [source-reviewed record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/67f2ef7c94665fbe5d302040a757402873790cfc/tasks/LATEST_TASK_RESULT/README.md)
+  retains the 23-case proof and immutable links to all earlier, separate evidence.
+
 - Restore PR750's omitted-control V2 startup clock sampling and correct the
   directly affected frozen-source test fixtures. `AgenticV2ScriptedRunner.run`
   reuses `startup_started` when observation control is absent; the controlled
@@ -64,10 +81,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   preserves the original 46-pass/5-fail invocation, five-target continuation,
   21-case finalization proof and 30-case ownership proof as separate observations.
   None was rerun or combined into a global pass. The new exact command, node list
-  and evidence identities are in the single [current record](tasks/LATEST_TASK_RESULT/README.md).
-  Only that record and CHANGELOG follow the pinned proof.
+  and evidence identities remain in the source-reviewed record linked above.
+  Its original post-proof delta was the two completion records; the additional
+  usage correction brings the post-proof file set to `batch-runner/README.md`,
+  `CHANGELOG.md` and the single [current record](tasks/LATEST_TASK_RESULT/README.md).
+  No source, test, workflow, manifest or pin changed after that proof.
 
-  Delivery remains **HOLD** for whole corrected-HEAD review and applicable CI.
+  The leader's remaining incremental source/test review at `67f2ef7c` found no
+  additional blocking code finding. This is source approval, not delivery or
+  live authorization. The supplied initial CI snapshot has 14 successes, one
+  native-host check in progress and one PR-only deploy skip; it was not queried
+  or refreshed here. Delivery remains **HOLD** for applicable CI and final
+  acceptance.
   The prior real-host admission refusal (`time_budget_owned_process_host_required`,
   `FileNotFoundError`, errno 2) is not real orphan-cleanup success. Platform and
   live enforcement remain unproved; dispatcher/capture, credentialed-input and

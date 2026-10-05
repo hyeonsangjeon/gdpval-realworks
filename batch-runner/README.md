@@ -381,13 +381,21 @@ Preparation does not start the clock. Both paths use one 1200-second monotonic
 budget, latch timeout before interruption, and spend one shared cleanup remainder:
 until first start plus 1220 seconds after timeout, or at most 20 seconds after an
 earlier terminal result. The record distinguishes interruption attempt from
-acknowledgement and cleanup completion from expiry, without bodies or credentials. Unconfirmed cleanup
-keeps the host lease and cannot produce a clean-host success.
+acknowledgement and cleanup completion from expiry, without bodies or credentials.
+Unconfirmed cleanup cannot produce a clean-host success. Admission history and
+process ownership prevent reuse even if the lease was unlinked before expiry;
+successful reuse requires confirmation in the same process before the cleanup
+deadline.
 
-This control requires the owned Linux/POSIX host's main thread, `/proc` visibility
-and no existing real-time alarm. It actively interrupts blocking local I/O, stops
-owned descendants/process groups and bounds native waits and cleanup. It does not
-confirm server-side cancellation or billing. Omitted control preserves the prior
+This control requires exclusive Linux child-subreaper ownership. Admission
+requires one kernel thread, no existing children, default `SIGCHLD` handling,
+and the required `/proc`, pidfd and `waitid` interfaces. It must run on the main
+thread with no existing real-time alarm. Unsupported or occupied hosts refuse
+admission. It supervises blocking local I/O and native waits and terminates owned
+children through kernel-confirmed child pidfds, not bare PID or process-group
+signalling. Cleanup on a real supported kernel remains unproved: the prior
+real-host case refused admission for a missing interface. This does not confirm
+server-side cancellation or billing. Omitted control preserves the prior
 runner behavior, including the separate closed `CodexTaskDeadlineStore` contract.
 No dispatcher or capture path selects this control yet. Measurement availability,
 credentialed-input authority and live source-bound execution remain unverified;
