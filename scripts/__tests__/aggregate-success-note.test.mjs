@@ -66,7 +66,152 @@ test('success source fails when a non-dummy exp026 external grade appears', asyn
   assert.doesNotThrow(() => buildSuccessNoteData(source, report, [...grades, dummy]))
 })
 
-test('pinned HF artifacts match recorded hashes and selected manifest structure', { timeout: 30_000 }, async () => {
+// Test-only transport: one request per pinned artifact, with no retry or cache.
+async function readPinnedArtifact(name, url, contract, {
+  signal,
+  fetchImpl = fetch,
+  timeoutSignal = AbortSignal.timeout(30_000),
+  clock = () => performance.now(),
+} = {}) {
+  const owner = new AbortController()
+  const requestSignal = AbortSignal.any([owner.signal, timeoutSignal, ...(signal ? [signal] : [])])
+  const started = clock()
+  let stage = 'request'
+  let status = null
+  let reader
+  try {
+    const response = await fetchImpl(url, { signal: requestSignal })
+    status = response.status
+    stage = 'http_status'
+    assert.equal(status, 200, name)
+    stage = 'content_length'
+    const declaredBytes = Number(response.headers.get('content-length'))
+    if (Number.isFinite(declaredBytes)) assert.ok(declaredBytes <= contract.maxBytes, `${name} content-length cap`)
+    stage = 'response_body'
+    assert.ok(response.body, `${name} response body`)
+    reader = response.body.getReader()
+    const hash = createHash('sha256')
+    const chunks = []
+    let totalBytes = 0
+    stage = 'stream'
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      totalBytes += value.byteLength
+      assert.ok(totalBytes <= contract.maxBytes, `${name} streaming byte cap`)
+      hash.update(value)
+      if (contract.collect) chunks.push(Buffer.from(value))
+    }
+    stage = 'byte_length'
+    if (contract.expectedBytes != null) assert.equal(totalBytes, contract.expectedBytes, `${name} byte length`)
+    stage = 'sha256'
+    assert.equal(hash.digest('hex'), contract.sha256, name)
+    return [name, contract.collect ? Buffer.concat(chunks) : null]
+  } catch (error) {
+    const kind = timeoutSignal.aborted ? 'TimeoutError' : requestSignal.aborted ? 'AbortError'
+      : ['AssertionError', 'TypeError', 'TimeoutError', 'AbortError'].includes(error?.name) ? error.name : 'Error'
+    const elapsed = Math.max(0, Math.round(clock() - started))
+    // Do not attach the raw cause: fetch errors may contain signed redirect URLs.
+    throw new Error(`${name} stage=${stage} status=${status ?? 'unavailable'} elapsed_ms=${elapsed} error=${kind}`)
+  } finally {
+    // Abort also cancels an unread response body. Do not await an unbounded
+    // reader.cancel() promise while handling the original failure.
+    owner.abort()
+    reader?.releaseLock()
+  }
+}
+
+const tinyArtifact = Buffer.from('tiny')
+const tinyContract = {
+  sha256: createHash('sha256').update(tinyArtifact).digest('hex'),
+  maxBytes: 4, expectedBytes: 4, collect: true,
+}
+
+test('pinned HF artifact transport retains exact bytes and releases its reader', async () => {
+  let signal
+  const response = new Response(tinyArtifact)
+  const result = await readPinnedArtifact('fixture', 'unused', tinyContract, {
+    fetchImpl: async (_url, options) => { signal = options.signal; return response },
+  })
+  assert.deepEqual(result, ['fixture', tinyArtifact])
+  assert.equal(signal.aborted, true)
+  assert.equal(response.body.locked, false)
+})
+
+for (const [stage, makeResponse, contract] of [
+  ['http_status', () => new Response('not logged', { status: 503 }), tinyContract],
+  ['content_length', () => new Response(tinyArtifact, { headers: { 'content-length': '5' } }), tinyContract],
+  ['response_body', () => new Response(null), tinyContract],
+  ['stream', () => new Response('larger'), tinyContract],
+  ['byte_length', () => new Response('tin'), tinyContract],
+  ['sha256', () => new Response('tine'), tinyContract],
+]) {
+  test(`pinned HF artifact transport identifies ${stage} failures without bodies`, async () => {
+    let signal
+    const response = makeResponse()
+    let now = 100
+    await assert.rejects(readPinnedArtifact('fixture', 'unused', contract, {
+      clock: () => { now += 25; return now },
+      fetchImpl: async (_url, options) => { signal = options.signal; return response },
+    }), { message: `fixture stage=${stage} status=${response.status} elapsed_ms=25 error=AssertionError` })
+    assert.equal(signal.aborted, true)
+    if (response.body) assert.equal(response.body.locked, false)
+  })
+}
+
+for (const stage of ['request', 'stream']) {
+  test(`pinned HF artifact transport bounds ${stage} timeout and redacts the cause`, async () => {
+    const deadline = new AbortController()
+    let signal
+    let calls = 0
+    let released = false
+    let now = 0
+    const expire = () => {
+      now = 30_000
+      deadline.abort(new DOMException('https://example.invalid/?signed=do-not-log', 'TimeoutError'))
+      signal.throwIfAborted()
+    }
+    await assert.rejects(readPinnedArtifact('fixture', 'unused', tinyContract, {
+      clock: () => now,
+      timeoutSignal: deadline.signal,
+      fetchImpl: async (_url, options) => {
+        calls += 1
+        signal = options.signal
+        if (stage === 'request') expire()
+        return {
+          status: 200, headers: new Headers(),
+          body: { getReader: () => ({ read: async () => expire(), releaseLock: () => { released = true } }) },
+        }
+      },
+    }), { message: `fixture stage=${stage} status=${stage === 'request' ? 'unavailable' : 200} elapsed_ms=30000 error=TimeoutError` })
+    assert.equal(calls, 1)
+    assert.equal(signal.aborted, true)
+    assert.equal(released, stage === 'stream')
+  })
+}
+
+test('pinned HF artifact transport preserves request failure and parent abort without retry', async () => {
+  for (const cancelled of [false, true]) {
+    const parent = new AbortController()
+    let calls = 0
+    let signal
+    await assert.rejects(readPinnedArtifact('fixture', 'unused', tinyContract, {
+      signal: parent.signal,
+      clock: () => 0,
+      fetchImpl: async (_url, options) => {
+        calls += 1
+        signal = options.signal
+        if (cancelled) parent.abort()
+        signal.throwIfAborted()
+        throw new TypeError('https://example.invalid/?signed=do-not-log')
+      },
+    }), { message: `fixture stage=request status=unavailable elapsed_ms=0 error=${cancelled ? 'AbortError' : 'TypeError'}` })
+    assert.equal(calls, 1)
+    assert.equal(signal.aborted, true)
+  }
+})
+
+test('pinned HF artifacts match recorded hashes and selected manifest structure', { timeout: 45_000 }, async (context) => {
   const revision = '47aed3c0b13eaa90eb02803bec9d5c75e559f416'
   const root = `https://huggingface.co/datasets/HyeonSang/exp026_sandbox_skills_multimodal/resolve/${revision}`
   const paths = {
@@ -85,29 +230,17 @@ test('pinned HF artifacts match recorded hashes and selected manifest structure'
     pptx: { sha256: 'f74aede2e3ac34118554a5eb113cd75d4d1fb49031d0b8c06bf648dafe36d7f0', maxBytes: 128 * 1024, expectedBytes: 79257, collect: false },
     pdf: { sha256: '1ddd01654bea34ab58d0426db1a15b5eeb4636a7ae38a1069d188523f5a2a278', maxBytes: 192 * 1024, expectedBytes: 114751, collect: false },
   }
-  const entries = await Promise.all(Object.entries(paths).map(async ([name, path]) => {
-    const contract = contracts[name]
-    const response = await fetch(`${root}/${path}`, { signal: AbortSignal.timeout(10_000) })
-    assert.equal(response.status, 200, name)
-    const declaredBytes = Number(response.headers.get('content-length'))
-    if (Number.isFinite(declaredBytes)) assert.ok(declaredBytes <= contract.maxBytes, `${name} content-length cap`)
-    assert.ok(response.body, `${name} response body`)
-    const reader = response.body.getReader()
-    const hash = createHash('sha256')
-    const chunks = []
-    let totalBytes = 0
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      totalBytes += value.byteLength
-      assert.ok(totalBytes <= contract.maxBytes, `${name} streaming byte cap`)
-      hash.update(value)
-      if (contract.collect) chunks.push(Buffer.from(value))
-    }
-    if (contract.expectedBytes != null) assert.equal(totalBytes, contract.expectedBytes, `${name} byte length`)
-    assert.equal(hash.digest('hex'), contract.sha256, name)
-    return [name, contract.collect ? Buffer.concat(chunks) : null]
-  }))
+  const downloads = new AbortController()
+  let entries
+  try {
+    entries = await Promise.all(Object.entries(paths).map(([name, path]) =>
+      readPinnedArtifact(name, `${root}/${path}`, contracts[name], {
+        signal: AbortSignal.any([downloads.signal, context.signal]),
+      })))
+  } finally {
+    // Stop sibling requests on the first rejection or test cancellation.
+    downloads.abort()
+  }
   const downloaded = Object.fromEntries(entries)
   const selfReport = JSON.parse(downloaded.selfReport.toString('utf8'))
   const workbookManifest = JSON.parse(downloaded.workbookManifest.toString('utf8'))

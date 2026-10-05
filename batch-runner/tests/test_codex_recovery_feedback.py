@@ -26,7 +26,9 @@ from .test_codex_native_resume import (
     _execute_reference_task, _restore_through_retry, executor_for, offline, reference_task,
 )
 from .test_codex_task_deadline import Clock, CONDITION, ROOT, SETTINGS, TASK, TASK2, host, store_at
-from .test_ghcp_vm_gate_contract import FOUNDRY, FOUNDRY_SHA256, WORKFLOW, WORKFLOW_SHA256
+from .test_ghcp_vm_gate_contract import (
+    FOUNDRY, FOUNDRY_SHA256, FROZEN_PILOT_WORKFLOW_SHA256, WORKFLOW,
+)
 
 
 def turn_inputs(transport):
@@ -479,4 +481,4 @@ def test_recovery_feedback_active_grader_template_source_bindings(
         assert report["launch_allowed"] is report["full_220_allowed"] is False
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)
     assert hashlib.sha256((frozen_source / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
-    assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == WORKFLOW_SHA256
+    assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == FROZEN_PILOT_WORKFLOW_SHA256

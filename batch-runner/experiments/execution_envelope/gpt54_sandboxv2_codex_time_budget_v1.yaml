@@ -1,0 +1,147 @@
+# Separate prospective registration. Neither prior comparison is superseded.
+# This is intent, not an executable config or evidence of deadline enforcement.
+plan_version: gpt54-sandboxv2-codex-time-budget-v1
+study_id: gpt54_sandboxv2_codex_time_budget_v1
+comparison: configuration_bundle
+question: Which tested GPT-5.4 configuration produces usable, graded work within the same external generation-time budget?
+launch_enabled: false
+execution_enabled: false
+
+source_basis:
+  # Accepted starting source, not a claim that the new compiler is reviewed.
+  accepted_base_sha: 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2
+  accepted_base_tree: 45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca
+  source_profile:
+    path: batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml
+    sha256: 81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe
+  registration_compiler:
+    path: batch-runner/gpt54_time_budget_comparison.py
+    sha256: 58a7b76840a6f8c639c278fa771d2271c3f765946e401f6ea4441f7bff7dab93
+
+# Only these validated facts are shared with the old source profile. Its shared
+# native request/token limits, run IDs and launch policy are not copied here.
+shared:
+  model:
+    provider: azure
+    account: hjeon-fdpo-foundry-eus2
+    deployment: gpt-5.4
+    resolved_model: gpt-5.4
+    route_profile: direct-v1
+    reasoning_effort: xhigh
+    automatic_model_switch_allowed: false
+  dataset:
+    repo_id: openai/gdpval
+    revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
+    parquet_sha256: f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202
+    catalog_sha256: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
+    cohort: advance_check_5
+    tasks:
+      - task_id: 02aa1805-c658-4069-8a6a-02dec146063a
+        prompt_sha256: 8dc289aa58f05aa1f65453cb7cf975be037014305da824cef73ec7f6b8869f98
+      - task_id: 0112fc9b-c3b2-4084-8993-5a4abb1f54f1
+        prompt_sha256: b20e140c0169184998ae2c506e8aad04e1f51772527c8d2ffe10b0c32f042df5
+      - task_id: 2ea2e5b5-257f-42e6-a7dc-93763f28b19d
+        prompt_sha256: 93c975a12dba13dc194d410225bf41da3aa58e45bf9cbc963d0426b0edd2ec14
+      - task_id: 3baa0009-5a60-4ae8-ae99-4955cb328ff3
+        prompt_sha256: cd6b2d63e8d90a7058bd7d4d9ff3a94e258268b54f78ec1ff3eff467437dbf76
+      - task_id: 0818571f-5ff7-4d39-9d2c-ced5ae44299e
+        prompt_sha256: 718353295dc2778e76283739c455c4faf2c3ee18fb7e125495fd1e95e69aa6d5
+    input_file_versions:
+      openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf: f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202
+      reference_files/bb09ca2a9999b404d7fced9202b42949/Work Time Study - Source.xlsx: bb09ca2a9999b404d7fced9202b42949cd9f142f39554e254bac77b3686dae9e
+      reference_files/901e943a97328a661f9e704ae43eeea1/Acquisition Criteria (2).pdf: 901e943a97328a661f9e704ae43eeea167e7805385a99322f1c24f8e159125c4
+  grading:
+    config: batch-runner/grading_configs/default_v2_sol_max.yaml
+    source_sha: a855c5a9604554499be9eed4e5eb5523e8ad95d5
+    # Whole original TEMPLATE closure, not a materialized grader identity.
+    template_source_sha256: 37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce
+    rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
+    prompt_version: v2.2
+    judge_model: gpt-5.6-sol
+    judge_effort: max
+    grades_per_task: 1
+  results:
+    projector: core.result_projection.project_result_row
+    receipt_schema: cost-receipt-v1
+    grade_schema: batch-runner/schemas/grade.schema.json
+    grade_schema_version: '1.4'
+    missing_or_unpriced_usage: preserve_null_and_partial_reasons
+  cost:
+    policy: record_cost_findings_only
+    approved_maximum_usd: null
+
+scope:
+  inference_concurrency: 1
+  max_generation_observations: 20
+  repeats_per_condition: 2
+  external_attempts_per_observation: 1
+  external_replay_allowed: false
+  external_resume_allowed: false
+  external_retry_allowed: false
+  pool_with_other_studies: false
+
+generation_budget:
+  policy: external_elapsed_time_v1
+  seconds_per_observation: 1200
+  starts_at: first_generation_start
+  includes: [all_waits, native_internal_recovery]
+  deadline_action: request_interruption
+  local_cleanup_grace_seconds: 20
+  cleanup_grace_recorded_separately: true
+  max_planned_host_lifecycle_seconds: 1220
+  remote_billing_bound: false
+  server_side_cancellation_guaranteed: false
+
+native_measurements:
+  policy: observation_only_when_available
+  metrics: [model_attempt_count, repeated_request_count, input_tokens, output_tokens, written_tokens, native_retries]
+  unavailable: explicitly_unavailable_not_zero_or_estimated
+  token_accounting: difference_cumulative_totals_not_sum_snapshots
+  cached_input_and_reasoning: subsets_not_additional_tokens
+  incomplete_usage: preserve_null_and_partial_reasons
+  shared_native_request_token_hard_caps: false
+  native_turn_equals_model_attempt: false
+
+conditions:
+  # Named differences, not replacement runtime configs. Existing template bytes
+  # remain sealed, including V2's other local settings. No equal-compute claim.
+  sandbox_v2:
+    template: batch-runner/experiments/execution_envelope/agentic_corrected_harness_plan.yaml
+    harness: agentic_sandbox_v2
+    isolation: same-host
+    replay_format: faithful
+    request: {reasoning_effort: xhigh}
+    local_settings: {max_model_turns: 9, max_written_tokens_per_turn: 8192}
+    settings_scope: v2_only_not_shared_native_compute
+  codex:
+    template: batch-runner/experiments/exp033_codex_foundry_fixed5.yaml
+    harness: codex
+    sdk_version: 0.147.0
+    cli_version: 0.147.0
+    request: {reasoning_effort: xhigh, model_context_window: null}
+    provider_retry_settings: {request_max_retries: 0, stream_max_retries: 0}
+    retry_settings_bound_all_native_recovery: false
+    native_turn_is_v2_turn_equivalent: false
+
+grading_policy:
+  attempts_per_resulting_observation: 1
+  failed_or_missing_outcomes: retain
+  regrade_for_score: false
+
+decision_rule:
+  analysis: descriptive_paired_outcome_and_grade_differences
+  pairing: [task_id, repeat]
+  spread: within_condition_across_fixed_observations
+  early_selection: false
+  score_dependent_repeats: false
+  precise_uncertainty_claim: false
+  isolated_harness_causality_claim: false
+  equal_native_compute_claim: false
+
+# New identities; no reuse, relabeling or pooling of the historical comparison
+# or the closed 30-cell/8-cell studies. ABBA does not eliminate time drift.
+runs:
+  - {run_id: gpt54_time_budget_v1_v2_r1, condition: sandbox_v2, repeat: 1, task_count: 5}
+  - {run_id: gpt54_time_budget_v1_codex_r1, condition: codex, repeat: 1, task_count: 5}
+  - {run_id: gpt54_time_budget_v1_codex_r2, condition: codex, repeat: 2, task_count: 5}
+  - {run_id: gpt54_time_budget_v1_v2_r2, condition: sandbox_v2, repeat: 2, task_count: 5}
