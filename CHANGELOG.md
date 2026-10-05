@@ -18,7 +18,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   fixed 20-observation GPT-5.4/direct-v1/xhigh comparison retains five tasks, ABBA,
   two repeats, concurrency 1 and no external replay/resume/retry. No dispatcher or
   capture path selects the control; every launch refusal and execution flag stays
-  closed. There is no native request/token or money hard-cap claim.
+  closed. Native counters remain observation-only when available, with no native
+  request/token or money hard-cap claim. The closed 30-cell/8-cell studies and
+  10800-second deadline store are unchanged.
 
   Durable exclusive admission precedes preparation. One monotonic clock starts
   immediately before V2's first `voice.next_turn` or Codex's `thread.turn`, after
@@ -26,87 +28,83 @@ entries land under a fresh dated heading the day they merge to `main`.
   seconds. Timeout latches before interruption and rejects late success. All
   interruption, waits, close, orphan checks, collection, removal and finalization
   spend one cleanup remainder: first start plus 1220 seconds after timeout, or at
-  most 20 seconds after an earlier terminal result. Unconfirmed cleanup remains a
-  non-success; retained lease or admission uncertainty prevents host reuse. No
-  environment enlargement or independent reset grace is available. The control
-  requires an owned Linux/POSIX main-thread host;
-  omitted behavior and the closed 10800-second deadline store are unchanged.
+  most 20 seconds after an earlier terminal result. No environment enlargement or
+  renewed grace is available. The prior persistence/finalization correction arms
+  supervision before terminal I/O and keeps durable cleanup snapshots pending and
+  non-reusable. Before-deadline, one-use completion confirmation remains necessary.
 
   `compile_registration` requires both explicit roots and both independent full
   commit anchors together. Runtime R supplies 41 prospective bindings. Frozen F
-  is `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-  `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, with the genuine unchanged
-  whole TEMPLATE closure
-  `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
-  Registered detached linked worktrees, tracked regular blobs, held parents and
-  final byte/HEAD rereads bind both sources. R cannot claim F's judge hash.
-  Materialized grader path/bytes require a distinct fingerprint and eventual
-  F-derived execution. Neither historical manifest, legacy compiler, grader,
-  Step2, workflow, capture guard nor historical paid binding changes. Current
-  refusals and frozen positive fixtures keep explicit, separate source roles.
+  remains `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
+  `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, with genuine whole TEMPLATE
+  closure `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
+  Tracked regular blobs, held parents and final source rereads bind both roles;
+  R cannot claim F's judge hash. Materialized grader path/bytes require a distinct
+  fingerprint and eventual F-derived execution. Historical profiles, paid
+  RESULT/PARENT/READER bindings, input identities, frozen receipts and hash scope
+  remain unchanged. Accepted main is `f609aff0deefd3c5afd7a6322ba6473c8b3e6c98`,
+  tree `3b318f9d70cbf2a080de28ff76fdfd5e278e1264`.
 
-  The same-session architecture/grading/source-provenance review and consolidated
-  grading specification were applied before coupled edits. The accepted source
-  basis is `f609aff0deefd3c5afd7a6322ba6473c8b3e6c98`, tree
-  `3b318f9d70cbf2a080de28ff76fdfd5e278e1264`; the leader supplied reviewed
-  PR749 `d901b119443a843784d81717943622f577fb43b4`, owner review `5411970743`,
-  all 11 applicable checks successful and PR-only deploy skipped. Those prior
-  facts are not approval or CI evidence for this change.
+  The leader's P1 against `0cee74941b9a093109d7c32a289d563616626e99`, tree
+  `33e3f40304217fdc42d73b2f49e0310001f6c6be`, found that current PPID ancestry
+  can miss reparented descendants. The same-session architecture/source-provenance
+  charter review preceded this correction and required exclusive ownership,
+  kernel-confirmed child handles, bounded confirmation and refusal on uncertainty.
+  This is not the pending independent whole-PR review. The repaired I/O paths from
+  review `5413283960` were not re-investigated or re-tested.
 
-  The one combined offline selector at
-  `1d5a9c2472e17fde1c0ad2dc1a0f3300772b5c95`, tree
-  `20c0d2d4ddd60d2f67c88dee7105d22bd522345f`, reported **5 failed, 46 passed,
-  75 deselected in 8.35s**, exit 1. Its three V2 failures exposed control-stage
-  timeout mapping; the other two exposed synthetic Git layout and guarded fixture
-  import mistakes. The narrow correction at
-  `73a86933934ac0a9cc260a963f042414b61bc151`, tree
-  `cae6626dfba04eb6d2caad83fe725e72dcb1243e`, reran only those five failed
-  node IDs: **5 passed in 7.55s**, exit 0. The repaired positive source target also
-  completes the deep substitution/race checks previously blocked by the invalid
-  Git layout. Initial early-layout refusals are not claimed as those deeper proofs.
-  No passed node was repeated and no aggregate 51-pass/fixed-HEAD result is claimed.
+  The optional control now establishes a Linux child subreaper before admission.
+  A host with pre-existing children, extra threads, non-default SIGCHLD handling,
+  external subreaper ownership or unavailable required interfaces refuses. The
+  subreaper retains orphan attribution after parent exit. `/proc` lists locate
+  candidates, while child-pidfd checks prevent unrelated/PID-substituted signals.
+  There is no bare-PID or process-group fallback. TERM, KILL, adoption and reaping
+  spend the same cleanup remainder. Kernel ECHILD, including clone children,
+  and a single-threaded host are required before release; an empty PPID list is
+  not proof. Uncertain ownership blocks reuse even through another receipt
+  directory. Confirmed cleanup restores the subreaper setting within the deadline.
+  No production runner, omitted-control path or launch guard changed here.
 
-  The leader's first runtime review of
-  `969aabfda810dfb0477c8ca55cbe2918f005666a` found unsupervised terminal
-  persistence and premature finalization/reuse claims; the whole-PR source review
-  is incomplete. The correction arms the original cleanup deadline before terminal
-  receipt I/O and supervises finalization through lease unlink/fsync and close.
-  Unbuffered writes avoid another flush while unwinding. Final deadline checks
-  precede completion, and expired cleanup starts no new receipt I/O. Durable cleanup
-  snapshots remain explicitly pending and non-reusable. Ordinary same-host reuse
-  requires a one-use confirmation issued after all I/O and tied to the process and directory.
-  Retained admission history blocks reuse after an interrupted unlink, including
-  a restarted or forked host. This changes only the helper, its existing test
-  surface and its one prospective runtime pin; F and historical profiles stay fixed.
+  The clean correction `c73a71b5307a8d1f3405cf3cc3f55cb3d8d4cb3e`, tree
+  `c3935a504c1b5922f2e07405c0356df270f40239`, changes only the helper, its
+  existing test surface and its one prospective pin. One token-free/offline
+  Python 3.10.12 selector, `time_budget_observation_deadline_process_ownership`,
+  reported **30 passed, 147 deselected in 4.91s**, exit 0, under a 300-second limit
+  plus 5-second termination grace. Controlled kernel lifecycles cover reparenting,
+  unrelated processes, PID substitution, admission refusals, cleanup expiry,
+  retained non-reusable state and supported release. The isolated real-host case
+  refused admission with `time_budget_owned_process_host_required`, caused by
+  `FileNotFoundError`, errno 2. Real supported-kernel orphan cleanup was not proved.
+  Directly coupled older test fakes were adapted but those targets were not rerun.
+  Exact private command/log/receipt SHA256 values are
+  `7929ea0bef8794cdc27fc6b1b9fc2d62127fe44b0ea8bd822ec5057e24b2ce69`,
+  `6beeafaf7e4d5d2d28e9baf3485555e4a78c2924ea2972ee94ab51e4efc58b4a`,
+  `f2e73a2882efdbce45dec6ad38eb9432e57d7f4a443706b183a6d23efaa7bbdf`.
+  The private command hash is not a hash of its redacted public display.
 
-  The new correction at `d6bff25dc037c96bccf418a0fe06b00402592bc7`, tree
-  `fd2c78441106f4f1aba1cf7a0067dc214fb2d447`, selected only
-  `time_budget_observation_deadline_finalization`: **21 passed, 126 deselected in
-  6.51s**, exit 0. This one token-free/offline Python 3.10.12 invocation used fake
-  clocks and controlled I/O under a 300-second limit plus 5-second termination
-  grace. It covers pending terminal persistence, late finalization, returned and
-  durable non-reusable state, admission refusal and ordinary completion. No earlier
-  successful target was repeated. The directly coupled expired-cleanup assertion
-  now checks returned failure and absent post-deadline persistence; that earlier
-  target was not rerun. New command/log/receipt SHA256 values are
-  `99a7bfab57f45553aeb111ea85cb2441cefb24d085c7fe510f5a49e8adc845f9`,
-  `1ad7ac04a51e9958ae13986704702f5808f0b8697304715212e3132d8db20a5a`,
-  `06734fc949875629881844709de26e575416277c4e3cb5b4a2765ac0f435a6f4`.
-  Exact private command hashes are not hashes of redacted public displays.
+  The original `1d5a9c2472e17fde1c0ad2dc1a0f3300772b5c95` proof remains
+  **5 failed, 46 passed, 75 deselected in 8.35s**, exit 1. The five-failed-target
+  continuation at `73a86933934ac0a9cc260a963f042414b61bc151` remains
+  **5 passed in 7.55s**, exit 0. The persistence/finalization proof at
+  `d6bff25dc037c96bccf418a0fe06b00402592bc7` remains **21 passed, 126 deselected
+  in 6.51s**, exit 0. These are separate observations, not an aggregate 51-pass or
+  whole-HEAD proof. The [immutable prior correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0cee74941b9a093109d7c32a289d563616626e99/tasks/LATEST_TASK_RESULT/README.md)
+  preserves their trees, command/log/receipt identities, node inventories and older
+  evidence links. No prior evidence file was changed, and no successful selector
+  was repeated.
 
   Only CHANGELOG and the single [current task record](tasks/LATEST_TASK_RESULT/README.md)
-  follow this new proof. The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/969aabfda810dfb0477c8ca55cbe2918f005666a/tasks/LATEST_TASK_RESULT/README.md)
-  retains the original failed and continued proofs, command/log/receipt identities,
-  passed-node inventory and earlier evidence links. Those files remain untouched.
-  Delivery remains **HOLD** for full corrected-HEAD review and applicable CI. Dispatcher/
-  capture selection, verified credentialed inputs, F-derived grading materialization
-  and a source-bound live direction remain. Signal supervision does not establish
-  a hard real-time bound on an uninterruptible kernel stall or descheduled host.
-  These synthetic software cases do not establish live enforcement, remote
-  cancellation or billing. No private input, consumed
-  artifact, real preparation, provider/model/grader/HF/Azure operation, CI query/
-  dispatch/retry, Project edit or merge occurred. The closed 30-cell/8-cell studies
-  and all previous worktrees remain untouched.
+  follow this new proof. Delivery remains **HOLD** for whole corrected-HEAD review
+  and applicable CI. Dispatcher/capture selection, verified credentialed inputs,
+  F-derived grading materialization and a separately reviewed source-bound live
+  direction remain. SIGALRM does not establish a hard real-time bound on an
+  uninterruptible kernel stall or descheduled host. These software cases do not
+  establish live enforcement, remote cancellation/process ownership or billing.
+  No private input/consumed-artifact access, real preparation, provider/model/grader/
+  HF/Azure call, CI query/poll/dispatch/retry, Node/HF check, Project edit or merge
+  occurred. Previous worktrees remain untouched. The fixed `experiment-design`
+  guardrails and `im-not-ai-en` were applied; no new study axis or unrelated skill
+  was introduced.
 
 
 - Bind the local model-free workflow gate to an explicitly selected comparison
