@@ -174,7 +174,8 @@ def _unregistered_or_stripped(
       for case in ("legacy_absent_and_null", *_REFUSALS)),
 ])
 def test_runtime_checkout_lineage_precedes_both_providers(
-    condition: str, case: str, tmp_path: Path, monkeypatch: Any, _input_bundle_seed: Any,
+    condition: str, case: str, tmp_path: Path, monkeypatch: Any,
+    _input_bundle_seed: Any, capsys: pytest.CaptureFixture[str],
 ) -> None:
     forbidden_calls, git_calls = _allow_only_temporary_git(monkeypatch, tmp_path)
     _input_bundle_seed.install(monkeypatch)
@@ -319,7 +320,9 @@ def test_runtime_checkout_lineage_precedes_both_providers(
 
     def observed_binding(*args: Any, **kwargs: Any) -> Any:
         events.append("binding")
-        return real_binding(*args, **kwargs)
+        result = real_binding(*args, **kwargs)
+        events.append("binding_ok")
+        return result
 
     monkeypatch.setattr(preparer, "_git", read_only_git)
     monkeypatch.setattr(preparer, "verify_runtime_checkout", observed_lineage)
@@ -337,15 +340,21 @@ def test_runtime_checkout_lineage_precedes_both_providers(
                          condition="sandbox_v2" if condition == "codex" else "codex")
 
     if case in {"r1", "r2"}:
-        with pytest.raises(ProviderBoundary):
-            _entrypoint(condition, runtime_root, requested_run, monkeypatch)
-        expected = (["lineage", "lineage_ok", "binding", "host_gate", "auth_boundary"]
-                    if condition == "codex" else
-                    ["lineage", "lineage_ok", "binding", "binding", "free_safety_boundary"])
-        assert events == expected
         capture_path = checkout / writer.CAPTURE_PATH
-        assert capture_path.read_bytes() == _json(captures[index])
-        assert capture_path.stat().st_nlink == 1 and not capture_path.is_symlink()
+        if condition == "codex":
+            with pytest.raises(
+                writer.ComparisonRuntimeLaunchRefused,
+                match="^comparison_runtime_launch_refused$",
+            ) as refusal:
+                _entrypoint(condition, runtime_root, requested_run, monkeypatch)
+            assert type(refusal.value) is writer.ComparisonRuntimeLaunchRefused
+            assert capture_path.read_bytes() == _json(captures[index])
+            assert capture_path.stat().st_nlink == 1 and not capture_path.is_symlink()
+        else:
+            assert _entrypoint(condition, runtime_root, requested_run, monkeypatch) == 1
+            assert "comparison_runtime_launch_refused" in capsys.readouterr().out.splitlines()
+            assert not capture_path.exists()
+        assert events == ["lineage", "lineage_ok", "binding", "binding_ok"]
         assert len(git_calls) == 10
         inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
         assert inspection["configuration_valid"] is True
@@ -370,12 +379,7 @@ def test_runtime_checkout_lineage_precedes_both_providers(
         assert events == ([] if case in {"path_traversal", "root_symlink"} else ["lineage"])
 
     after = _tree_snapshot(tmp_path)
-    if case in {"r1", "r2"} and condition == "sandbox_v2":
-        # Only the real capture writer may add a file after the read-only gate.
-        new_capture = (checkout / writer.CAPTURE_PATH).relative_to(tmp_path).as_posix()
-        assert new_capture not in before
-        after.pop(new_capture)
-    elif case == "head_moves":
+    if case == "head_moves":
         assert moves == ["head_changed_after_real_bundle_validation"]
         head_role = head.relative_to(tmp_path).as_posix()
         assert after[head_role][:2] == before[head_role][:2]
