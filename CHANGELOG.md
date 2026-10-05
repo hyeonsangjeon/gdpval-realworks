@@ -13,6 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Record one successful model-free local preparation of
+  `gpt54_v2_codex_v1_v2_r1`, `sandbox_v2`, repeat 1, five registered tasks, at
+  reviewed source `14d7579c2578cb2a09397b5d42f41e7b5daaf2d7`, tree
+  `b3988e0f794866abc44007d22d632e2691485b1b`. The exact first row and combined
+  plan came from the real compiler and the explicit prospective manifest,
+  SHA256 `51a1788d37b7eba3aa134dccff13fdb27eeb5be1ba9a00896e6f2b97fe6509d5`.
+  The unchanged preparer checked the private originals and returned after its
+  built-in final verification, exit 0. No other row was prepared, and the Step0
+  file was not read. The importer, a separate verifier and model/runtime
+  entrypoints were not invoked.
+
+  The new private destination retained exclusive reservation and no-clobber
+  behavior. The operation had a 300-second bound plus 5-second termination grace;
+  these are software-operation limits, not an experiment budget. Both capped
+  output captures exited 0, with 1767 stdout bytes and empty stderr. Command
+  SHA256 is `b42ab417335691d61b0cc9a5ed98037821e65511d048e64b9e0c4316bbe3145c`;
+  stdout SHA256 is
+  `210a54806d204ad83c7ef2959669207997c9b13ff9c84f42b78896ca20e02a1b`, and
+  private preparation-receipt SHA256 is
+  `f76b5cf42ca05ce8ce94d81080a3d728ebd2bacf178a079cf496e913561e2d84`.
+  The [current task record](tasks/LATEST_TASK_RESULT/README.md) preserves the
+  ready/config/input marker identities, exact evidence and privacy boundary;
+  local paths, original bodies and raw markers remain outside public records.
+
+  Prior source review covers `fd903b96dc8d4622470b6971fde820334c16396b`, owner
+  review5408616238 and the leader-reported 11 successful applicable checks,
+  with PR-only deploy skipped. Prior proofs remain immutable references, not
+  tests rerun here or approval of this records HEAD. Only the two completion
+  records change after the real preparation. Final records-HEAD review and CI
+  remain pending. Runtime/workflow profile selection, native caps, dispatcher,
+  credentialed-CI authority and all launch gates remain unresolved. This is one
+  local artifact, not comparison execution, wire-consumption evidence, a grade,
+  model success or cost measurement; the closed 30-cell/8-cell studies are untouched.
+
 - Add a separately named prospective source profile for local GPT-5.4 comparison
   preparation. The three existing preparation helpers forward an explicit
   manifest path and bind it to the caller-reviewed commit's tracked bytes and
