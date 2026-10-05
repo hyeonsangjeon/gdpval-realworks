@@ -22,7 +22,11 @@ HISTORICAL_SHA256 = "47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41
 FOUNDRY = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 FOUNDRY_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 WORKFLOW = ".github/workflows/backend-tests.yml"
-WORKFLOW_SHA256 = "3f7d6bf0112a4d669b4144a60a248d55ecb654d4b883c6e62e7e145d8bdf2f9b"
+CURRENT_WORKFLOW_SHA256 = "3f7d6bf0112a4d669b4144a60a248d55ecb654d4b883c6e62e7e145d8bdf2f9b"
+# approved_pilot_source archives this workflow from immutable commit
+# 8ac891e3e0e4752fe15a00139a2691ddf9df7dce. Pin that Git blob, not the
+# current workflow or the extracted fixture file being checked.
+FROZEN_PILOT_WORKFLOW_SHA256 = "b617f79a09427f9b877e9fef214bdf2fe96ba817fc8debf5369b4f172640f9da"
 FALSE_FLAGS = (
     "launch_enabled", "launch_allowed", "paid_execution_enabled",
     "paid_execution_allowed", "full_220_enabled", "full_220_allowed",
@@ -125,7 +129,7 @@ def test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition()
     for relative, expected in (
         (HISTORICAL, HISTORICAL_SHA256),
         (FOUNDRY, FOUNDRY_SHA256),
-        (WORKFLOW, WORKFLOW_SHA256),
+        (WORKFLOW, CURRENT_WORKFLOW_SHA256),
     ):
         assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected
     historical = yaml.safe_load((ROOT / HISTORICAL).read_bytes())

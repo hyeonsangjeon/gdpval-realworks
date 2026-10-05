@@ -43,7 +43,9 @@ from core.executor import TaskExecutor
 from .test_codex_task_deadline import (
     Clock, CONDITION, ROOT, SETTINGS, TASK, TASK2, execute, host, store_at,
 )
-from .test_ghcp_vm_gate_contract import FOUNDRY, FOUNDRY_SHA256, WORKFLOW, WORKFLOW_SHA256
+from .test_ghcp_vm_gate_contract import (
+    FOUNDRY, FOUNDRY_SHA256, FROZEN_PILOT_WORKFLOW_SHA256, WORKFLOW,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -1604,7 +1606,7 @@ def test_native_resume_active_grader_template_source_bindings(
         assert report["launch_allowed"] is report["full_220_allowed"] is False
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)
     assert hashlib.sha256((frozen_source / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
-    assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == WORKFLOW_SHA256
+    assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == FROZEN_PILOT_WORKFLOW_SHA256
     gate_plan = ghcp_gate.load_plan()
     reference_source = "batch-runner/core/reference_integrity.py"
     current_reference = hashlib.sha256((frozen_source / reference_source).read_bytes()).hexdigest()

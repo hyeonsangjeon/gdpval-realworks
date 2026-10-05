@@ -302,10 +302,10 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
 
 def test_budget_readout_partition_preserves_exact_commands_and_guards():
     """Inspect the split without importing, collecting or running its test files."""
-    from .test_ghcp_vm_gate_contract import WORKFLOW_SHA256
+    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
 
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert hashlib.sha256(WORKFLOW.read_bytes()).hexdigest() == WORKFLOW_SHA256
+    assert hashlib.sha256(WORKFLOW.read_bytes()).hexdigest() == CURRENT_WORKFLOW_SHA256
     workflow = yaml.safe_load(text)
     jobs = workflow["jobs"]
     pilot = jobs["pilot-contracts"]
@@ -322,11 +322,30 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     assert "secrets." not in text and "id-token" not in text
 
     # Captured before editing workflow bytes 19cd9099ad1e60865111d789207bd09fc8302095be7012eea75703c9490da09d.
-    # Removing only this job and restoring only the old budget command must
-    # reproduce every pre-existing job, trigger, permission and guard setting.
+    # Restore the old budget command and remove its readout job, then undo only
+    # PR749's two explicit time-budget test-inventory additions. Every other
+    # pre-existing job, trigger, permission and guard must match the baseline.
     previous = deepcopy(workflow)
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
+    time_budget_test = "tests/test_gpt54_time_budget_comparison.py"
+    assert text.count(time_budget_test) == 2
+    for job_name, step_name, token in (
+        ("pytest", "Run tests", "--ignore=" + time_budget_test),
+        ("comparison-contracts", "Run comparison contracts", time_budget_test),
+    ):
+        steps = [step for step in previous["jobs"][job_name]["steps"]
+                 if step.get("name") == step_name]
+        assert len(steps) == 1
+        run = steps[0]["run"]
+        lines = run.splitlines()
+        assert len(lines) == 2 and lines[0] == "cd batch-runner"
+        tokens = shlex.split(lines[1])
+        assert tokens[:3] == ["python", "-m", "pytest"]
+        assert tokens.count(token) == 1
+        literal = " " + token + " "
+        assert run.count(literal) == 1
+        steps[0]["run"] = run.replace(literal, " ", 1)
     canonical = json.dumps(previous, separators=(",", ":"), ensure_ascii=True).encode()
     assert hashlib.sha256(canonical).hexdigest() == (
         "fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47"
@@ -385,10 +404,10 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
 
 def test_backend_jobs_partition_the_comparison_contracts():
     """Nine jobs cover every node once, including budget-pilot and shared files."""
-    from .test_ghcp_vm_gate_contract import WORKFLOW_SHA256
+    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
 
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert hashlib.sha256(WORKFLOW.read_bytes()).hexdigest() == WORKFLOW_SHA256
+    assert hashlib.sha256(WORKFLOW.read_bytes()).hexdigest() == CURRENT_WORKFLOW_SHA256
     workflow = yaml.safe_load(text)
     assert set(workflow) == {"name", True, "permissions", "concurrency", "jobs"}
     jobs = workflow["jobs"]
