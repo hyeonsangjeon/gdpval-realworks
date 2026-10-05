@@ -12,6 +12,13 @@ Supervision belongs to the main thread of the owned POSIX host process. SIGALRM
 interrupts blocking local I/O, including turn creation and Responses.create;
 unsupported threads and pre-existing timers refuse before generation. No daemon
 watchdog or independently renewed cleanup grace is used.
+
+The optional observation mode also requires an exclusive Linux child subreaper.
+Admission starts with one thread and no children; every subsequently created
+child belongs to that observation. Orphans remain attributable after double
+fork/setsid/parent exit. Cleanup signals only pidfds the kernel confirms are our
+children, then reaps until ECHILD. A /proc listing locates candidates, never
+proves emptiness. No legacy runner acquires this process-wide ownership.
 """
 
 from __future__ import annotations
@@ -24,6 +31,7 @@ from pathlib import Path
 import re
 import signal
 import stat
+import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -36,6 +44,10 @@ CLEANUP_SECONDS = 20
 TIMEOUT = "time_budget_observation_deadline_exhausted"
 REFUSED = "time_budget_observation_admission_refused"
 CLEANUP_UNCONFIRMED = "time_budget_observation_cleanup_unconfirmed"
+OWNERSHIP_REQUIRED = "time_budget_owned_process_host_required"
+# Linux wait(2): include clone children regardless of their exit signal. The
+# owned host must account for these too, not just SIGCHLD children.
+_WAIT_ALL_CHILDREN = 0x40000000
 TASK_IDS = (
     "02aa1805-c658-4069-8a6a-02dec146063a",
     "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
@@ -61,6 +73,20 @@ def _json(value: object) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), allow_nan=False
     ).encode()
+
+
+def _child_subreaper(enable: bool | None = None) -> int:
+    """Use the kernel's reparenting guarantee, not a sampled PPID history."""
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    zeros = (ctypes.c_ulong(0),) * 3
+    if enable is not None and libc.prctl(36, ctypes.c_ulong(int(enable)), *zeros) != 0:
+        raise OSError(ctypes.get_errno(), OWNERSHIP_REQUIRED)
+    value = ctypes.c_int()
+    if libc.prctl(37, ctypes.byref(value), *zeros) != 0:
+        raise OSError(ctypes.get_errno(), OWNERSHIP_REQUIRED)
+    return value.value
 
 
 @dataclass(frozen=True)
@@ -126,6 +152,10 @@ class TimeBudgetObservation:
     # Keep snapshots pessimistic and authorize reuse only after ALL finalization
     # I/O returned within the deadline. PID binding rejects inherited fork state.
     _released_hosts: dict[tuple[int, int, int, str], str] = {}
+    # Retain ownership after ANY uncertain cleanup, even if a caller changes
+    # the receipt directory. A new process cannot inherit this authority.
+    _process_owner: tuple[int, object] | None = None
+    _subreaper_host: int | None = None
 
     def __init__(
         self,
@@ -165,7 +195,8 @@ class TimeBudgetObservation:
         self._claimed = False
         self._supervising = 0
         self._cleanup_step_end: float | None = None
-        self._before_processes: dict[int, tuple[int, str, str]] | None = None
+        self._ownership_token = object()
+        self._processes_stopped = False
         self._finished = False
         self._cleanup_finished_at: float | None = None
         self._host_key = (
@@ -190,6 +221,7 @@ class TimeBudgetObservation:
             # In particular, unlink may have succeeded before its fsync timed
             # out. Absence of host-lease.json must not admit the next observation.
             raise ObservationDeadlineRefused(REFUSED)
+        self._acquire_process_ownership()
         self._write("host-lease.json", {"observation": identity.key})
         # Failure between these writes deliberately retains the host lease.
         self._write(identity.key + ".admitted.json", asdict(identity))
@@ -260,7 +292,6 @@ class TimeBudgetObservation:
         ):
             raise ObservationDeadlineRefused(REFUSED)
         self._require_owned_host()
-        self._before_processes = self._descendants()
         self._write(self.identity.key + ".claimed.json", {"claimed": True})
         self._claimed = True
 
@@ -410,6 +441,11 @@ class TimeBudgetObservation:
             self._supervising = 0
 
     def _require_owned_host(self) -> None:
+        self._require_supervision()
+        self._require_process_ownership()
+
+    @staticmethod
+    def _require_supervision() -> None:
         if (
             threading.current_thread() is not threading.main_thread()
             or not hasattr(signal, "setitimer")
@@ -418,6 +454,90 @@ class TimeBudgetObservation:
             raise ObservationDeadlineRefused(
                 "time_budget_owned_host_supervision_required"
             )
+
+    @staticmethod
+    def _single_threaded() -> bool:
+        # Python's threading registry omits native/library threads. Require the
+        # kernel task set, both at admission and before a clean-host release.
+        return {item.name for item in Path("/proc/self/task").iterdir()} == {str(os.getpid())}
+
+    @staticmethod
+    def _child_pids() -> set[int]:
+        children = set()
+        for task in Path("/proc/self/task").iterdir():
+            try:
+                children.update(int(pid) for pid in (task / "children").read_text().split())
+            except FileNotFoundError:
+                if task.name == str(os.getpid()):
+                    raise
+                # A retiring SDK thread may disappear. Kernel waitid, not this
+                # candidate list, decides whether ANY children remain.
+        return children
+
+    @staticmethod
+    def _no_kernel_children() -> bool:
+        try:
+            os.waitid(os.P_ALL, 0, os.WEXITED | os.WNOHANG | os.WNOWAIT | _WAIT_ALL_CHILDREN)
+        except ChildProcessError:
+            return True
+        return False  # A live OR unreaped child is still an ownership obligation.
+
+    def _acquire_process_ownership(self) -> None:
+        self._require_supervision()
+        try:
+            if (
+                sys.platform != "linux"
+                or type(self)._process_owner is not None
+                or not self._single_threaded()
+                or signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL
+                or self._child_pids()
+                or not self._no_kernel_children()
+            ):
+                raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED)
+            # Probe only this host, never a pre-existing child/unrelated PID.
+            # ENOSYS/EPERM/EINVAL all refuse; no bare-PID or process-group fallback.
+            handle = os.pidfd_open(os.getpid())
+            try:
+                signal.pidfd_send_signal(handle, 0)
+                try:
+                    os.waitid(os.P_PIDFD, handle, os.WEXITED | os.WNOHANG | os.WNOWAIT | _WAIT_ALL_CHILDREN)
+                except ChildProcessError:
+                    pass  # This process is not its own child.
+                else:
+                    raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED)
+            finally:
+                os.close(handle)
+            known_host = type(self)._subreaper_host == os.getpid()
+            if _child_subreaper() != int(known_host):
+                # Do not adopt an externally configured subreaper's obligations.
+                raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED)
+            if _child_subreaper(enable=True) != 1:
+                raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED)
+            type(self)._subreaper_host = os.getpid()
+            type(self)._process_owner = (os.getpid(), self._ownership_token)
+            # Retain ownership on uncertainty after activation, before any
+            # admission receipt or provider construction can occur.
+            if not self._single_threaded() or not self._no_kernel_children():
+                raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED)
+        except (AttributeError, OSError, ValueError) as error:
+            raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED) from error
+
+    def _require_process_ownership(self) -> None:
+        try:
+            if (
+                type(self)._process_owner != (os.getpid(), self._ownership_token)
+                or type(self)._subreaper_host != os.getpid()
+                or _child_subreaper() != 1
+                or signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL
+            ):
+                raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED)
+        except (AttributeError, OSError, ValueError) as error:
+            raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED) from error
+
+    def _confirm_owned_empty(self) -> bool:
+        self._require_process_ownership()
+        self._processes_stopped = self._single_threaded() and self._no_kernel_children()
+        return self._processes_stopped
 
     def cleanup(
         self,
@@ -476,95 +596,52 @@ class TimeBudgetObservation:
                 else:
                     signal.setitimer(signal.ITIMER_REAL, 0.0)
 
-    @staticmethod
-    def _process(pid: int) -> tuple[int, str, str] | None:
-        try:
-            # stat's command name may contain spaces and parentheses. Fields
-            # after its final ')' are state, parent, group, ... start ticks.
-            with open(f"/proc/{pid}/stat", "rb") as source:
-                fields = source.read(8192).rsplit(b")", 1)[1].split()
-            return int(fields[2]), fields[19].decode("ascii"), fields[0].decode("ascii")
-        except FileNotFoundError:
-            return None
-
-    @classmethod
-    def _descendants(cls) -> dict[int, tuple[int, str, str]]:
-        proc = Path("/proc")
-        if not proc.is_dir():
-            raise ObservationDeadlineRefused(
-                "time_budget_owned_host_supervision_required"
-            )
-        parents = {}
-        identities = {}
-        for leaf in proc.iterdir():
-            if not leaf.name.isdigit():
-                continue
-            pid = int(leaf.name)
-            try:
-                with (leaf / "stat").open("rb") as source:
-                    fields = source.read(8192).rsplit(b")", 1)[1].split()
-                parents[pid] = int(fields[1])
-                identities[pid] = (
-                    int(fields[2]),
-                    fields[19].decode("ascii"),
-                    fields[0].decode("ascii"),
-                )
-            except (FileNotFoundError, ProcessLookupError):
-                continue
-        owned = {os.getpid()}
-        while True:
-            new = {pid for pid, parent in parents.items() if parent in owned} - owned
-            if not new:
-                break
-            owned.update(new)
-        return {pid: identities[pid] for pid in owned if pid != os.getpid()}
-
     def stop_owned_processes(self, process=None) -> bool:
-        """Stop only new owned descendants; never signal the host's group.
+        """Reap the exclusive subreaper's children, including adopted orphans.
 
-        TERM, KILL, the SDK process wait, and confirmation all consume the
-        existing cleanup remainder. A process identity that cannot be confirmed
-        stopped retains the host lease; sending a signal alone is not proof.
+        TERM, KILL, blocking waitid and repeated orphan adoption all spend the
+        SAME cleanup remainder. The SDK handle is not ownership authority and
+        needs no separate kill/wait. No signal is sent by PID or process group.
         """
+        del process
 
         def stop():
-            if self._before_processes is None:
-                return False
-            owned = {
-                pid: value
-                for pid, value in self._descendants().items()
-                if self._before_processes.get(pid, (None, None))[1] != value[1]
-            }
-            for sig in (signal.SIGTERM, signal.SIGKILL):
-                for pid, identity in owned.items():
-                    current = self._process(pid)
-                    if (
-                        current is None
-                        or current[1] != identity[1]
-                        or current[2] == "Z"
-                    ):
+            self._require_process_ownership()
+            self._processes_stopped = False
+            while not self._no_kernel_children():
+                self._arm()
+                for pid in self._child_pids():
+                    self._arm()
+                    try:
+                        handle = os.pidfd_open(pid)
+                    except ProcessLookupError:
                         continue
                     try:
-                        self.interruption_attempted |= self.terminal_reason == TIMEOUT
-                        if current[0] == pid and pid != os.getpgrp():
-                            os.killpg(pid, sig)
-                        else:
-                            os.kill(pid, sig)
-                    except ProcessLookupError:
-                        pass
-            if process is not None:
-                # The pinned SDK owns a Popen. Capture it BEFORE SDK.close()
-                # clears _proc, and never perform its unbounded final wait.
-                if process.poll() is None:
-                    self.interruption_attempted |= self.terminal_reason == TIMEOUT
-                    process.kill()
-                process.wait(timeout=min(1.0, self.remaining_cleanup()))
-            return all(
-                (current := self._process(pid)) is None
-                or current[1] != identity[1]
-                or current[2] == "Z"
-                for pid, identity in owned.items()
-            )
+                        try:
+                            exited = os.waitid(os.P_PIDFD, handle, os.WEXITED | os.WNOHANG | os.WNOWAIT | _WAIT_ALL_CHILDREN)
+                        except ChildProcessError:
+                            continue  # A stale/reused PID outside this host is NOT ours.
+                        if exited is None:
+                            for sig in (signal.SIGTERM, signal.SIGKILL):
+                                self._arm()
+                                self.interruption_attempted |= self.terminal_reason == TIMEOUT
+                                try:
+                                    signal.pidfd_send_signal(handle, sig)
+                                except ProcessLookupError:
+                                    break
+                    finally:
+                        os.close(handle)
+                self._arm()
+                try:
+                    # The next exited child may expose more adopted orphans.
+                    # SIGALRM bounds the blocking wait by the original end.
+                    os.waitid(os.P_ALL, 0, os.WEXITED | _WAIT_ALL_CHILDREN)
+                except ChildProcessError:
+                    pass
+            self._arm()
+            self._require_process_ownership()
+            self._processes_stopped = True
+            return True
 
         return self.cleanup(stop)
 
@@ -574,16 +651,7 @@ class TimeBudgetObservation:
         try:
             if self.terminal_reason is None:
                 self.terminal("abandoned")
-            if self._before_processes is not None:
-                self.cleanup(
-                    lambda: (
-                        not any(
-                            value[2] != "Z"
-                            and self._before_processes.get(pid, (None, None))[1] != value[1]
-                            for pid, value in self._descendants().items()
-                        )
-                    )
-                )
+            self.cleanup(self._confirm_owned_empty)
             with self.supervise():
                 self._arm()
                 parent = self._directory_fd()
@@ -617,6 +685,10 @@ class TimeBudgetObservation:
                 finally:
                     os.close(parent)
                 self._arm()
+                if releasable:
+                    if not self._confirm_owned_empty() or _child_subreaper(enable=False) != 0:
+                        raise ObservationDeadlineRefused(OWNERSHIP_REQUIRED)
+                self._arm()
             # Include supervisor teardown, not just receipt persistence, in the
             # final sample. No filesystem operation follows this confirmation.
             finished = self._now()
@@ -626,6 +698,8 @@ class TimeBudgetObservation:
             self.cleanup_complete = releasable
             if releasable:
                 self._released_hosts[self._host_key] = self.identity.key
+                type(self)._process_owner = None
+                type(self)._subreaper_host = None
         except ObservationCleanupExpired:
             self.cleanup_expired = True
             self.cleanup_failed = True
@@ -664,6 +738,8 @@ class TimeBudgetObservation:
             "interruption_acknowledgement_scope": "local_runtime_only_not_remote_cancellation",
             "cleanup_complete": self.cleanup_complete,
             "cleanup_expired": self.cleanup_expired,
+            "process_ownership": "linux_exclusive_subreaper_pidfd_waitid",
+            "owned_processes_stopped": self._processes_stopped,
             "host_reusable": self.cleanup_complete,
             "remote_cancellation_confirmed": False,
             "remote_billing_bound": False,

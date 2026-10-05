@@ -7,6 +7,7 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 import tarfile
 from copy import deepcopy
 from dataclasses import FrozenInstanceError
@@ -86,6 +87,9 @@ def _compile(plan, roots):
 def model_free(monkeypatch, request, dual_roots):
     deadline_case = "time_budget_observation_deadline" in request.node.name
     if deadline_case:
+        # Exercise the ownership checks through a deterministic kernel adapter.
+        # Never change the pytest host's subreaper state or signal its children.
+        request.getfixturevalue("observation_kernel")
         calls = []
     else:
         calls = _guards(monkeypatch)
@@ -439,6 +443,109 @@ class _Clock:
         self.now += seconds
 
 
+class _ObservationKernel:
+    """Controlled Linux child/subreaper/pidfd semantics, with no real signals."""
+
+    def __init__(self, monkeypatch):
+        import core.time_budget_observation_deadline as deadline
+
+        self.host = os.getpid()
+        self.subreaper = 0
+        self.one_thread = True
+        self.processes = {}
+        self.handles = {}
+        self.signals = []
+        self.reaped = []
+        self.next_pid = 424242
+        self.on_signal = None
+        self.on_blocking_wait = None
+        self.candidates = None
+        monkeypatch.setattr(deadline, "_child_subreaper", self.prctl)
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_process_owner", None)
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_subreaper_host", None)
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_released_hosts", {})
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_single_threaded", staticmethod(lambda: self.one_thread))
+        monkeypatch.setattr(deadline.TimeBudgetObservation, "_child_pids", staticmethod(self.child_pids))
+        monkeypatch.setattr(os, "pidfd_open", self.pidfd_open, raising=False)
+        monkeypatch.setattr(signal, "pidfd_send_signal", self.send_signal, raising=False)
+        monkeypatch.setattr(os, "waitid", self.waitid)
+
+    def prctl(self, enable=None):
+        if enable is not None:
+            self.subreaper = int(enable)
+        return self.subreaper
+
+    def spawn(self, parent=None, *, pid=None):
+        pid = self.next_pid if pid is None else pid
+        self.next_pid = max(self.next_pid, pid + 1)
+        child = SimpleNamespace(pid=pid, parent=self.host if parent is None else parent, alive=True)
+        self.processes[pid] = child
+        return child
+
+    def exit(self, child):
+        child.alive = False
+        for descendant in self.processes.values():
+            if descendant.parent == child.pid:
+                descendant.parent = self.host if self.subreaper else 1
+
+    def child_pids(self):
+        if self.candidates is not None:
+            return set(self.candidates)
+        return {child.pid for child in self.processes.values() if child.parent == self.host}
+
+    def pidfd_open(self, pid):
+        child = None if pid == self.host else self.processes.get(pid)
+        if pid != self.host and child is None:
+            raise ProcessLookupError
+        # An actual local fd keeps close() real; the mapping pins the object,
+        # not its replaceable PID, just as the kernel pidfd does.
+        handle = os.open(os.devnull, os.O_RDONLY)
+        self.handles[handle] = child
+        return handle
+
+    def send_signal(self, handle, sig):
+        child = self.handles[handle]
+        if sig == 0:
+            assert child is None
+            return
+        assert child is not None and child.parent == self.host
+        self.signals.append((child.pid, sig))
+        if self.on_signal is not None:
+            self.on_signal(child, sig)
+        if sig == signal.SIGKILL:
+            self.exit(child)
+
+    def waitid(self, kind, target, options):
+        from core.time_budget_observation_deadline import _WAIT_ALL_CHILDREN
+
+        assert options & _WAIT_ALL_CHILDREN and options & os.WEXITED
+        if kind == os.P_PIDFD:
+            child = self.handles[target]
+            if child is None or child.parent != self.host or self.processes.get(child.pid) is not child:
+                raise ChildProcessError
+            children = [child]
+        else:
+            assert kind == os.P_ALL and target == 0
+            children = [child for child in self.processes.values() if child.parent == self.host]
+        if not children:
+            raise ChildProcessError
+        if not options & os.WNOHANG and self.on_blocking_wait is not None:
+            self.on_blocking_wait()
+        exited = next((child for child in children if not child.alive), None)
+        if exited is None:
+            assert options & os.WNOHANG, "controlled blocking wait has no scheduled exit"
+            return None
+        if not options & os.WNOWAIT:
+            self.reaped.append(exited.pid)
+            del self.processes[exited.pid]
+        return SimpleNamespace(si_pid=exited.pid)
+
+
+@pytest.fixture
+def observation_kernel(monkeypatch):
+    return _ObservationKernel(monkeypatch)
+
+
 def _observation(tmp_path, condition="codex", *, clock=None, task_index=0):
     from core.time_budget_observation_deadline import ObservationIdentity, STUDY_ID, TASK_IDS, TimeBudgetObservation
 
@@ -456,6 +563,317 @@ def _observation(tmp_path, condition="codex", *, clock=None, task_index=0):
 def _claim(control):
     control.claim(run_id=control.identity.run_id, condition=control.identity.condition,
                   task_id=control.identity.task_id)
+
+
+@pytest.mark.parametrize("when", ["before_cleanup", "during_termination"])
+def test_time_budget_observation_deadline_process_ownership_reparenting(tmp_path, monkeypatch, observation_kernel, when):
+    kernel = observation_kernel
+    unrelated = kernel.spawn(parent=1)
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    assert kernel.subreaper == 1 and control.first_start is None
+    parent = kernel.spawn()
+    orphan = None
+    if when == "before_cleanup":
+        orphan = kernel.spawn(parent=parent.pid)
+        kernel.exit(parent)
+        assert orphan.alive and orphan.parent == kernel.host
+    else:
+        def fork_during_term(child, sig):
+            nonlocal orphan
+            if child is parent and sig == signal.SIGTERM:
+                orphan = kernel.spawn(parent=parent.pid)
+
+        kernel.on_signal = fork_during_term
+    for name in ("kill", "killpg"):
+        monkeypatch.setattr(os, name, lambda *args: pytest.fail("bare PID/group signalling is not ownership"))
+    control.terminal("completed")
+    end = control.cleanup_deadline
+    assert control.stop_owned_processes()
+    assert orphan is not None and not orphan.alive
+    assert set(kernel.reaped) == {parent.pid, orphan.pid}
+    assert all(pid != unrelated.pid for pid, _ in kernel.signals)
+    assert (orphan.pid, signal.SIGKILL) in kernel.signals
+    control.finish_cleanup(True)
+    assert control.cleanup_deadline == end == clock.now + 20
+    assert control.as_record()["host_reusable"] is True
+    assert control.as_record()["owned_processes_stopped"] is True
+    assert kernel.subreaper == 0  # No new-mode process setting leaks to legacy work.
+    assert kernel.processes == {unrelated.pid: unrelated} and unrelated.alive
+
+
+@pytest.mark.parametrize("case", [
+    "preexisting_child", "preexisting_zombie", "another_thread", "foreign_subreaper",
+    "pidfd_missing", "pidfd_enosys", "pidfd_denied", "signal_denied", "waitid_unsupported",
+    "subreaper_denied", "subreaper_unconfirmed", "nonlinux", "sigchld_ignored",
+])
+def test_time_budget_observation_deadline_process_ownership_admission_refuses(tmp_path, monkeypatch, observation_kernel, case):
+    import errno
+    import core.time_budget_observation_deadline as deadline
+
+    kernel = observation_kernel
+    before = None
+
+    def denied(*args, **kwargs):
+        raise OSError(errno.ENOSYS if case in ("pidfd_enosys", "waitid_unsupported") else errno.EPERM, "synthetic unsupported interface")
+
+    if case in ("preexisting_child", "preexisting_zombie"):
+        before = kernel.spawn()
+        if case == "preexisting_zombie":
+            kernel.exit(before)
+    elif case == "another_thread":
+        kernel.one_thread = False
+    elif case == "foreign_subreaper":
+        kernel.subreaper = 1
+    elif case == "pidfd_missing":
+        monkeypatch.delattr(os, "pidfd_open")
+    elif case in ("pidfd_enosys", "pidfd_denied"):
+        monkeypatch.setattr(os, "pidfd_open", denied)
+    elif case == "signal_denied":
+        monkeypatch.setattr(signal, "pidfd_send_signal", denied)
+    elif case == "waitid_unsupported":
+        monkeypatch.setattr(os, "waitid", denied)
+    elif case == "subreaper_denied":
+        monkeypatch.setattr(deadline, "_child_subreaper", denied)
+    elif case == "subreaper_unconfirmed":
+        monkeypatch.setattr(deadline, "_child_subreaper", lambda **kwargs: 0)
+    elif case == "nonlinux":
+        monkeypatch.setattr(sys, "platform", "unsupported")
+    elif case == "sigchld_ignored":
+        getsignal = signal.getsignal
+        monkeypatch.setattr(signal, "getsignal", lambda sig: signal.SIG_IGN if sig == signal.SIGCHLD else getsignal(sig))
+    with pytest.raises(deadline.ObservationDeadlineRefused, match=deadline.OWNERSHIP_REQUIRED):
+        _observation(tmp_path)
+    assert list((tmp_path / "host-observations").iterdir()) == []
+    assert kernel.signals == kernel.reaped == []
+    if before is not None:
+        assert kernel.processes == {before.pid: before}
+
+
+@pytest.mark.parametrize("case", ["stale_candidate", "pid_reused_before_open", "pid_reused_after_open"])
+def test_time_budget_observation_deadline_process_ownership_pidfd_child_identity(tmp_path, monkeypatch, observation_kernel, case):
+    kernel = observation_kernel
+    outside = kernel.spawn(parent=1)
+    control, _ = _observation(tmp_path)
+    _claim(control)
+    owned = kernel.spawn()
+    stale_pid = outside.pid
+    if case != "stale_candidate":
+        original = kernel.spawn()
+        stale_pid = original.pid
+        opener = os.pidfd_open
+
+        def substitute(pid):
+            if pid != stale_pid:
+                return opener(pid)
+            if case == "pid_reused_after_open":
+                handle = opener(pid)
+            kernel.exit(original)
+            del kernel.processes[pid]
+            kernel.spawn(parent=1, pid=pid)
+            return handle if case == "pid_reused_after_open" else opener(pid)
+
+        monkeypatch.setattr(os, "pidfd_open", substitute)
+    kernel.candidates = {owned.pid, stale_pid}
+    control.terminal("completed")
+    assert control.stop_owned_processes()
+    control.finish_cleanup(True)
+    assert control.cleanup_complete
+    assert kernel.signals == [(owned.pid, signal.SIGTERM), (owned.pid, signal.SIGKILL)]
+    assert kernel.processes[stale_pid].alive and outside.alive
+
+
+@pytest.mark.parametrize("case", [
+    "wait_expiry", "empty_proc_listing", "new_child_after_stop", "thread_not_joined",
+    "signal_denied", "child_wait_denied",
+])
+def test_time_budget_observation_deadline_process_ownership_incomplete_refuses_reuse(tmp_path, monkeypatch, observation_kernel, case):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT
+
+    kernel = observation_kernel
+    control, clock = _observation(tmp_path)
+    _claim(control)
+    with control.supervise():
+        control.start()
+        clock.advance(1200)
+        control.terminal(TIMEOUT)
+    end = control.cleanup_deadline
+    if case in ("wait_expiry", "empty_proc_listing"):
+        child = kernel.spawn()
+        if case == "empty_proc_listing":
+            kernel.candidates = set()
+
+        def expire():
+            assert control._supervising > 0
+            clock.advance(control.remaining_cleanup())
+            signal.raise_signal(signal.SIGALRM)
+
+        kernel.on_blocking_wait = expire
+        assert control.stop_owned_processes() is False
+        assert child.pid in kernel.processes  # No confirmed reap, even after KILL.
+    elif case in ("signal_denied", "child_wait_denied"):
+        child = kernel.spawn()
+
+        def denied(*args, **kwargs):
+            raise PermissionError("synthetic child ownership/termination uncertainty")
+
+        if case == "signal_denied":
+            monkeypatch.setattr(signal, "pidfd_send_signal", denied)
+        else:
+            waitid = os.waitid
+            monkeypatch.setattr(os, "waitid", lambda kind, target, options: denied() if kind == os.P_PIDFD else waitid(kind, target, options))
+        assert control.stop_owned_processes() is False
+        assert child.alive
+    else:
+        assert control.stop_owned_processes()
+        if case == "new_child_after_stop":
+            kernel.spawn()
+        else:
+            kernel.one_thread = False
+    control.finish_cleanup(True)
+    assert control.cleanup_deadline == end == control.first_start + 1220
+    assert not control.as_record()["host_reusable"] and not control.cleanup_complete
+    assert control.cleanup_expired is (case in ("wait_expiry", "empty_proc_listing"))
+    assert (control.directory / "host-lease.json").exists()
+    receipt = control.directory / (control.identity.key + ".cleanup.json")
+    if receipt.exists():
+        durable = json.loads(receipt.read_bytes())
+        assert durable["cleanup_complete"] is durable["host_reusable"] is False
+    else:
+        assert control.cleanup_expired  # Expiry does not start unbounded receipt I/O.
+    kernel.one_thread = True
+    # Changing the private receipt directory cannot discharge kernel ownership.
+    other = tmp_path / "another-directory"
+    other.mkdir(mode=0o700)
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(other, clock=clock, task_index=1)
+    assert list((other / "host-observations").iterdir()) == []
+
+
+@pytest.mark.parametrize("case", ["subreaper_removed", "forked_host", "sigchld_changed"])
+def test_time_budget_observation_deadline_process_ownership_authority_lost(tmp_path, monkeypatch, observation_kernel, case):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused, OWNERSHIP_REQUIRED
+
+    control, _ = _observation(tmp_path)
+    if case == "subreaper_removed":
+        observation_kernel.subreaper = 0
+    elif case == "forked_host":
+        monkeypatch.setattr(os, "getpid", lambda: observation_kernel.host + 1)
+    else:
+        getsignal = signal.getsignal
+        monkeypatch.setattr(signal, "getsignal", lambda sig: signal.SIG_IGN if sig == signal.SIGCHLD else getsignal(sig))
+    with pytest.raises(ObservationDeadlineRefused, match=OWNERSHIP_REQUIRED):
+        _claim(control)
+    assert control.first_start is None and not control.cleanup_complete
+    assert (control.directory / "host-lease.json").exists()
+    assert observation_kernel.signals == observation_kernel.reaped == []
+
+
+def test_time_budget_observation_deadline_process_ownership_release_and_exclusivity(tmp_path, observation_kernel):
+    from core.time_budget_observation_deadline import ObservationDeadlineRefused
+
+    kernel = observation_kernel
+    control, clock = _observation(tmp_path)
+    other = tmp_path / "other-host-name"
+    other.mkdir(mode=0o700)
+    with pytest.raises(ObservationDeadlineRefused):
+        _observation(other, clock=clock, task_index=1)
+    _claim(control)
+    child = kernel.spawn()
+    control.terminal("completed")
+
+    class UntrustedSDKHandle:
+        def __getattr__(self, name):
+            pytest.fail("SDK handle is not ownership/kill/wait authority")
+
+    assert control.stop_owned_processes(UntrustedSDKHandle())
+    assert kernel.reaped == [child.pid]
+    control.finish_cleanup(True)
+    assert control.cleanup_complete and kernel.subreaper == 0
+    next_control, _ = _observation(tmp_path, clock=clock, task_index=1)
+    assert next_control.first_start is None and kernel.subreaper == 1
+    next_control.terminal("abandoned")
+    next_control.finish_cleanup(True)
+    assert next_control.cleanup_complete and kernel.subreaper == 0
+
+
+def test_time_budget_observation_deadline_process_ownership_source_pin():
+    source = historical.ROOT / "batch-runner/core/time_budget_observation_deadline.py"
+    manifest = prospective.load_registration()
+    assert manifest["source_pins"]["batch-runner/core/time_budget_observation_deadline.py"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert prospective.ACCEPTED_BASE_SHA == "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2"
+    assert hashlib.sha256((historical.ROOT / prospective.SOURCE_PROFILE).read_bytes()).hexdigest() == "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
+
+
+def test_time_budget_observation_deadline_process_ownership_platform_contract(tmp_path):
+    """One short real-kernel lifecycle OR explicit unsupported-host refusal.
+
+    This child imports only the helper, uses synthetic identity/files, and has
+    no provider, credentials, network, private inputs or long-running worker.
+    The daemon has a five-second test failsafe in addition to parent supervision.
+    """
+    script = r'''
+import json, os, signal, sys
+from pathlib import Path
+from core.time_budget_observation_deadline import (
+    ObservationIdentity, TimeBudgetObservation, ObservationDeadlineRefused,
+    OWNERSHIP_REQUIRED, STUDY_ID, TASK_IDS,
+)
+directory = Path(sys.argv[1]) / "synthetic-owned-host"
+directory.mkdir(mode=0o700)
+identity = ObservationIdentity(STUDY_ID, "gpt54_time_budget_v1_codex_r1", "codex", 1,
+    TASK_IDS[0], "1" * 40, "2" * 40, "3" * 64, "4" * 64)
+try:
+    control = TimeBudgetObservation(directory, identity)
+except ObservationDeadlineRefused as error:
+    assert str(error) == OWNERSHIP_REQUIRED
+    assert list(directory.iterdir()) == []
+    print(json.dumps({"platform_result": "admission_refused", "reason": str(error),
+        "cause_type": type(error.__cause__).__name__, "errno": getattr(error.__cause__, "errno", None)}))
+    sys.exit(0)
+control.claim(run_id=identity.run_id, condition=identity.condition, task_id=identity.task_id)
+with control.supervise():
+    control.start()
+reader, writer = os.pipe()
+parent = os.fork()
+if parent == 0:
+    orphan = os.fork()
+    if orphan == 0:
+        os.close(reader)
+        os.setsid()
+        signal.alarm(5)
+        os.write(writer, str(os.getpid()).encode() + b"\n")
+        os.close(writer)
+        signal.pause()
+        os._exit(90)
+    os._exit(0)
+os.close(writer)
+os.waitpid(parent, 0)
+with os.fdopen(reader, "rb") as pipe:
+    orphan = int(pipe.readline(64))
+assert orphan in control._child_pids()
+fields = Path(f"/proc/{orphan}/stat").read_bytes().rsplit(b")", 1)[1].split()
+assert int(fields[1]) == os.getpid()  # Parent exit and setsid did not escape ownership.
+control.terminal("completed")
+assert control.stop_owned_processes()
+control.finish_cleanup(True)
+assert control.cleanup_complete and control._no_kernel_children()
+assert not (directory / "host-lease.json").exists()
+print(json.dumps({"platform_result": "real_reparenting_confirmed", "host_reusable": True}))
+'''
+    process = _REAL_POPEN([sys.executable, "-c", script, str(tmp_path)],
+                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=10)
+    except BaseException:
+        process.kill()
+        process.communicate(timeout=2)
+        raise
+    assert process.returncode == 0, stderr.decode(errors="replace")[:4000]
+    outcome = json.loads(stdout)
+    assert outcome["platform_result"] in {"admission_refused", "real_reparenting_confirmed"}
+    print(json.dumps(outcome, sort_keys=True))
 
 
 @pytest.mark.parametrize("phase", ["admitted", "started", "terminal", "abandoned"])
@@ -533,7 +951,7 @@ def test_time_budget_observation_deadline_one_cleanup_remainder(tmp_path, termin
         _observation(tmp_path, clock=clock, task_index=1)
 
 
-def test_time_budget_observation_deadline_interrupt_latch_and_owned_group(tmp_path, monkeypatch):
+def test_time_budget_observation_deadline_interrupt_latch_and_owned_child(tmp_path, observation_kernel):
     from core.time_budget_observation_deadline import ObservationTimedOut, TIMEOUT
 
     control, clock = _observation(tmp_path)
@@ -547,25 +965,11 @@ def test_time_budget_observation_deadline_interrupt_latch_and_owned_group(tmp_pa
     assert json.loads((control.directory / (control.identity.key + ".terminal.json")).read_bytes())["reason"] == TIMEOUT
     control.terminal("completed")  # A late result cannot replace the timeout latch.
     assert control.terminal_reason == TIMEOUT
-    owned = {424242: (424242, "17", "S"), 424243: (os.getpgrp(), "18", "S")}
-    control._before_processes = {}
-    sent = []
-    monkeypatch.setattr(control, "_descendants", lambda: dict(owned))
-    monkeypatch.setattr(control, "_process", lambda pid: owned.get(pid))
-
-    def kill(target, sig):
-        sent.append((target, sig))
-        assert target != os.getpgrp()
-        if sig == signal.SIGKILL:
-            owned.pop(target, None)
-
-    monkeypatch.setattr(os, "kill", kill)
-    monkeypatch.setattr(os, "killpg", kill)
+    child = observation_kernel.spawn()
     assert control.stop_owned_processes()
-    assert sent == [(424242, signal.SIGTERM), (424243, signal.SIGTERM),
-                    (424242, signal.SIGKILL), (424243, signal.SIGKILL)]
+    assert observation_kernel.signals == [(child.pid, signal.SIGTERM), (child.pid, signal.SIGKILL)]
     control.finish_cleanup(True)
-    assert control.cleanup_complete and not owned
+    assert control.cleanup_complete and not observation_kernel.processes
 
 
 @pytest.mark.parametrize("case", ["claimed_elsewhere", "timer_in_use", "backwards_clock", "lease_replaced"])
@@ -970,7 +1374,7 @@ def test_time_budget_observation_deadline_v2_actual_factory(tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("case", ["success", "creation_timeout", "native_recovery", "late_success", "cleanup_expired"])
-def test_time_budget_observation_deadline_codex_actual_entry(tmp_path, monkeypatch, case):
+def test_time_budget_observation_deadline_codex_actual_entry(tmp_path, monkeypatch, observation_kernel, case):
     import core.codex_runner as native
     from core.codex_runtime_config import LoopbackCodexProvider
     from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT, CLEANUP_UNCONFIRMED
@@ -980,22 +1384,25 @@ def test_time_budget_observation_deadline_codex_actual_entry(tmp_path, monkeypat
     events = []
 
     class Process:
-        alive = True
+        child = None
 
-        def poll(self):
-            return None if self.alive else 0
-
-        def kill(self):
-            events.append("kill_owned_process")
-            self.alive = False
-
-        def wait(self, timeout):
-            assert 0 < timeout <= min(1, control.remaining_cleanup())
-            events.append("bounded_wait")
-            clock.advance(0.25)
-            return 0
+        @property
+        def alive(self):
+            return self.child is not None and self.child.alive
 
     process = Process()
+
+    def signalled(child, sig):
+        if child is process.child and sig == signal.SIGKILL:
+            events.append("kill_owned_process")
+
+    def reaping():
+        assert control._supervising and control.remaining_cleanup() > 0
+        events.append("bounded_wait")
+        clock.advance(0.25)
+
+    observation_kernel.on_signal = signalled
+    observation_kernel.on_blocking_wait = reaping
 
     def cleanup():
         events.append("remove")
@@ -1054,6 +1461,7 @@ def test_time_budget_observation_deadline_codex_actual_entry(tmp_path, monkeypat
 
     def open_runtime(*args, **kwargs):
         assert control.first_start is None
+        process.child = observation_kernel.spawn()
         clock.advance(2000)
         return SimpleNamespace(_client=SimpleNamespace(_proc=process), close=lambda: events.append("close_sdk"))
 
