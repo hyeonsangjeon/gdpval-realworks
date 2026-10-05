@@ -298,9 +298,36 @@ jobs:
           echo "pytest.ini deselects integration tests"
 
       - name: Run comparison contracts
+        id: comparison_tests
         run: |
           cd batch-runner
-          python -m pytest -m "not integration" --tb=short -q -rs tests/test_gpt54_codex_grading_input.py tests/test_gpt54_codex_input_capture.py tests/test_gpt54_comparison_preflight.py tests/test_gpt54_disposable_checkout.py tests/test_gpt54_prepared_input_attestation.py tests/test_gpt54_run_config_bundle.py tests/test_gpt54_run_input_bundle.py tests/test_gpt54_runtime_checkout.py tests/test_gpt54_time_budget_comparison.py tests/test_gpt54_v2_grading_input.py tests/test_gpt54_v2_input_capture.py tests/test_gpt54_workflow_gate.py
+          [[ ! -e "$RUNNER_TEMP/comparison-contracts.xml" && ! -L "$RUNNER_TEMP/comparison-contracts.xml" ]]
+          python -m pytest -m "not integration" --tb=short -q -rs --junitxml="$RUNNER_TEMP/comparison-contracts.xml" -o junit_family=xunit1 -o junit_logging=no tests/test_gpt54_codex_grading_input.py tests/test_gpt54_codex_input_capture.py tests/test_gpt54_comparison_preflight.py tests/test_gpt54_disposable_checkout.py tests/test_gpt54_prepared_input_attestation.py tests/test_gpt54_run_config_bundle.py tests/test_gpt54_run_input_bundle.py tests/test_gpt54_runtime_checkout.py tests/test_gpt54_time_budget_comparison.py tests/test_gpt54_v2_grading_input.py tests/test_gpt54_v2_input_capture.py tests/test_gpt54_workflow_gate.py
+
+      # One existing real-kernel case, never a second probe. Keep the bounded
+      # JUnit report temporary; retain only safe JSON in this step's summary.
+      - name: Require positive owned-host platform evidence
+        if: ${{ !cancelled() }}
+        timeout-minutes: 1
+        env:
+          PLATFORM_EXPECTED_SHA: ${{ github.sha }}
+          PLATFORM_RUN_ID: ${{ github.run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
+          PLATFORM_JOB: ${{ github.job }}
+          PLATFORM_TEST_OUTCOME: ${{ steps.comparison_tests.outcome }}
+          PLATFORM_RUNNER_NAME: ${{ runner.name }}
+          PLATFORM_RUNNER_OS: ${{ runner.os }}
+          PLATFORM_RUNNER_ARCH: ${{ runner.arch }}
+          PLATFORM_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python batch-runner/scripts/verify_time_budget_owned_host_ci.py \
+            --junit "$RUNNER_TEMP/comparison-contracts.xml" --summary "$GITHUB_STEP_SUMMARY" \
+            --expected-sha "$PLATFORM_EXPECTED_SHA" --run-id "$PLATFORM_RUN_ID" \
+            --run-attempt "$PLATFORM_RUN_ATTEMPT" --job "$PLATFORM_JOB" \
+            --test-outcome "$PLATFORM_TEST_OUTCOME" \
+            --runner-name "$PLATFORM_RUNNER_NAME" --runner-os "$PLATFORM_RUNNER_OS" \
+            --runner-arch "$PLATFORM_RUNNER_ARCH" --runner-environment "$PLATFORM_RUNNER_ENVIRONMENT"
 
   pilot-contracts:
     runs-on: ubuntu-latest

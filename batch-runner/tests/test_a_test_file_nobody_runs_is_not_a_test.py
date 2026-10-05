@@ -60,6 +60,69 @@ BUDGET_READOUT_RUN = (
     "cd batch-runner\n"
     f'python -m pytest -m "not integration" --tb=short -q -rs {BUDGET_READOUT_GLOB}\n'
 )
+OWNED_HOST_JUNIT_GUARD = (
+    '[[ ! -e "$RUNNER_TEMP/comparison-contracts.xml" '
+    '&& ! -L "$RUNNER_TEMP/comparison-contracts.xml" ]]'
+)
+OWNED_HOST_JUNIT_OPTIONS = (
+    ' --junitxml="$RUNNER_TEMP/comparison-contracts.xml"'
+    ' -o junit_family=xunit1 -o junit_logging=no'
+)
+OWNED_HOST_RECEIPT_STEP = {
+    "name": "Require positive owned-host platform evidence",
+    "if": "${{ !cancelled() }}",
+    "timeout-minutes": 1,
+    "env": {
+        "PLATFORM_EXPECTED_SHA": "${{ github.sha }}",
+        "PLATFORM_RUN_ID": "${{ github.run_id }}",
+        "PLATFORM_RUN_ATTEMPT": "${{ github.run_attempt }}",
+        "PLATFORM_JOB": "${{ github.job }}",
+        "PLATFORM_TEST_OUTCOME": "${{ steps.comparison_tests.outcome }}",
+        "PLATFORM_RUNNER_NAME": "${{ runner.name }}",
+        "PLATFORM_RUNNER_OS": "${{ runner.os }}",
+        "PLATFORM_RUNNER_ARCH": "${{ runner.arch }}",
+        "PLATFORM_RUNNER_ENVIRONMENT": "${{ runner.environment }}",
+    },
+    "run": '''set -euo pipefail
+python batch-runner/scripts/verify_time_budget_owned_host_ci.py \\
+  --junit "$RUNNER_TEMP/comparison-contracts.xml" --summary "$GITHUB_STEP_SUMMARY" \\
+  --expected-sha "$PLATFORM_EXPECTED_SHA" --run-id "$PLATFORM_RUN_ID" \\
+  --run-attempt "$PLATFORM_RUN_ATTEMPT" --job "$PLATFORM_JOB" \\
+  --test-outcome "$PLATFORM_TEST_OUTCOME" \\
+  --runner-name "$PLATFORM_RUNNER_NAME" --runner-os "$PLATFORM_RUNNER_OS" \\
+  --runner-arch "$PLATFORM_RUNNER_ARCH" --runner-environment "$PLATFORM_RUNNER_ENVIRONMENT"
+''',
+}
+
+
+def _without_owned_host_ci_evidence(workflow):
+    """Check every new metadata addition exactly before historical reconstruction."""
+    previous = deepcopy(workflow)
+    steps = previous["jobs"]["comparison-contracts"]["steps"]
+    assert len(steps) == 8
+    assert steps[-1] == OWNED_HOST_RECEIPT_STEP
+    assert sum(step.get("name") == OWNED_HOST_RECEIPT_STEP["name"]
+               for job in previous["jobs"].values() for step in job["steps"]) == 1
+    test_step = steps[-2]
+    assert set(test_step) == {"name", "id", "run"}
+    assert test_step["name"] == "Run comparison contracts"
+    assert test_step.pop("id") == "comparison_tests"
+    run = test_step["run"]
+    lines = run.splitlines()
+    assert len(lines) == 3 and lines[:2] == ["cd batch-runner", OWNED_HOST_JUNIT_GUARD]
+    tokens = shlex.split(lines[2])
+    assert tokens[:3] == ["python", "-m", "pytest"]
+    assert tokens.count("--junitxml=$RUNNER_TEMP/comparison-contracts.xml") == 1
+    assert tokens.count("-o") == 2
+    assert tokens.count("junit_family=xunit1") == tokens.count("junit_logging=no") == 1
+    assert run.count(OWNED_HOST_JUNIT_GUARD + "\n") == 1
+    assert run.count(OWNED_HOST_JUNIT_OPTIONS) == 1
+    test_step["run"] = run.replace(OWNED_HOST_JUNIT_GUARD + "\n", "", 1).replace(
+        OWNED_HOST_JUNIT_OPTIONS, "", 1,
+    )
+    steps.pop()
+    return previous
+
 
 # Every directory a pytest invocation in backend-tests.yml reaches. Adding a
 # test directory means adding a step there and a line here, in one commit.
@@ -85,12 +148,12 @@ def _pytest_target_arguments(args: list[str]) -> list[str]:
         if token == "--":
             targets.extend(tokens)
             break
-        if token in {"-k", "-m", "-r", "--tb", "--ignore", "--ignore-glob"}:
+        if token in {"-k", "-m", "-r", "-o", "--tb", "--ignore", "--ignore-glob", "--junitxml"}:
             value = next(tokens, None)
             assert value is not None and not value.startswith("-"), "missing pytest option value"
         elif token in {"-q", "-v"}:
             continue
-        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=", "--ignore-glob=")):
+        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=", "--ignore-glob=", "--junitxml=")):
             # Short attached values (-rs/-kexpr) and long --option=value forms.
             continue
         else:
@@ -323,9 +386,10 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
 
     # Captured before editing workflow bytes 19cd9099ad1e60865111d789207bd09fc8302095be7012eea75703c9490da09d.
     # Restore the old budget command and remove its readout job, then undo only
-    # PR749's two explicit time-budget test-inventory additions. Every other
-    # pre-existing job, trigger, permission and guard must match the baseline.
-    previous = deepcopy(workflow)
+    # PR749's two explicit time-budget test-inventory additions and the exact
+    # owned-host JUnit/receipt additions checked above. Every other pre-existing
+    # job, trigger, permission and guard must match the captured baseline.
+    previous = _without_owned_host_ci_evidence(workflow)
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
     time_budget_test = "tests/test_gpt54_time_budget_comparison.py"
@@ -408,7 +472,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
 
     text = WORKFLOW.read_text(encoding="utf-8")
     assert hashlib.sha256(WORKFLOW.read_bytes()).hexdigest() == CURRENT_WORKFLOW_SHA256
-    workflow = yaml.safe_load(text)
+    workflow = _without_owned_host_ci_evidence(yaml.safe_load(text))
     assert set(workflow) == {"name", True, "permissions", "concurrency", "jobs"}
     jobs = workflow["jobs"]
     assert set(jobs) == {
