@@ -11,6 +11,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Restrict frozen-grader preparation to the existing
+  `TimeBudgetObservation.terminal` reasons: `completed`, `failed`, `cancelled`,
+  `abandoned` and the imported `TIMEOUT` constant. A coherent result digest or
+  fingerprint no longer permits a nonterminal or unknown reason. Success still
+  requires `completed` and confirmed cleanup/reuse; valid failed/missing-output
+  rows remain intact. Source/input/result validators, F-derived output, core,
+  judge/configuration, workflows, source pins and launch gates are unchanged.
+
+  The leader-read basis was `ac61308aa5204ceb6ccb0e6415065622c3ac7ef3`, tree
+  `fbe5418b22cb32f868621394e4d5f211f89392d1`. One new eight-case selector at
+  `942fb0680b63ec80b3d5f924609de878ef7751d1`, tree
+  `e41d5d4bfb96f092814b3f642ef7bb72292b5af0`, reported **8 passed in 31.43s**,
+  exit 0, offline under 300 seconds plus 5 seconds termination grace, without
+  `-x`. Three nonterminal/unknown reasons refused before publication; all five
+  allowed reasons retained synthetic error results with ordinary F-derived
+  output and no provider/grader/network/admission effects. The original
+  **41 passed in 95.22s** at `3e81b74be73ff1a7a925d7780c9fbd9b896d7d6d`
+  remains separate and was not rerun; [its immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ac61308aa5204ceb6ccb0e6415065622c3ac7ef3/tasks/LATEST_TASK_RESULT/README.md)
+  preserves the command and evidence. This correction's post-proof delta is
+  CHANGELOG and LATEST only. PR753 remains untouched. Final-HEAD review,
+  applicable CI acceptance and source-bound live grading/input/provider gates
+  remain pending; no CI query, retry, polling or live operation occurred.
+
 ### Added
 
 - Add `gpt54_time_budget_grading_preparation.prepare_observation_grading` for
@@ -39,8 +64,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   reviewed `a9dd6d12ee52344d3f0e329d2d355d429a175df8`, review `5420090699`;
   its consumer code is not included. Production edits are confined to the new
   helper; the comparison compiler/manifest, core, frozen F, grader algorithm,
-  workflows, study policy and historical evidence are unchanged. The post-proof
-  delta is CHANGELOG and LATEST only. The [current record](tasks/LATEST_TASK_RESULT/README.md)
+  workflows, study policy and historical evidence are unchanged. Its original
+  post-proof delta was CHANGELOG and LATEST only. The [current record](tasks/LATEST_TASK_RESULT/README.md)
   gives exact output/evidence identities and the pre-edit charter review;
   [prior evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9dd6d12ee52344d3f0e329d2d355d429a175df8/tasks/LATEST_TASK_RESULT/README.md)
   remains separate. Final-HEAD review, applicable CI and source-bound live
