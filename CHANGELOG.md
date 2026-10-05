@@ -37,23 +37,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   Four passing handoffs covered tasks without references. Test-only correction
   `184cba2e042518c0e22af104c42e5ef0b099f4a9`, tree
   `63b03670161112bb0e5c4b3ab678e0dadd4b9ed0`, selects a declared reference task
-  and adds two positive reference-payload cases. The nine repaired and two new
-  cases are **unrun**, not a combined pass. No selector or successful subset was
-  repeated. The exact command/log/receipt identities and failed-node inventory
-  are in the single [current record](tasks/LATEST_TASK_RESULT/README.md).
+  and adds two positive reference-payload cases. The nine repaired cases and two
+  new positives were not rerun locally. They are covered by the supplied
+  successful corrected-HEAD CI, not an aggregate local pass. The exact private
+  command/log/receipt identities and failed-node inventory remain in the
+  [immutable local-proof record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/865c37fe662af11850cc2681f53bf136fdc65444/tasks/LATEST_TASK_RESULT/README.md).
+  Its command digest identifies the private script, not the redacted display.
 
-  The post-proof delta is the test correction and two completion records only;
-  production, manifest and usage README bytes still match the tested source.
+  The leader completed source review at
+  `865c37fe662af11850cc2681f53bf136fdc65444`, tree
+  `ae71f34e1d3787e584c05220de5b7780da19bab2`, with no blocking source finding.
+  All 11 applicable checks at that HEAD succeeded; PR-only deploy was skipped.
+  The leader-read [comparison job](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37345048041/job/111881404006),
+  run `37345048041`, job `111881404006`, attempt 1, reported **1410 passed in
+  1008.64s**, with no failed, skipped or deselected cases in its final result.
+  Its log SHA256 is
+  `da26d6a2768d32eeefe073ea451cb35e4f67d566e71a4f5e76a889c19d19a2d1`.
+  The same job emitted a positive model-free owned-host receipt at source
+  `55ee47386c97058863a5ceefb6c1e358f7f41940`, tree
+  `ae71f34e1d3787e584c05220de5b7780da19bab2`. The receipt's source commit differs
+  from the reviewed PR HEAD; their supplied trees are equal. This is CI host
+  evidence, not a study observation or live authority.
+
+  Between the local proof and the reviewed HEAD, only the test correction and
+  two completion records changed. Production, manifest and usage README bytes
+  still matched the tested implementation. This reconciliation changes
+  only CHANGELOG and LATEST; all source/test/config/pin/usage README bytes remain
+  unchanged. The [current record](tasks/LATEST_TASK_RESULT/README.md) keeps these
+  evidence stages distinct.
   The accepted basis is `36ba69e59e4196d653ca046e064809ca2a8f5bb3`, tree
   `2d96778657188d7a80c32076fd6121707eb790f0`, following the supplied PR751 source
-  and actual-host receipt reviews. That positive model-free CI host receipt is
-  limited to its exact source/host; it is not this task's validation or launch
-  authority. [Prior proofs and the distinct NAS refusal](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0e270b67b3c7f63b8f94f945c4839b778c7572b/tasks/LATEST_TASK_RESULT/README.md)
-  remain immutable. Repaired-case evidence, full-HEAD review and applicable CI
-  acceptance are pending. The next execution integration is one handoff
-  consumer supplying the required control; host/input/live-dispatch/capture
-  and F-derived grading gates remain closed. No real preparation, provider call,
-  platform probe or CI query/dispatch occurred.
+  and actual-host receipt reviews. [Prior proofs, PR751 host evidence and the
+  distinct NAS refusal](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0e270b67b3c7f63b8f94f945c4839b778c7572b/tasks/LATEST_TASK_RESULT/README.md)
+  remain immutable and separate. Final docs-HEAD review and applicable CI
+  acceptance remain pending. The next execution integration is one handoff
+  consumer supplying the required control; host/input/provider/live-dispatch/
+  capture and F-derived grading gates remain closed. No test, platform probe,
+  real preparation, provider call or CI query/dispatch/rerun occurred in this
+  records-only update.
 
 ### Fixed
 
