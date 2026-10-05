@@ -13,9 +13,9 @@ import json
 import os
 import re
 import subprocess
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
 
@@ -54,6 +54,7 @@ from gpt54_run_input_bundle import (
 from gpt54_v2_grading_input import _read_bytes
 
 READY_PATH = "comparison-checkout-ready.json"
+_MAX_ANCHORED_METADATA_BYTES = 1024 * 1024
 
 
 class DisposableCheckoutRefused(ValueError):
@@ -342,13 +343,68 @@ def _runtime_revision(checkout: Path, sha: str, tree: str) -> tuple[Path, Path]:
     return common, gitdir
 
 
-def verify_runtime_checkout(*, checkout: Path, run_id: str, condition: str) -> dict[str, Any]:
+@contextmanager
+def _anchored_runtime_manifest(
+    root: Path, held: dict[str, Any], expected_sha: str,
+) -> Iterator[tuple[str, bytes]]:
+    """A held config marker supplies a locator, never source-review authority."""
+    config_identity = held["bundles"]["config"]
+    _same("anchored config marker path", config_identity["path"], CONFIG_READY_PATH)
+    size = config_identity["size"]
+    if type(size) is not int or not 0 < size <= _MAX_ANCHORED_METADATA_BYTES:
+        raise DisposableCheckoutRefused("anchored config marker size exceeds the metadata bound")
+    _same("anchored config marker size", (root / CONFIG_READY_PATH).lstat().st_size, size)
+    config_data = _read_bytes(root / CONFIG_READY_PATH, size=size, sha256=config_identity["sha256"])
+    _same("anchored config marker identity", config_identity, {
+        "path": CONFIG_READY_PATH, **_identity(config_data),
+    })
+    identity = _json_object(config_data)["manifest_file"]
+    manifest_path = identity["path"]
+    source = _manifest_file(root, manifest_path)
+    size = identity["size"]
+    if type(size) is not int or not 0 < size <= _MAX_ANCHORED_METADATA_BYTES:
+        raise DisposableCheckoutRefused("anchored manifest size exceeds the metadata bound")
+    with _held_parents(root, (manifest_path,)) as check_source:
+        _same("anchored manifest size", source.lstat().st_size, size)
+        data = _read_bytes(source, size=size, sha256=identity["sha256"])
+        _same("anchored manifest identity", identity, {"path": manifest_path, **_identity(data)})
+        # Inspect only the selected tree entry, not the index or the whole source
+        # tree. A matching mutable manifest/config/ready set is not sufficient.
+        entries = _git(root, "ls-tree", "-z", "--full-tree", expected_sha, "--", manifest_path).stdout
+        rows = entries.split(b"\0")
+        if len(rows) != 2 or rows[1] != b"":
+            raise DisposableCheckoutRefused("anchored manifest requires one exact tracked blob")
+        metadata, name = rows[0].split(b"\t", 1)
+        mode, kind, oid = metadata.split()
+        if (name != manifest_path.encode("utf-8") or mode not in (b"100644", b"100755")
+                or kind != b"blob" or re.fullmatch(rb"[0-9a-f]{40}", oid) is None):
+            raise DisposableCheckoutRefused("anchored manifest requires a regular tracked blob")
+        # Check the immutable object's length before asking Git for its bytes.
+        blob_sha = oid.decode("ascii")
+        if _git(root, "cat-file", "-s", blob_sha).stdout != str(size).encode("ascii") + b"\n":
+            raise DisposableCheckoutRefused("anchored manifest tracked blob size mismatch")
+        if _git(root, "cat-file", "blob", blob_sha).stdout != data:
+            raise DisposableCheckoutRefused("anchored manifest differs from the reviewed commit blob")
+        yield manifest_path, data
+        _read_bytes(_manifest_file(root, manifest_path), **_identity(data))
+        check_source()
+
+
+def verify_runtime_checkout(
+    *, checkout: Path, run_id: str, condition: str,
+    expected_reviewed_source_sha: str | None = None,
+) -> dict[str, Any]:
     """Verify one prepared checkout in place before provider construction.
 
     Args:
         checkout: Current run checkout, not the preparer's external source tree.
         run_id: Exact registered run requested by the runtime.
         condition: The runtime's condition, either sandbox_v2 or codex.
+        expected_reviewed_source_sha: Optional independent caller-reviewed full
+            commit SHA, never inferred from the checkout, markers or environment.
+            Supplying it permits read-only selection of the config marker's
+            tracked manifest blob at that commit. Omission retains the historical
+            manifest path; neither mode grants permission to execute a run.
 
     Returns:
         The unchanged canonical preparation marker, never launch authorization.
@@ -360,7 +416,11 @@ def verify_runtime_checkout(*, checkout: Path, run_id: str, condition: str) -> d
     try:
         root = _root(checkout)
         reservation, quarantine = _sidecars(root)
-        with _held_parents(root.parent, (root.name,)) as check_parent, _held_parents(root, (READY_PATH,)) as check_root:
+        with (
+            _held_parents(root.parent, (root.name,)) as check_parent,
+            _held_parents(root, (READY_PATH,)) as check_root,
+            ExitStack() as held_manifest,
+        ):
             if os.path.lexists(quarantine):
                 raise DisposableCheckoutRefused("quarantined runtime checkout cannot be used")
             held_ready = _read_bytes(root / READY_PATH)
@@ -371,8 +431,26 @@ def verify_runtime_checkout(*, checkout: Path, run_id: str, condition: str) -> d
                 raise DisposableCheckoutRefused("runtime checkout requires full commit/tree identities")
             if type(run_id) is not str or type(condition) is not str:
                 raise DisposableCheckoutRefused("exact runtime run and condition required")
+            if expected_reviewed_source_sha is not None:
+                if (type(expected_reviewed_source_sha) is not str
+                        or re.fullmatch(r"[0-9a-f]{40}", expected_reviewed_source_sha) is None):
+                    raise DisposableCheckoutRefused("an independent reviewed full lowercase 40-hex commit SHA is required")
+                if sha != expected_reviewed_source_sha:
+                    raise DisposableCheckoutRefused("runtime checkout differs from the expected reviewed commit")
+                sha = expected_reviewed_source_sha
+                if _git(root, "cat-file", "-t", sha).stdout != b"commit\n":
+                    raise DisposableCheckoutRefused("expected reviewed source must name a commit object")
+                if _git(root, "rev-parse", "--verify", "--end-of-options", sha + "^{tree}").stdout != tree.encode("ascii") + b"\n":
+                    raise DisposableCheckoutRefused("runtime checkout tree differs from the expected reviewed commit")
             revision = _runtime_revision(root, sha, tree)
-            manifest = yaml.safe_load(_read_bytes(root / MANIFEST_PATH))
+            manifest_path = MANIFEST_PATH
+            if expected_reviewed_source_sha is None:
+                manifest_data = _read_bytes(root / manifest_path)
+            else:
+                manifest_path, manifest_data = held_manifest.enter_context(
+                    _anchored_runtime_manifest(root, held, expected_reviewed_source_sha),
+                )
+            manifest = yaml.safe_load(manifest_data)
             plan = compile_grading_plan(manifest)
             index = next(index for index, run in enumerate(plan.dispatch.runs) if run.run_id == run_id)
             _same("runtime checkout condition", condition, plan.dispatch.runs[index].condition)
@@ -381,7 +459,7 @@ def verify_runtime_checkout(*, checkout: Path, run_id: str, condition: str) -> d
             expected_reservation = _reservation(plan, index, sha)
             if _read_bytes(reservation) != expected_reservation:
                 raise DisposableCheckoutRefused("runtime checkout reservation mismatch")
-            marker = _marker(root, plan, index, sha, {"tree_sha": tree})
+            marker = _marker(root, plan, index, sha, {"tree_sha": tree}, manifest_path)
             expected = _canonical_json(marker).encode("utf-8")
             if held_ready != expected:
                 raise DisposableCheckoutRefused("runtime checkout-ready marker mismatch")
