@@ -553,7 +553,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt56_*.py")
     )
-    assert len(comparison_files) == 11 and len(pilot_files) == 9
+    assert len(comparison_files) == 12 and len(pilot_files) == 9
     wire_file = "tests/test_gpt56_pilot_wire_receipt.py"
     pilot_preflight_file = "tests/test_gpt56_sol_codex_pilot_preflight.py"
     publication_functions = (
