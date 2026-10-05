@@ -18,6 +18,8 @@ import pytest
 
 import gpt54_comparison_preflight as historical
 import gpt54_time_budget_comparison as prospective
+from core.codex_runner import CodexAgentRunner as _REAL_CODEX_RUNNER
+from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend as _FIXTURE_BACKEND
 from core.execution_envelope_tasks import load_task_catalog, select_advance_check_tasks
 from gpt54_codex_input_capture import (
     ComparisonRuntimeLaunchRefused,
@@ -28,6 +30,7 @@ from . import test_codex_retention_task4_fresh_r1 as retained_fixture
 from . import test_codex_retention_budget_report as retention_report
 
 _REAL_RUN, _REAL_POPEN = subprocess.run, subprocess.Popen
+_FIXTURE_BACKEND_INIT = _FIXTURE_BACKEND.__init__
 
 
 @pytest.fixture(scope="module")
@@ -85,7 +88,8 @@ def _compile(plan, roots):
 
 @pytest.fixture(autouse=True)
 def model_free(monkeypatch, request, dual_roots):
-    handoff_case = "time_budget_observation_handoff" in request.node.name
+    consumer_case = "time_budget_handoff_consumer" in request.node.name
+    handoff_case = "time_budget_observation_handoff" in request.node.name or consumer_case
     handoff = request.getfixturevalue("handoff_source_seed") if handoff_case else None
     deadline_case = "time_budget_observation_deadline" in request.node.name
     if deadline_case:
@@ -139,7 +143,7 @@ def model_free(monkeypatch, request, dual_roots):
         "pandas.read_parquet",
     ):
         monkeypatch.setattr(name, forbidden)
-    if handoff_case:
+    if handoff_case and not consumer_case:
         from core.time_budget_observation_deadline import TimeBudgetObservation
 
         monkeypatch.setattr(TimeBudgetObservation, "__init__", forbidden)
@@ -2123,6 +2127,201 @@ def test_time_budget_observation_handoff_valid_exact_shape(handoff_sources, tmp_
     assert before == {path: path.read_bytes() for path in output.rglob("*") if path.is_file()}
 
 
+@pytest.mark.parametrize("case", [
+    "wrong_preparation", "missing_preparation", "malformed_size", "unknown_run", "cross_task",
+    "missing_runtime_anchor", "wrong_runtime_anchor", "swapped_roots", "wrong_input_anchor",
+    "different_input_locator", "input_drift", "codex_step0_drift", "v2_step0_forbidden",
+    "marker_bytes", "marker_duplicate_key", "coherent_other_observation", "coherent_source",
+    "config_factory", "control_identity", "duplicate_reference", "member_size",
+    "reference_bytes", "reservation_binding", "extra_file", "extra_directory", "missing_member",
+    "symlink_member", "hardlink_member", "path_alias", "partial", "used",
+])
+def test_time_budget_handoff_consumer_refuses_before_effects(handoff_sources, dual_roots, tmp_path, monkeypatch, case):
+    from gpt54_prepared_input_attestation import _identity
+
+    seed = handoff_sources
+    condition = "codex" if case == "codex_step0_drift" else "sandbox_v2"
+    marker, arguments = _consumer_arguments(seed, tmp_path, condition=condition)
+    output = arguments["preparation_directory"]
+    reservation = output.with_name(output.name + prospective.HANDOFF_RESERVATION_SUFFIX)
+    ready = output / prospective.HANDOFF_READY
+    effects = _consumer_no_effects(monkeypatch, arguments)
+    restore = []
+
+    def replace_bytes(path, data):
+        restore.append((path, path.read_bytes()))
+        path.write_bytes(data)
+
+    def rebind_marker(*, new_external_expectation=False):
+        raw = historical._canonical_json(marker).encode()
+        ready.write_bytes(raw)
+        reservation.write_bytes(historical._canonical_json({
+            "reservation_version": "gpt54-time-budget-preparation-reservation-v1",
+            "intended_preparation": _identity(raw), "ready_path": prospective.HANDOFF_READY,
+        }).encode())
+        if new_external_expectation:
+            # Deliberately declare an invalid preparation as the caller's
+            # expectation: an external digest alone cannot waive semantics.
+            arguments["expected_preparation_identity"] = _identity(raw)
+
+    if case == "wrong_preparation":
+        arguments["expected_preparation_identity"]["sha256"] = "0" * 64
+    elif case == "missing_preparation":
+        arguments["expected_preparation_identity"] = None
+    elif case == "malformed_size":
+        arguments["expected_preparation_identity"]["size"] = True
+    elif case == "unknown_run":
+        arguments["run_id"] = "outside-study"
+    elif case == "cross_task":
+        arguments["task_id"] = seed.task_ids[1]
+    elif case == "missing_runtime_anchor":
+        arguments["expected_reviewed_source_sha"] = None
+    elif case == "wrong_runtime_anchor":
+        arguments["expected_reviewed_source_sha"] = "0" * 40
+    elif case == "swapped_roots":
+        arguments["runtime_root"], arguments["frozen_grader_root"] = seed.frozen, seed.runtime
+    elif case == "wrong_input_anchor":
+        arguments["expected_input_source_sha"] = seed.runtime_sha
+    elif case == "different_input_locator":
+        arguments["input_registration_path"] = seed.input_only_role
+    elif case == "input_drift":
+        replace_bytes(seed.parquet, seed.parquet.read_bytes() + b"synthetic drift")
+    elif case == "codex_step0_drift":
+        replace_bytes(seed.step0, seed.step0.read_bytes() + b" ")
+    elif case == "v2_step0_forbidden":
+        arguments["step0_manifest"] = tmp_path / "must-never-read-step0"
+    elif case == "marker_bytes":
+        ready.write_bytes(ready.read_bytes() + b" ")
+    elif case == "marker_duplicate_key":
+        raw = b'{"preparation_version":"duplicate",' + ready.read_bytes()[1:]
+        ready.write_bytes(raw)
+        arguments["expected_preparation_identity"] = _identity(raw)
+    elif case == "coherent_other_observation":
+        preparation = _handoff_arguments(seed, tmp_path, task_index=1)
+        preparation["destination"] = output.with_name("other-observation")
+        prospective.prepare_observation_handoff(seed.plan, **preparation)
+        output.rename(output.with_name("saved-original"))
+        preparation["destination"].rename(output)
+        other_reservation = preparation["destination"].with_name(
+            preparation["destination"].name + prospective.HANDOFF_RESERVATION_SUFFIX)
+        reservation.write_bytes(other_reservation.read_bytes())
+        # A complete genuinely prepared replacement still lacks the caller's
+        # independent original expectation. No hand-edited partial fixture.
+    elif case == "coherent_source":
+        arguments["runtime_root"] = dual_roots["substitute"]
+        marker["runtime_source"]["source_sha"] = dual_roots["substitute_sha"]
+        marker["observation"]["reviewed_source_sha"] = dual_roots["substitute_sha"]
+        marker["observation_control"]["identity"] = deepcopy(marker["observation"])
+        configuration = json.loads((output / prospective.HANDOFF_CONFIG).read_bytes())
+        configuration["observation_control"]["identity"] = deepcopy(marker["observation"])
+        raw = historical._canonical_json(configuration).encode()
+        (output / prospective.HANDOFF_CONFIG).write_bytes(raw)
+        marker["files"][prospective.HANDOFF_CONFIG] = _identity(raw)
+        rebind_marker(new_external_expectation=True)
+        # The independently expected R anchor remains the genuine original,
+        # so the actual replacement Git HEAD must refuse before input effects.
+    elif case in ("config_factory", "control_identity", "duplicate_reference"):
+        name = prospective.HANDOFF_TASK if case == "duplicate_reference" else prospective.HANDOFF_CONFIG
+        changed = json.loads((output / name).read_bytes())
+        if case == "config_factory":
+            changed["factory"] = "subprocess.Popen"
+        elif case == "control_identity":
+            changed["observation_control"]["identity"]["task_id"] = seed.task_ids[1]
+            marker["observation_control"] = deepcopy(changed["observation_control"])
+        else:
+            changed["arguments"]["reference_files"] *= 2
+            changed["reference_file_records"] *= 2
+        raw = historical._canonical_json(changed).encode()
+        (output / name).write_bytes(raw)
+        marker["files"][name] = _identity(raw)
+        rebind_marker(new_external_expectation=True)
+    elif case == "member_size":
+        marker["files"][prospective.HANDOFF_CONFIG]["size"] += 1
+        rebind_marker(new_external_expectation=True)
+    elif case == "reference_bytes":
+        (output / marker["inputs"]["reference_file_records"][0]["path"]).write_bytes(b"synthetic alteration")
+    elif case == "reservation_binding":
+        value = json.loads(reservation.read_bytes())
+        value["intended_preparation"]["sha256"] = "0" * 64
+        reservation.write_bytes(historical._canonical_json(value).encode())
+    elif case == "extra_file":
+        (output / "unregistered.txt").write_bytes(b"extra")
+    elif case == "extra_directory":
+        (output / "unregistered").mkdir()
+    elif case == "missing_member":
+        (output / prospective.HANDOFF_CONFIG).unlink()
+    elif case == "symlink_member":
+        config = output / prospective.HANDOFF_CONFIG
+        saved = tmp_path / "external-config.json"
+        config.rename(saved)
+        config.symlink_to(saved)
+    elif case == "hardlink_member":
+        os.link(output / prospective.HANDOFF_CONFIG, tmp_path / "aliased-config.json")
+    elif case == "path_alias":
+        alias = tmp_path / "aliased-handoff"
+        alias.symlink_to(output, target_is_directory=True)
+        arguments["preparation_directory"] = alias
+    elif case == "partial":
+        ready.unlink()
+    elif case == "used":
+        _consumer_claim(arguments).write_bytes(b"partial consumption; do not adopt")
+    else:
+        raise AssertionError(case)
+
+    try:
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused) as error:
+            prospective.consume_observation_handoff(seed.plan, **arguments)
+        assert "direction" not in str(error.value), "a negative must reach its real identity/member refusal"
+        assert effects == []
+        assert list(arguments["observation_directory"].iterdir()) == []
+        if case == "used":
+            assert _consumer_claim(arguments).read_bytes() == b"partial consumption; do not adopt"
+        else:
+            assert not _consumer_claim(arguments).exists()
+    finally:
+        for path, data in restore:
+            path.write_bytes(data)
+
+
+@pytest.mark.parametrize("race", ["marker", "reservation", "reference", "parent", "runtime", "input"])
+def test_time_budget_handoff_consumer_final_rereads(handoff_sources, tmp_path, monkeypatch, race):
+    import shutil
+
+    seed = handoff_sources
+    marker, arguments = _consumer_arguments(seed, tmp_path)
+    output = arguments["preparation_directory"]
+    effects = _consumer_no_effects(monkeypatch, arguments)
+    restore = []
+
+    def direction(binding):
+        effects.append("direction")
+        assert json.loads(binding.observation_json) == marker["observation"]
+        if race == "parent":
+            moved = output.with_name("moved-held-handoff")
+            output.rename(moved)
+            shutil.copytree(moved, output)
+            return
+        target = {
+            "marker": output / prospective.HANDOFF_READY,
+            "reservation": output.with_name(output.name + prospective.HANDOFF_RESERVATION_SUFFIX),
+            "reference": output / marker["inputs"]["reference_file_records"][0]["path"],
+            "runtime": seed.runtime / "batch-runner/core/codex_runner.py",
+            "input": seed.parquet,
+        }[race]
+        restore.append((target, target.read_bytes()))
+        target.write_bytes(target.read_bytes() + b"\n# synthetic final-reread drift\n")
+
+    arguments["require_execution_direction"] = direction
+    try:
+        with pytest.raises(prospective.TimeBudgetRegistrationRefused):
+            prospective.consume_observation_handoff(seed.plan, **arguments)
+        assert effects == ["direction"] and not _consumer_claim(arguments).exists()
+        assert list(arguments["observation_directory"].iterdir()) == []
+    finally:
+        for path, data in restore:
+            path.write_bytes(data)
+
+
 @pytest.mark.parametrize("case,reason", [
     ("unknown_run", "exactly_one_registered_observation_required"),
     ("old_run", "exactly_one_registered_observation_required"),
@@ -2375,3 +2574,312 @@ def test_time_budget_observation_handoff_valid_reference_payload(handoff_sources
     assert marker["launch_authority"]["launch_allowed"] is False
     with pytest.raises(ComparisonRuntimeLaunchRefused, match="^comparison_runtime_launch_refused$"):
         require_comparison_runtime_launch()
+
+
+def _consumer_arguments(seed, tmp_path, *, condition="sandbox_v2", task_index=2):
+    """Retain the preparer's returned identity independently, before mutations."""
+    from gpt54_prepared_input_attestation import _identity
+
+    preparation = _handoff_arguments(seed, tmp_path, condition=condition, task_index=task_index)
+    marker = prospective.prepare_observation_handoff(seed.plan, **preparation)
+    expected = _identity(historical._canonical_json(marker).encode())
+    store = tmp_path / "consumer-observations"
+    store.mkdir(mode=0o700)
+    arguments = {name: value for name, value in preparation.items() if name != "destination"}
+    arguments.update(preparation_directory=preparation["destination"], expected_preparation_identity=expected,
+                     observation_directory=store)
+    return marker, arguments
+
+
+def _consumer_claim(arguments):
+    output = arguments["preparation_directory"]
+    return output.with_name(output.name + prospective.HANDOFF_CONSUMED_SUFFIX)
+
+
+def _consumer_no_effects(monkeypatch, arguments):
+    from core.time_budget_observation_deadline import TimeBudgetObservation
+
+    effects = []
+
+    def forbidden(*args, **kwargs):
+        effects.append("effect")
+        pytest.fail("consumer reached admission/provider/factory before validation/direction")
+
+    monkeypatch.setattr(TimeBudgetObservation, "__init__", forbidden)
+    arguments["require_execution_direction"] = lambda binding: effects.append("direction")
+    if "_codex_" in arguments["run_id"]:
+        arguments["codex_provider_for"] = forbidden
+    else:
+        arguments.update(v2_backend_factory=forbidden, v2_voice_for=forbidden)
+    return effects
+
+
+@pytest.mark.parametrize("condition", ["sandbox_v2", "codex"])
+@pytest.mark.parametrize("direction", ["missing", "boolean", "denied", "approval_bit"])
+def test_time_budget_handoff_consumer_direction_is_independent(
+    handoff_sources, tmp_path, monkeypatch, condition, direction,
+):
+    _, arguments = _consumer_arguments(handoff_sources, tmp_path, condition=condition)
+    effects = _consumer_no_effects(monkeypatch, arguments)
+    if direction == "missing":
+        arguments.pop("require_execution_direction")
+    elif direction == "boolean":
+        arguments["require_execution_direction"] = True
+    elif direction == "approval_bit":
+        arguments["require_execution_direction"] = lambda binding: True
+    else:
+        def refuse(binding):
+            raise prospective.TimeBudgetConsumptionRefused("independent_direction_denied")
+        arguments["require_execution_direction"] = refuse
+    with pytest.raises(prospective.TimeBudgetConsumptionRefused, match="direction"):
+        prospective.consume_observation_handoff(handoff_sources.plan, **arguments)
+    assert effects == [] and not _consumer_claim(arguments).exists()
+    assert list(arguments["observation_directory"].iterdir()) == []
+
+
+@pytest.mark.parametrize("condition,task_index", [
+    ("sandbox_v2", 0), ("sandbox_v2", 2), ("codex", 0), ("codex", 2),
+])
+def test_time_budget_handoff_consumer_real_factory_binding(
+    handoff_sources, tmp_path, monkeypatch, observation_kernel, condition, task_index,
+):
+    import core.agentic_v2_conversation_runner as v2
+    import core.codex_runner as native
+    import core.time_budget_observation_deadline as deadline
+    from core.agentic_v2_conversation import AskForTool
+    from core.codex_runtime_config import CodexProviderLike
+    from core.reference_integrity import VerifiedReferencePath
+
+    seed = handoff_sources
+    marker, arguments = _consumer_arguments(seed, tmp_path, condition=condition, task_index=task_index)
+    configuration = json.loads((arguments["preparation_directory"] / prospective.HANDOFF_CONFIG).read_bytes())
+    payload = json.loads((arguments["preparation_directory"] / prospective.HANDOFF_TASK).read_bytes())
+    clock, events, controls, actual_arguments = _Clock(), [], [], []
+    original_init = deadline.TimeBudgetObservation.__init__
+    original_build = v2.build_runner_factory
+
+    def admit(control, directory, identity):
+        assert events == ["direction"] and _consumer_claim(arguments).is_file()
+        assert json.loads(_consumer_claim(arguments).read_bytes())["observation"] == marker["observation"]
+        assert identity == deadline.ObservationIdentity(**marker["observation"])
+        original_init(control, directory, identity, clock=clock)
+        controls.append(control)
+        events.append("admission")
+        assert control.first_start is None
+
+    def direction(binding):
+        assert not _consumer_claim(arguments).exists()
+        assert list(arguments["observation_directory"].iterdir()) == []
+        assert binding == prospective.ObservationExecutionBinding(
+            arguments["expected_preparation_identity"]["sha256"], arguments["expected_preparation_identity"]["size"],
+            historical._canonical_json(marker["observation"]), seed.frozen_sha, seed.frozen_tree,
+            prospective.FROZEN_TEMPLATE_SHA256, str(arguments["preparation_directory"]),
+            str(arguments["observation_directory"]),
+        )
+        with pytest.raises(FrozenInstanceError):
+            binding.preparation_sha256 = "0" * 64
+        events.append("direction")
+        clock.advance(2000)
+
+    def check_references(references):
+        assert len(references) == len(payload["reference_file_records"])
+        for value, record in zip(references, payload["reference_file_records"]):
+            assert type(value) is VerifiedReferencePath
+            assert value.declared_path == record["path"]
+            assert (value.sha256, value.size) == (record["sha256"], record["size"])
+            assert Path(value) == arguments["preparation_directory"] / record["path"]
+            assert hashlib.sha256(Path(value).read_bytes()).hexdigest() == value.sha256
+
+    monkeypatch.setattr(deadline.TimeBudgetObservation, "__init__", admit)
+    arguments["require_execution_direction"] = direction
+    if condition == "sandbox_v2":
+        monkeypatch.setattr(_FIXTURE_BACKEND, "__init__", _FIXTURE_BACKEND_INIT)
+
+        class Backend(_FIXTURE_BACKEND):
+            def start(self, timeout):
+                assert controls[0]._claimed and controls[0].first_start is None
+                events.append("backend_start")
+                clock.advance(500)
+                return super().start(timeout)
+
+        class Voice:
+            makes_paid_calls = False
+
+            def next_turn(self, request):
+                control = controls[0]
+                assert control.first_start == 2600 and control._claimed
+                events.append("generation")
+                clock.advance(0.25)
+                if request.turn == 1:
+                    return AskForTool("write", "workspace_apply", {
+                        "operation": "write", "path": "report.txt", "content": "synthetic consumer result",
+                    }, input_tokens=20, output_tokens=10)
+                return AskForTool("finalize", "finalize", {
+                    "deliverables": ["report.txt"], "summary": "synthetic consumer result",
+                }, input_tokens=30, output_tokens=15)
+
+        def voice_for(config, budget):
+            assert config == configuration["configuration"]
+            assert config["model"]["reasoning_effort"] == "xhigh"
+            assert config["fixed_settings"]["retry_max_attempts"] == 1
+            assert budget.max_model_calls == 9 and budget.model_calls_made == 0
+            assert controls[0].first_start is None
+            events.append("voice_factory")
+            return Voice()
+
+        def build(**kwargs):
+            control = controls[0]
+            assert kwargs["observation_for"](arguments["task_id"], 1) is control
+            for task, attempt in ((seed.task_ids[1], 1), (arguments["task_id"], 2), (arguments["task_id"], True)):
+                with pytest.raises(prospective.TimeBudgetConsumptionRefused, match="observation_factory_selection"):
+                    kwargs["observation_for"](task, attempt)
+            assert events == ["direction", "admission"]
+            events.append("v2_factory")
+            real_factory = original_build(**kwargs)
+
+            def for_task(task):
+                assert task.prompt == seed.rows[task_index]["prompt"]
+                check_references(task.reference_files)
+                runner = real_factory(task)
+                assert runner.observation_control is control
+                original_run = runner.run
+
+                def run(**values):
+                    actual_arguments.append(values)
+                    return original_run(**values)
+
+                runner.run = run
+                return runner
+
+            return for_task
+
+        monkeypatch.setattr(v2, "build_runner_factory", build)
+        arguments.update(v2_backend_factory=lambda **kw: Backend(root=tmp_path / "synthetic-backend", **kw),
+                         v2_voice_for=voice_for)
+    else:
+        class Provider(CodexProviderLike):
+            def __init__(self, config):
+                self.__dict__.update(config["execution"]["codex"])
+
+        def provider_for(config):
+            assert config == configuration["configuration"]
+            assert config["data"]["filter"]["task_ids"] == [arguments["task_id"]]
+            assert config["execution"]["max_retries"] == config["execution"]["resume_max_rounds"] == 0
+            assert controls[0].first_start is None and not controls[0]._claimed
+            events.append("provider_factory")
+            return Provider(config)
+
+        def build(provider, **kwargs):
+            assert kwargs == {"timeout": 1200, "run_id": arguments["run_id"], "condition_name": "codex",
+                              "observation_control": controls[0]}
+            events.append("codex_factory")
+            runner = _REAL_CODEX_RUNNER(provider, **kwargs)
+            assert runner.observation_control is controls[0] and runner.preflight_auth is True
+
+            def transport(**values):
+                control = controls[0]
+                assert control._claimed and control.first_start is None
+                actual_arguments.append(values)
+                check_references(values["reference_files"])
+                # Only the native transport is substituted. The real run()
+                # claims and finalizes the genuine control around this adapter.
+                with control.supervise():
+                    control.start()
+                    events.append("generation")
+                    clock.advance(0.5)
+                    control.check_generation()
+                return {"success": True, "synthetic_transport": True}
+
+            monkeypatch.setattr(runner, "_run", transport)
+            return runner
+
+        monkeypatch.setattr(native, "require_pinned_runtime", lambda: events.append("runtime_version_seam"))
+        monkeypatch.setattr(native, "CodexAgentRunner", build)
+        arguments["codex_provider_for"] = provider_for
+
+    result = prospective.consume_observation_handoff(seed.plan, **arguments)
+    assert result["success"] is True
+    assert result["handoff_preparation_identity"] == arguments["expected_preparation_identity"]
+    assert result["time_budget_observation"] == controls[0].as_record()
+    assert controls[0].identity == deadline.ObservationIdentity(**marker["observation"])
+    assert controls[0].terminal_reason == "completed" and controls[0].cleanup_complete is True
+    assert result["time_budget_observation"]["remote_cancellation_confirmed"] is False
+    assert result["time_budget_observation"]["generation_elapsed_seconds"] == 0.5
+    assert len(actual_arguments) == 1
+    values = actual_arguments[0]
+    assert values["task_prompt"] == seed.rows[task_index]["prompt"]
+    assert (values["run_id"], values["condition_name"], values["task_id"]) == (
+        arguments["run_id"], condition, arguments["task_id"],
+    )
+    assert "rubric" not in json.dumps(values) and "withheld" not in json.dumps(values)
+    if condition == "codex":
+        assert values["model"] == "gpt-5.4"
+        assert values["experiment_prompt"] == payload["arguments"]["experiment_prompt"]
+    before = list(events)
+    with pytest.raises(prospective.TimeBudgetConsumptionRefused, match="already_consumed"):
+        prospective.consume_observation_handoff(seed.plan, **arguments)
+    with pytest.raises(deadline.ObservationDeadlineRefused):
+        original_init(object.__new__(deadline.TimeBudgetObservation), arguments["observation_directory"],
+                      controls[0].identity, clock=clock)
+    assert events == before
+    assert _consumer_claim(arguments).is_file()
+    assert not (arguments["observation_directory"] / "host-lease.json").exists()
+    with pytest.raises(ComparisonRuntimeLaunchRefused):
+        require_comparison_runtime_launch()
+    assert marker["launch_authority"]["launch_allowed"] is marker["launch_authority"]["execution_enabled"] is False
+
+
+@pytest.mark.parametrize("condition", ["sandbox_v2", "codex"])
+def test_time_budget_handoff_consumer_failed_factory_is_nonrenewable(
+    handoff_sources, tmp_path, monkeypatch, observation_kernel, condition,
+):
+    import core.time_budget_observation_deadline as deadline
+
+    marker, arguments = _consumer_arguments(handoff_sources, tmp_path, condition=condition)
+    controls, effects, clock = [], [], _Clock()
+    original_init = deadline.TimeBudgetObservation.__init__
+
+    def admit(control, directory, identity):
+        original_init(control, directory, identity, clock=clock)
+        controls.append(control)
+
+    def failure(*args):
+        effects.append("factory")
+        assert controls[0].first_start is None
+        raise RuntimeError("synthetic factory construction failure")
+
+    def backend(**kwargs):
+        pytest.fail("backend must not precede voice construction")
+
+    monkeypatch.setattr(deadline.TimeBudgetObservation, "__init__", admit)
+    arguments["require_execution_direction"] = lambda binding: None
+    if condition == "sandbox_v2":
+        arguments.update(v2_backend_factory=backend, v2_voice_for=failure)
+    else:
+        arguments["codex_provider_for"] = failure
+    with pytest.raises(RuntimeError, match="synthetic factory construction failure"):
+        prospective.consume_observation_handoff(handoff_sources.plan, **arguments)
+    assert effects == ["factory"] and controls[0].first_start is None
+    assert controls[0].terminal_reason == "failed" and controls[0]._finished
+    assert controls[0].cleanup_complete
+    assert json.loads((controls[0].directory / (controls[0].identity.key + ".admitted.json")).read_bytes()) == marker["observation"]
+    assert _consumer_claim(arguments).is_file()
+    with pytest.raises(prospective.TimeBudgetConsumptionRefused, match="already_consumed"):
+        prospective.consume_observation_handoff(handoff_sources.plan, **arguments)
+    assert effects == ["factory"]
+
+
+@pytest.mark.parametrize("condition", ["sandbox_v2", "codex"])
+def test_time_budget_handoff_consumer_requires_condition_specific_dependencies(
+    handoff_sources, tmp_path, monkeypatch, condition,
+):
+    _, arguments = _consumer_arguments(handoff_sources, tmp_path, condition=condition)
+    effects = _consumer_no_effects(monkeypatch, arguments)
+    if condition == "sandbox_v2":
+        arguments["codex_provider_for"] = lambda config: pytest.fail("foreign provider")
+    else:
+        arguments["v2_backend_factory"] = lambda **kwargs: pytest.fail("foreign backend")
+    with pytest.raises(prospective.TimeBudgetConsumptionRefused, match="condition_specific_factory_dependencies_required"):
+        prospective.consume_observation_handoff(handoff_sources.plan, **arguments)
+    assert effects == [] and not _consumer_claim(arguments).exists()
+    assert list(arguments["observation_directory"].iterdir()) == []

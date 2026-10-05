@@ -399,9 +399,38 @@ Held-directory/no-clobber publication retains a sibling
 `.time-budget-preparation-reserved.json` file. Existing, partial or changed
 destinations refuse; final source/input/member rereads precede readiness.
 Preparation evidence is not launch authority: all execution flags and existing
-launch gates remain closed. The next integration is one execution consumer
-that revalidates this handoff and supplies the required control to the existing
-factory under a separate source-bound execution direction.
+launch gates remain closed.
+
+`gpt54_time_budget_comparison.consume_observation_handoff` consumes exactly one
+handoff through the existing factories. It requires the same explicit source
+and input arguments, `preparation_directory`, an independently retained
+`expected_preparation_identity` (`sha256` and `size`), `run_id`, `task_id` and a
+private `observation_directory`. The expected identity must not be read from
+the marker being checked. The consumer reconstructs the exact configuration,
+task, references and marker, verifies the reservation and complete member set,
+and rereads held sources, inputs and directories before any output or admission.
+
+Startup is denied unless the trusted caller supplies
+`require_execution_direction(binding)`. That checker must match the immutable
+preparation/observation/R/F binding and canonical preparation/admission paths
+against a separate source-bound execution direction, then return `None` or
+raise on refusal. It is not a marker-controlled approval bit. No production
+checker, CLI or workflow entrypoint is installed here. Changing the preparation
+path or admission store is not a way to obtain another attempt.
+
+After the checker and final rereads, a no-clobber sibling
+`.time-budget-consumed.json` permanently consumes the handoff, including failed
+or abandoned startup. One `TimeBudgetObservation` then reserves admission.
+V2 receives that same control through `build_runner_factory.observation_for`,
+with caller-supplied `v2_backend_factory` and `v2_voice_for(config, budget)`.
+Codex receives it through `CodexAgentRunner.observation_control`, with
+`codex_provider_for(config)`. Both use verified reference paths and the prepared
+model-safe arguments; no factory is imported from marker text. The result is
+the existing runner envelope plus `handoff_preparation_identity` and the
+control's `time_budget_observation` record. Construction failures use that
+control's existing cleanup deadline and cannot renew the observation. The next
+live boundary is the independently reviewed host direction checker and its
+provider/backend dependencies; preparing or validating a packet does not cross it.
 
 `core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
 in a private host-owned directory before generation. The identity includes
