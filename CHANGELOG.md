@@ -11,6 +11,73 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore PR750's omitted-control V2 startup clock sampling and correct the
+  directly affected frozen-source test fixtures. `AgenticV2ScriptedRunner.run`
+  reuses `startup_started` when observation control is absent; the controlled
+  branch is unchanged. Only that runner's prospective source pin advances.
+  The comparison seeds use anchored F bytes and source-bound loader defaults,
+  while retaining real CURRENT source refusals. Fixed-grade fixture copies use
+  F's real closure and retain distinct template/materialized hashes. The manual
+  pilot history supplies its existing frozen fixture. CURRENT refusal/observer
+  expectations and the conversation wrapper's real loop target are corrected
+  without relaxing source, credential, stale-grader or launch assertions.
+
+  The same-session source/grading/architecture charter review preceded edits
+  and required explicit CURRENT versus frozen roles, unchanged whole-closure
+  hashing and preserved historical identities. The old materialized first-cell
+  and KEEP/r2 hashes remain `c391424e7ff45f375c6bb17135440aab85b29748fa0c52215805594a1517a320`
+  and `997c30a6b6b8ed8f53d75a6db180dca549df6d0ae31e549934b75eb27d1b0fc1`.
+  F remains `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
+  `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, with whole TEMPLATE
+  `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
+  Ownership/finalization code, workflows, historical manifests, paid evidence,
+  the grader algorithm, registered 1200/20 policy and launch gates are unchanged.
+
+  Leader-supplied CI at `513a443f361106300f9be425f8b12c2c48a2540f`, tree
+  `a6021266308b4fb83996e66a05fcb9a38ac1308d`, run `37304369158`, reported
+  1244 passed and 117 setup errors in 1193.62s in comparison job `111744830880`;
+  two seeds account for the 54/63 affected cases. Pilot job `111744831046`
+  reported 1514 passed and 23 setup errors in 1056.86s from one manual fixture
+  argument. Their log SHA256 values are
+  `e092582349b46b79a99c8b293c11a577c2dfb5461669952a101cc57c7e5b7dfa` and
+  `24f11bb158310fae07fe1bffb4e3d8033f26e316ddb3cdcb7e5b2184eb55e428`.
+  The older `0cee74941b9a093109d7c32a289d563616626e99` job `111732532758`
+  reported 9 failed, 13381 passed, 64 skipped and 46 deselected in 1766.43s.
+  Its affected source/test paths were unchanged at `513a443f`; this is source
+  reconciliation, not a claim that the older result ran at the newer HEAD.
+
+  One token-free/offline Python 3.10.12 invocation at clean correction
+  `00997e75f6c72e3bfa0541be1bb1c6e47867c401`, tree
+  `a3d4e355260c87ed7555d9db2cde1420955596ff`, reported **23 passed in 136.55s**,
+  exit 0. It selected the nine named failures, six runtime-checkout cases, seven
+  workflow-gate cases and one accepted pilot predecessor, without `-x`, under a
+  300-second test-only bound plus 5-second termination grace. There was no retry
+  or incomplete node. Exact private command/log/receipt SHA256 values are
+  `a480936099b18cc75a2a241bcac5bd66d5babfc7de7063e92f3c972b3e18d7aa`,
+  `eeebc45da1491ee35e8613fbc41cd0e5b6113e80ed4ee96a92689e2593f5a91c`, and
+  `aaf6910b2200c97394610a428d5edb981316c60851253172976a73763b375b29`.
+  The command hash identifies the private script, not its redacted public display.
+
+  The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/513a443f361106300f9be425f8b12c2c48a2540f/tasks/LATEST_TASK_RESULT/README.md)
+  preserves the original 46-pass/5-fail invocation, five-target continuation,
+  21-case finalization proof and 30-case ownership proof as separate observations.
+  None was rerun or combined into a global pass. The new exact command, node list
+  and evidence identities are in the single [current record](tasks/LATEST_TASK_RESULT/README.md).
+  Only that record and CHANGELOG follow the pinned proof.
+
+  Delivery remains **HOLD** for whole corrected-HEAD review and applicable CI.
+  The prior real-host admission refusal (`time_budget_owned_process_host_required`,
+  `FileNotFoundError`, errno 2) is not real orphan-cleanup success. Platform and
+  live enforcement remain unproved; dispatcher/capture, credentialed-input and
+  F-derived grading execution gates remain open work, with launch still refused.
+  No CI query/poll/dispatch/rerun, Node/HF check, real original-input/receipt access,
+  real preparation, provider/model/grader/HF/Azure call, Project edit or merge
+  occurred. Previous worktrees and artifacts remain untouched. `im-not-ai-en`
+  was applied to these records; no new experiment design or unrelated skill was
+  used.
+
 ### Added
 
 - Integrate the prospective time-budget observation control into the existing V2
