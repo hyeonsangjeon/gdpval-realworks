@@ -133,7 +133,7 @@ source_pins:
   batch-runner/gpt54_run_config_bundle.py: 92c0cdd8be5d93e229d4cb6fbc039d7fe5cd491c96918fdaf8b7ab2d86706817
   batch-runner/gpt54_run_input_bundle.py: 321c7de8203eccf18f0ca12a3f7f444811d21aa4811db21e94e869bf575b6256
   batch-runner/gpt54_disposable_checkout.py: 77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62
-  batch-runner/gpt54_workflow_gate.py: 0afde42161d9a954dd997e2c7681130a452e8684acef0e5b7a9219d49e80d190
+  batch-runner/gpt54_workflow_gate.py: 714a9e18fe5a3df54f54d472b772bfb958966c807ebe30dab7efc9428a062626
   batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c

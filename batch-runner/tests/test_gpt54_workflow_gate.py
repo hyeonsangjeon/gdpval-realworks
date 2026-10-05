@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -22,11 +23,11 @@ import gpt54_run_config_bundle as config_bundle
 import gpt54_run_input_bundle as input_bundle
 import gpt54_workflow_gate as gate
 from .test_gpt54_disposable_checkout import (
-    _allow_only_temporary_git, _commit_fixture, _fixture_git, _sidecars, _source_state,
+    _PROSPECTIVE_MANIFEST, _allow_only_temporary_git, _commit_fixture, _fixture_git, _sidecars, _source_state,
     _step0_manifest_checkout,
 )
-from .test_gpt54_prepared_input_attestation import _bundle_fixture, _json, _step0_manifest_source, _tree_snapshot
-from .test_gpt54_run_input_bundle import _copy_files, _input_bundle_seed, _snapshot_files
+from .test_gpt54_prepared_input_attestation import _bundle_fixture, _identity, _json, _step0_manifest_source, _tree_snapshot
+from .test_gpt54_run_input_bundle import _copy_files, _input_bundle_seed, _make_input_bundle_seed, _snapshot_files
 
 
 _OWNERS = {"sandbox_v2": "agentic-v2-stage-run", "codex": "batch-run"}
@@ -592,3 +593,385 @@ def test_workflow_execution_gate(
     assert _source_state(repository) == source_before
     assert _tree_snapshot(oracle_root) == oracle_before
     assert forbidden == []
+
+
+@pytest.fixture(scope="module")
+def _workflow_profile_input_seed(tmp_path_factory):
+    # Real prospective source pins and whole-template closure. Only the tiny
+    # original-data fixture is synthetic; no private original or marker is read.
+    yield from _make_input_bundle_seed(
+        tmp_path_factory, Path(__file__).resolve().parents[2], _PROSPECTIVE_MANIFEST,
+    )
+
+
+def _workflow_profile_fixture(tmp_path, monkeypatch, seed, condition, *, historical=False):
+    forbidden, git_calls = _allow_only_temporary_git(monkeypatch, tmp_path)
+    seed.install(monkeypatch)
+    oracle = tmp_path / "synthetic-originals"
+    oracle.mkdir()
+    inputs, _, _, _, _ = seed.inputs(oracle, monkeypatch, "identical")
+    run = seed.plan.dispatch.runs[1 if condition == "codex" else 0]
+    repository, checkout = tmp_path / "source", tmp_path / "prepared"
+    _bundle_fixture(repository, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
+                    run=run, materialize=False)
+    manifest_path = config_bundle.MANIFEST_PATH if historical else _PROSPECTIVE_MANIFEST
+    if not historical:
+        (repository / manifest_path).write_bytes(b"# Synthetic original-data identities only\n" + _json(inputs["manifest"]))
+        (repository / config_bundle.MANIFEST_PATH).write_bytes(
+            (preflight.ROOT / config_bundle.MANIFEST_PATH).read_bytes(),
+        )
+    alias = preflight.ENVELOPE + "workflow-selected-alias.yaml"
+    (repository / alias).write_bytes((repository / manifest_path).read_bytes())
+    _fixture_git(repository, "init", "--quiet", "--initial-branch=fixture-main",
+                 "--object-format=sha1", "--template=")
+    sha = _commit_fixture(repository, "Reviewed synthetic workflow source")
+    monkeypatch.setattr(preparer, "TRUSTED_ROOT", repository)
+    monkeypatch.setattr(gate, "ROOT", repository)
+    request = _request(condition, _inputs(condition, run.run_id, sha), sha)
+    anchors = []
+    real_verify = gate.verify_runtime_checkout
+
+    def observe_anchor(**kwargs):
+        # Observe the real check, never substitute an anchor or a verdict.
+        anchors.append(kwargs["expected_reviewed_source_sha"])
+        return real_verify(**kwargs)
+
+    monkeypatch.setattr(gate, "verify_runtime_checkout", observe_anchor)
+    kwargs = {
+        "repository": repository, "destination": checkout,
+        "manifest": inputs["manifest"], "combined_plan": inputs["combined_plan"],
+        "dataset_parquet": inputs["dataset_parquet"], "reference_root": inputs["reference_root"],
+        "step0_manifest": _step0_manifest_source(inputs, run), "manifest_path": manifest_path,
+    }
+    return SimpleNamespace(
+        repository=repository, checkout=checkout, oracle=oracle, sha=sha, request=request,
+        run=run, inputs=inputs, kwargs=kwargs, manifest_path=manifest_path, alias=alias,
+        validation={key: kwargs[key] for key in ("manifest", "combined_plan")},
+        anchors=anchors, forbidden=forbidden, git_calls=git_calls,
+    )
+
+
+def test_workflow_profile_anchor_current_source_and_frozen_refusals(monkeypatch):
+    from .test_gpt54_run_config_bundle import _guards
+    import step8_grade as grading
+
+    forbidden = _guards(monkeypatch)
+    root = Path(__file__).resolve().parents[2]
+    historical = preflight.load_plan()
+    manifest = preflight.load_plan(root / _PROSPECTIVE_MANIFEST)
+    assert _identity(preflight.PLAN.read_bytes())["sha256"] == (
+        "3d88bcb0c4eeeb9dad2c9ee7cb88db1b7ff49145f9264d9d284178f167a76ed1"
+    )
+    changed = {
+        "batch-runner/gpt54_codex_input_capture.py", "batch-runner/gpt54_v2_input_capture.py",
+        "batch-runner/gpt54_run_config_bundle.py", "batch-runner/gpt54_run_input_bundle.py",
+        "batch-runner/gpt54_disposable_checkout.py", "batch-runner/gpt54_workflow_gate.py",
+        "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+        "batch-runner/core/codex_task_deadline.py",
+    }
+    expected = deepcopy(historical)
+    for name in changed:
+        expected["source_pins"][name] = _identity((root / name).read_bytes())["sha256"]
+    closure = grading.compute_grader_source_hash(
+        root / preflight.GRADER, preflight.load_plan(root / preflight.GRADER), batch_root=root / "batch-runner",
+    )
+    assert closure == "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"
+    expected["shared"]["grading"]["template_source_sha256"] = closure
+    assert manifest == expected  # No control, input, run ID, budget or schema change.
+    plan = preflight.compile_grading_plan(manifest)
+    assert len(manifest["source_pins"]) == 37
+    assert [run.condition for run in plan.dispatch.runs] == ["sandbox_v2", "codex", "codex", "sandbox_v2"]
+    assert sum(len(run.task_ids) for run in plan.dispatch.runs) == 20
+    assert plan.as_dict()["launch_allowed"] is plan.dispatch.as_dict()["launch_allowed"] is False
+    assert plan.as_dict()["full_220_allowed"] is False
+    assert all(run.output.materialized_grader_source_hash is None for run in plan.runs)
+    frozen = preflight.inspect_plan(historical)
+    assert frozen["configuration_valid"] is False
+    assert frozen["configuration_problems"] == [
+        "source_pin:" + name for name in historical["source_pins"] if name in changed
+    ]
+    assert frozen["launch_allowed"] is frozen["full_220_allowed"] is False
+    # These two independent runtime guards and their call sites are unchanged.
+    for name, digest in (
+        ("gpt54_codex_input_capture.py", "6281ed936af90fce5d46ca82400b4163e0ba0d1dc0f3b34743b7d2c2ef431c5b"),
+        ("gpt54_v2_input_capture.py", "b7c3ad903afd16630c4bf92efa67d21b5f6d1092f394828888f82c4fc1cf3d52"),
+    ):
+        assert _identity((root / "batch-runner" / name).read_bytes())["sha256"] == digest
+    assert forbidden == []
+
+
+@pytest.mark.parametrize("condition", ["sandbox_v2", "codex"])
+@pytest.mark.parametrize("profile", ["historical_default", "historical_explicit", "prospective"])
+@pytest.mark.parametrize("interface", ["api", "cli"])
+def test_workflow_profile_anchor_positive(
+    condition, profile, interface, tmp_path, monkeypatch, capsys, _input_bundle_seed, _workflow_profile_input_seed,
+):
+    historical = profile.startswith("historical")
+    seed = _input_bundle_seed if historical else _workflow_profile_input_seed
+    f = _workflow_profile_fixture(tmp_path, monkeypatch, seed, condition, historical=historical)
+    if profile == "historical_default":
+        f.kwargs.pop("manifest_path")
+    before_source, before_inputs = _source_state(f.repository), _tree_snapshot(f.oracle)
+    # Ambient metadata and caller desires cannot replace the independent request.
+    monkeypatch.setenv("EXPECTED_REVIEWED_SOURCE_SHA", "f" * 40)
+    monkeypatch.setenv("COMPARISON_MANIFEST_PATH", f.alias)
+    monkeypatch.setenv("COMPARISON_LAUNCH_ALLOWED", "true")
+    if interface == "cli":
+        capsys.readouterr()
+        prepared_calls = []
+        real_prepare = gate.prepare_workflow_execution
+
+        def observe_prepare(*args, **kwargs):
+            result = real_prepare(*args, **kwargs)
+            prepared_calls.append(result)
+            return result
+
+        monkeypatch.setattr(gate, "prepare_workflow_execution", observe_prepare)
+        assert gate.main([
+            "--workflow", _OWNERS[condition], "--inputs-json", f.request.inputs_json,
+            "--event-name", "workflow_dispatch", "--event-ref", "refs/heads/main",
+            "--event-sha", f.sha, "--workflow-sha", f.sha,
+            "--repository", str(f.repository), "--destination", str(f.checkout),
+            "--dataset-parquet", str(f.inputs["dataset_parquet"]),
+            "--reference-root", str(f.inputs["reference_root"]),
+            *(["--step0-manifest", str(f.kwargs["step0_manifest"])] if condition == "codex" else []),
+            *(["--manifest-path", f.manifest_path] if profile != "historical_default" else []),
+        ]) == 2
+        evidence, refusal = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert refusal == {
+            "launch_allowed": False,
+            "error": "canonical compiler launch flags are false; local preparation is not launch permission",
+        }
+        assert len(prepared_calls) == 1
+        prepared = prepared_calls[0]
+    else:
+        prepared = gate.prepare_workflow_execution(f.request, **f.kwargs)
+        evidence = gate.verify_workflow_execution(prepared, **f.validation)
+    assert prepared.manifest_path == f.manifest_path
+    assert set(evidence) == {
+        "gate_version", "workflow_request", "run_id", "condition", "repeat", "repository", "checkout",
+        "cwd", "commands", "checkout_ready", "launch_allowed", "dispatch_launch_allowed",
+        "full_220_allowed", "commands_executed", "evidence_boundary",
+    }
+    assert evidence["gate_version"] == "gpt54-workflow-execution-gate-v1"
+    assert evidence["launch_allowed"] is evidence["dispatch_launch_allowed"] is evidence["full_220_allowed"] is False
+    assert evidence["commands_executed"] is False
+    assert evidence["commands"] == [list(command) for command in f.run.commands]
+    assert evidence["cwd"] == str(f.checkout / f.run.working_directory)
+    assert evidence["evidence_boundary"] == "local_workflow_request_and_prepared_checkout_only"
+    config = json.loads((f.checkout / config_bundle.READY_PATH).read_bytes())
+    assert config["manifest_file"] == {"path": f.manifest_path, **_identity((f.repository / f.manifest_path).read_bytes())}
+    assert json.loads(prepared.checkout_ready_json) == evidence["checkout_ready"]
+    f.git_calls.clear()
+    before = _tree_snapshot(tmp_path)
+    assert gate.verify_workflow_execution(prepared, **f.validation) == evidence
+    with pytest.raises(gate.WorkflowExecutionRefused, match="^canonical compiler launch flags are false;"):
+        gate.require_workflow_launch(prepared, **f.validation)
+    assert _tree_snapshot(tmp_path) == before
+    assert f.anchors and set(f.anchors) == {f.request.reviewed_source_sha}
+    assert all(args[0] in {"rev-parse", "config", "ls-tree", "cat-file"} for _, args in f.git_calls)
+    assert _source_state(f.repository) == before_source and _tree_snapshot(f.oracle) == before_inputs
+    assert not _sidecars(f.checkout)[1].exists() and f.forbidden == []
+
+
+@pytest.mark.parametrize(("condition", "case"), [
+    *((condition, case) for condition in ("sandbox_v2", "codex")
+      for case in ("event_sha", "workflow_sha", "source_head")),
+    *(("sandbox_v2", case) for case in (
+        "untracked", "altered", "symlink", "hardlink", "external", "url", "traversal", "wrong_directory",
+        "destination_exists", "destination_symlink", "reservation_exists", "quarantine_exists",
+        "combined_launch_enabled", "request_manifest_input", "request_launch_flag", "handoff_failure",
+    )),
+])
+def test_workflow_profile_anchor_preparation_refuses(
+    condition, case, tmp_path, monkeypatch, _workflow_profile_input_seed,
+):
+    f = _workflow_profile_fixture(tmp_path, monkeypatch, _workflow_profile_input_seed, condition)
+    manifest_file = f.repository / f.manifest_path
+    if case in {"event_sha", "workflow_sha"}:
+        f.request = replace(f.request, **{case: "f" * 40})
+    elif case == "source_head":
+        f.request = _request(condition, _inputs(condition, f.run.run_id, "f" * 40), "f" * 40)
+    elif case == "untracked":
+        f.kwargs["manifest_path"] = preflight.ENVELOPE + "untracked.yaml"
+        (f.repository / f.kwargs["manifest_path"]).write_bytes(manifest_file.read_bytes())
+    elif case == "altered":
+        manifest_file.write_bytes(manifest_file.read_bytes() + b"\n# unreviewed bytes\n")
+    elif case == "symlink":
+        moved = tmp_path / "moved-manifest.yaml"
+        manifest_file.rename(moved)
+        manifest_file.symlink_to(moved)
+    elif case == "hardlink":
+        os.link(manifest_file, tmp_path / "manifest-alias.yaml")
+    elif case in {"external", "url", "traversal", "wrong_directory"}:
+        f.kwargs["manifest_path"] = {
+            "external": str(manifest_file), "url": "https://invalid.example/manifest.yaml",
+            "traversal": preflight.ENVELOPE + "../execution_envelope/manifest.yaml",
+            "wrong_directory": "batch-runner/manifest.yaml",
+        }[case]
+    elif case == "destination_exists":
+        f.checkout.mkdir()
+    elif case == "destination_symlink":
+        f.checkout.symlink_to(f.repository, target_is_directory=True)
+    elif case in {"reservation_exists", "quarantine_exists"}:
+        _sidecars(f.checkout)[0 if case == "reservation_exists" else 1].write_bytes(b"retained\n")
+    elif case == "combined_launch_enabled":
+        f.kwargs["combined_plan"] = {**f.kwargs["combined_plan"], "launch_allowed": True}
+    elif case in {"request_manifest_input", "request_launch_flag"}:
+        field = {"manifest_path": f.manifest_path} if case == "request_manifest_input" else {"launch_allowed": True}
+        f.request = replace(f.request, inputs_json=_json({**json.loads(f.request.inputs_json), **field}).decode())
+    elif case == "handoff_failure":
+        real_verify = gate.verify_workflow_execution
+
+        def fail_after_real_verification(*args, **kwargs):
+            real_verify(*args, **kwargs)
+            raise gate.WorkflowExecutionRefused("injected final handoff failure")
+
+        monkeypatch.setattr(gate, "verify_workflow_execution", fail_after_real_verification)
+    before = _tree_snapshot(tmp_path)
+    with pytest.raises(gate.WorkflowExecutionRefused):
+        gate.prepare_workflow_execution(f.request, **f.kwargs)
+    if case == "handoff_failure":
+        reservation, quarantine = _sidecars(f.checkout)
+        assert reservation.is_file() and (f.checkout / preparer.READY_PATH).is_file()
+        assert json.loads(quarantine.read_bytes())["phase"] == "workflow_handoff"
+        retained = _tree_snapshot(tmp_path)
+        with pytest.raises(gate.WorkflowExecutionRefused, match="cannot be reused"):
+            gate.prepare_workflow_execution(f.request, **f.kwargs)
+        assert _tree_snapshot(tmp_path) == retained
+    else:
+        assert _tree_snapshot(tmp_path) == before
+        assert f.anchors == []  # Refusal precedes target verification/publication.
+    assert f.forbidden == []
+
+
+@pytest.mark.parametrize("case", [
+    "target_untracked", "target_altered", "target_symlink", "target_traversal", "target_alias",
+    "requested_alias", "target_digest", "config_digest", "ready_noncanonical", "ready_evidence",
+    "changed_commands", "mutable_commands", "source_cwd", "reservation_missing", "reservation_altered",
+    "quarantine", "quarantine_without_reservation", "ready_race", "config_race", "reservation_race",
+    "quarantine_race", "source_manifest_race", "source_pin_race", "source_head_race",
+    "source_parent_race", "checkout_parent_race", "checkout_head_race",
+])
+def test_workflow_profile_anchor_verification_refuses(
+    case, tmp_path, monkeypatch, _workflow_profile_input_seed,
+):
+    from .test_gpt54_runtime_checkout import _rebind_synthetic_locator
+
+    f = _workflow_profile_fixture(tmp_path, monkeypatch, _workflow_profile_input_seed, "sandbox_v2")
+    prepared = gate.prepare_workflow_execution(f.request, **f.kwargs)
+    ready = f.checkout / preparer.READY_PATH
+    config = f.checkout / config_bundle.READY_PATH
+    manifest_file = f.checkout / f.manifest_path
+    reservation, quarantine = _sidecars(f.checkout)
+    gitdir = Path(os.fsdecode(_fixture_git(f.checkout, "rev-parse", "--absolute-git-dir").stdout.rstrip(b"\n")))
+    injected = []
+    if case in {"target_untracked", "target_altered", "target_traversal", "target_alias", "target_digest"}:
+        locator = f.manifest_path
+        if case == "target_untracked":
+            locator = preflight.ENVELOPE + "untracked.yaml"
+            (f.checkout / locator).write_bytes(manifest_file.read_bytes())
+        elif case == "target_altered":
+            manifest_file.write_bytes(manifest_file.read_bytes() + b"\n# coherent but not reviewed\n")
+        elif case == "target_traversal":
+            locator = preflight.ENVELOPE + "../execution_envelope/" + Path(f.manifest_path).name
+        elif case == "target_alias":
+            locator = f.alias
+        identity = {"path": locator, **_identity(manifest_file.read_bytes())}
+        if case == "target_digest":
+            identity["sha256"] = "0" * 64
+        _rebind_synthetic_locator(f.checkout, identity)
+        prepared = replace(prepared, checkout_ready_json=ready.read_text())
+    elif case == "target_symlink":
+        moved = tmp_path / "target-manifest.yaml"
+        manifest_file.rename(moved)
+        manifest_file.symlink_to(moved)
+    elif case == "requested_alias":
+        prepared = replace(prepared, manifest_path=f.alias)
+    elif case == "config_digest":
+        config.write_bytes(config.read_bytes() + b"\n")
+    elif case == "ready_noncanonical":
+        ready.write_bytes(ready.read_bytes() + b"\n")
+    elif case == "ready_evidence":
+        prepared = replace(prepared, checkout_ready_json=prepared.checkout_ready_json + "\n")
+    elif case == "changed_commands":
+        prepared = replace(prepared, commands=(f.run.commands[0] + ("--dry-run",),))
+    elif case == "mutable_commands":
+        prepared = replace(prepared, commands=list(f.run.commands))
+    elif case == "source_cwd":
+        prepared = replace(prepared, cwd=f.repository / f.run.working_directory)
+    elif case in {"reservation_missing", "quarantine_without_reservation"}:
+        reservation.unlink()
+        if case == "quarantine_without_reservation":
+            quarantine.write_bytes(b"{}")
+    elif case == "reservation_altered":
+        reservation.write_bytes(reservation.read_bytes() + b"\n")
+    elif case == "quarantine":
+        quarantine.write_bytes(b"{}")
+    elif case.endswith("_race"):
+        real_sources = gate._sources
+        source_calls = []
+
+        def race_after_source_check(*args, **kwargs):
+            result = real_sources(*args, **kwargs)
+            source_calls.append(True)
+            when = 1 if case.startswith("source_") else 2
+            if len(source_calls) == when:
+                if case in {"ready_race", "config_race", "reservation_race", "quarantine_race"}:
+                    target = {"ready_race": ready, "config_race": config,
+                              "reservation_race": reservation, "quarantine_race": quarantine}[case]
+                    target.write_bytes(b"injected after real verification\n")
+                elif case == "source_manifest_race":
+                    path = f.repository / f.manifest_path
+                    path.write_bytes(path.read_bytes() + b"\n# late source bytes\n")
+                elif case == "source_pin_race":
+                    (f.repository / "batch-runner/gpt54_workflow_gate.py").write_bytes(b"changed source\n")
+                elif case == "source_head_race":
+                    (f.repository / ".git/HEAD").write_bytes(b"f" * 40 + b"\n")
+                elif case == "checkout_head_race":
+                    (gitdir / "HEAD").write_bytes(b"f" * 40 + b"\n")
+                else:
+                    parent = (f.repository / f.manifest_path).parent if case == "source_parent_race" else f.checkout
+                    moved = parent.with_name(parent.name + "-moved")
+                    parent.rename(moved)
+                    shutil.copytree(moved, parent)
+                injected.append(_tree_snapshot(tmp_path))
+            return result
+
+        monkeypatch.setattr(gate, "_sources", race_after_source_check)
+    before = _tree_snapshot(tmp_path)
+    with pytest.raises(gate.WorkflowExecutionRefused) as refused:
+        gate.verify_workflow_execution(prepared, **f.validation)
+    if case in {"quarantine", "quarantine_without_reservation"}:
+        assert str(refused.value) == "quarantined runtime checkout cannot be used"
+    if case in {"requested_alias", "target_alias"}:
+        assert "workflow selected manifest" in str(refused.value.__cause__)
+    assert _tree_snapshot(tmp_path) == (injected[0] if injected else before)
+    assert set(f.anchors) == {f.request.reviewed_source_sha} and f.forbidden == []
+
+
+@pytest.mark.parametrize("condition", ["sandbox_v2", "codex"])
+def test_workflow_profile_anchor_coherent_target_substitution(
+    condition, tmp_path, monkeypatch, _workflow_profile_input_seed,
+):
+    f = _workflow_profile_fixture(tmp_path, monkeypatch, _workflow_profile_input_seed, condition)
+    # Retain the independently reviewed source A while constructing a completely
+    # coherent prepared checkout from different committed source B. No pin changes.
+    reviewed_source = tmp_path / "independent-reviewed-source"
+    reviewed_source.mkdir()
+    _fixture_git(f.repository, "worktree", "add", "--detach", "--", str(reviewed_source), f.sha)
+    path = f.repository / f.manifest_path
+    path.write_bytes(path.read_bytes() + b"\n# separately committed, not request A\n")
+    other_sha = _commit_fixture(f.repository, "Different coherent synthetic source")
+    other_request = _request(condition, _inputs(condition, f.run.run_id, other_sha), other_sha)
+    substituted = gate.prepare_workflow_execution(other_request, **f.kwargs)
+    assert json.loads(substituted.checkout_ready_json)["reviewed_source_sha"] == other_sha != f.sha
+    monkeypatch.setattr(gate, "ROOT", reviewed_source)
+    monkeypatch.setattr(preparer, "TRUSTED_ROOT", reviewed_source)
+    substituted = replace(substituted, request=f.request, repository=reviewed_source)
+    f.anchors.clear()
+    before = _tree_snapshot(tmp_path)
+    with pytest.raises(gate.WorkflowExecutionRefused, match="differs from the expected reviewed commit"):
+        gate.verify_workflow_execution(substituted, **f.validation)
+    assert f.anchors == [f.sha]  # Never the self-consistent target's other SHA.
+    assert _tree_snapshot(tmp_path) == before and f.forbidden == []
