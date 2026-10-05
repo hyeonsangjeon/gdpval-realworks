@@ -8,11 +8,13 @@ graded work within the same external generation-time budget. It compares
 configuration bundles, not isolated harness effects or equal native compute.
 There is no new execution route, preparation or live observation.
 
-Delivery remains **HOLD** after the CI correction. The registration implementation
-and its original 75-case proof are unchanged. The one new combined validation
-command failed at a CURRENT workflow-digest assertion before partition checks or
-Node tests ran. That digest was then corrected without a rerun; the final
-correction has no passing targeted proof yet.
+Delivery remains **HOLD** for remaining CI and final-record acceptance. The
+registration implementation and its original 75-case proof are unchanged. After
+the CURRENT workflow-digest correction, the unfinished Python partition node
+passed once at the leader-reviewed correction HEAD. Separately, the leader
+supplied successful CI evidence for the transport fakes and live artifact check.
+The first failed local combined attempt remains a failure; no local Node or HF
+check was repeated.
 
 The existing historical comparison and local-source profile keep their intent,
 controls, run IDs and launch refusals. The closed 30-cell external-budget pilot
@@ -135,14 +137,18 @@ profile's unchanged caps and false-launch output. This is software-contract
 evidence, not measured deadline enforcement, runtime equivalence, served identity,
 wire consumption, model quality, grades or cost.
 
-### CI correction and incomplete local validation
+### CI correction and prior local failure
 
 The leader reviewed all six registration/source/record files at
 `c5217b19f79a44787ae08fafecc28dae3ab145b1`, tree
 `7e8e5d0d4cd987c16fe84fba924f3aa2e94cce3f`, in
 [review5410467314][registration-review]. The original 75-case proof and its
 documentation-only post-proof delta were accepted at their software-evidence
-scope. That review does not cover the CI correction below.
+scope. That review did not cover the CI correction below. The leader subsequently
+reviewed all six correction files at
+`369817bf919eb04632ad0af78160d3a33b5d5692`, tree
+`0bd9f2bbd1c837994d655ad328857082e4988a38`, and accepted the source correction
+with no blocking source finding. Delivery remains subject to the remaining gates.
 
 The leader supplied these failed CI outcomes; no CI logs were fetched or jobs
 queried, dispatched or retried for this correction:
@@ -178,9 +184,10 @@ stage, HTTP status when available, elapsed time and a safe error class, without
 response bodies, raw causes or signed redirects. Requests and readers are
 aborted/released on exit; sibling requests are aborted on rejection. There is no
 retry, skip, credential, alternate source, cache fallback or replacement of the
-live hash check. Tiny local fake cases cover the changed handling but have not
-run yet. No dependency was installed; Node uses the existing owner workspace
-dependencies through an ignored worktree link.
+live hash check. The tiny transport-fake cases did not run in the local combined
+attempt; their later CI result is recorded below. No dependency was installed;
+Node uses the existing owner workspace dependencies through an ignored worktree
+link.
 
 The correction was pinned at HEAD `fd910be79992d08e1006622e227e542f8ad0cb78`,
 tree `ef8c4b5d05c3c871f8491b0e62d20f1cb7b2458a`, clean before and after the
@@ -196,24 +203,11 @@ The shell stopped before Node, so **zero live requests and zero local fake cases
 ran**. This is a failed, incomplete validation, not a combined pass or a new
 observation about the public artifact service.
 
-The command below is a redacted display, not a ready-to-run command. Only the
-worktree and private evidence locators are replaced by angle-bracket placeholders.
-The command digest describes the exact private 1033-byte script, including its
-final newline, not this display. Its environment was token-free; Python was
-offline. Node would have used only the six authorized public reads, without auth.
-
-```bash
-#!/bin/bash
-set -euo pipefail
-cd <private-worktree>
-env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TMPDIR=<private-evidence-root> PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_NO_LAZY_FETCH=1 timeout --kill-after=5s 300s /bin/bash <<'TARGETS'
-set -euo pipefail
-cd batch-runner
-env PYTHONPATH=. HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -vv -ra -x --tb=short --color=no -p no:cacheprovider -m "not integration" --basetemp <private-evidence-root>/pytest tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
-cd ..
-node --test --test-name-pattern='^(pinned HF artifact transport |pinned HF artifacts match recorded hashes and selected manifest structure$)' scripts/__tests__/aggregate-success-note.test.mjs
-TARGETS
-```
+The [immutable correction record][ci-correction-record] preserves that attempt's
+command display with private locators redacted. The command digest below identifies
+the exact private 1033-byte script, including its final newline, not the redacted
+display. Its environment was token-free; Python was offline. All original failed
+command, log and receipt files remain unchanged.
 
 | CI-correction evidence | Bytes | SHA256 |
 | --- | ---: | --- |
@@ -221,23 +215,81 @@ TARGETS
 | Combined stdout/stderr | 1802 | `e8e6488b6a603356644ff1845b210de33c948de47d5ce4e7d21e4f28b27de308` |
 | Metadata-only receipt | 2393 | `52f82edf52f76cf68a59fa4cad1aab70723ec46197f5b8fb0b1c439f5ef07ee3` |
 
-The first command/log/receipt remain unchanged. No second invocation or remote
-attempt followed. A separate ordinary correction commit,
+A separate ordinary correction commit,
 `0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18`, tree
 `e2c51219d5e027ea6bf2c1911db4874690d08d22`, updates only the CURRENT
 `WORKFLOW_SHA256` in `tests/test_ghcp_vm_gate_contract.py` to those edited workflow
 bytes. Its `HISTORICAL_SHA256` and `FOUNDRY_SHA256` and all substantive assertions
-remain unchanged. This post-proof one-line correction is **not revalidated**.
-Only CHANGELOG and this record follow that correction commit. Relative to the
-tested HEAD, the post-proof delta includes that one test literal and these two
-records; it is not a records-only delta.
+remain unchanged. No further local test or remote attempt ran in that correction
+turn. Only CHANGELOG and this record changed between that commit and
+`369817bf919eb04632ad0af78160d3a33b5d5692`. Relative to the failed
+`fd910be79992d08e1006622e227e542f8ad0cb78` proof, the delta includes the test
+literal and records; it is not records alone. The separately authorized
+continuation below validates the corrected partition without rewriting that
+failed attempt.
+
+### One-node Python continuation
+
+The existing worktree was clean at HEAD
+`369817bf919eb04632ad0af78160d3a33b5d5692`, tree
+`0bd9f2bbd1c837994d655ad328857082e4988a38`, before and after the one-node
+continuation. Python 3.10.12 and pytest 9.1.1 reported **1 passed in 15.32s;
+exit 0**. Process timestamps were 2026-10-05T07:07:56Z–2026-10-05T07:08:11Z.
+The node's own scoped collect-only checks completed as part of that invocation.
+No Node command, HF request, registration selector, other suite or build ran.
+
+The token-free/offline command used a 300-second outer bound and 5-second
+termination grace. These are software-validation bounds, not a CI timeout or
+experiment budget. The following display redacts only the worktree and private
+evidence locators; it is not ready to run. The digest identifies the exact private
+992-byte script, including its final newline, not this redacted text.
+
+```bash
+#!/bin/bash
+set -euo pipefail
+cd <private-worktree>/batch-runner
+test "$(git rev-parse HEAD)" = 369817bf919eb04632ad0af78160d3a33b5d5692
+test "$(git rev-parse HEAD^{tree})" = 0bd9f2bbd1c837994d655ad328857082e4988a38
+git diff --quiet
+git diff --cached --quiet
+env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TMPDIR=<private-evidence-root> PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_NO_LAZY_FETCH=1 PYTHONPATH=. HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 timeout --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -vv -ra -x --tb=short --color=no -p no:cacheprovider -m "not integration" --basetemp <private-evidence-root>/pytest tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+```
+
+| Continuation evidence | Bytes | SHA256 |
+| --- | ---: | --- |
+| Exact private command script | 992 | `1814661791a888232a78504f1c8e85ee8f169fe94b7fa468da388cca84bf1290` |
+| Combined pytest stdout/stderr | 552 | `d9488c9f39a5d63d76a1e27fd74d8dd3b774b084a480fd86a4534c1590aef87f` |
+| Metadata-only receipt | 2295 | `3aaef590fc6effaea58b81d7895e2a555b285515b50363cea41c108772971976` |
+
+Only CHANGELOG and this current record change after that passing proof. Source,
+tests, workflows, manifests and budget/deadline policy remain unchanged.
+
+### Separately supplied successful CI transport evidence
+
+At that same `369817bf919eb04632ad0af78160d3a33b5d5692` HEAD, the leader
+read completed [validate run `37274687663`, job `111649027037`][transport-ci],
+attempt 1, **SUCCESS**. The retained log is 125654 bytes, SHA256
+`dc07a93374aac5c78ad9c9369fb6fd6faee0bac0a2e93dccc1af1cfe3742e13e`.
+Its full Node result is **556 passed, 0 failed**. The ten transport-fake cases
+passed: retains-exact-bytes; the six failure stages `http_status`,
+`content_length`, `response_body`, `stream`, `byte_length` and `sha256`;
+request/stream timeout redaction; and parent-abort/no-retry. The live six-artifact
+hash/structure test passed in **494.959834ms**.
+
+This is leader-supplied CI evidence, not a locally repeated Node/HF check. No CI
+log was fetched or job queried for this continuation. The successful check is
+newer live evidence than the two earlier 10-second CI timeouts; it does not
+establish why those requests timed out or make the failed local combined command
+a pass. The registration proof, failed local attempt, Python continuation and CI
+transport result remain separate evidence.
 
 ### Remaining work
 
-Final corrected-HEAD review, completed targeted validation, applicable CI and
-leader acceptance remain pending. Delivery is **HOLD**. The local artifact
-check was not reached, so its external status is unknown here; the two supplied
-CI timeouts remain the last live evidence. No check was disabled to claim success.
+The leader accepted the source correction at
+`369817bf919eb04632ad0af78160d3a33b5d5692`; its Python partition proof is now
+complete, and the supplied validate job passed. Remaining CI jobs, the final
+records HEAD and delivery still need acceptance. Delivery stays **HOLD**. No
+combined local pass or all-checks-success claim is made.
 
 The later execution integration unit remains `time_budget_observation_deadline`.
 Its accepted source-analysis memo identifies first generation at V2's first
@@ -255,18 +307,22 @@ unchanged; this new study makes no native hard-cap claim. No private original in
 retained input receipt, original archive or consumed prepared artifact was read,
 imported, prepared or relabeled.
 No model/grader, HF/Azure, CI dispatch/query/retry, Project or merge operation
-occurred during this correction. The authorized local HF check was never reached.
+occurred during this correction or continuation. The original local HF check was
+never reached, and no local HF check ran in the continuation.
 
 For the original registration, experiment-design kept the new time-policy
 question distinct from historical studies and separated intent from enforcement.
-For this CI correction, the full skill catalog was inspected once; im-not-ai-en
-protected exact scope, failed/incomplete evidence and refusal conditions in the
-bounded English records. Experiment-design was not retriggered because no
-experiment/config policy changed. UI/animation and experiment-result reporting
-were not applied; there are no experiment results to report. The [immutable prior record][prior-record]
+For this continuation, the full skill catalog was inspected once. im-not-ai-en
+protected exact scope and refusal conditions while keeping the failed local
+attempt, passing continuation and supplied CI evidence distinct. Experiment-design
+was not retriggered because no experiment/config policy changed. UI/animation and
+experiment-result reporting were not applied; there are no experiment results to
+report. The [immutable prior record][prior-record]
 retains earlier source/verification evidence. This page replaces stale status
 instead of appending prior full task histories.
 
 [prior-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/748#pullrequestreview-5410023630
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2/tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05
 [registration-review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/749#pullrequestreview-5410467314
+[ci-correction-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/369817bf919eb04632ad0af78160d3a33b5d5692/tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation
+[transport-ci]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37274687663/job/111649027037

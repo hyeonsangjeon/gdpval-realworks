@@ -44,18 +44,46 @@ entries land under a fresh dated heading the day they merge to `main`.
   receipt SHA256 is
   `52f82edf52f76cf68a59fa4cad1aab70723ec46197f5b8fb0b1c439f5ef07ee3`.
 
-  A separate, unvalidated one-line correction at
+  A separate one-line correction at
   `0821ff8d190a7ca5a1d4cf5a0c4710f8a9111b18`, tree
   `e2c51219d5e027ea6bf2c1911db4874690d08d22`, binds only the CURRENT test
   `WORKFLOW_SHA256` to the edited workflow. No historical pin or assertion was
-  weakened. No second validation ran. The post-proof delta is this test literal
-  plus CHANGELOG/LATEST records, not records alone. The leader's six-file source
+  weakened. It was initially unvalidated; no second invocation ran in that
+  correction turn. Relative to the failed proof, the delta includes this test
+  literal plus CHANGELOG/LATEST, not records alone. The leader's six-file source
   review `5410467314` at `c5217b19f79a44787ae08fafecc28dae3ab145b1` and the
-  original 75-case proof below remain distinct and unchanged. Delivery stays
-  **HOLD** for completed targeted validation, corrected-HEAD review, applicable
-  CI and acceptance. The [current task record](tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation)
-  preserves the redacted command boundary and remaining deadline/source-closure
-  work. No deadline integration or execution authority is added.
+  original 75-case proof below remain distinct and unchanged. The
+  [immutable correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/369817bf919eb04632ad0af78160d3a33b5d5692/tasks/LATEST_TASK_RESULT/README.md#ci-correction-and-incomplete-local-validation)
+  preserves the earlier failed command and review boundary.
+
+  The leader subsequently reviewed all six correction files at HEAD
+  `369817bf919eb04632ad0af78160d3a33b5d5692`, tree
+  `0bd9f2bbd1c837994d655ad328857082e4988a38`, and accepted the source
+  correction. At that unchanged clean HEAD, one separately authorized Python
+  partition-node continuation passed **1 case in 15.32s, exit 0**, including its
+  scoped collect-only checks. Python 3.10.12 ran token-free/offline with a
+  300-second outer bound and 5-second termination grace. No Node/HF check or
+  successful registration selector was repeated. Exact private command SHA256 is
+  `1814661791a888232a78504f1c8e85ee8f169fe94b7fa468da388cca84bf1290`;
+  combined-log SHA256 is
+  `d9488c9f39a5d63d76a1e27fd74d8dd3b774b084a480fd86a4534c1590aef87f`;
+  receipt SHA256 is
+  `3aaef590fc6effaea58b81d7895e2a555b285515b50363cea41c108772971976`.
+  The command digest identifies the private script, not its redacted public
+  display. Only CHANGELOG/LATEST change after this passing proof.
+
+  Separately, the leader supplied successful validate run `37274687663`, job
+  `111649027037`, attempt 1, at that same HEAD: **556 passed, 0 failed** in Node,
+  including the ten transport-fake cases and the live six-artifact hash/structure
+  test, which took **494.959834ms**. The completed CI log is 125654 bytes,
+  SHA256 `dc07a93374aac5c78ad9c9369fb6fd6faee0bac0a2e93dccc1af1cfe3742e13e`.
+  This newer live evidence does not establish why the earlier requests timed out
+  or turn the failed local combined attempt into a pass. No CI query or local
+  Node/HF rerun occurred. Remaining CI jobs, the final records HEAD and delivery
+  still need acceptance; delivery stays **HOLD**. The
+  [current task record](tasks/LATEST_TASK_RESULT/README.md#one-node-python-continuation)
+  preserves the separate evidence and remaining deadline/source-closure work.
+  No deadline integration or execution authority is added.
 
 ### Added
 
@@ -93,8 +121,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   preserves the exact command with private locators redacted, accepted
   `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2` basis and evidence boundary.
   The original post-proof delta contained only README/CHANGELOG/LATEST
-  documentation. The separate CI correction and failed local target are recorded
-  above; final corrected-HEAD review, applicable CI and acceptance remain pending.
+  documentation. The separate CI correction, failed local target, passing Python
+  continuation and supplied CI transport proof are recorded above. Remaining CI,
+  final-record review and delivery acceptance remain pending.
   The single next integration unit,
   `time_budget_observation_deadline`, would wire the existing host deadline;
   no deadline/counter enforcement or execution authority is claimed here.
