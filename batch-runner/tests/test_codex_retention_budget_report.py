@@ -28,7 +28,7 @@ FROZEN_SOURCE = {
     "batch-runner/codex_retention_result_intake.py": "df629ee1defde93347a6a6eb92d25ef8ad536e39e7a52b19ad3acb32deaa4196",
     "batch-runner/codex_budget_pilot_grade_readout.py": "96d0dd63f5d67aa9f54e95615b4467357aa65ea5223418be47e120cc3ad5e815",
     # Current-checkout observer facade, not a historical writer/receipt binding.
-    "batch-runner/codex_retention_grade_readout.py": "12cc7ffba78901c070adc7fd3f18e622eef8c359257d56a057ec798beddfb94f",
+    "batch-runner/codex_retention_grade_readout.py": "0e2b920875fb5597406e267a8b838e80fcd55d6958ded1e4286516036cb44038",
     "batch-runner/codex_retention_fixed_grade.py": "3d771582eaaf0d4cfab8e8858db1c7e557473459c2dd5769a837f059f516a684",
     "batch-runner/codex_retention_keep_r2_grade.py": "bb8d1b3a46824a2597f31fe6567531fc59deabb79af87e85d98fd1a08ae3988e",
     "batch-runner/core/codex_task_deadline.py": "7af4af22903af0a97fdcfb33c318616f105bc50ae1cd8054daeb55e75989550f",

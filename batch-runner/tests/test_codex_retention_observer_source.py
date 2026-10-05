@@ -17,6 +17,65 @@ FIRST_EVIDENCE = "1ced90e270d80055cc3482bea4a5489f045f1b9dcb0ed2622ebd8de80285a5
 KEEP_EVIDENCE = "25d2591a2b53d3055a7efb46b55ce86bab811a702e6598b7119f0625784b6ca0"
 
 
+def test_anchored_prospective_verification_current_binding_remains_unpaid(tmp_path, monkeypatch):
+    """Only the CURRENT helper/facade identity advances, never a paid receipt."""
+    from .test_codex_retention_budget_report import FROZEN_SOURCE
+
+    fixed = bridge._fixed("retention/keep-r2")
+    historical = deepcopy((bridge.RESULT, bridge.PARENT, bridge.READER, fixed.RESULT, fixed.PARENT, fixed.READER))
+    assert bridge.fixed_evidence_sha256() == FIRST_EVIDENCE
+    assert bridge.fixed_evidence_sha256(fixed.SELECTOR) == KEEP_EVIDENCE
+    helper = bridge.ROOT / "batch-runner/gpt54_disposable_checkout.py"
+    assert hashlib.sha256(helper.read_bytes()).hexdigest() == reader.CURRENT_DEPENDENCIES[helper.name]
+    facade = "batch-runner/codex_retention_grade_readout.py"
+    assert hashlib.sha256((bridge.ROOT / facade).read_bytes()).hexdigest() == FROZEN_SOURCE[facade]
+    effects = []
+
+    def forbidden(*args, **kwargs):
+        effects.append(True)
+        pytest.fail("CURRENT compatibility reached a private or paid boundary")
+
+    for name in ("_authority", "_derived_inputs", "prepare", "claim", "judge", "publish", "reconcile"):
+        monkeypatch.setattr(bridge, name, forbidden)
+    monkeypatch.setattr(bridge.reader, "read_result", forbidden)
+    common = tmp_path / "git-common"
+    common.mkdir()
+
+    def git(path, *command, ok=(0,)):
+        assert Path(path) == bridge.ROOT
+        answers = {
+            ("rev-parse", "--show-toplevel"): os.fsencode(bridge.ROOT) + b"\n",
+            ("rev-parse", "--path-format=absolute", "--git-common-dir"): os.fsencode(common) + b"\n",
+            ("rev-parse", "HEAD"): (old.OBSERVER + "\n").encode(),
+            ("diff", "--name-only", "HEAD", "--"): b"",
+            ("status", "--porcelain", "--untracked-files=normal"): b"",
+            ("config", "--name-only", "--get-regexp",
+             r"^(filter\.|include\.|includeif\.|extensions\.partialclone$|remote\..*\.promisor$|core\.alternaterefscommand$)"): b"",
+        }
+        assert command in answers  # Only metadata transport, not source validation, is synthetic.
+        return SimpleNamespace(stdout=answers[command], returncode=0)
+
+    monkeypatch.setattr(old.source_checkout, "_git", git)
+    monkeypatch.setattr(pilot, "_git", git)
+    for selector in (reader.SELECTOR, reader.KEEP_R2_SELECTOR):
+        reader._source_current(old.OBSERVER, selector=selector)
+    with pytest.raises(output.OutputPublicationRefused, match="^reviewed_retention_reader_required$"):
+        bridge._source(bridge.compile_request(old.OBSERVER, selector=fixed.SELECTOR))
+    read_bytes = output._bytes
+
+    def drift(path, **kwargs):
+        data = read_bytes(path, **kwargs)
+        return data + b"\n" if Path(path) == helper else data
+
+    monkeypatch.setattr(output, "_bytes", drift)
+    with pytest.raises(output.OutputPublicationRefused, match="^reviewed_retention_observer_dependency_required$"):
+        reader._source_current(old.OBSERVER)
+    assert historical == (bridge.RESULT, bridge.PARENT, bridge.READER, fixed.RESULT, fixed.PARENT, fixed.READER)
+    assert bridge.fixed_evidence_sha256() == FIRST_EVIDENCE
+    assert bridge.fixed_evidence_sha256(fixed.SELECTOR) == KEEP_EVIDENCE
+    assert effects == []
+
+
 def test_current_observer_source_preserves_historical_grade_bindings(tmp_path, monkeypatch, capsys):
     fixed = bridge._fixed("retention/keep-r2")
     historical = deepcopy((bridge.RESULT, bridge.PARENT, bridge.READER, fixed.RESULT, fixed.PARENT, fixed.READER))
@@ -27,7 +86,7 @@ def test_current_observer_source_preserves_historical_grade_bindings(tmp_path, m
     assert set(fixed.READER_FILES.values()) <= set(reader.CURRENT_DEPENDENCIES)
     assert reader.CURRENT_DEPENDENCIES["codex_retention_first_cell.py"] == "c42c8bb3e521c10a5d48680918978a3b9269468a724cd127109f8f4898fe2e6b"
     assert reader.CURRENT_DEPENDENCIES["codex_retention_fresh_r1_result_intake.py"] == "631dd2a76faecd28ae65bdbe69d755f598aa4b025cfc66a8280872c2f3a2bc96"
-    assert reader.CURRENT_DEPENDENCIES["gpt54_disposable_checkout.py"] == "3b4ae25c5683722a6e490e316a32024a03a1e9a3380c3b02098226f2eac5b5db"
+    assert reader.CURRENT_DEPENDENCIES["gpt54_disposable_checkout.py"] == "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62"
     assert fixed.READER["controller_sha256"] == "957934b869ed5071923add7e9554aa68de941c9488f3e6d650557d27f6179601"
     assert fixed.READER["module_sha256"] == "5f4f6c8ae9e361760e9a76d12c95edd3237aac2714ab8767c640e80e78e24583"
     for name, expected in reader.CURRENT_DEPENDENCIES.items():

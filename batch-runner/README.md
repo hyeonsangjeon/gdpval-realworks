@@ -199,8 +199,9 @@ The [local-source profile](experiments/execution_envelope/gpt54_sandboxv2_codex_
 uses the existing comparison schema, model/effort, input identities, task order,
 ABBA20, run IDs and limits. It changes only the reviewed runtime source bindings,
 the three local preparation helper fingerprints, the two capture-module bindings
-and the actual full grader template closure. The capture-only launch refusal
-does not change that closure. The historical manifest and compiler remain
+and the actual full grader template closure. Neither the capture launch refusal
+nor the anchored metadata verifier changes that closure. The historical
+manifest and compiler remain
 unchanged; the template closure is not a materialized-grader identity or a
 grading result.
 
@@ -231,6 +232,44 @@ not the private originals. Real local preparation needs a separate instruction;
 credentialed CI authority, dispatch, native call/token caps and launch gates
 remain unresolved.
 
+#### Independently anchored prospective-profile verification
+
+`gpt54_disposable_checkout.verify_runtime_checkout` accepts the optional
+`expected_reviewed_source_sha` keyword for a read-only, model-free mode. The
+caller must supply a full lowercase 40-hex commit SHA independently of the
+checkout and its markers. Never obtain this expected value from their HEAD,
+environment, manifest or fallback. It is review metadata, not launch approval.
+
+```python
+verify_runtime_checkout(
+    checkout=prepared_root,
+    run_id=registered_run_id,
+    condition=registered_condition,
+    expected_reviewed_source_sha=independently_reviewed_full_sha,
+)
+```
+
+The held ready marker and actual detached HEAD must match that expected commit;
+its tree is checked independently. Bound bytes from the fixed config-ready
+marker supply `manifest_file.path` only as a locator. The selected execution_envelope
+YAML must be a regular tracked blob at the expected commit, with identical
+working-file bytes, size and digest. Config-marker and manifest metadata are
+each bounded to 1 MiB; local Git uses its existing 60-second command bound,
+closed environment and disabled transport. A matching rewritten marker set
+cannot substitute an unreviewed manifest or commit.
+
+Config/input verification uses the same selected path. Quarantine, reservations,
+held directories and final rereads remain enforced. The API writes nothing and
+returns only the unchanged canonical preparation marker. An omitted or `None`
+anchor retains the historical path; it does not discover the prospective
+profile. Refs, tags, malformed anchors, unsafe paths and mismatched bytes refuse.
+
+No runtime or workflow caller supplies this new keyword. The unconditional
+comparison launch refusal below is unchanged. The [anchored-verifier proof](../tasks/LATEST_TASK_RESULT/README.md#project5-independently-anchored-prospective-profile-verification--2026-10-05)
+uses temporary Git and synthetic inputs, not private originals or evidence of
+runtime equivalence. A changed-source preparation requires separate fixed-HEAD
+review and direction; the consumed earlier artifact cannot be relabeled.
+
 #### Direct comparison runtime launch refusal
 
 `verify_codex_input_capture` and `capture_v2_pre_execution_input` share the
@@ -243,7 +282,7 @@ environment variable, manifest or marker enables this route.
 
 Absent/non-comparison behavior and model-free bundle verification/materialization
 APIs are unchanged. Runtime profile recognition remains deferred. The
-[launch-boundary proof](../tasks/LATEST_TASK_RESULT/README.md#project5-independent-comparison-runtime-launch-refusal--2026-10-05)
+[launch-boundary proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c28847f1b0e3626a088a746558cda82aca67c127/tasks/LATEST_TASK_RESULT/README.md#project5-independent-comparison-runtime-launch-refusal--2026-10-05)
 uses synthetic inputs and forbidden-effect sentinels, not private originals or
 an executed comparison.
 

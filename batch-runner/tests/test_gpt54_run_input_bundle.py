@@ -368,6 +368,10 @@ def _copy_files(root, files):
 
 @pytest.fixture(scope="module")
 def _input_bundle_seed(tmp_path_factory, approved_pilot_source):
+    yield from _make_input_bundle_seed(tmp_path_factory, approved_pilot_source)
+
+
+def _make_input_bundle_seed(tmp_path_factory, source, manifest_path=None):
     """Build the independent five-task oracle and four config bundles once.
 
     Only immutable bytes and frozen typed plans cross case boundaries. The
@@ -378,8 +382,15 @@ def _input_bundle_seed(tmp_path_factory, approved_pilot_source):
     oracle = root / "oracle"
     oracle.mkdir()
     with pytest.MonkeyPatch.context() as setup:
-        # The oracle's registered source pins must bind real historical bytes.
-        setup.setattr(preflight, "ROOT", approved_pilot_source)
+        # Source pins always bind real bytes: the historical default or an
+        # explicitly selected current profile. Only original-data pins below
+        # describe synthetic inputs, never production/private originals.
+        setup.setattr(preflight, "ROOT", source)
+        if manifest_path is not None:
+            load_plan = preflight.load_plan
+            setup.setattr(preflight, "load_plan", lambda path=preflight.PLAN: load_plan(
+                source / manifest_path if path == preflight.PLAN else path,
+            ))
         forbidden = _guards(setup)
         install_cache = _compiler_cache()
         install_cache(setup)
@@ -443,8 +454,8 @@ def _input_bundle_seed(tmp_path_factory, approved_pilot_source):
         return json.loads(config_markers[run.run_id])
 
     def install(monkeypatch):
-        # Consumers recompile against the same historical source as this seed.
-        monkeypatch.setattr(preflight, "ROOT", approved_pilot_source)
+        # Consumers recompile against the exact same source as this seed.
+        monkeypatch.setattr(preflight, "ROOT", source)
         install_cache(monkeypatch)
         # These are fixture suppliers, not runtime/compiler validators. Other
         # selectors get their unmodified helpers back at each case's teardown.
