@@ -9,6 +9,47 @@ import tarfile
 import pytest
 
 
+@pytest.fixture(scope="session")
+def frozen_local_comparison_source(tmp_path_factory):
+    """F882 supplies historical positive bytes, never the current runtime R."""
+    frozen_sha = "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2"
+    archived = subprocess.run(
+        ["git", "archive", "--format=tar", frozen_sha, "batch-runner", ".github/workflows"],
+        cwd=Path(__file__).resolve().parents[2], check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30,
+        env={"PATH": os.defpath, "LANG": "C.UTF-8", "GIT_CONFIG_NOSYSTEM": "1",
+             "GIT_CONFIG_GLOBAL": os.devnull, "GIT_NO_LAZY_FETCH": "1"},
+    ).stdout
+    root = tmp_path_factory.mktemp("frozen-local-comparison-source")
+    with tarfile.open(fileobj=io.BytesIO(archived), mode="r:") as snapshot:
+        assert snapshot.pax_headers["comment"] == frozen_sha
+        assert all(not Path(member.name).is_absolute() and ".." not in Path(member.name).parts
+                   and (member.isdir() or member.isfile()) for member in snapshot.getmembers())
+        snapshot.extractall(root)
+    return root
+
+
+@pytest.fixture
+def historical_retention_source(frozen_local_comparison_source, monkeypatch):
+    """The closed eight-cell compiler refuses R and validates its real F bytes.
+
+    This test-only fixture changes a source root, never hashes, verdicts, paid
+    bindings or the current observer's dependencies. Synthetic retained-cell
+    helpers explicitly copy this frozen core when exercising old positive paths.
+    """
+    import codex_retention_diagnostic as registration
+
+    current = registration.ROOT
+    with pytest.raises(registration.RetentionRegistrationRefused,
+                       match="^source_pin:batch-runner/core/codex_runner.py$"):
+        registration.compile_plan()
+    frozen = frozen_local_comparison_source
+    assert (frozen / registration.REGISTRATION).read_bytes() == (current / registration.REGISTRATION).read_bytes()
+    assert (frozen / registration.COMPILER).read_bytes() == (current / registration.COMPILER).read_bytes()
+    monkeypatch.setattr(registration, "ROOT", frozen)
+    return frozen
+
+
 @pytest.fixture(scope="module")
 def approved_pilot_source(tmp_path_factory):
     """Read immutable local Git data before the function-scoped process guard.
@@ -49,6 +90,7 @@ def historical_comparison_source(approved_pilot_source, monkeypatch):
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/gpt54_workflow_gate.py",
+        "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
         "source_pin:batch-runner/core/codex_task_deadline.py",
@@ -89,6 +131,7 @@ def historical_budget_source(approved_pilot_source):
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/gpt54_workflow_gate.py",
+        "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
         "source_pin:batch-runner/core/codex_task_deadline.py",

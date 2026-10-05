@@ -806,6 +806,37 @@ class ConversationOutcome:
 
 
 def run_model_conversation(
+    *, task_prompt: str, voice: ModelVoice, desk: ToolDesk, limits: LoopLimits,
+    tools_available: Sequence[str] = TOOL_NAMES,
+    cancel_requested: Optional[Callable[[], bool]] = None,
+    before_model_call: Optional[Callable[[int], None]] = None,
+    clock: Callable[[], float] = time.monotonic,
+    observation_control=None,
+) -> ConversationOutcome:
+    """Keep the optional observation clock outside every turn and tool wait."""
+    from core.time_budget_observation_deadline import (
+        ObservationCleanupExpired, ObservationTimedOut, TIMEOUT,
+    )
+
+    interrupted = []
+    arguments = dict(task_prompt=task_prompt, voice=voice, desk=desk, limits=limits,
+                     tools_available=tools_available, cancel_requested=cancel_requested,
+                     before_model_call=before_model_call, clock=clock,
+                     observation_control=observation_control, _timeout_finish=interrupted)
+    if observation_control is None:
+        return _run_model_conversation(**arguments)
+    try:
+        with observation_control.supervise():
+            outcome = _run_model_conversation(**arguments)
+            observation_control.terminal("completed" if outcome.produced_an_answer else "failed")
+            return outcome
+    except (ObservationTimedOut, ObservationCleanupExpired):
+        # Use the loop's real partial ledger. A late reply is not a successful
+        # task, but known usage and earlier completed turns must not disappear.
+        return interrupted[0](StopReason.TIME_LIMIT_REACHED, TIMEOUT)
+
+
+def _run_model_conversation(
     *,
     task_prompt: str,
     voice: ModelVoice,
@@ -815,6 +846,8 @@ def run_model_conversation(
     cancel_requested: Optional[Callable[[], bool]] = None,
     before_model_call: Optional[Callable[[int], None]] = None,
     clock: Callable[[], float] = time.monotonic,
+    observation_control=None,
+    _timeout_finish=None,
 ) -> ConversationOutcome:
     """Ask the model, run what it asked for, show it the answer, repeat.
 
@@ -845,6 +878,14 @@ def run_model_conversation(
     history: list[ToolExchange] = []
     repeats: dict[str, int] = {}
     started_at = clock()
+    if observation_control is not None:
+        clock = observation_control.clock
+
+    def elapsed_seconds():
+        if observation_control is not None:
+            first = observation_control.first_start
+            return 0.0 if first is None else clock() - first
+        return clock() - started_at
     turn = 0
     # Set the moment a reply's usage is known, cleared the moment that turn is
     # recorded. While it holds something, this run owes the ledger a call.
@@ -856,6 +897,16 @@ def run_model_conversation(
         # can be written down. Ten paths between the reply arriving and the
         # turn being recorded end here, and every one of them used to lose it.
         nonlocal billed
+        if observation_control is not None:
+            from core.time_budget_observation_deadline import TIMEOUT
+
+            if (observation_control.first_start is not None
+                    and observation_control.terminal_reason is None
+                    and observation_control.remaining_seconds() <= 0):
+                observation_control.terminal(TIMEOUT)
+            if observation_control.terminal_reason == TIMEOUT:
+                reason, detail = StopReason.TIME_LIMIT_REACHED, TIMEOUT
+                extra.pop("final_result", None)
         if billed is not None:
             turns.append(billed.as_turn(reason.value))
             billed = None
@@ -876,6 +927,9 @@ def run_model_conversation(
             ),
             **extra,
         )
+
+    if _timeout_finish is not None:
+        _timeout_finish.append(finish)
 
     # Asked before anything else, in two steps, because "did not say" and "said
     # yes" are different problems with different answers.
@@ -935,7 +989,7 @@ def run_model_conversation(
                 f"the model has been asked {turn} times, which is all the "
                 f"{max_turns} this run was allowed",
             )
-        elapsed = clock() - started_at
+        elapsed = elapsed_seconds()
         if elapsed >= max_seconds:
             return finish(
                 StopReason.TIME_LIMIT_REACHED,
@@ -979,6 +1033,10 @@ def run_model_conversation(
                     "to not do",
                 )
         try:
+            if observation_control is not None:
+                # Reservation above is durable before the first generation
+                # start. Later turns only check/re-arm the same absolute budget.
+                observation_control.start()
             reply = voice.next_turn(request)
         except Exception as error:  # noqa: BLE001 - any failure ends the run
             return finish(
@@ -1093,6 +1151,9 @@ def run_model_conversation(
                 f"the model's reply could not be charged for: {error}",
             )
 
+        if observation_control is not None:
+            observation_control.check_generation()
+
         if output_tokens > max_written:
             return finish(
                 StopReason.WRITING_LIMIT_REACHED,
@@ -1133,7 +1194,7 @@ def run_model_conversation(
                 StopReason.CANCELLED,
                 "the run was asked to stop before the tool was run",
             )
-        elapsed = clock() - started_at
+        elapsed = elapsed_seconds()
         if elapsed >= max_seconds:
             return finish(
                 StopReason.TIME_LIMIT_REACHED,
@@ -1154,6 +1215,8 @@ def run_model_conversation(
             outcome = desk.run_one(
                 call_id=call_id, tool_name=tool_name, arguments=arguments
             )
+            if observation_control is not None:
+                observation_control.check_generation()
         except Exception as error:  # noqa: BLE001 - any failure ends the run
             return finish(
                 StopReason.TOOL_DESK_BROKE,

@@ -1,5 +1,5 @@
 # Separate prospective registration. Neither prior comparison is superseded.
-# This is intent, not an executable config or evidence of deadline enforcement.
+# Intent and reviewed source roles, not an executable config or launch authority.
 plan_version: gpt54-sandboxv2-codex-time-budget-v1
 study_id: gpt54_sandboxv2_codex_time_budget_v1
 comparison: configuration_bundle
@@ -16,7 +16,60 @@ source_basis:
     sha256: 81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe
   registration_compiler:
     path: batch-runner/gpt54_time_budget_comparison.py
-    sha256: 58a7b76840a6f8c639c278fa771d2271c3f765946e401f6ea4441f7bff7dab93
+    sha256: 82976543add7e68a5ce786b2798860a80cb5b60116eb3ec15a0d45d4dd2fb7d4
+  runtime_role: independently_reviewed_runtime_commit
+  frozen_grader:
+    source_sha: 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2
+    source_tree: 45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca
+    template_path: batch-runner/grading_configs/default_v2_sol_max.yaml
+    template_source_sha256: 37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce
+    execution_source: frozen_source_only_not_runtime_root
+    materialized_config_requires_distinct_path_bytes_and_fingerprint: true
+
+# Runtime R: only directly changed runtime/compiler bindings advance here.
+# The sealed local-source profile and its 37 historical pins remain in F.
+source_pins:
+  .github/workflows/agentic-v2-stage-run.yml: f02579edfa09ee9d3e9576cff25510c27f86bb1a9498f311f0bafd9ff4261ae1
+  .github/workflows/batch-run.yml: 47f006f69bc079c50e3fba5ec5a7afcee769478e9857dead9c2e0eee22d90c26
+  batch-runner/gpt54_comparison_preflight.py: 82f37bbea62a5b0ee70ae20d36376440763f2474afd0ad17cc8389eba291dc29
+  batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
+  batch-runner/gpt54_codex_grading_input.py: 9a24f053afde1bf4b039135fdc633d49b32553f5b02a50c596f210dc7e46d1b7
+  batch-runner/gpt54_prepared_input_attestation.py: 6e78388a36446317d02f80409079e3a338eced6245afc56867f5438c0183ff9a
+  batch-runner/gpt54_codex_input_capture.py: 6281ed936af90fce5d46ca82400b4163e0ba0d1dc0f3b34743b7d2c2ef431c5b
+  batch-runner/gpt54_v2_input_capture.py: b7c3ad903afd16630c4bf92efa67d21b5f6d1092f394828888f82c4fc1cf3d52
+  batch-runner/gpt54_run_config_bundle.py: 92c0cdd8be5d93e229d4cb6fbc039d7fe5cd491c96918fdaf8b7ab2d86706817
+  batch-runner/gpt54_run_input_bundle.py: 321c7de8203eccf18f0ca12a3f7f444811d21aa4811db21e94e869bf575b6256
+  batch-runner/gpt54_disposable_checkout.py: 77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62
+  batch-runner/gpt54_workflow_gate.py: 714a9e18fe5a3df54f54d472b772bfb958966c807ebe30dab7efc9428a062626
+  batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
+  batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
+  batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
+  batch-runner/core/needs_files.py: 05c1c0baf36c5bae01bcb6c8b5871249e2633c7165b8e96f94726ece7f5ddd84
+  batch-runner/core/repo_bootstrapper.py: 7e87e75b78d9a86740610bd87cfb8b0eb8bb3dd14a4925af8eca477812e419f3
+  batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
+  batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0
+  batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
+  batch-runner/experiments/execution_envelope/advance_check_plan.yaml: 9ecf85f1e9eb40ddb0232baa854c10052c3e4457fe2cf174f9b34d4cbecdc26e
+  batch-runner/experiments/execution_envelope/agentic_corrected_harness_plan.yaml: 99431b9d8a6c9d2ca55abc580ce3dab67b80808be7c4c3777fb5abe7669dc8a8
+  batch-runner/experiments/exp033_codex_foundry_fixed5.yaml: 5af7bd64ec00c6ac45c6d2a2f472833b90c4920221fd61dfdc9bbc324c745763
+  batch-runner/grading_configs/default_v2_sol_max.yaml: 12d38383d94e991d61491631d73119c89c997faaa146562f3be71d6527b195bf
+  batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
+  batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
+  batch-runner/core/agentic_v2_model_voice.py: 71da68598e631a43678d278c04589b978bd3c8d82d4df47ca30f90d1df4ce1a6
+  batch-runner/core/agentic_v2_conversation_runner.py: 57e38d8b884cb03e7c7a10e0442d8fbc6925eb02c56e8fb29adb71b9b85d6a92
+  batch-runner/core/agentic_v2_stage_one_budget.py: 56641403c043d09ef49360a473aedc22ff8fc1f863bb9746dacd9891622324f1
+  batch-runner/scripts/run_agentic_v2_stage.py: 3a97f33c77bfcaa199ba349e4547bec12a1949afc0dce52c38bd943206162fc9
+  batch-runner/core/codex_runtime_config.py: 3ef7a6bcbfe3523516068dee99f5488163cf33516d03de1c9fe42d8e2aca19b3
+  batch-runner/core/codex_runner.py: b6765bef5c013b964e6133b6d915ab337e087b8130bc443938c4abb23cf8265c
+  batch-runner/core/experiment_config.py: dee343217eebbf1e1adf2981e3c07d94e200d1af8e054a2a22f34470799f233d
+  batch-runner/core/executor.py: 31eb831a7a450558192a050cedaf2cc905b992c1e1028dab9e34af4287e64bad
+  batch-runner/step1_prepare_tasks.py: 5f3419596655aa5860abc4a8cd776212f8d1c3ba4bc38545f7aab62a06160ae9
+  batch-runner/step2_run_inference.py: 9ae6e0c809be498fd96c25ad16b83302c567fe95bdd7dc587451c4029b8c24bc
+  batch-runner/core/codex_task_deadline.py: 7af4af22903af0a97fdcfb33c318616f105bc50ae1cd8054daeb55e75989550f
+  batch-runner/core/time_budget_observation_deadline.py: f219143e7c73da224948538170b781c393f57fe13bd4587fb94e9c28a67744e2
+  batch-runner/core/agentic_v2_conversation.py: b117c036ab42ad234da06d6ddebd83529c151d45208cd490e278944ad10b2125
+  batch-runner/core/agentic_v2_runner.py: b9a03a58fb68802d6b852429713454123b90ad47e49337ffe4425df4f3c50050
+  batch-runner/gpt54_time_budget_comparison.py: 82976543add7e68a5ce786b2798860a80cb5b60116eb3ec15a0d45d4dd2fb7d4
 
 # Only these validated facts are shared with the old source profile. Its shared
 # native request/token limits, run IDs and launch policy are not copied here.

@@ -794,6 +794,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         preflight_auth: bool = True,
         pilot_wire_receipts: Any | None = None,
         task_deadline_store: CodexTaskDeadlineStore | None = None,
+        observation_control=None,
     ) -> None:
         """
         Args:
@@ -849,6 +850,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         ):
             raise TaskDeadlineRefused("Codex runner differs from its deadline identity/controls")
         self.task_deadline_store = task_deadline_store
+        if observation_control is not None:
+            from core.time_budget_observation_deadline import (
+                ObservationDeadlineRefused, TimeBudgetObservation,
+            )
+
+            if (type(observation_control) is not TimeBudgetObservation
+                    or task_deadline_store is not None or pilot_wire_receipts is not None
+                    or run_id != observation_control.identity.run_id
+                    or condition_name != "codex"):
+                raise ObservationDeadlineRefused("time_budget_observation_identity_refused")
+            observation_control.require_unclaimed()
+        self.observation_control = observation_control
+        self.last_observation_deadline = None
         self.cost_ledger = cost_ledger
         self.run_id = run_id
         self.condition_name = condition_name
@@ -1318,6 +1332,42 @@ class CodexAgentRunner(RecordsItsFirstRequest):
     # -- run ----------------------------------------------------------------
 
     def run(
+        self, task_prompt: str, model: str | None = None,
+        reference_files: Optional[list] = None, occupation: str = "professional",
+        experiment_prompt: Optional[dict] = None, perception_text: Optional[str] = None,
+        run_id: Optional[str] = None, condition_name: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> dict:
+        observation = getattr(self, "observation_control", None)
+        arguments = dict(task_prompt=task_prompt, model=model, reference_files=reference_files,
+                         occupation=occupation, experiment_prompt=experiment_prompt,
+                         perception_text=perception_text, run_id=run_id,
+                         condition_name=condition_name, task_id=task_id)
+        if observation is None:
+            return self._run(**arguments)
+        from core.time_budget_observation_deadline import CLEANUP_UNCONFIRMED, TIMEOUT
+
+        observation.claim(run_id=self.run_id if run_id is None else run_id,
+                          condition=self.condition_name if condition_name is None else condition_name,
+                          task_id=task_id)
+        result = None
+        try:
+            result = self._run(**arguments)
+            return result
+        finally:
+            observation.terminal("completed" if result and result.get("success") else "failed")
+            observation.stop_owned_processes()
+            observation.finish_cleanup(True)
+            self.last_observation_deadline = observation.as_record()
+            if result is not None:
+                result["time_budget_observation"] = self.last_observation_deadline
+                if observation.terminal_reason == TIMEOUT:
+                    result.update(success=False, error=TIMEOUT, error_category=TIMEOUT)
+                elif not observation.cleanup_complete:
+                    result.update(success=False, error=CLEANUP_UNCONFIRMED,
+                                  error_category=CLEANUP_UNCONFIRMED)
+
+    def _run(
         self,
         task_prompt: str,
         model: str | None = None,
@@ -1548,10 +1598,14 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 raise
         finally:
             if workspace is not None and deadline is None:
-                try:
-                    workspace.cleanup()
-                except OSError:
-                    pass
+                observation = getattr(self, "observation_control", None)
+                if observation is not None:
+                    observation.cleanup(workspace.cleanup)
+                else:
+                    try:
+                        workspace.cleanup()
+                    except OSError:
+                        pass
 
         self.last_run_diagnostics = {
             "thread_id": outcome.thread_id,
@@ -1603,8 +1657,33 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if pilot_wire_observer is None or pilot_host_witness is None:
                 raise PilotNativeResultHostRefused() from None
         before_pids = _descendant_pids(os.getpid())
+        observation = getattr(self, "observation_control", None)
+        if observation is not None and (not observation._claimed or task_id != observation.identity.task_id):
+            from core.time_budget_observation_deadline import ObservationDeadlineRefused
+
+            raise ObservationDeadlineRefused("time_budget_observation_admission_refused")
         call_id: str | None = None
         codex: Any = None
+        observation_runtime_closed = False
+
+        def close_observation_runtime():
+            nonlocal observation_runtime_closed
+            if observation_runtime_closed:
+                return
+            observation_runtime_closed = True
+            process = getattr(getattr(codex, "_client", None), "_proc", None)
+            observation.stop_owned_processes(process)
+            if codex is not None:
+                observation.cleanup(codex.close, step_seconds=2.0)
+
+        def collect_files():
+            if observation is None:
+                return (workspace.collect_deliverables() if pilot_host is None else
+                        pilot_host.collect_deliverables(pilot_host_witness, workspace))
+            close_observation_runtime()
+            files = []
+            observation.cleanup(lambda: files.extend(workspace.collect_deliverables()))
+            return files
         binds_native_state = task_deadline is not None and task_deadline.binds_native_state
         try:
             continuation = task_deadline.continuation() if binds_native_state else None
@@ -1702,7 +1781,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 ))
                 task_deadline.bound_timeout(self.timeout)
             try:
-                turn_handle = thread.turn(turn_input)
+                if observation is None:
+                    turn_handle = thread.turn(turn_input)
+                else:
+                    turn_handle, observed = self._observation_turn(thread, turn_input, observation)
             except Exception as exc:  # noqa: BLE001
                 category = "turn_start_failed"
                 if task_deadline is not None:
@@ -1713,7 +1795,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         task_deadline.stop_content_filter()
                     elif binds_native_state:
                         task_deadline.observe_turn_start_failure(attempt_index)
-                else:
+                elif observation is None:
                     # Preserve the legacy pre-turn accounting boundary.
                     self._abandon_call(call_id, "the turn never started")
                 call_id = None
@@ -1725,11 +1807,14 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     thread_id=getattr(thread, "id", None),
                 )
 
-            observed = (
-                self._await_turn(turn_handle)
-                if task_deadline is None else
-                self._await_turn(turn_handle, task_deadline=task_deadline)
-            )
+            if observation is None:
+                observed = (
+                    self._await_turn(turn_handle)
+                    if task_deadline is None else
+                    self._await_turn(turn_handle, task_deadline=task_deadline)
+                )
+            else:
+                close_observation_runtime()
             result, timed_out, failure = (
                 observed.result, observed.timed_out, observed.failure
             )
@@ -1790,20 +1875,18 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 # to report before the interrupt is settled; what it did not
                 # stays an open reservation.
                 measured = _settle_what_was_measured()
-                files = (
-                    workspace.collect_deliverables()
-                    if pilot_host is None
-                    else pilot_host.collect_deliverables(pilot_host_witness, workspace)
-                )
+                files = collect_files()
                 return CodexRunOutcome(
                     success=False,
                     text="",
                     files=files,
-                    error=EXHAUSTED if deadline_expired else (
+                    error=("time_budget_observation_deadline_exhausted" if observation is not None else
+                           EXHAUSTED if deadline_expired else (
                         f"the Codex turn exceeded {self.timeout} seconds and "
                         "was interrupted"
-                    ),
-                    error_category=EXHAUSTED if deadline_expired else "timeout",
+                    )),
+                    error_category=("time_budget_observation_deadline_exhausted" if observation is not None else
+                                    EXHAUSTED if deadline_expired else "timeout"),
                     usage_delta=measured,
                     items_seen=observed.items_seen,
                     thread_id=getattr(thread, "id", None),
@@ -1813,11 +1896,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if failure is not None:
                 status_code = observed.http_status_code
                 measured = _settle_what_was_measured()
-                files = (
-                    workspace.collect_deliverables()
-                    if pilot_host is None
-                    else pilot_host.collect_deliverables(pilot_host_witness, workspace)
-                )
+                files = collect_files()
                 return CodexRunOutcome(
                     success=False,
                     text="",
@@ -1845,11 +1924,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 task_deadline.acknowledge_usage(attempt_index)
             call_id = None
 
-            files = (
-                workspace.collect_deliverables()
-                if pilot_host is None
-                else pilot_host.collect_deliverables(pilot_host_witness, workspace)
-            )
+            files = collect_files()
             text = getattr(result, "final_response", None) or ""
             return CodexRunOutcome(
                 success=True,
@@ -1871,17 +1946,54 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 error=str(exc), error_category=STATE_REFUSED,
             )
         finally:
-            if codex is not None:
+            if observation is not None:
+                observation.terminal("failed")
+                close_observation_runtime()
+            elif codex is not None:
                 try:
                     codex.close()
                 except Exception:  # noqa: BLE001 - closing must not mask a result
                     pass
-            swept = sweep_orphans(before_pids)
+            swept = () if observation is not None else sweep_orphans(before_pids)
             if swept:
                 self.last_swept_pids = swept
 
+    def _observation_turn(self, thread, turn_input, observation):
+        """Supervise creation AND every native wait under the first start."""
+        from core.time_budget_observation_deadline import (
+            ObservationCleanupExpired, ObservationTimedOut, TIMEOUT,
+        )
+
+        turn_handle = None
+        observed = TurnObservation()
+        try:
+            with observation.supervise():
+                observation.start()
+                turn_handle = thread.turn(turn_input)
+                observation.check_generation()
+                self._await_turn(turn_handle, observation_control=observation, observed=observed)
+        except (ObservationTimedOut, ObservationCleanupExpired):
+            observed.timed_out = observation.terminal_reason == TIMEOUT
+            observed.result = None
+        except Exception as error:
+            observed.failure = str(error)
+            observation.terminal("failed")
+        if observation.terminal_reason == TIMEOUT:
+            observed.timed_out = True
+            observed.result = None
+            if turn_handle is not None:
+                def interrupt():
+                    response = turn_handle.interrupt()
+                    from openai_codex.generated.v2_all import TurnInterruptResponse
+
+                    return isinstance(response, TurnInterruptResponse)
+
+                observation.cleanup(interrupt, interruption=True, step_seconds=0.5)
+        return turn_handle, observed
+
     def _await_turn(
         self, turn_handle: Any, *, task_deadline: CodexTaskDeadline | None = None,
+        observation_control=None, observed=None,
     ) -> TurnObservation:
         """Consume a turn under a wall clock; interrupt it if it overruns.
 
@@ -1898,6 +2010,31 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         reading is then a moment stale rather than torn -- every field is a
         single assignment or a count only that thread increments.
         """
+        if observation_control is not None:
+            from core.time_budget_observation_deadline import ObservationTimedOut
+
+            observed = TurnObservation() if observed is None else observed
+            collector = _load_turn_collector()
+            stream = None
+            try:
+                if collector is None:
+                    observed.result = turn_handle.run()
+                else:
+                    stream = turn_handle.stream()
+                    observed.result = collector(_recording_stream(stream, observed), turn_id=turn_handle.id)
+                observation_control.check_generation()
+                observation_control.terminal("completed")
+            except ObservationTimedOut:
+                observed.timed_out = True
+                observed.result = None
+            except Exception as error:
+                observed.failure = str(error)
+                observation_control.terminal("failed")
+            finally:
+                if stream is not None:
+                    observation_control.cleanup(stream.close, step_seconds=0.5)
+            return observed
+
         observed = TurnObservation()
         try:
             timeout = self.timeout if task_deadline is None else task_deadline.bound_timeout(self.timeout)

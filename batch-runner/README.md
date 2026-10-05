@@ -338,23 +338,61 @@ visible. There is no shared native request/token or money hard-cap claim. V2's
 turn is not the equivalent unit. All existing template bytes remain sealed.
 
 `gpt54_time_budget_comparison.compile_registration` validates this versioned
-policy separately. It reuses the unchanged comparison compiler to check the
-37 source pins, catalog/cohort/input identities and real whole grader TEMPLATE
-closure before reusing model, dataset, judge, result and cost facts. Unknown
-fields, contradictory hard caps, changed scope and ambiguous YAML refuse. The
-compiled object separates registered intent, implementation status and false
-launch authority. It has no commands, runtime configs or preparation recipes.
+policy separately. Its prospective API requires both independent source roots
+and full review anchors together:
 
-For offline registration inspection only, from `batch-runner/`:
-
-```bash
-python gpt54_time_budget_comparison.py
+```python
+compile_registration(
+    plan,
+    runtime_root=runtime_root,
+    expected_reviewed_source_sha=reviewed_runtime_sha,
+    frozen_grader_root=frozen_grader_root,
+    expected_grader_source_sha="882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2",
+)
 ```
 
-The CLI returns status 2 even when `registration_valid` is true. Deadline/cleanup
-enforcement and dispatch/capture integration are not implemented for this study;
-measurement availability remains unverified. Do not pass this manifest to the old
-preparer or runtime as an execution config. Existing launch refusals remain.
+The caller supplies review metadata independently of either checkout. Detached
+HEAD/tree checks, tracked regular blobs, held directories and final rereads bind
+runtime R to its 41 prospective source pins. Frozen F supplies the unchanged
+37-pin local-source profile and the actual whole grader TEMPLATE closure
+`37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`, at tree
+`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. Changed runtime core cannot claim
+that judge identity. A materialized grader needs its actual config path/bytes
+and a distinct fingerprint. When grading is eventually wired, it must execute
+from F-derived source, not from R while hashing F. No grader is materialized or
+run by this API.
+
+The omitted-argument compiler and local CLI retain the historical path and refuse
+the advanced runtime source. There is no new CLI enablement flag. Unknown fields,
+contradictory hard caps, changed scope and ambiguous YAML still refuse. Compiled
+evidence separates intent, optional host-control implementation and false launch
+authority; it supplies no commands, runtime configs or preparation recipes.
+
+`core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
+in a private host-owned directory before preparation. The identity includes
+study/run/condition/repeat/task and reviewed source, registration and input hashes.
+An admitted, started, terminal or abandoned identity cannot be adopted by another
+runner. Changing a source/input hash does not mint a second observation.
+
+V2's `build_runner_factory(observation_for=...)` passes the same control through
+the runner and conversation to the first `voice.next_turn`. Codex's optional
+`observation_control` supervises `thread.turn` creation and its native stream.
+Preparation does not start the clock. Both paths use one 1200-second monotonic
+budget, latch timeout before interruption, and spend one shared cleanup remainder:
+until first start plus 1220 seconds after timeout, or at most 20 seconds after an
+earlier terminal result. The record distinguishes interruption attempt from
+acknowledgement and cleanup completion from expiry, without bodies or credentials. Unconfirmed cleanup
+keeps the host lease and cannot produce a clean-host success.
+
+This control requires the owned Linux/POSIX host's main thread, `/proc` visibility
+and no existing real-time alarm. It actively interrupts blocking local I/O, stops
+owned descendants/process groups and bounds native waits and cleanup. It does not
+confirm server-side cancellation or billing. Omitted control preserves the prior
+runner behavior, including the separate closed `CodexTaskDeadlineStore` contract.
+No dispatcher or capture path selects this control yet. Measurement availability,
+credentialed-input authority and live source-bound execution remain unverified;
+all existing launch refusals remain. Do not pass this manifest to the old preparer
+or runtime as an execution config, or relabel an older prepared source snapshot.
 
 Grading is one attempt per resulting observation with the same source-bound
 frozen judge. Failed/missing outcomes are retained; scores never trigger regrading
@@ -362,11 +400,12 @@ or extra repeats. Analysis is descriptive paired outcome/grade differences and
 within-condition spread over the fixed observations. Two repeats do not support
 precise uncertainty or isolated causal claims.
 
-The [registration proof](../tasks/LATEST_TASK_RESULT/README.md#project5-prospective-time-budget-comparison-registration--2026-10-05)
-is an offline software proof, not a live outcome. After fixed-source review, the
-single next integration unit is `time_budget_observation_deadline`: wire the
-existing host deadline to the new observation identities and separate cleanup
-accounting. This registration does not authorize that integration or execution.
+The [prior registration proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/d901b119443a843784d81717943622f577fb43b4/tasks/LATEST_TASK_RESULT/README.md)
+and the [current task record](../tasks/LATEST_TASK_RESULT/README.md) describe
+software evidence, not live observations. The next integration gap is a reviewed
+dispatcher/capture path that binds this control and the two independently anchored
+sources to verified inputs. That path must preserve the separate launch refusals;
+this API and a compiled registration grant no execution authority.
 
 #### Direct comparison runtime launch refusal
 

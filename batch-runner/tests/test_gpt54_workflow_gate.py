@@ -651,12 +651,24 @@ def _workflow_profile_fixture(tmp_path, monkeypatch, seed, condition, *, histori
     )
 
 
-def test_workflow_profile_anchor_current_source_and_frozen_refusals(monkeypatch):
+def test_workflow_profile_anchor_current_source_and_frozen_refusals(monkeypatch, frozen_local_comparison_source):
     from .test_gpt54_run_config_bundle import _guards
     import step8_grade as grading
 
     forbidden = _guards(monkeypatch)
     root = Path(__file__).resolve().parents[2]
+    current = preflight.inspect_plan(preflight.load_plan(root / _PROSPECTIVE_MANIFEST))
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
+        "source_pin:batch-runner/core/codex_runner.py",
+    ]
+    for capture in ("gpt54_codex_input_capture.py", "gpt54_v2_input_capture.py"):
+        assert (root / "batch-runner" / capture).read_bytes() == (
+            frozen_local_comparison_source / "batch-runner" / capture
+        ).read_bytes()
+    root = frozen_local_comparison_source
+    monkeypatch.setattr(preflight, "ROOT", root)
     historical = preflight.load_plan()
     manifest = preflight.load_plan(root / _PROSPECTIVE_MANIFEST)
     assert _identity(preflight.PLAN.read_bytes())["sha256"] == (

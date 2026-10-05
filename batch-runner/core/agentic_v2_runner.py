@@ -486,6 +486,7 @@ class AgenticV2ScriptedRunner:
         clock: Callable[[], float] = time.monotonic,
         required_backend_type: type | None = None,
         admitted_identity: Optional[Mapping[str, Any]] = None,
+        observation_control=None,
     ):
         if not callable(backend_factory):
             raise ValueError("agentic v2 backend_factory is required")
@@ -505,6 +506,13 @@ class AgenticV2ScriptedRunner:
         self.clock = clock
         self.required_backend_type = required_backend_type
         self.admitted_identity = _validate_admitted_identity(admitted_identity)
+        if observation_control is not None:
+            from core.time_budget_observation_deadline import TimeBudgetObservation
+
+            if type(observation_control) is not TimeBudgetObservation or conversation is None:
+                raise ValueError("time_budget_observation_identity_refused")
+        self.observation_control = observation_control
+        self.last_observation_deadline = None
         self._closed = False
 
     def close(self) -> None:
@@ -525,6 +533,9 @@ class AgenticV2ScriptedRunner:
         del experiment_prompt, perception_text
         if self._closed:
             raise RuntimeError("agentic v2 runner is closed")
+        observation = self.observation_control
+        if observation is not None:
+            observation.claim(run_id=run_id, condition=condition_name, task_id=task_id)
         lifecycle = AgenticV2Lifecycle()
         audit_chain = AgenticV2EventChain()
         public_chain = AgenticV2EventChain()
@@ -533,6 +544,17 @@ class AgenticV2ScriptedRunner:
         deadline = started_at + max_task_seconds
         backend: AgenticV2Backend | None = None
         result: dict | None = None
+
+        def expired() -> bool:
+            if observation is None:
+                return self.clock() >= deadline
+            from core.time_budget_observation_deadline import TIMEOUT
+
+            return observation.terminal_reason == TIMEOUT or (
+                observation.first_start is not None
+                and observation.terminal_reason is None
+                and observation.remaining_seconds() <= 0
+            )
 
         def finish(value: Mapping[str, Any]) -> dict:
             nonlocal result
@@ -565,21 +587,23 @@ class AgenticV2ScriptedRunner:
                 ))
             lifecycle.transition(LifecycleState.STARTED)
             startup_started = self.clock()
-            if startup_started >= deadline:
+            if expired():
                 lifecycle.transition(LifecycleState.FAILED)
                 return finish(_failure(
                     "task_wall_time_exhausted", lifecycle, audit_chain, public_chain,
                     stage="control",
                 ))
             try:
-                startup = dict(backend.start(deadline - startup_started))
+                startup = dict(backend.start(
+                    max_task_seconds if observation is not None else deadline - startup_started,
+                ))
             except Exception:
                 lifecycle.transition(LifecycleState.FAILED)
                 return finish(_failure(
                     "compute_start_failed", lifecycle, audit_chain, public_chain,
                     stage="startup",
                 ))
-            if self.clock() >= deadline:
+            if expired():
                 lifecycle.transition(LifecycleState.FAILED)
                 return finish(_failure(
                     "task_wall_time_exhausted", lifecycle, audit_chain, public_chain,
@@ -780,7 +804,7 @@ class AgenticV2ScriptedRunner:
                         stage="control",
                     )
                     raise _EndTheRun(pending_ending)
-                if self.clock() >= deadline:
+                if expired():
                     lifecycle.transition(LifecycleState.FAILED)
                     pending_ending = _failure(
                         "task_wall_time_exhausted",
@@ -844,7 +868,7 @@ class AgenticV2ScriptedRunner:
                 and before a ``finalize`` is honoured. A task whose answer
                 arrives past its deadline did not finish in time.
                 """
-                if self.clock() < deadline:
+                if not expired():
                     return
                 failure_lifecycle = lifecycle
                 if not lifecycle.terminal:
@@ -970,7 +994,22 @@ class AgenticV2ScriptedRunner:
                 stage="runtime" if audit_chain.events else "startup",
             ))
         finally:
-            if backend is not None:
+            if observation is not None:
+                observation.terminal("completed" if result and result.get("success") is True else "failed")
+                observation.stop_owned_processes()
+                if backend is not None:
+                    observation.cleanup(backend.close)
+                observation.finish_cleanup(True)
+                self.last_observation_deadline = observation.as_record()
+                if not observation.cleanup_complete:
+                    cleanup_failure = _failure(
+                        "compute_cleanup_failed", lifecycle, audit_chain, public_chain,
+                        stage="cleanup",
+                    )
+                    if result is not None:
+                        result.clear()
+                        result.update(cleanup_failure)
+            elif backend is not None:
                 try:
                     backend.close()
                 except Exception:

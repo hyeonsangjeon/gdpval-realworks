@@ -49,8 +49,10 @@ _PREPARER_SOURCE = "batch-runner/gpt54_disposable_checkout.py"
 _PROSPECTIVE_MANIFEST = preflight.ENVELOPE + "gpt54_sandboxv2_codex_comparison_local_source.yaml"
 
 
-def test_prospective_source_profile_real_tracked_compilation_and_refusals(monkeypatch, capsys):
-    """Current tracked production bytes, not the synthetic plumbing source below."""
+def test_prospective_source_profile_real_tracked_compilation_and_refusals(
+    monkeypatch, capsys, frozen_local_comparison_source,
+):
+    """Sealed local profile at F; changed runtime R must refuse that old profile."""
     import codex_ci_input_bundle as originals
     import step8_grade as grading
 
@@ -63,6 +65,15 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(monkey
     assert (root / _PROSPECTIVE_MANIFEST).read_bytes() == tracked
 
     forbidden = _guards(monkeypatch)
+    current = preflight.inspect_plan(preflight.load_plan(root / _PROSPECTIVE_MANIFEST))
+    assert current["configuration_valid"] is False
+    assert current["configuration_problems"] == [
+        "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
+        "source_pin:batch-runner/core/codex_runner.py",
+    ]
+    root = frozen_local_comparison_source
+    assert (root / _PROSPECTIVE_MANIFEST).read_bytes() == tracked
+    monkeypatch.setattr(preflight, "ROOT", root)
     historical = preflight.load_plan()
     assert _identity(preflight.PLAN.read_bytes())["sha256"] == (
         "3d88bcb0c4eeeb9dad2c9ee7cb88db1b7ff49145f9264d9d284178f167a76ed1"
@@ -114,11 +125,15 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(monkey
     assert forbidden == []
 
 
-def test_comparison_runtime_launch_boundary_current_source_bindings(monkeypatch, capsys):
-    """Real tracked current compilation; frozen comparison/pilot pins still refuse."""
+def test_comparison_runtime_launch_boundary_current_source_bindings(
+    monkeypatch, capsys, frozen_local_comparison_source,
+):
+    """Frozen positive compilation; current comparison/pilot pins still refuse."""
     import gpt56_sol_codex_pilot_preflight as pilot
 
-    test_prospective_source_profile_real_tracked_compilation_and_refusals(monkeypatch, capsys)
+    test_prospective_source_profile_real_tracked_compilation_and_refusals(
+        monkeypatch, capsys, frozen_local_comparison_source,
+    )
     manifest = preflight.load_plan(preflight.ROOT / _PROSPECTIVE_MANIFEST)
     assert manifest["shared"]["grading"]["template_source_sha256"] == (
         "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"

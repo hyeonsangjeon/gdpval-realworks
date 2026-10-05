@@ -75,6 +75,7 @@ def _originals(tmp_path, monkeypatch, approved_pilot_source):
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/gpt54_workflow_gate.py",
+        "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
         "source_pin:batch-runner/core/codex_task_deadline.py",
@@ -83,7 +84,8 @@ def _originals(tmp_path, monkeypatch, approved_pilot_source):
     assert archived_plan.read_bytes() == current_plan.read_bytes()
     runtime_modules = (fresh, ci, controller, preparation, registration, owned)
     runtime_roots = tuple(module.ROOT for module in runtime_modules)
-    assert all(root == REAL_ROOT for root in runtime_roots)
+    assert all(module.ROOT == REAL_ROOT for module in runtime_modules if module is not registration)
+    assert registration.ROOT != REAL_ROOT  # Closed compiler F; CURRENT facades still read R.
     try:
         # Bind only the original serializer/compiler to its immutable source.
         # Its synthetic data suppliers still serve the successor fixture.
@@ -157,9 +159,12 @@ def _source_tree(destination):
         "batch-runner/requirements.txt", "batch-runner/requirements-renderer.txt",
         "batch-runner/scripts/download_inference_from_hf.py", "batch-runner/prompts/grader_judge.md",
         "batch-runner/prompts/grader_judge_v2.md"}
-    roles.update(path.relative_to(REAL_ROOT).as_posix() for path in (REAL_ROOT / "batch-runner/core").rglob("*.py"))
+    frozen = registration.ROOT
+    assert frozen != REAL_ROOT
+    roles.update(path.relative_to(frozen).as_posix() for path in (frozen / "batch-runner/core").rglob("*.py"))
     for role in sorted(roles):
-        _write(destination / role, preparation._read(REAL_ROOT / role, "synthetic_source_copy"))
+        source = frozen if role.startswith("batch-runner/core/") else REAL_ROOT
+        _write(destination / role, preparation._read(source / role, "synthetic_source_copy"))
     (destination / "batch-runner/workspace").mkdir(exist_ok=True)
     (destination / "data").mkdir(exist_ok=True)
 

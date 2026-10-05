@@ -1,8 +1,8 @@
 """Compile one prospective time-budget registration, never an execution recipe.
 
-The legacy comparison validates the unchanged source, input and judge facts.
-Its shared request/token caps and run identities are NOT inherited by this study.
-No deadline, counter, dispatcher or launch authority is implemented here.
+The explicit dual-root mode separates reviewed runtime facts from the frozen
+whole-closure judge. The omitted mode retains the legacy source refusal. Neither
+mode selects an executor, verifies private inputs, or grants launch authority.
 """
 
 from __future__ import annotations
@@ -10,9 +10,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import stat
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 import yaml
@@ -22,6 +25,10 @@ from gpt54_comparison_preflight import (
     ENVELOPE,
     ROOT,
     DispatchPlanRefused,
+    GRADER,
+    REQUIRED_SOURCES,
+    V2_TEMPLATE,
+    CODEX_TEMPLATE,
     _canonical_json,
     compile_dispatch_plan,
     load_plan,
@@ -32,12 +39,30 @@ STUDY_ID = "gpt54_sandboxv2_codex_time_budget_v1"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_time_budget_v1.yaml"
 COMPILER = "batch-runner/gpt54_time_budget_comparison.py"
 SOURCE_PROFILE = ENVELOPE + "gpt54_sandboxv2_codex_comparison_local_source.yaml"
-SOURCE_PROFILE_SHA256 = "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
+SOURCE_PROFILE_SHA256 = (
+    "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
+)
 ACCEPTED_BASE_SHA = "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2"
 ACCEPTED_BASE_TREE = "45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca"
+FROZEN_TEMPLATE_SHA256 = (
+    "37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce"
+)
+RUNTIME_ADDITIONS = {
+    COMPILER,
+    "batch-runner/core/time_budget_observation_deadline.py",
+    "batch-runner/core/agentic_v2_conversation.py",
+    "batch-runner/core/agentic_v2_runner.py",
+}
+CHANGED_RUNTIME_SOURCES = RUNTIME_ADDITIONS | {
+    "batch-runner/core/codex_runner.py",
+    "batch-runner/core/agentic_v2_conversation_runner.py",
+}
+REGISTRATION_PATH = ENVELOPE + "gpt54_sandboxv2_codex_time_budget_v1.yaml"
 RUN_ORDER = (
-    ("sandbox_v2", "v2", 1), ("codex", "codex", 1),
-    ("codex", "codex", 2), ("sandbox_v2", "v2", 2),
+    ("sandbox_v2", "v2", 1),
+    ("codex", "codex", 1),
+    ("codex", "codex", 2),
+    ("sandbox_v2", "v2", 2),
 )
 SHARED_FACTS = ("model", "dataset", "grading", "results", "cost")
 MAX_MANIFEST_BYTES = 65_536
@@ -67,7 +92,9 @@ class _RegistrationLoader(yaml.SafeLoader):
         for key_node, value_node in node.value:
             key = self.construct_object(key_node, deep=deep)
             if not isinstance(key, str) or key in result:
-                raise TimeBudgetRegistrationRefused("manifest_duplicate_or_nonstring_key")
+                raise TimeBudgetRegistrationRefused(
+                    "manifest_duplicate_or_nonstring_key"
+                )
             result[key] = self.construct_object(value_node, deep=deep)
         return result
 
@@ -133,8 +160,14 @@ def _policy() -> dict[str, Any]:
         },
         "native_measurements": {
             "policy": "observation_only_when_available",
-            "metrics": ["model_attempt_count", "repeated_request_count", "input_tokens",
-                        "output_tokens", "written_tokens", "native_retries"],
+            "metrics": [
+                "model_attempt_count",
+                "repeated_request_count",
+                "input_tokens",
+                "output_tokens",
+                "written_tokens",
+                "native_retries",
+            ],
             "unavailable": "explicitly_unavailable_not_zero_or_estimated",
             "token_accounting": "difference_cumulative_totals_not_sum_snapshots",
             "cached_input_and_reasoning": "subsets_not_additional_tokens",
@@ -178,6 +211,7 @@ class CompiledTimeBudgetRegistration:
     source_evidence_json: str
     intent_json: str
     runs: tuple[TimeBudgetRunSpec, ...]
+    runtime_bound: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         intent = json.loads(self.intent_json)
@@ -189,8 +223,13 @@ class CompiledTimeBudgetRegistration:
             "registered_intent": intent,
             "implementation_status": {
                 "registration_compiler": "implemented_offline",
-                "generation_deadline": "not_integrated",
-                "cleanup_grace": "not_integrated",
+                "generation_deadline": "opt_in_host_control"
+                if self.runtime_bound
+                else "not_integrated",
+                "cleanup_grace": "one_absolute_cleanup_deadline"
+                if self.runtime_bound
+                else "not_integrated",
+                "host_control_selected_by_executor": False,
                 "native_measurement_availability": "not_verified",
                 "executor_enforces_registered_policy": False,
                 "dispatch_and_capture": "not_integrated_for_this_study",
@@ -200,7 +239,14 @@ class CompiledTimeBudgetRegistration:
                 "launch_allowed": False,
                 "execution_enabled": False,
                 "full_220_allowed": False,
-                "blockers": list(LAUNCH_BLOCKERS),
+                "blockers": (
+                    [
+                        "time_budget_dispatch_must_select_observation_control",
+                        *LAUNCH_BLOCKERS[1:],
+                    ]
+                    if self.runtime_bound
+                    else list(LAUNCH_BLOCKERS)
+                ),
             },
         }
 
@@ -208,7 +254,294 @@ class CompiledTimeBudgetRegistration:
         return _canonical_json(self.as_dict()).encode("utf-8")
 
 
-def compile_registration(plan: dict[str, Any]) -> CompiledTimeBudgetRegistration:
+@contextmanager
+def _reviewed_source(root: Path, expected_sha: str, roles: set[str]):
+    """Read held regular bytes against an independent, full Git commit anchor.
+
+    Git's tree object supplies blob identities, never local markers or the
+    index. Hashing canonical Git blob bytes checks that exact object identity;
+    it does not invent or replace the whole-grader fingerprint below.
+    """
+    from gpt54_disposable_checkout import (
+        _git,
+        _repository,
+        _runtime_revision,
+        _safe_checkout_configuration,
+    )
+    from gpt54_run_config_bundle import _held_parents, _path
+    from gpt54_prepared_input_attestation import _identity, _read_bytes
+
+    if (
+        type(expected_sha) is not str
+        or re.fullmatch(r"[0-9a-f]{40}", expected_sha) is None
+    ):
+        raise TimeBudgetRegistrationRefused("review_anchor_must_be_full_commit")
+    root, _ = _repository(root)
+    _safe_checkout_configuration(root)
+    if _git(
+        root, "rev-parse", "--verify", "--end-of-options", expected_sha + "^{commit}"
+    ).stdout != (expected_sha + "\n").encode("ascii"):
+        raise TimeBudgetRegistrationRefused("review_anchor_not_commit")
+    tree = (
+        _git(
+            root, "rev-parse", "--verify", "--end-of-options", expected_sha + "^{tree}"
+        )
+        .stdout.decode()
+        .strip()
+    )
+    _runtime_revision(root, expected_sha, tree)
+    entries = _git(
+        root,
+        "ls-tree",
+        "-r",
+        "-z",
+        "--full-tree",
+        expected_sha,
+        "--",
+        *sorted(roles),
+        "batch-runner/core",
+    ).stdout
+    if len(entries) > 2 * 1024 * 1024:
+        raise TimeBudgetRegistrationRefused("source_inventory_bound")
+    objects = {}
+    for row in entries.rstrip(b"\0").split(b"\0"):
+        metadata, name = row.split(b"\t", 1)
+        mode, kind, oid = metadata.split()
+        name = name.decode("utf-8")
+        if name not in roles and not (
+            name.startswith("batch-runner/core/") and name.endswith(".py")
+        ):
+            continue
+        if mode not in (b"100644", b"100755") or kind != b"blob" or name in objects:
+            raise TimeBudgetRegistrationRefused("source_requires_regular_tracked_blob")
+        objects[name] = oid.decode("ascii")
+    if not roles.issubset(objects):
+        raise TimeBudgetRegistrationRefused("source_missing_tracked_blob")
+
+    def core_inventory():
+        found = set()
+        for path in (root / "batch-runner/core").rglob("*"):
+            if path.is_symlink():
+                raise TimeBudgetRegistrationRefused("source_symlink")
+            if path.is_file() and path.suffix == ".py":
+                found.add(path.relative_to(root).as_posix())
+        _expect(
+            "source_core_inventory",
+            sorted(found),
+            sorted(
+                name
+                for name in objects
+                if name.startswith("batch-runner/core/") and name.endswith(".py")
+            ),
+        )
+
+    with _held_parents(root, tuple(objects)) as held:
+        core_inventory()
+        identities = {}
+        total = 0
+        for name, oid in sorted(objects.items()):
+            path = _path(root, name)
+            size = path.lstat().st_size
+            total += size
+            if size > 8 * 1024 * 1024 or total > 64 * 1024 * 1024:
+                raise TimeBudgetRegistrationRefused("source_bytes_bound")
+            data = _read_bytes(path, size=size)
+            blob = hashlib.sha1(
+                b"blob " + str(len(data)).encode("ascii") + b"\0" + data
+            ).hexdigest()
+            if blob != oid:
+                raise TimeBudgetRegistrationRefused("source_differs_from_reviewed_blob")
+            identities[name] = _identity(data)
+        yield root, tree, identities
+        for name, identity in identities.items():
+            _read_bytes(_path(root, name), **identity)
+        core_inventory()
+        held()
+        _runtime_revision(root, expected_sha, tree)
+
+
+def _frozen_roles() -> set[str]:
+    # F has this sealed two-file requirements graph. Bind its bytes to tracked
+    # blobs BEFORE the unchanged whole-closure helper follows any include.
+    # This is a source-read boundary, not a change to the hash algorithm/scope.
+    return set(REQUIRED_SOURCES) | {
+        SOURCE_PROFILE,
+        "batch-runner/prompts/grader_judge.md",
+        "batch-runner/prompts/grader_judge_v2.md",
+        "batch-runner/scripts/download_inference_from_hf.py",
+        "batch-runner/requirements.txt",
+        "batch-runner/requirements-renderer.txt",
+    }
+
+
+@contextmanager
+def _dual_root_sources(
+    plan,
+    runtime_root,
+    expected_reviewed_source_sha,
+    frozen_grader_root,
+    expected_grader_source_sha,
+):
+    from core.agentic_v2_conversation_runner import ceilings_from
+    from core.execution_envelope_tasks import (
+        catalog_sha256,
+        load_task_catalog,
+        select_advance_check_tasks,
+    )
+    from gpt54_run_config_bundle import _root, _sources
+    from step8_grade import compute_grader_source_hash
+
+    if expected_grader_source_sha != ACCEPTED_BASE_SHA:
+        raise TimeBudgetRegistrationRefused("frozen_grader_review_anchor")
+    runtime_root, frozen_grader_root = _root(runtime_root), _root(frozen_grader_root)
+    if runtime_root == frozen_grader_root:
+        raise TimeBudgetRegistrationRefused(
+            "runtime_and_frozen_grader_roots_must_differ"
+        )
+    _expect(
+        "runtime_source_pin_set",
+        sorted(plan["source_pins"]),
+        sorted(REQUIRED_SOURCES | RUNTIME_ADDITIONS),
+    )
+    with (
+        _reviewed_source(
+            runtime_root,
+            expected_reviewed_source_sha,
+            REQUIRED_SOURCES | RUNTIME_ADDITIONS | {REGISTRATION_PATH},
+        ) as (runtime, runtime_tree, _),
+        _reviewed_source(
+            frozen_grader_root,
+            expected_grader_source_sha,
+            _frozen_roles(),
+        ) as (frozen, frozen_tree, _),
+    ):
+        _expect("frozen_grader_tree", frozen_tree, ACCEPTED_BASE_TREE)
+        # Verify the sealed historical profile in F. Never relabel R with its
+        # whole-core template identity or call the legacy compiler against R.
+        profile_bytes = _regular_bytes(frozen / SOURCE_PROFILE)
+        _expect(
+            "source_profile_bytes",
+            hashlib.sha256(profile_bytes).hexdigest(),
+            SOURCE_PROFILE_SHA256,
+        )
+        profile = load_plan(frozen / SOURCE_PROFILE)
+        frozen_sources = _sources(frozen, profile, SOURCE_PROFILE)
+        expected_pins = dict(profile["source_pins"])
+        expected_pins.update(
+            {
+                name: hashlib.sha256(_regular_bytes(runtime / name)).hexdigest()
+                for name in CHANGED_RUNTIME_SOURCES
+            }
+        )
+        _expect("runtime_source_roles", plan["source_pins"], expected_pins)
+        runtime_manifest = load_registration(runtime / REGISTRATION_PATH)
+        runtime_sources = _sources(runtime, runtime_manifest, REGISTRATION_PATH)
+        _expect(
+            "running_compiler_bytes",
+            hashlib.sha256(_regular_bytes(runtime / COMPILER)).hexdigest(),
+            hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        )
+        basis = {
+            "accepted_base_sha": ACCEPTED_BASE_SHA,
+            "accepted_base_tree": ACCEPTED_BASE_TREE,
+            "source_profile": {"path": SOURCE_PROFILE, "sha256": SOURCE_PROFILE_SHA256},
+            "registration_compiler": {
+                "path": COMPILER,
+                "sha256": hashlib.sha256(
+                    _regular_bytes(runtime / COMPILER)
+                ).hexdigest(),
+            },
+            "runtime_role": "independently_reviewed_runtime_commit",
+            "frozen_grader": {
+                "source_sha": ACCEPTED_BASE_SHA,
+                "source_tree": ACCEPTED_BASE_TREE,
+                "template_path": GRADER,
+                "template_source_sha256": FROZEN_TEMPLATE_SHA256,
+                "execution_source": "frozen_source_only_not_runtime_root",
+                "materialized_config_requires_distinct_path_bytes_and_fingerprint": True,
+            },
+        }
+        _expect("source_basis", plan["source_basis"], basis)
+        grader = load_plan(frozen / GRADER)
+        template = compute_grader_source_hash(
+            config_path=frozen / GRADER,
+            config=grader,
+            batch_root=frozen / "batch-runner",
+        )
+        _expect("frozen_whole_template", template, FROZEN_TEMPLATE_SHA256)
+        shared = {name: profile["shared"][name] for name in SHARED_FACTS}
+        _expect(
+            "frozen_grader_template",
+            shared["grading"]["template_source_sha256"],
+            template,
+        )
+        # Root-explicit catalog and typed harness controls verify current facts;
+        # no fabricated ComparisonGradingPlan and no production ROOT mutation.
+        catalog_path = runtime / ENVELOPE / "gdpval_task_catalog.json"
+        catalog = load_task_catalog(catalog_path)
+        selected = select_advance_check_tasks(catalog)
+        by_id = catalog.by_task_id()
+        dataset = shared["dataset"]
+        _expect(
+            "runtime_catalog", dataset["catalog_sha256"], catalog_sha256(catalog_path)
+        )
+        _expect(
+            "runtime_cohort",
+            dataset["tasks"],
+            [
+                {"task_id": task, "prompt_sha256": by_id[task].prompt_sha256}
+                for task in selected.task_ids
+            ],
+        )
+        v2 = load_plan(runtime / V2_TEMPLATE)
+        codex = load_plan(runtime / CODEX_TEMPLATE)
+        _expect(
+            "runtime_model",
+            codex["condition_a"]["model"]["deployment"],
+            v2["model"]["deployment"],
+        )
+        limits = ceilings_from(
+            v2, SimpleNamespace(**v2["cost"]["chosen_settings"])
+        ).as_dict()
+        for name in ("max_model_turns", "max_written_tokens_per_turn"):
+            _expect(
+                "runtime_local_setting", limits[name], profile["shared"]["limits"][name]
+            )
+        controls = {**shared, "limits": profile["shared"]["limits"]}
+        evidence = {
+            "basis": basis,
+            "runtime": {
+                "source_sha": expected_reviewed_source_sha,
+                "source_tree": runtime_tree,
+                **runtime_sources,
+            },
+            "frozen_grader": {
+                "source_sha": expected_grader_source_sha,
+                "source_tree": frozen_tree,
+                "template_source_sha256": template,
+                "template_config_path": GRADER,
+                "materialized_config_path": None,
+                "materialized_grader_source_sha256": None,
+                "execution_source": "frozen_source_only_not_runtime_root",
+                **frozen_sources,
+            },
+            "validated_source_pins": plan["source_pins"],
+            "source_profile_semantic_sha256": seal(profile),
+            "private_originals_verified": False,
+            "template_not_materialized_grader": True,
+        }
+        yield profile, controls, basis, evidence
+        _expect("registered_manifest", plan, runtime_manifest)
+
+
+def compile_registration(
+    plan: dict[str, Any],
+    *,
+    runtime_root: Path | None = None,
+    expected_reviewed_source_sha: str | None = None,
+    frozen_grader_root: Path | None = None,
+    expected_grader_source_sha: str | None = None,
+) -> CompiledTimeBudgetRegistration:
     """Validate fixed intent and real source facts; never produce launch recipes.
 
     The unmodified legacy compiler checks all 37 sources, score-free cohort,
@@ -216,90 +549,179 @@ def compile_registration(plan: dict[str, Any]) -> CompiledTimeBudgetRegistration
     model/data/judge/result/cost facts and per-harness settings are reused. Its
     old shared caps, run IDs, dispatch commands and launch policy stay separate.
     """
+    from contextlib import ExitStack
+
+    try:
+        anchors = (
+            runtime_root,
+            expected_reviewed_source_sha,
+            frozen_grader_root,
+            expected_grader_source_sha,
+        )
+        anchored = any(value is not None for value in anchors)
+        if anchored and any(value is None for value in anchors):
+            raise TimeBudgetRegistrationRefused(
+                "both_independent_review_anchors_required"
+            )
+        with ExitStack() as sources:
+            return _compile_registration(plan, anchors, anchored, sources)
+    except TimeBudgetRegistrationRefused:
+        raise
+    except DispatchPlanRefused as error:
+        raise TimeBudgetRegistrationRefused("source_contract_refused") from error
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        yaml.YAMLError,
+        RecursionError,
+    ) as error:
+        raise TimeBudgetRegistrationRefused(
+            "registration_cannot_be_compiled"
+        ) from error
+
+
+def _compile_registration(plan, anchors, anchored, sources):
     try:
         plan = json.loads(_canonical_json(plan))
         expected = _policy()
         keys = set(expected) | {"source_basis", "shared", "conditions", "runs"}
+        if anchored:
+            keys.add("source_pins")
         if not isinstance(plan, dict) or set(plan) != keys:
             raise TimeBudgetRegistrationRefused("manifest_fields")
         for name, value in expected.items():
             _expect(name, plan[name], value)
 
-        profile_bytes = _regular_bytes(ROOT / SOURCE_PROFILE)
-        if hashlib.sha256(profile_bytes).hexdigest() != SOURCE_PROFILE_SHA256:
-            raise TimeBudgetRegistrationRefused("source_profile_bytes")
-        basis = {
-            "accepted_base_sha": ACCEPTED_BASE_SHA,
-            "accepted_base_tree": ACCEPTED_BASE_TREE,
-            "source_profile": {"path": SOURCE_PROFILE, "sha256": SOURCE_PROFILE_SHA256},
-            "registration_compiler": {
-                "path": COMPILER,
-                "sha256": hashlib.sha256(_regular_bytes(ROOT / COMPILER)).hexdigest(),
-            },
-        }
-        _expect("source_basis", plan["source_basis"], basis)
-        profile = load_plan(ROOT / SOURCE_PROFILE)
-        dispatch = compile_dispatch_plan(profile)
-        # Re-read the exact profile, not a mutable caller-supplied projection.
-        if _regular_bytes(ROOT / SOURCE_PROFILE) != profile_bytes:
-            raise TimeBudgetRegistrationRefused("source_profile_changed")
-        controls = json.loads(dispatch.controls_json)
+        if anchored:
+            profile, controls, basis, evidence = sources.enter_context(
+                _dual_root_sources(plan, *anchors)
+            )
+        else:
+            profile, controls, basis, evidence = _legacy_sources(plan)
         shared = {name: controls[name] for name in SHARED_FACTS}
-        _expect("shared_facts", plan["shared"], shared)
-        conditions = {
-            "sandbox_v2": {
-                "template": profile["conditions"]["sandbox_v2"]["template"],
-                "harness": "agentic_sandbox_v2",
-                "isolation": "same-host",
-                "replay_format": "faithful",
-                "request": profile["conditions"]["sandbox_v2"]["request"],
-                "local_settings": {name: controls["limits"][name] for name in (
-                    "max_model_turns", "max_written_tokens_per_turn",
-                )},
-                "settings_scope": "v2_only_not_shared_native_compute",
-            },
-            "codex": {
-                "template": profile["conditions"]["codex"]["template"],
-                "harness": "codex",
-                "sdk_version": profile["conditions"]["codex"]["sdk_version"],
-                "cli_version": profile["conditions"]["codex"]["cli_version"],
-                "request": profile["conditions"]["codex"]["request"],
-                "provider_retry_settings": {name: controls["limits"][name] for name in (
-                    "request_max_retries", "stream_max_retries",
-                )},
-                "retry_settings_bound_all_native_recovery": False,
-                "native_turn_is_v2_turn_equivalent": False,
-            },
-        }
-        _expect("condition_settings", plan["conditions"], conditions)
-        task_ids = tuple(task["task_id"] for task in shared["dataset"]["tasks"])
-        runs = tuple(TimeBudgetRunSpec(
-            f"gpt54_time_budget_v1_{suffix}_r{repeat}", condition, repeat, task_ids,
-        ) for condition, suffix, repeat in RUN_ORDER)
-        _expect("repetition_matrix", plan["runs"], [
-            {"run_id": run.run_id, "condition": run.condition,
-             "repeat": run.repeat, "task_count": len(run.task_ids)} for run in runs
-        ])
-        intent = {name: plan[name] for name in expected if name not in (
-            "launch_enabled", "execution_enabled",
-        )}
-        intent.update(shared=shared, conditions=conditions)
-        return CompiledTimeBudgetRegistration(
-            manifest_sha256=seal(plan),
-            source_evidence_json=_canonical_json({
-                "basis": basis, "validated_source_pins": json.loads(dispatch.source_pins_json),
-                "source_profile_semantic_sha256": dispatch.manifest_sha256,
-                "private_originals_verified": False,
-                "template_not_materialized_grader": True,
-            }),
-            intent_json=_canonical_json(intent), runs=runs,
+        return _compile_intent(
+            plan, expected, profile, controls, basis, evidence, shared, anchored
         )
     except TimeBudgetRegistrationRefused:
         raise
     except DispatchPlanRefused as error:
         raise TimeBudgetRegistrationRefused("source_contract_refused") from error
-    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, RecursionError) as error:
-        raise TimeBudgetRegistrationRefused("registration_cannot_be_compiled") from error
+
+
+def _legacy_sources(plan):
+    profile_bytes = _regular_bytes(ROOT / SOURCE_PROFILE)
+    if hashlib.sha256(profile_bytes).hexdigest() != SOURCE_PROFILE_SHA256:
+        raise TimeBudgetRegistrationRefused("source_profile_bytes")
+    basis = {
+        "accepted_base_sha": ACCEPTED_BASE_SHA,
+        "accepted_base_tree": ACCEPTED_BASE_TREE,
+        "source_profile": {"path": SOURCE_PROFILE, "sha256": SOURCE_PROFILE_SHA256},
+        "registration_compiler": {
+            "path": COMPILER,
+            "sha256": hashlib.sha256(_regular_bytes(ROOT / COMPILER)).hexdigest(),
+        },
+    }
+    _expect("source_basis", plan["source_basis"], basis)
+    profile = load_plan(ROOT / SOURCE_PROFILE)
+    dispatch = compile_dispatch_plan(profile)
+    # Re-read the exact profile, not a mutable caller-supplied projection.
+    if _regular_bytes(ROOT / SOURCE_PROFILE) != profile_bytes:
+        raise TimeBudgetRegistrationRefused("source_profile_changed")
+    controls = json.loads(dispatch.controls_json)
+    return (
+        profile,
+        controls,
+        basis,
+        {
+            "basis": basis,
+            "validated_source_pins": json.loads(dispatch.source_pins_json),
+            "source_profile_semantic_sha256": dispatch.manifest_sha256,
+            "private_originals_verified": False,
+            "template_not_materialized_grader": True,
+        },
+    )
+
+
+def _compile_intent(
+    plan, expected, profile, controls, basis, evidence, shared, anchored
+):
+    _expect("shared_facts", plan["shared"], shared)
+    conditions = {
+        "sandbox_v2": {
+            "template": profile["conditions"]["sandbox_v2"]["template"],
+            "harness": "agentic_sandbox_v2",
+            "isolation": "same-host",
+            "replay_format": "faithful",
+            "request": profile["conditions"]["sandbox_v2"]["request"],
+            "local_settings": {
+                name: controls["limits"][name]
+                for name in (
+                    "max_model_turns",
+                    "max_written_tokens_per_turn",
+                )
+            },
+            "settings_scope": "v2_only_not_shared_native_compute",
+        },
+        "codex": {
+            "template": profile["conditions"]["codex"]["template"],
+            "harness": "codex",
+            "sdk_version": profile["conditions"]["codex"]["sdk_version"],
+            "cli_version": profile["conditions"]["codex"]["cli_version"],
+            "request": profile["conditions"]["codex"]["request"],
+            "provider_retry_settings": {
+                name: controls["limits"][name]
+                for name in (
+                    "request_max_retries",
+                    "stream_max_retries",
+                )
+            },
+            "retry_settings_bound_all_native_recovery": False,
+            "native_turn_is_v2_turn_equivalent": False,
+        },
+    }
+    _expect("condition_settings", plan["conditions"], conditions)
+    task_ids = tuple(task["task_id"] for task in shared["dataset"]["tasks"])
+    runs = tuple(
+        TimeBudgetRunSpec(
+            f"gpt54_time_budget_v1_{suffix}_r{repeat}",
+            condition,
+            repeat,
+            task_ids,
+        )
+        for condition, suffix, repeat in RUN_ORDER
+    )
+    _expect(
+        "repetition_matrix",
+        plan["runs"],
+        [
+            {
+                "run_id": run.run_id,
+                "condition": run.condition,
+                "repeat": run.repeat,
+                "task_count": len(run.task_ids),
+            }
+            for run in runs
+        ],
+    )
+    intent = {
+        name: plan[name]
+        for name in expected
+        if name
+        not in (
+            "launch_enabled",
+            "execution_enabled",
+        )
+    }
+    intent.update(shared=shared, conditions=conditions)
+    return CompiledTimeBudgetRegistration(
+        manifest_sha256=seal(plan),
+        source_evidence_json=_canonical_json(evidence),
+        intent_json=_canonical_json(intent),
+        runs=runs,
+        runtime_bound=anchored,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -307,9 +729,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, default=PLAN)
     args = parser.parse_args(argv)
     try:
-        report = {"registration_valid": True, "compiled": compile_registration(
-            load_registration(args.manifest),
-        ).as_dict()}
+        report = {
+            "registration_valid": True,
+            "compiled": compile_registration(
+                load_registration(args.manifest),
+            ).as_dict(),
+        }
     except TimeBudgetRegistrationRefused as error:
         report = {"registration_valid": False, "reason": str(error), "compiled": None}
     print(_canonical_json(report))

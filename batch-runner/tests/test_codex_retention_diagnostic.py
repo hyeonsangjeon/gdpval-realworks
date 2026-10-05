@@ -17,10 +17,10 @@ from .test_codex_budget_pilot import offline  # noqa: F401; genuine process/netw
 
 
 def test_retention_registration_is_exact_closed_and_inert(
-    tmp_path, monkeypatch, capsys, historical_budget_source,
+    tmp_path, monkeypatch, capsys, historical_budget_source, historical_retention_source,
 ):
-    # The shared immutable legacy source is installed before the function guard.
-    # The new compiler retains its own actual worktree ROOT and new source pins.
+    # The closed compiler's unchanged positive uses F; the fixture separately
+    # proves that changed current runtime R refuses its historical source pins.
     registration = load_plan(diagnostic.ROOT / diagnostic.REGISTRATION)
     plan = diagnostic.compile_plan(registration)
     assert _canonical_json(plan) == _canonical_json(diagnostic.compile_plan())
