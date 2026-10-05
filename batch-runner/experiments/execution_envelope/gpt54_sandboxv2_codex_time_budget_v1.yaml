@@ -16,7 +16,7 @@ source_basis:
     sha256: 81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe
   registration_compiler:
     path: batch-runner/gpt54_time_budget_comparison.py
-    sha256: 82976543add7e68a5ce786b2798860a80cb5b60116eb3ec15a0d45d4dd2fb7d4
+    sha256: 584d161b13476b6caba3f30452dc686be2dd761d97c81a7934478ea5d2bcf0ae
   runtime_role: independently_reviewed_runtime_commit
   frozen_grader:
     source_sha: 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2
@@ -69,7 +69,8 @@ source_pins:
   batch-runner/core/time_budget_observation_deadline.py: 4ce90fd05e4c8f0c32d3a0267f089bbaf0a279ef704852c994af6debb12a6c26
   batch-runner/core/agentic_v2_conversation.py: b117c036ab42ad234da06d6ddebd83529c151d45208cd490e278944ad10b2125
   batch-runner/core/agentic_v2_runner.py: b573bad6dd5b859106621705c5d9e8adc72efd9e32b4de1165b33b849aeb9ee6
-  batch-runner/gpt54_time_budget_comparison.py: 82976543add7e68a5ce786b2798860a80cb5b60116eb3ec15a0d45d4dd2fb7d4
+  batch-runner/gpt54_time_budget_comparison.py: 584d161b13476b6caba3f30452dc686be2dd761d97c81a7934478ea5d2bcf0ae
+  batch-runner/ghcp_vm_input_bundle.py: f6b57eacdcb93715bb286dc7bc979599d5c5a14a948f5b14a1c8561631780d39
 
 # Only these validated facts are shared with the old source profile. Its shared
 # native request/token limits, run IDs and launch policy are not copied here.

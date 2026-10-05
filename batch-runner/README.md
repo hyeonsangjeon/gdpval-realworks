@@ -353,7 +353,8 @@ compile_registration(
 
 The caller supplies review metadata independently of either checkout. Detached
 HEAD/tree checks, tracked regular blobs, held directories and final rereads bind
-runtime R to its 41 prospective source pins. Frozen F supplies the unchanged
+runtime R to its 42 prospective source pins, including the reused held-directory
+publication helper. Frozen F supplies the unchanged
 37-pin local-source profile and the actual whole grader TEMPLATE closure
 `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`, at tree
 `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. Changed runtime core cannot claim
@@ -368,8 +369,42 @@ contradictory hard caps, changed scope and ambiguous YAML still refuse. Compiled
 evidence separates intent, optional host-control implementation and false launch
 authority; it supplies no commands, runtime configs or preparation recipes.
 
+`gpt54_time_budget_comparison.prepare_observation_handoff` is the separate,
+model-free API for one registered run/task. It takes the same explicit R/F
+anchors plus `input_registration_root`, `expected_input_source_sha` and the
+repository-relative `input_registration_path`. An old registration may supply
+only its dataset/cohort facts after exact equality checks against this study.
+Its tracked regular blob, catalog and envelope are checked against the supplied
+input-source commit; it cannot supply launch authority or old run identities.
+The caller also supplies `dataset_parquet`, `reference_root`, `destination`,
+`run_id` and `task_id`. Codex requires `step0_manifest`; V2 requires it to be
+absent and does not read it. All inputs must already exist locally.
+
+The new destination contains `configuration.json`, `task.json`, only the
+selected task's `reference_files/` members, and a final `preparation.json`.
+The configuration envelope holds actual template-derived factory settings,
+the GPT-5.4/direct-v1/xhigh binding and a required observation-control identity.
+V2 retains its local settings but does not inherit the old stage plan's dollar
+approvals or escalation. The task payload is a V2 `TaskToRun` projection or
+Codex `run` arguments; it excludes rubric and expert-answer bodies. Reference
+paths are relative to the handoff directory. The full pinned parquet and, for
+Codex, canonical Step0 bytes are verified but are not copied into the packet.
+No grader config, provider instance, command, admission or generation clock is
+created. This envelope is not a standalone CLI execution config.
+
+The final marker binds study/run/condition/repeat/task, registration digest,
+R commit/tree, frozen F/template identity, condition template and generated
+config digests, input-registration source and verified input-byte identities.
+Held-directory/no-clobber publication retains a sibling
+`.time-budget-preparation-reserved.json` file. Existing, partial or changed
+destinations refuse; final source/input/member rereads precede readiness.
+Preparation evidence is not launch authority: all execution flags and existing
+launch gates remain closed. The next integration is one execution consumer
+that revalidates this handoff and supplies the required control to the existing
+factory under a separate source-bound execution direction.
+
 `core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
-in a private host-owned directory before preparation. The identity includes
+in a private host-owned directory before generation. The identity includes
 study/run/condition/repeat/task and reviewed source, registration and input hashes.
 An admitted, started, terminal or abandoned identity cannot be adopted by another
 runner. Changing a source/input hash does not mint a second observation.
@@ -393,9 +428,13 @@ and the required `/proc`, pidfd and `waitid` interfaces. It must run on the main
 thread with no existing real-time alarm. Unsupported or occupied hosts refuse
 admission. It supervises blocking local I/O and native waits and terminates owned
 children through kernel-confirmed child pidfds, not bare PID or process-group
-signalling. Cleanup on a real supported kernel remains unproved: the prior
-real-host case refused admission for a missing interface. This does not confirm
-server-side cancellation or billing. Omitted control preserves the prior
+signalling. The supplied PR751 CI evidence confirmed a synthetic reparenting
+lifecycle on GitHub-hosted Linux X64 at tree
+`2d96778657188d7a80c32076fd6121707eb790f0` (run `37331226376`, job `111834532570`,
+attempt 1). That evidence applies to that source/host only; the earlier NAS
+missing-interface admission refusal remains a separate observation. Neither
+establishes support for this changed source/another host, server-side
+cancellation, billing bounds or live authorization. Omitted control preserves the prior
 runner behavior, including the separate closed `CodexTaskDeadlineStore` contract.
 No dispatcher or capture path selects this control yet. Measurement availability,
 credentialed-input authority and live source-bound execution remain unverified;

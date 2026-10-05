@@ -1,8 +1,9 @@
-"""Compile one prospective time-budget registration, never an execution recipe.
+"""Compile the prospective registration or prepare one observation, never launch.
 
 The explicit dual-root mode separates reviewed runtime facts from the frozen
 whole-closure judge. The omitted mode retains the legacy source refusal. Neither
-mode selects an executor, verifies private inputs, or grants launch authority.
+mode selects an executor or grants launch authority. The separate explicit
+preparation API verifies supplied local inputs and emits one model-free handoff.
 """
 
 from __future__ import annotations
@@ -10,9 +11,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import stat
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -49,6 +51,7 @@ FROZEN_TEMPLATE_SHA256 = (
 )
 RUNTIME_ADDITIONS = {
     COMPILER,
+    "batch-runner/ghcp_vm_input_bundle.py",
     "batch-runner/core/time_budget_observation_deadline.py",
     "batch-runner/core/agentic_v2_conversation.py",
     "batch-runner/core/agentic_v2_runner.py",
@@ -73,10 +76,18 @@ LAUNCH_BLOCKERS = (
     "served_identity_and_original_input_verification_required",
     "credentialed_ci_input_authority_unresolved",
 )
+HANDOFF_CONFIG = "configuration.json"
+HANDOFF_TASK = "task.json"
+HANDOFF_READY = "preparation.json"
+HANDOFF_RESERVATION_SUFFIX = ".time-budget-preparation-reserved.json"
 
 
 class TimeBudgetRegistrationRefused(ValueError):
     """The separate, fixed registration is not valid offline evidence."""
+
+
+class TimeBudgetPreparationRefused(TimeBudgetRegistrationRefused):
+    """One local observation cannot be published; partial output is not reusable."""
 
 
 class _RegistrationLoader(yaml.SafeLoader):
@@ -549,8 +560,6 @@ def compile_registration(
     model/data/judge/result/cost facts and per-harness settings are reused. Its
     old shared caps, run IDs, dispatch commands and launch policy stay separate.
     """
-    from contextlib import ExitStack
-
     try:
         anchors = (
             runtime_root,
@@ -722,6 +731,352 @@ def _compile_intent(
         runs=runs,
         runtime_bound=anchored,
     )
+
+
+@contextmanager
+def _observation_input_registration(root, expected_sha, manifest_path, dataset):
+    """Reuse only input facts, never the old registration's dispatch authority."""
+    from core.execution_envelope_tasks import (
+        catalog_sha256, check_catalog_carries_no_scores, load_task_catalog,
+        select_advance_check_tasks,
+    )
+    from gpt54_run_config_bundle import _manifest_file, _root
+    from gpt54_v2_grading_input import _read_bytes
+
+    root = _root(root)
+    manifest = _manifest_file(root, manifest_path)
+    catalog_role = ENVELOPE + "gdpval_task_catalog.json"
+    envelope_role = ENVELOPE + "advance_check_plan.yaml"
+    roles = {manifest_path, catalog_role, envelope_role}
+    with _reviewed_source(root, expected_sha, roles) as (_, tree, identities):
+        # The frozen input document genuinely uses YAML &shared aliases. Its
+        # exact reviewed blob and input-fact equality are checked; do not apply
+        # the separate prospective schema's no-alias rule to that old format.
+        document = yaml.safe_load(_read_bytes(manifest, **identities[manifest_path]))
+        for name in (catalog_role, envelope_role):
+            _read_bytes(root / name, sha256=document["source_pins"][name])
+        _expect("input_catalog_score_free", check_catalog_carries_no_scores(root / catalog_role), [])
+        catalog = load_task_catalog(root / catalog_role)
+        digest = catalog_sha256(root / catalog_role)
+        task_ids = select_advance_check_tasks(catalog, catalog_fingerprint=digest).task_ids
+        by_id = catalog.by_task_id()
+        envelope = load_plan(root / envelope_role)
+        actual = {
+            "repo_id": catalog.dataset_repo_id, "revision": catalog.dataset_revision,
+            "parquet_sha256": catalog.dataset_file_sha256, "catalog_sha256": digest,
+            "cohort": "advance_check_5",
+            "tasks": [{"task_id": task, "prompt_sha256": by_id[task].prompt_sha256} for task in task_ids],
+            "input_file_versions": envelope["model_run_conditions"]["shared"]["input_file_versions"],
+        }
+        _expect("input_registration_dataset", document["shared"]["dataset"], actual)
+        _expect("study_input_dataset", actual, dataset)
+        yield catalog, task_ids, {
+            "source_sha": expected_sha, "source_tree": tree,
+            "scope": "dataset_and_cohort_only_not_legacy_dispatch",
+            "files": {name: identities[name] for name in sorted(roles)},
+            "manifest_path": manifest_path,
+        }
+
+
+def _observation_inputs(dataset, catalog, task_ids, *, parquet, references, step0):
+    """Read real bytes through the existing input-only projection validators."""
+    from core.agentic_v2_manifest_binding import bind_stage
+    from core.source_identity import source_task_projection_sha256
+    from gpt54_prepared_input_attestation import (
+        _SourceSnapshot, _dataset_tasks, _identity, _reference_snapshot,
+    )
+    from gpt54_run_input_bundle import _step0_bytes
+    from gpt54_v2_grading_input import _read_bytes
+
+    data = _read_bytes(parquet, sha256=dataset["parquet_sha256"])
+    projections, needs_files = _dataset_tasks(data, task_ids)
+    bound = bind_stage(
+        dataset["cohort"], dataset_tasks=[SimpleNamespace(**row) for row in projections],
+        catalog=catalog, catalog_digest=dataset["catalog_sha256"],
+    )
+    versions = dict(dataset["input_file_versions"])
+    _expect("input_dataset_version", versions.pop(dataset["repo_id"] + "@" + dataset["revision"]),
+            dataset["parquet_sha256"])
+    paths = [name for row in projections for name in row["reference_files"]]
+    if len(paths) != len(set(paths)):
+        raise TimeBudgetPreparationRefused("duplicate_or_cross_task_reference_path")
+    _expect("input_reference_set", sorted(paths), sorted(versions))
+    records = _reference_snapshot(references, versions)
+    sources = [{
+        "projection": row,
+        "source_projection_sha256": source_task_projection_sha256(**row),
+        "text_bytes": {name: _identity(row[name].encode("utf-8"))
+                       for name in ("prompt", "rubric_json", "rubric_pretty")},
+        "reference_file_records": [{"path": name, **records[name]} for name in row["reference_files"]],
+    } for row in projections]
+    snapshot = _SourceSnapshot(
+        {"dataset": {"parquet": _identity(data)}, "needs_files_policy": "deliverable_only"},
+        sources, projections, records, needs_files, bound,
+    )
+    # None returns without a read. V2 never consumes Codex's Step0 input.
+    manifest = _step0_bytes(step0, snapshot)
+    return snapshot, None if manifest is None else _identity(manifest)
+
+
+def _observation_configuration(plan, run, task_id, runtime_root):
+    """Real template-derived factory inputs, not a standalone dispatch config."""
+    from core.agentic_v2_contract import AgenticV2Profile
+    from core.agentic_v2_conversation_runner import ceilings_from
+    from core.codex_runtime_config import DEFAULT_PROVIDER_ID
+    from core.experiment_config import ExperimentConfig
+
+    model = plan["shared"]["model"]
+    condition = plan["conditions"][run.condition]
+    config = load_plan(runtime_root / condition["template"])
+    if run.condition == "sandbox_v2":
+        # Project the actual factory/voice settings, not the old stage plan's
+        # dollar approvals, escalation, grading or dispatch instructions.
+        template = config
+        config = {name: template[name] for name in (
+            "model", "azure_connection", "instructions", "fixed_settings", "safety_blocks_must_stay_closed",
+        )}
+        config["cost"] = {"chosen_settings": template["cost"]["chosen_settings"]}
+        config["profile"] = asdict(AgenticV2Profile.from_mapping({
+            "tool_contract_version": "2.0", "policy_profile_id": template.get("policy_profile_id") or "offline-full-v1",
+            "foundation_only": True,
+        }))
+        config["model"].update(deployment=model["deployment"], resolved_model=model["resolved_model"],
+                               **condition["request"])
+        config["azure_connection"].update(account=model["account"], route_profile=model["route_profile"])
+        config["task_ids"] = [task_id]
+        config["fixed_settings"].update(
+            retry_max_attempts=1, self_review_enabled=False, self_review_max_attempts=0,
+            per_task_timeout_seconds=1200, replay_format=condition["replay_format"],
+        )
+        limits = ceilings_from(config, SimpleNamespace(**config["cost"]["chosen_settings"])).as_dict()
+        _expect("v2_local_settings", {name: limits[name] for name in condition["local_settings"]},
+                condition["local_settings"])
+        factory = "core.agentic_v2_conversation_runner.build_runner_factory"
+        argument = "observation_for"
+    else:
+        config["experiment"].update(
+            id=run.run_id, name=f"GPT-5.4 time-budget Codex repeat {run.repeat}",
+            description="One model-free observation handoff; launch remains blocked.",
+        )
+        config["data"]["source"] = plan["shared"]["dataset"]["repo_id"]
+        config["data"]["filter"]["task_ids"] = [task_id]
+        config["condition_a"]["model"].update(
+            provider=model["provider"], deployment=model["deployment"], reasoning_effort=model["reasoning_effort"],
+        )
+        config["execution"]["codex"].update(
+            model=model["deployment"], provider_id=DEFAULT_PROVIDER_ID,
+            **condition["request"], **condition["provider_retry_settings"],
+        )
+        config["execution"].update(timeout=1200, max_retries=0, resume_max_rounds=0)
+        if ExperimentConfig.from_dict(config).validate():
+            raise TimeBudgetPreparationRefused("codex_observation_configuration")
+        factory, argument = "core.codex_runner.CodexAgentRunner", "observation_control"
+    return config, factory, argument
+
+
+def _handoff_path(value):
+    from core.inference_manifest import _assert_no_symlink_ancestors
+
+    path = Path(value)
+    if ".." in path.parts:
+        raise TimeBudgetPreparationRefused("handoff_parent_traversal")
+    path = Path(os.path.abspath(path))
+    _assert_no_symlink_ancestors(path)
+    return path
+
+
+def prepare_observation_handoff(
+    plan: dict[str, Any], *, run_id: str, task_id: str,
+    runtime_root: Path, expected_reviewed_source_sha: str,
+    frozen_grader_root: Path, expected_grader_source_sha: str,
+    input_registration_root: Path, expected_input_source_sha: str,
+    input_registration_path: str, dataset_parquet: Path, reference_root: Path,
+    destination: Path, step0_manifest: Path | None = None,
+) -> dict[str, Any]:
+    """Publish one config/task/reference handoff and final preparation evidence.
+
+    All source anchors are caller-supplied full commits. The input registration
+    supplies dataset/cohort facts only, after equality with the genuine study.
+    Originals must already exist locally; no acquisition, Step1, provider,
+    grading materialization, observation admission or clock start occurs here.
+    V2 requires Step0 to be absent; Codex verifies its full canonical bytes.
+
+    The destination must be new, disjoint from sources/inputs, with an existing
+    parent. A retained sibling reservation refuses clobber/adoption after any
+    partial write. Only the last preparation.json signals verified local bytes.
+    It grants no launch authority. No historical API/default is changed.
+    """
+    from core.agentic_v2_manifest_binding import ManifestRefused
+    from core.time_budget_observation_deadline import ObservationIdentity
+    from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
+    from gpt54_prepared_input_attestation import _identity
+    from gpt54_run_config_bundle import _held_parents, _path
+    from gpt54_v2_grading_input import _read_bytes
+
+    try:
+        anchors = (runtime_root, expected_reviewed_source_sha, frozen_grader_root, expected_grader_source_sha)
+        if any(value is None for value in (*anchors, input_registration_root, expected_input_source_sha,
+                                           input_registration_path)):
+            raise TimeBudgetPreparationRefused("explicit_source_and_input_anchors_required")
+        if type(run_id) is not str or type(task_id) is not str:
+            raise TimeBudgetPreparationRefused("exactly_one_registered_observation_required")
+        plan = json.loads(_canonical_json(plan))
+        output = _handoff_path(destination)
+        reservation = output.with_name(output.name + HANDOFF_RESERVATION_SUFFIX)
+        if not output.parent.is_dir():
+            raise TimeBudgetPreparationRefused("handoff_parent_required")
+
+        def absent():
+            if os.path.lexists(output) or os.path.lexists(reservation):
+                raise TimeBudgetPreparationRefused("handoff_or_reservation_exists")
+
+        absent()
+        with ExitStack() as sources:
+            compiled = _compile_registration(plan, anchors, True, sources)
+            selected = [run for run in compiled.runs if run.run_id == run_id and task_id in run.task_ids]
+            if len(selected) != 1:
+                raise TimeBudgetPreparationRefused("exactly_one_registered_observation_required")
+            run = selected[0]
+            if (run.condition == "codex") != (step0_manifest is not None):
+                raise TimeBudgetPreparationRefused("condition_specific_step0_required")
+            parquet, references = _handoff_path(dataset_parquet), _handoff_path(reference_root)
+            step0 = None if step0_manifest is None else _handoff_path(step0_manifest)
+            for path in (runtime_root, frozen_grader_root, input_registration_root, parquet, references,
+                         *(() if step0 is None else (step0,))):
+                source = _handoff_path(path)
+                if any(target.is_relative_to(source) or source.is_relative_to(target)
+                       for target in (output, reservation)):
+                    raise TimeBudgetPreparationRefused("handoff_source_overlap")
+            dataset = plan["shared"]["dataset"]
+            catalog, task_ids, input_source = sources.enter_context(_observation_input_registration(
+                input_registration_root, expected_input_source_sha, input_registration_path, dataset,
+            ))
+            versions = {name: digest for name, digest in dataset["input_file_versions"].items()
+                        if name.startswith("reference_files/")}
+            checks = [sources.enter_context(_held_parents(parquet.parent, (parquet.name,))),
+                      sources.enter_context(_held_parents(references, tuple(versions)))]
+            if step0 is not None:
+                checks.append(sources.enter_context(_held_parents(step0.parent, (step0.name,))))
+
+            def read_inputs():
+                return _observation_inputs(dataset, catalog, task_ids, parquet=parquet,
+                                           references=references, step0=step0)
+
+            snapshot, step0_identity = read_inputs()
+            source = next(row for row in snapshot.sources if row["projection"]["task_id"] == task_id)
+            task = source["projection"]
+            inputs = {
+                "registration": input_source,
+                "dataset": {**snapshot.shared_binding["dataset"], "repo_id": dataset["repo_id"],
+                            "revision": dataset["revision"], "catalog_sha256": dataset["catalog_sha256"]},
+                "task_id": task_id, "source_projection_sha256": source["source_projection_sha256"],
+                "text_bytes": source["text_bytes"], "reference_file_records": source["reference_file_records"],
+                "needs_files_policy": "deliverable_only", "needs_files": snapshot.needs_files[task_id],
+                "step0_manifest": step0_identity,
+                "verification": "local_bytes_against_independently_anchored_input_registration",
+            }
+            evidence = json.loads(compiled.source_evidence_json)
+            runtime = evidence["runtime"]
+            identity = ObservationIdentity(
+                STUDY_ID, run.run_id, run.condition, run.repeat, task_id,
+                runtime["source_sha"], runtime["source_tree"], compiled.manifest_sha256, seal(inputs),
+            )
+            config, factory, argument = _observation_configuration(plan, run, task_id, Path(runtime_root))
+            control = {
+                "required": True, "type": "core.time_budget_observation_deadline.TimeBudgetObservation",
+                "factory_argument": argument, "identity": asdict(identity),
+                "generation_seconds": 1200, "cleanup_seconds": 20,
+                "admission_reserved": False, "generation_started": False,
+            }
+            configuration = {
+                "handoff_version": "gpt54-time-budget-observation-configuration-v1",
+                "factory": factory, "configuration": config, "observation_control": control,
+                "model_binding": plan["shared"]["model"],
+                "launch_allowed": False, "execution_enabled": False,
+            }
+            if run.condition == "sandbox_v2":
+                arguments = asdict(next(row for row in snapshot.bound.tasks if row.task_id == task_id))
+                _expect("v2_reference_order", list(arguments["reference_files"]), task["reference_files"])
+                kind = "sandbox_v2_task_to_run"
+            else:
+                arguments = {
+                    "task_prompt": task["prompt"], "model": plan["shared"]["model"]["deployment"],
+                    "reference_files": task["reference_files"], "occupation": task["occupation"],
+                    "experiment_prompt": config["condition_a"]["prompt"], "run_id": run.run_id,
+                    "condition_name": run.condition, "task_id": task_id,
+                }
+                kind = "codex_run_arguments"
+            payload = {"kind": kind, "arguments": arguments, "reference_path_base": "handoff_directory",
+                       "reference_file_records": source["reference_file_records"]}
+            files = {
+                HANDOFF_CONFIG: _canonical_json(configuration).encode("utf-8"),
+                HANDOFF_TASK: _canonical_json(payload).encode("utf-8"),
+                **{item["path"]: _read_bytes(references / item["path"], sha256=item["sha256"], size=item["size"])
+                   for item in source["reference_file_records"]},
+            }
+            marker = {
+                "preparation_version": "gpt54-time-budget-observation-preparation-v1",
+                "observation": asdict(identity), "abba_index": compiled.runs.index(run),
+                "registration_file": runtime["manifest_file"],
+                "runtime_source": {name: runtime[name] for name in ("source_sha", "source_tree")},
+                "frozen_grader": {name: evidence["frozen_grader"][name] for name in (
+                    "source_sha", "source_tree", "template_source_sha256", "template_config_path",
+                    "materialized_config_path", "materialized_grader_source_sha256", "execution_source",
+                )},
+                "condition_template": {"path": plan["conditions"][run.condition]["template"],
+                                       **runtime["source_files"][plan["conditions"][run.condition]["template"]]},
+                "inputs": inputs, "observation_control": control,
+                "files": {name: _identity(data) for name, data in files.items()},
+                "launch_authority": compiled.as_dict()["launch_authority"],
+                "evidence_boundary": "model_free_one_observation_preparation_not_execution",
+            }
+            marker_data = _canonical_json(marker).encode("utf-8")
+            reservation_data = _canonical_json({
+                "reservation_version": "gpt54-time-budget-preparation-reservation-v1",
+                "intended_preparation": _identity(marker_data), "ready_path": HANDOFF_READY,
+            }).encode("utf-8")
+
+            def reread_inputs():
+                current, current_step0 = read_inputs()
+                _expect("input_snapshot_changed", (current.sources, current.shared_binding, current.needs_files,
+                                                   current.references, current_step0),
+                        (snapshot.sources, snapshot.shared_binding, snapshot.needs_files,
+                         snapshot.references, step0_identity))
+                for check in checks:
+                    check()
+
+            reread_inputs()
+            with _publication_parents(output.parent) as (check, mkdir, descriptor):
+                absent()
+                _write_no_clobber(reservation, reservation_data, parent_fd=descriptor(output.parent))
+                mkdir(output)
+                directories = {parent for name in files for parent in _path(output, name).parents
+                               if parent != output and parent.is_relative_to(output)}
+                for directory in sorted(directories, key=lambda path: (len(path.parts), path.as_posix())):
+                    mkdir(directory)
+                for name, data in files.items():
+                    path = _path(output, name)
+                    _write_no_clobber(path, data, parent_fd=descriptor(path.parent))
+                reread_inputs()
+                _read_bytes(reservation, **_identity(reservation_data))
+                # Exit performs every held R/F/input-registration final reread
+                # BEFORE readiness. No fallible source check follows the marker.
+                sources.close()
+                for name, data in files.items():
+                    _read_bytes(_path(output, name), **_identity(data))
+                members = tuple(output.rglob("*"))
+                if any(path.is_symlink() for path in members):
+                    raise TimeBudgetPreparationRefused("handoff_member_symlink")
+                _expect("handoff_members", sorted(path.relative_to(output).as_posix() for path in members),
+                        sorted([*files, *(path.relative_to(output).as_posix() for path in directories)]))
+                check()
+                _write_no_clobber(output / HANDOFF_READY, marker_data, parent_fd=descriptor(output))
+            return marker
+    except TimeBudgetRegistrationRefused:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, StopIteration,
+            ManifestRefused, yaml.YAMLError, RecursionError):
+        raise TimeBudgetPreparationRefused("observation_handoff_refused") from None
 
 
 def main(argv: list[str] | None = None) -> int:
