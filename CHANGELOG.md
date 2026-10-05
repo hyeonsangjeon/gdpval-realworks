@@ -13,6 +13,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Bind the local model-free workflow gate to an explicitly selected comparison
+  manifest and the independently validated request SHA. The optional API
+  `manifest_path` and local CLI `--manifest-path` reuse the accepted path/blob
+  validators and preparer. The same selection reaches source validation,
+  preparation and anchored verification; held marker identities cannot replace
+  the request's review authority. Immutable commands/cwd, final source/marker
+  rereads, detached HEAD/tree checks, held directories, reservations, quarantine
+  and no-clobber behavior remain enforced. Historical omission and the JSON
+  evidence shape remain compatible; current-source frozen-plan refusals remain.
+
+  Production behavior changes only in `gpt54_workflow_gate.py`, with its one
+  prospective binding and directly coupled frozen-refusal test inventories.
+  No CURRENT observer repin is required. Request schemas, Actions workflows,
+  both unconditional runtime launch guards, compiler/core/Step2/grader files,
+  historical/paid evidence, original inputs, full grader TEMPLATE closure and
+  registered study controls remain unchanged. The workflow launch gate still
+  revalidates and refuses; no dispatcher, permission or execution route is added.
+
+  One offline `workflow_profile_anchor` invocation passed 64 cases, with
+  67 deselected, in 102.84s, exit 0, at HEAD
+  `5b72b56d3d69c7fcd322da78d12586380f625b21`, tree
+  `fe1112327564d61f6c9af275f1cb254cdd133667`. The 300-second limit plus
+  5-second grace is test-only. Command SHA256 is
+  `1ff99750c84a0264523e97e8e7bee718668dcead4835f202d8ffb152ce24e2f1`;
+  combined-log SHA256 is
+  `5135bcf0a846c4f6c53d8367e75f2de2bb5bfcaf56a0d3380c684fe96d1895a1`;
+  private receipt SHA256 is
+  `09a1c10f72f6eb0f46188a93cf2a589f99cf9d91b6605846eff2df998a78c59b`.
+  The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05)
+  preserves the exact command, accepted `3419e7db30784bd89034b95253f9f4698acae6f2`
+  source basis, synthetic-input boundary and immutable prior evidence.
+  Only README/CHANGELOG/LATEST records follow the pinned proof. Final-HEAD
+  review, applicable CI and leader acceptance remain pending. Actual Actions
+  and capture profile selection, native caps, dispatcher, credentialed-CI input
+  authority and launch authorization remain unresolved. No private input or
+  consumed artifact was accessed, prepared, adopted or relabeled; no previous
+  selector was rerun. The closed 30-cell/8-cell studies remain untouched.
+
 - Add an explicitly anchored, model-free mode to
   `gpt54_disposable_checkout.verify_runtime_checkout`. The independent caller
   keyword `expected_reviewed_source_sha` binds the held ready marker, detached
@@ -43,7 +81,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   private receipt SHA256 is
   `cf9fbef9163474dbaab66af817133a3cfe47207c5c7b51fbc959b324204debc3`.
   This is a new synthetic-input regression proof, not a repeat of the prior
-  launch-boundary selector or a real preparation. The [current task record](tasks/LATEST_TASK_RESULT/README.md#project5-independently-anchored-prospective-profile-verification--2026-10-05)
+  launch-boundary selector or a real preparation. The [immutable task record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/3419e7db30784bd89034b95253f9f4698acae6f2/tasks/LATEST_TASK_RESULT/README.md#project5-independently-anchored-prospective-profile-verification--2026-10-05)
   records the exact command, accepted `c28847f1b0e3626a088a746558cda82aca67c127`
   source basis, safe evidence and immutable prior references. Only
   README/CHANGELOG/LATEST records follow this proof. Final-HEAD review,

@@ -198,9 +198,9 @@ proof, real-import identities and remaining gates.
 The [local-source profile](experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml)
 uses the existing comparison schema, model/effort, input identities, task order,
 ABBA20, run IDs and limits. It changes only the reviewed runtime source bindings,
-the three local preparation helper fingerprints, the two capture-module bindings
-and the actual full grader template closure. Neither the capture launch refusal
-nor the anchored metadata verifier changes that closure. The historical
+the three local preparation helper fingerprints, the two capture-module bindings,
+the workflow-gate binding and the actual full grader template closure. The later
+launch-refusal and metadata-verifier changes do not alter that closure. The historical
 manifest and compiler remain
 unchanged; the template closure is not a materialized-grader identity or a
 grading result.
@@ -223,8 +223,9 @@ regular tracked manifest blob. Its bytes, source pins, detached checkout HEAD
 and existing `manifest_file.path`/digest evidence must agree. External paths,
 URLs, traversal, symlink substitution and unreviewed bytes are refused.
 
-Omitting the API keyword preserves the historical path. Runtime and workflow
-callers do not discover or select this profile. Existing canonical Step0 checks,
+Omitting the API keyword preserves the historical path. Direct runtime callers
+and Actions workflows do not select this profile; the local workflow API/CLI
+selection is described below. Existing canonical Step0 checks,
 no-clobber publication, reservations and quarantine remain in force. The
 [source-profile proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/fd903b96dc8d4622470b6971fde820334c16396b/tasks/LATEST_TASK_RESULT/README.md#project5-prospective-local-preparation-source-profile--2026-10-04)
 uses genuine current-source compilation and synthetic preparation fixtures,
@@ -264,11 +265,50 @@ returns only the unchanged canonical preparation marker. An omitted or `None`
 anchor retains the historical path; it does not discover the prospective
 profile. Refs, tags, malformed anchors, unsafe paths and mismatched bytes refuse.
 
-No runtime or workflow caller supplies this new keyword. The unconditional
-comparison launch refusal below is unchanged. The [anchored-verifier proof](../tasks/LATEST_TASK_RESULT/README.md#project5-independently-anchored-prospective-profile-verification--2026-10-05)
+The local workflow gate below supplies its independently validated request SHA.
+Direct runtime callers do not supply this keyword. The unconditional comparison
+launch refusal below is unchanged. The [anchored-verifier proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/3419e7db30784bd89034b95253f9f4698acae6f2/tasks/LATEST_TASK_RESULT/README.md#project5-independently-anchored-prospective-profile-verification--2026-10-05)
 uses temporary Git and synthetic inputs, not private originals or evidence of
 runtime equivalence. A changed-source preparation requires separate fixed-HEAD
 review and direction; the consumed earlier artifact cannot be relabeled.
+
+#### Model-free workflow profile handoff
+
+`gpt54_workflow_gate.prepare_workflow_execution` accepts the optional
+repository-relative `manifest_path` and retains it in the prepared metadata.
+The local CLI accepts the same locator with `--manifest-path`. Omitting either
+keeps the historical path and its current-source refusals. This argument fragment
+is documentation, not authorization for a preparation or dispatch:
+
+```text
+--manifest-path batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml
+```
+
+This is not a GitHub workflow input or an experiment/launch control.
+`WorkflowRequest` keeps its exact input/event/source schema. The source HEAD,
+event SHA and workflow SHA must agree with its independent reviewed SHA. The
+existing preparer machinery binds the selected regular tracked YAML blob to
+that commit, then checks the same path and bytes throughout local preparation.
+Untracked or altered manifests, external paths, URLs, traversal and link
+substitutions refuse without fallback.
+
+`verify_workflow_execution` forwards `request.reviewed_source_sha` as
+`expected_reviewed_source_sha`; no target HEAD or marker supplies that anchor.
+The config marker's bound manifest path/size/digest must match the caller's
+selected source blob. Commands and cwd remain bound to the compiled run, and
+source/marker identities, both HEADs, held directories, reservations and
+quarantine are checked before evidence is returned. The JSON evidence shape is
+unchanged, and verification writes nothing.
+
+`require_workflow_launch` still revalidates and refuses the false compiler
+launch flags; this gate has no dispatcher. Even after valid model-free
+preparation, the local CLI returns status 2 through that mandatory refusal.
+Both direct comparison runtime guards remain unchanged. The [workflow handoff
+proof](../tasks/LATEST_TASK_RESULT/README.md#project5-model-free-workflow-profile-handoff--2026-10-05)
+uses synthetic original inputs and real temporary Git/source validators,
+not private inputs or an executed comparison. Actual Actions/capture profile
+selection, native call/token caps, dispatcher, credentialed-CI input authority
+and launch authorization remain unresolved.
 
 #### Direct comparison runtime launch refusal
 

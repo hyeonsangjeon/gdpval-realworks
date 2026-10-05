@@ -172,6 +172,7 @@ def test_ci_input_bundle_current_input_registration_does_not_compile_dispatch():
         "source_pin:batch-runner/gpt54_run_config_bundle.py, "
         "source_pin:batch-runner/gpt54_run_input_bundle.py, "
         "source_pin:batch-runner/gpt54_disposable_checkout.py, "
+        "source_pin:batch-runner/gpt54_workflow_gate.py, "
         "source_pin:batch-runner/core/codex_runner.py, "
         "source_pin:batch-runner/step2_run_inference.py, "
         "source_pin:batch-runner/core/codex_task_deadline.py"

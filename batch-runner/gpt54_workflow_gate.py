@@ -32,17 +32,20 @@ from gpt54_comparison_preflight import (
     compile_grading_plan,
 )
 from gpt54_disposable_checkout import (
+    CONFIG_READY_PATH,
     READY_PATH,
     DisposableCheckoutRefused,
     _common,
     _destination,
     _git,
+    _reviewed_commit,
+    _runtime_revision,
     _sidecars,
     prepare_disposable_checkout,
     verify_runtime_checkout,
 )
 from gpt54_prepared_input_attestation import _json_object, _same
-from gpt54_run_config_bundle import MANIFEST_PATH, _held_parents, _root, _sources
+from gpt54_run_config_bundle import MANIFEST_PATH, _held_parents, _manifest_file, _root, _sources
 from gpt54_v2_grading_input import _read_bytes
 
 OWNER_CONDITIONS: dict[str, Literal["sandbox_v2", "codex"]] = {
@@ -79,6 +82,7 @@ class PreparedWorkflowExecution:
     cwd: Path
     commands: tuple[tuple[str, ...], ...]
     checkout_ready_json: str
+    manifest_path: str = MANIFEST_PATH
 
 
 def request_from_inputs(
@@ -177,8 +181,13 @@ def prepare_workflow_execution(
     manifest: dict[str, Any], combined_plan: dict[str, Any],
     dataset_parquet: Path, reference_root: Path,
     step0_manifest: Path | None = None,
+    manifest_path: str = MANIFEST_PATH,
 ) -> PreparedWorkflowExecution:
     """Reuse local checkout preparation and runtime lineage without launching.
+
+    ``manifest_path`` is a repository-relative locator bound to the request's
+    reviewed commit, never a workflow input or permission to execute commands.
+    Omission keeps the historical manifest path.
 
     Raises:
         WorkflowExecutionRefused: Invalid inputs or retained failed preparation.
@@ -190,7 +199,7 @@ def prepare_workflow_execution(
     try:
         _, run = _compiled_request(request, manifest, combined_plan)
         source = _source_root(request, repository)
-        _sources(source, manifest)
+        _sources(source, manifest, manifest_path)
         _source_root(request, source)
         destination = _destination(destination, source)
         reservation, quarantine = _sidecars(destination)
@@ -201,7 +210,7 @@ def prepare_workflow_execution(
                 run, repository=source, reviewed_source_sha=request.reviewed_source_sha,
                 destination=destination, manifest=manifest, combined_plan=combined_plan,
                 dataset_parquet=dataset_parquet, reference_root=reference_root,
-                step0_manifest=step0_manifest,
+                step0_manifest=step0_manifest, manifest_path=manifest_path,
             )
             try:
                 check_parent()
@@ -210,6 +219,7 @@ def prepare_workflow_execution(
                     request=request, repository=source, checkout=checkout,
                     cwd=checkout / run.working_directory, commands=run.commands,
                     checkout_ready_json=_canonical_json(marker),
+                    manifest_path=manifest_path,
                 )
                 verify_workflow_execution(prepared, manifest=manifest, combined_plan=combined_plan)
                 check_parent()
@@ -259,7 +269,10 @@ def verify_workflow_execution(
         request = prepared.request
         plan, run = _compiled_request(request, manifest, combined_plan)
         source = _source_root(request, prepared.repository)
-        _sources(source, manifest)
+        reviewed = _reviewed_commit(
+            source, request.reviewed_source_sha, manifest, plan, prepared.manifest_path,
+        )
+        expected_sources = {key: reviewed[key] for key in ("manifest_file", "source_files")}
         checkout = _root(prepared.checkout)
         cwd = _root(prepared.cwd)
         if checkout == source or cwd != checkout / run.working_directory:
@@ -267,13 +280,38 @@ def verify_workflow_execution(
         if type(prepared.commands) is not tuple or any(type(row) is not tuple for row in prepared.commands):
             raise WorkflowExecutionRefused("workflow argv must remain immutable command tuples")
         _same("workflow command argv", prepared.commands, run.commands)
-        marker = verify_runtime_checkout(checkout=checkout, run_id=run.run_id, condition=run.condition)
-        if prepared.checkout_ready_json != _canonical_json(marker):
-            raise WorkflowExecutionRefused("prepared checkout-ready evidence changed")
-        _same("workflow checkout reviewed SHA", marker["reviewed_source_sha"], request.reviewed_source_sha)
-        _same("workflow checkout source pins", marker["source_pins"], manifest["source_pins"])
-        _sources(source, manifest)
-        _source_root(request, source)
+        reservation, quarantine = _sidecars(checkout)
+        with (
+            _held_parents(source, (prepared.manifest_path, *manifest["source_pins"])) as check_source,
+            _held_parents(checkout.parent, (checkout.name,)) as check_parent,
+            _held_parents(checkout, (READY_PATH, CONFIG_READY_PATH)) as check_checkout,
+        ):
+            _same("workflow reviewed source files", _sources(source, manifest, prepared.manifest_path), expected_sources)
+            marker = verify_runtime_checkout(
+                checkout=checkout, run_id=run.run_id, condition=run.condition,
+                expected_reviewed_source_sha=request.reviewed_source_sha,
+            )
+            held_reservation = _read_bytes(reservation)
+            if prepared.checkout_ready_json != _canonical_json(marker):
+                raise WorkflowExecutionRefused("prepared checkout-ready evidence changed")
+            config_identity = marker["bundles"]["config"]
+            config_data = _read_bytes(checkout / CONFIG_READY_PATH,
+                                      size=config_identity["size"], sha256=config_identity["sha256"])
+            _same("workflow selected manifest", _json_object(config_data)["manifest_file"], reviewed["manifest_file"])
+            _same("workflow checkout reviewed SHA", marker["reviewed_source_sha"], request.reviewed_source_sha)
+            _same("workflow checkout reviewed tree", marker["reviewed_tree_sha"], reviewed["tree_sha"])
+            _same("workflow checkout source pins", marker["source_pins"], manifest["source_pins"])
+            _same("workflow reviewed source files", _sources(source, manifest, prepared.manifest_path), expected_sources)
+            _source_root(request, source)
+            _runtime_revision(checkout, request.reviewed_source_sha, reviewed["tree_sha"])
+            if (_read_bytes(checkout / READY_PATH) != prepared.checkout_ready_json.encode("utf-8")
+                    or _read_bytes(checkout / CONFIG_READY_PATH) != config_data
+                    or _read_bytes(reservation) != held_reservation
+                    or os.path.lexists(quarantine)):
+                raise WorkflowExecutionRefused("workflow markers changed during verification")
+            check_source()
+            check_parent()
+            check_checkout()
         return json.loads(_canonical_json({
             "gate_version": "gpt54-workflow-execution-gate-v1",
             "workflow_request": asdict(request), "run_id": run.run_id,
@@ -315,6 +353,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--step0-manifest", type=Path,
                         help="Explicit local canonical schema-4 manifest (required for Codex only)")
+    parser.add_argument("--manifest-path", default=MANIFEST_PATH,
+                        help="Repository-relative execution_envelope YAML at the reviewed commit; never launch permission")
     args = parser.parse_args(argv)
     try:
         request = request_from_inputs(
@@ -323,13 +363,13 @@ def main(argv: list[str] | None = None) -> int:
             event_sha=args.event_sha, workflow_sha=args.workflow_sha,
         )
         source = _source_root(request, args.repository)
-        manifest = yaml.safe_load(_read_bytes(source / MANIFEST_PATH))
+        manifest = yaml.safe_load(_read_bytes(_manifest_file(source, args.manifest_path)))
         combined = compile_grading_plan(manifest).as_dict()
         prepared = prepare_workflow_execution(
             request, repository=source, destination=args.destination,
             manifest=manifest, combined_plan=combined,
             dataset_parquet=args.dataset_parquet, reference_root=args.reference_root,
-            step0_manifest=args.step0_manifest,
+            step0_manifest=args.step0_manifest, manifest_path=args.manifest_path,
         )
         print(_canonical_json(verify_workflow_execution(prepared, manifest=manifest, combined_plan=combined)))
         require_workflow_launch(prepared, manifest=manifest, combined_plan=combined)

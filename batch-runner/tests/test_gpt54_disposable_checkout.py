@@ -73,6 +73,7 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(monkey
         "batch-runner/gpt54_v2_input_capture.py",
         "batch-runner/gpt54_run_config_bundle.py",
         "batch-runner/gpt54_run_input_bundle.py", _PREPARER_SOURCE,
+        "batch-runner/gpt54_workflow_gate.py",
         "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
         "batch-runner/core/codex_task_deadline.py",
     }
