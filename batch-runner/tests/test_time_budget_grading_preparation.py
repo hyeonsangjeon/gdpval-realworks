@@ -392,6 +392,17 @@ def _execution_case(seed, roots, tmp_path, monkeypatch, *, status="success"):
     import gpt54_time_budget_grading_execution as execution
     from gpt54_disposable_checkout import _git
 
+    # Raw host facts are explicitly synthetic, like the process below. Do not
+    # turn this offline selector into a NAS kernel/namespace support probe or
+    # mock the context hash/direction/source validators to return success.
+    real_readlink = os.readlink
+    namespaces = {"/proc/self/ns/" + name: f"{name}:[90000{index}]"
+                  for index, name in enumerate(("pid", "mnt", "user"), 1)}
+
+    def synthetic_namespace(path, *args, **kwargs):
+        return namespaces[str(path)] if str(path) in namespaces else real_readlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "readlink", synthetic_namespace)
     arguments, payload, _ = _case(seed, tmp_path, status=status, task_index=0)
     assert arguments.pop("step0_manifest") is None
     # Explicit synthetic publication-locator declarations, not a claim that a
