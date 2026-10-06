@@ -1,289 +1,61 @@
 # Latest task result
 
-## F-derived grading preparation: terminal-result correction — 2026-10-05
+## Consumer and frozen-grader source integration
 
-`gpt54_time_budget_grading_preparation.prepare_observation_grading` now
-requires the existing core terminal reasons before preparing a grader for one
-registered observation. Independent result hashes do not establish terminal
-semantics. The new selector reported **8 passed in 31.43s**, exit 0, with no
-failures, skips, deselections or timeout. The original **41 passed in 95.22s
-(0:01:35)** at `3e81b74be73ff1a7a925d7780c9fbd9b896d7d6d` remains a separate
-observation and was not rerun. No aggregate pass count is claimed.
+This integration preserves the reviewed handoff consumer and the accepted
+F-derived grading preparation together. It resolves their two overlapping
+completion records without changing either implementation, test, runtime
+configuration, source pin or workflow.
 
-This is a separate main-based implementation, not a stack on PR753. PR753's
-reviewed branch remains untouched. Preparation does not create a provider,
-grader, grading admission, command or execution authority. Final-HEAD owner
-review and applicable CI acceptance remain pending.
+The consumer was reviewed at `a9dd6d12ee52344d3f0e329d2d355d429a175df8`,
+tree `f30a46e0960de628a7dc777ea2fc64a5167f107c`, in owner review `5420090699`.
+The accepted source is `25d0fe2b972042d1c71240a83fa3e06493c9ddcf`, tree
+`08abfc1e3e8724a9c6a862e6a07cc7c68e46dae0`. It includes the grading helper
+and tests reviewed at `896a27fffbba23f2d1a1b75fa9fd61c0d83170ed` in
+owner review `5421426459`.
 
-### Inputs, bindings and output
+### Exact reconciliation
 
-The API requires the genuine registration, a caller-supplied typed
-`ObservationIdentity`, its independently supplied input binding, explicit
-runtime R/frozen F/input-registration roots and full commit anchors, local
-parquet/reference/result locators, independently expected result `sha256`/`size`,
-and the result's deliverable root. Result metadata is bounded to 8 MiB; this is
-an input-file safety bound, not a model or experiment budget. Codex must supply
-canonical Step0; V2 refuses it without reading it.
+The comparison compiler, consumer tests, prospective manifest and usage README
+retain the consumer parent's bytes. The independent grading helper and its
+tests retain the accepted source's bytes. All other non-record paths retain
+their existing bytes. CHANGELOG retains both sets of entries; this single
+record replaces the two competing task summaries.
 
-The existing compiler and input validators check registration/cohort equality,
-R/F Git commits and trees, tracked regular blobs, local input bytes and the
-sealed observation binding. The new helper also checks its own tracked bytes
-against R. The independently expected result must be canonical, have a valid
-result fingerprint, contain this exact terminal observation identity, and carry
-one matching task/model/condition row with exact deliverable hashes and sizes.
-Coherently changed metadata does not replace the independent anchors. A missing
-output is retained as a supplied terminal error row; the helper does not invent
-a result for an absent source file or discard a failed outcome.
+The integration uses an ordinary two-parent owner commit on the existing
+consumer branch. It does not rewrite either parent, change main, delete a
+branch, or discard the grading files. The local user checkout is not modified.
+The combined HEAD requires its own final review and applicable CI acceptance.
 
-The correction replaces the nonempty-string terminal check with the existing
-`TimeBudgetObservation.terminal` contract: `completed`, `failed`, `cancelled`,
-`abandoned` or `TIMEOUT` (`time_budget_observation_deadline_exhausted`). The
-timeout constant is imported from the unchanged core contract. Unknown or
-nonterminal reasons refuse before any grading reservation or publication.
-Success still requires `completed`, `cleanup_complete=true` and
-`host_reusable=true`; an error row with a valid terminal reason is retained
-without inventing cleanup or reuse success.
+### Evidence retained without repetition
 
-The destination must be new and disjoint from every source/input/result path.
-Held directories, single-link regular reads, no-clobber publication and final
-source/input/member rereads are reused. A retained sibling reservation blocks
-adoption after an interrupted or invalid publication. The marker is last.
+| Component | Tested source | Separate result |
+| --- | --- | --- |
+| Consumer | `b9daec496548293d7e0f316fd6d18f0c16b6ae2e` | 53 passed, 226 deselected in 76.10s |
+| Grading preparation | `3e81b74be73ff1a7a925d7780c9fbd9b896d7d6d` | 41 passed in 95.22s |
+| Terminal-reason correction | `942fb0680b63ec80b3d5f924609de878ef7751d1` | 8 passed in 31.43s |
 
-```text
-<destination>.time-budget-grading-reserved.json
-<destination>/
-  source/
-    batch-runner/
-      step8_grade.py                         # exact tracked F bytes
-      core/**/*.py                          # F's complete Python core
-      prompts/...; schemas/...; requirements*.txt
-      <other verified F batch-runner source/config roles>
-      grading_configs/default_v2_sol_max.yaml # unchanged F template
-      time-budget-grading.json              # materialized config
-      workspace/
-        step2_inference_results.json         # exact bound result bytes
-        upload/deliverable_files/<task>/...   # selected result files, if any
-    data/gdpval-local/
-      rubric_snapshots/<revision>/
-        data/registered.parquet              # exact verified input bytes
-        rubric_snapshot_manifest.json
-      datasets--openai--gdpval/snapshots/<revision>/reference_files/...
-  grading-preparation.json                   # final marker
-```
+The [consumer record][consumer] and [grading record][grading] retain their
+exact commands, private evidence hashes, source identities and limits. The
+consumer parent's 11 applicable checks and the grading parent's ten applicable
+checks succeeded independently. These facts are not a new combined test run.
+No successful local selector was repeated for this source-preserving integration.
 
-The source derivation contains verified F batch-runner roles and its whole
-Python core, not a Git checkout claiming a new commit. It copies no `.git`,
-workflow, credential or historical result files. The exact finite member set
-and each file's `sha256`/`size` are recorded under `files`. Only selected
-references/deliverables are copied; Step0 is verified but not copied for grading.
-The original F checkout is unchanged.
+The pre-publication comparison verified the exact non-record Git tree against
+the reviewed consumer tree plus the two accepted grading blobs. Conflict
+markers are absent, both changelog entries remain, and the unrelated changelog
+suffix is unchanged. `im-not-ai-en` applies only to this
+concise record and reconciliation wording; it does not establish software
+correctness or new experimental evidence.
 
-The returned marker binds the observation, registration file, R/F origin
-commits/trees, input registration and verified input bytes, result digest and
-fingerprint, terminal outcome, preparation-helper identity, reservation and
-exact output members. Its `grader` object names:
+### Remaining work
 
-- `template_path` and `template_source_sha256` for the genuine F template;
-- `config_path` as the actual absolute path, with a relative `config_file`
-  identity containing its exact bytes/size;
-- `materialized_source_sha256`, calculated by the unchanged whole-closure
-  helper against the destination's actual config and copied F source;
-- `execution_source: source`, `working_directory: source/batch-runner` and
-  `entrypoint: source/batch-runner/step8_grade.py`.
+Final integrated-HEAD source/record review and CI acceptance remain pending.
+The independent execution-direction checker, exact-source host/input/provider
+binding, live capture and F-derived grading execution remain separate gates.
+No production checker, workflow/CLI live path, model or grader invocation,
+original-input operation, new spending approval, policy relaxation or changed
+historical score is introduced. Existing launch refusals remain closed.
 
-Only the rubric revision and local cache path are materialized from the frozen
-config. Judge, visual/audio routing, prompts, scoring and retry settings stay
-unchanged. The policy remains one grading attempt per resulting observation,
-with failed/missing outcomes retained and no score-driven regrade. The marker's
-`grading_attempt: 1` records that policy; preparation is not a grading claim or
-an executor's global one-attempt enforcement. `launch_allowed` and
-`execution_enabled` remain false.
-
-### Source identities and reviewed basis
-
-- Accepted main: `a5a04701fed3067b56bd80af424824c447f3075e`, tree
-  `d36a356b0950bd44b0b789dfebf725035601d259`.
-- Original tested implementation: `3e81b74be73ff1a7a925d7780c9fbd9b896d7d6d`,
-  tree `3e044527af08a438b5677e9f95be8d8ab3609e0e`.
-- Leader-read PR754 basis: `ac61308aa5204ceb6ccb0e6415065622c3ac7ef3`, tree
-  `fbe5418b22cb32f868621394e4d5f211f89392d1`. The leader identified this terminal
-  validation gap; that review does not approve the correction's final HEAD.
-- Tested correction: `942fb0680b63ec80b3d5f924609de878ef7751d1`, tree
-  `e41d5d4bfb96f092814b3f642ef7bb72292b5af0`.
-- Frozen F: `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-  `45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, TEMPLATE
-  `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
-- Corrected helper SHA256:
-  `bb48357d16a6196646e1eadc4f5984115032e9dabac364562498f6ceddc35a8c`.
-- Separate PR753 remains frozen at
-  `a9dd6d12ee52344d3f0e329d2d355d429a175df8`, tree
-  `f30a46e0960de628a7dc777ea2fc64a5167f107c`, with leader review `5420090699`.
-  It was not modified, pushed, stacked or cherry-picked here.
-
-Before the original implementation, the consolidated grading specification and
-overview and the grading-engineer/source-provenance/architecture charters were read. The
-same-session decision was APPROVE-WITH-CONDITIONS for independent anchors,
-actual F execution bytes, distinct materialized hashing, fixed routing,
-validation before publication, retained partial state and synthetic proof.
-This was the primary worker applying the charters, not owner approval of this
-new implementation. The user's bounded offline scope excludes the charters'
-broad-suite and paid-smoke defaults.
-
-This correction applies the existing grading/source charter only to `_result`
-and the unchanged core terminal contract. It adds no design decision or new
-taxonomy. Source/input/result validators and the successful-result checks are
-unchanged. The small regression uses the same genuine source fixtures and
-coherent synthetic result hashes, with no mocked successful validator verdict.
-
-The directly coupled CURRENT/source roles were audited once. The new helper
-has an independent R tracked-blob check, so no comparison manifest or source-pin
-change is needed. The new `test_time_budget_grading_preparation.py` remains in
-ordinary backend discovery, outside the explicit `test_gpt54_*.py` comparison
-inventory. No workflow/selection guard changed. The comparison compiler and
-manifest, core/runtime/ownership, frozen F, grader hash scope, historical
-profiles, paid evidence, registered study/model/1200/20 policy and launch gates
-are unchanged.
-
-### New terminal-reason proof
-
-The single new function
-`test_time_budget_f_grading_preparation_terminal_reason` ran once at the clean
-tested correction in Python 3.10.12 / pytest 9.1.1, token-free and offline, with
-a 300-second outer limit plus 5-second termination grace and no `-x`. It
-reported **8 passed in 31.43s**, exit 0. Completed parameter IDs were:
-
-- `v2-running-refused`, `codex-pending-refused`, `codex-unknown-refused`;
-- `v2-completed-error`, `codex-failed-error`, `v2-cancelled-error`,
-  `codex-abandoned-error`, `v2-timeout-error`.
-
-The three refusals reached `terminal_observation_required` with no grading
-output or reservation. Each valid case preserved its failed/missing-output row,
-false cleanup/reuse flags and exact result bytes, then published ordinary
-F-derived output with a recomputed materialized fingerprint distinct from the
-template. Effect guards observed zero provider, model, grader, network or
-observation-admission calls. No prior selector or platform probe was rerun.
-
-This is the redacted command display. Only local absolute paths are redacted;
-the command digest below identifies the exact private 953-byte script, not
-this display.
-
-```bash
-#!/bin/bash
-set -o pipefail
-cd "<worktree>/batch-runner" || exit 90
-timeout --signal=TERM --kill-after=5s 300s \
-  env -i PATH="<py310-bin>:/usr/bin:/bin" \
-  LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-  PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS= \
-  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
-  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 \
-  "<py310-bin>/python" -m pytest \
-  -o addopts= -p no:cacheprovider -m 'not integration' \
-  -vv --tb=short --color=no \
-  --basetemp="<proof>/pytest-tmp" \
-  --junitxml="<proof>/junit.xml" \
-  tests/test_time_budget_grading_preparation.py::test_time_budget_f_grading_preparation_terminal_reason \
-  2>&1 | tee "<proof>/pytest.log"
-```
-
-| New preserved file | Bytes | SHA256 |
-| --- | ---: | --- |
-| `command.sh` | 953 | `17d52da7fedead33515fe097a949144a350ac879c325e24c8281f5f8a30212a1` |
-| `pytest.log` | 1612 | `daa68a672cce37e71918701ea2eef0b96fe5f929ebdbf38126439bb368450810` |
-| `junit.xml` | 1556 | `de245ef03a6c999271c529fec098e4bc2c1f5e6a392677386094c749933900c9` |
-| `pre-edit-review.md` | 2169 | `cb6e6dc047bf84ffe31573e1602d7b991a74ede773981da04f06b41ad4d6635c` |
-
-### Original bounded offline proof (not rerun)
-
-The [immutable PR754 basis record] preserves this separate 41-case observation
-and its original command/log/JUnit/review artifacts. None was overwritten.
-
-Python 3.10.12 / pytest 9.1.1 ran once at the original clean tested HEAD,
-token-free and offline, with a 300-second outer limit plus 5-second termination grace and no
-`-x`. The 41 cases covered 4 positive materializations (both owners, success and
-failed/missing output), 26 pre-publication refusals, 2 existing-state refusals
-and 9 final-reread/partial-publication cases. The effect guards observed no
-provider, model, grader, network or observation-admission call.
-
-Fixtures used actual temporary Git/config/source bytes and explicit synthetic
-input/result declarations. Only source metadata needed to declare synthetic
-inputs differed in their R/F/input commits; the real F grader closure retained
-TEMPLATE `37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
-No successful source-validator or hasher verdict was mocked. Existing fixture
-helpers were reused; no prior selector or real platform case was run.
-
-In the synthetic positive evidence, the materialized config was 2306 bytes,
-SHA256 `62a6d99d9e74d187e517d60d9a5afb112e38926917710ac6e6606eb28404dfa0`,
-with actual whole-source fingerprint
-`51d42b300d17d933fffbd73b2cdea645a803c63a4246af4f37cb193bf951bd7c`.
-The tests independently recomputed that fingerprint, the copied F template's
-original fingerprint and R's unequal template fingerprint. These are software
-identity observations, not preparation of real original assets or grading.
-
-Redacted command display follows. Only absolute local paths are redacted. The
-command digest identifies the exact private 928-byte script, including log
-capture, not a digest of this public display.
-
-```bash
-#!/bin/bash
-set -o pipefail
-cd "<worktree>/batch-runner" || exit 90
-timeout --signal=TERM --kill-after=5s 300s \
-  env -i PATH="<py310-bin>:/usr/bin:/bin" \
-  LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-  PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS= \
-  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
-  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 \
-  "<py310-bin>/python" -m pytest \
-  -o addopts= -p no:cacheprovider -m 'not integration' \
-  -vv --tb=short --color=no \
-  --basetemp="<proof>/pytest-tmp" \
-  --junitxml="<proof>/junit.xml" \
-  tests/test_time_budget_grading_preparation.py -k time_budget_f_grading_preparation \
-  2>&1 | tee "<proof>/pytest.log"
-```
-
-| Preserved file | Bytes | SHA256 |
-| --- | ---: | --- |
-| `command.sh` | 928 | `b5c7df88221b858c66398765217204a15cb72f60821a4d69a55f3be2f028d096` |
-| `pytest.log` | 6087 | `542956190a00d7e677788a8e9aea3191d87d00ab8534d3feadc1a67d234cce72` |
-| `junit.xml` | 6890 | `8559514b53b7c1966e2117d4dd97356f4585fe6bc4117be7d90d8faa887931f0` |
-| `pre-edit-review.md` | 4985 | `bd52b3c3b71e5542057e3f31b09433b8051d5d9a0a899dc54c44de4d18bc8ec6` |
-
-### Separate prior evidence and remaining gates
-
-The [immutable PR753 record] preserves its 53-case software proof and links to
-earlier preparation, deadline, ownership and host evidence. Those observations
-are not repeated or pooled with this one. The leader supplied PR753 retry
-run `37364096520`, job `111963051664`, attempt 2: the runner received a shutdown
-signal, not a test assertion failure. The supplied GitHub status was Actions
-`major_outage`, [incident 3q1yb5m7ltvb], investigating hosted-runner assignment
-and failures. No CI/status query, retry, wait or weakening occurred here.
-
-This correction's post-proof delta is exactly `CHANGELOG.md` and
-`tasks/LATEST_TASK_RESULT/README.md`. The helper and tests remain identical
-to `942fb0680b63ec80b3d5f924609de878ef7751d1`. These two completion records are
-the only shared surfaces with PR753; any later reconciliation belongs in
-substantive delivery.
-
-Final-HEAD owner review and applicable CI remain outstanding. A future
-source-bound grading execution direction must consume/revalidate this exact
-preparation, enforce the one-attempt/no-score-regrade policy and invoke Step8
-from its F-derived source with the bound observation/result/input identities.
-No live caller, provider/credential selection, original input acquisition,
-generation/dispatch enablement or grading attempt is added. Host support,
-private-input authority and live grading evidence remain separate gates. The
-offline result does not establish live execution, backend cancellation or billing.
-
-The catalog was inspected once for this correction. `experiment-design` was
-used for the original fixed config mapping, not rerun for this terminal check;
-study design and spending authority were not reopened. The bounded
-`im-not-ai-en` changed-passage fidelity check passed
-with no failures or warnings, preserving the protected counts, source
-identities, links and evidence limits. No unrelated skill was applied. There was no private
-original/inference/receipt/consumed-artifact read, real preparation, paid call,
-HF/Azure operation, Project edit or merge.
-
-[immutable PR753 record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9dd6d12ee52344d3f0e329d2d355d429a175df8/tasks/LATEST_TASK_RESULT/README.md
-[immutable PR754 basis record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/ac61308aa5204ceb6ccb0e6415065622c3ac7ef3/tasks/LATEST_TASK_RESULT/README.md
-[incident 3q1yb5m7ltvb]: https://www.githubstatus.com/incidents/3q1yb5m7ltvb
+[consumer]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9dd6d12ee52344d3f0e329d2d355d429a175df8/tasks/LATEST_TASK_RESULT/README.md
+[grading]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/896a27fffbba23f2d1a1b75fa9fd61c0d83170ed/tasks/LATEST_TASK_RESULT/README.md

@@ -1,9 +1,11 @@
-"""Compile the prospective registration or prepare one observation, never launch.
+"""Compile, prepare, or consume one prospective observation; default-denied.
 
 The explicit dual-root mode separates reviewed runtime facts from the frozen
 whole-closure judge. The omitted mode retains the legacy source refusal. Neither
 mode selects an executor or grants launch authority. The separate explicit
 preparation API verifies supplied local inputs and emits one model-free handoff.
+The consumer requires a separate trusted execution-direction checker before
+admission or factories. No CLI/workflow selects it or gains launch authority.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import yaml
 
@@ -80,6 +82,7 @@ HANDOFF_CONFIG = "configuration.json"
 HANDOFF_TASK = "task.json"
 HANDOFF_READY = "preparation.json"
 HANDOFF_RESERVATION_SUFFIX = ".time-budget-preparation-reserved.json"
+HANDOFF_CONSUMED_SUFFIX = ".time-budget-consumed.json"
 
 
 class TimeBudgetRegistrationRefused(ValueError):
@@ -88,6 +91,24 @@ class TimeBudgetRegistrationRefused(ValueError):
 
 class TimeBudgetPreparationRefused(TimeBudgetRegistrationRefused):
     """One local observation cannot be published; partial output is not reusable."""
+
+
+class TimeBudgetConsumptionRefused(TimeBudgetRegistrationRefused):
+    """A handoff is not executable evidence or lacks an independent direction."""
+
+
+@dataclass(frozen=True)
+class ObservationExecutionBinding:
+    """Metadata for the trusted direction checker; no bodies or permission bit."""
+
+    preparation_sha256: str
+    preparation_size: int
+    observation_json: str
+    frozen_grader_source_sha: str
+    frozen_grader_source_tree: str
+    frozen_template_sha256: str
+    preparation_directory: str
+    observation_directory: str
 
 
 class _RegistrationLoader(yaml.SafeLoader):
@@ -885,6 +906,145 @@ def _handoff_path(value):
     return path
 
 
+def _observation_handoff_data(
+    plan, *, sources, run_id, task_id, runtime_root, expected_reviewed_source_sha,
+    frozen_grader_root, expected_grader_source_sha, input_registration_root,
+    expected_input_source_sha, input_registration_path, dataset_parquet,
+    reference_root, destination, step0_manifest,
+):
+    """The preparer and consumer reconstruct the same bytes with real validators.
+
+    This helper writes nothing. Its caller must close sources (which performs
+    all final rereads) before publishing readiness or admitting an observation.
+    """
+    from core.time_budget_observation_deadline import ObservationIdentity
+    from gpt54_prepared_input_attestation import _identity
+    from gpt54_run_config_bundle import _held_parents
+    from gpt54_v2_grading_input import _read_bytes
+
+    anchors = (runtime_root, expected_reviewed_source_sha, frozen_grader_root, expected_grader_source_sha)
+    if any(value is None for value in (*anchors, input_registration_root, expected_input_source_sha,
+                                       input_registration_path)):
+        raise TimeBudgetPreparationRefused("explicit_source_and_input_anchors_required")
+    if type(run_id) is not str or type(task_id) is not str:
+        raise TimeBudgetPreparationRefused("exactly_one_registered_observation_required")
+    plan = json.loads(_canonical_json(plan))
+    compiled = _compile_registration(plan, anchors, True, sources)
+    selected = [run for run in compiled.runs if run.run_id == run_id and task_id in run.task_ids]
+    if len(selected) != 1:
+        raise TimeBudgetPreparationRefused("exactly_one_registered_observation_required")
+    run = selected[0]
+    if (run.condition == "codex") != (step0_manifest is not None):
+        raise TimeBudgetPreparationRefused("condition_specific_step0_required")
+    output = _handoff_path(destination)
+    reservation = output.with_name(output.name + HANDOFF_RESERVATION_SUFFIX)
+    parquet, references = _handoff_path(dataset_parquet), _handoff_path(reference_root)
+    step0 = None if step0_manifest is None else _handoff_path(step0_manifest)
+    for path in (runtime_root, frozen_grader_root, input_registration_root, parquet, references,
+                 *(() if step0 is None else (step0,))):
+        source = _handoff_path(path)
+        if any(target.is_relative_to(source) or source.is_relative_to(target)
+               for target in (output, reservation)):
+            raise TimeBudgetPreparationRefused("handoff_source_overlap")
+    dataset = plan["shared"]["dataset"]
+    catalog, task_ids, input_source = sources.enter_context(_observation_input_registration(
+        input_registration_root, expected_input_source_sha, input_registration_path, dataset,
+    ))
+    versions = {name: digest for name, digest in dataset["input_file_versions"].items()
+                if name.startswith("reference_files/")}
+    checks = [sources.enter_context(_held_parents(parquet.parent, (parquet.name,))),
+              sources.enter_context(_held_parents(references, tuple(versions)))]
+    if step0 is not None:
+        checks.append(sources.enter_context(_held_parents(step0.parent, (step0.name,))))
+
+    def read_inputs():
+        return _observation_inputs(dataset, catalog, task_ids, parquet=parquet,
+                                   references=references, step0=step0)
+
+    snapshot, step0_identity = read_inputs()
+    source = next(row for row in snapshot.sources if row["projection"]["task_id"] == task_id)
+    task = source["projection"]
+    inputs = {
+        "registration": input_source,
+        "dataset": {**snapshot.shared_binding["dataset"], "repo_id": dataset["repo_id"],
+                    "revision": dataset["revision"], "catalog_sha256": dataset["catalog_sha256"]},
+        "task_id": task_id, "source_projection_sha256": source["source_projection_sha256"],
+        "text_bytes": source["text_bytes"], "reference_file_records": source["reference_file_records"],
+        "needs_files_policy": "deliverable_only", "needs_files": snapshot.needs_files[task_id],
+        "step0_manifest": step0_identity,
+        "verification": "local_bytes_against_independently_anchored_input_registration",
+    }
+    evidence = json.loads(compiled.source_evidence_json)
+    runtime = evidence["runtime"]
+    identity = ObservationIdentity(
+        STUDY_ID, run.run_id, run.condition, run.repeat, task_id,
+        runtime["source_sha"], runtime["source_tree"], compiled.manifest_sha256, seal(inputs),
+    )
+    config, factory, argument = _observation_configuration(plan, run, task_id, Path(runtime_root))
+    control = {
+        "required": True, "type": "core.time_budget_observation_deadline.TimeBudgetObservation",
+        "factory_argument": argument, "identity": asdict(identity),
+        "generation_seconds": 1200, "cleanup_seconds": 20,
+        "admission_reserved": False, "generation_started": False,
+    }
+    configuration = {
+        "handoff_version": "gpt54-time-budget-observation-configuration-v1",
+        "factory": factory, "configuration": config, "observation_control": control,
+        "model_binding": plan["shared"]["model"],
+        "launch_allowed": False, "execution_enabled": False,
+    }
+    if run.condition == "sandbox_v2":
+        arguments = asdict(next(row for row in snapshot.bound.tasks if row.task_id == task_id))
+        _expect("v2_reference_order", list(arguments["reference_files"]), task["reference_files"])
+        kind = "sandbox_v2_task_to_run"
+    else:
+        arguments = {
+            "task_prompt": task["prompt"], "model": plan["shared"]["model"]["deployment"],
+            "reference_files": task["reference_files"], "occupation": task["occupation"],
+            "experiment_prompt": config["condition_a"]["prompt"], "run_id": run.run_id,
+            "condition_name": run.condition, "task_id": task_id,
+        }
+        kind = "codex_run_arguments"
+    payload = {"kind": kind, "arguments": arguments, "reference_path_base": "handoff_directory",
+               "reference_file_records": source["reference_file_records"]}
+    files = {
+        HANDOFF_CONFIG: _canonical_json(configuration).encode("utf-8"),
+        HANDOFF_TASK: _canonical_json(payload).encode("utf-8"),
+        **{item["path"]: _read_bytes(references / item["path"], sha256=item["sha256"], size=item["size"])
+           for item in source["reference_file_records"]},
+    }
+    marker = {
+        "preparation_version": "gpt54-time-budget-observation-preparation-v1",
+        "observation": asdict(identity), "abba_index": compiled.runs.index(run),
+        "registration_file": runtime["manifest_file"],
+        "runtime_source": {name: runtime[name] for name in ("source_sha", "source_tree")},
+        "frozen_grader": {name: evidence["frozen_grader"][name] for name in (
+            "source_sha", "source_tree", "template_source_sha256", "template_config_path",
+            "materialized_config_path", "materialized_grader_source_sha256", "execution_source",
+        )},
+        "condition_template": {"path": plan["conditions"][run.condition]["template"],
+                               **runtime["source_files"][plan["conditions"][run.condition]["template"]]},
+        "inputs": inputs, "observation_control": control,
+        "files": {name: _identity(data) for name, data in files.items()},
+        "launch_authority": compiled.as_dict()["launch_authority"],
+        "evidence_boundary": "model_free_one_observation_preparation_not_execution",
+    }
+
+    def reread_inputs():
+        current, current_step0 = read_inputs()
+        _expect("input_snapshot_changed", (current.sources, current.shared_binding, current.needs_files,
+                                           current.references, current_step0),
+                (snapshot.sources, snapshot.shared_binding, snapshot.needs_files,
+                 snapshot.references, step0_identity))
+        for check in checks:
+            check()
+
+    # Also check on context exit: a direction checker cannot mutate inputs
+    # between the initial validation and admission.
+    sources.callback(reread_inputs)
+    return marker, files, reread_inputs
+
+
 def prepare_observation_handoff(
     plan: dict[str, Any], *, run_id: str, task_id: str,
     runtime_root: Path, expected_reviewed_source_sha: str,
@@ -907,10 +1067,9 @@ def prepare_observation_handoff(
     It grants no launch authority. No historical API/default is changed.
     """
     from core.agentic_v2_manifest_binding import ManifestRefused
-    from core.time_budget_observation_deadline import ObservationIdentity
     from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
     from gpt54_prepared_input_attestation import _identity
-    from gpt54_run_config_bundle import _held_parents, _path
+    from gpt54_run_config_bundle import _path
     from gpt54_v2_grading_input import _read_bytes
 
     try:
@@ -932,118 +1091,19 @@ def prepare_observation_handoff(
 
         absent()
         with ExitStack() as sources:
-            compiled = _compile_registration(plan, anchors, True, sources)
-            selected = [run for run in compiled.runs if run.run_id == run_id and task_id in run.task_ids]
-            if len(selected) != 1:
-                raise TimeBudgetPreparationRefused("exactly_one_registered_observation_required")
-            run = selected[0]
-            if (run.condition == "codex") != (step0_manifest is not None):
-                raise TimeBudgetPreparationRefused("condition_specific_step0_required")
-            parquet, references = _handoff_path(dataset_parquet), _handoff_path(reference_root)
-            step0 = None if step0_manifest is None else _handoff_path(step0_manifest)
-            for path in (runtime_root, frozen_grader_root, input_registration_root, parquet, references,
-                         *(() if step0 is None else (step0,))):
-                source = _handoff_path(path)
-                if any(target.is_relative_to(source) or source.is_relative_to(target)
-                       for target in (output, reservation)):
-                    raise TimeBudgetPreparationRefused("handoff_source_overlap")
-            dataset = plan["shared"]["dataset"]
-            catalog, task_ids, input_source = sources.enter_context(_observation_input_registration(
-                input_registration_root, expected_input_source_sha, input_registration_path, dataset,
-            ))
-            versions = {name: digest for name, digest in dataset["input_file_versions"].items()
-                        if name.startswith("reference_files/")}
-            checks = [sources.enter_context(_held_parents(parquet.parent, (parquet.name,))),
-                      sources.enter_context(_held_parents(references, tuple(versions)))]
-            if step0 is not None:
-                checks.append(sources.enter_context(_held_parents(step0.parent, (step0.name,))))
-
-            def read_inputs():
-                return _observation_inputs(dataset, catalog, task_ids, parquet=parquet,
-                                           references=references, step0=step0)
-
-            snapshot, step0_identity = read_inputs()
-            source = next(row for row in snapshot.sources if row["projection"]["task_id"] == task_id)
-            task = source["projection"]
-            inputs = {
-                "registration": input_source,
-                "dataset": {**snapshot.shared_binding["dataset"], "repo_id": dataset["repo_id"],
-                            "revision": dataset["revision"], "catalog_sha256": dataset["catalog_sha256"]},
-                "task_id": task_id, "source_projection_sha256": source["source_projection_sha256"],
-                "text_bytes": source["text_bytes"], "reference_file_records": source["reference_file_records"],
-                "needs_files_policy": "deliverable_only", "needs_files": snapshot.needs_files[task_id],
-                "step0_manifest": step0_identity,
-                "verification": "local_bytes_against_independently_anchored_input_registration",
-            }
-            evidence = json.loads(compiled.source_evidence_json)
-            runtime = evidence["runtime"]
-            identity = ObservationIdentity(
-                STUDY_ID, run.run_id, run.condition, run.repeat, task_id,
-                runtime["source_sha"], runtime["source_tree"], compiled.manifest_sha256, seal(inputs),
+            marker, files, reread_inputs = _observation_handoff_data(
+                plan, sources=sources, run_id=run_id, task_id=task_id,
+                runtime_root=runtime_root, expected_reviewed_source_sha=expected_reviewed_source_sha,
+                frozen_grader_root=frozen_grader_root, expected_grader_source_sha=expected_grader_source_sha,
+                input_registration_root=input_registration_root, expected_input_source_sha=expected_input_source_sha,
+                input_registration_path=input_registration_path, dataset_parquet=dataset_parquet,
+                reference_root=reference_root, destination=output, step0_manifest=step0_manifest,
             )
-            config, factory, argument = _observation_configuration(plan, run, task_id, Path(runtime_root))
-            control = {
-                "required": True, "type": "core.time_budget_observation_deadline.TimeBudgetObservation",
-                "factory_argument": argument, "identity": asdict(identity),
-                "generation_seconds": 1200, "cleanup_seconds": 20,
-                "admission_reserved": False, "generation_started": False,
-            }
-            configuration = {
-                "handoff_version": "gpt54-time-budget-observation-configuration-v1",
-                "factory": factory, "configuration": config, "observation_control": control,
-                "model_binding": plan["shared"]["model"],
-                "launch_allowed": False, "execution_enabled": False,
-            }
-            if run.condition == "sandbox_v2":
-                arguments = asdict(next(row for row in snapshot.bound.tasks if row.task_id == task_id))
-                _expect("v2_reference_order", list(arguments["reference_files"]), task["reference_files"])
-                kind = "sandbox_v2_task_to_run"
-            else:
-                arguments = {
-                    "task_prompt": task["prompt"], "model": plan["shared"]["model"]["deployment"],
-                    "reference_files": task["reference_files"], "occupation": task["occupation"],
-                    "experiment_prompt": config["condition_a"]["prompt"], "run_id": run.run_id,
-                    "condition_name": run.condition, "task_id": task_id,
-                }
-                kind = "codex_run_arguments"
-            payload = {"kind": kind, "arguments": arguments, "reference_path_base": "handoff_directory",
-                       "reference_file_records": source["reference_file_records"]}
-            files = {
-                HANDOFF_CONFIG: _canonical_json(configuration).encode("utf-8"),
-                HANDOFF_TASK: _canonical_json(payload).encode("utf-8"),
-                **{item["path"]: _read_bytes(references / item["path"], sha256=item["sha256"], size=item["size"])
-                   for item in source["reference_file_records"]},
-            }
-            marker = {
-                "preparation_version": "gpt54-time-budget-observation-preparation-v1",
-                "observation": asdict(identity), "abba_index": compiled.runs.index(run),
-                "registration_file": runtime["manifest_file"],
-                "runtime_source": {name: runtime[name] for name in ("source_sha", "source_tree")},
-                "frozen_grader": {name: evidence["frozen_grader"][name] for name in (
-                    "source_sha", "source_tree", "template_source_sha256", "template_config_path",
-                    "materialized_config_path", "materialized_grader_source_sha256", "execution_source",
-                )},
-                "condition_template": {"path": plan["conditions"][run.condition]["template"],
-                                       **runtime["source_files"][plan["conditions"][run.condition]["template"]]},
-                "inputs": inputs, "observation_control": control,
-                "files": {name: _identity(data) for name, data in files.items()},
-                "launch_authority": compiled.as_dict()["launch_authority"],
-                "evidence_boundary": "model_free_one_observation_preparation_not_execution",
-            }
             marker_data = _canonical_json(marker).encode("utf-8")
             reservation_data = _canonical_json({
                 "reservation_version": "gpt54-time-budget-preparation-reservation-v1",
                 "intended_preparation": _identity(marker_data), "ready_path": HANDOFF_READY,
             }).encode("utf-8")
-
-            def reread_inputs():
-                current, current_step0 = read_inputs()
-                _expect("input_snapshot_changed", (current.sources, current.shared_binding, current.needs_files,
-                                                   current.references, current_step0),
-                        (snapshot.sources, snapshot.shared_binding, snapshot.needs_files,
-                         snapshot.references, step0_identity))
-                for check in checks:
-                    check()
 
             reread_inputs()
             with _publication_parents(output.parent) as (check, mkdir, descriptor):
@@ -1077,6 +1137,262 @@ def prepare_observation_handoff(
     except (OSError, ValueError, KeyError, TypeError, AttributeError, StopIteration,
             ManifestRefused, yaml.YAMLError, RecursionError):
         raise TimeBudgetPreparationRefused("observation_handoff_refused") from None
+
+
+def _require_running_observation_sources(runtime_root: Path) -> None:
+    """The statically imported runtime must be the independently checked R.
+
+    _reviewed_source already checks R's complete tracked core inventory. Check
+    the importing process's core against those same bytes, not just its helper.
+    No factory name from a marker is imported or looked up.
+    """
+    from gpt54_prepared_input_attestation import _identity
+    from gpt54_v2_grading_input import _read_bytes
+
+    local = Path(__file__).resolve().parent / "core"
+    runtime = Path(runtime_root) / "batch-runner/core"
+    roles = {path.relative_to(local).as_posix() for path in local.rglob("*.py")}
+    _expect("running_core_inventory", sorted(roles),
+            sorted(path.relative_to(runtime).as_posix() for path in runtime.rglob("*.py")))
+    for role in sorted(roles):
+        _read_bytes(local / role, **_identity(_read_bytes(runtime / role)))
+
+
+def _bind_observation_runner(marker, configuration, payload, references, control, *,
+                             v2_backend_factory, v2_voice_for, codex_provider_for):
+    """Use the two existing, statically named factories and their real shapes."""
+    from core.time_budget_observation_deadline import TimeBudgetObservation
+
+    if type(control) is not TimeBudgetObservation:
+        raise TimeBudgetConsumptionRefused("observation_control_type")
+    _expect("observation_control_identity", asdict(control.identity), marker["observation"])
+    control.require_unclaimed()
+    config = configuration["configuration"]
+    identity = control.identity
+    if identity.condition == "sandbox_v2":
+        from core.agentic_v2_conversation_runner import TaskConversations, build_runner_factory, ceilings_from
+        from core.agentic_v2_run_driver import TaskToRun
+
+        task = TaskToRun(**{**payload["arguments"], "reference_files": tuple(references)})
+
+        def observation_for(task_id, attempt):
+            if task_id != identity.task_id or type(attempt) is not int or attempt != 1:
+                raise TimeBudgetConsumptionRefused("observation_factory_selection")
+            _expect("observation_control_identity", asdict(control.identity), marker["observation"])
+            control.require_unclaimed()
+            return control
+
+        factory = build_runner_factory(
+            backend_factory=v2_backend_factory, profile=config["profile"],
+            conversations=TaskConversations(ceilings_from(config, SimpleNamespace(**config["cost"]["chosen_settings"]))),
+            attempt_of=lambda task_id: 1,
+            voice_for=lambda budget: v2_voice_for(json.loads(_canonical_json(config)), budget),
+            observation_for=observation_for,
+            budget_caps={"wall_seconds": config["fixed_settings"]["per_task_timeout_seconds"]},
+        )
+        return factory(task), dict(
+            task_prompt=task.prompt, reference_files=list(task.reference_files), occupation=task.occupation,
+            run_id=identity.run_id, condition_name=identity.condition, task_id=task.task_id,
+        )
+
+    from core.codex_runner import CodexAgentRunner
+
+    provider = codex_provider_for(json.loads(_canonical_json(config)))
+    settings = config["execution"]["codex"]
+    keys = ("model", "provider_id", "reasoning_effort", "model_context_window",
+            "request_max_retries", "stream_max_retries")
+    _expect("codex_provider_configuration", {name: getattr(provider, name, None) for name in keys},
+            {name: settings[name] for name in keys})
+    return CodexAgentRunner(
+        provider, timeout=config["execution"]["timeout"], run_id=identity.run_id,
+        condition_name=identity.condition, observation_control=control,
+    ), {**payload["arguments"], "reference_files": references}
+
+
+def consume_observation_handoff(
+    plan: dict[str, Any], *, preparation_directory: Path,
+    expected_preparation_identity: dict[str, Any], run_id: str, task_id: str,
+    runtime_root: Path, expected_reviewed_source_sha: str,
+    frozen_grader_root: Path, expected_grader_source_sha: str,
+    input_registration_root: Path, expected_input_source_sha: str,
+    input_registration_path: str, dataset_parquet: Path, reference_root: Path,
+    observation_directory: Path, step0_manifest: Path | None = None,
+    require_execution_direction: Callable[[ObservationExecutionBinding], None] | None = None,
+    v2_backend_factory: Callable[..., Any] | None = None,
+    v2_voice_for: Callable[[dict[str, Any], Any], Any] | None = None,
+    codex_provider_for: Callable[[dict[str, Any]], Any] | None = None,
+) -> dict[str, Any]:
+    """Consume one exact handoff, default-denied without an independent direction.
+
+    The expected preparation digest/size, run/task and source anchors MUST come
+    from the caller's independently reviewed direction, never from local marker
+    bytes or HEAD. Validation is read-only. The trusted direction checker is a
+    callable dependency, not a serialized approval flag: it must check the full
+    immutable binding against that separate direction and raise on refusal.
+    Returning anything other than None refuses. No production caller installs
+    this checker here, and no CLI/workflow or existing launch gate is opened.
+
+    Only after the checker and all final rereads does a no-clobber sibling claim
+    permanently consume the handoff. Then the existing control reserves host
+    admission before factory/provider construction. A partial or failed attempt
+    is never adopted, repaired or retried. Factories receive verified reference
+    paths, not marker-selected code. V2 never consumes Step0. No generation
+    clock is started by validation, direction checking or preparation.
+    """
+    from core.agentic_v2_manifest_binding import ManifestRefused
+    from core.reference_integrity import resolve_verified_reference_paths, validate_reference_record
+    from core.time_budget_observation_deadline import (
+        ObservationIdentity, TimeBudgetObservation, CLEANUP_UNCONFIRMED,
+    )
+    from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
+    from gpt54_prepared_input_attestation import _identity
+    from gpt54_run_config_bundle import _held_parents, _path
+    from gpt54_v2_grading_input import _read_bytes
+
+    try:
+        # Validate the caller's expectation before reading any marker. A None,
+        # malformed or overlarge expectation never falls back to local bytes.
+        if type(expected_preparation_identity) is not dict:
+            raise TimeBudgetConsumptionRefused("independent_preparation_identity_required")
+        expected = dict(expected_preparation_identity)
+        validate_reference_record(expected)
+        if not 0 < expected["size"] <= MAX_MANIFEST_BYTES:
+            raise TimeBudgetConsumptionRefused("preparation_identity_bound")
+        output = _handoff_path(preparation_directory)
+        reservation = output.with_name(output.name + HANDOFF_RESERVATION_SUFFIX)
+        consumed = output.with_name(output.name + HANDOFF_CONSUMED_SUFFIX)
+        store = _handoff_path(observation_directory)
+        if any(store.is_relative_to(path) or path.is_relative_to(store) for path in (
+            output, reservation, consumed, _handoff_path(runtime_root), _handoff_path(frozen_grader_root),
+            _handoff_path(input_registration_root), _handoff_path(dataset_parquet), _handoff_path(reference_root),
+            *(() if step0_manifest is None else (_handoff_path(step0_manifest),)),
+        )):
+            raise TimeBudgetConsumptionRefused("observation_directory_overlap")
+
+        def unused():
+            if os.path.lexists(consumed):
+                raise TimeBudgetConsumptionRefused("observation_handoff_already_consumed")
+
+        unused()
+        with ExitStack() as held, ExitStack() as sources:
+            parent_check = held.enter_context(_held_parents(output.parent, (
+                output.name + "/" + HANDOFF_READY, reservation.name, consumed.name,
+            )))
+            data = _read_bytes(output / HANDOFF_READY, **expected)
+            marker, files, _ = _observation_handoff_data(
+                plan, sources=sources, run_id=run_id, task_id=task_id,
+                runtime_root=runtime_root, expected_reviewed_source_sha=expected_reviewed_source_sha,
+                frozen_grader_root=frozen_grader_root, expected_grader_source_sha=expected_grader_source_sha,
+                input_registration_root=input_registration_root, expected_input_source_sha=expected_input_source_sha,
+                input_registration_path=input_registration_path, dataset_parquet=dataset_parquet,
+                reference_root=reference_root, destination=output, step0_manifest=step0_manifest,
+            )
+            marker_data = _canonical_json(marker).encode("utf-8")
+            if data != marker_data:
+                raise TimeBudgetConsumptionRefused("prepared_observation_binding")
+            reservation_data = _canonical_json({
+                "reservation_version": "gpt54-time-budget-preparation-reservation-v1",
+                "intended_preparation": expected, "ready_path": HANDOFF_READY,
+            }).encode("utf-8")
+            member_check = held.enter_context(_held_parents(output, (*files, HANDOFF_READY)))
+            expected_members = {*files, HANDOFF_READY}
+            for name in files:
+                expected_members.update(parent.relative_to(output).as_posix()
+                                        for parent in _path(output, name).parents
+                                        if parent != output and parent.is_relative_to(output))
+
+            def reread_handoff():
+                unused()
+                members = set()
+                for path in output.rglob("*"):
+                    if path.is_symlink():
+                        raise TimeBudgetConsumptionRefused("handoff_member_symlink")
+                    name = path.relative_to(output).as_posix()
+                    if name not in expected_members:
+                        raise TimeBudgetConsumptionRefused("handoff_members")
+                    members.add(name)
+                _expect("handoff_members", sorted(members), sorted(expected_members))
+                for name, raw in files.items():
+                    _read_bytes(_path(output, name), **_identity(raw))
+                _read_bytes(output / HANDOFF_READY, **expected)
+                _read_bytes(reservation, **_identity(reservation_data))
+                member_check()
+                parent_check()
+
+            reread_handoff()
+            _require_running_observation_sources(runtime_root)
+            configuration = json.loads(files[HANDOFF_CONFIG])
+            payload = json.loads(files[HANDOFF_TASK])
+            identity = ObservationIdentity(**marker["observation"])
+            references = resolve_verified_reference_paths(
+                output, payload["arguments"]["reference_files"], payload["reference_file_records"],
+            )
+            if identity.condition == "sandbox_v2":
+                dependencies_valid = (callable(v2_backend_factory) and callable(v2_voice_for)
+                                      and codex_provider_for is None)
+            else:
+                dependencies_valid = (callable(codex_provider_for) and v2_backend_factory is None
+                                      and v2_voice_for is None)
+            if not callable(require_execution_direction):
+                raise TimeBudgetConsumptionRefused("source_bound_execution_direction_required")
+            if not dependencies_valid:
+                raise TimeBudgetConsumptionRefused("condition_specific_factory_dependencies_required")
+            binding = ObservationExecutionBinding(
+                expected["sha256"], expected["size"], _canonical_json(marker["observation"]),
+                expected_grader_source_sha, marker["frozen_grader"]["source_tree"],
+                marker["frozen_grader"]["template_source_sha256"],
+                str(output), str(store),
+            )
+            if require_execution_direction(binding) is not None:
+                raise TimeBudgetConsumptionRefused("execution_direction_must_raise_or_return_none")
+            # A trusted checker can still fail or race with another process.
+            # No output, admission or provider effect precedes these rereads.
+            sources.close()
+            _require_running_observation_sources(runtime_root)
+            reread_handoff()
+            with _publication_parents(output.parent) as (check, _, descriptor):
+                reread_handoff()
+                check()
+                _write_no_clobber(consumed, _canonical_json({
+                    "consumption_version": "gpt54-time-budget-observation-consumption-v1",
+                    "preparation_identity": expected, "observation": marker["observation"],
+                    "state": "consumed_not_completion_or_launch_authority",
+                }).encode("utf-8"), parent_fd=descriptor(output.parent))
+    except TimeBudgetRegistrationRefused:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, StopIteration,
+            ManifestRefused, yaml.YAMLError, RecursionError):
+        raise TimeBudgetConsumptionRefused("observation_handoff_consumption_refused") from None
+
+    # A failed/unsupported admission still consumes this observation; the claim
+    # is deliberately never removed. Clock start remains inside the runners.
+    control = TimeBudgetObservation(store, identity)
+    runner = None
+    result = None
+    try:
+        runner, arguments = _bind_observation_runner(
+            marker, configuration, payload, references, control,
+            v2_backend_factory=v2_backend_factory, v2_voice_for=v2_voice_for,
+            codex_provider_for=codex_provider_for,
+        )
+        result = runner.run(**arguments)
+        if type(result) is not dict:
+            raise TimeBudgetConsumptionRefused("observation_runner_result_required")
+    finally:
+        # Real runners finalize their own work. A construction/startup exception
+        # still needs the SAME control's bounded cleanup, never a renewed grace.
+        if not control._finished:
+            control.terminal("failed")
+            close = getattr(runner, "close", None)
+            if callable(close):
+                control.cleanup(close)
+            control.stop_owned_processes()
+            control.finish_cleanup(True)
+    record = control.as_record()
+    if record["terminal_reason"] != "completed" or not record["cleanup_complete"]:
+        result = {**result, "success": False,
+                  "error": record["terminal_reason"] if record["cleanup_complete"] else CLEANUP_UNCONFIRMED}
+    return {**result, "time_budget_observation": record, "handoff_preparation_identity": expected}
 
 
 def main(argv: list[str] | None = None) -> int:
