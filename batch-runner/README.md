@@ -415,8 +415,9 @@ Startup is denied unless the trusted caller supplies
 preparation/observation/R/F binding and canonical preparation/admission paths
 against a separate source-bound execution direction, then return `None` or
 raise on refusal. It is not a marker-controlled approval bit. The consumer's
-default remains denied; the separate first-cell adapter below installs a
-concrete checker and dependencies. No workflow entrypoint is added. Changing
+default remains denied; the V2 and Codex callables below install concrete
+checkers and dependencies. The consumer itself adds no workflow entrypoint.
+Changing
 the preparation path or admission store is not a way to obtain another attempt.
 
 After the checker and final rereads, a no-clobber sibling
@@ -502,6 +503,135 @@ error rows; pre-admission refusal produces no study row. These bytes can feed
 `prepare_observation_grading` with independent result/input identities, but this
 entrypoint neither grades nor uploads. No real input, provider, host or live-run
 acceptance follows from a passing synthetic test.
+
+##### One registered Codex time-budget observation
+
+[`gpt54_time_budget_codex_observation.py`](gpt54_time_budget_codex_observation.py)
+provides `run_codex_observation` and a CLI for one explicitly selected task in
+`gpt54_time_budget_v1_codex_r1` or `gpt54_time_budget_v1_codex_r2`. The repeat
+must match the run, the condition is `codex`, and the task must belong to the
+registered five-task cohort. This is the Codex arm of the existing 20-observation
+study, not a scheduler, controller, extra repeat or new experiment.
+
+The callable supplies concrete `CodexProviderSettings` to the existing consumer,
+which constructs the real `CodexAgentRunner` with the same
+`TimeBudgetObservation`. It preserves GPT-5.4/direct-v1/xhigh, the null requested
+context-window override, pinned SDK/CLI 0.147.0, isolated existing auth command,
+zero configured request/stream retries, one external attempt, concurrency 1,
+1200-second generation and the shared 20-second cleanup. Native recovery is
+still inside that generation deadline; zero retry settings do not claim a bound
+on every native recovery or a model-call count. There is no loopback provider,
+personal API key or fallback endpoint in the production route.
+
+Command shape, **not a live authorization**; the leader or trusted controller
+must supply the independent values after final source review and acceptance:
+
+```bash
+GDPVAL_CODEX_RUN_ROOT="$NATIVE_RUN_ROOT" \
+  JE_ARROW_MALLOC_CONF=background_thread:false "$OBSERVATION_PYTHON" \
+  "$RUNTIME_ROOT/batch-runner/gpt54_time_budget_codex_observation.py" \
+  --run-id "$RUN_ID" --repeat "$REPEAT" --task-id "$TASK_ID" \
+  --runtime-root "$RUNTIME_ROOT" \
+  --reviewed-source-sha "$R_COMMIT" --reviewed-source-tree "$R_TREE" \
+  --frozen-grader-root "$FROZEN_ROOT" \
+  --grader-source-sha 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2 \
+  --input-registration-root "$INPUT_REGISTRATION_ROOT" \
+  --input-source-sha "$INPUT_SOURCE_COMMIT" \
+  --input-registration-path "$INPUT_REGISTRATION_PATH" \
+  --registration-sha256 "$REGISTRATION_SHA256" --input-sha256 "$INPUT_SHA256" \
+  --dataset-parquet "$DATASET_PARQUET" --reference-root "$REFERENCE_ROOT" \
+  --step0-manifest "$STEP0_MANIFEST" --step0-sha256 "$STEP0_SHA256" --step0-size "$STEP0_SIZE" \
+  --preparation-directory "$PREPARATION_DIRECTORY" \
+  --preparation-sha256 "$PREPARATION_SHA256" --preparation-size "$PREPARATION_SIZE" \
+  --observation-directory "$OBSERVATION_DIRECTORY" --destination "$RESULT_DESTINATION" \
+  --direction "$DIRECTION_PATH" --direction-sha256 "$DIRECTION_SHA256" \
+  --host-sha256 "$HOST_SHA256"
+```
+
+R and F must be genuine detached, registered linked worktrees at their exact
+independently reviewed identities. F stays at tree
+`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`; the original whole TEMPLATE hash
+`37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce` is unchanged.
+The input-source commit/path must anchor the registered dataset, catalog and
+reference identities. `REGISTRATION_SHA256` is the verified registration
+manifest digest; `INPUT_SHA256` is the selected observation's sealed input
+facts, including Step0. Neither is the R commit, a parquet digest or a V2
+input seal. Genuine parquet, references and canonical Step0 must already exist
+locally. Use `prepare_observation_handoff` with the same Codex run/task and
+anchors; retain its expected digest/size independently of the artifact.
+
+The new private direction format is `gpt54-time-budget-codex-direction-v1`.
+Its exact fields are `direction_version`,
+`purpose: execute_one_registered_observation`, `execution_binding`, `paths`,
+`host_sha256`, `provider_binding`, `step0_identity`, `not_before_unix` and
+`expires_unix`. `execution_binding` is the complete existing
+`ObservationExecutionBinding`, including the canonical observation JSON and
+preparation/F/store binding. `step0_identity` contains its independently
+expected `sha256` and `size`. The finite Unix-time window authorizes admission
+only, not a resettable generation clock.
+
+`provider_binding` contains `settings_sha256` (the canonical seal of
+`dataclasses.asdict(provider)` for the concrete `CodexProviderSettings`),
+`config_overrides_sha256` (the canonical seal of the actual `config_overrides()`
+tuple), `sdk_version` and
+`cli_version`. The concrete settings come from the verified configuration and
+the existing approved route resolver; the override digest also binds the real
+auth-helper/Python/login-location arguments without publishing them. Both
+versions are `0.147.0`. The controller must independently bind the actual
+environment's approved values; a file-provided hash or approval bit cannot
+authorize itself. No token is part of this direction.
+
+The exact `paths` keys are `direction`, `preparation`, `runtime_root`,
+`frozen_grader_root`, `input_registration_root`, `dataset_parquet`,
+`reference_root`, `step0_manifest`, `observation_directory`, `destination`,
+`native_run_root`, `input_source_sha` and `input_registration_path`. Filesystem
+paths are canonical absolute paths; the input registration path remains
+repository-relative. The existing `GDPVAL_CODEX_RUN_ROOT` resolver must select
+the bound native root outside the system temporary directory. It creates fresh
+isolated per-task workspaces there; it does not reuse a personal Codex home.
+The observation store is a caller-owned private directory. Its permanent
+observation-keyed claim survives failure, copied preparations and changed
+destinations. This is local-store protection, not a distributed/global claim;
+replacing the store is not permission to retry. Host metadata remains distinct
+from the unchanged real kernel ownership admission.
+
+The destination must be new, with an existing private parent. The callable
+retains returned deliverables under `upload/deliverable_files/<task-id>/`,
+verifies their exact byte records, and writes `step2_inference_results.json`
+last with its canonical fingerprint, source/input/direction bindings and actual
+deadline/cleanup fields. A returned native failure retains its partial bytes
+as an error outcome; a missing returned terminal record does not become a row.
+The reservation and any partial publication cannot be adopted or retried.
+The consumer does not export native token totals, so `usage`, native counters
+and cost remain null with an explicit availability reason. Safe returned
+item/status/rate-limit fields are retained without raw provider errors. CLI
+exit is 0 for captured success, 1 for a captured error and 2 for refusal or
+incomplete capture; none of those states permits another attempt. No upload,
+inference-publication locator, grader or real execution controller is added.
+
+The [pinned implementation](https://github.com/hyeonsangjeon/gdpval-realworks/commit/c6c8b2135f7e363d6c3371f023187641dbc0802f),
+tree `4f14c866b6b05def538e05ca9296b75837e78e73`, passed the one new offline
+Python 3.10.12 selector: **9 passed in 22.91s**, exit 0, under 300 seconds plus
+5 seconds grace without `-x`. It covers real validators and the consumer/runner/
+pinned SDK path at synthetic auth/native transport and kernel seams, canonical
+success/failure capture, direction/selection/Step0/route refusals and permanent
+duplicate refusal. Exact command/log/JUnit/exit artifacts remain at
+`/tmp/codex-time-budget-native-proof.0X57Ez/`; log SHA256 is
+`5edc111eebd46ff05e2c16758ff8e9b2e78c862abc0addb68bc833ecf63113d8`.
+The base was accepted main `86bf684706bdbfc641f10c2774b7e4884d8fc7cd`, tree
+`0165ff4f9f7d226a4cac8f34803d6134f53ba693`.
+[Prior diagnostics and real V2 uncertainty](https://github.com/hyeonsangjeon/gdpval-realworks/blob/86bf684706bdbfc641f10c2774b7e4884d8fc7cd/tasks/LATEST_TASK_RESULT/README.md)
+and [PR760's separate proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md)
+are not combined with this result. Source review `5431353775` accepted the
+callable; final integrated-HEAD CI, a trusted
+controller, genuine inputs and actual host/auth/direction values remain gates.
+The first two real V2 cells stay consumed/uncertain. Task3 also remains
+consumed, with a canonical error, reported usage and confirmed cleanup; its
+error classification is still pending. No Codex or further V2 live authority
+is granted by this proof. The retry fixture subsequently passed its sixteen
+tests in CI at `d71bae686020ee465a487f25dbb4675954ec849c`; its earlier local
+wrapper exit 127 remains an unstarted proof. The current evidence record
+separates those observations and the pending combined-source CI.
 
 <a id="first-v2-observation-on-github-actions"></a>
 

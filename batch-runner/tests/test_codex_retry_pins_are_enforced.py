@@ -52,10 +52,13 @@ numbers on the NAS and on a runner.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -277,7 +280,12 @@ def _one_turn(
     this that dropped the ``for`` loop would measure zero requests and read as
     proof that no retries happen.
     """
-    from core.codex_runner import CodexAgentRunner, CodexWorkspace
+    from core.codex_runner import (
+        CodexAgentRunner,
+        CodexWorkspace,
+        _descendant_pids,
+        sweep_orphans,
+    )
 
     printer, call_log = _token_printer(tmp_path)
     with RefusingResponses(status, drop=drop) as server:
@@ -285,6 +293,7 @@ def _one_turn(
             _RedirectedProvider(server.port, printer, settings), timeout=90
         )
         workspace = CodexWorkspace.create(task_id=f"retry-probe-{status}-{drop}")
+        before_pids = _descendant_pids(os.getpid())
         codex = None
         try:
             codex = runner.open_runtime(workspace)
@@ -296,12 +305,14 @@ def _one_turn(
             except Exception:  # noqa: BLE001 - the refusal is the measurement
                 pass
         finally:
-            if codex is not None:
-                try:
+            try:
+                if codex is not None:
                     codex.close()
-                except Exception:  # noqa: BLE001 - teardown, not the subject
-                    pass
-            workspace.cleanup()
+            finally:
+                # Match _run_one_turn's lifecycle before removing its files.
+                # The snapshot excludes children that predate this runtime.
+                sweep_orphans(before_pids)
+                workspace.cleanup()
 
         return {
             "requests": len(server.calls),
@@ -314,6 +325,74 @@ def _one_turn(
             "authorization": server.authorization_headers(),
             "paths": sorted({call["path"] for call in server.calls}),
         }
+
+
+def test_runtime_descendants_finish_before_workspace_removal(tmp_path, monkeypatch):
+    """Exercise the real sweep and keep a pre-existing child outside it."""
+    from core import codex_runner
+
+    children = []
+    events = []
+    real_sweep = codex_runner.sweep_orphans
+    real_cleanup = codex_runner.CodexWorkspace.cleanup
+
+    def waiting_child():
+        child = subprocess.Popen(
+            [sys.executable, "-I", "-c", "import sys; sys.stdin.buffer.read()"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        children.append(child)
+        assert child.pid in codex_runner._descendant_pids(os.getpid()), (
+            "host descendant enumeration is unavailable for a known live child"
+        )
+        return child
+
+    try:
+        pre_existing = waiting_child()
+        runtime_child = None
+
+        def open_runtime(_runner, _workspace):
+            nonlocal runtime_child
+            runtime_child = waiting_child()
+            events.append("open")
+            return SimpleNamespace(close=lambda: events.append("close"))
+
+        def sweep(before):
+            assert events == ["open", "close"]
+            assert pre_existing.pid in before
+            assert runtime_child.pid not in before
+            swept = real_sweep(before)
+            assert swept == (runtime_child.pid,)
+            assert runtime_child.wait(timeout=10) is not None
+            assert pre_existing.poll() is None
+            events.append("sweep")
+            return swept
+
+        def cleanup(workspace):
+            assert events == ["open", "close", "sweep"]
+            real_cleanup(workspace)
+            assert not workspace.root.exists()
+            events.append("cleanup")
+
+        monkeypatch.setattr(codex_runner.CodexAgentRunner, "open_runtime", open_runtime)
+        monkeypatch.setattr(
+            codex_runner.CodexAgentRunner, "start_thread",
+            lambda *_: SimpleNamespace(
+                turn=lambda _: SimpleNamespace(stream=lambda: iter(())),
+            ),
+        )
+        monkeypatch.setattr(codex_runner, "sweep_orphans", sweep)
+        monkeypatch.setattr(codex_runner.CodexWorkspace, "cleanup", cleanup)
+        _one_turn(tmp_path, status=500)
+        assert events == ["open", "close", "sweep", "cleanup"]
+        assert pre_existing.poll() is None
+    finally:
+        # Only these directly owned handles are reaped, including on failure.
+        for child in reversed(children):
+            child.stdin.close()
+            child.wait(timeout=10)
 
 
 # ── What the shipped settings cost ──────────────────────────────────────────
