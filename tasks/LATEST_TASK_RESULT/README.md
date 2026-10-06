@@ -1,6 +1,52 @@
 # Latest task result
 
-## PR757: linked-source CLI proof after a test-only parser correction
+## PR757: accepted-source integration and real storage metadata
+
+The first-V2 route is combined with the accepted read-only metadata route.
+Both parent sources passed all ten applicable checks. Source, workflow and
+test bytes are preserved; the combined HEAD still needs review and CI.
+No new local selector, input acquisition, inference or grading was performed
+for this integration.
+
+### Reviewed sources and integration
+
+The first-V2 source is `83d615c5516efbe1c4b20f273c493e1cc9dce208`, tree
+`761d2ad208d355e515bdabce67226837569ff9f7`, accepted in review `5426656908`.
+Accepted main is `536d2466b63b2f845a691a8953901e02a1757b05`, tree
+`b72496e0151609defcbd40407e9f37479e0bd5a6`, containing metadata source
+`b759affe6abdf2eba8b32f0470837f6c2145997e`, accepted in review `5426656614`.
+Only CHANGELOG, this record and the usage README overlap. The README combines
+both sections without a content conflict; every non-document blob is retained
+exactly from its parent. Earlier proofs are not tests of the combined tree.
+
+### Actual read-only metadata
+
+Corrected metadata source `b759affe6abdf2eba8b32f0470837f6c2145997e` passed
+all 25 metadata cases in CI run `37438423265`, job `112185883536`, attempt 1.
+The main selector reported **13573 passed, 64 skipped, 46 deselected,
+1 warning in 2334.76s**; the separate scripts selector reported **186 passed
+in 45.51s**. Log SHA256:
+`899cc398018a8cfafbefc63420b14dd77950733f2b510b511cf012997c2ebe9b`.
+The original local **17 failed, 8 passed, 1 teardown error in 5.31s** remains
+failed historical evidence; it is not converted into a local pass.
+
+Authorized read-only [metadata run 37446326232][metadata-run], attempt 1,
+succeeded from source `536d2466b63b2f845a691a8953901e02a1757b05`.
+The leader verified artifact `11403029974` against its exact schema and
+source/run identities. At `2026-10-06T09:58:18Z`, it reported the fixed target
+as private and the first-observation prefix as absent, at parent
+`d25e0b9daf5d80082641a6e6a99448507cc5fdf4`. Envelope SHA256:
+`bb20c398b98266838c4f09fc8c047dbe7f069457d8b40fa1f87fae8023e08a5d`.
+Its target hash is
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+The only inspected prefix was
+`time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a`.
+No credential was copied to NAS, private body downloaded, HF object written
+or model/grader called. This observation supplies a candidate parent only.
+The actual claim must still match the remote parent and all source, input,
+host, attempt and direction checks; prefix absence is not execution authority.
+
+### Prior isolated CLI proof
 
 The single `[linked]` case reported **1 passed in 9.88s**, exit 0. It parsed
 the actual workflow commands, checked every argument and reached
@@ -96,18 +142,19 @@ README request paths and usage commands are unchanged. `im-not-ai-en` is limited
 to these changed English records, preserving failures, counts, paths, identities
 and gates. Its bounded fidelity check is editorial, not another software test.
 
-Remaining work is final-HEAD source review and new ordinary CI, including the
-older fixture consumers, then the leader's source/integration decision. Accepted
-main remains
+Remaining work is combined-HEAD review and ordinary CI, followed by the
+leader's runtime-source decision. The earlier proof's accepted base was
 `b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
-`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`. This repair does not select an
-approved runtime. Genuine input/private-parent/actual-host values, the finite
+`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`; the current integration basis is
+listed above. This repair does not select an approved runtime.
+Genuine input/actual-host values, the checked remote parent, the finite
 window and a separately issued digest-bound live request are still required.
 Actual kernel ownership admission and provider identity checks remain mandatory.
 The [usage section](../../batch-runner/README.md#first-v2-observation-on-github-actions)
 shows the future request path contract; it is not permission to dispatch.
 
-The old PR757 worktree and PR758 branch were left untouched. No CI query,
+During that isolated parser correction, the old PR757 worktree and PR758
+branch were left untouched. No CI query,
 dispatch, retry or poll; private HF/input/receipt access; model/grader/Azure
 operation; permission expansion; Project edit or merge occurred. This is
 synthetic source-layout evidence, not real input, host, inference or publication
@@ -117,3 +164,4 @@ evidence.
 [continuation]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md
 [missing-usage]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md
 [layout]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md
+[metadata-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37446326232
