@@ -132,13 +132,24 @@ def _reference_snapshot(
     }
 
 
-def _dataset_tasks(data: bytes, task_ids: tuple[str, ...]) -> tuple[list[dict], dict[str, bool]]:
+def _dataset_tasks(data: bytes, task_ids: tuple[str, ...], *, synchronous: bool = False) -> tuple[list[dict], dict[str, bool]]:
     # Hash the held snapshot before parsing. Read only selected row content;
     # physical parquet order is not the registered execution order.
-    rows = parquet.read_table(
-        io.BytesIO(data), columns=[*SOURCE_PROJECTION_FIELDS, "deliverable_files"],
-        filters=[("task_id", "in", list(task_ids))],
-    ).to_pylist()
+    if synchronous:
+        # The prospective owned host cannot inherit parser worker threads.
+        # Keep the same projection/selected-row validation below. The legacy
+        # read_table/filter path remains the omitted/default calling form.
+        with parquet.ParquetFile(io.BytesIO(data), pre_buffer=False) as source:
+            table = source.read(columns=[*SOURCE_PROJECTION_FIELDS, "deliverable_files"],
+                                use_threads=False)
+        selected = [index for index, task_id in enumerate(table.column("task_id").to_pylist())
+                    if task_id in task_ids]
+        rows = table.take(selected).to_pylist()
+    else:
+        rows = parquet.read_table(
+            io.BytesIO(data), columns=[*SOURCE_PROJECTION_FIELDS, "deliverable_files"],
+            filters=[("task_id", "in", list(task_ids))],
+        ).to_pylist()
     ids = [row["task_id"] for row in rows]
     _same("selected parquet task set", sorted(ids), sorted(task_ids))
     by_id = {row["task_id"]: row for row in rows}
