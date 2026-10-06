@@ -409,7 +409,7 @@ def test_time_budget_first_v2_entrypoint_final_reread_and_partial(handoff_source
     assert output.with_name(output.name + entry.RESERVATION_SUFFIX).exists() is (change == "publication_failure")
 
 
-def test_time_budget_first_v2_entrypoint_defaults_and_source_roles(handoff_sources, monkeypatch, capsys):
+def test_time_budget_first_v2_entrypoint_defaults_and_source_roles(handoff_sources, dual_roots, monkeypatch, capsys):
     assert entry.main([]) == 2
     assert json.loads(capsys.readouterr().out)["retry_allowed"] is False
     profile = legacy.load_plan(handoff_sources.runtime / registration.SOURCE_PROFILE)
@@ -422,8 +422,10 @@ def test_time_budget_first_v2_entrypoint_defaults_and_source_roles(handoff_sourc
     ]
     assert current["launch_allowed"] is False
     with monkeypatch.context() as source:
-        source.setattr(legacy, "ROOT", handoff_sources.frozen)
-        frozen = legacy.compile_dispatch_plan(legacy.load_plan(handoff_sources.frozen / registration.SOURCE_PROFILE))
+        # The synthetic input-only profile is not a legacy dispatch plan.
+        # This historical positive needs F's untouched profile and source.
+        source.setattr(legacy, "ROOT", dual_roots["frozen"])
+        frozen = legacy.compile_dispatch_plan(legacy.load_plan(dual_roots["frozen"] / registration.SOURCE_PROFILE))
         assert frozen.as_dict()["launch_allowed"] is False
 
 
