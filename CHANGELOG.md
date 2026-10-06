@@ -13,6 +13,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Integrate reviewed grading source
+  `87fec0a0a4cd3b6b585896782a60690cd1cd7ca8` (review `5424037416`) with
+  accepted main `e2b8c5e15296eefbb2c1ee21d6b8ba3725d75506`, whose V2 source
+  `39362bb804b1f0823091cb597e1d6ae4db58ec15` passed 11 applicable checks.
+  Only the two completion records overlap. Preserve both parents' source and
+  test blobs exactly, retain their separate proofs, and reconcile these records
+  without a new local test or live operation. The combined HEAD still needs
+  review and applicable CI; this is not execution or grading authority.
+
+- Apply the owner-approved prospective grading filename rule through one
+  shared config-materialization helper used by preparation and executor
+  reconstruction. Remove only the literal `judge_`, `cfg_`, `rubric_`,
+  `inference_` and `src_` labels, saving 31 ASCII bytes while preserving all
+  eight placeholders and their values, order, formatting and separators.
+  The first failing operation was checkpoint temporary-file creation:
+  grade/checkpoint/temporary basenames were 221/259/263 bytes against
+  `NAME_MAX=255`, before grade publication or the simulated `TimeoutExpired`.
+  Frozen checkpoint code, F/TEMPLATE, judge/scoring policy and all admission,
+  input/result/source and permanent-attempt checks remain unchanged. The
+  actual materialized config and whole-source fingerprints are recomputed;
+  a coherently rehashed obsolete config still refuses.
+
+  The clean correction basis was `91272409148a68c8d2c57b7c45d0541ee86b2810`,
+  tree `0f87a5fb45fe538d8ba0cc692f8379833ff7bfef`. The accepted tuple fix and
+  review `5423395811` remain documented in the
+  [prior immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/91272409148a68c8d2c57b7c45d0541ee86b2810/tasks/LATEST_TASK_RESULT/README.md),
+  including its distinct **29 passed, 2 failed, 49 deselected in 226.13s**.
+  One offline Python 3.10.12 invocation at
+  `4f8deffb4080785b70d8f27bebf89b8047cec70d`, tree
+  `eee63b994df82d0ea6522e4717e5252ed4866d88`, reported **3 passed in 24.63s**,
+  exit 0, under 300 seconds plus 5 seconds grace without `-x`. Only the two
+  retained roundtrips and the new filename contract ran. Real formatter and
+  checkpoint writes measured temporary basenames of 232 bytes for V2 and
+  235 for Codex across all 20 registered run/task variants; every checked
+  basename fits 255 UTF-8 bytes. Partial-sidecar and timeout assertions are
+  unchanged. Older updated config assertions await ordinary CI coverage.
+  The post-proof delta is CHANGELOG and LATEST only. Final-HEAD review/CI,
+  leader-owned integration and genuine input/publication/host/live-direction
+  gates remain pending; this is synthetic software evidence, not a real grade.
+
 - Add the omitted CURRENT refusal for
   `source_pin:batch-runner/gpt54_prepared_input_attestation.py` at index 4 in the
   disposable-checkout launch-boundary test, after `gpt54_run_config_bundle.py`
@@ -79,6 +119,37 @@ entries land under a fresh dated heading the day they merge to `main`.
   remain pending; no CI query, retry, polling or live operation occurred.
 
 ### Added
+
+- Add `gpt54_time_budget_grading_execution.execute_first_observation_grading`
+  and its CLI for only `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 /
+  `02aa1805-c658-4069-8a6a-02dec146063a`. The adapter revalidates the accepted
+  F-derived preparation, independent controller/runtime/frozen-source anchors,
+  original input/result identities, copied F blobs and the actual materialized
+  config hash. A concrete digest-bound direction with a finite admission window
+  and a permanent observation-keyed claim precede the copied F Step8 process.
+  Once-only protection is limited to the independently named local attempt
+  store. Existing F grading policy, provider route and timeout/retry semantics
+  are unchanged; no historical study authority, generation entrypoint or
+  workflow is reused. Returned Step8 grade bytes, ledger pointers and partial
+  checkpoints remain distinct from the execution receipt and usage availability.
+
+  The original offline invocation at `362587b029d069f8a27226fbd37e60a6484649b0`,
+  tree `bc326cbcc6b16ed3b39e5d3596b98ba28904f50a`, reported **31 failed,
+  49 deselected in 132.68s**, exit 1. Every case stopped in shared test setup
+  because `/proc/self/ns/user` was absent on this NAS host (`FileNotFoundError`,
+  errno 2), before direction construction or executor assertions. These failures
+  are not positive refusal or host-support evidence. Test-only correction
+  `3642428f88e5d7a6f159be9978e3a6137d7f4bf1`, tree
+  `58074aae1c1a83c7f00d47ef8b821795dc305c7b`, supplies explicit synthetic
+  namespace metadata; the real context hash, direction/source validators and
+  production refusal are unchanged. That correction was not rerun locally in
+  the original task. Its post-proof delta was the 11-line fixture correction
+  plus CHANGELOG and LATEST. The [immutable initial record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/8722a9d91c3ef1b7c77a6e6b529052b0ce621cf8/tasks/LATEST_TASK_RESULT/README.md)
+  retains that failed command, callable shape and separate prior proofs. The
+  later supplied CI production failure and the new bytes-reread correction
+  above are distinct observations, not an aggregate pass. Corrected-HEAD
+  review/CI and genuine source-bound execution values remain required; no real
+  grader, provider, private input or CI query ran.
 
 - Add a callable/CLI adapter for the first time-budget V2 observation only:
   `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1, task

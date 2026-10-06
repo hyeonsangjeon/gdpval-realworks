@@ -34,6 +34,10 @@ HELPER = "batch-runner/gpt54_time_budget_grading_preparation.py"
 READY = "grading-preparation.json"
 RESERVATION_SUFFIX = ".time-budget-grading-reserved.json"
 CONFIG = "source/batch-runner/time-budget-grading.json"
+MATERIALIZED_FILENAME_TEMPLATE = (
+    "{exp_id}__{judge_slug}__{config_name}__{config_hash}__{rubric_sha}__"
+    "{inference_sha}__{grader_source_hash_short}__{prompt_v}.json"
+)
 RESULT = "source/batch-runner/workspace/step2_inference_results.json"
 UPLOAD = "source/batch-runner/workspace/upload"
 CACHE = "source/data/gdpval-local"
@@ -133,6 +137,17 @@ def _validate_config(config: dict, source: Path) -> None:
         if name in validation["prompt"]:
             validation["prompt"][name] = str(_path(source / "batch-runner", config["prompt"][name]))
     validate_grading_config(validation)
+
+
+def _materialized_config(plan: dict[str, Any], frozen: Path) -> dict[str, Any]:
+    """Derive the fixed rubric/cache/filename changes without altering F."""
+    config = load_plan(frozen / GRADER)
+    config["rubric"].update(revision=plan["shared"]["grading"]["rubric_revision"],
+                            cache_dir="../data/gdpval-local")
+    # Only literal labels are removed; every identity value and separator stays.
+    config["output"]["filename_template"] = MATERIALIZED_FILENAME_TEMPLATE
+    _validate_config(config, frozen)
+    return config
 
 
 def _members(output: Path, files: dict[str, bytes], directories: set[Path]) -> None:
@@ -253,10 +268,7 @@ def prepare_observation_grading(
             # workflow or historical data/result files are copied.
             files = {"source/" + role: _read_bytes(frozen / role, **identity)
                      for role, identity in frozen_files.items() if role.startswith("batch-runner/")}
-            config = load_plan(frozen / GRADER)
-            config["rubric"].update(revision=plan["shared"]["grading"]["rubric_revision"],
-                                    cache_dir="../data/gdpval-local")
-            _validate_config(config, frozen)
+            config = _materialized_config(plan, frozen)
             files[CONFIG] = _json_bytes(config)
             files[RESULT] = result_data
             files.update({UPLOAD + "/" + role: data for role, data in deliverables.items()})
