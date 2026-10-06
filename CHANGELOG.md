@@ -13,47 +13,65 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Move only `tests/test_time_budget_*.py` from the general backend pytest
-  invocation into one plain `time-budget-contracts` job. Both jobs retain
-  45-minute ceilings. The new job matches the existing interpreter,
-  dependency installation, non-integration selection and dispatch/checkout
-  guards. All other job bodies, selectors, root-script tests, permissions,
-  triggers, concurrency and the positive-host receipt producer are unchanged.
-  No production, test, manifest, frozen-source or experiment-workflow bytes
-  changed. Experimental observations still have one attempt, concurrency 1,
-  1200 seconds of generation and shared 20-second cleanup; the V2 job still
-  has a 45-minute ceiling.
+- Complete the backend time-budget partition checks after restoring only
+  `pytest-timeout==2.4.0` in the existing Python 3.10.12 proof virtualenv.
+  The before/after package inventory confirms no removals or unrelated
+  upgrades. Requirements already declared the dependency and are unchanged.
+  Correct the current workflow hash and partition assertions in
+  `test_ghcp_vm_gate_contract.py` and
+  `test_a_test_file_nobody_runs_is_not_a_test.py` for ten jobs, identical setup,
+  the extra ignore glob and exactly-once node/file coverage. Historical
+  reconstruction removes only the validated time-budget job and its ignore
+  token; the canonical historical hash remains
+  `fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47`.
+  HISTORICAL, FOUNDRY, F and source-profile hashes are unchanged.
 
-  The leader-reviewed basis is `ca84a224fe565d255194a33e1f2ea18340af70a7`,
-  tree `1cdfddb4b3335366e418d18a36fc3417a9076a42`, review `5429965072`.
-  The leader reported that run `37478077525` / attempt 1 / pytest job
-  `112319417386` exceeded its 45-minute maximum after setup succeeded.
-  Its 13693 selected tests reached 94%, with no final pytest verdict.
-  The 201254-byte log has SHA256
-  `dff51180e425daa8655b0c88be82244439c4084bcbafd87be7aaf9e6b1a75a22`.
-  Nine other checks succeeded. This is CI ceiling evidence, not a full test
-  pass or model/runtime failure. The leader supplied the pre-edit CI decision;
-  the unavailable extreme-reasoner harness produced no review and was not
-  retried.
+  The leader reviewed the starting source
+  `453cb1371a3f8b2ce764ab00a654b5c61a687d9b`, tree
+  `845f6d176d8323879260e8abe8a8a00134765123`, and authorized this dependency
+  restoration and the two test corrections. The workflow still has SHA256
+  `4afc013fa51044cc72ecb71be785e0d78b9792592eb138fa1ffcf1643e42dfd5`.
+  Its only partition changes remain the general time-budget ignore glob and
+  the plain `time-budget-contracts` job. All other selectors, guards,
+  permissions and the positive-host receipt producer are unchanged.
 
-  One offline Python 3.10.12 collection/structure probe at
-  `55ef11739f8bcf441e01d36f11396c27ad7ea223`, tree
-  `6fdd8664bb971baa15a8a5914ecbc1fb0811d383`, used a single 300s+5s bound
-  without `-x`. Parsed YAML and source-scope assertions passed, but the probe
-  **failed in 0.330s**, exit 1. The baseline process could not import the
-  explicitly requested `pytest_timeout` plugin from the existing offline
-  environment. Collection never started; neither new selector ran. No node
-  sets, counts or partition-equivalence result exist, and no tests executed.
+  One offline continuation at `c3312abb7c139779259371b756f3f144d3687ad2`,
+  tree `541d3901bb5a86f32e0d223acd0f932136acaa0c`, completed in **90.060s**,
+  exit 0, under one 300s+5s/no-`-x` bound. Collection proved the exact disjoint
+  partition **13693 = 13454 general + 239 time-budget nodes**, with no lost,
+  additional or selected integration nodes. The three authorized assertion
+  tests separately reported **3 passed in 19.57s**, exit 0. The original
+  reporting/socket sentinel and explicit timeout plugin were retained.
+  The node counts are collection evidence, not a full behavioral CI pass or a
+  guarantee that the partitioned jobs will finish within their ceilings.
   The [current record](tasks/LATEST_TASK_RESULT/README.md) retains exact
-  commands, outputs and artifact hashes. Nothing was installed or retried.
+  commands, node-set digests and artifacts under
+  `/tmp/pr760-partition-continuation.KrS7hcz9/`; `result.json` has SHA256
+  `e81dce77c624d31014dfce53770f688882be930132cd5539f0f3bab83a218d39`.
 
-  Existing tests still pin the old workflow hash and nine-job layout. Those
-  known stale expectations were left unchanged under the test-byte restriction
-  and remain a CI blocker. The [prior proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md),
-  including 1 passed in 19.36s and the earlier failed invocation, remain
-  separate. The post-proof delta is only this entry and LATEST. Review of the
-  new HEAD, collection equivalence and ordinary new-HEAD CI remain pending.
-  No CI operation, live observation or replay was performed.
+  The [original probe](https://github.com/hyeonsangjeon/gdpval-realworks/blob/453cb1371a3f8b2ce764ab00a654b5c61a687d9b/tasks/LATEST_TASK_RESULT/README.md)
+  remains a separate **0.330s failure**, exit 1, at
+  `55ef11739f8bcf441e01d36f11396c27ad7ea223`, tree
+  `6fdd8664bb971baa15a8a5914ecbc1fb0811d383`: the missing explicit
+  `pytest_timeout` import stopped it before any nodes were collected.
+  Neither new selector ran in that invocation. Its artifacts are untouched.
+  The leader-reported CI run `37478077525` / attempt 1 / pytest job
+  `112319417386` also remains a distinct 45-minute cancellation after setup
+  succeeded, with 13693 selected tests, latest output at 94% and no final
+  pytest verdict. Nine other checks succeeded. Its 201254-byte log has SHA256
+  `dff51180e425daa8655b0c88be82244439c4084bcbafd87be7aaf9e6b1a75a22`.
+  The unavailable extreme-reasoner harness produced no review; the leader
+  supplied the source-grounded CI decision, and the harness was not retried.
+
+  The [prior observation proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md)
+  remain separate. The post-proof delta is only this entry and LATEST.
+  Final-source review and ordinary new-HEAD CI remain pending. Workflow,
+  production, native, manifest, frozen-source and experiment bytes did not
+  change in this continuation. Both backend ceilings and the actual V2 job
+  remain 45 minutes; observations retain one attempt, concurrency 1,
+  1200 seconds of generation and shared 20-second cleanup. Historical Task1
+  remains consumed/uncertain. No CI operation, live observation or replay was
+  performed; PR761 is untouched.
 
 - Verify the integrated Task2 failure-event and uncertainty-retention path
   with one new synthetic test. The reviewed integration basis is
