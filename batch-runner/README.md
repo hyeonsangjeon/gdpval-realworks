@@ -499,6 +499,116 @@ error rows; pre-admission refusal produces no study row. These bytes can feed
 entrypoint neither grades nor uploads. No real input, provider, host or live-run
 acceptance follows from a passing synthetic test.
 
+##### First V2 observation on GitHub Actions
+
+[`gpt54-time-budget-first-v2.yml`](../.github/workflows/gpt54-time-budget-first-v2.yml)
+adds one manual route to that same callable, through
+[`gpt54_time_budget_v2_ci.py`](gpt54_time_budget_v2_ci.py). It accepts only the
+first V2 cell above. It has a 45-minute job ceiling for setup, the unchanged
+1200-second generation budget and shared 20-second cleanup, and private
+retention. That ceiling is not a money cap or a remote-cancellation guarantee.
+The new route's local proof is incomplete: **14 passed, 11 failed and 11 teardown
+errors in 16.57s**. A fixture-only telemetry correction has not been rerun.
+See the [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) before
+treating this route as ready for an authorized observation.
+
+The following is the future command shape, **not permission to dispatch**:
+
+```bash
+gh workflow run gpt54-time-budget-first-v2.yml --ref main \
+  -f reviewed_source_sha=R_COMMIT \
+  -f reviewed_source_tree=R_TREE \
+  -f request_sha256=LEADER_RECORDED_REQUEST_SHA256 \
+  -F request_json=@leader-request.json
+```
+
+The leader must select R after acceptance. R must equal the actual main,
+workflow and checkout commit, with its independently reviewed tree. The request
+contains no credentials, original bodies or self-authorizing digest. Its exact
+UTF-8 bytes must match the separately issued `request_sha256`; do not derive the
+trusted expected value from a downloaded artifact on the runner. Every field
+below is required; uppercase placeholders must be replaced with genuine values:
+
+```json
+{
+  "format": "gpt54-time-budget-first-v2-ci-request-v1",
+  "purpose": "execute_and_privately_retain_first_v2_observation",
+  "source": {"sha": "R_COMMIT", "tree": "R_TREE"},
+  "frozen_source": {
+    "sha": "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2",
+    "tree": "45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca"
+  },
+  "input_registration": {
+    "source_sha": "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2",
+    "source_tree": "45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca",
+    "path": "batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml",
+    "sha256": "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
+  },
+  "registration_sha256": "REGISTRATION_SHA256",
+  "dataset_sha256": "REGISTERED_DATASET_FACTS_SHA256",
+  "cell": {
+    "study_id": "gpt54_sandboxv2_codex_time_budget_v1",
+    "run_id": "gpt54_time_budget_v1_v2_r1",
+    "condition": "sandbox_v2", "repeat": 1,
+    "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"
+  },
+  "ci": {
+    "repository": "hyeonsangjeon/gdpval-realworks",
+    "workflow": ".github/workflows/gpt54-time-budget-first-v2.yml",
+    "ref": "refs/heads/main", "actor": "hyeonsangjeon",
+    "job": "observation", "attempt": 1, "run_number": "EXACT_INTEGER_RUN_NUMBER",
+    "runner": "ubuntu-22.04", "runner_os": "Linux", "runner_arch": "X64"
+  },
+  "paths": {
+    "runtime_root": "/ACTUAL_GITHUB_WORKSPACE",
+    "frozen_root": "/ACTUAL_RUNNER_TEMP/time-budget-v2-frozen",
+    "state_root": "/ACTUAL_RUNNER_TEMP/time-budget-first-v2"
+  },
+  "storage": {
+    "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
+    "branch": "main",
+    "prefix": "time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a",
+    "expected_parent": "EXACT_PRIVATE_MAIN_COMMIT"
+  },
+  "not_before_unix": "INTEGER_ADMISSION_START",
+  "expires_unix": "INTEGER_ADMISSION_END"
+}
+```
+
+`run_number`, `not_before_unix` and `expires_unix` must be JSON integers, not the
+placeholder strings shown here. The admission window must be finite and no
+longer than 2700 seconds; it does not renew the generation clock.
+`registration_sha256` is the genuine compiled registration's `manifest_sha256`,
+not a raw YAML file hash. `dataset_sha256` is
+`core.agentic_v2_preregistration.seal(plan["shared"]["dataset"])` from that
+registration. The controller checks these declarations against independent R/F
+Git sources before credentials, then reads and verifies the original parquet
+and both registered references. It never reads Codex Step0. It uses the existing
+`HF_TOKEN` and approved Azure OIDC secrets/identity variables and Foundry project
+connection; no new resource, credential, account, region or permission is needed.
+
+The trusted controller prepares and independently reconstructs the handoff,
+measures this job's host identity, and records the actual run/job/attempt and
+verified input/preparation/path bindings in a permanent observation-keyed CAS
+claim. It then constructs the concrete finite-window direction and passes its
+digest separately to the real callable. Host metadata and older CI receipts
+cannot bypass actual `TimeBudgetObservation` kernel admission. Storage tokens
+are removed before inference. Concurrency is 1; a rerun, existing claim, parent
+race, lost acknowledgement or partial local state does not authorize recovery,
+an alternate destination or another attempt.
+
+Within the existing private target, the new prefix receives `admission.json`,
+`output-manifest.json`, `result/step2_inference_results.json` and any verified
+`result/upload/deliverable_files/<task-id>/<relative-file>`. Add-only commits
+check the independently expected parent and read back immutable objects and
+control bytes. The result fingerprint and canonical payload remain unchanged.
+A failed row is retained; a missing return remains explicit uncertainty without
+a fabricated study row. Missing usage remains unavailable. Only schema-allowlisted
+`completion.json` metadata can become the seven-day Actions artifact. Original
+inputs, private receipts and raw exceptions are not public artifacts. This is
+private retention, not a fabricated inference `source_repo_id`/`source_revision`
+or grading intake. There is no grading, retry, resume or other-cell dispatcher.
+
 `core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
 in a private host-owned directory before generation. The identity includes
 study/run/condition/repeat/task and reviewed source, registration and input hashes.
