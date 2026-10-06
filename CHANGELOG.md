@@ -13,6 +13,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Compare all four result-reread components directly in
+  `gpt54_time_budget_grading_execution`: raw result bytes, parsed payload,
+  deliverable bytes and fingerprint. A mismatch explicitly refuses with
+  `grading_result_changed`, matching the existing preparation pattern. The
+  generic JSON helper, validators, F/template/materialized-source bindings,
+  independent direction and permanent local attempt claim are unchanged.
+
+  The clean reviewed basis was `8722a9d91c3ef1b7c77a6e6b529052b0ce621cf8`, tree
+  `e27f9e2d573581feb20f052ac2be8c8034027b3d`, review `5423395811`.
+  Supplied CI run `37405741472`, job `112082795143`, attempt 1, reported
+  **31 failed, 13482 passed, 64 skipped, 46 deselected, 1 warning in 1376.58s**.
+  All 31 executor failures reached the production bytes-serialization call;
+  the log SHA256 is
+  `21d3c237d56e8bc4b53afb3cda872b775c6800c1436c43a111bc5662abf690e4`.
+
+  One offline Python 3.10.12 invocation at
+  `b3587f7dc865812e416d6b49b3914d0d3c6ed037`, tree
+  `dbe3f311d35b20b941b4e61b9306cbe80647d118`, reported **2 failed, 29 passed,
+  49 deselected in 226.13s**, exit 1, under 300 seconds plus 5 seconds
+  termination grace without `-x`. All 31 selected cases completed. The partial
+  roundtrip lacked a `/_progress/` sidecar; the timeout roundtrip returned
+  `failed` instead of `timeout`. Neither failure was repaired or rerun here.
+  No test or assertion changed. The post-proof delta is CHANGELOG and LATEST
+  only; the full correction adds just the production comparison above.
+  Delivery remains HOLD for those failures, corrected-HEAD review/CI and
+  genuine inference-publication/intake and source-bound live execution gates.
+  No source locator was invented, and PR755 is untouched.
+
 - Integrate the reviewed handoff consumer with the accepted F-derived grading
   preparation without changing either implementation. The consumer source is
   `a9dd6d12ee52344d3f0e329d2d355d429a175df8`, reviewed in `5420090699`;
@@ -62,7 +90,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   workflow is reused. Returned Step8 grade bytes, ledger pointers and partial
   checkpoints remain distinct from the execution receipt and usage availability.
 
-  The one offline invocation at `362587b029d069f8a27226fbd37e60a6484649b0`,
+  The original offline invocation at `362587b029d069f8a27226fbd37e60a6484649b0`,
   tree `bc326cbcc6b16ed3b39e5d3596b98ba28904f50a`, reported **31 failed,
   49 deselected in 132.68s**, exit 1. Every case stopped in shared test setup
   because `/proc/self/ns/user` was absent on this NAS host (`FileNotFoundError`,
@@ -71,13 +99,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   `3642428f88e5d7a6f159be9978e3a6137d7f4bf1`, tree
   `58074aae1c1a83c7f00d47ef8b821795dc305c7b`, supplies explicit synthetic
   namespace metadata; the real context hash, direction/source validators and
-  production refusal are unchanged. The corrected cases were not rerun.
-  The exact post-proof delta is that 11-line fixture correction plus CHANGELOG
-  and LATEST. [The current record](tasks/LATEST_TASK_RESULT/README.md) retains
-  the failed command/evidence, callable shape and separate prior proofs.
-  Draft source review, corrected-HEAD CI and genuine source-bound execution
-  values remain required. No real grader, provider, private input or CI query ran;
-  PR755's branch was not modified.
+  production refusal are unchanged. That correction was not rerun locally in
+  the original task. Its post-proof delta was the 11-line fixture correction
+  plus CHANGELOG and LATEST. The [immutable initial record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/8722a9d91c3ef1b7c77a6e6b529052b0ce621cf8/tasks/LATEST_TASK_RESULT/README.md)
+  retains that failed command, callable shape and separate prior proofs. The
+  later supplied CI production failure and the new bytes-reread correction
+  above are distinct observations, not an aggregate pass. Corrected-HEAD
+  review/CI and genuine source-bound execution values remain required; no real
+  grader, provider, private input or CI query ran.
 
 - Add `gpt54_time_budget_comparison.consume_observation_handoff` to revalidate
   one prepared run/task against an independent preparation digest/size and
