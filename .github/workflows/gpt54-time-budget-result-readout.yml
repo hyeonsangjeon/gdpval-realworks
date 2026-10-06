@@ -1,0 +1,132 @@
+# One already-retained canonical result. No intake, claim, execution or grading.
+name: GPT-5.4 time budget — retained result readout
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_source_sha:
+        description: Leader-selected accepted controller C/workflow commit, full SHA
+        required: true
+        type: string
+      reviewed_source_tree:
+        description: Independently reviewed tree of controller C
+        required: true
+        type: string
+      request_json:
+        description: Independent readout request containing the verified completion envelope
+        required: true
+        type: string
+      request_sha256:
+        description: Independently recorded SHA256 of exact request_json bytes
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  readout:
+    if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+      READOUT_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      REVIEWED_SOURCE_SHA: ${{ inputs.reviewed_source_sha }}
+      REVIEWED_SOURCE_TREE: ${{ inputs.reviewed_source_tree }}
+      READOUT_REQUEST_JSON: ${{ inputs.request_json }}
+      READOUT_REQUEST_SHA256: ${{ inputs.request_sha256 }}
+    steps:
+      - name: Refuse other callers, sources and reruns before credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_ACTOR" == hyeonsangjeon && "$GITHUB_TRIGGERING_ACTOR" == hyeonsangjeon ]]
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]
+          [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ && "$REVIEWED_SOURCE_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$READOUT_REQUEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$GITHUB_SHA" == "$REVIEWED_SOURCE_SHA" && "$READOUT_WORKFLOW_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+          [[ "$GITHUB_WORKFLOW_REF" == hyeonsangjeon/gdpval-realworks/.github/workflows/gpt54-time-budget-result-readout.yml@refs/heads/main ]]
+
+      - name: Check out the exact reviewed controller
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.reviewed_source_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify the bootstrap and create its linked readout source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA" ]]
+          [[ "$(git rev-parse HEAD^{tree})" == "$REVIEWED_SOURCE_TREE" ]]
+          [[ ! -e "$RUNNER_TEMP/time-budget-readout-source" && ! -L "$RUNNER_TEMP/time-budget-readout-source" ]]
+          git worktree add --detach "$RUNNER_TEMP/time-budget-readout-source" "$REVIEWED_SOURCE_SHA"
+
+      - name: Setup pinned Python without storage credentials
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install existing declared dependencies without credentials
+        timeout-minutes: 5
+        run: python3 -m pip install -r "$RUNNER_TEMP/time-budget-readout-source/batch-runner/requirements.txt"
+
+      - name: Validate the independent request and held controller source
+        id: source
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/time-budget-readout-source/batch-runner/gpt54_time_budget_result_readout.py" validate-request \
+            --request-json "$READOUT_REQUEST_JSON" --expected-request-sha256 "$READOUT_REQUEST_SHA256" \
+            --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
+            --runtime-root "$RUNNER_TEMP/time-budget-readout-source"
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+
+      - name: Read the exact retained private result and project safe fields
+        id: readout
+        timeout-minutes: 2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 60s \
+            python3 "$RUNNER_TEMP/time-budget-readout-source/batch-runner/gpt54_time_budget_result_readout.py" read \
+              --request-json "$READOUT_REQUEST_JSON" --expected-request-sha256 "$READOUT_REQUEST_SHA256" \
+              --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
+              --runtime-root "$RUNNER_TEMP/time-budget-readout-source"
+
+      - name: Verify only the public projection without credentials
+        id: envelope
+        if: always() && steps.source.outputs.validated == 'true' && steps.readout.outcome != 'skipped'
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/time-budget-readout-source/batch-runner/gpt54_time_budget_result_readout.py" verify-envelope \
+            --request-json "$READOUT_REQUEST_JSON" --expected-request-sha256 "$READOUT_REQUEST_SHA256" \
+            --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
+            --runtime-root "$RUNNER_TEMP/time-budget-readout-source"
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+
+      - name: Retain only the validated safe projection
+        if: always() && steps.envelope.outputs.validated == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: time-budget-result-readout-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/time-budget-result-readout.json
+          if-no-files-found: error
+          retention-days: 7
