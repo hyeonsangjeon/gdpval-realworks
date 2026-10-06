@@ -11,7 +11,88 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Update the native retry fixture to snapshot descendants before runtime
+  startup, close the SDK, reuse the existing `sweep_orphans` lifecycle, then
+  delete its workspace. Teardown errors propagate. Preserve stream
+  consumption, the localhost refusing-server measurement, synthetic token
+  printer, provider/auth isolation and original request-count assertions.
+  One focused regression uses real child handles and sweeping to check
+  cleanup order and exclude a pre-existing child; unsupported enumeration
+  must fail, not count as a positive. Only the retry test file changes.
+
+  The leader-read CI run `37497507989`, job `112385735261`, at
+  `2fe4adf221078c9b36ec53fdb6d76cce31f8ce10`, tree
+  `e311f122e6a01361b5e243c410e73af7b9a7a871`, completed **1 failed, 13391
+  passed, 64 skipped, 46 deselected, 1 warning in 1982.61s**; ten other checks
+  succeeded. The reported failure was `OSError` errno `39` during workspace
+  deletion of `codex_home/.tmp/plugins-clone-.../plugins/zoom/skills`, not a
+  retry-count assertion or timeout. Its 219971-byte log SHA256 is
+  `dcf8b8d537c76243118ecbb8a6319d1addcac76fb72e22225e2092132f7eec2a`.
+  A still-active plugin writer remains a hypothesis, not proven ownership.
+
+  The single local proof attempt pinned
+  `bebce09ff6893ed6308127df36c14e4c2bc7ce97`, tree
+  `c5a10eed1d0c0106a9903edf1141032d3f5683d0`, for the failed HTTP 500 node
+  and new cleanup-order regression only. Its wrapper exited **127** because
+  `/usr/bin/time` was unavailable, before pytest started. No node was
+  collected or executed; no JUnit report or test duration exists. No retry
+  followed. The intended Python 3.10.12 command retains 300s+5s/no-`-x`.
+  Artifacts are in `/tmp/pr761-retry-cleanup-proof.oyHpxk/`; launch-log SHA256
+  is `622780fbfd1284f1c6a79c28f948c5258dcf82ac8bc3e3c6e78be73683ff602e`.
+  At that local handoff the fixture correction was unverified. Only this
+  changelog and LATEST changed after the attempted proof. Subsequent CI at
+  `d71bae686020ee465a487f25dbb4675954ec849c` passed all eleven checks, with
+  all sixteen retry-fixture tests passing. The local exit 127 is unchanged.
+  Current integration and existing live gates remain. The native
+  9-pass proof and prior CI outcomes stay separate. No production/workflow,
+  experiment limit, historical claim or PR762 source changed; no observation
+  was replayed. See [the current evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
 ### Changed
+
+- Accept native/allocator source
+  `4306f7f7d310362ea6d2895017025274186a3530`, tree
+  `13ddb272d0683557b119592fa37cca5995446562`, review `5434685097`,
+  after all eleven combined-HEAD checks succeeded. Preserve every runtime,
+  workflow and test blob; update only completion records after validation.
+  The native callable and cleanup fixture are delivered software capabilities,
+  not a live native-run authorization. Task3's canonical error still needs
+  its separate safe readout; no replay, new observation or grading is granted.
+
+- Integrate native source `d71bae686020ee465a487f25dbb4675954ec849c`
+  with accepted allocator main `f2eaccf1b3973a6fc683f169b38f6caddb5a1953`.
+  Each source passed its eleven applicable checks. Preserve all source,
+  workflow and test blobs; reconcile only the three documentation files.
+  Native pytest job `112466778086` reported 13393 passed, 64 skipped and
+  46 deselected in 1908.71s, including sixteen passing retry-fixture tests.
+  That is separate from the original failed local wrapper and native nine-case
+  proof. The combined HEAD still needs its own CI and review; no local test
+  was repeated. Preserve Task3's real canonical error, reported 2913/326
+  tokens and confirmed cleanup without inventing its cause, cost or score.
+
+- Integrate native candidate `55639ee4f642a4f951909a3d4e066eee3776cfd7`
+  with accepted main `793c8778a75348fcb4070f2c8bec135b428ae731`.
+  Preserve every non-document blob from both sources; their shared CI blobs
+  are identical. Reconcile only usage and completion records so combined-HEAD
+  CI can run without a merge conflict. The native callable keeps review
+  `5431353775`; its later cleanup fixture remains unverified because the
+  local wrapper exited 127 before pytest. No successful test was repeated
+  and no combined behavioral pass or live authority is claimed.
+
+- Reuse the reviewed backend time-budget partition from
+  `e817d592ca0e38be29d26da4122d5b6d7ed7395f` (review `5431664726`) for the
+  native Codex branch. Copy the exact workflow and two CI-contract test blobs;
+  do not copy the separate V2 implementation or replay its proofs. Native
+  source and its test module remain unchanged from reviewed
+  `9183232103be1e46b654be76143c349b0cf0f425` (review `5431353775`).
+  The old native pytest job also reported the 45-minute ceiling annotation.
+  Both partition ceilings stay at 45 minutes. The native test file matches
+  the existing time-budget selector; final CI must verify this branch.
+  The donor's 13693-node collection partition and three passing assertions
+  remain donor evidence, not a new native-branch test count or CI pass.
+  No local proof, model, input, grading or consumed observation was rerun.
 
 - Accept allocator startup source
   `108cab226346f7c95e994ed384b4f9ee54f51d46`, tree
@@ -229,6 +310,40 @@ entries land under a fresh dated heading the day they merge to `main`.
   No live input, HF, provider, grader or CI operation ran for this continuation.
 
 ### Added
+
+- Add `gpt54_time_budget_codex_observation.run_codex_observation` and its CLI
+  for one explicitly selected task in the registered Codex r1/r2 rows. The
+  callable installs concrete `CodexProviderSettings` through the existing
+  consumer and real runner, checks an independently digest-bound direction,
+  reviewed R/F/input/Step0 and preparation identities, and captures the actual
+  terminal Step2 row, fingerprint and verified deliverable bytes to a new
+  no-clobber destination. Native counters and cost unavailable through the
+  consumer remain null. Existing provider/auth isolation, pinned SDK/runtime,
+  ownership, permanent local claim, 1200-second generation and shared
+  20-second cleanup controls are unchanged. V2, core, registration, workflows,
+  frozen F, grading policy and the closed 30-cell/eight-observation studies
+  were not changed.
+
+  The starting source was accepted main
+  `86bf684706bdbfc641f10c2774b7e4884d8fc7cd`, tree
+  `0165ff4f9f7d226a4cac8f34803d6134f53ba693`, verified against `origin/main`
+  before creating the independent worktree. The single new offline selector
+  at `c6c8b2135f7e363d6c3371f023187641dbc0802f`, tree
+  `4f14c866b6b05def538e05ca9296b75837e78e73`, reported **9 passed in 22.91s**,
+  exit 0, with Python 3.10.12 and the 300-second plus 5-second/no-`-x` bound.
+  It exercised real validators, consumer, pinned SDK facade and runner through
+  synthetic auth/native I/O and kernel seams, including failure capture and
+  copied-handoff duplicate refusal. The exact command, log, JUnit and exit
+  artifacts are retained at `/tmp/codex-time-budget-native-proof.0X57Ez/`;
+  log SHA256 is `5edc111eebd46ff05e2c16758ff8e9b2e78c862abc0addb68bc833ecf63113d8`.
+  [Prior V2 diagnostics and live uncertainty](https://github.com/hyeonsangjeon/gdpval-realworks/blob/86bf684706bdbfc641f10c2774b7e4884d8fc7cd/tasks/LATEST_TASK_RESULT/README.md)
+  and [PR760's separate proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md)
+  retain their own outcomes. The first real V2 cell remains consumed/uncertain;
+  no model-call count, cost, score or replay authority is inferred. Only the
+  three evidence/usage records changed after this proof. Source review
+  `5431353775` accepted the inspected callable; final-HEAD CI, a trusted
+  controller, actual host/input/auth values and a
+  leader-issued live direction remain gates; no real execution was authorized.
 
 - Add one test-only V2 startup regression in
   `batch-runner/tests/test_time_budget_owned_startup.py`, from accepted source

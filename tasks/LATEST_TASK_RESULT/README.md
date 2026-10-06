@@ -1,60 +1,46 @@
 # Latest task result
 
-## Accepted allocator correction and one directed Task3 observation
+## Accepted native observation and allocator integration
 
-Reviewed source `108cab226346f7c95e994ed384b4f9ee54f51d46`, tree
-`2462fb3ec7cb66b32e01dca9b8f8944f74802aa9`, passed all eleven applicable
-checks. Source review `5433737665` accepted its narrow startup setting,
-Ubuntu-22.04 contract-host alignment and preserved ownership checks.
-Only completion records and the direct README evidence change after that
-validation; runtime, workflow and test bytes remain those reviewed.
+Source `4306f7f7d310362ea6d2895017025274186a3530`, tree
+`13ddb272d0683557b119592fa37cca5995446562`, passed all eleven applicable
+combined-HEAD checks. Review `5434685097` inspected the exact 1786-blob union
+of the native observation implementation and accepted allocator startup
+source. Only completion records change after validation; runtime, workflow,
+tests and usage bytes remain those reviewed.
 
-The real `ubuntu-22.04` job `112459794337`, run `37519177987`, attempt 1,
-reported **241 passed in 776.84s**. Both startup-module nodes ran, including
-the fresh process's real controller imports, synthetic input reconstruction,
-kernel ownership admission and cleanup without a provider. The 118890-byte
-log has SHA256
-`7663ef33c9be1a7bea57063cca487275f094734d902a5b39feb8dd60f33157d4`.
-This is supported-host software evidence, not a real Task3 result.
+This delivers the registered Codex callable, independent direction/provider
+binding, canonical result/deliverable capture and corrected retry-fixture
+cleanup order. Existing ownership, frozen F, twenty-observation registration,
+model settings and 1200+20 limits remain unchanged. No actual native
+observation has been executed by this delivery.
 
-The leader authorizes exactly one subsequent immutable request for
-`gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 /
-`2ea2e5b5-257f-42e6-a7dc-93763f28b19d`. The request must name the actual
-accepted runtime/workflow commit and tree, actual next run number and
-attempt 1, finite admission window and separately recorded exact-byte digest.
-The actual executor must still validate original inputs, preparation, source,
-paths, host support and the task-specific private CAS. No other cell, retry,
-resume or grading is authorized.
+The [integrated evidence record][prior] preserves the native parent's
+13393 passing tests, sixteen passing retry-fixture cases, separate nine-case
+callable proof and the earlier local wrapper exit 127. It also preserves
+actual Ubuntu-22.04 allocator admission/cleanup evidence. Those results are
+not aggregated or relabeled as a new local invocation; combined CI supplies
+the additional acceptance evidence.
 
-The last acknowledged private output
-`bf82b283576411b66dfc7e962de4c587d6de4b02` is an independently known expected
-parent, not an assumption of freshness. Actual metadata/CAS must match it
-and refuse an occupied Task3 prefix. A disagreement grants no automatic retry.
+Real V2 Task3 run `37524773961` remains consumed with a canonical error,
+terminal reason `failed`, confirmed cleanup and reported usage of 2913 input
+and 326 output tokens. Its 6632-byte result is retained at output commit
+`2460c45c3896371b011624f13fc7817d5f670969`, SHA256
+`a2f21666eb53542ead8b780404fd241056d3cc129167f6e7b1be36c6b64160f7`.
+That is not a bill, model-call count or quality score. Task1 and Task2 remain
+consumed and uncertain; no Task1-Task3 replay or Task4 is authorized.
 
-The correction sets the verified
-`JE_ARROW_MALLOC_CONF=background_thread:false` before data-library imports.
-It prevents the allocator worker observed in the earlier CI reproduction;
-it does not relax single-kernel-task, pidfd, subreaper or ECHILD requirements.
-The twenty-observation configuration-bundle comparison, GPT-5.4/direct-v1/xhigh,
-V2 nine-turn/8192-output settings, concurrency 1, one external attempt,
-1200 seconds from first generation and shared 20-second cleanup remain fixed.
-The execution job retains its 45-minute ceiling. No timing equivalence,
-money cap or remote-cancellation guarantee is claimed.
+The separate result-readout candidate was inspected at
+`9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2` in review `5434935150`.
+Its compression-negotiation correction and focused proof are in progress;
+no private canonical body has been read. That path must retain exact immutable
+result/source/request bindings and publish only safe typed fields.
 
-Task1 run `37456739936` and Task2 run `37501571165` remain consumed and
-uncertain, not zero scores or excluded observations. Task2's permanent claim
-is `3def41563f98b70201dc42814bc45b4fd9f1d70c`; its acknowledged output is the
-parent above. Their missing historical first-prerequisite, model-call, usage,
-cost and cleanup facts are not reconstructed from the later synthetic test.
-The [prior record][prior] retains their exact identities and all failed local,
-hosted and synthetic observations without aggregation.
+Remaining work is the accepted readout and directed read needed to classify
+Task3, plus a trusted native execution controller and genuine input/Step0,
+auth, host, path and direction bindings before any native model call.
+Grading still requires its own result/input/publication association and
+frozen-source direction. No further live or grading authority follows from
+this pre-merge acceptance record.
 
-This record stops at acceptance and authorization. Remaining work is the
-actual directed Task3 attempt and retention of its result or uncertainty.
-Any later grading requires a genuine result/input/publication association
-and separate direction using frozen F
-`882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`. No Task3 result or cost is claimed.
-The owner's existing finite execution delegation is reused; no new account,
-deployment, infrastructure or experimental condition is introduced.
-
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/108cab226346f7c95e994ed384b4f9ee54f51d46/tasks/LATEST_TASK_RESULT/README.md
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/4306f7f7d310362ea6d2895017025274186a3530/tasks/LATEST_TASK_RESULT/README.md
