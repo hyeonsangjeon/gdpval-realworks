@@ -13,6 +13,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Add the omitted CURRENT refusal for
+  `source_pin:batch-runner/gpt54_prepared_input_attestation.py` at its existing
+  source-inventory position in the Foundry preflight test. Every other refusal,
+  anchored historical positive and stale-template assertion remains unchanged.
+  No adapter, production, configuration, workflow, usage README, source pin,
+  frozen profile, grader or launch gate changes.
+
+  The leader reviewed `b6ba71115c36075acde2c8f2cece1a3de28cc180`, tree
+  `db706ece066c2a5bacdca257242a10357ceb8a6f`, without an additional blocking
+  implementation finding in that scope. Supplied CI run `37398278085`, job
+  `112059370013`, attempt 1, reported **2 failed, 196 passed, 143 deselected in
+  711.89s**; both failures were this omitted CURRENT expectation. The log SHA256
+  is `441e55db421b98278b668c6447e85bb0c43665c907bd8693158b647c3773847b`.
+  One offline Python 3.10.12 invocation of only the two failed parameters at
+  `53d17831df0bc3fd569c00baeffb6ac34d5c5d7c`, tree
+  `aed06bccd29064dc4feca872f4945397529aab21`, reported **2 passed in 2.15s**,
+  exit 0, under 300 seconds plus 5 seconds termination grace without `-x`.
+  The earlier 32-pass/1-fail invocation and separate unrerun fixture correction
+  remain distinct in the [immutable first-cell record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b6ba71115c36075acde2c8f2cece1a3de28cc180/tasks/LATEST_TASK_RESULT/README.md).
+  This correction's post-proof delta is CHANGELOG and LATEST only. Final-HEAD
+  review/CI acceptance and source-bound live execution gates remain pending.
+
 - Integrate the reviewed handoff consumer with the accepted F-derived grading
   preparation without changing either implementation. The consumer source is
   `a9dd6d12ee52344d3f0e329d2d355d429a175df8`, reviewed in `5420090699`;
@@ -79,10 +101,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   profile as a dispatch plan (`shared_controls, conditions`). Test-only
   correction `9cf4429c377449e98b2c595703d873622c3390dc`, tree
   `db32151d10e0c5d777749b604fbc697aacc1c955`, uses the untouched anchored F
-  profile instead; it was **not rerun**. The post-proof delta is that one test
-  fixture plus CHANGELOG and LATEST, not a new aggregate pass. Prior 53/41/8-case
-  proofs and real CI host outcomes remain separate in the linked evidence in
-  [LATEST](tasks/LATEST_TASK_RESULT/README.md). Final-HEAD review/CI and real
+  profile instead; it was **not rerun locally**. That original post-proof delta
+  was one test fixture plus CHANGELOG and LATEST, not a new aggregate pass.
+  The [immutable first-cell record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b6ba71115c36075acde2c8f2cece1a3de28cc180/tasks/LATEST_TASK_RESULT/README.md)
+  retains the prior 53/41/8-case proofs and real CI host outcomes separately.
+  The later CURRENT expectation correction and its two-parameter proof are
+  recorded above. Final-HEAD review/CI and real
   source-bound direction/input/host/provider acceptance remain pending; no live
   observation, private asset preparation or CI query/retry occurred.
 
