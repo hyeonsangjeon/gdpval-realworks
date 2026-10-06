@@ -102,6 +102,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Preserve allowlisted failure metadata in the first-V2 controller's existing
+  private execution receipt and uncertainty output manifest. The real first
+  attempt, run `37456739936` / job `112246098370` / attempt 1 at accepted
+  `7f4daa09944f6d9635e9bff3d945c224cfc76392`, tree
+  `9bc2b0bb655c4cd69fb3b59162776743b5a9278a`, reached a permanent claim and
+  approved login but its execute step returned exit 2. Private uncertainty
+  retention succeeded. The historical first throw is unrecoverable from the
+  discarded exception data; no deterministic runtime mismatch, kernel, quota
+  or model cause is established. Null usage does not establish zero calls or
+  cost. Claim `e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` and private output
+  `f602355f945471963a338ccf79783a6f802ac6dd` remain immutable and non-reusable.
+
+  Only an invocation that successfully reserves execution may write the new
+  static stage/category/reason fields. Unknown exceptions are not formatted;
+  existing partial state is not annotated or adopted. Retention validates and
+  rereads the failure receipt without fabricating a Step2 row. The public
+  completion envelope, workflow, source/input/direction/CAS/host guards,
+  single attempt, 1200+20-second control, frozen F and grading policy are
+  unchanged. Implementation `1b21fe4d635b5d3934cfcd06699f6ca9c7c725ca`, tree
+  `6b2b049ef9551766b00876fa59d37dedfcbc23e1`, reported **5 passed in 95.25s**,
+  exit 0, in one new offline Python 3.10.12 selector bounded by 300s+5s with
+  no `-x`. These synthetic diagnostics do not explain the historical throw.
+  The leader accepted that private-receipt scope at
+  `b98fc7e5eca79d55a4925ff1aa6bd78463e25814`, tree
+  `065c50a6be73db07fdca2464a28307ca9dc93f98`;
+  its [immutable proof record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b98fc7e5eca79d55a4925ff1aa6bd78463e25814/tasks/LATEST_TASK_RESULT/README.md)
+  remains separate.
+
+  Complete operator visibility with one non-authoritative stderr event after
+  a fresh execution reservation and successful failure-receipt write. The only
+  fields are `format=gpt54-time-budget-first-v2-ci-failure-v1` and the existing
+  validated `stage`, `category`, `reason`. It uses the current in-memory failure,
+  never an earlier receipt. Missing/malformed metadata, prior partial state and
+  unacknowledged reservation or failed receipt I/O produce no new event. An
+  emission failure stays a refusal without retry; generic CLI stdout, exit 2,
+  public completion and canonical result schemas remain unchanged. The leader's
+  actual read-only review approved this visibility scope, not paid execution.
+  New implementation `2bd14c256992d7a47e4f297f81fa28a729b05755`, tree
+  `5b77ac3550461e8331bd3de8854b98abc99513d2`, reported **8 passed in 162.87s**,
+  exit 0, in one new offline Python 3.10.12 event selector bounded by 300s+5s,
+  no `-x`. It did not rerun or aggregate the earlier five-case proof.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact evidence and
+  remaining final-HEAD review/CI and future-live/intake/grading gates. The
+  post-proof delta is only CHANGELOG, LATEST and direct usage docs; no workflow,
+  private operation, old selector or consumed-state change was performed.
+
 - Repair the first-V2 Actions source layout from reviewed
   `1a1e9f9199497ccb804f1d00ece46515f75544ff`, tree
   `0392fc326b3293ffbf30e75e25570b0912c2da15` (review `5425363467`). The ordinary

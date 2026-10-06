@@ -1,167 +1,184 @@
 # Latest task result
 
-## PR757: accepted-source integration and real storage metadata
+## First-V2 static stderr event for a freshly reserved failure
 
-The first-V2 route is combined with the accepted read-only metadata route.
-Both parent sources passed all ten applicable checks. Source, workflow and
-test bytes are preserved; the combined HEAD still needs review and CI.
-No new local selector, input acquisition, inference or grading was performed
-for this integration.
+The new event-focused selector reported **8 passed in 162.87s**, exit 0.
+The controller now exposes the existing validated failure codes in one
+non-authoritative stderr event after this invocation reserves execution and
+successfully writes its failure receipt. Generic CLI stdout, refusal exit 2,
+the public completion envelope and canonical result schemas are unchanged.
 
-### Reviewed sources and integration
+The accepted private-receipt proof remains **5 passed in 95.25s**, exit 0,
+as a separate observation. Neither proof recovers the historical first throw,
+model-call count or cost. The real first cell remains consumed and uncertain;
+no replay, resume, regrade, state adoption or new cell is authorized.
 
-The first-V2 source is `83d615c5516efbe1c4b20f273c493e1cc9dce208`, tree
-`761d2ad208d355e515bdabce67226837569ff9f7`, accepted in review `5426656908`.
-Accepted main is `536d2466b63b2f845a691a8953901e02a1757b05`, tree
-`b72496e0151609defcbd40407e9f37479e0bd5a6`, containing metadata source
-`b759affe6abdf2eba8b32f0470837f6c2145997e`, accepted in review `5426656614`.
-Only CHANGELOG, this record and the usage README overlap. The README combines
-both sections without a content conflict; every non-document blob is retained
-exactly from its parent. Earlier proofs are not tests of the combined tree.
+### Reviewed basis and actual failed attempt
 
-### Actual read-only metadata
+This continuation began in PR759's existing clean worktree at
+`b98fc7e5eca79d55a4925ff1aa6bd78463e25814`, tree
+`065c50a6be73db07fdca2464a28307ca9dc93f98`. The leader accepted the private
+receipt/retention change within the inspected scope and separately approved
+this tightly scoped public static event in an actual read-only review. That
+review was leader-executed, not a successful spawned-model review. No reviewer
+harness, design review or experiment was started. Final-HEAD review and
+ordinary CI remain gates.
 
-Corrected metadata source `b759affe6abdf2eba8b32f0470837f6c2145997e` passed
-all 25 metadata cases in CI run `37438423265`, job `112185883536`, attempt 1.
-The main selector reported **13573 passed, 64 skipped, 46 deselected,
-1 warning in 2334.76s**; the separate scripts selector reported **186 passed
-in 45.51s**. Log SHA256:
-`899cc398018a8cfafbefc63420b14dd77950733f2b510b511cf012997c2ebe9b`.
-The original local **17 failed, 8 passed, 1 teardown error in 5.31s** remains
-failed historical evidence; it is not converted into a local pass.
+The leader read [run 37456739936, attempt 1][live-run], job `112246098370`,
+from accepted source `7f4daa09944f6d9635e9bff3d945c224cfc76392`, tree
+`9bc2b0bb655c4cd69fb3b59162776743b5a9278a`. Source/caller/ref/attempt guards,
+ordinary bootstrap
+and linked R/F setup, full request validation, genuine V2 originals and
+preparation, permanent claim, Azure Login and existing OIDC identity checks
+succeeded. The execute step alone returned exit 2 with only
+`{"outcome":"refused_or_uncertain"}`. Retain, verify-envelope and artifact
+publication succeeded. These are supplied leader-verified facts, not new local
+reads of logs, private data, credentials or remote storage.
 
-Authorized read-only [metadata run 37446326232][metadata-run], attempt 1,
-succeeded from source `536d2466b63b2f845a691a8953901e02a1757b05`.
-The leader verified artifact `11403029974` against its exact schema and
-source/run identities. At `2026-10-06T09:58:18Z`, it reported the fixed target
-as private and the first-observation prefix as absent, at parent
-`d25e0b9daf5d80082641a6e6a99448507cc5fdf4`. Envelope SHA256:
-`bb20c398b98266838c4f09fc8c047dbe7f069457d8b40fa1f87fae8023e08a5d`.
-Its target hash is
-`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
-The only inspected prefix was
-`time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a`.
-No credential was copied to NAS, private body downloaded, HF object written
-or model/grader called. This observation supplies a candidate parent only.
-The actual claim must still match the remote parent and all source, input,
-host, attempt and direction checks; prefix absence is not execution authority.
+| Evidence | Exact identity |
+| --- | --- |
+| Completion artifact | `11409044632` |
+| Completion artifact SHA256 | `06eb9a0c78858da29089cbd9d162e690320e45e40e3f8837de5bfaf11ef9e468` |
+| Job log SHA256 | `3e606025e66106575a472cb20073ec705ff60fd0cd532d972b589faf710f9a83` |
+| Permanent claim commit | `e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` |
+| Private output commit | `f602355f945471963a338ccf79783a6f802ac6dd` |
+| Host hash | `a84bfb9c4e87bd9911654714c629c00ca32466c381376b4f3f07416721ef1c87` |
+| Request SHA256 | `6425b2b65ad94b6d7e1455df2d1717eccae18f937bf632f68222b80bf75f79bf` |
 
-### Prior isolated CLI proof
+The bound cell is `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 /
+task `02aa1805-c658-4069-8a6a-02dec146063a`. The verified completion has
+`status=uncertain`, `retention=acknowledged`, `retry_allowed=false`,
+`grading_performed=false` and `other_cells_executed=0`. Its result identity,
+result fingerprint, terminal reason, usage, cleanup completion and host reuse
+are all null. This proves acknowledged retention of uncertainty, not zero
+provider calls, zero cost, successful kernel admission or confirmed cleanup.
+No old claim, output or other consumed artifact was read, changed or adopted.
 
-The single `[linked]` case reported **1 passed in 9.88s**, exit 0. It parsed
-the actual workflow commands, checked every argument and reached
-`ci.main(validate-request)` with the exact completed output. Only the test's
-backslash-newline handling changed. This is one synthetic CLI proof, separate
-from every earlier invocation; no other case was rerun.
+### Bounded visibility correction
 
-### Scope and reviewed basis
+The [accepted private-receipt record][private-proof] preserves the earlier
+source trace. The historical controller discarded its exception data and
+retention discarded its generic failure receipt. The first throw, model-call
+count and cost cannot be recovered. No deterministic production mismatch,
+kernel, quota or model cause was established, and this patch does not invent one.
 
-Work resumed in the clean repair worktree at leader-reviewed
-`f81fe508b34c74f21b2e128ae2354da663d24203`, tree
-`3af3c9407a6c10c9c9b79e7890993ba50f734216`. The leader reviewed the workflow,
-controller, source fixtures and records, accepted the production layout repair,
-and identified this test-parser defect. No new architecture review or reviewer
-harness invocation occurred. The earlier CI/source decision was leader-executed,
-not a successful spawned-model review; its provenance remains in the
-[prior layout record][layout].
+Production changes are confined to `batch-runner/gpt54_time_budget_v2_ci.py`.
+The controller uses the current failure object in memory, validates it with
+the existing exact receipt schema and emits exactly four fields:
 
-Bash removes physical backslash-newline continuations before argument parsing.
-The test now folds only those exact pairs in the extracted workflow command
-before environment expansion and `shlex.split`. Quotes, whitespace within
-arguments, every flag/value, the full exact-argv assertion and the actual CLI
-call remain unchanged. There is no handwritten replacement command or filtering
-of arbitrary newline arguments.
+```json
+{"category":"unexpected_error","format":"gpt54-time-budget-first-v2-ci-failure-v1","reason":"execution_refused_or_uncertain","stage":"observation_callable"}
+```
 
-All production, workflow, source-fixture and validator bytes remain identical
-to the reviewed basis. Actual `GITHUB_WORKSPACE` stays the ordinary bootstrap;
-R and F remain genuine detached registered linked worktrees at
-`$RUNNER_TEMP/time-budget-v2-runtime` and
-`$RUNNER_TEMP/time-budget-v2-frozen`. State remains at
-`$RUNNER_TEMP/time-budget-first-v2`. The existing bootstrap commit/tree,
-canonical-path, common Git, held-directory and final-reread checks are unchanged.
-No core, ownership, manifest, source pin, frozen F, permission or study policy
-changed. The first V2 cell, fixed 20-observation study, GPT-5.4/direct-v1/xhigh,
-concurrency 1, one attempt, 1200-second generation, shared 20-second cleanup and
-45-minute job ceiling remain fixed. The ceiling is not a money cap.
+This is the event verified for a synthetic construction error, not an event
+recovered from the historical run. `stage`, `category` and `reason` use the
+unchanged static code/class allowlists. The stage names an entered controller
+boundary, not an internal traceback or inferred admission/model/cleanup fact.
+The event is diagnostic data, never a study row or execution authority.
 
-### Pinned correction and one proof
+Emission is attempted only after this invocation acknowledges its own execution
+reservation and successfully writes the failure receipt. The execute path does
+not read, annotate or print a prior partial receipt. Absent or malformed metadata
+produces no event. Pre-reservation failure, lost reservation acknowledgement or
+failed receipt I/O can still leave no diagnostic. A failed stderr write is not
+retried and cannot change a refusal into success. Receipt-writing failures after
+a returned outcome retain their existing uncertainty limits; no new metadata is
+invented for that path. No deadline or cleanup allowance is extended.
 
-- Tested HEAD: `980e2666483aa787a847d107bce095c491df2b04`.
-- Tested tree: `f4a9fae1eb6852f1b123f2ea85146d60418f3a83`.
-- Test-only delta: one line replaced in `batch-runner/tests/test_time_budget_first_v2_ci.py`.
-- Selector: `tests/test_time_budget_first_v2_ci.py::test_time_budget_first_v2_ci_source_layout[linked]`.
-- Python 3.10.12, one offline invocation, 300 seconds plus 5 seconds termination
-  grace, no `-x`. JUnit records one case, zero failures, zero errors and zero
-  skips. No other layout, PR757, PR758, study, platform or full-suite case ran.
+The existing private manifest retains the validated receipt independently of
+stderr availability. Generic CLI stdout stays `{"outcome":"refused_or_uncertain"}`
+with exit 2. Public completion and canonical result schemas are unchanged.
+No raw exception, traceback, dynamic type name, provider message, filename,
+token, header or body is formatted or emitted. No new service, workflow,
+permission, provider, source-pin sweep, manifest, core, F or grading-policy
+change was made.
+Existing source/input/direction/CAS/host guards, one attempt, concurrency 1,
+GPT-5.4/direct-v1/xhigh, the fixed 20-observation study, 1200-second generation,
+shared 20-second cleanup and 45-minute job ceiling remain unchanged. Receipt
+metadata does not restart or extend cleanup. The ceiling is not a money cap.
 
-The case used genuine temporary Git/source validators and executed the
-workflow's linked-worktree creation command with explicit synthetic F anchors.
-It verified no-clobber refusal, complete argv for all five controller commands,
-and the real `ci.main` return value 0 with
-`{"operation": "validate-request", "outcome": "completed"}`. Truthful
-`GITHUB_WORKSPACE`, socket and external-write sentinels stayed intact. No
-credentialed intake, CAS, admission or provider effect occurred. This does not
-claim that the other four controller operations executed in this invocation.
+### Pinned implementation and one offline event proof
 
-Artifacts remain at `/tmp/pr757-linked-cli-proof.MKeaJT/`. `command.sh`
-contains the complete invocation and clean HEAD/tree guards; its digest is
-not the hash of shortened or redacted command text.
+- Tested HEAD: `2bd14c256992d7a47e4f297f81fa28a729b05755`.
+- Tested tree: `5b77ac3550461e8331bd3de8854b98abc99513d2`.
+- Implementation delta from reviewed `b98fc7e5eca79d55a4925ff1aa6bd78463e25814`:
+  controller and test module only, 173 insertions and 2 deletions.
+- Selector: `tests/test_time_budget_first_v2_ci.py::test_time_budget_first_v2_ci_failure_stderr_event`.
+- Python 3.10.12, one offline invocation bounded by 300 seconds plus 5 seconds
+  termination grace, no `-x`: **8 passed in 162.87s**, exit 0. No old five-case,
+  layout, platform, study or whole-suite selector was rerun.
+
+The eight new cases were `allowlisted_refusal`, `secret_exception`,
+`missing_metadata`, `malformed_metadata`, `prior_partial`, `reservation_io`,
+`receipt_io` and `stderr_io`. Full routes use actual temporary Git/linked R/F,
+source/request/input/direction validation, synthetic originals, the existing
+controlled kernel fixture, and ordinary construction, file-I/O, stderr and
+private-storage transport seams. The malformed/absent metadata cases call the
+real event/schema helper. No successful validator verdict is substituted;
+socket and external-effect sentinels remain enabled.
+
+The proof checks the exact event shape and static refusal code, a secret-bearing
+exception whose text must never be formatted, no event from prior/partial or
+unavailable metadata, and one failed stderr write without a retry. Duplicate
+synthetic execution refuses without reading or modifying the earlier receipt
+or permanent claim. Private retention acknowledges uncertainty through real
+CAS/readback validators on the synthetic transport, with an exact unchanged
+completion envelope and no result or deliverable fabrication. This is not real
+host, original-input, provider or private-publication evidence.
+
+Artifacts remain at `/tmp/pr759-v2-failure-event-proof.UREWou/`.
+`command.sh` contains the complete invocation and exact clean HEAD/tree guards;
+its digest is not a hash of shortened or redacted command text.
 
 | Artifact | Bytes | SHA256 |
 | --- | --- | --- |
-| `command.sh` | 1093 | `874fa9bcb5082ac0293fdb3faf3d4437aa203a58b5d10625d74adcfd380e5bfd` |
-| `pytest.log` | 609 | `41123833940c955ba1c8318829bfe3fe2ab0f8a4087260575eecb05f491fe79a` |
-| `junit.xml` | 438 | `162e57b2ed485cba1b0bf852f67f4fc64c0040b0e68b464d61efd8f89f1cab89` |
-| `exit.txt` | 12 | `bde294368bfed77c2cddf8cec271d398aee9cdbab3b26e1059281bd33adb0120` |
+| `command.sh` | 1333 | `7f3aea8af6a147116c0177e5ccac5ce4d1cc4647641b163204b48501b5f24601` |
+| `pytest.log` | 1468 | `fc6c80f9ac2508ecbfde18496bdbb9f782ca96a8b1a62bcaf648c6e8405429f0` |
+| `junit.xml` | 1871 | `ee8d2019b599ae990ff3fad00c9fd48b8360701f3222cb5ad20b058a634016a8` |
+| `exit.txt` | 14 | `a589fb135cc49e1dd1462a45e1394bfa71fa20ffca282d444ae7f7d857ad39a3` |
 
-### Separate evidence and remaining gates
+### Separate prior evidence and remaining gates
 
-The [first layout invocation][layout] remains **6 passed, 1 failed in 58.33s**,
-exit 1, at `14fe35b08018af3c92e02bfc474b5aef6777c724`, tree
-`27c5c4f7f275a9cb5a06633ebb5298733f3e7ae9`. Its `[linked]` case stopped before
-`ci.main` at the command-tokenization assertion. Its six passing refusal cases
-were not repeated. That failed observation and its exact artifacts remain
-unchanged, not relabeled as a seven-pass result.
+The [accepted private-receipt record][private-proof] preserves its separate
+five-case result, original command and artifact hashes. Its tested HEAD was
+`1b21fe4d635b5d3934cfcd06699f6ca9c7c725ca`, tree
+`6b2b049ef9551766b00876fa59d37dedfcbc23e1`: **5 passed in 95.25s**, exit 0.
+Its record-bearing reviewed HEAD was
+`b98fc7e5eca79d55a4925ff1aa6bd78463e25814`, tree
+`065c50a6be73db07fdca2464a28307ca9dc93f98`. That result was not rerun or
+combined with the new public-event proof.
 
-The [original invocation][original] remains **14 passed, 11 failed and
-11 teardown errors in 16.57s**, exit 1, at
-`8be989167037f91b98866a2fdb8bc887b11a4c54`. The telemetry correction
-`1585ef4309f03fc08d0e7c553341d62826b182d0` was unrerun at that handoff.
-The [11-node continuation][continuation] remains **10 passed, 1 failed in
-68.02s**, exit 1, at `0fe559377bbbd20eab790dd7a5c48e4509911c90`.
-The [missing-usage retention proof][missing-usage] remains **1 passed in
-15.88s**, exit 0, at `d82fbd9b47b3af97d56510ee98db5370830d30fb`; its accepted
-correction is `32b5fadcb4346fc576b1e5e631b164c596f68bf4`, review `5425328389`.
-These immutable records retain their artifacts and earlier software, grading,
-NAS-refusal and real CI host evidence. No aggregate 25-pass result is claimed.
+The [prior source/evidence record][prior] preserves the real metadata
+observation and earlier software proofs through immutable links. The original
+14-pass/11-fail/11-teardown-error invocation, separate 10-pass/1-fail continuation,
+1-pass missing-usage proof, 6-pass/1-fail layout proof and isolated 1-pass CLI
+proof retain their original scopes and outcomes. Earlier grading, ownership
+and CI host evidence remain linked there; none is blended with this new
+eight-case proof or the actual uncertain attempt. No aggregate pass result is
+claimed.
 
 The exact post-proof repository delta is only `CHANGELOG.md`, this LATEST
-record and the affected evidence paragraph in `batch-runner/README.md`.
-Production, workflow and test bytes remain identical to the tested correction;
-README request paths and usage commands are unchanged. `im-not-ai-en` is limited
-to these changed English records, preserving failures, counts, paths, identities
-and gates. Its bounded fidelity check is editorial, not another software test.
+record and the directly related usage passages in `batch-runner/README.md`.
+Controller and test bytes remain identical to the tested implementation.
+The final record-bearing HEAD/tree are reported in the task handoff after
+committing these records. Retained source/CI guidance and a bounded
+`im-not-ai-en` changed-passage check preserve exact evidence, scope and
+uncertainty; no new study design or reviewer-harness attempt was needed.
 
-Remaining work is combined-HEAD review and ordinary CI, followed by the
-leader's runtime-source decision. The earlier proof's accepted base was
-`b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
-`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`; the current integration basis is
-listed above. This repair does not select an approved runtime.
-Genuine input/actual-host values, the checked remote parent, the finite
-window and a separately issued digest-bound live request are still required.
-Actual kernel ownership admission and provider identity checks remain mandatory.
-The [usage section](../../batch-runner/README.md#first-v2-observation-on-github-actions)
-shows the future request path contract; it is not permission to dispatch.
+Final-HEAD review and ordinary CI remain pending. The first cell stays consumed
+and uncertain; this patch neither repairs historical remote evidence nor grants
+replay, resume, regrade, alternate-destination adoption or another cell. The
+leader owns any future live decision and its independent source/host/input and
+direction bindings. No valid canonical result is reported for this attempt, and
+the private uncertainty output is not an inference-publication/intake locator
+for grading. Do not invent `source_repo_id` or `source_revision`. A genuine
+result/input/deliverable association and independent live grading direction
+remain required for any later grading route.
 
-During that isolated parser correction, the old PR757 worktree and PR758
-branch were left untouched. No CI query,
-dispatch, retry or poll; private HF/input/receipt access; model/grader/Azure
-operation; permission expansion; Project edit or merge occurred. This is
-synthetic source-layout evidence, not real input, host, inference or publication
-evidence.
+No CI query/dispatch/retry/poll, Azure management, credential search, private
+HF/input/result read or write, model/grader operation, Project edit or merge
+was performed in this task.
 
-[original]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md
-[continuation]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md
-[missing-usage]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md
-[layout]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md
-[metadata-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37446326232
+[live-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37456739936/attempts/1
+[private-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/b98fc7e5eca79d55a4925ff1aa6bd78463e25814/tasks/LATEST_TASK_RESULT/README.md
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/7f4daa09944f6d9635e9bff3d945c224cfc76392/tasks/LATEST_TASK_RESULT/README.md
