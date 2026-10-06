@@ -50,6 +50,8 @@ ENVELOPE_VERSION = "gpt54-time-budget-first-v2-ci-completion-v1"
 TARGET = "HyeonSang/gdpval-codex-budget-pilot-ci-20260923"
 TARGET_SHA256 = "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44"
 BRANCH = "main"
+# Preserve the historical first-cell names for existing readers/fixtures.
+# Execution resolves its cell from the verified registration, never these globals.
 CELL = {"study_id": registration.STUDY_ID, "run_id": observation.RUN,
         "condition": "sandbox_v2", "repeat": 1, "task_id": observation.TASK}
 PREFIX = "time-budget/" + registration.STUDY_ID + "/" + observation.RUN + "/" + observation.TASK
@@ -102,6 +104,26 @@ def _read(path: Path) -> dict:
     return value
 
 
+def _selected_cell(compiled: registration.CompiledTimeBudgetRegistration, requested: dict) -> dict:
+    """Bind one requested task to the already source-verified first V2 run."""
+    runs = [run for run in compiled.runs if run.run_id == observation.RUN
+            and run.condition == "sandbox_v2" and run.repeat == 1]
+    _require(compiled.runtime_bound and len(runs) == 1 and type(requested) is dict
+             and type(requested.get("task_id")) is str and requested["task_id"] in runs[0].task_ids,
+             "registered_first_v2_task_required")
+    run = runs[0]
+    cell = {"study_id": registration.STUDY_ID, "run_id": run.run_id, "condition": run.condition,
+            "repeat": run.repeat, "task_id": requested["task_id"]}
+    _same("request cell", requested, cell)
+    return cell
+
+
+def _namespace(cell: dict) -> tuple[str, str, str]:
+    """Stable observation-keyed paths, including the original consumed first cell."""
+    prefix = "time-budget/" + cell["study_id"] + "/" + cell["run_id"] + "/" + cell["task_id"]
+    return prefix, prefix + "/admission.json", prefix + "/output-manifest.json"
+
+
 @contextmanager
 def checked_request(*, request_json: str, expected_request_sha256: str,
                     reviewed_source_sha: str, reviewed_source_tree: str,
@@ -118,7 +140,6 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
     }, "request_schema")
     _same("request format", request["format"], REQUEST_VERSION)
     _same("request purpose", request["purpose"], "execute_and_privately_retain_first_v2_observation")
-    _same("request cell", request["cell"], CELL)
     _require(storage._hash(reviewed_source_sha, 40) and storage._hash(reviewed_source_tree, 40),
              "independent_reviewed_commit_and_tree_required")
     _same("request source", request["source"], {"sha": reviewed_source_sha, "tree": reviewed_source_tree})
@@ -181,8 +202,6 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
     target = request["storage"]
     _require(type(target) is dict and storage._hash(target.get("expected_parent"), 40),
              "independent_private_parent_required")
-    _same("private study storage", target, {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH,
-          "prefix": PREFIX, "expected_parent": target["expected_parent"]})
     _require(_identity(TARGET.encode())["sha256"] == TARGET_SHA256, "fixed_private_target_identity")
     with ExitStack() as sources:
         check_bootstrap_parents = sources.enter_context(_held_parents(bootstrap, (".git/HEAD",)))
@@ -201,13 +220,16 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         plan = registration.load_registration(roots["runtime_root"] / registration.REGISTRATION_PATH)
         anchors = (roots["runtime_root"], reviewed_source_sha, roots["frozen_root"], registration.ACCEPTED_BASE_SHA)
         compiled = registration._compile_registration(plan, anchors, True, sources)
+        cell = _selected_cell(compiled, request["cell"])
+        _same("private study storage", target, {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH,
+              "prefix": _namespace(cell)[0], "expected_parent": target["expected_parent"]})
         _same("request registration", request["registration_sha256"], compiled.manifest_sha256)
         _same("request dataset facts", request["dataset_sha256"], seal(plan["shared"]["dataset"]))
         sources.enter_context(registration._observation_input_registration(
             roots["frozen_root"], registration.ACCEPTED_BASE_SHA, registration.SOURCE_PROFILE,
             plan["shared"]["dataset"]))
         host = observation.execution_host_identity(reviewed_source_sha)
-        context = {"request": request, "request_identity": _identity(data), "plan": plan, "roots": roots,
+        context = {"request": request, "request_identity": _identity(data), "plan": plan, "roots": roots, "cell": cell,
                    "host": host, "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
         check_bootstrap_parents()
         check_bootstrap()
@@ -238,12 +260,13 @@ def _common(context: dict) -> dict:
 
 def _reconstruct(context: dict, sources: ExitStack):
     return registration._observation_handoff_data(
-        context["plan"], sources=sources, run_id=observation.RUN, task_id=observation.TASK,
+        context["plan"], sources=sources, run_id=context["cell"]["run_id"], task_id=context["cell"]["task_id"],
         destination=_paths(context)["preparation"], step0_manifest=None, **_common(context))
 
 
 def _direction(context: dict, marker: dict) -> tuple[dict, dict]:
     paths, common = _paths(context), _common(context)
+    _same("selected observation cell", {name: marker["observation"][name] for name in context["cell"]}, context["cell"])
     expected = _identity(_bytes(marker))
     binding = registration.ObservationExecutionBinding(
         expected["sha256"], expected["size"], _canonical_json(marker["observation"]),
@@ -268,22 +291,24 @@ def _claim(context: dict, marker: dict) -> dict:
             "preparation_identity": expected, "input_binding_sha256": seal(marker["inputs"]),
             "host": context["host"], "ci": context["ci"], "direction_identity": _identity(_bytes(direction)),
             "paths": direction["paths"], "expected_parent": context["request"]["storage"]["expected_parent"],
-            "storage": {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH, "prefix": PREFIX},
+            "storage": {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH, "prefix": _namespace(context["cell"])[0]},
             "state": "permanently_consumed_not_completion"}
 
 
-def _commit(api, token, deadline, *, parent: str, files: dict[str, bytes], control_path: str,
+def _commit(api, token, deadline, *, cell: dict, parent: str, files: dict[str, bytes], control_path: str,
             control: dict, cache: Path) -> str:
     """One add-only study CAS and immutable byte/object readback. Never retry."""
+    prefix, _, _ = _namespace(cell)
+    _same("private control cell", {name: control["observation"][name] for name in cell}, cell)
     _require(files.get(control_path) == _encoded(control)
-             and all(name.startswith(PREFIX + "/") for name in files), "private_namespace_required")
+             and all(name.startswith(prefix + "/") for name in files), "private_namespace_required")
     staged = [_PublicationFile(name, io.BytesIO(data), len(data), _identity(data)["sha256"])
               for name, data in sorted(files.items())]
     try:
         operations = _publication_additions(tuple(staged))
         storage._remaining(deadline)
         response = api.create_commit(repo_id=TARGET, repo_type="dataset", revision=BRANCH, token=token,
-            parent_commit=parent, operations=operations, commit_message="Record first time-budget V2 observation boundary",
+            parent_commit=parent, operations=operations, commit_message="Record time-budget V2 observation boundary",
             num_threads=1, run_as_future=False, create_pr=False)
         revision = getattr(response, "oid", None)
         _require(storage._hash(revision, 40) and revision != parent
@@ -303,6 +328,7 @@ def _commit(api, token, deadline, *, parent: str, files: dict[str, bytes], contr
 def prepare_and_claim(context: dict) -> dict:
     """Credentialed V2-only original intake, genuine handoff, durable admission."""
     paths, root = _paths(context), _paths(context)["root"]
+    prefix, claim_path, _ = _namespace(context["cell"])
     _require(not os.path.lexists(root), "partial_or_consumed_state_refused")
     dataset = context["plan"]["shared"]["dataset"]
     versions = dict(dataset["input_file_versions"])
@@ -341,7 +367,7 @@ def prepare_and_claim(context: dict) -> dict:
                 remaining -= len(data)
         token = None
         marker = registration.prepare_observation_handoff(context["plan"], **_common(context),
-            run_id=observation.RUN, task_id=observation.TASK, destination=paths["preparation"])
+            run_id=context["cell"]["run_id"], task_id=context["cell"]["task_id"], destination=paths["preparation"])
         with ExitStack() as sources:
             rebuilt, _, reread = _reconstruct(context, sources)
             _same("independently reconstructed preparation", marker, rebuilt)
@@ -361,9 +387,9 @@ def prepare_and_claim(context: dict) -> dict:
                 parent = context["request"]["storage"]["expected_parent"]
                 _same("independent private parent", storage._metadata(api, TARGET, BRANCH, token, deadline)["sha"], parent)
                 _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
-                         paths=[PREFIX], token=token) == [], "observation_already_claimed_or_retained")
-                receipt["returned_commit"] = _commit(api, token, deadline, parent=parent,
-                    files={CLAIM: _encoded(claim)}, control_path=CLAIM, control=claim, cache=cache)
+                         paths=[prefix], token=token) == [], "observation_already_claimed_or_retained")
+                receipt["returned_commit"] = _commit(api, token, deadline, cell=context["cell"], parent=parent,
+                    files={claim_path: _encoded(claim)}, control_path=claim_path, control=claim, cache=cache)
                 receipt["outcome"] = "acknowledged"
         except (Exception, KeyboardInterrupt):
             # No server-state adoption after a lost response, and no second CAS.
@@ -457,7 +483,7 @@ def _envelope(context: dict, claim: dict, payload: dict | None, *, commit: str |
     if not (type(usage) is dict and set(usage) == {"input_tokens", "output_tokens"}
             and all(type(value) is int and value >= 0 for value in usage.values())):
         usage = None
-    return {"format": ENVELOPE_VERSION, **CELL, "source": context["request"]["source"], "ci": context["ci"],
+    return {"format": ENVELOPE_VERSION, **context["cell"], "source": context["request"]["source"], "ci": context["ci"],
         "request_sha256": context["request_identity"]["sha256"], "host_sha256": context["host"]["instance_sha256"],
         "claim_commit": claim["returned_commit"], "output_commit": commit, "retention": outcome,
         "result_identity": None if payload is None else _identity(_bytes(payload)),
@@ -469,9 +495,10 @@ def _envelope(context: dict, claim: dict, payload: dict | None, *, commit: str |
         "grading_performed": False, "retry_allowed": False, "other_cells_executed": 0}
 
 
-def validate_envelope(value: dict) -> None:
+def validate_envelope(value: dict, *, expected_cell: dict) -> None:
     """Exact metadata allowlist: never upload a raw receipt, exception or body."""
-    fixed = {"format": ENVELOPE_VERSION, **CELL, "grading_performed": False, "retry_allowed": False,
+    _require(set(expected_cell) == {"study_id", "run_id", "condition", "repeat", "task_id"}, "completion_cell_schema")
+    fixed = {"format": ENVELOPE_VERSION, **expected_cell, "grading_performed": False, "retry_allowed": False,
              "other_cells_executed": 0}
     _same("completion constants", {name: value[name] for name in fixed}, fixed)
     _require(set(value) == {*fixed, "source", "ci", "request_sha256", "host_sha256", "claim_commit",
@@ -517,6 +544,7 @@ def validate_envelope(value: dict) -> None:
 def retain(context: dict) -> dict:
     """Add only this observation's real output or an explicit uncertainty record."""
     paths = _paths(context)
+    prefix, claim_path, manifest_path = _namespace(context["cell"])
     with ExitStack() as sources:
         marker, admission = _admission(context, sources)
         snapshot, files, execution_receipt, payload = _result_snapshot(context, marker)
@@ -537,18 +565,18 @@ def retain(context: dict) -> dict:
         with _session(None) as (api, token, deadline):
             parent = admission["returned_commit"]
             _same("retention parent", storage._metadata(api, TARGET, BRANCH, token, deadline)["sha"], parent)
-            _objects(api, TARGET, parent, [_object(CLAIM, _encoded(admission["claim"]))], token, deadline, written_at=parent)
+            _objects(api, TARGET, parent, [_object(claim_path, _encoded(admission["claim"]))], token, deadline, written_at=parent)
             _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
-                     paths=[MANIFEST, PREFIX + "/result"], token=token) == [], "output_already_retained")
-            revision = _commit(api, token, deadline, parent=parent,
-                files={MANIFEST: _encoded(manifest), **{PREFIX + "/" + name: data for name, data in files.items()}},
-                control_path=MANIFEST, control=manifest, cache=cache)
-            _objects(api, TARGET, revision, [_object(CLAIM, _encoded(admission["claim"]))], token, deadline, written_at=parent)
+                     paths=[manifest_path, prefix + "/result"], token=token) == [], "output_already_retained")
+            revision = _commit(api, token, deadline, cell=context["cell"], parent=parent,
+                files={manifest_path: _encoded(manifest), **{prefix + "/" + name: data for name, data in files.items()}},
+                control_path=manifest_path, control=manifest, cache=cache)
+            _objects(api, TARGET, revision, [_object(claim_path, _encoded(admission["claim"]))], token, deadline, written_at=parent)
             outcome = "acknowledged"
     except (Exception, KeyboardInterrupt):
         revision = None  # Lost response is uncertainty, never retry/adoption.
     envelope = _envelope(context, admission, payload, commit=revision, outcome=outcome)
-    validate_envelope(envelope)
+    validate_envelope(envelope, expected_cell=context["cell"])
     _write(paths["root"] / "completion.json", envelope)
     _require(outcome == "acknowledged", "private_retention_unconfirmed")
     return envelope
@@ -578,7 +606,7 @@ def main(argv=None) -> int:
                              admission=operation not in ("retain", "verify-envelope"), **kwargs) as context:
             if operation == "verify-envelope":
                 envelope = _read(_paths(context)["root"] / "completion.json")
-                validate_envelope(envelope)
+                validate_envelope(envelope, expected_cell=context["cell"])
                 for name, expected in {"source": context["request"]["source"], "ci": context["ci"],
                                        "request_sha256": context["request_identity"]["sha256"],
                                        "host_sha256": context["host"]["instance_sha256"]}.items():
