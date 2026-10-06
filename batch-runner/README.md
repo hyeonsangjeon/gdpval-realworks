@@ -555,8 +555,12 @@ claim `3def41563f98b70201dc42814bc45b4fd9f1d70c` and acknowledged output
 `bf82b283576411b66dfc7e962de4c587d6de4b02`. This CI reproduction does not
 establish Task2's historical first failed prerequisite, model-call count or
 cost. Task1 and Task2 cannot be replayed, adopted, scored as zero or removed
-from the planned denominator. Any Task3 execution requires the leader's
-separately recorded immutable request; the command example alone grants none.
+from the planned denominator. The leader subsequently verified Task3 run
+`37524773961` / job `112478881979` at
+`f2eaccf1b3973a6fc683f169b38f6caddb5a1953`: a retained canonical `error` /
+`failed` result with confirmed cleanup/host reuse and reported usage of
+2913 input and 326 output tokens. Task3 is also permanently consumed. This
+is not a bill, grade or model-call count, and no Task4 or replay is authorized.
 
 The five-node continuation at leader-reviewed
 `70a02619276bc9da072567d5ee0e4060aed6dbbf`, tree
@@ -879,6 +883,109 @@ that is not a complete prefix check. Even an `absent` result supplies only a
 candidate expected parent. It verifies neither inputs nor host support and
 does not authorize a paid observation. The later V2 parent CAS, permanent
 claim, source/direction checks and actual kernel admission remain unchanged.
+
+#### Read-only view of one retained canonical result
+
+[`gpt54-time-budget-result-readout.yml`](../.github/workflows/gpt54-time-budget-result-readout.yml)
+uses [`gpt54_time_budget_result_readout.py`](gpt54_time_budget_result_readout.py)
+to project safe structured fields from one existing private V2 result. This
+does not execute, adopt, retry or grade an observation. The initial intended
+read is the retained Task3 result at immutable output commit
+`2460c45c3896371b011624f13fc7817d5f670969`, with this registered path:
+
+```text
+time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/2ea2e5b5-257f-42e6-a7dc-93763f28b19d/result/step2_inference_results.json
+```
+
+The target remains `HyeonSang/gdpval-codex-budget-pilot-ci-20260923`. No
+repository, path or branch is an input. Only the current V2 capture schema
+and one V2 row of the source-verified registration are supported. Controller
+C must be the accepted readout workflow/helper source selected for the later
+request. Retained result R is the original execution source, not C. For Task3, R is
+`f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, tree
+`72a9d2fa2c22b1409a8b19e01d6a24ac5f29f9cf`.
+
+The leader supplies a UTF-8 request and its independently recorded exact-byte
+SHA256. Its exact top-level fields are:
+
+- `format`: `gpt54-time-budget-result-readout-request-v1`.
+- `purpose`: `read_one_retained_canonical_result`.
+- `controller`: accepted C's full `sha` and `tree`, also supplied separately
+  as workflow inputs.
+- `ci`: `repository`, `workflow`, `ref`, `actor`, `job`, `attempt`,
+  `run_number`, `runner`, `runner_os` and `runner_arch`. Values must name
+  this repository/workflow, `refs/heads/main`, `hyeonsangjeon`, `readout`,
+  attempt 1, the actual next readout run number, `ubuntu-22.04`, `Linux`
+  and `X64`.
+- `registration_sha256`: the seal of the unchanged registered manifest,
+  `f3337bd80a168cf42b37314b425f5f5b221049fa87c1c15e2338de3441e0ae05`.
+- `cell`: the registered `study_id`, `run_id`, `condition`, `repeat` and
+  `task_id` for the selected result.
+- `completion`: the full, independently verified existing completion
+  envelope, with acknowledged retention and a canonical success/error
+  result. Its original execution request hash, R, cell, output commit,
+  expected result size/hash/fingerprint and outcome are trusted request
+  bindings, not values learned from the downloaded object.
+
+For Task3, the independent result identity is 6632 bytes, SHA256
+`a2f21666eb53542ead8b780404fd241056d3cc129167f6e7b1be36c6b64160f7`,
+fingerprint `0374270431f6352211715da432d886f8557514324c89d60c230f81f65a2a5b61`.
+The original execution request SHA256 is
+`6748374c1b4ad0bbcbafb47117c6c641976d85ece836486eb8ce553c65719c1a`.
+The [evidence record](../tasks/LATEST_TASK_RESULT/README.md) retains the claim,
+completion artifact, envelope and log identities. The canonical result does
+not embed the original request hash; the readout relies on the leader's
+verified completion for that association and does not fetch the claim or
+original request.
+
+After separate approval and accepted-main delivery, the usage shape is:
+
+```bash
+gh workflow run gpt54-time-budget-result-readout.yml \
+  --repo hyeonsangjeon/gdpval-realworks --ref main \
+  -f reviewed_source_sha=LEADER_SELECTED_ACCEPTED_CONTROLLER_SHA \
+  -f reviewed_source_tree=INDEPENDENT_CONTROLLER_TREE \
+  -F request_json=@leader-readout-request.json \
+  -f request_sha256=INDEPENDENT_EXACT_REQUEST_SHA256
+```
+
+This example is not an instruction or executable authorization for this
+implementation task. The ordinary `GITHUB_WORKSPACE` bootstrap remains
+unchanged; the workflow creates a no-clobber detached linked C at
+`RUNNER_TEMP/time-budget-readout-source`. Owner/ref/workflow/attempt/source
+and full request validation precede the only credentialed step, and source
+checks run again before publication. Permissions remain `contents: read`,
+checkout credentials are nonpersistent and SDK telemetry is disabled.
+
+At most two requests share 60 cumulative seconds: private-identity metadata
+at the exact output commit, then one exact raw Git-object GET. No HEAD
+lookup, redirect, retry, LFS/cache follow-up or deliverable read occurs.
+Missing/inaccessible credentials, nonprivate/wrong target, an LFS pointer,
+hash/fingerprint/source mismatch or unsupported schema returns an explicit
+refusal. The safe artifact may retain the requested expected identities and
+verified privacy on refusal, but its `summary` is null and `outcome` is
+`refused`. It grants no retry permission.
+
+Only `time-budget-result-readout.json` is published. Its strict projection
+contains status/error enums, runner/admission/terminal/cleanup flags, reported
+usage and availability counters, model-binding categories and route fingerprint
+where present, plus aggregate deliverable count/bytes from authenticated
+records. It does not publish private prose, filenames, full canonical JSON,
+raw exceptions, headers, tokens or an invented served-model string. Unknown
+fields in the projected schema refuse. Unavailable native counters and cost
+remain unavailable; this readout does not infer model-call counts or grades.
+
+The single offline selector at `2fa134ba2deeefe4cdc9e0098cb0c5117a6f51a5`,
+tree `4be69ae48d1502e669c962110016ca0218e1e686`, reported **21 passed in
+7.95s**, exit 0, under Python 3.10.12/300s+5s/no-`-x`. It used genuine linked
+source fixtures and real validators with synthetic HTTP responses; no private
+read or kernel-positive claim follows. Its artifacts are at
+`/tmp/time-budget-result-readout.YTwR9r/`. Only the three evidence/usage records
+change after that proof. Final source review, ordinary CI, accepted-main C
+selection and the separately directed real read remain pending. The leader's
+read-only pre-edit decision is the review provenance; the unavailable reviewer
+invocation did not execute and was not retried. The study, existing execution
+workflow, 1200+20 observation budget and 45-minute execution ceiling are unchanged.
 
 #### Direct comparison runtime launch refusal
 

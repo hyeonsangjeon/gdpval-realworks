@@ -11,6 +11,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a manual, read-only view of one retained canonical V2 time-budget
+  result through `gpt54_time_budget_result_readout.py` and
+  `gpt54-time-budget-result-readout.yml`. A separately digest-bound leader
+  request binds the readout controller, actual Actions context and the
+  independently verified completion envelope. The original result source
+  remains distinct from the controller source. One private-identity lookup
+  and one exact immutable Git-object GET share 60 seconds, without redirects,
+  retries, HEAD lookup, input acquisition, claim mutation, inference or grading.
+  Only the bounded read step receives `HF_TOKEN`; permission is `contents: read`.
+  The public artifact contains validated enums, flags, reported usage and
+  availability fields, and aggregate deliverable metadata. It contains no
+  private prose, filenames, raw errors, credentials or invented served-model
+  string. Unknown fields in the projected schema refuse rather than pass through.
+
+  The one offline Python 3.10.12 invocation at
+  `2fa134ba2deeefe4cdc9e0098cb0c5117a6f51a5`, tree
+  `4be69ae48d1502e669c962110016ca0218e1e686`, reported **21 passed in 7.95s**,
+  exit 0, with an 8.412420-second wrapper duration under the 300s+5s/no-`-x`
+  bound. It used real source, request, canonical-result, observation and
+  fingerprint validators with synthetic HTTP transport. Artifacts are at
+  `/tmp/time-budget-result-readout.YTwR9r/`; the pytest log SHA256 is
+  `821675614ef942e47244da0c15f6683d4732e28546541f2f64c451f90536ee3d`.
+  Only CHANGELOG, LATEST and direct README usage change after this proof.
+
+  Separately, the leader verified actual Task3 run `37524773961`, job
+  `112478881979`, attempt 1, at accepted source
+  `f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, tree
+  `72a9d2fa2c22b1409a8b19e01d6a24ac5f29f9cf`. Execution returned 1 with a
+  canonical `error` / `failed` result, acknowledged retention, confirmed
+  cleanup/host reuse and reported usage of 2913 input and 326 output tokens.
+  This is not an uncertainty-only output, a bill, a grade or a model-call
+  count. Task1, Task2 and Task3 remain consumed, without replay permission.
+  The leader performed the read-only pre-edit readout/CI review; the mandatory
+  reviewer invocation failed before execution and was not retried. New-source
+  review, ordinary CI, accepted-main controller selection and a separately
+  directed real read remain pending. See the [exact evidence and immutable
+  Task3 identities](tasks/LATEST_TASK_RESULT/README.md).
+
 ### Changed
 
 - Accept allocator startup source
