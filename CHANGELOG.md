@@ -11,6 +11,47 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add one manual native Actions route through
+  `gpt54_time_budget_codex_ci.py` to the accepted `run_codex_observation`
+  callable. It permits only `gpt54_time_budget_v1_codex_r1` / `codex` /
+  repeat 1 / task `02aa1805-c658-4069-8a6a-02dec146063a`. The independent
+  request binds reviewed source/workflow, ordinary bootstrap and linked R/F,
+  genuine original-input and full Step0 provenance, canonical native/login
+  paths, host, finite admission window and expected private parent. Reuse
+  existing preparation, consumer, permanent CAS claim and retention helpers;
+  refuse occupied state without adoption. HF credentials are confined to
+  bounded intake/claim and retention steps, never inference. Public output
+  is only the strict completion envelope. Existing V2, readout, core, callable,
+  registration and frozen F bytes remain unchanged.
+
+  The leader's pre-edit CI/storage decision authorized this implementation,
+  not live execution. The required reviewer invocation failed before execution
+  on its unavailable legacy Opus preference; it was not a spawned review and
+  was not retried. The base is accepted main
+  `1e4519d71a6cead3a2dd8de7e60d884a21ba954d`, tree
+  `9464969952af79c359e5c4236692f0dc4ca844e3`. Tested implementation
+  `546498510996573f5855d449593df0b4a60ec414`, tree
+  `ca7b7e75ad29d9fd1b91994b12886c55a1b07742`, passed its one new offline
+  selector: **8 passed in 94.87s**, exit 0; wrapper **95.498829s**. Python
+  3.10.12, 300s+5s, no `-x`, and 30s temporary Git bounds were preserved.
+  Real source/input/Step0/direction validators, consumer and native callable
+  ran at synthetic storage/native SDK and stateful kernel seams. This is
+  not a real-host admission or live-input proof. Artifacts are in
+  `/tmp/time-budget-first-codex-ci.yqfbZJ7y/`; log SHA256 is
+  `ceed24bfdfa739ca9b9fb801fbb8ea15486a325697bbc6799d59a7b1c88d42fc`.
+
+  Only this changelog, LATEST and direct native README usage change after
+  the proof. GPT-5.4/direct-v1/xhigh, null context override, zero provider
+  request/stream retries, one external attempt, shared concurrency 1,
+  1200+20 and the 45-minute job ceiling remain fixed. Final review/CI,
+  accepted controller source, actual input/Step0/auth/host/path bindings
+  and a new independent leader request remain gates. No ABBA advancement,
+  native live run, V2 replay, grading or money cap is authorized. Prior
+  proofs and consumed V2 outcomes remain separate in the
+  [evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
 ### Fixed
 
 - Update the native retry fixture to snapshot descendants before runtime
