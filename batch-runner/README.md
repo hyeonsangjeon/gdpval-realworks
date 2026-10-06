@@ -565,9 +565,26 @@ at `2bd14c256992d7a47e4f297f81fa28a729b05755`, tree
 300s+5s bound and no `-x`. Neither synthetic proof changes the live outcome
 or authorizes a new cell. The diagnostic source
 `7aebe28c402cfb71463231f2fb1a75825a26391f` passed all ten applicable checks;
-its private receipt and static event are preserved in this integration.
-Task2 still requires accepted combined source and a new leader-issued immutable
-request. Combined-HEAD review, CI and a focused cross-feature proof remain gates.
+its private receipt and static event are preserved in the leader-reviewed
+integration `741c0fabcf7ad612b470df0c966d32a7e17f8b23`, tree
+`fdbfaf46a168868ac529bf7da30797b7d8e90ec0`. The leader's AST and 1783-blob
+checks are structural evidence. The new, separate single-node interaction proof
+reported **1 passed in 19.36s**, exit 0, at
+`3d66290d364f41efabfeb598bf9e322fa1b8596b`, tree
+`88f2c0db1e6d8b5f9aed1b5a402ac76d40fe2733`. It reached Task2's reserved
+secret-bearing construction failure, the exact four-field safe stderr event,
+both uncertainty-receipt reads and private CAS/readback. Completion retained
+the independently expected Task2 cell with null result, usage and cleanup;
+duplicate execution refused without another attempt or event, and seeded
+synthetic Task1 bytes were preserved. Real validators and the existing ordinary
+transport/kernel fixtures ran under offline Python 3.10.12, 300s+5s/no-`-x`
+and the unchanged 30-second Git setup bound. Production and workflow bytes
+were unchanged. No earlier proof was rerun or combined into an aggregate pass.
+The [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) contains
+the exact node, artifact hashes and three-record post-proof delta. This single
+synthetic interaction does not establish live host, model or publication facts.
+Final-source review and final-HEAD CI remain gates. Task2 still requires
+accepted combined source and a new leader-issued immutable live request.
 
 The following documents the command shape, **not permission to dispatch or
 repeat the consumed cell**:

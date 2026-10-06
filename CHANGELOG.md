@@ -13,19 +13,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Integrate reviewed diagnostic source
-  `7aebe28c402cfb71463231f2fb1a75825a26391f` (review `5428735621`,
-  ten successful applicable checks) with reviewed selected-task source
-  `0ff2bd7378c392f3d3380a2983107a696f0bc75b` (review `5429517883`).
-  Preserve both helper groups and combine selected-task retention with the
-  validated uncertainty-receipt reread. Two diagnostic test calls now supply
-  the independently requested completion cell. AST comparison confirms that
-  `retain` is the only jointly changed controller function; all other
-  controller definitions match their reviewed source. This is structural
-  evidence, not a combined behavioral pass. One new Task2 diagnostic
-  interaction proof, final review and combined CI remain required.
-  The separate 5-pass/96.48s selection, 5-pass/95.25s private-receipt and
-  8-pass/162.87s stderr proofs remain separate. No live run or replay is granted.
+- Verify the integrated Task2 failure-event and uncertainty-retention path
+  with one new synthetic test. The reviewed integration basis is
+  `741c0fabcf7ad612b470df0c966d32a7e17f8b23`, tree
+  `fdbfaf46a168868ac529bf7da30797b7d8e90ec0`, combining selected-task source
+  `0ff2bd7378c392f3d3380a2983107a696f0bc75b` (review `5429517883`) with
+  diagnostic main `86bf684706bdbfc641f10c2774b7e4884d8fc7cd`. The leader's
+  AST and 1783-blob integration checks remain structural evidence, not a
+  combined behavioral pass.
+
+  The single new node reported **1 passed in 19.36s**, exit 0, at
+  `3d66290d364f41efabfeb598bf9e322fa1b8596b`, tree
+  `88f2c0db1e6d8b5f9aed1b5a402ac76d40fe2733`. Offline Python 3.10.12 used
+  the unchanged 300s+5s/no-`-x` limits and 30-second temporary Git setup bound.
+  The test exercises the real source/input/direction validators, Task2's
+  reserved secret-bearing construction failure, the exact four-field safe
+  stderr event, both uncertainty-receipt reads and private CAS/readback.
+  Completion has the independently expected Task2 cell and null result,
+  usage and cleanup fields. One permanent Task2 claim survives duplicate
+  execution refusal; seeded synthetic Task1 bytes are unchanged. No row or
+  historical diagnosis is fabricated.
+
+  [Exact proof and artifact hashes](tasks/LATEST_TASK_RESULT/README.md) are
+  recorded separately from the 5-pass/96.48s selection, 5-pass/95.25s
+  private-receipt and 8-pass/162.87s stderr proofs. The original invocation
+  remains 6 passed, 4 failed and 1 setup error in 215.64s. Its correction was
+  unrerun at that handoff; neither is relabeled by this proof. No aggregate
+  pass or old-selector rerun is claimed. Production and workflow bytes are
+  unchanged. The post-proof delta
+  is only this entry, LATEST and the direct README evidence paragraph.
+  Final-source review, final-HEAD CI and a new leader-issued live request
+  remain gates. Historical Task1 is still consumed/uncertain; its first throw,
+  model-call count and cost remain unknown. No live run or replay is granted.
 
 - Let the existing directed V2 route select one task from the verified five-task
   registration for `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1. The
