@@ -269,7 +269,7 @@ def test_time_budget_first_v2_ci_roundtrip(case, monkeypatch, outcome):
         assert effects.controls[0].identity == ObservationIdentity(**claim["observation"])
         assert effects.events[:3] == ["direction", "admission", "backend_start"]
         assert effects.controls[0].first_start == 2600
-        assert returned["returned"]["status"] == ("error" if outcome == "failed" else "success")
+        assert returned["returned"]["status"] == ("error" if outcome in {"failed", "missing_usage"} else "success")
         assert effects.requests and all(item["model"] == "gpt-5.4" for item in effects.requests)
         assert ci._read(case.root / "result" / entry.RESULT)["observation_execution"]["inputs"]["step0_manifest"] is None
         previous = len(effects.requests)
@@ -284,7 +284,7 @@ def test_time_budget_first_v2_ci_roundtrip(case, monkeypatch, outcome):
     ci.validate_envelope(envelope)
     assert envelope == ci._read(case.root / "completion.json")
     assert case.api.commits == ["claim", "output"] and envelope["output_commit"] == case.api.head
-    assert envelope["status"] == ("uncertain" if outcome == "not_started" else "error" if outcome == "failed" else "success")
+    assert envelope["status"] == ("uncertain" if outcome == "not_started" else "error" if outcome in {"failed", "missing_usage"} else "success")
     tree = case.api.trees[case.api.head]
     assert tree[ci.CLAIM] == ci._encoded(claim)
     manifest = json.loads(tree[ci.MANIFEST])
@@ -302,6 +302,21 @@ def test_time_budget_first_v2_ci_roundtrip(case, monkeypatch, outcome):
         assert (envelope["usage"] is None) == (outcome == "missing_usage")
         for name, identity in manifest["files"].items():
             assert _identity(tree[ci.PREFIX + "/" + name]) == identity
+        if outcome == "missing_usage":
+            payload = json.loads(raw)
+            row = payload["results"][0]
+            assert row["status"] == "error" and payload["time_budget_observation"]["terminal_reason"] == "failed"
+            assert row["usage"] is None and row["observability"]["usage_availability"]["usage_complete"] is False
+            assert row["deliverable_file_records"] == [] and row["deliverable_files"] == []
+            assert set(manifest["files"]) == {"result/" + entry.RESULT}
+            assert not any(path.is_file() for path in (case.root / "result" / "upload").rglob("*"))
+            assert envelope["terminal_reason"] == "failed" and envelope["usage"] is None
+            assert "usage_complete" not in envelope and envelope["retention"] == "acknowledged"
+            assert envelope["result_identity"] == returned["returned"]["result_identity"] == _identity(raw)
+            assert (envelope["result_fingerprint"] == returned["returned"]["result_fingerprint"]
+                    == payload["result_fingerprint"] == entry.inference_result_fingerprint(payload))
+            assert (case.root / "claim-reserved.json").is_file()
+            assert (case.root / "execution-reserved.json").is_file()
     with ci.checked_request(**case.args, admission=False) as context, pytest.raises((ValueError, FileExistsError)):
         ci.retain(context)
     assert case.api.commits == ["claim", "output"]
