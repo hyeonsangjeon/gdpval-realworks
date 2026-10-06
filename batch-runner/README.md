@@ -518,18 +518,22 @@ private claim/retention and completion metadata. It has a 45-minute job ceiling
 for setup, the unchanged
 1200-second generation budget and shared 20-second cleanup, and private
 retention. That ceiling is not a money cap or a remote-cancellation guarantee.
-The new selector at `e99fbc774a6fa2e2c02624e8f78bcc40200928cb`, tree
-`4b1d7aadd4813be2f746e4ae8d4dfbdfb5c8aa71`, reported **6 passed, 4 failed,
-1 setup error in 215.64s**, exit 1. Four cases stopped at a test-only lookup of
-`task_ids` on the configuration wrapper rather than its `configuration` member;
-the source-mismatch case timed out during linked-worktree setup. Task2's
-runner/result/retention and cross-task direction/result assertions were not
-reached. The single-line correction `9b1d5b7fddf887a4233630452a261ff3bebfe880`
-was not rerun; production/workflow bytes did not change after that proof.
-The passing cases covered invalid task/run/condition/repeat/prefix refusal and
-preservation/refusal of synthetic pre-existing Task1 claim/output bytes. The
+The five-node continuation at leader-reviewed
+`70a02619276bc9da072567d5ee0e4060aed6dbbf`, tree
+`1d85a59c1baf5660d80a3abd5eedf14053dc54b2`, reported **5 passed in 96.48s**,
+exit 0. It reached Task2's synthetic input/runner/canonical-result/private-prefix
+readback and permanent-claim checks, plus the intended direction, result-task,
+result-source and request-source refusals. The single offline Python 3.10.12
+invocation retained the 300s+5s/no-`-x` limits and the 30-second Git setup bound;
+production, workflow, tests, assertions and validators were unchanged. The
+[prior selector invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/70a02619276bc9da072567d5ee0e4060aed6dbbf/tasks/LATEST_TASK_RESULT/README.md)
+at `e99fbc774a6fa2e2c02624e8f78bcc40200928cb` remains **6 passed, 4 failed,
+1 setup error in 215.64s**, exit 1. Its wrapper-lookup failures and source-case
+setup timeout remain distinct; correction
+`9b1d5b7fddf887a4233630452a261ff3bebfe880` was unrerun at that handoff. The six
+passing cases were not repeated, and no aggregate 11-pass result is claimed. The
 [prior isolated CLI proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/83d615c5516efbe1c4b20f273c493e1cc9dce208/tasks/LATEST_TASK_RESULT/README.md)
-remains **1 passed in 9.88s**, separate from this failed invocation. The
+remains **1 passed in 9.88s**, separate from both selector invocations. The
 [earlier layout proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md)
 remains **6 passed, 1 failed in 58.33s**, exit 1, not a successful invocation.
 The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md),
@@ -537,8 +541,8 @@ The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob
 and [original failed invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
 remain separate evidence, not an aggregate 25-pass result. See the
 [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact
-tested/reviewed identities, incomplete coverage, pending diagnostics integration,
-final-HEAD review, new CI and live gates.
+tested/reviewed identities, the records-only post-proof delta, pending diagnostics
+integration, final-HEAD review, ordinary CI and live gates.
 These synthetic tests are not real host, inference or publication evidence.
 
 Historical real run `37456739936` / attempt 1 / job `112246098370` retained

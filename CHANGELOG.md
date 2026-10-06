@@ -28,19 +28,27 @@ entries land under a fresh dated heading the day they merge to `main`.
   aliasing as the critical risk. This was a leader-executed read-only decision,
   not a successful spawned-model review; no reviewer harness was retried.
 
-  The one new offline Python 3.10.12 selector at
-  `e99fbc774a6fa2e2c02624e8f78bcc40200928cb`, tree
-  `4b1d7aadd4813be2f746e4ae8d4dfbdfb5c8aa71`, reported **6 passed, 4 failed,
-  1 setup error in 215.64s**, exit 1, within 300 seconds plus 5 seconds grace,
-  without `-x`. The four failures read `task_ids` from the test's configuration
-  wrapper instead of its `configuration` member; the source-mismatch case
-  timed out after 30 seconds during temporary linked-worktree setup. Task2's
-  runner/result/retention and cross-task direction/result checks were not
-  reached. The one-line test correction is
+  The five-node continuation at leader-reviewed
+  `70a02619276bc9da072567d5ee0e4060aed6dbbf`, tree
+  `1d85a59c1baf5660d80a3abd5eedf14053dc54b2`, reported **5 passed in 96.48s**,
+  exit 0. One offline Python 3.10.12 invocation used 300 seconds plus 5 seconds
+  grace, no `-x`, and the unchanged 30-second temporary Git setup bound. It
+  reached Task2's genuine synthetic input/runner/canonical-result/private-prefix
+  readback path, permanent-claim checks and the intended direction, result-task,
+  result-source and request-source refusals. No production, workflow, test,
+  assertion or validator changed for this proof-only continuation.
+
+  The [prior invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/70a02619276bc9da072567d5ee0e4060aed6dbbf/tasks/LATEST_TASK_RESULT/README.md)
+  at `e99fbc774a6fa2e2c02624e8f78bcc40200928cb`, tree
+  `4b1d7aadd4813be2f746e4ae8d4dfbdfb5c8aa71`, remains **6 passed, 4 failed,
+  1 setup error in 215.64s**, exit 1. Its configuration-wrapper lookup failures
+  and source-case setup timeout are not relabeled as passes. Test correction
   `9b1d5b7fddf887a4233630452a261ff3bebfe880`, tree
-  `098626359b138c45fc53029fa55ed8cb7a21fe65`, and was not rerun. No production
-  or workflow byte changed after the proof. The [current record](tasks/LATEST_TASK_RESULT/README.md)
-  retains exact artifacts, failed nodes, passed scope and remaining coverage.
+  `098626359b138c45fc53029fa55ed8cb7a21fe65`, was unrerun at that handoff.
+  The six passing nodes were not repeated; there is no aggregate 11-pass claim.
+  The [current record](tasks/LATEST_TASK_RESULT/README.md) retains exact source,
+  node and artifact identities. The post-proof delta is only this entry, LATEST
+  and the direct README evidence paragraph.
 
   Historical Task1 run `37456739936` / attempt 1 / job `112246098370` remains
   permanently consumed/uncertain, with acknowledged private retention, not a
@@ -50,9 +58,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   First throw, model-call count and cost remain unknown. The pending
   [diagnostics evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/7aebe28c402cfb71463231f2fb1a75825a26391f/tasks/LATEST_TASK_RESULT/README.md)
   keeps its 5-pass and 8-pass proofs separate; none was repeated or copied into
-  this branch. Failed-path coverage, source review, diagnostics integration,
-  final-HEAD CI and a new leader-issued request with genuine live values remain
-  gates. No live input, HF, provider, grader or CI operation ran for this change.
+  this branch. Final-source review, diagnostics integration, ordinary
+  final/integrated-HEAD CI and a new leader-issued request with genuine live
+  values remain gates. This synthetic proof supplies no live authorization.
+  No live input, HF, provider, grader or CI operation ran for this continuation.
 
 ### Added
 
