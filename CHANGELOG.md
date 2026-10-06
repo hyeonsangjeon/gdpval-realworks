@@ -49,6 +49,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a callable/CLI adapter for the first time-budget V2 observation only:
+  `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1, task
+  `02aa1805-c658-4069-8a6a-02dec146063a`. Its concrete direction checker requires
+  an independently supplied direction digest, host/preparation/observation
+  identities, reviewed R/F anchors and exact paths. It installs the existing V2
+  backend, `AzureFoundryVoice` and typed Azure inference client; construction
+  waits and client closure use the existing 1200/20 observation control. No
+  workflow, credential, core/ownership, frozen-judge or study-policy change is
+  made. Preparation alone still grants no authority, and old launch guards stay
+  closed. Prospective input validation opts into synchronous parquet reads;
+  legacy parsing is unchanged. Only that reader's and the compiler's prospective
+  pins advance, with explicit CURRENT refusal expectations; historical pins stay
+  intact.
+
+  The adapter publishes a no-clobber canonical Step2 result with verified
+  deliverable identities, actual terminal/control state, R/F/input/config
+  bindings and honest usage availability. Failed/missing outcomes remain error
+  rows, while pre-admission refusals produce no study row. No grading, upload,
+  native request/token hard cap, remote cancellation or billing guarantee is
+  introduced.
+
+  One offline Python 3.10.12 selector at
+  `a1380d827814699265e1406cc8e84b0f6187b87a`, tree
+  `28cd1c7dfb471848dd4ce7b91eed8894da4b7e17`, reported **32 passed, 1 failed in
+  81.67s**, exit 1, under 300 seconds plus 5 seconds termination grace without
+  `-x`. All five synthetic factory/result/F-grading-preparation roundtrips passed.
+  The failed legacy-positive case correctly refused the synthetic input-only
+  profile as a dispatch plan (`shared_controls, conditions`). Test-only
+  correction `9cf4429c377449e98b2c595703d873622c3390dc`, tree
+  `db32151d10e0c5d777749b604fbc697aacc1c955`, uses the untouched anchored F
+  profile instead; it was **not rerun**. The post-proof delta is that one test
+  fixture plus CHANGELOG and LATEST, not a new aggregate pass. Prior 53/41/8-case
+  proofs and real CI host outcomes remain separate in the linked evidence in
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md). Final-HEAD review/CI and real
+  source-bound direction/input/host/provider acceptance remain pending; no live
+  observation, private asset preparation or CI query/retry occurred.
+
 - Add `gpt54_time_budget_comparison.consume_observation_handoff` to revalidate
   one prepared run/task against an independent preparation digest/size and
   explicit runtime, frozen-grader and input-source anchors. It checks the
