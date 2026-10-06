@@ -1,46 +1,54 @@
 # Latest task result
 
-## Accepted native observation and allocator integration
+## Accepted readout and one directed Task3 result read
 
-Source `4306f7f7d310362ea6d2895017025274186a3530`, tree
-`13ddb272d0683557b119592fa37cca5995446562`, passed all eleven applicable
-combined-HEAD checks. Review `5434685097` inspected the exact 1786-blob union
-of the native observation implementation and accepted allocator startup
-source. Only completion records change after validation; runtime, workflow,
-tests and usage bytes remain those reviewed.
+Source `f1f79f27b8ffd3e67cf7af60810be5abde86333b`, tree
+`affa4bc859a48482656327b85ef3786268f125c0`, passed all eleven applicable
+checks. Review `5435184139` accepted the integrated immutable-result reader
+and transport correction. Only completion and direct usage records change
+after validation; helper, workflow, tests and all other runtime bytes remain
+those reviewed.
 
-This delivers the registered Codex callable, independent direction/provider
-binding, canonical result/deliverable capture and corrected retry-fixture
-cleanup order. Existing ownership, frozen F, twenty-observation registration,
-model settings and 1200+20 limits remain unchanged. No actual native
-observation has been executed by this delivery.
+The leader authorizes one separately digest-bound read of Task3's retained
+canonical result, not a new inference or grading attempt. The request must
+name the actual accepted controller C/tree and the real readout run number,
+attempt 1, and include the independently verified completion envelope.
+Original result source R remains
+`f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, tree
+`72a9d2fa2c22b1409a8b19e01d6a24ac5f29f9cf`; it is not replaced by C.
 
-The [integrated evidence record][prior] preserves the native parent's
-13393 passing tests, sixteen passing retry-fixture cases, separate nine-case
-callable proof and the earlier local wrapper exit 127. It also preserves
-actual Ubuntu-22.04 allocator admission/cleanup evidence. Those results are
-not aggregated or relabeled as a new local invocation; combined CI supplies
-the additional acceptance evidence.
+The selected observation is `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` /
+repeat 1 / `2ea2e5b5-257f-42e6-a7dc-93763f28b19d`, actual run `37524773961`,
+attempt 1. Its immutable output is
+`2460c45c3896371b011624f13fc7817d5f670969`, result size 6632 bytes,
+SHA256 `a2f21666eb53542ead8b780404fd241056d3cc129167f6e7b1be36c6b64160f7`,
+fingerprint `0374270431f6352211715da432d886f8557514324c89d60c230f81f65a2a5b61`.
+The original execution request SHA256 is
+`6748374c1b4ad0bbcbafb47117c6c641976d85ece836486eb8ce553c65719c1a`.
+The claim/request association is supplied by the verified completion, not
+independently rediscovered by the reader.
 
-Real V2 Task3 run `37524773961` remains consumed with a canonical error,
-terminal reason `failed`, confirmed cleanup and reported usage of 2913 input
-and 326 output tokens. Its 6632-byte result is retained at output commit
-`2460c45c3896371b011624f13fc7817d5f670969`, SHA256
-`a2f21666eb53542ead8b780404fd241056d3cc129167f6e7b1be36c6b64160f7`.
-That is not a bill, model-call count or quality score. Task1 and Task2 remain
-consumed and uncertain; no Task1-Task3 replay or Task4 is authorized.
+At most two GETs share 60 seconds: private identity at that immutable
+revision, then the exact canonical object. Both request identity encoding.
+Only the bounded step receives the existing HF secret; permissions are
+`contents: read`, with no OIDC or Azure login. Exact bytes, canonical
+schema/fingerprint, source and cell are checked before safe-field projection.
+Private prose, filenames, raw errors, headers, tokens and the full body
+must not be published. There is no retry, HEAD lookup, storage write,
+input acquisition, model operation, grader or consumed-state adoption.
 
-The separate result-readout candidate was inspected at
-`9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2` in review `5434935150`.
-Its compression-negotiation correction and focused proof are in progress;
-no private canonical body has been read. That path must retain exact immutable
-result/source/request bindings and publish only safe typed fields.
+The [reviewed evidence record][prior] preserves the separate **21 passed
+in 7.95s** and **3 passed in 2.55s** synthetic proofs. They were not rerun
+or aggregated for this authorization. The actual Task3 outcome is a
+canonical error with terminal `failed`, confirmed cleanup/host reuse and
+reported usage of 2913 input and 326 output tokens. That is not an invoice,
+model-call count or grade.
 
-Remaining work is the accepted readout and directed read needed to classify
-Task3, plus a trusted native execution controller and genuine input/Step0,
-auth, host, path and direction bindings before any native model call.
-Grading still requires its own result/input/publication association and
-frozen-source direction. No further live or grading authority follows from
-this pre-merge acceptance record.
+This record stops before the real read: the private error/model-binding
+classification is not yet known. Remaining work is the bounded read and
+interpretation of its verified safe projection. Task1 and Task2 remain
+consumed/uncertain; Task3 remains consumed/error. No Task1-Task3 replay,
+Task4, native execution or grading is authorized. The existing study,
+frozen F and 1200+20 execution limits remain unchanged.
 
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/4306f7f7d310362ea6d2895017025274186a3530/tasks/LATEST_TASK_RESULT/README.md
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/f1f79f27b8ffd3e67cf7af60810be5abde86333b/tasks/LATEST_TASK_RESULT/README.md
