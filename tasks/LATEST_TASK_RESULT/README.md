@@ -1,6 +1,6 @@
 # Latest task result
 
-## PR757: missing-usage failed-result retention proof
+## PR757: retention proof and accepted-main integration
 
 The corrected missing-usage test completed its full failed-result retention
 path. The one invocation reported **1 passed in 15.88s**, exit 0. The only
@@ -8,6 +8,22 @@ software change is the test's two status expectations and assertions for the
 exact missing-usage outcome. Production, workflow, response fixture, serializer
 and validator bytes are unchanged. This is one synthetic proof, not a live
 observation or publication.
+
+### Accepted-main integration
+
+The leader accepted source `32b5fadcb4346fc576b1e5e631b164c596f68bf4`, tree
+`c2aa0c86a85fae86426f839009ce63221eeba8e4`, in review `5425328389`,
+conditional on integration and CI. It is combined with accepted main
+`b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
+`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`. That main contains grading
+source `a511e7453233db4690478685d3227b3bb5e88a0e`, reviewed in `5424085140`
+with all 10 applicable checks successful.
+
+Only CHANGELOG and LATEST overlap between the changes. Every source, test,
+workflow and usage blob is retained exactly from its respective parent;
+only the two completion records are reconciled. Prior proofs are not
+relabeled as tests of this combined tree. No local selector or live operation
+was run for integration. The combined HEAD still requires review and CI.
 
 ### Scope and reviewed source
 
@@ -42,8 +58,8 @@ connection or successful-validator substitute was allowed.
 
 The existing base `e2b8c5e15296eefbb2c1ee21d6b8ba3725d75506`, tree
 `820bc59533a7fd6ba65e237501e6b3ce2c759ced`, is intentional for this proof.
-Newer-main integration and record-conflict resolution remain the leader's
-work. There was no merge, rebase, reset, stash or change to a prior worktree.
+The proof did not integrate newer main or change a prior worktree. The later
+leader integration is described above; no rebase, reset or stash was used.
 The leader-executed pre-edit charter review and failed reviewer-harness
 provenance remain in the original handoff; neither review nor harness was
 repeated. The catalog was checked once, retained source/CI guidance applied,
@@ -167,8 +183,7 @@ preserving counts, identities, failure semantics, links and pending gates.
 One bounded changed-passage fidelity check passed without warnings; it was
 an editorial check, not another software invocation.
 
-Remaining work is correction review, leader-owned newer-main integration,
-integrated-HEAD review and CI acceptance, and genuine
+Remaining work is integrated-HEAD review and CI acceptance, and genuine
 source/input/host/private-parent values with a separate leader-issued
 execution direction. The unchanged
 [usage section](../../batch-runner/README.md#first-v2-observation-on-github-actions)
