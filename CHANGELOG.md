@@ -14,26 +14,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 ### Fixed
 
 - Add the omitted CURRENT refusal for
-  `source_pin:batch-runner/gpt54_prepared_input_attestation.py` at its existing
-  source-inventory position in the Foundry preflight test. Every other refusal,
-  anchored historical positive and stale-template assertion remains unchanged.
+  `source_pin:batch-runner/gpt54_prepared_input_attestation.py` at index 4 in the
+  disposable-checkout launch-boundary test, after `gpt54_run_config_bundle.py`
+  and before `gpt54_run_input_bundle.py`. Every other expected refusal, the
+  genuine frozen-source compilation, historical profile/template hashes and
+  final `launch_allowed` / `full_220_allowed` false assertions are unchanged.
   No adapter, production, configuration, workflow, usage README, source pin,
   frozen profile, grader or launch gate changes.
 
-  The leader reviewed `b6ba71115c36075acde2c8f2cece1a3de28cc180`, tree
-  `db706ece066c2a5bacdca257242a10357ceb8a6f`, without an additional blocking
-  implementation finding in that scope. Supplied CI run `37398278085`, job
-  `112059370013`, attempt 1, reported **2 failed, 196 passed, 143 deselected in
-  711.89s**; both failures were this omitted CURRENT expectation. The log SHA256
-  is `441e55db421b98278b668c6447e85bb0c43665c907bd8693158b647c3773847b`.
-  One offline Python 3.10.12 invocation of only the two failed parameters at
-  `53d17831df0bc3fd569c00baeffb6ac34d5c5d7c`, tree
-  `aed06bccd29064dc4feca872f4945397529aab21`, reported **2 passed in 2.15s**,
+  The clean reviewed basis was `c766c3b80365d1ff4c7b1dc1e1a91bef569c7b9f`, tree
+  `b7ca9c4593db5b08aa08b778163940e8b7c1adaa`, review `5423001724`.
+  The leader supplied CI run `37400663932`, job `112067100288`, attempt 1:
+  **1 failed, 1462 passed in 1855.84s**, with this sole omission recorded in
+  review `5423178464`. The log SHA256 is
+  `4d8a7ad0f73bbc05cd2dcd9a8274c17b2bb175fbfe1aee57e623e33a19aa833c`.
+  The downstream host receipt refused only for `comparison_step_not_successful`;
+  this is not new kernel evidence or a positive-host claim.
+
+  One offline Python 3.10.12 invocation of only the failed node at
+  `8e37ed79df606f7eee3eccfed557a42de5ddb573`, tree
+  `5974a01e2868caaab34ccab77855c5e79395179f`, reported **1 passed in 2.82s**,
   exit 0, under 300 seconds plus 5 seconds termination grace without `-x`.
-  The earlier 32-pass/1-fail invocation and separate unrerun fixture correction
-  remain distinct in the [immutable first-cell record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b6ba71115c36075acde2c8f2cece1a3de28cc180/tasks/LATEST_TASK_RESULT/README.md).
-  This correction's post-proof delta is CHANGELOG and LATEST only. Final-HEAD
-  review/CI acceptance and source-bound live execution gates remain pending.
+  The original **32 passed, 1 failed in 81.67s**, separate `9cf4429c` fixture
+  correction not rerun locally, prior **2 passed in 2.15s** at `53d17831`, and
+  supplied CI failure remain distinct; the [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c766c3b80365d1ff4c7b1dc1e1a91bef569c7b9f/tasks/LATEST_TASK_RESULT/README.md)
+  retains their details. No aggregate 33-pass result is claimed.
+  This correction's total delta is one test-line insertion plus CHANGELOG and
+  LATEST; its post-proof delta is the two records only. PR756 is untouched.
+  Corrected-HEAD review, CI acceptance and source-bound live execution gates
+  remain pending.
 
 - Integrate the reviewed handoff consumer with the accepted F-derived grading
   preparation without changing either implementation. The consumer source is
