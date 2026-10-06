@@ -41,6 +41,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/backend-tests.yml"
 BUDGET_GLOB = "tests/test_codex_budget_pilot*.py"
 BUDGET_READOUT_GLOB = "tests/test_codex_budget_pilot*readout*.py"
+TIME_BUDGET_GLOB = "tests/test_time_budget_*.py"
+TIME_BUDGET_RUN = (
+    "cd batch-runner\n"
+    f'python -m pytest -m "not integration" --tb=short -q -rs {TIME_BUDGET_GLOB}\n'
+)
 BUDGET_ORIGINAL_RUN = (
     "cd batch-runner\n"
     f'python -m pytest -m "not integration" --tb=short -q -rs {BUDGET_GLOB}\n'
@@ -121,6 +126,34 @@ def _without_owned_host_ci_evidence(workflow):
         OWNED_HOST_JUNIT_OPTIONS, "", 1,
     )
     steps.pop()
+    return previous
+
+
+def _without_time_budget_contracts(workflow):
+    """Validate the exact new partition before undoing it for the old hash."""
+    previous = deepcopy(workflow)
+    jobs = previous["jobs"]
+    family = jobs["time-budget-contracts"]
+    assert set(family) == {"runs-on", "timeout-minutes", "steps"}
+    assert family["runs-on"] == "ubuntu-latest"
+    assert family["timeout-minutes"] == jobs["pytest"]["timeout-minutes"] == 45
+    assert family["steps"] == jobs["budget-readout-contracts"]["steps"][:6] + [{
+        "name": "Run time-budget contracts", "run": TIME_BUDGET_RUN,
+    }]
+    steps = [step for step in jobs["pytest"]["steps"] if step["name"] == "Run tests"]
+    assert len(steps) == 1
+    run = steps[0]["run"]
+    lines = run.splitlines()
+    assert len(lines) == 2 and lines[0] == "cd batch-runner"
+    tokens = shlex.split(lines[1])
+    assert tokens[:3] == ["python", "-m", "pytest"]
+    token = f"--ignore-glob={TIME_BUDGET_GLOB}"
+    literal = f" --ignore-glob='{TIME_BUDGET_GLOB}'"
+    assert tokens.count(token) == 1
+    assert run.count(literal) == 1 and run.endswith(literal + "\n")
+    steps[0]["run"] = run.removesuffix(literal + "\n") + "\n"
+    assert shlex.split(steps[0]["run"].splitlines()[1]) == tokens[:-1]
+    jobs.pop("time-budget-contracts")
     return previous
 
 
@@ -384,12 +417,13 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     }
     assert "secrets." not in text and "id-token" not in text
 
+    # First validate and undo only the new time-budget job and ignore token.
     # Captured before editing workflow bytes 19cd9099ad1e60865111d789207bd09fc8302095be7012eea75703c9490da09d.
     # Restore the old budget command and remove its readout job, then undo only
     # PR749's two explicit time-budget test-inventory additions and the exact
     # owned-host JUnit/receipt additions checked above. Every other pre-existing
     # job, trigger, permission and guard must match the captured baseline.
-    previous = _without_owned_host_ci_evidence(workflow)
+    previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(workflow))
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
     time_budget_test = "tests/test_gpt54_time_budget_comparison.py"
@@ -467,7 +501,7 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """Nine jobs cover every node once, including budget-pilot and shared files."""
+    """Ten jobs cover every node once, including time-budget and shared files."""
     from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
 
     text = WORKFLOW.read_text(encoding="utf-8")
@@ -478,7 +512,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert set(jobs) == {
         "pytest", "comparison-contracts", "pilot-contracts", "pilot-preflight-contracts",
         "pilot-external-receipt-contracts", "pilot-external-publication-contracts",
-        "wire-contracts", "native-host-contracts", "budget-readout-contracts"
+        "wire-contracts", "native-host-contracts", "budget-readout-contracts",
+        "time-budget-contracts",
     }
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["concurrency"] == {
@@ -497,6 +532,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     comparison = jobs["comparison-contracts"]["steps"]
     pilot = jobs["pilot-contracts"]["steps"]
     budget_readouts = jobs["budget-readout-contracts"]["steps"]
+    time_budget = jobs["time-budget-contracts"]["steps"]
     pilot_preflight = jobs["pilot-preflight-contracts"]["steps"]
     pilot_external = jobs["pilot-external-receipt-contracts"]["steps"]
     pilot_publication = jobs["pilot-external-publication-contracts"]["steps"]
@@ -523,6 +559,9 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert [step["name"] for step in budget_readouts] == setup_names + [
         "Run budget pilot readout contracts",
     ]
+    assert [step["name"] for step in time_budget] == setup_names + [
+        "Run time-budget contracts",
+    ]
     assert [step["name"] for step in pilot_preflight] == setup_names + ["Run pilot preflight contracts"]
     assert [step["name"] for step in pilot_external] == setup_names + ["Run pilot external receipt contracts"]
     assert [step["name"] for step in pilot_publication] == setup_names + ["Run pilot external publication contracts"]
@@ -530,7 +569,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert [step["name"] for step in native_host] == setup_names + ["Run native host contracts"]
     assert all(steps[:6] == core[:6] for steps in (
         comparison, pilot, pilot_preflight, pilot_external, pilot_publication,
-        wire, native_host, budget_readouts,
+        wire, native_host, budget_readouts, time_budget,
     ))
     assert core[1] == {
         "name": "Checkout",
@@ -578,7 +617,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     for step, command_count in (
         (core[6], 1), (comparison[6], 1), (pilot[6], 1),
         (pilot_preflight[6], 1), (pilot_external[6], 1), (pilot_publication[6], 1),
-        (wire[6], 1), (native_host[6], 1), (pilot[7], 1), (budget_readouts[6], 1)
+        (wire[6], 1), (native_host[6], 1), (pilot[7], 1), (budget_readouts[6], 1),
+        (time_budget[6], 1),
     ):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
@@ -602,16 +642,22 @@ def test_backend_jobs_partition_the_comparison_contracts():
     native_selected = argv[7][len(prefix):]
     budget_selected = argv[8][len(prefix):]
     budget_readout_selected = argv[9][len(prefix):]
+    time_budget_selected = argv[10][len(prefix):]
     budget_glob = BUDGET_GLOB
     # shlex removes quotes: verify the actual shell expands only the target,
     # while pytest receives the core ignore glob literally.
-    assert core[6]["run"].endswith(f" --ignore-glob='{budget_glob}'\n")
+    assert core[6]["run"].endswith(
+        f" --ignore-glob='{budget_glob}' --ignore-glob='{TIME_BUDGET_GLOB}'\n"
+    )
     assert pilot[7]["run"] == BUDGET_NONREADER_RUN
     assert budget_readouts[6]["run"] == BUDGET_READOUT_RUN
+    assert time_budget[6]["run"] == TIME_BUDGET_RUN
     assert _pytest_target_arguments(argv[0][len(prefix):]) == []
     assert _pytest_target_arguments(budget_selected) == ["${budget_contract_files[@]}"]
     assert _pytest_target_arguments(budget_readout_selected) == [BUDGET_READOUT_GLOB]
+    assert _pytest_target_arguments(time_budget_selected) == [TIME_BUDGET_GLOB]
     assert _pytest_target_arguments(["--ignore-glob", budget_glob]) == []
+    assert _pytest_target_arguments(["--ignore-glob", TIME_BUDGET_GLOB]) == []
     with pytest.raises(AssertionError, match="missing pytest option value"):
         _pytest_target_arguments(["--ignore-glob"])
     assert {REPO_ROOT / "batch-runner", REPO_ROOT / "scripts/__tests__"} <= _pytest_targets()
@@ -628,6 +674,10 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert budget_reader_files and budget_nonreader_files
     assert not budget_reader_files & budget_nonreader_files
     assert budget_reader_files | budget_nonreader_files == set(budget_files)
+    time_budget_files = sorted(path.relative_to(runner).as_posix()
+                               for path in runner.glob(TIME_BUDGET_GLOB))
+    assert time_budget_files and all((runner / path).is_file() for path in time_budget_files)
+    assert time_budget_selected == [TIME_BUDGET_GLOB]
     comparison_files = sorted(
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt54_*.py")
@@ -653,6 +703,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     actual = sorted(comparison_files + pilot_files)
     assert argv[0][len(prefix):] == [
         *[f"--ignore={path}" for path in actual], f"--ignore-glob={budget_glob}",
+        f"--ignore-glob={TIME_BUDGET_GLOB}",
     ]
     assert excluded == actual
     assert selected == comparison_files
@@ -692,7 +743,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         # Collection runs imports/hooks but not fixtures or test bodies. Keep
         # it scoped to preflight or the exact moved files, with the same marker.
         targets = _pytest_target_arguments(arguments)
-        assert targets == [pilot_preflight_file] or targets == budget_files
+        assert targets in ([pilot_preflight_file], budget_files, time_budget_files)
         result = subprocess.run(
             [sys.executable, *prefix[1:], "--collect-only", "-p", "no:cacheprovider",
              "-o", "addopts=", "--color=no", *arguments],
@@ -736,6 +787,10 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert budget_reader_nodes and budget_nonreader_nodes
     assert not budget_reader_nodes & budget_nonreader_nodes
     assert budget_reader_nodes | budget_nonreader_nodes == budget_nodes
+    time_budget_nodes = collect_partition_nodes(time_budget_files)
+    assert time_budget_nodes
+    assert {node.split("::", 1)[0] for node in time_budget_nodes} == set(time_budget_files)
+    assert time_budget_nodes.isdisjoint(budget_nodes | all_preflight_nodes)
 
     discovery = ConfigParser()
     discovery.read(runner / "pytest.ini")
@@ -749,10 +804,14 @@ def test_backend_jobs_partition_the_comparison_contracts():
     budget_tests = {path for path in all_tests if fnmatch(path, budget_glob)}
     assert budget_tests == set(budget_files)
     assert not budget_tests & set(excluded)
+    time_budget_tests = {path for path in all_tests if fnmatch(path, TIME_BUDGET_GLOB)}
+    assert time_budget_tests == set(time_budget_files), "nested time-budget file omitted by shell glob"
+    assert not time_budget_tests & (set(excluded) | budget_tests)
     previous_core_tests = all_tests - set(excluded)
-    core_tests = previous_core_tests - budget_tests
+    core_tests = previous_core_tests - budget_tests - time_budget_tests
     assert not core_tests & budget_tests
-    assert core_tests | budget_tests == previous_core_tests
+    assert not core_tests & time_budget_tests
+    assert core_tests | budget_tests | time_budget_tests == previous_core_tests
     comparison_tests = set(selected)
     assert not set(pilot_selected) & budget_tests
     pilot_tests = set(pilot_selected) | budget_nonreader_files
@@ -770,11 +829,14 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert not pilot_tests & shared_wire_tests
     assert not pilot_preflight_tests & shared_wire_tests
     assert reader_tests.isdisjoint(
-        core_tests | comparison_tests | pilot_tests | pilot_preflight_tests | shared_wire_tests
+        core_tests | comparison_tests | pilot_tests | pilot_preflight_tests | shared_wire_tests | time_budget_tests
+    )
+    assert time_budget_tests.isdisjoint(
+        core_tests | comparison_tests | pilot_tests | reader_tests | pilot_preflight_tests | shared_wire_tests
     )
     # Every other file is selected once without a keyword filter. The shared
     # wire and preflight files have exhaustive/disjoint node splits above.
-    assert core_tests | comparison_tests | pilot_tests | reader_tests | pilot_preflight_tests | shared_wire_tests == all_tests
+    assert core_tests | comparison_tests | pilot_tests | reader_tests | pilot_preflight_tests | shared_wire_tests | time_budget_tests == all_tests
 
 
 @pytest.mark.parametrize("root", COVERED_ROOTS)

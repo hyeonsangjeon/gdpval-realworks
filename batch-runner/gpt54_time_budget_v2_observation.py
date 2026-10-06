@@ -1,4 +1,4 @@
-"""Execute only the first registered V2 observation with an independent direction.
+"""Execute one registered task of the first V2 run with an independent direction.
 
 This is a callable consumer, not a workflow, preparation authority or grading
 entrypoint. The caller supplies trusted digests/anchors separately from every
@@ -45,6 +45,7 @@ from gpt54_v2_grading_input import _object, _read_bytes, _same, _snapshot_delive
 
 ENTRYPOINT = "batch-runner/gpt54_time_budget_v2_observation.py"
 RUN = "gpt54_time_budget_v1_v2_r1"
+# Historical first-cell identity; selection is carried by ObservationIdentity.
 TASK = "02aa1805-c658-4069-8a6a-02dec146063a"
 DIRECTION_VERSION = "gpt54-time-budget-first-v2-direction-v1"
 RESULT = "step2_inference_results.json"
@@ -257,6 +258,7 @@ class _V2Dependencies:
 
 def _capture(raw: dict, marker: dict, dependencies: _V2Dependencies, direction: _ExecutionDirection):
     observation = marker["observation"]
+    task_id = observation["task_id"]
     control = raw["time_budget_observation"]
     _same("returned control identity", control["identity"], observation)
     _same("returned admission", control["admitted"], True)
@@ -274,7 +276,7 @@ def _capture(raw: dict, marker: dict, dependencies: _V2Dependencies, direction: 
         verify_agentic_v2_result({**base, "success": True})
         for item in base["files"]:
             name = canonical_relative_path(item["filename"])
-            role = canonical_deliverable_path(TASK, f"deliverable_files/{TASK}/{name}")
+            role = canonical_deliverable_path(task_id, f"deliverable_files/{task_id}/{name}")
             _require(role not in files and 0 < len(item["content"]) <= 64 * 1024 * 1024,
                      "deliverable_size_or_duplicate")
             files[role] = item["content"]
@@ -295,7 +297,7 @@ def _capture(raw: dict, marker: dict, dependencies: _V2Dependencies, direction: 
     error = raw.get("error")
     safe_error = error if type(error) is str and error in {*ERROR_TYPES, TIMEOUT, CLEANUP_UNCONFIRMED} else None
     row = {
-        "task_id": TASK, "status": "success" if success else "error",
+        "task_id": task_id, "status": "success" if success else "error",
         "error": None if success else safe_error or "time_budget_observation_non_success",
         "content": text, "deliverable_text": text, "deliverable_files": sorted(files),
         "deliverable_file_records": [{"path": name, **_identity(files[name])} for name in sorted(files)],
@@ -312,7 +314,7 @@ def _capture(raw: dict, marker: dict, dependencies: _V2Dependencies, direction: 
     }
     validate_step2_progress_results([row], schema_version=STEP2_PROGRESS_SCHEMA)
     payload = canonicalize_inference_payload({
-        "experiment_id": RUN, "condition": "sandbox_v2", "execution_mode": "agentic_sandbox_v2",
+        "experiment_id": observation["run_id"], "condition": observation["condition"], "execution_mode": "agentic_sandbox_v2",
         "model": "gpt-5.4", "source": "openai/gdpval", "results": [row],
         "time_budget_observation": control,
         "observation_execution": {
@@ -339,7 +341,7 @@ def run_first_v2_observation(
     input_registration_root: Path, expected_input_source_sha: str, input_registration_path: str,
     dataset_parquet: Path, reference_root: Path, observation_directory: Path, destination: Path,
 ) -> dict:
-    """One nonrenewable first-cell call, no outer retry or grading.
+    """One nonrenewable registered first-run task, no outer retry or grading.
 
     Expected identities are caller authority, not values inferred from markers,
     direction bytes or HEAD. A new result destination and adjacent backend work
@@ -347,9 +349,9 @@ def run_first_v2_observation(
     workspace is never repaired/adopted. Construction/interruption without a
     returned terminal control remains uncertainty, not a fabricated study row.
     """
-    _require(type(observation) is ObservationIdentity and observation.run_id == RUN
-             and observation.condition == "sandbox_v2" and observation.repeat == 1
-             and observation.task_id == TASK, "first_registered_v2_cell_only")
+    _require(type(observation) is ObservationIdentity and observation.study_id == registration.STUDY_ID
+             and observation.run_id == RUN and observation.condition == "sandbox_v2"
+             and observation.repeat == 1, "first_registered_v2_cell_only")
     observation = ObservationIdentity(**asdict(observation))
     _same("independent runtime source", observation.reviewed_source_sha, expected_reviewed_source_sha)
     _same("independent frozen source", expected_grader_source_sha, registration.ACCEPTED_BASE_SHA)
@@ -414,6 +416,8 @@ def run_first_v2_observation(
             input_registration_path=input_registration_path, dataset_parquet=paths["dataset_parquet"],
             reference_root=paths["reference_root"], step0_manifest=None,
         )
+        # This genuine source/input reconstruction selects exactly one task
+        # from the compiled run spec before any consumption or provider effect.
         marker, handoff_files, reread_inputs = registration._observation_handoff_data(
             plan, sources=sources, destination=paths["preparation"], **common)
         _same("independent observation", marker["observation"], asdict(observation))
