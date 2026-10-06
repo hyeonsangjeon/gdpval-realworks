@@ -49,6 +49,7 @@ RUNTIME_BASENAME = "time-budget-v2-runtime"
 FROZEN_BASENAME = "time-budget-v2-frozen"
 REQUEST_VERSION = "gpt54-time-budget-first-v2-ci-request-v1"
 ENVELOPE_VERSION = "gpt54-time-budget-first-v2-ci-completion-v1"
+FAILURE_EVENT_VERSION = "gpt54-time-budget-first-v2-ci-failure-v1"
 # Existing verified private target, not its closed pilot's admission authority.
 TARGET = "HyeonSang/gdpval-codex-budget-pilot-ci-20260923"
 TARGET_SHA256 = "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44"
@@ -157,6 +158,13 @@ def _check_execution_failure(receipt: dict) -> None:
                  and all(type(failure[key]) is str for key in failure)
                  and failure["stage"] in FAILURE_STAGES and failure["category"] in FAILURE_CATEGORIES
                  and failure["reason"] in FAILURE_REASONS, "execution_failure_schema")
+
+
+def _emit_execution_failure(receipt: dict) -> None:
+    """Emit only the validated current failure, never a receipt read from disk."""
+    _check_execution_failure(receipt)
+    if "failure" in receipt:
+        sys.stderr.write(_canonical_json({"format": FAILURE_EVENT_VERSION, **receipt["failure"]}) + "\n")
 
 
 @contextmanager
@@ -485,9 +493,12 @@ def execute(context: dict) -> dict:
         # Never annotate/adopt a previous partial attempt or overwrite its receipt.
         if reserved and stage != "execution_receipt":
             try:
-                _write(paths["root"] / "execution-receipt.json", _execution_failure(stage, error))
+                failure = _execution_failure(stage, error)
+                _write(paths["root"] / "execution-receipt.json", failure)
+                # One non-authoritative event after this invocation's receipt write.
+                _emit_execution_failure(failure)
             except (Exception, KeyboardInterrupt):
-                pass  # Receipt I/O uncertainty is not a retry or cleanup extension.
+                pass  # Receipt/event I/O uncertainty is not a retry or cleanup extension.
         if stage not in {"observation_callable", "execution_receipt"}:
             raise
         raise FirstV2CIRefused("execution_refused_or_uncertain") from None
