@@ -47,6 +47,9 @@ jobs:
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
       NUMEXPR_NUM_THREADS: "1"
+      # Arrow's vendored jemalloc reads its prefixed setting before imports.
+      # Keep allocator workers outside the single-kernel-task ownership gate.
+      JE_ARROW_MALLOC_CONF: "background_thread:false"
       TIME_BUDGET_WORKFLOW_SHA: ${{ github.workflow_sha }}
       REVIEWED_SOURCE_SHA: ${{ inputs.reviewed_source_sha }}
       REVIEWED_SOURCE_TREE: ${{ inputs.reviewed_source_tree }}

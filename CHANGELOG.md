@@ -13,6 +13,65 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept allocator startup source
+  `108cab226346f7c95e994ed384b4f9ee54f51d46`, tree
+  `2462fb3ec7cb66b32e01dca9b8f8944f74802aa9`, review `5433737665`,
+  after all eleven applicable checks succeeded. Actual Ubuntu-22.04
+  job `112459794337`, run `37519177987`, reported 241 passed in 776.84s,
+  including real fresh-process ownership admission and cleanup.
+  Update only completion and directly related usage evidence after validation;
+  reviewed runtime, workflow and test bytes remain unchanged.
+  Authorize exactly one independently digest-bound V2 r1 Task3 request for
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d`, retaining all source/input/host/private
+  CAS guards and 1200+20 limits. Task1 and Task2 remain consumed/uncertain.
+  This pre-dispatch record claims no Task3 result, cost or grading outcome.
+
+- Configure prospective V2 startup with job-level
+  `JE_ARROW_MALLOC_CONF=background_thread:false` before Python imports and
+  change only `time-budget-contracts.runs-on` to `ubuntu-22.04`, matching the
+  production observation host. The fresh-child regression reads the actual
+  workflow's static startup settings and checks host/45-minute alignment.
+  Ownership, pidfd/subreaper/ECHILD, source/input/direction/CAS and cleanup
+  checks are unchanged. Only the current backend hash/runner expectations
+  in the two coupled contract files change; historical canonical
+  `fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47`,
+  HISTORICAL/FOUNDRY/F/profile hashes, other jobs and experimental controls
+  remain fixed. This is prospective infrastructure, not a new study axis or
+  a claim of identical timing.
+
+  The leader-read `ubuntu-latest` run `37511729194`, job `112434320613`, at
+  `c41291dda23581318d904815a1af2af792d726c9`, tree
+  `2d1a54d33b2a569317a70f35f25bd840ee7d55a1`, completed **1 failed, 239 passed
+  in 621.38s**. It observed `python` plus `jemalloc_bg_thd` at the first real
+  `_single_threaded` refusal, with supported kernel interfaces and no
+  children/owner. Its 127428-byte log SHA256 is
+  `f7c6b88aabcb624c891f977c1359937714620971ad30e38913a6b9240dcf3825`.
+  This identifies the allocator worker in that reproduction, not the
+  historical Task2 model-call count, cost or exact prerequisite failure.
+  A bounded static check of installed PyArrow 25.0.1 confirmed the prefixed
+  environment string and allocator symbols in `libarrow.so.2500`, SHA256
+  `169a4b46f606daa5a9c142c64f7b35c516bd60c63b6a9699d25099e96dc8ecec`,
+  matching its wheel RECORD. No data-library import or kernel body ran.
+
+  One local validation at `12a0309592d4d5780ffa123eda889fddc2c70d4d`, tree
+  `bc847003bf690a09e33b81dedad5306804078cce`, ended **exit 1 in 22.966132s**
+  under Python 3.10.12/300s+5s/no-`-x`. Syntax and exact scope checks passed;
+  the kernel node was collected without fixtures or execution. JUnit records
+  **3 passed, 1 failed, 0 skipped, 0 errors in 19.963s** for the four affected
+  contracts. The proof-only guard blocked the existing budget-readout
+  contract's validated Bash argv-only check at `subprocess.Popen`; its final
+  zero-denied-effects assertion also failed. No retry or assertion change
+  followed. Artifacts are under `/tmp/pr762-arrow-startup.rY7mXj/`, with
+  validation-log SHA256
+  `8e9377840d666f1f9a9210a1ffc27e07e4a31b0c27ab160a7b5179beb5dbd849`.
+  The post-proof delta is only CHANGELOG, LATEST and direct README usage.
+  The leader performed the source-grounded CI/cost decision; the allocator
+  reviewer invocation failed before execution, not a successful spawned
+  review, and was not retried. Final review, new-HEAD ordinary Ubuntu 22.04
+  CI admission/cleanup and all live gates remain pending. Earlier failed
+  checks and consumed Task1/Task2 uncertainty remain separate and immutable.
+  See [the exact evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
 - Accept reviewed V2/CI source `e817d592ca0e38be29d26da4122d5b6d7ed7395f`,
   tree `5b02bae6484cc1a19fa8c735a8bf754b6091bc48`, review `5431664726`,
   after all eleven applicable checks succeeded. Update only completion
@@ -170,6 +229,58 @@ entries land under a fresh dated heading the day they merge to `main`.
   No live input, HF, provider, grader or CI operation ran for this continuation.
 
 ### Added
+
+- Add one test-only V2 startup regression in
+  `batch-runner/tests/test_time_budget_owned_startup.py`, from accepted source
+  `793c8778a75348fcb4070f2c8bec135b428ae731`, tree
+  `b765bf7a089b56b602aba363d615ec87f8a35a81`. The leader authorized this
+  supported-host CI assertion, not a production fix or another observation.
+  One fresh Python child uses the shipped BLAS/OpenMP settings, actual
+  controller imports, synchronous synthetic input reconstruction, real
+  source/registration/input/direction validators and real kernel admission
+  and cleanup. It reports bounded kernel facts, including task comm names,
+  and stops before provider construction. Unsupported admission fails;
+  there is no skip, kernel adapter or successful-verdict patch.
+
+  The test-only commit is `3c0325bebe439a75cc551ec5c13d547fa1e2490f`, tree
+  `5d682a1dba1aa7d83b72550b8b7e45a3fb40eb72`. Its one local Python 3.10.12
+  syntax/collection/scope check ended **exit 1 in 2.874s** under a 60s+5s
+  bound. Syntax and scope checks succeeded; pytest collected exactly one
+  node in **2.58s**, exit 0, with zero fixture or test-protocol entries.
+  The overall check failed at the final assertion because its audit guard
+  had blocked one process/socket event during collection. The event name
+  was not retained, so this is not evidence of a network connection or a
+  kernel failure. It was not retried. The check is not a passing proof;
+  the decisive body was not executed on NAS.
+
+  Separately, the retained NAS reproduction remains **19.890s, exit 2** at
+  the accepted source above. It observed one kernel task before controller
+  import and two by NumPy import completion, with two still present at
+  admission. This does not identify the task's creator or explain the
+  historical Actions failure. NAS also lacked working pidfd/waitid/proc-child
+  interfaces: ENOSYS 38, EINVAL 22 and ENOENT 2. Its artifacts were not
+  changed or rerun. The leader-verified Task2 run `37501571165`, attempt 1,
+  job `112399621053`, remains consumed and uncertain after the safe
+  `observation_callable` / `deadline_refused` /
+  `time_budget_owned_process_host_required` event. Its claim
+  `3def41563f98b70201dc42814bc45b4fd9f1d70c` and acknowledged output
+  `bf82b283576411b66dfc7e962de4c587d6de4b02` remain immutable.
+  Missing result, usage and cleanup fields do not establish model-call
+  counts, cost, zero score or replay permission.
+
+  [The immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c41291dda23581318d904815a1af2af792d726c9/tasks/LATEST_TASK_RESULT/README.md) retains the full source and
+  artifact identities for the live uncertainty, NAS reproduction and local
+  check. The new check artifacts are under
+  `/tmp/pr762-owned-startup-collection.8RG6XJey/`; `result.json` has SHA256
+  `ca45695c9077edde4a1b60122572f932582a752b2fb2073bb32a579c8a1cea73`.
+  The post-check delta was only this entry and LATEST. At that handoff,
+  production, workflows, dependencies, frozen F, experiment settings and
+  previous worktrees were unchanged, and no production fix was claimed.
+  The then-pending `ubuntu-latest` CI result and the prospective allocator
+  correction are recorded separately above. That CI host was not the
+  production `ubuntu-22.04` host.
+  Actual execution-host readiness and any later live direction remain gates.
+  Task1 and Task2 remain consumed, with no new live cell authorized.
 
 - Integrate reviewed first-V2 source
   `83d615c5516efbe1c4b20f273c493e1cc9dce208` (review `5426656908`) with
