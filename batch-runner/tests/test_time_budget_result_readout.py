@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import gzip
 import json
 import os
 from pathlib import Path
@@ -255,7 +256,7 @@ def _context(case):
 @pytest.fixture
 def transport(case, monkeypatch):
     state = SimpleNamespace(calls=[], head={"id": subject.metadata.TARGET, "private": True, "sha": OUTPUT_COMMIT},
-                            data=subject._bytes(case.payload), failure=None, hook=None, formatted=[])
+                            data=subject._bytes(case.payload), failure=None, hook=None, formatted=[], gzip_at=None)
 
     class SecretTimeout(httpx.ReadTimeout):
         def __str__(self):
@@ -277,12 +278,43 @@ def transport(case, monkeypatch):
                 raise SecretTimeout(PRIVATE + TOKEN, request=request)
             status = 403 if state.failure == "denied" else 200
             data = PRIVATE.encode() if status != 200 else subject._bytes(state.head) if number == 1 else state.data
-            return httpx.Response(status, headers={"content-type": "application/json"},
+            headers = {"content-type": "application/json"}
+            if number == state.gzip_at:
+                headers["content-encoding"] = "gzip"
+                data = gzip.compress(data, mtime=0)
+            return httpx.Response(status, headers=headers,
                                   stream=httpx.ByteStream(data), request=request)
 
     monkeypatch.setattr(httpx, "HTTPTransport", Transport)
     yield state
     assert state.formatted == []
+
+
+@pytest.mark.parametrize("gzip_at", [None, 1, 2], ids=["uncompressed", "gzip_metadata", "gzip_result"])
+def test_time_budget_result_readout_identity_encoding(case, transport, capsys, gzip_at):
+    transport.gzip_at = gzip_at
+    assert _invoke(case) == (0 if gzip_at is None else 2)
+    assert len(transport.calls) == (1 if gzip_at == 1 else 2)
+    assert all(request.method == "GET" and request.headers["accept-encoding"] == "identity"
+               for request in transport.calls)
+    assert subject.SECONDS == 60
+    assert all(0 < request.extensions["timeout"]["read"] <= 30 for request in transport.calls)
+    value = json.loads(case.source.destination.read_bytes())
+    subject.validate_envelope(value, _context(case))
+    assert value["verified_private"] is (None if gzip_at == 1 else True)
+    assert value["outcome"] == ("read" if gzip_at is None else "refused")
+    assert value["retry_allowed"] is False and value["grading_performed"] is False
+    if gzip_at is None:
+        assert value["summary"]["status"] == "error"
+        assert value["summary"]["usage"] == case.request["completion"]["usage"]
+        assert value["result_identity"] == case.request["completion"]["result_identity"]
+    else:
+        assert value["summary"] is None
+    output = capsys.readouterr()
+    assert output.err == "" and json.loads(output.out) == value
+    public = case.source.destination.read_text() + output.out + output.err
+    assert all(secret not in public for secret in (
+        TOKEN, PRIVATE, "PRIVATE_FILENAME", "deliverable_text", subject.metadata.TARGET))
 
 
 @pytest.mark.parametrize("available", [True, False], ids=["reported", "unavailable"])

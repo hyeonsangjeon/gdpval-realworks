@@ -358,6 +358,7 @@ def _read_result(context: dict) -> dict:
                     65536, completion["result_identity"]["size"])) as api:
                 session, attempts = _http.get_session(), 0
                 session.follow_redirects = False
+                session.headers["Accept-Encoding"] = "identity"
 
                 def request_guard(request):
                     nonlocal attempts
