@@ -23,6 +23,10 @@ from .test_gpt54_time_budget_comparison import (
 )
 
 _REAL_RUN, _REAL_POPEN = subprocess.run, subprocess.Popen
+_EXPECTED_MATERIALIZED_FILENAME_TEMPLATE = (
+    "{exp_id}__{judge_slug}__{config_name}__{config_hash}__{rubric_sha}__"
+    "{inference_sha}__{grader_source_hash_short}__{prompt_v}.json"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -207,8 +211,10 @@ def test_time_budget_f_grading_preparation_valid(handoff_sources, tmp_path, cond
     assert config["grader"] == template["grader"]
     assert config["rubric"] == {**template["rubric"], "revision": seed.plan["shared"]["grading"]["rubric_revision"],
                                 "cache_dir": "../data/gdpval-local"}
-    assert {key: value for key, value in config.items() if key != "rubric"} == {
-        key: value for key, value in template.items() if key != "rubric"}
+    assert config == {**template,
+        "rubric": {**template["rubric"], "revision": seed.plan["shared"]["grading"]["rubric_revision"],
+                   "cache_dir": "../data/gdpval-local"},
+        "output": {**template["output"], "filename_template": _EXPECTED_MATERIALIZED_FILENAME_TEMPLATE}}
     # Both are actual whole closures. Merely choosing similar judge parameters
     # does not make the materialized path/config the old template identity.
     frozen_hash = step8_grade.compute_grader_source_hash(
@@ -560,6 +566,116 @@ def _execution_cli(arguments, tmp_path):
                  "input_source_sha", "direction_sha256", "execution_context_sha256"):
         values[name] = values.pop("expected_" + name)
     return [part for key, value in values.items() for part in ("--" + key.replace("_", "-"), str(value))]
+
+
+def test_time_budget_f_grading_materialized_filename_contract(
+        handoff_sources, dual_roots, tmp_path, monkeypatch, offline, record_property):
+    from string import Formatter
+    import gpt54_time_budget_grading_execution as execution
+    from core.task_checkpoint import TaskProgressDraft, build_progress, checkpoint_path, write_checkpoint
+
+    seed = handoff_sources
+    arguments, marker, _ = _execution_case(seed, dual_roots, tmp_path, monkeypatch)
+    output = arguments["preparation_directory"]
+    batch = output / "source/batch-runner"
+    config_path = output / preparation.CONFIG
+    config = json.loads(config_path.read_bytes())
+    template = load_plan(seed.frozen / GRADER)
+    assert config == {**template,
+        "rubric": {**template["rubric"], "revision": seed.plan["shared"]["grading"]["rubric_revision"],
+                   "cache_dir": "../data/gdpval-local"},
+        "output": {**template["output"], "filename_template": _EXPECTED_MATERIALIZED_FILENAME_TEMPLATE}}
+    fields = ["exp_id", "judge_slug", "config_name", "config_hash", "rubric_sha",
+              "inference_sha", "grader_source_hash_short", "prompt_v"]
+    old_parts = list(Formatter().parse(template["output"]["filename_template"]))
+    new_parts = list(Formatter().parse(config["output"]["filename_template"]))
+    assert [(name, spec, conversion) for _, name, spec, conversion in old_parts if name is not None] == [
+        (name, "", None) for name in fields]
+    assert [(name, spec, conversion) for _, name, spec, conversion in new_parts] == [
+        (name, spec, conversion) for _, name, spec, conversion in old_parts]
+    assert [literal for literal, *_ in old_parts] == [
+        "", "__judge_", "__", "__cfg_", "__rubric_", "__inference_", "__src_", "__", ".json"]
+    assert [literal for literal, *_ in new_parts] == ["", *(["__"] * 7), ".json"]
+    assert len(template["output"]["filename_template"].encode()) - len(config["output"]["filename_template"].encode()) == 31
+    materialized = step8_grade.compute_grader_source_hash(config_path, config, batch_root=batch)
+    assert materialized == marker["grader"]["materialized_source_sha256"] != registration.FROZEN_TEMPLATE_SHA256
+    assert marker["config"] == {"path": preparation.CONFIG, **_identity(config_path.read_bytes())}
+
+    # Observe the actual temporary checkpoint rename; delegate every file write.
+    temporary_paths, measurements = [], []
+    real_replace = Path.replace
+
+    def observe_replace(path, target):
+        assert path.is_file()
+        temporary_paths.append(path)
+        return real_replace(path, target)
+
+    values = {"judge_slug": step8_grade._judge_slug(config["judge"]["model"]),
+        "config_name": step8_grade._config_name_slug(config["config_name"]),
+        "config_hash": step8_grade.hash_config(str(config_path)), "rubric_sha": config["rubric"]["revision"],
+        "inference_sha": "1" * 40, "grader_source_hash_short": materialized[:16],
+        "prompt_v": config["prompt"]["version"]}
+    contract_batch = tmp_path / "filename-contract" / "batch-runner"
+    for run in seed.plan["runs"]:
+        for task_id in seed.task_ids:
+            values["exp_id"] = run["run_id"]
+            grade = step8_grade.resolve_grade_output_path(config, experiment_id=run["run_id"],
+                judge_slug=values["judge_slug"], config_hash=values["config_hash"],
+                rubric_sha=values["rubric_sha"], rubric_short_sha=values["rubric_sha"][:7],
+                prompt_version=values["prompt_v"], inference_sha=values["inference_sha"],
+                grader_source_hash=materialized,
+                diagnostic_task_scope_sha=step8_grade._ordered_task_ids_sha256([task_id]))
+            grade = (contract_batch / grade).resolve()
+            assert grade.name == "__".join(values[name] for name in fields) + ".json"
+            checkpoint = checkpoint_path(grade, task_id)
+            assert checkpoint.name == grade.stem + "__" + task_id + ".json"
+            with monkeypatch.context() as observer:
+                observer.setattr(Path, "replace", observe_replace)
+                assert write_checkpoint(grade, build_progress(task_id=task_id, grader_source_hash=materialized,
+                    rubric_item_ids=["synthetic-item"], draft=TaskProgressDraft())) == checkpoint
+            temporary = temporary_paths[-1]
+            assert temporary == checkpoint.with_suffix(".json.tmp") and not temporary.exists()
+            assert checkpoint.is_file()
+            names = {"grade": grade, "checkpoint": checkpoint, "temporary_checkpoint": temporary,
+                "ledger_sqlite": grade.with_name(grade.stem + ".cost_ledger.sqlite3"),
+                "ledger_jsonl": grade.with_name(grade.stem + ".cost_ledger.jsonl")}
+            sizes = {role: len(path.name.encode("utf-8")) for role, path in names.items()}
+            assert all(size <= 255 for size in sizes.values()), (run["run_id"], task_id, sizes)
+            measurements.append({"run_id": run["run_id"], "task_id": task_id, "basename_utf8_bytes": sizes})
+    assert len(measurements) == len(temporary_paths) == 20
+    assert len({(row["run_id"], row["task_id"]) for row in measurements}) == 20
+
+    # A coherent synthetic obsolete config/marker is still not the new rule.
+    # Never rewrite or adopt a historical preparation in production.
+    stale = {**config, "output": template["output"]}
+    stale_data = preparation._json_bytes(stale)
+    config_path.write_bytes(stale_data)
+    stale_hash = step8_grade.compute_grader_source_hash(config_path, stale, batch_root=batch)
+    assert stale_hash != materialized
+    stale_config = {"path": preparation.CONFIG, **_identity(stale_data)}
+    marker["config"] = marker["grader"]["config_file"] = stale_config
+    marker["grader"]["materialized_source_sha256"] = stale_hash
+    marker["files"][preparation.CONFIG] = _identity(stale_data)
+    reservation = output.with_name(output.name + preparation.RESERVATION_SUFFIX)
+    reservation_value = json.loads(reservation.read_bytes())
+    reservation_value["intent"]["config"] = stale_config
+    reservation_data = preparation._json_bytes(reservation_value)
+    reservation.write_bytes(reservation_data)
+    marker["reservation"] = {"path": reservation.name, **_identity(reservation_data)}
+    ready_data = preparation._json_bytes(marker)
+    (output / preparation.READY).write_bytes(ready_data)
+    arguments["expected_preparation_identity"] = _identity(ready_data)
+    with pytest.raises(ValueError, match="^exact grading preparation mismatch$"):
+        with execution._checked_preparation(seed.plan, arguments):
+            pytest.fail("obsolete materialized filename was accepted")
+    assert not arguments["destination"].exists() and list(arguments["attempt_store"].iterdir()) == []
+    assert config_path.read_bytes() == stale_data and (output / preparation.READY).read_bytes() == ready_data
+    assert offline == []
+    record_property("materialized_filename_contract", json.dumps({
+        "filename_template": config["output"]["filename_template"], "measurements": measurements,
+        "config": _identity(preparation._json_bytes(config)), "materialized_source_sha256": materialized,
+        "obsolete_config": _identity(stale_data), "obsolete_materialized_source_sha256": stale_hash,
+        "frozen_template_sha256": registration.FROZEN_TEMPLATE_SHA256}, sort_keys=True))
 
 
 @pytest.mark.parametrize("mode,terminal", [

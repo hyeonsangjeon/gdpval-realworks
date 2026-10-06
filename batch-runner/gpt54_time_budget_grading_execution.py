@@ -34,7 +34,7 @@ from core.rubric_loader import RubricLoader
 from core.task_checkpoint import checkpoint_path, load_checkpoint
 from core.time_budget_observation_deadline import ObservationIdentity
 from ghcp_vm_input_bundle import _held_parents, _publication_parents, _write_no_clobber
-from gpt54_comparison_preflight import GRADER, load_plan
+from gpt54_comparison_preflight import GRADER
 from gpt54_prepared_input_attestation import _identity
 from gpt54_run_config_bundle import _path
 from gpt54_v2_grading_input import _object, _read_bytes, _same
@@ -225,10 +225,7 @@ def _checked_preparation(plan: dict, arguments: dict) -> Iterator[dict]:
             a["expected_grader_source_sha"]}, "dataset_or_runtime_is_not_inference_revision")
         files = {"source/" + role: _read_bytes(frozen / role, **identity)
                  for role, identity in frozen_files.items() if role.startswith("batch-runner/")}
-        config = load_plan(frozen / GRADER)
-        config["rubric"].update(revision=plan["shared"]["grading"]["rubric_revision"],
-                                cache_dir="../data/gdpval-local")
-        preparation._validate_config(config, frozen)
+        config = preparation._materialized_config(plan, frozen)
         files[preparation.CONFIG] = _encoded(config)
         files[preparation.RESULT] = result_data
         files.update({preparation.UPLOAD + "/" + role: data for role, data in deliverables.items()})
