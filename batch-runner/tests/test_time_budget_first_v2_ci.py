@@ -107,8 +107,13 @@ class PrivateStore:
 @pytest.fixture(autouse=True)
 def offline(monkeypatch, handoff_sources, dual_roots, observation_kernel):
     import huggingface_hub
+    from huggingface_hub import constants
     import step8_grade
 
+    # Match the workflow's HF_HUB_DISABLE_TELEMETRY=1 / DO_NOT_TRACK=1.
+    # The SDK caches this setting at import; its header builder otherwise
+    # fetches an agent registry before our ordinary original-file HTTP seam.
+    monkeypatch.setattr(constants, "HF_HUB_DISABLE_TELEMETRY", True)
     forbidden_calls = []
 
     def forbidden(*args, **kwargs):
