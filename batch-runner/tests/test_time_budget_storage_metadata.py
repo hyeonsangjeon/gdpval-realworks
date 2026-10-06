@@ -28,6 +28,7 @@ TOKEN = "hf_SYNTHETIC_METADATA_ONLY_NOT_A_CREDENTIAL"
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     attempted = []
+    ordinary_sleep = time.sleep
 
     def forbidden(*args, **kwargs):
         attempted.append("forbidden effect")
@@ -35,13 +36,23 @@ def offline(monkeypatch):
 
     for obj, names in (
         (socket, ("create_connection",)), (socket.socket, ("connect", "connect_ex")),
-        (time, ("sleep",)), (HfApi, ("create_repo", "create_commit", "upload_file", "delete_file")),
+        (HfApi, ("create_repo", "create_commit", "upload_file", "delete_file")),
     ):
         for name in names:
             monkeypatch.setattr(obj, name, forbidden)
     monkeypatch.setenv("HF_HUB_DISABLE_TELEMETRY", "1")
     monkeypatch.setenv("DO_NOT_TRACK", "1")
     monkeypatch.setattr(constants, "HF_HUB_DISABLE_TELEMETRY", True)
+    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", True)
+
+    def no_transport_backoff(seconds):
+        # subprocess.communicate(timeout=...) may sleep while reaping local
+        # Git. Only the HF session's online scope must not back off or retry.
+        if not constants.HF_HUB_OFFLINE:
+            forbidden()
+        ordinary_sleep(seconds)
+
+    monkeypatch.setattr(time, "sleep", no_transport_backoff)
     monkeypatch.setenv("HF_TOKEN", TOKEN)
     yield
     assert attempted == []  # A caught network exception is still a test failure.
@@ -49,27 +60,29 @@ def offline(monkeypatch):
 
 @pytest.fixture
 def source(tmp_path, monkeypatch):
-    root, runner_temp = tmp_path / "reviewed", tmp_path / "runner-temp"
-    root.mkdir()
+    workspace, runner_temp = tmp_path / "checkout", tmp_path / "runner-temp"
+    workspace.mkdir()
     runner_temp.mkdir()
+    root = runner_temp / subject.SOURCE_BASENAME
     roles = subject.SOURCE_ROLES | {
         path.relative_to(ROOT).as_posix() for path in (ROOT / "batch-runner/core").rglob("*.py")
     }
     for role in sorted(roles):
-        destination = root / role
+        destination = workspace / role
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / role, destination)
 
     def git(*args):
         return subprocess.check_output(
             ["git", "-c", "user.name=Synthetic metadata fixture", "-c", "user.email=fixture@example.invalid",
-             "-C", str(root), *args], stderr=subprocess.PIPE, text=True, timeout=10).strip()
+             "-C", str(workspace), *args], stderr=subprocess.PIPE, text=True, timeout=10).strip()
 
     git("init", "--quiet")
     git("add", ".")
     git("commit", "--quiet", "-m", "Explicit synthetic metadata source")
     sha, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
     git("switch", "--quiet", "--detach", sha)
+    git("worktree", "add", "--quiet", "--detach", str(root), sha)
     environment = {
         "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": subject.REPOSITORY, "GITHUB_REF": "refs/heads/main",
         "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_ACTOR": subject.OWNER,
@@ -77,7 +90,7 @@ def source(tmp_path, monkeypatch):
         "GITHUB_SHA": sha, "METADATA_WORKFLOW_SHA": sha, "GITHUB_RUN_ID": "123456789",
         "GITHUB_WORKFLOW_REF": subject.REPOSITORY + "/" + subject.WORKFLOW + "@refs/heads/main",
         "RUNNER_ENVIRONMENT": "github-hosted", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
-        "GITHUB_WORKSPACE": str(root), "RUNNER_TEMP": str(runner_temp),
+        "GITHUB_WORKSPACE": str(workspace), "RUNNER_TEMP": str(runner_temp),
     }
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
@@ -265,6 +278,9 @@ def test_time_budget_storage_metadata_workflow_contract():
     assert checkout["with"]["ref"] == "${{ inputs.reviewed_source_sha }}"
     source = next(step for step in steps if step.get("id") == "source")
     assert steps.index(source) < steps.index(secrets[0]) and "validate-source" in source["run"]
+    linked = next(step for step in steps if "git worktree add --detach" in step.get("run", ""))
+    assert steps.index(linked) < steps.index(source)
+    assert '--runtime-root "$RUNNER_TEMP/time-budget-metadata-source"' in source["run"]
     assert "timeout --signal=TERM --kill-after=5s 60s" in secrets[0]["run"]
     verify = next(step for step in steps if step.get("id") == "envelope")
     assert "always()" in verify["if"] and "verify-envelope" in verify["run"]

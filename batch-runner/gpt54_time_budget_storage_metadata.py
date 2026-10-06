@@ -24,6 +24,7 @@ from urllib.parse import parse_qs
 import codex_budget_pilot_output as storage
 from codex_ci_input_intake import _hf_environment
 from gpt54_codex_input_capture import _write_no_clobber
+from gpt54_disposable_checkout import _git, _repository
 from gpt54_run_config_bundle import _held_parents, _root
 from gpt54_time_budget_comparison import _reviewed_source
 from gpt54_v2_grading_input import _object, _read_bytes
@@ -35,6 +36,7 @@ OWNER = "hyeonsangjeon"
 JOB = "metadata"
 FORMAT = "gpt54-time-budget-storage-metadata-v1"
 BASENAME = "time-budget-storage-metadata.json"
+SOURCE_BASENAME = "time-budget-metadata-source"
 TARGET = "HyeonSang/gdpval-codex-budget-pilot-ci-20260923"
 TARGET_SHA256 = "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44"
 PREFIX = ("time-budget/gpt54_sandboxv2_codex_time_budget_v1/"
@@ -78,8 +80,19 @@ def checked_source(*, runtime_root: Path, reviewed_source_sha: str, reviewed_sou
     run_id = os.environ.get("GITHUB_RUN_ID", "")
     _require(re.fullmatch(r"[1-9][0-9]{0,19}", run_id) is not None, "run_identity_required")
     root = _root(runtime_root)
-    _require(str(root) == os.environ.get("GITHUB_WORKSPACE") == str(runtime_root)
-             and root.resolve() == root, "canonical_checkout_required")
+    workspace, common = _repository(Path(os.environ.get("GITHUB_WORKSPACE", "")))
+    runner_temp = _root(Path(os.environ.get("RUNNER_TEMP", "")))
+    _require(str(workspace) == os.environ.get("GITHUB_WORKSPACE") and workspace.resolve() == workspace
+             and str(runner_temp) == os.environ.get("RUNNER_TEMP") and runner_temp.resolve() == runner_temp
+             and root == runner_temp / SOURCE_BASENAME and str(root) == str(runtime_root)
+             and root.resolve() == root and _repository(root)[1] == common, "canonical_linked_source_required")
+
+    def checkout_identity():
+        for revision, expected_sha in (("HEAD^{commit}", reviewed_source_sha), ("HEAD^{tree}", reviewed_source_tree)):
+            _require(_git(workspace, "rev-parse", "--verify", revision).stdout == (expected_sha + "\n").encode(),
+                     "actions_checkout_identity_changed")
+
+    checkout_identity()
     with _reviewed_source(root, reviewed_source_sha, SOURCE_ROLES) as (_, tree, identities):
         _require(tree == reviewed_source_tree, "reviewed_tree_mismatch")
         for name in SOURCE_ROLES:
@@ -88,6 +101,7 @@ def checked_source(*, runtime_root: Path, reviewed_source_sha: str, reviewed_sou
                 _read_bytes(Path(module.__file__), **identities[name])
         yield {"source": {"sha": reviewed_source_sha, "tree": tree},
                "ci": {"run_id": run_id, "job": JOB, "attempt": 1}}
+    checkout_identity()
 
 
 def validate_envelope(value: dict, identity: dict) -> None:
