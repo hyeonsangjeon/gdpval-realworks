@@ -28,7 +28,10 @@ from codex_budget_pilot_retention import _control, _encoded, _object, _objects, 
 from core.agentic_v2_preregistration import seal
 from core.hf_publication import _PublicationFile, _publication_additions
 from core.reference_integrity import validate_reference_relative_path
-from core.time_budget_observation_deadline import ObservationIdentity, TIMEOUT
+from core.time_budget_observation_deadline import (
+    CLEANUP_UNCONFIRMED, OWNERSHIP_REQUIRED, REFUSED, TIMEOUT,
+    ObservationDeadlineRefused, ObservationIdentity,
+)
 from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
 from gpt54_comparison_preflight import _canonical_json
 from gpt54_disposable_checkout import _git, _repository
@@ -65,6 +68,25 @@ SOURCE_ROLES = {
     "batch-runner/gpt54_time_budget_grading_preparation.py",
     "batch-runner/scripts/azure_oidc_identity_preflight.py", "batch-runner/requirements.txt",
 }
+FAILURE_STAGES = frozenset({
+    "claim_admission", "execution_consumption", "direction_binding",
+    "execution_reservation", "execution_source_reread", "observation_callable", "execution_receipt",
+})
+FAILURE_CATEGORIES = frozenset({
+    "controller_refused", "observation_refused", "registration_refused", "deadline_refused",
+    "interrupted", "io_error", "validation_refused", "type_error", "attribute_error", "key_error",
+    "unexpected_error",
+})
+# Exact existing static codes only. Exception messages, paths and tracebacks
+# are never serialized, even privately; an unknown reason stays unknown.
+FAILURE_REASONS = frozenset({
+    "execution_refused_or_uncertain", "acknowledged_same_host_claim_required", "execution_already_consumed",
+    "direction_not_current", "direction_schema", "direction_size_bound", "direction_admission_window",
+    "result_destination_exists", "backend_workspace_exists", "direction_observation_already_consumed",
+    "returned_terminal_required", "observation_handoff_consumption_refused", "prepared_observation_binding",
+    "source_bound_execution_direction_required", "observation_handoff_already_consumed",
+    REFUSED, OWNERSHIP_REQUIRED, CLEANUP_UNCONFIRMED,
+})
 
 
 class FirstV2CIRefused(ValueError):
@@ -100,6 +122,41 @@ def _read(path: Path) -> dict:
     value = json.loads(data, object_pairs_hook=_json_object)
     _require(type(value) is dict and data == _bytes(value), "canonical_private_record_required")
     return value
+
+
+def _execution_failure(stage: str, error: BaseException) -> dict:
+    category = "unexpected_error"
+    for kind, name in (
+        (FirstV2CIRefused, "controller_refused"),
+        (observation.FirstV2ObservationRefused, "observation_refused"),
+        (registration.TimeBudgetRegistrationRefused, "registration_refused"),
+        (ObservationDeadlineRefused, "deadline_refused"),
+        (KeyboardInterrupt, "interrupted"), (OSError, "io_error"),
+        (ValueError, "validation_refused"), (TypeError, "type_error"),
+        (AttributeError, "attribute_error"), (KeyError, "key_error"),
+    ):
+        if isinstance(error, kind):
+            category = name
+            break
+    reason = "execution_refused_or_uncertain"
+    if isinstance(error, (FirstV2CIRefused, observation.FirstV2ObservationRefused,
+                          registration.TimeBudgetRegistrationRefused, ObservationDeadlineRefused)):
+        if len(error.args) == 1 and type(error.args[0]) is str and error.args[0] in FAILURE_REASONS:
+            reason = error.args[0]
+    return {"outcome": "refused_or_uncertain", "returned": None,
+            "failure": {"stage": stage, "category": category, "reason": reason}}
+
+
+def _check_execution_failure(receipt: dict) -> None:
+    _require(set(receipt) in ({"outcome", "returned"}, {"outcome", "returned", "failure"})
+             and receipt["outcome"] == "refused_or_uncertain" and receipt["returned"] is None,
+             "execution_receipt_schema")
+    if "failure" in receipt:
+        failure = receipt["failure"]
+        _require(type(failure) is dict and set(failure) == {"stage", "category", "reason"}
+                 and all(type(failure[key]) is str for key in failure)
+                 and failure["stage"] in FAILURE_STAGES and failure["category"] in FAILURE_CATEGORIES
+                 and failure["reason"] in FAILURE_REASONS, "execution_failure_schema")
 
 
 @contextmanager
@@ -395,30 +452,45 @@ def _admission(context: dict, sources: ExitStack) -> tuple[dict, dict]:
 def execute(context: dict) -> dict:
     """Pass the reconstructed direction to the real callable without storage tokens."""
     paths = _paths(context)
-    with ExitStack() as sources:
-        marker, receipt = _admission(context, sources)
-        _require(not any(os.path.lexists(paths["root"] / name) for name in
-                         ("execution-reserved.json", "execution-receipt.json")), "execution_already_consumed")
-        direction, expected = _direction(context, marker)
-        # Reserve once before admission/provider effects, including unsupported hosts.
-        _write(paths["root"] / "execution-reserved.json", {"claim_commit": receipt["returned_commit"],
-               "observation": marker["observation"], "outcome": "uncertain_until_returned"})
-    for key in TOKEN_KEYS:
-        os.environ.pop(key, None)
-    os.environ["HF_HUB_OFFLINE"] = os.environ["HF_DATASETS_OFFLINE"] = "1"
-    result = {"outcome": "refused_or_uncertain", "returned": None}
+    reserved = False
+    stage = "claim_admission"
     try:
+        with ExitStack() as sources:
+            marker, receipt = _admission(context, sources)
+            stage = "execution_consumption"
+            _require(not any(os.path.lexists(paths["root"] / name) for name in
+                             ("execution-reserved.json", "execution-receipt.json")), "execution_already_consumed")
+            stage = "direction_binding"
+            direction, expected = _direction(context, marker)
+            # Reserve once before admission/provider effects, including unsupported hosts.
+            stage = "execution_reservation"
+            _write(paths["root"] / "execution-reserved.json", {"claim_commit": receipt["returned_commit"],
+                   "observation": marker["observation"], "outcome": "uncertain_until_returned"})
+            reserved = True
+            stage = "execution_source_reread"
+        for key in TOKEN_KEYS:
+            os.environ.pop(key, None)
+        os.environ["HF_HUB_OFFLINE"] = os.environ["HF_DATASETS_OFFLINE"] = "1"
+        stage = "observation_callable"
         returned = observation.run_first_v2_observation(
             context["plan"], **_common(context), observation=ObservationIdentity(**marker["observation"]),
             direction_path=paths["direction"], expected_direction_sha256=_identity(_bytes(direction))["sha256"],
             expected_host_sha256=context["host"]["instance_sha256"], preparation_directory=paths["preparation"],
             expected_preparation_identity=expected, observation_directory=paths["observation"], destination=paths["destination"])
         result = {"outcome": "returned", "returned": returned}
-    except (Exception, KeyboardInterrupt):
-        # Refusal/abrupt control loss cannot be manufactured into an admitted row.
+        stage = "execution_receipt"
         _write(paths["root"] / "execution-receipt.json", result)
+    except (Exception, KeyboardInterrupt) as error:
+        # Refusal/abrupt control loss cannot be manufactured into an admitted row.
+        # Never annotate/adopt a previous partial attempt or overwrite its receipt.
+        if reserved and stage != "execution_receipt":
+            try:
+                _write(paths["root"] / "execution-receipt.json", _execution_failure(stage, error))
+            except (Exception, KeyboardInterrupt):
+                pass  # Receipt I/O uncertainty is not a retry or cleanup extension.
+        if stage not in {"observation_callable", "execution_receipt"}:
+            raise
         raise FirstV2CIRefused("execution_refused_or_uncertain") from None
-    _write(paths["root"] / "execution-receipt.json", result)
     return result
 
 
@@ -426,8 +498,11 @@ def _result_snapshot(context: dict, marker: dict):
     paths = _paths(context)
     receipt_path = paths["root"] / "execution-receipt.json"
     receipt = _read(receipt_path) if receipt_path.exists() else None
-    if receipt is None or receipt == {"outcome": "refused_or_uncertain", "returned": None}:
+    if receipt is None:
         return None, {}, None, None
+    if receipt.get("outcome") == "refused_or_uncertain":
+        _check_execution_failure(receipt)
+        return None, {}, receipt, None
     _require(set(receipt) == {"outcome", "returned"} and receipt["outcome"] == "returned", "execution_receipt_schema")
     returned = receipt["returned"]
     _same("returned observation", returned["observation"], marker["observation"])
@@ -530,6 +605,8 @@ def retain(context: dict) -> dict:
         if snapshot is not None:
             # All four components, including actual result/deliverable bytes.
             _require(_result_snapshot(context, marker)[0] == snapshot, "result_changed_before_publication")
+        else:
+            _same("final uncertainty receipt", _result_snapshot(context, marker)[2], execution_receipt)
     cache = paths["root"] / "retention-readback"
     cache.mkdir(mode=0o700)
     outcome, revision = "unresolved", None

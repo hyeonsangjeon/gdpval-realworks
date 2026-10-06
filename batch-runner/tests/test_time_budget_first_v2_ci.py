@@ -583,6 +583,117 @@ def test_time_budget_first_v2_ci_cli_request_validation_is_not_admission(case, m
     assert case.downloads == case.api.calls == [] and not case.root.exists()
 
 
+@pytest.mark.parametrize("mode", [
+    "expired_direction", "unexpected_construction", "interrupted_construction",
+    "malformed_receipt", "prior_partial",
+])
+def test_time_budget_first_v2_ci_private_failure_diagnostics(case, monkeypatch, capsys, mode):
+    """Fresh step contexts, real validators and permanently consumed synthetic claims."""
+    import logging
+
+    admission = _prepare(case)
+    claim_bytes = (case.root / "claim-reserved.json").read_bytes()
+    remote_claim = case.api.trees[case.api.head][ci.CLAIM]
+    effects = _effects(case, monkeypatch, "success")
+    marker = ci._read(case.root / "preparation" / registration.HANDOFF_READY)
+    reservation = case.root / "execution-reserved.json"
+    receipt_path = case.root / "execution-receipt.json"
+    secret = "synthetic-token Authorization: Bearer hidden /private/prompt.json provider-body"
+
+    class SecretError(RuntimeError):
+        def __str__(self):
+            pytest.fail("unexpected exception text must never be formatted")
+
+    def failed_voice(**kwargs):
+        assert len(effects.controls) == 1 and effects.requests == []
+        assert reservation.is_file()
+        _assert_no_storage_tokens()
+        if mode == "interrupted_construction":
+            raise KeyboardInterrupt(secret)
+        raise SecretError(secret)
+
+    if mode == "expired_direction":
+        now = time.time()
+        monkeypatch.setattr(time, "time", lambda: case.request["expires_unix"] + 1 if reservation.exists() else now)
+    elif mode == "prior_partial":
+        ci._write(reservation, {"claim_commit": admission["returned_commit"], "observation": marker["observation"],
+                               "outcome": "uncertain_until_returned"})
+    else:
+        # Ordinary voice-construction seam, after real direction/source/handoff
+        # validation and genuine control construction with the synthetic kernel.
+        monkeypatch.setattr(entry, "AzureFoundryVoice", failed_voice)
+
+    command = ["--reviewed-source-sha", case.seed.runtime_sha, "--reviewed-source-tree", case.seed.runtime_tree,
+               "--expected-request-sha256", case.args["expected_request_sha256"],
+               "--runtime-root", str(case.seed.runtime), "--frozen-root", str(case.seed.frozen),
+               "--state-root", str(case.root)]
+    monkeypatch.setenv("TIME_BUDGET_REQUEST_JSON", case.args["request_json"])
+    monkeypatch.setenv("GITHUB_ACTION", "execute-step-distinct-from-intake")
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    previous_mask, previous_logging = os.umask(0o077), logging.root.manager.disable
+    try:
+        assert ci.main(["execute", *command]) == 2
+        assert capsys.readouterr().out == '{"outcome":"refused_or_uncertain"}\n'
+        assert case.api.commits == ["claim"] and effects.requests == []
+        assert not (case.root / "result").exists()
+        if mode == "prior_partial":
+            assert not receipt_path.exists()  # Never annotate/adopt an earlier partial attempt.
+            failure_receipt = None
+        else:
+            failure_receipt = ci._read(receipt_path)
+            expected_category = {"expired_direction": "observation_refused",
+                                 "interrupted_construction": "interrupted"}.get(mode, "unexpected_error")
+            expected_reason = "direction_not_current" if mode == "expired_direction" else "execution_refused_or_uncertain"
+            assert failure_receipt == {"outcome": "refused_or_uncertain", "returned": None,
+                "failure": {"stage": "observation_callable", "category": expected_category, "reason": expected_reason}}
+            assert all(part.encode() not in receipt_path.read_bytes() for part in
+                       ("synthetic-token", "Authorization", "/private/prompt.json", "provider-body"))
+        if mode in {"expired_direction", "prior_partial"}:
+            assert effects.controls == [] and effects.events == []
+        else:
+            assert effects.events == ["direction", "admission"]
+        retained_bytes = receipt_path.read_bytes() if receipt_path.exists() else None
+        assert ci.main(["execute", *command]) == 2
+        assert capsys.readouterr().out == '{"outcome":"refused_or_uncertain"}\n'
+        assert (receipt_path.read_bytes() if receipt_path.exists() else None) == retained_bytes
+        assert (case.root / "claim-reserved.json").read_bytes() == claim_bytes
+        assert case.api.trees[admission["returned_commit"]][ci.CLAIM] == remote_claim
+
+        if mode == "malformed_receipt":
+            changed = deepcopy(failure_receipt)
+            changed["failure"]["reason"] = secret
+            receipt_path.write_bytes(ci._bytes(changed))  # Explicit synthetic tamper, never trusted.
+        monkeypatch.setenv("GITHUB_ACTION", "retain-step-distinct-from-execute")
+        monkeypatch.setenv("HF_TOKEN", TOKEN)
+        result = ci.main(["retain", *command])
+        output = capsys.readouterr().out
+        if mode == "malformed_receipt":
+            assert result == 2 and output == '{"outcome":"refused_or_uncertain"}\n'
+            assert case.api.commits == ["claim"] and not (case.root / "completion.json").exists()
+            assert not (case.root / "retention-reserved.json").exists()
+            return
+        assert result == 0 and json.loads(output) == {"operation": "retain", "outcome": "completed"}
+        envelope = ci._read(case.root / "completion.json")
+        ci.validate_envelope(envelope)
+        assert envelope["status"] == "uncertain" and envelope["retention"] == "acknowledged"
+        assert envelope["retry_allowed"] is False and envelope["grading_performed"] is False
+        assert envelope["other_cells_executed"] == 0
+        assert all(envelope[key] is None for key in (
+            "result_identity", "result_fingerprint", "terminal_reason", "usage", "cleanup_complete", "host_reusable"))
+        assert "failure" not in envelope and secret not in ci._bytes(envelope).decode()
+        tree = case.api.trees[envelope["output_commit"]]
+        manifest = json.loads(tree[ci.MANIFEST])
+        assert manifest["execution_receipt"] == failure_receipt
+        assert all(part.encode() not in tree[ci.MANIFEST] for part in
+                   ("synthetic-token", "Authorization", "/private/prompt.json", "provider-body"))
+        assert manifest["result"] == "unavailable_no_fabricated_study_row" and manifest["files"] == {}
+        assert set(tree) == {ci.CLAIM, ci.MANIFEST} and tree[ci.CLAIM] == remote_claim
+        assert case.api.commits == ["claim", "output"]
+    finally:
+        os.umask(previous_mask)
+        logging.disable(previous_logging)
+
+
 def test_time_budget_first_v2_ci_workflow_command_and_guard_contract():
     root = Path(__file__).resolve().parents[2]
     text = (root / ci.WORKFLOW).read_text()
