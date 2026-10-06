@@ -531,9 +531,15 @@ exit 2 and acknowledged uncertainty retention. Its claim is
 `f602355f945471963a338ccf79783a6f802ac6dd`. No canonical result, terminal
 control or usage was reported. The historical exception was discarded, so
 neither its first throw nor model-call count or cost is established. Do not
-replay, resume, regrade, delete or adopt that state. The new diagnostic selector
-reported **5 passed in 95.25s** at `1b21fe4d635b5d3934cfcd06699f6ca9c7c725ca`;
-that synthetic proof neither changes the live outcome nor authorizes a new cell.
+replay, resume, regrade, delete or adopt that state. The
+[private-receipt proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b98fc7e5eca79d55a4925ff1aa6bd78463e25814/tasks/LATEST_TASK_RESULT/README.md)
+reported **5 passed in 95.25s** at `1b21fe4d635b5d3934cfcd06699f6ca9c7c725ca`.
+The leader accepted that scope at `b98fc7e5eca79d55a4925ff1aa6bd78463e25814`.
+The separate stderr-event selector reported **8 passed in 162.87s**, exit 0,
+at `2bd14c256992d7a47e4f297f81fa28a729b05755`, tree
+`5b77ac3550461e8331bd3de8854b98abc99513d2`, under Python 3.10.12 with a
+300s+5s bound and no `-x`. Neither synthetic proof changes the live outcome
+or authorizes a new cell. Final-HEAD review and ordinary CI remain gates.
 
 The following documents the command shape, **not permission to dispatch or
 repeat the consumed cell**:
@@ -652,9 +658,24 @@ it; prior partial/consumed state is never annotated, and receipt publication is
 not retried. Pre-reservation failures or failed receipt I/O can still leave no
 diagnostic. Retention validates and rereads this metadata and includes it in
 the private output manifest while keeping the canonical result unavailable.
-The public completion envelope is unchanged. No raw exception, provider text,
-token, header, filename or original body is included in these diagnostics.
-This does not backfill the historical attempt or extend its cleanup allowance.
+After a successful failure-receipt write, the controller validates that same
+in-memory object and makes one stderr write. For example, the new synthetic
+construction-error case emits exactly this non-authoritative event:
+
+```json
+{"category":"unexpected_error","format":"gpt54-time-budget-first-v2-ci-failure-v1","reason":"execution_refused_or_uncertain","stage":"observation_callable"}
+```
+
+The event has only `format`, `stage`, `category` and `reason`. Missing or
+malformed metadata produces no event, and execution never reads an earlier
+receipt to print it as a new failure. Stderr I/O is not retried; if it fails,
+execution still refuses and retained uncertainty remains uncertainty. Generic
+CLI stdout stays `{"outcome":"refused_or_uncertain"}` with exit 2. The public
+completion envelope and canonical result schemas are unchanged. No raw
+exception, traceback, dynamic type name, provider text, token, header, filename
+or original body is included in these diagnostics. This does not backfill the
+historical attempt, infer admission/model calls/cleanup, authorize another
+attempt or extend the observation deadline.
 
 `core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
 in a private host-owned directory before generation. The identity includes

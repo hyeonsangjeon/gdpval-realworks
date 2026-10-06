@@ -124,10 +124,29 @@ entries land under a fresh dated heading the day they merge to `main`.
   `6b2b049ef9551766b00876fa59d37dedfcbc23e1`, reported **5 passed in 95.25s**,
   exit 0, in one new offline Python 3.10.12 selector bounded by 300s+5s with
   no `-x`. These synthetic diagnostics do not explain the historical throw.
-  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact live evidence,
-  proof artifacts, coverage limits and remaining review/CI/live/intake/grading
-  gates. The post-proof delta is only CHANGELOG, LATEST and direct usage docs;
-  no old selector, live operation or consumed-state change was performed.
+  The leader accepted that private-receipt scope at
+  `b98fc7e5eca79d55a4925ff1aa6bd78463e25814`, tree
+  `065c50a6be73db07fdca2464a28307ca9dc93f98`;
+  its [immutable proof record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b98fc7e5eca79d55a4925ff1aa6bd78463e25814/tasks/LATEST_TASK_RESULT/README.md)
+  remains separate.
+
+  Complete operator visibility with one non-authoritative stderr event after
+  a fresh execution reservation and successful failure-receipt write. The only
+  fields are `format=gpt54-time-budget-first-v2-ci-failure-v1` and the existing
+  validated `stage`, `category`, `reason`. It uses the current in-memory failure,
+  never an earlier receipt. Missing/malformed metadata, prior partial state and
+  unacknowledged reservation or failed receipt I/O produce no new event. An
+  emission failure stays a refusal without retry; generic CLI stdout, exit 2,
+  public completion and canonical result schemas remain unchanged. The leader's
+  actual read-only review approved this visibility scope, not paid execution.
+  New implementation `2bd14c256992d7a47e4f297f81fa28a729b05755`, tree
+  `5b77ac3550461e8331bd3de8854b98abc99513d2`, reported **8 passed in 162.87s**,
+  exit 0, in one new offline Python 3.10.12 event selector bounded by 300s+5s,
+  no `-x`. It did not rerun or aggregate the earlier five-case proof.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact evidence and
+  remaining final-HEAD review/CI and future-live/intake/grading gates. The
+  post-proof delta is only CHANGELOG, LATEST and direct usage docs; no workflow,
+  private operation, old selector or consumed-state change was performed.
 
 - Repair the first-V2 Actions source layout from reviewed
   `1a1e9f9199497ccb804f1d00ece46515f75544ff`, tree
