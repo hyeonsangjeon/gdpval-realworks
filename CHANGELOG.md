@@ -171,6 +171,57 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add one test-only V2 startup regression in
+  `batch-runner/tests/test_time_budget_owned_startup.py`, from accepted source
+  `793c8778a75348fcb4070f2c8bec135b428ae731`, tree
+  `b765bf7a089b56b602aba363d615ec87f8a35a81`. The leader authorized this
+  supported-host CI assertion, not a production fix or another observation.
+  One fresh Python child uses the shipped BLAS/OpenMP settings, actual
+  controller imports, synchronous synthetic input reconstruction, real
+  source/registration/input/direction validators and real kernel admission
+  and cleanup. It reports bounded kernel facts, including task comm names,
+  and stops before provider construction. Unsupported admission fails;
+  there is no skip, kernel adapter or successful-verdict patch.
+
+  The test-only commit is `3c0325bebe439a75cc551ec5c13d547fa1e2490f`, tree
+  `5d682a1dba1aa7d83b72550b8b7e45a3fb40eb72`. Its one local Python 3.10.12
+  syntax/collection/scope check ended **exit 1 in 2.874s** under a 60s+5s
+  bound. Syntax and scope checks succeeded; pytest collected exactly one
+  node in **2.58s**, exit 0, with zero fixture or test-protocol entries.
+  The overall check failed at the final assertion because its audit guard
+  had blocked one process/socket event during collection. The event name
+  was not retained, so this is not evidence of a network connection or a
+  kernel failure. It was not retried. The check is not a passing proof;
+  the decisive body was not executed on NAS.
+
+  Separately, the retained NAS reproduction remains **19.890s, exit 2** at
+  the accepted source above. It observed one kernel task before controller
+  import and two by NumPy import completion, with two still present at
+  admission. This does not identify the task's creator or explain the
+  historical Actions failure. NAS also lacked working pidfd/waitid/proc-child
+  interfaces: ENOSYS 38, EINVAL 22 and ENOENT 2. Its artifacts were not
+  changed or rerun. The leader-verified Task2 run `37501571165`, attempt 1,
+  job `112399621053`, remains consumed and uncertain after the safe
+  `observation_callable` / `deadline_refused` /
+  `time_budget_owned_process_host_required` event. Its claim
+  `3def41563f98b70201dc42814bc45b4fd9f1d70c` and acknowledged output
+  `bf82b283576411b66dfc7e962de4c587d6de4b02` remain immutable.
+  Missing result, usage and cleanup fields do not establish model-call
+  counts, cost, zero score or replay permission.
+
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains the full source and
+  artifact identities for the live uncertainty, NAS reproduction and local
+  check. The new check artifacts are under
+  `/tmp/pr762-owned-startup-collection.8RG6XJey/`; `result.json` has SHA256
+  `ca45695c9077edde4a1b60122572f932582a752b2fb2073bb32a579c8a1cea73`.
+  The post-check delta is only this entry and LATEST. Production, workflows,
+  dependencies, frozen F, experiment settings and previous worktrees are
+  unchanged. This draft must not be merged or called a fix until the real
+  startup failure is understood. Ordinary `time-budget-contracts` CI on
+  `ubuntu-latest` is pending; it is not the production `ubuntu-22.04` host.
+  Actual execution-host readiness and any later live direction remain gates.
+  Task1 and Task2 remain consumed, with no new live cell authorized.
+
 - Integrate reviewed first-V2 source
   `83d615c5516efbe1c4b20f273c493e1cc9dce208` (review `5426656908`) with
   accepted metadata source `536d2466b63b2f845a691a8953901e02a1757b05`.
