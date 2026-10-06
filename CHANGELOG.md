@@ -13,6 +13,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Add the omitted CURRENT refusal for
+  `source_pin:batch-runner/gpt54_prepared_input_attestation.py` at index 4 in the
+  disposable-checkout launch-boundary test, after `gpt54_run_config_bundle.py`
+  and before `gpt54_run_input_bundle.py`. Every other expected refusal, the
+  genuine frozen-source compilation, historical profile/template hashes and
+  final `launch_allowed` / `full_220_allowed` false assertions are unchanged.
+  No adapter, production, configuration, workflow, usage README, source pin,
+  frozen profile, grader or launch gate changes.
+
+  The clean reviewed basis was `c766c3b80365d1ff4c7b1dc1e1a91bef569c7b9f`, tree
+  `b7ca9c4593db5b08aa08b778163940e8b7c1adaa`, review `5423001724`.
+  The leader supplied CI run `37400663932`, job `112067100288`, attempt 1:
+  **1 failed, 1462 passed in 1855.84s**, with this sole omission recorded in
+  review `5423178464`. The log SHA256 is
+  `4d8a7ad0f73bbc05cd2dcd9a8274c17b2bb175fbfe1aee57e623e33a19aa833c`.
+  The downstream host receipt refused only for `comparison_step_not_successful`;
+  this is not new kernel evidence or a positive-host claim.
+
+  One offline Python 3.10.12 invocation of only the failed node at
+  `8e37ed79df606f7eee3eccfed557a42de5ddb573`, tree
+  `5974a01e2868caaab34ccab77855c5e79395179f`, reported **1 passed in 2.82s**,
+  exit 0, under 300 seconds plus 5 seconds termination grace without `-x`.
+  The original **32 passed, 1 failed in 81.67s**, separate `9cf4429c` fixture
+  correction not rerun locally, prior **2 passed in 2.15s** at `53d17831`, and
+  supplied CI failure remain distinct; the [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c766c3b80365d1ff4c7b1dc1e1a91bef569c7b9f/tasks/LATEST_TASK_RESULT/README.md)
+  retains their details. No aggregate 33-pass result is claimed.
+  This correction's total delta is one test-line insertion plus CHANGELOG and
+  LATEST; its post-proof delta is the two records only. PR756 is untouched.
+  Corrected-HEAD review, CI acceptance and source-bound live execution gates
+  remain pending.
+
 - Integrate the reviewed handoff consumer with the accepted F-derived grading
   preparation without changing either implementation. The consumer source is
   `a9dd6d12ee52344d3f0e329d2d355d429a175df8`, reviewed in `5420090699`;
@@ -48,6 +79,45 @@ entries land under a fresh dated heading the day they merge to `main`.
   remain pending; no CI query, retry, polling or live operation occurred.
 
 ### Added
+
+- Add a callable/CLI adapter for the first time-budget V2 observation only:
+  `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1, task
+  `02aa1805-c658-4069-8a6a-02dec146063a`. Its concrete direction checker requires
+  an independently supplied direction digest, host/preparation/observation
+  identities, reviewed R/F anchors and exact paths. It installs the existing V2
+  backend, `AzureFoundryVoice` and typed Azure inference client; construction
+  waits and client closure use the existing 1200/20 observation control. No
+  workflow, credential, core/ownership, frozen-judge or study-policy change is
+  made. Preparation alone still grants no authority, and old launch guards stay
+  closed. Prospective input validation opts into synchronous parquet reads;
+  legacy parsing is unchanged. Only that reader's and the compiler's prospective
+  pins advance, with explicit CURRENT refusal expectations; historical pins stay
+  intact.
+
+  The adapter publishes a no-clobber canonical Step2 result with verified
+  deliverable identities, actual terminal/control state, R/F/input/config
+  bindings and honest usage availability. Failed/missing outcomes remain error
+  rows, while pre-admission refusals produce no study row. No grading, upload,
+  native request/token hard cap, remote cancellation or billing guarantee is
+  introduced.
+
+  One offline Python 3.10.12 selector at
+  `a1380d827814699265e1406cc8e84b0f6187b87a`, tree
+  `28cd1c7dfb471848dd4ce7b91eed8894da4b7e17`, reported **32 passed, 1 failed in
+  81.67s**, exit 1, under 300 seconds plus 5 seconds termination grace without
+  `-x`. All five synthetic factory/result/F-grading-preparation roundtrips passed.
+  The failed legacy-positive case correctly refused the synthetic input-only
+  profile as a dispatch plan (`shared_controls, conditions`). Test-only
+  correction `9cf4429c377449e98b2c595703d873622c3390dc`, tree
+  `db32151d10e0c5d777749b604fbc697aacc1c955`, uses the untouched anchored F
+  profile instead; it was **not rerun locally**. That original post-proof delta
+  was one test fixture plus CHANGELOG and LATEST, not a new aggregate pass.
+  The [immutable first-cell record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b6ba71115c36075acde2c8f2cece1a3de28cc180/tasks/LATEST_TASK_RESULT/README.md)
+  retains the prior 53/41/8-case proofs and real CI host outcomes separately.
+  The later CURRENT expectation correction and its two-parameter proof are
+  recorded above. Final-HEAD review/CI and real
+  source-bound direction/input/host/provider acceptance remain pending; no live
+  observation, private asset preparation or CI query/retry occurred.
 
 - Add `gpt54_time_budget_comparison.consume_observation_handoff` to revalidate
   one prepared run/task against an independent preparation digest/size and

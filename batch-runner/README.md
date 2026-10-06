@@ -414,9 +414,10 @@ Startup is denied unless the trusted caller supplies
 `require_execution_direction(binding)`. That checker must match the immutable
 preparation/observation/R/F binding and canonical preparation/admission paths
 against a separate source-bound execution direction, then return `None` or
-raise on refusal. It is not a marker-controlled approval bit. No production
-checker, CLI or workflow entrypoint is installed here. Changing the preparation
-path or admission store is not a way to obtain another attempt.
+raise on refusal. It is not a marker-controlled approval bit. The consumer's
+default remains denied; the separate first-cell adapter below installs a
+concrete checker and dependencies. No workflow entrypoint is added. Changing
+the preparation path or admission store is not a way to obtain another attempt.
 
 After the checker and final rereads, a no-clobber sibling
 `.time-budget-consumed.json` permanently consumes the handoff, including failed
@@ -428,9 +429,75 @@ Codex receives it through `CodexAgentRunner.observation_control`, with
 model-safe arguments; no factory is imported from marker text. The result is
 the existing runner envelope plus `handoff_preparation_identity` and the
 control's `time_budget_observation` record. Construction failures use that
-control's existing cleanup deadline and cannot renew the observation. The next
-live boundary is the independently reviewed host direction checker and its
-provider/backend dependencies; preparing or validating a packet does not cross it.
+control's existing cleanup deadline and cannot renew the observation. Preparing
+or validating a packet is not execution permission.
+
+The callable `gpt54_time_budget_v2_observation.run_first_v2_observation` and its
+CLI serve **only** run `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1, task
+`02aa1805-c658-4069-8a6a-02dec146063a`. All other cells refuse. It installs the
+existing same-host `AgenticV2FixtureBackend` (its limited tools are not a
+microVM), `AzureFoundryVoice`, and typed Azure inference client. Client creation
+and connection waits begin inside supervised generation; the client closes
+through the existing shared cleanup control. The registered
+`hjeon-fdpo-foundry-eus2` / `gdpval-realworks` / `direct-v1` / GPT-5.4 / `xhigh`
+mapping and V2's 9-turn/8192-output settings are unchanged. The existing approved
+OIDC connection must already be configured; the adapter does not change it.
+
+This command shape is documentation, **not permission to run it**. Every value
+must come from a separately issued exact-source execution direction, including
+independent preparation, registration, input and host identities:
+
+```bash
+python batch-runner/gpt54_time_budget_v2_observation.py \
+  --run-id gpt54_time_budget_v1_v2_r1 \
+  --task-id 02aa1805-c658-4069-8a6a-02dec146063a \
+  --runtime-root /reviewed/R --reviewed-source-sha R_COMMIT --reviewed-source-tree R_TREE \
+  --frozen-grader-root /frozen/F --grader-source-sha 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2 \
+  --input-registration-root /anchored/I --input-source-sha I_COMMIT \
+  --input-registration-path batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml \
+  --registration-sha256 REGISTRATION_SHA256 --input-sha256 INPUT_BINDING_SHA256 \
+  --preparation-directory /private/prepared --preparation-sha256 PREPARATION_SHA256 --preparation-size PREPARATION_BYTES \
+  --dataset-parquet /private/original.parquet --reference-root /private/references \
+  --observation-directory /private/exclusive-host-state --destination /private/new-result \
+  --direction /private/direction.json --direction-sha256 INDEPENDENT_DIRECTION_SHA256 \
+  --host-sha256 INDEPENDENT_HOST_SHA256
+```
+
+The direction is a strict JSON object: `direction_version` is
+`gpt54-time-budget-first-v2-direction-v1`, `purpose` is
+`execute_one_registered_observation`, and `execution_binding` is the exact
+`ObservationExecutionBinding` object (including its canonical `observation_json`
+string). `host_sha256` is independently supplied too. Integer
+`not_before_unix` / `expires_unix` bound the admission decision, not generation.
+`paths` must exactly name `direction`, `preparation`, `runtime_root`,
+`frozen_grader_root`, `input_registration_root`, `dataset_parquet`,
+`reference_root`, `observation_directory`, `destination`, `input_source_sha`,
+`input_registration_path`, and `backend_workspace`. All filesystem paths are
+absolute; `input_registration_path` is relative to its source root, and
+`backend_workspace` is the destination's sibling with `.time-budget-v2-work`
+appended. Missing/extra fields, changed bindings, stale directions and consumed
+observations refuse. The file cannot supply its own trusted expected digest.
+
+`execution_host_identity(R_COMMIT)["instance_sha256"]` exposes only a digest of
+boot/namespace/user and any CI instance identity for that independent direction.
+It is metadata, not a platform probe or proof of support. Actual admission still
+requires the exclusive single-threaded Linux host described below. Prospective
+parquet validation disables parser background reads; libraries that leave
+native threads active still cause host refusal. Legacy input parsing is unchanged.
+
+The result destination must be new with an existing private parent. It receives
+`step2_inference_results.json` last and
+`upload/deliverable_files/<task-id>/<verified-relative-file>` for any returned
+artifacts. A sibling `.time-budget-result-reserved.json` binds the exact result
+bytes; interrupted/partial publication is not reusable. The canonical Step2
+fingerprint covers the actual terminal control, preparation/R/F/input/config
+bindings, outcome and usage availability. Cached/reasoning tokens remain subsets;
+missing usage and native-attempt/repeated-request/written-token counters are
+explicitly unavailable, not zero or hard caps. Failed/missing outcomes remain
+error rows; pre-admission refusal produces no study row. These bytes can feed
+`prepare_observation_grading` with independent result/input identities, but this
+entrypoint neither grades nor uploads. No real input, provider, host or live-run
+acceptance follows from a passing synthetic test.
 
 `core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
 in a private host-owned directory before generation. The identity includes

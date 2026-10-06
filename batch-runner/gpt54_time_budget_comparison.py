@@ -59,6 +59,7 @@ RUNTIME_ADDITIONS = {
     "batch-runner/core/agentic_v2_runner.py",
 }
 CHANGED_RUNTIME_SOURCES = RUNTIME_ADDITIONS | {
+    "batch-runner/gpt54_prepared_input_attestation.py",
     "batch-runner/core/codex_runner.py",
     "batch-runner/core/agentic_v2_conversation_runner.py",
 }
@@ -810,7 +811,7 @@ def _observation_inputs(dataset, catalog, task_ids, *, parquet, references, step
     from gpt54_v2_grading_input import _read_bytes
 
     data = _read_bytes(parquet, sha256=dataset["parquet_sha256"])
-    projections, needs_files = _dataset_tasks(data, task_ids)
+    projections, needs_files = _dataset_tasks(data, task_ids, synchronous=True)
     bound = bind_stage(
         dataset["cohort"], dataset_tasks=[SimpleNamespace(**row) for row in projections],
         catalog=catalog, catalog_digest=dataset["catalog_sha256"],
