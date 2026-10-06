@@ -293,6 +293,158 @@ def _assert_no_storage_tokens():
     assert not any(os.environ.get(key) for key in ci.TOKEN_KEYS)
 
 
+def test_time_budget_v2_selected_task_failure_retention(case, monkeypatch, capsys):
+    """Retain Task2's fresh safe failure without adopting synthetic old Task1 state."""
+    import logging
+
+    task1, task2 = case.seed.task_ids[:2]
+    assert (task1, task2) == ("02aa1805-c658-4069-8a6a-02dec146063a", "0112fc9b-c3b2-4084-8993-5a4abb1f54f1")
+    base = "time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/"
+    old_prefix, selected_prefix = base + task1, base + task2
+    constants = deepcopy((ci.CELL, ci.PREFIX, ci.CLAIM, ci.MANIFEST))
+    assert ci.CELL["task_id"] == task1 and ci.PREFIX == old_prefix
+    # Invented test bytes only, never a read or reconstruction of live Task1.
+    old_objects = {
+        old_prefix + "/admission.json": b"Explicitly synthetic old permanent claim; never adopt.\n",
+        old_prefix + "/output-manifest.json": b"Explicitly synthetic old uncertainty; never rewrite.\n",
+    }
+    case.request["cell"]["task_id"] = task2
+    case.request["storage"]["prefix"] = selected_prefix
+    expected_cell = deepcopy(case.request["cell"])
+    case.api = PrivateStore(prefix=selected_prefix)
+    original_head = case.api.head
+    case.api.trees[original_head] = dict(old_objects)
+    case.api.writers[original_head] = {name: original_head for name in old_objects}
+    _request_changed(case)
+
+    admission = _prepare(case)
+    claim = admission["claim"]
+    marker = ci._read(case.root / "preparation" / registration.HANDOFF_READY)
+    assert marker["inputs"]["task_id"] == marker["observation"]["task_id"] == task2
+    assert marker["inputs"]["step0_manifest"] is None
+    assert ci._read(case.root / "preparation/configuration.json")["configuration"]["task_ids"] == [task2]
+    assert claim["observation"] == marker["observation"] and claim["storage"]["prefix"] == selected_prefix
+    assert admission["outcome"] == "acknowledged" and case.api.commits == ["claim"]
+    direction = ci._read(case.root / "direction.json")
+    assert json.loads(direction["execution_binding"]["observation_json"]) == marker["observation"]
+    assert _identity(ci._bytes(direction)) == claim["direction_identity"]
+    claim_path, manifest_path = selected_prefix + "/admission.json", selected_prefix + "/output-manifest.json"
+    claim_tree = deepcopy(case.api.trees[admission["returned_commit"]])
+    assert set(claim_tree) == {*old_objects, claim_path}
+    assert {name: claim_tree[name] for name in old_objects} == old_objects
+    remote_claim = claim_tree[claim_path]
+    claim_bytes = (case.root / "claim-reserved.json").read_bytes()
+    effects = _effects(case, monkeypatch, "success")
+    reservation, receipt_path = case.root / "execution-reserved.json", case.root / "execution-receipt.json"
+    secret = "synthetic-token Authorization: Bearer hidden /private/prompt.json provider-body"
+    formatted, constructions = [], []
+
+    class SecretError(RuntimeError):
+        def __str__(self):
+            formatted.append(True)
+            pytest.fail("unexpected exception text must never be formatted")
+
+    def failed_voice(**kwargs):
+        assert len(effects.controls) == 1 and effects.requests == [] and reservation.is_file()
+        assert effects.controls[0].identity == ObservationIdentity(**marker["observation"])
+        _assert_no_storage_tokens()
+        constructions.append(task2)
+        raise SecretError(secret)
+
+    monkeypatch.setattr(entry, "AzureFoundryVoice", failed_voice)
+    command = ["--reviewed-source-sha", case.seed.runtime_sha, "--reviewed-source-tree", case.seed.runtime_tree,
+               "--expected-request-sha256", case.args["expected_request_sha256"],
+               "--runtime-root", str(case.seed.runtime), "--frozen-root", str(case.seed.frozen),
+               "--state-root", str(case.root)]
+    monkeypatch.setenv("TIME_BUDGET_REQUEST_JSON", case.args["request_json"])
+    monkeypatch.setenv("GITHUB_ACTION", "execute-step-distinct-from-intake")
+    for key in ci.TOKEN_KEYS:
+        monkeypatch.setenv(key, "synthetic-storage-token-must-not-enter-inference")
+    calls, downloads = list(case.api.calls), list(case.downloads)
+    previous_mask, previous_logging = os.umask(0o077), logging.root.manager.disable
+    try:
+        assert ci.main(["execute", *command]) == 2
+        captured = capsys.readouterr()
+        failure = {"stage": "observation_callable", "category": "unexpected_error",
+                   "reason": "execution_refused_or_uncertain"}
+        event = {"format": "gpt54-time-budget-first-v2-ci-failure-v1", **failure}
+        event_line = ci._canonical_json(event) + "\n"
+        assert captured.out == '{"outcome":"refused_or_uncertain"}\n' and captured.err == event_line
+        assert json.loads(captured.err) == event and len(event) == 4
+        receipt = {"outcome": "refused_or_uncertain", "returned": None, "failure": failure}
+        receipt_bytes = receipt_path.read_bytes()
+        assert receipt_bytes == ci._bytes(receipt)
+        reserved_bytes = reservation.read_bytes()
+        assert json.loads(reserved_bytes) == {"claim_commit": admission["returned_commit"],
+            "observation": marker["observation"], "outcome": "uncertain_until_returned"}
+        assert constructions == [task2] and effects.events == ["direction", "admission"]
+        assert len(effects.controls) == 1 and effects.requests == effects.runners == []
+        assert not (case.root / "result").exists()
+        assert (case.root / ("preparation" + registration.HANDOFF_CONSUMED_SUFFIX)).is_file()
+        _assert_no_storage_tokens()
+
+        # The current failure is not a new event or another attempt on duplicate execution.
+        with ci.checked_request(**case.args) as context, pytest.raises(
+                ci.FirstV2CIRefused, match="execution_already_consumed"):
+            ci.execute(context)
+        captured = capsys.readouterr()
+        assert captured.out == captured.err == ""
+        assert constructions == [task2] and len(effects.controls) == 1
+        assert effects.events == ["direction", "admission"] and effects.requests == effects.runners == []
+        assert reservation.read_bytes() == reserved_bytes and receipt_path.read_bytes() == receipt_bytes
+        assert case.api.calls == calls and case.downloads == downloads and case.api.commits == ["claim"]
+
+        receipt_reads, real_read = [], ci._read
+
+        def observed_read(path):
+            if path == receipt_path:
+                receipt_reads.append(path)
+            return real_read(path)
+
+        monkeypatch.setenv("GITHUB_ACTION", "retain-step-distinct-from-execute")
+        monkeypatch.setenv("HF_TOKEN", TOKEN)
+        with monkeypatch.context() as retaining:
+            retaining.setattr(ci, "_read", observed_read)
+            assert ci.main(["retain", *command]) == 0
+        captured = capsys.readouterr()
+        assert json.loads(captured.out) == {"operation": "retain", "outcome": "completed"} and captured.err == ""
+        assert receipt_reads == [receipt_path, receipt_path]  # Snapshot and final uncertainty reread.
+        envelope = ci._read(case.root / "completion.json")
+        ci.validate_envelope(envelope, expected_cell=expected_cell)
+        assert envelope == {
+            "format": "gpt54-time-budget-first-v2-ci-completion-v1", **expected_cell,
+            "source": case.request["source"], "ci": claim["ci"],
+            "request_sha256": case.args["expected_request_sha256"], "host_sha256": claim["host"]["instance_sha256"],
+            "claim_commit": admission["returned_commit"], "output_commit": case.api.head,
+            "retention": "acknowledged", "status": "uncertain", "result_identity": None,
+            "result_fingerprint": None, "usage": None, "terminal_reason": None, "cleanup_complete": None,
+            "host_reusable": None, "grading_performed": False, "retry_allowed": False, "other_cells_executed": 0,
+        }
+        tree = case.api.trees[envelope["output_commit"]]
+        manifest = json.loads(tree[manifest_path])
+        assert manifest["observation"] == marker["observation"] and manifest["execution_receipt"] == receipt
+        assert manifest["claim_commit"] == admission["returned_commit"] and manifest["claim_identity"] == admission["claim_identity"]
+        assert manifest["request_identity"] == _identity(ci._bytes(case.request))
+        assert manifest["result"] == "unavailable_no_fabricated_study_row" and manifest["files"] == {}
+        assert set(tree) == {*old_objects, claim_path, manifest_path} and tree[claim_path] == remote_claim
+        assert {name: tree[name] for name in old_objects} == old_objects
+        assert {name: case.api.writers[case.api.head][name] for name in old_objects} == {
+            name: original_head for name in old_objects}
+        assert case.api.trees[original_head] == old_objects and case.api.trees[admission["returned_commit"]] == claim_tree
+        assert case.api.writers[case.api.head][claim_path] == admission["returned_commit"]
+        assert case.api.commits == ["claim", "output"] and case.api.calls.count("immutable_control_readback") == 2
+        assert (case.root / "claim-reserved.json").read_bytes() == claim_bytes
+        assert reservation.read_bytes() == reserved_bytes and receipt_path.read_bytes() == receipt_bytes
+        assert not (case.root / "result").exists() and formatted == []
+        assert (ci.CELL, ci.PREFIX, ci.CLAIM, ci.MANIFEST) == constants
+        for data in (receipt_bytes, tree[manifest_path], ci._bytes(envelope), event_line.encode()):
+            assert all(part.encode() not in data for part in
+                       ("synthetic-token", "Authorization", "/private/prompt.json", "provider-body", "SecretError", TOKEN))
+    finally:
+        os.umask(previous_mask)
+        logging.disable(previous_logging)
+
+
 @pytest.mark.parametrize("change", [
     "task2", "unregistered_task", "run", "condition", "repeat", "prefix", "source",
     "direction_task", "result_task", "result_source", "old_task1_claim",
