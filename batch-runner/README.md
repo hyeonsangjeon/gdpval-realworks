@@ -527,7 +527,8 @@ Command shape, **not a live authorization**; the leader or trusted controller
 must supply the independent values after final source review and acceptance:
 
 ```bash
-GDPVAL_CODEX_RUN_ROOT="$NATIVE_RUN_ROOT" "$OBSERVATION_PYTHON" \
+GDPVAL_CODEX_RUN_ROOT="$NATIVE_RUN_ROOT" \
+  JE_ARROW_MALLOC_CONF=background_thread:false "$OBSERVATION_PYTHON" \
   "$RUNTIME_ROOT/batch-runner/gpt54_time_budget_codex_observation.py" \
   --run-id "$RUN_ID" --repeat "$REPEAT" --task-id "$TASK_ID" \
   --runtime-root "$RUNTIME_ROOT" \
@@ -624,9 +625,13 @@ and [PR760's separate proof](https://github.com/hyeonsangjeon/gdpval-realworks/b
 are not combined with this result. Source review `5431353775` accepted the
 callable; final integrated-HEAD CI, a trusted
 controller, genuine inputs and actual host/auth/direction values remain gates.
-The first two real V2 cells stay consumed/uncertain; no Codex or further V2
-live authority is granted by this proof. The separate retry-fixture correction
-and its unstarted local proof are documented in the current evidence record.
+The first two real V2 cells stay consumed/uncertain. Task3 also remains
+consumed, with a canonical error, reported usage and confirmed cleanup; its
+error classification is still pending. No Codex or further V2 live authority
+is granted by this proof. The retry fixture subsequently passed its sixteen
+tests in CI at `d71bae686020ee465a487f25dbb4675954ec849c`; its earlier local
+wrapper exit 127 remains an unstarted proof. The current evidence record
+separates those observations and the pending combined-source CI.
 
 <a id="first-v2-observation-on-github-actions"></a>
 
@@ -643,6 +648,46 @@ private claim/retention and completion metadata. It has a 45-minute job ceiling
 for setup, the unchanged
 1200-second generation budget and shared 20-second cleanup, and private
 retention. That ceiling is not a money cap or a remote-cancellation guarantee.
+
+The `ubuntu-22.04` job sets
+`JE_ARROW_MALLOC_CONF=background_thread:false` before Python imports. This
+is Arrow's vendored allocator prefix, verified in installed PyArrow 25.0.1's
+`libarrow.so.2500` (SHA256
+`169a4b46f606daa5a9c142c64f7b35c516bd60c63b6a9699d25099e96dc8ecec`, matching
+wheel RECORD). Unprefixed `MALLOC_CONF` or changing the memory pool after
+import is not a substitute. Existing BLAS/OpenMP controls and the strict
+single-kernel-task ownership requirement remain in force. This prospective
+infrastructure change adds no study condition and makes no timing-equivalence
+claim.
+
+The existing fresh-child startup regression reads these static values from
+the actual V2 workflow; `time-budget-contracts` now runs on `ubuntu-22.04`
+as well. The leader-read earlier `ubuntu-latest` run `37511729194` / job
+`112434320613` at `c41291dda23581318d904815a1af2af792d726c9` reported
+1 failed and 239 passed in 621.38s, with `jemalloc_bg_thd` causing the real
+`_single_threaded` refusal in that synthetic reproduction. The new local
+check at `12a0309592d4d5780ffa123eda889fddc2c70d4d`, tree
+`bc847003bf690a09e33b81dedad5306804078cce`, failed in 22.966132s overall:
+syntax/scope and kernel-node collection succeeded, but the four contracts
+recorded 3 passed and 1 failed because the proof guard refused the existing
+Bash argv-only check. It was not retried. The real-kernel body was not run
+on NAS. The subsequent Ubuntu 22.04 CI job `112459794337` in run
+`37519177987`, at reviewed source `108cab226346f7c95e994ed384b4f9ee54f51d46`,
+reported **241 passed in 776.84s**, including both startup-module nodes and
+the real fresh-process admission/cleanup assertion. All eleven applicable
+checks succeeded. This supported-host evidence does not replace the actual
+execution's source/input/direction and per-observation claim checks.
+See the [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for
+exact commands, artifact hashes, review provenance and remaining live gates.
+
+Historical Task2 run `37501571165` remains consumed/uncertain, with permanent
+claim `3def41563f98b70201dc42814bc45b4fd9f1d70c` and acknowledged output
+`bf82b283576411b66dfc7e962de4c587d6de4b02`. This CI reproduction does not
+establish Task2's historical first failed prerequisite, model-call count or
+cost. Task1 and Task2 cannot be replayed, adopted, scored as zero or removed
+from the planned denominator. Any Task3 execution requires the leader's
+separately recorded immutable request; the command example alone grants none.
+
 The five-node continuation at leader-reviewed
 `70a02619276bc9da072567d5ee0e4060aed6dbbf`, tree
 `1d85a59c1baf5660d80a3abd5eedf14053dc54b2`, reported **5 passed in 96.48s**,

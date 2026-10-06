@@ -1,58 +1,59 @@
 # Latest task result
 
-## Native candidate integrated with accepted V2 source
+## Native observation source integrated with allocator correction
 
-The leader reconciled native candidate
-`55639ee4f642a4f951909a3d4e066eee3776cfd7`, tree
-`221d1e6c2c4ad8e2d985a362166f2732588a1981`, with accepted main
-`793c8778a75348fcb4070f2c8bec135b428ae731`, tree
-`b765bf7a089b56b602aba363d615ec87f8a35a81`. Only CHANGELOG, this record and
-the related README sections require reconciliation. All non-document source,
-workflow and test blobs retain their original identities; the shared CI
-changes are identical in both parents. This is integration evidence, not
-a combined behavioral pass.
+The leader reconciled native source
+`d71bae686020ee465a487f25dbb4675954ec849c`, tree
+`5659b7b882db4f52d2db97b16c0eaad3347ce725`, with accepted main
+`f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, tree
+`72a9d2fa2c22b1409a8b19e01d6a24ac5f29f9cf`. Each source passed its eleven
+applicable checks. All non-document changes are disjoint and retained by exact
+blob identity. Only CHANGELOG, LATEST and README need reconciliation.
+No new runtime, workflow or test logic is introduced by integration.
 
-The native callable retains source review `5431353775` at
-`9183232103be1e46b654be76143c349b0cf0f425`, and CI reuse retains review
-`5431704047` at `2fe4adf221078c9b36ec53fdb6d76cce31f8ce10`.
-The later retry-fixture correction was read but remains behaviorally unproved.
-The [exact native record][native] preserves its attempted source
-`bebce09ff6893ed6308127df36c14e4c2bc7ce97`, tree
-`c5a10eed1d0c0106a9903edf1141032d3f5683d0`: its wrapper exited 127 because
-`/usr/bin/time` was unavailable, before pytest or either selected node ran.
-No JUnit, passing cleanup assertion or supported-host result is inferred.
+Native source reviews `5431353775`, `5431704047` and `5433784158` remain
+attached to their inspected heads. Actual run `37521213587`, pytest job
+`112466778086`, at the native parent reported **13393 passed, 64 skipped,
+46 deselected, 1 warning in 1908.71s**. The retry-fixture module reported
+sixteen passing tests, including the previously failing HTTP 500 case and
+the added cleanup-order regression. The 219176-byte log has SHA256
+`5dbb8e6839d952bb0e31d715ae0954f36d459d58e7a69481b8768555faf840c3`.
 
-The correction snapshots descendants, closes the SDK, reuses the existing
-sweep and then removes its own workspace. Original stream consumption,
-localhost measurement and retry-count assertions remain intact. Its
-regression protects a pre-existing child and requires actual enumeration.
-No core runner or ownership gate is changed.
+That hosted result does not relabel the local wrapper's exit 127, which
+occurred before pytest, or aggregate the separate **9 passed in 22.91s**
+native callable proof. The [native record][native] retains the exact failed
+wrapper and earlier test artifacts. No passing selector was repeated locally.
 
-The original native CI remains **1 failed, 13391 passed, 64 skipped,
-46 deselected, 1 warning in 1982.61s**, with a workspace-deletion errno 39,
-not a retry-count assertion or timeout. The separate native callable proof
-remains **9 passed in 22.91s**. The [accepted V2 evidence][v2] retains its
-source reviews, eleven successful checks and prior failed/local proofs.
-None was rerun or aggregated for this integration.
+Allocator source review `5433737665` and the [accepted main record][allocator]
+retain the real Ubuntu-22.04 startup/cleanup evidence: job `112459794337`,
+run `37519177987`, reported **241 passed in 776.84s**. The integrated source
+preserves the prefixed allocator setting, strict single-kernel-task ownership
+and all source/input/direction/CAS checks. The native CLI example now supplies
+that same host-process setting before Python imports; it is not execution
+authority. Model parameters, frozen F and 1200+20 limits do not change.
 
-The new combined HEAD needs review and all applicable CI. Ordinary CI can
-now exercise the native fixture correction on Linux; no repeated local
-wrapper or known-unsupported NAS ownership probe is requested. A failure
-must remain explicit rather than being hidden by retry or test removal.
+The combined HEAD still needs source review and all applicable CI before
+delivery. Readiness of either parent does not invent a combined-HEAD verdict.
+Trusted native controller/input/Step0/auth/host/direction requirements remain
+separate from the callable implementation.
 
-V2 Task1 and Task2 remain consumed and uncertain. Task2 run `37501571165`
-retained claim `3def41563f98b70201dc42814bc45b4fd9f1d70c` and output
-`bf82b283576411b66dfc7e962de4c587d6de4b02`; result, usage and cleanup remain
-unknown. Its historical first prerequisite and model-call count are not
-recovered by a separate CI reproduction.
+Real V2 Task3 run `37524773961`, attempt 1, source
+`f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, produced a canonical error with
+terminal reason `failed`, confirmed cleanup and a reusable host. Reported
+usage was 2913 input and 326 output tokens. Its result is 6632 bytes, SHA256
+`a2f21666eb53542ead8b780404fd241056d3cc129167f6e7b1be36c6b64160f7`, fingerprint
+`0374270431f6352211715da432d886f8557514324c89d60c230f81f65a2a5b61`.
+Private output `2460c45c3896371b011624f13fc7817d5f670969` was acknowledged
+under permanent claim `e5571e85eb10ed7450c4dda02b66363f7e5d0dc4`.
 
-The prospective allocator correction at PR762 source
-`108cab226346f7c95e994ed384b4f9ee54f51d46` is not copied or treated as accepted
-runtime here. Its real Ubuntu-22.04 admission/cleanup and full CI are separate
-gates. No further live cell, Task1/Task2 replay or grade is authorized.
-The frozen grader, twenty-observation registration and 1200+20 limits remain
-unchanged. Trusted native controller/input/Step0/auth/host/direction work is
-still required before native execution.
+The completion envelope, artifact `11441448261`, has SHA256
+`200b555b8659b0e04ba7be6f722a2c7dd2e6a0f12bb05392c101b268de2a5648`.
+Its exact source/request/cell/run binding was checked independently. The
+private canonical error code and model-binding fields have not yet been read;
+the dedicated readout implementation is separate ongoing work. Token usage
+is not a bill, model-call count or quality score. Task3 is consumed, not
+uncertainty-only and not permission to retry. Task1/Task2 remain consumed and
+uncertain. No Task4, replay or grading operation is authorized here.
 
-[native]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/55639ee4f642a4f951909a3d4e066eee3776cfd7/tasks/LATEST_TASK_RESULT/README.md
-[v2]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/793c8778a75348fcb4070f2c8bec135b428ae731/tasks/LATEST_TASK_RESULT/README.md
+[native]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/d71bae686020ee465a487f25dbb4675954ec849c/tasks/LATEST_TASK_RESULT/README.md
+[allocator]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/f2eaccf1b3973a6fc683f169b38f6caddb5a1953/tasks/LATEST_TASK_RESULT/README.md

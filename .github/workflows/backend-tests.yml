@@ -246,7 +246,7 @@ jobs:
   # ceiling. `pytest` remains the core check; all ten job verdicts must be
   # reviewed. Keep setup and dispatch pinning identical to the core job.
   time-budget-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
