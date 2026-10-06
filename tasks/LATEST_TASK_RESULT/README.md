@@ -1,205 +1,192 @@
 # Latest task result
 
-## Test-only V2 startup gate; real-host proof pending
+## PR762 prospective Arrow startup configuration
 
-Added one regression in `batch-runner/tests/test_time_budget_owned_startup.py`.
-There is **no production startup fix and no positive local kernel proof**.
-The decisive test body was not run on known-unsupported NAS. The single local
-syntax/collection/scope check ended **exit 1 in 2.874s**: syntax and scope
-checks succeeded and pytest collected one node in **2.58s**, exit 0, but the
-final zero-effects assertion found one blocked audit event. That failed
-check is retained without a retry.
+The V2 workflow now sets `JE_ARROW_MALLOC_CONF=background_thread:false` at
+job startup, before Python imports. Only the `time-budget-contracts` job's
+runner label changes from `ubuntu-latest` to production's `ubuntu-22.04`.
+The strict ownership gate is unchanged. The fresh-child regression reads
+the actual V2 workflow's static environment and asserts the shared host and
+45-minute ceiling; it does not supply an independent test-only allocator
+setting. This is a prospective infrastructure correction, not a new study
+condition or a claim of identical timing.
 
-The accepted source and leader-reviewed basis are
-`793c8778a75348fcb4070f2c8bec135b428ae731`, tree
-`b765bf7a089b56b602aba363d615ec87f8a35a81`. The leader reviewed the retained
-reproduction and authorized this one automated supported-host assertion.
-No new design review or unavailable model-reviewer invocation occurred.
-The test-only checked commit is `3c0325bebe439a75cc551ec5c13d547fa1e2490f`,
-tree `5d682a1dba1aa7d83b72550b8b7e45a3fb40eb72`; the test file has SHA256
-`eae12f848d0f4e8b13527d13b679b0820bc6280ab26cb274757d24a60ba930a2`.
-The post-check delta is only this record and the CHANGELOG entry. Final
-source review and ordinary final-HEAD CI remain pending. This draft must not
-be merged or described as a fix until the real startup failure is understood.
+The installed Arrow prefix was verified statically. The one local validation
+invocation then **failed, exit 1, in 22.966132s**: syntax/scope checks passed,
+the real-kernel node was collected without execution, and the four contract
+nodes recorded **3 passed and 1 failed**. The proof guard blocked an existing
+argv-only Bash check. No retry or post-proof code change followed. Real
+admission and cleanup on the new Ubuntu 22.04 CI host remain pending.
 
-## Actual Task2 uncertainty, supplied by the leader
+### Reviewed basis and exact source
 
-The real selected cell was `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` /
-repeat 1 / `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`. Run `37501571165` /
-run_number 2 / attempt 1 / job `112399621053` used source `793c8778a75348fcb4070f2c8bec135b428ae731`.
-Original inputs, preparation, the permanent private claim, approved login and
-identity checks succeeded. Execute ran at `17:13:41..17:13:47Z` and returned 2.
-Its exact safe event was:
-
-```json
-{"category":"deadline_refused","format":"gpt54-time-budget-first-v2-ci-failure-v1","reason":"time_budget_owned_process_host_required","stage":"observation_callable"}
-```
-
-Retention, envelope verification and artifact publication succeeded. The
-completion remains `uncertain` with acknowledged retention; result,
-fingerprint, terminal reason, usage, cleanup and host reuse are null.
-`retry_allowed=false`, `grading_performed=false`, and `other_cells_executed=0`.
-The static refusal code also covers later ownership rechecks. It does not
-identify which prerequisite failed, establish whether a provider call
-occurred, or establish a model-call count or cost. No live evidence was
-queried again for this task.
-
-| Immutable evidence | Identity |
+| Identity | Value |
 | --- | --- |
-| Permanent Task2 claim | `3def41563f98b70201dc42814bc45b4fd9f1d70c` |
-| Acknowledged Task2 output | `bf82b283576411b66dfc7e962de4c587d6de4b02` |
-| Request SHA256 | `e7839f57002e20ce9488fa8c6e90d6ded8f916835619c2486280faad1e03cd9a` |
-| Artifact `11430455885`, ZIP SHA256 | `abe03b702245b5b438ad2fdc8cea863aac98f0ed5bec8263d9ae8954e2fce2a6` |
-| Envelope SHA256 | `55edb4b7df3159f664bc5e3e577e01743f02033f55d869515ccd3fbd815bd2e4` |
-| Log, 185747 bytes, SHA256 | `ee35534bbe3b89ba29850b715b81c0e4e0be74bbb0dc5bf9a5d095db0e923ee0` |
+| Leader-inspected starting source | `c41291dda23581318d904815a1af2af792d726c9` |
+| Starting tree | `2d1a54d33b2a569317a70f35f25bd840ee7d55a1` |
+| Accepted main basis | `793c8778a75348fcb4070f2c8bec135b428ae731` |
+| Main basis tree | `b765bf7a089b56b602aba363d615ec87f8a35a81` |
+| Tested implementation | `12a0309592d4d5780ffa123eda889fddc2c70d4d` |
+| Tested tree | `bc847003bf690a09e33b81dedad5306804078cce` |
+| Backend workflow SHA256 | `ff89fe6ffc6bfda1ed151fd8b4d6a49aeada28fd97b7a7271be45b9e943785f4` |
+| V2 workflow SHA256 | `849b316dc4011c41ecfa2263d8305bc548860cdf2977dcdf99e714409a1ed721` |
 
-Task1 run `37456739936`, attempt 1, also remains consumed and uncertain.
-Its claim `e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` and acknowledged output
-`f602355f945471963a338ccf79783a6f802ac6dd` remain untouched. Neither cell is
-a zero score, an excluded planned cell, or permission to replay or adopt state.
+The existing PR762 worktree was clean at that starting source. The leader
+performed the source-grounded CI/cost decision approving this bounded
+change. The mandatory allocator-review invocation failed before execution
+because of the unavailable legacy Opus preference. It was not a successful
+spawned review; no harness retry, model-setting change or new design loop
+was performed. PR761 remains untouched at
+`55639ee4f642a4f951909a3d4e066eee3776cfd7`.
 
-## Retained NAS reproduction, not rerun
+The five-file implementation changes two workflows, the existing startup
+test, and only the current backend hash/runner expectations in the two
+coupled CI-contract test files. All other parsed workflow fields are equal
+to the starting source. The historical reconstruction still validates and
+removes the time-budget job and its single ignore token before comparing
+`fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47`.
+HISTORICAL, FOUNDRY, frozen F and registered source-profile hashes are unchanged.
+No exact V2 environment assertion in another test file required modification.
+The new static contract checks the environment used by the existing child.
 
-The one reproduction at accepted source `793c8778a75348fcb4070f2c8bec135b428ae731`
-/ tree `b765bf7a089b56b602aba363d615ec87f8a35a81` ended **19.890s, exit 2**.
-It used offline Python 3.10.12 under a 300s+5s overall bound, a 60-second
-child bound and the existing 30-second temporary Git bounds. Real source,
-input and direction validation reached the common consumer and ownership.
-One synthetic handoff was consumed; one admission was entered. No factory,
-provider or generation was reached in that local reproduction; no network
-attempt or reusable-host claim was recorded. These local observations do
-not recover facts missing from the historical Actions attempt.
+### Confirmed hosted startup blocker, supplied by the leader
 
-There was one kernel task before controller import and two by NumPy import
-completion. Two remained through synchronous input reconstruction and
-admission; `_single_threaded()` was the first unmet local admission predicate.
-The timing does not identify who created the task or prove the same condition
-caused the Actions failure. PyArrow was 25.0.1 with the mimalloc allocator.
-Task comm names were not retained by the old script because its combined
-proc read stopped at the missing children interface; the new test separates
-those reads.
+Run `37511729194`, job `112434320613`, at the starting source completed
+**1 failed, 239 passed in 621.38s** on `ubuntu-latest`. The 127428-byte log
+has SHA256
+`f7c6b88aabcb624c891f977c1359937714620971ad30e38913a6b9240dcf3825`.
+No CI query or download was made for this continuation.
 
-Before imports, NAS already returned pidfd ENOSYS 38, waitid EINVAL 22 and
-proc-child ENOENT 2. SIGCHLD was default, the alarm idle, no process owner
-was registered, and subreaper state was 0. These unsupported interfaces
-preclude a genuine positive NAS proof. They were not patched or worked around.
+Before controller import there was one kernel task, `python`. By NumPy
+completion, and through PyArrow/Pandas/datasets, the synchronous reader,
+reconstruction and admission, there were two: `python` and
+`jemalloc_bg_thd`. NumPy was 2.2.6 and PyArrow was 25.0.1. Actual pidfd open,
+signal 0, waitid ECHILD and proc-child interfaces worked; child count and
+subreaper state were 0 and no owner existed. The first real refusal was
+`_single_threaded`. Admission receipts, construction stops, network attempts
+and process refusals were all 0. This identifies an allocator background
+thread in this CI reproduction. Import chronology does not establish that
+NumPy created it, and this is not a historical Task2 cause, call-count or
+cost diagnosis.
 
-Artifacts remain unchanged under
-`/tmp/pr762-v2-owned-startup-reproduction.Wvs1WxG6/`:
+### Static Arrow identity and setting
 
-| File | SHA256 |
+The 30s+5s-bounded static check completed successfully in **0.512644s** using
+Python 3.10.12. It read wheel metadata and binary bytes only; it did not
+import Arrow/NumPy/Pandas/datasets or execute any kernel body.
+
+| Installed artifact | Identity |
 | --- | --- |
-| `command.sh` | `0fdafced8a1a79930fd9710666eb4c98636b4edced981e04b6b02862cc9e52b4` |
-| `reproduce.py` | `3ccf9eb892fd1f8c2e5fd7cb03181cc272954f3f343b538f5fae98b21cbb77ce` |
-| `startup_child.py` | `8d56b2e22d3c76d7d74244cb812058e3a0888e82482975ba66e7018823170b0f` |
-| `synthetic-packet.json` | `cc1551596b3ed9fd20a5efb69156554566df8843adb05644f5a4187ef7143d24` |
-| `child-command.json` | `72cbdf16f7add28716418777db242cf744d0aaa1f925df83523310078ed791ac` |
-| `child.stdout`, 2814 bytes | `9deb7ea508b6554b4b57fffc07586a83a511d970001f601e3492969f06140541` |
-| `child.stderr`, empty | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `result.json`, 363 bytes | `a6b9233513a3f584254d1a53f6e2636e1a10871bce0022ab39c8406c752ba66f` |
-| `reproduction.log`, 3164 bytes | `90c6ebfa7f4ce1f4d2330f5fb4070b8cb2c4257c3694a858ef997efee5c9f80c` |
-| `exit-status` | `53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3` |
+| PyArrow | `25.0.1` |
+| Wheel tag | `cp310-cp310-manylinux_2_28_x86_64` |
+| Binary | `/ai-work/venvs/gdpval-realworks-py310/lib/python3.10/site-packages/pyarrow/libarrow.so.2500` |
+| Binary size | 55368864 bytes |
+| Binary SHA256, matching wheel RECORD | `169a4b46f606daa5a9c142c64f7b35c516bd60c63b6a9699d25099e96dc8ecec` |
+| Distribution METADATA SHA256 | `12ed8d0988a6f7153fec923ee47b7fc1d6134463a86b1b89fa36f24c250163ff` |
 
-That reproduction used separately declared synthetic runtime
-`d40d563f695f4326cb7a3a61cddcd04ebbd31d02`, tree
-`375b905f552b2320075ebddf3029528dcdbc9a92`, and synthetic frozen input source
-`530bc6cee8762116799c0bb1a212e7a1dff7fb8c`, tree
-`ac0ab4e0a0a7893fffdb6b342c786f2526c625a7`. Its synthetic profile SHA256 was
-`e7c44a239ead984f97c8f11e427550d96accfe6bd49c72d0d670d996b7409fc6`.
-These are fixture identities, not accepted production replacements.
+The binary contains the null-terminated `JE_ARROW_MALLOC_CONF` at byte offset
+34846167, `background_thread:true` at 35967669, and the
+`je_arrow_malloc_conf`/`je_arrow_mallctl` symbols. This verifies the exact
+prefix described by the leader's Arrow memory-pool/toolchain and jemalloc
+5.3 source trace. It does not measure the setting's runtime effect. The
+workflow uses that prefixed startup setting, not unprefixed `MALLOC_CONF`,
+a memory-pool switch after import, native mallctl, thread killing or a
+relaxed ownership check. Dependency versions were not changed.
 
-## Committed regression and local check
-
-The single node is
-`tests/test_time_budget_owned_startup.py::test_time_budget_owned_startup`.
-It reuses the existing synthetic linked-source/input preparation fixtures,
-then starts one fresh Python child with no inherited credentials. It sets
-the same shipped `OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`,
-`MKL_NUM_THREADS` and `NUMEXPR_NUM_THREADS` values to 1, with offline HF and
-telemetry disabled. Git fixture operations retain their 30-second bounds;
-the child has a 60-second bound and no retry, sleep or unknown-PID cleanup.
-
-The child imports the actual controller, reconstructs synchronous synthetic
-inputs, validates the source, registration, inputs and digest-bound direction,
-and calls the real consumer in an exclusive temporary synthetic store.
-A construction-stop factory prevents provider effects after real admission;
-the consumer's existing cleanup must complete and release its owned host.
-The test requires one retained synthetic admission and consumed handoff, no
-returned row and no generation. No ownership, pidfd, waitid, subreaper,
-cleanup or admission method is replaced. Existing adverse-case assertions
-are untouched and were not rerun.
-
-Fixed nonsecret JSON diagnostics report kernel task counts and comm names,
-child counts, SIGCHLD, pidfd/waitid outcomes and errno values, subreaper
-state, the first observed failed prerequisite/operation, and installed NumPy
-and PyArrow versions before/after relevant imports and reads and immediately
-before admission. The diagnostics are observations, not admission authority.
-Unexpected exception text, tracebacks, paths and environment contents are
-not forwarded by the child. Refused or unsupported admission fails the test;
-there is no skip, xfail or passing-refusal substitute.
-
-The only local check was:
+### One bounded local validation
 
 ```sh
-bash /tmp/pr762-owned-startup-collection.8RG6XJey/command.sh
+bash /tmp/pr762-arrow-startup.rY7mXj/command.sh
 ```
 
-The retained command uses offline Python 3.10.12 with a 60s+5s bound and
-no `-x`. Its syntax and source-scope checks precede this exact in-process
-pytest argument list, from `batch-runner`:
+The command uses the existing Python 3.10.12, pytest 9.1.1 and pytest-timeout
+2.4.0, with one overall 300s+5s/no-`-x` bound. Source reads keep the 30-second
+Git bound. Timing uses `time.perf_counter`, not `/usr/bin/time`.
+
+Syntax and scope checks verified the exact five changed paths, parsed YAML
+delta and unchanged kernel/diagnostic/validator bodies. Collection selected
+only `tests/test_time_budget_owned_startup.py::test_time_budget_owned_startup`
+in 2.49s, with 0 fixture entries, 0 test-protocol entries and 0 denied effects.
+No real-kernel body ran on the known-unsupported NAS.
+
+The single contract invocation selected exactly:
 
 ```text
---collect-only -q -o addopts= -m "not integration" -p pytest_timeout -p no:cacheprovider tests/test_time_budget_owned_startup.py::test_time_budget_owned_startup
+tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition
+tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_budget_readout_partition_preserves_exact_commands_and_guards
+tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+tests/test_time_budget_owned_startup.py::test_time_budget_owned_startup_workflow_contract
 ```
 
-Pytest 9.1.1 and pytest-timeout 2.4.0 were already installed; no dependency
-changed. Pytest returned 0 after collecting exactly that node in 2.58s.
-Fixture entries and test-protocol entries were both 0. The overall check
-returned 1 in 2.874s because the process/socket audit guard recorded one
-denied event. The first retained failing assertion checks that all three
-counters, including denied effects, are zero. The harness did not save the
-event name, so its precise operation cannot be recovered from this output.
-This is a failed local check, not a passing behavioral or kernel proof, and
-not evidence that a connection was made. Neither the check nor the decisive
-body was rerun.
+JUnit retains all four outcomes: **3 passed, 1 failed, 0 skipped, 0 errors**,
+with duration **19.963s**. The budget-readout node failed at its existing
+`subprocess.run` on line 484. The validated `/bin/bash --noprofile --norc`
+script replaces `python()` with an argv-only `printf`; the proof-only audit
+guard refused its `subprocess.Popen` because it allowed only nested pytest
+collection. Bash did not start. The guard's final zero-denied-effects
+assertion also failed, so pytest's normal terminal summary did not finish.
+The node remains failed even though it had already reached the historical
+canonical-hash comparison before that operation. No assertion was weakened,
+no harness correction was applied and no successful case was repeated.
 
-Artifacts are under `/tmp/pr762-owned-startup-collection.8RG6XJey/`:
+The other three nodes passed. Six nested collection-only subprocesses came
+from the existing partition test. These are contract/collection outcomes,
+not a full CI pass, successful startup, live input verification or an
+ownership/admission/cleanup verdict. The guard recorded one denied process
+event and no network event. `result.json` records the overall failed phase;
+JUnit and the session records retain the completed individual outcomes.
 
-| File | SHA256 |
+| Artifact under `/tmp/pr762-arrow-startup.rY7mXj/` | SHA256 |
 | --- | --- |
-| `command.sh` | `c1db86c1ab3ba6244c619c936a397a2b70fd2a22409b6fa97d14210f9919c75c` |
-| `check.py` | `fe9c149909ed9839a02c121ac4a5ef7f63c95e15f4b2db8216220111fbb2c5af` |
-| `collection.log` | `26841e7d19d45f3b278858b2513db7085ca189cb1430535ffc31edf4b7c619bd` |
-| `result.json` | `ca45695c9077edde4a1b60122572f932582a752b2fb2073bb32a579c8a1cea73` |
-| `exit-status` | `4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865` |
+| `arrow-binary.json` | `0d1c0f89dac486fb8d2fadb91583ab04e863e3fb09810f2e5ddd5dba056764dd` |
+| `command.sh` | `891b2303fbfbc5a3a95acf14ac7706c23b32bd7d10b475d288b2870f732ddfab` |
+| `check.py` | `8ffde0e9ae84d15afa9c8c87259dce8c7f17f199e549781655a328da5fa7d88a` |
+| `startup_contract_guard.py` | `6162be5108257af6519e7fbcf032b1b29d7bb3bb3e224d019f95f948ed4b8f58` |
+| `validation.log` | `8e9377840d666f1f9a9210a1ffc27e07e4a31b0c27ab160a7b5179beb5dbd849` |
+| `result.json` | `13178c125417e9c3af2181283735fda524fc6e3f38cb8d8bc19d544d0994ea05` |
+| `junit.xml` | `556bb3aabf9e923d649f974d091d608cb726950422655208dd71f954f5ec04eb` |
+| `exit.txt` | `88b555aaa75b49fc5c1f5b70ba78c3f9f641894bd5b38628a452f464b226be1d` |
 
-## Remaining gates and unchanged boundaries
+Exact collection/test argument arrays and per-process session records are
+retained alongside these files. The final handoff identifies the final
+HEAD/tree and artifact manifest. Only CHANGELOG, this record and the direct
+README usage section change after the proof; implementation bytes stay pinned.
 
-Ordinary existing `time-budget-contracts` CI selects this filename and runs
-on `ubuntu-latest` with Python 3.10.12. Its result remains pending and must
-be labeled that host. It is not the actual observation workflow's
-`ubuntu-22.04` host; production execution-host readiness remains a later gate
-even if CI admission succeeds. A failure must retain its safe diagnostics
-before any source-grounded correction is considered. No workflow was added
-or changed, and no CI query, dispatch, retry or polling was performed.
+### Prior evidence, historical cells and remaining gates
 
-Production, dependencies, frozen F, experiment settings and all previous
-worktrees are unchanged. The registered 20 planned observations, five-task
-cohort, ABBA order, GPT-5.4/direct-v1/xhigh, V2 nine-turn/8192-output settings,
-concurrency 1 and one external attempt remain fixed. Generation retains
-1200 seconds from first start and the same shared 20-second cleanup; the
-actual V2 job remains 45 minutes. These are not money caps or guarantees
-of remote cancellation. The frozen grader stays
-`882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`; real intake, source/host admission,
-permanent claim/CAS and separate grading gates remain unchanged. No new
-live cell, Task1/Task2 replay, Task3 execution or grade is authorized.
+The [immutable prior record][prior] retains the full source/artifact hashes
+for the **19.890s, exit 2** NAS reproduction and the separate **2.874s,
+exit 1** collection/sentinel check. Neither was rerun or became a kernel
+positive. NAS pidfd ENOSYS 38, waitid EINVAL 22 and proc-child ENOENT 2 remain
+unsupported interfaces; none was patched or bypassed. PR761's separate
+`/usr/bin/time` exit 127 remains an unstarted proof, not a test verdict.
 
-The [prior accepted-source record][basis] and its [earlier proof record][proof]
-retain their separate source, CI, collection and synthetic results. None
-was rerun or aggregated into this check. The original 30-cell pilot, eight
-retention observations and #649 remain closed. Experiment-design was used
-only to preserve these boundaries; English evidence editing preserved the
-observed results, uncertainty and immutable identities.
+The prior record also retains Task2 run `37501571165` / run_number 2 /
+attempt 1 / job `112399621053`, source `793c8778a75348fcb4070f2c8bec135b428ae731`,
+and all request, artifact, envelope and log hashes. Its permanent claim is
+`3def41563f98b70201dc42814bc45b4fd9f1d70c`; acknowledged output is
+`bf82b283576411b66dfc7e962de4c587d6de4b02`. Execute returned 2 with safe reason
+`time_budget_owned_process_host_required`. Task2 remains retained uncertainty
+with null result/fingerprint/terminal/usage/cleanup/host reuse, retry false,
+grading false and other cells 0. Task1 also remains consumed/uncertain with
+claim `e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` and output
+`f602355f945471963a338ccf79783a6f802ac6dd`. Neither cell is removed from the
+planned denominator, treated as a zero score, replayed or adopted. No
+historical model-call count, cost or exact first failing prerequisite is inferred.
 
-[basis]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/793c8778a75348fcb4070f2c8bec135b428ae731/tasks/LATEST_TASK_RESULT/README.md
-[proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e817d592ca0e38be29d26da4122d5b6d7ed7395f/tasks/LATEST_TASK_RESULT/README.md
+Final review and new-HEAD ordinary CI must establish real admission and
+cleanup on `ubuntu-22.04`; no manual dispatch/query/retry/poll was performed.
+Actual execution-host readiness, accepted source, immutable input/direction
+and per-observation claim/CAS remain later leader-owned gates. No live Task3
+or replay authority is issued. Core/readers, source/input/provider controls,
+ownership/pidfd/subreaper/ECHILD semantics, credentials, permissions, other
+jobs and their selectors/receipt producer are unchanged. The fixed five-task,
+20-cell ABBA study, GPT-5.4/direct-v1/xhigh, V2 nine-turn/8192-output settings,
+concurrency 1, one external attempt, 1200-second generation and shared
+20-second cleanup remain fixed. V2 and time-budget CI retain 45-minute
+ceilings. Experiment-design was used only to preserve those boundaries and
+identify the prospective infrastructure change; no timing equivalence is
+claimed. English records were checked with `im-not-ai-en` without changing
+the evidence or uncertainty.
+
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/c41291dda23581318d904815a1af2af792d726c9/tasks/LATEST_TASK_RESULT/README.md

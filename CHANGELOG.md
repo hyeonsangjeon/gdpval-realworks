@@ -13,6 +13,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Configure prospective V2 startup with job-level
+  `JE_ARROW_MALLOC_CONF=background_thread:false` before Python imports and
+  change only `time-budget-contracts.runs-on` to `ubuntu-22.04`, matching the
+  production observation host. The fresh-child regression reads the actual
+  workflow's static startup settings and checks host/45-minute alignment.
+  Ownership, pidfd/subreaper/ECHILD, source/input/direction/CAS and cleanup
+  checks are unchanged. Only the current backend hash/runner expectations
+  in the two coupled contract files change; historical canonical
+  `fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47`,
+  HISTORICAL/FOUNDRY/F/profile hashes, other jobs and experimental controls
+  remain fixed. This is prospective infrastructure, not a new study axis or
+  a claim of identical timing.
+
+  The leader-read `ubuntu-latest` run `37511729194`, job `112434320613`, at
+  `c41291dda23581318d904815a1af2af792d726c9`, tree
+  `2d1a54d33b2a569317a70f35f25bd840ee7d55a1`, completed **1 failed, 239 passed
+  in 621.38s**. It observed `python` plus `jemalloc_bg_thd` at the first real
+  `_single_threaded` refusal, with supported kernel interfaces and no
+  children/owner. Its 127428-byte log SHA256 is
+  `f7c6b88aabcb624c891f977c1359937714620971ad30e38913a6b9240dcf3825`.
+  This identifies the allocator worker in that reproduction, not the
+  historical Task2 model-call count, cost or exact prerequisite failure.
+  A bounded static check of installed PyArrow 25.0.1 confirmed the prefixed
+  environment string and allocator symbols in `libarrow.so.2500`, SHA256
+  `169a4b46f606daa5a9c142c64f7b35c516bd60c63b6a9699d25099e96dc8ecec`,
+  matching its wheel RECORD. No data-library import or kernel body ran.
+
+  One local validation at `12a0309592d4d5780ffa123eda889fddc2c70d4d`, tree
+  `bc847003bf690a09e33b81dedad5306804078cce`, ended **exit 1 in 22.966132s**
+  under Python 3.10.12/300s+5s/no-`-x`. Syntax and exact scope checks passed;
+  the kernel node was collected without fixtures or execution. JUnit records
+  **3 passed, 1 failed, 0 skipped, 0 errors in 19.963s** for the four affected
+  contracts. The proof-only guard blocked the existing budget-readout
+  contract's validated Bash argv-only check at `subprocess.Popen`; its final
+  zero-denied-effects assertion also failed. No retry or assertion change
+  followed. Artifacts are under `/tmp/pr762-arrow-startup.rY7mXj/`, with
+  validation-log SHA256
+  `8e9377840d666f1f9a9210a1ffc27e07e4a31b0c27ab160a7b5179beb5dbd849`.
+  The post-proof delta is only CHANGELOG, LATEST and direct README usage.
+  The leader performed the source-grounded CI/cost decision; the allocator
+  reviewer invocation failed before execution, not a successful spawned
+  review, and was not retried. Final review, new-HEAD ordinary Ubuntu 22.04
+  CI admission/cleanup and all live gates remain pending. Earlier failed
+  checks and consumed Task1/Task2 uncertainty remain separate and immutable.
+  See [the exact evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
 - Accept reviewed V2/CI source `e817d592ca0e38be29d26da4122d5b6d7ed7395f`,
   tree `5b02bae6484cc1a19fa8c735a8bf754b6091bc48`, review `5431664726`,
   after all eleven applicable checks succeeded. Update only completion
@@ -209,16 +255,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   Missing result, usage and cleanup fields do not establish model-call
   counts, cost, zero score or replay permission.
 
-  [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains the full source and
+  [The immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/c41291dda23581318d904815a1af2af792d726c9/tasks/LATEST_TASK_RESULT/README.md) retains the full source and
   artifact identities for the live uncertainty, NAS reproduction and local
   check. The new check artifacts are under
   `/tmp/pr762-owned-startup-collection.8RG6XJey/`; `result.json` has SHA256
   `ca45695c9077edde4a1b60122572f932582a752b2fb2073bb32a579c8a1cea73`.
-  The post-check delta is only this entry and LATEST. Production, workflows,
-  dependencies, frozen F, experiment settings and previous worktrees are
-  unchanged. This draft must not be merged or called a fix until the real
-  startup failure is understood. Ordinary `time-budget-contracts` CI on
-  `ubuntu-latest` is pending; it is not the production `ubuntu-22.04` host.
+  The post-check delta was only this entry and LATEST. At that handoff,
+  production, workflows, dependencies, frozen F, experiment settings and
+  previous worktrees were unchanged, and no production fix was claimed.
+  The then-pending `ubuntu-latest` CI result and the prospective allocator
+  correction are recorded separately above. That CI host was not the
+  production `ubuntu-22.04` host.
   Actual execution-host readiness and any later live direction remain gates.
   Task1 and Task2 remain consumed, with no new live cell authorized.
 
