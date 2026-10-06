@@ -194,8 +194,8 @@ jobs:
       # even if the addopts guard above is ever relaxed. Integration tests reach
       # paid APIs; CI must never pay.
       #
-      # GPT-5.4/GPT-5.6 and budget-pilot contracts run in their family jobs;
-      # no additional tests are deselected across the nine jobs. The partition
+      # GPT-5.4/GPT-5.6, budget-pilot and time-budget contracts run in their family jobs;
+      # no additional tests are deselected across the ten jobs. The partition
       # test checks the explicit selections and budget-pilot glob against the
       # actual file set, including nonempty, exactly-once node coverage.
       # The sandbox launcher test used to be deselected because it probed exec
@@ -215,7 +215,7 @@ jobs:
       - name: Run tests
         run: |
           cd batch-runner
-          python -m pytest -m "not integration" --tb=short -q -rs --ignore=tests/test_gpt54_codex_grading_input.py --ignore=tests/test_gpt54_codex_input_capture.py --ignore=tests/test_gpt54_comparison_preflight.py --ignore=tests/test_gpt54_disposable_checkout.py --ignore=tests/test_gpt54_prepared_input_attestation.py --ignore=tests/test_gpt54_run_config_bundle.py --ignore=tests/test_gpt54_run_input_bundle.py --ignore=tests/test_gpt54_runtime_checkout.py --ignore=tests/test_gpt54_time_budget_comparison.py --ignore=tests/test_gpt54_v2_grading_input.py --ignore=tests/test_gpt54_v2_input_capture.py --ignore=tests/test_gpt54_workflow_gate.py --ignore=tests/test_gpt56_evidence_preflight_gate.py --ignore=tests/test_gpt56_foundry_evidence_intake.py --ignore=tests/test_gpt56_pilot_config_bundle.py --ignore=tests/test_gpt56_pilot_deployment_binding.py --ignore=tests/test_gpt56_pilot_identity_plan.py --ignore=tests/test_gpt56_pilot_input_bundle.py --ignore=tests/test_gpt56_pilot_input_capture.py --ignore=tests/test_gpt56_pilot_wire_receipt.py --ignore=tests/test_gpt56_sol_codex_pilot_preflight.py --ignore-glob='tests/test_codex_budget_pilot*.py'
+          python -m pytest -m "not integration" --tb=short -q -rs --ignore=tests/test_gpt54_codex_grading_input.py --ignore=tests/test_gpt54_codex_input_capture.py --ignore=tests/test_gpt54_comparison_preflight.py --ignore=tests/test_gpt54_disposable_checkout.py --ignore=tests/test_gpt54_prepared_input_attestation.py --ignore=tests/test_gpt54_run_config_bundle.py --ignore=tests/test_gpt54_run_input_bundle.py --ignore=tests/test_gpt54_runtime_checkout.py --ignore=tests/test_gpt54_time_budget_comparison.py --ignore=tests/test_gpt54_v2_grading_input.py --ignore=tests/test_gpt54_v2_input_capture.py --ignore=tests/test_gpt54_workflow_gate.py --ignore=tests/test_gpt56_evidence_preflight_gate.py --ignore=tests/test_gpt56_foundry_evidence_intake.py --ignore=tests/test_gpt56_pilot_config_bundle.py --ignore=tests/test_gpt56_pilot_deployment_binding.py --ignore=tests/test_gpt56_pilot_identity_plan.py --ignore=tests/test_gpt56_pilot_input_bundle.py --ignore=tests/test_gpt56_pilot_input_capture.py --ignore=tests/test_gpt56_pilot_wire_receipt.py --ignore=tests/test_gpt56_sol_codex_pilot_preflight.py --ignore-glob='tests/test_codex_budget_pilot*.py' --ignore-glob='tests/test_time_budget_*.py'
 
       # `scripts/__tests__/` holds Python tests for the repo-root `scripts/`
       # tooling, and until now nothing ran them: the step above changes into
@@ -243,8 +243,65 @@ jobs:
         run: python -m pytest scripts/__tests__ -m "not integration" --tb=short -q -rs
 
   # Separate read-only runners give each contract family its own 45-minute
-  # ceiling. `pytest` remains the core check; all nine job verdicts must be
+  # ceiling. `pytest` remains the core check; all ten job verdicts must be
   # reviewed. Keep setup and dispatch pinning identical to the core job.
+  time-budget-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Verify dispatch contract
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_SHA" ]]
+          echo "dispatch pinned to $EXPECTED_SHA"
+
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact checkout
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Verify integration tests stay deselected
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          if ! grep -qE '^addopts = .*-m "not integration"' pytest.ini; then
+            echo "::error::pytest.ini no longer deselects integration tests"
+            exit 1
+          fi
+          echo "pytest.ini deselects integration tests"
+
+      - name: Run time-budget contracts
+        run: |
+          cd batch-runner
+          python -m pytest -m "not integration" --tb=short -q -rs tests/test_time_budget_*.py
+
   comparison-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 45

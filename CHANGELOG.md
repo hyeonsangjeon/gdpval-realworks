@@ -11,6 +11,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Reuse the reviewed backend time-budget partition from
+  `e817d592ca0e38be29d26da4122d5b6d7ed7395f` (review `5431664726`) for the
+  native Codex branch. Copy the exact workflow and two CI-contract test blobs;
+  do not copy the separate V2 implementation or replay its proofs. Native
+  source and its test module remain unchanged from reviewed
+  `9183232103be1e46b654be76143c349b0cf0f425` (review `5431353775`).
+  The old native pytest job also reported the 45-minute ceiling annotation.
+  Both partition ceilings stay at 45 minutes. The native test file matches
+  the existing time-budget selector; final CI must verify this branch.
+  The donor's 13693-node collection partition and three passing assertions
+  remain donor evidence, not a new native-branch test count or CI pass.
+  No local proof, model, input, grading or consumed observation was rerun.
+
 ### Added
 
 - Add `gpt54_time_budget_codex_observation.run_codex_observation` and its CLI
@@ -42,8 +57,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   and [PR760's separate proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md)
   retain their own outcomes. The first real V2 cell remains consumed/uncertain;
   no model-call count, cost, score or replay authority is inferred. Only the
-  three evidence/usage records changed after this proof. New-source review,
-  final-HEAD CI, a trusted controller, actual host/input/auth values and a
+  three evidence/usage records changed after this proof. Source review
+  `5431353775` accepted the inspected callable; final-HEAD CI, a trusted
+  controller, actual host/input/auth values and a
   leader-issued live direction remain gates; no real execution was authorized.
 
 - Integrate reviewed first-V2 source
