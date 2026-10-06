@@ -11,6 +11,49 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Let the existing directed V2 route select one task from the verified five-task
+  registration for `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1. The
+  existing `request.cell.task_id` now binds input preparation, the callable,
+  result/deliverable paths, direction, private claim/retention prefix and
+  completion metadata. No scheduler, new workflow/input, study axis, permission,
+  model/budget change or frozen-source repin is introduced. Task1's prefix stays
+  unchanged so its permanent claim still blocks under a new source. This is an
+  implementation-only change; Task2 has no live authorization.
+
+  The accepted basis is `7f4daa09944f6d9635e9bff3d945c224cfc76392`, tree
+  `9bc2b0bb655c4cd69fb3b59162776743b5a9278a`. The leader separately approved
+  this bounded wiring change under the CI/source charter, with task/prefix/claim
+  aliasing as the critical risk. This was a leader-executed read-only decision,
+  not a successful spawned-model review; no reviewer harness was retried.
+
+  The one new offline Python 3.10.12 selector at
+  `e99fbc774a6fa2e2c02624e8f78bcc40200928cb`, tree
+  `4b1d7aadd4813be2f746e4ae8d4dfbdfb5c8aa71`, reported **6 passed, 4 failed,
+  1 setup error in 215.64s**, exit 1, within 300 seconds plus 5 seconds grace,
+  without `-x`. The four failures read `task_ids` from the test's configuration
+  wrapper instead of its `configuration` member; the source-mismatch case
+  timed out after 30 seconds during temporary linked-worktree setup. Task2's
+  runner/result/retention and cross-task direction/result checks were not
+  reached. The one-line test correction is
+  `9b1d5b7fddf887a4233630452a261ff3bebfe880`, tree
+  `098626359b138c45fc53029fa55ed8cb7a21fe65`, and was not rerun. No production
+  or workflow byte changed after the proof. The [current record](tasks/LATEST_TASK_RESULT/README.md)
+  retains exact artifacts, failed nodes, passed scope and remaining coverage.
+
+  Historical Task1 run `37456739936` / attempt 1 / job `112246098370` remains
+  permanently consumed/uncertain, with acknowledged private retention, not a
+  zero score or a removed planned observation. Its claim
+  `e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` and output
+  `f602355f945471963a338ccf79783a6f802ac6dd` were not accessed or changed.
+  First throw, model-call count and cost remain unknown. The pending
+  [diagnostics evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/7aebe28c402cfb71463231f2fb1a75825a26391f/tasks/LATEST_TASK_RESULT/README.md)
+  keeps its 5-pass and 8-pass proofs separate; none was repeated or copied into
+  this branch. Failed-path coverage, source review, diagnostics integration,
+  final-HEAD CI and a new leader-issued request with genuine live values remain
+  gates. No live input, HF, provider, grader or CI operation ran for this change.
+
 ### Added
 
 - Integrate reviewed first-V2 source

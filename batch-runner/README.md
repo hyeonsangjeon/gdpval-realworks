@@ -433,8 +433,12 @@ control's existing cleanup deadline and cannot renew the observation. Preparing
 or validating a packet is not execution permission.
 
 The callable `gpt54_time_budget_v2_observation.run_first_v2_observation` and its
-CLI serve **only** run `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1, task
-`02aa1805-c658-4069-8a6a-02dec146063a`. All other cells refuse. It installs the
+CLI serve **only** run `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1, and
+one explicitly selected task from that run's verified five-task registration.
+All other runs, conditions, repeats and unregistered tasks refuse. The next
+intended task is `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`; this code change does not
+authorize it. Task `02aa1805-c658-4069-8a6a-02dec146063a` remains permanently
+consumed/uncertain and cannot be replayed. The callable installs the
 existing same-host `AgenticV2FixtureBackend` (its limited tools are not a
 microVM), `AzureFoundryVoice`, and typed Azure inference client. Client creation
 and connection waits begin inside supervised generation; the client closes
@@ -450,7 +454,7 @@ independent preparation, registration, input and host identities:
 ```bash
 python batch-runner/gpt54_time_budget_v2_observation.py \
   --run-id gpt54_time_budget_v1_v2_r1 \
-  --task-id 02aa1805-c658-4069-8a6a-02dec146063a \
+  --task-id 0112fc9b-c3b2-4084-8993-5a4abb1f54f1 \
   --runtime-root /reviewed/R --reviewed-source-sha R_COMMIT --reviewed-source-tree R_TREE \
   --frozen-grader-root /frozen/F --grader-source-sha 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2 \
   --input-registration-root /anchored/I --input-source-sha I_COMMIT \
@@ -499,20 +503,33 @@ error rows; pre-admission refusal produces no study row. These bytes can feed
 entrypoint neither grades nor uploads. No real input, provider, host or live-run
 acceptance follows from a passing synthetic test.
 
-##### First V2 observation on GitHub Actions
+<a id="first-v2-observation-on-github-actions"></a>
+
+##### One selected V2 observation on GitHub Actions
 
 [`gpt54-time-budget-first-v2.yml`](../.github/workflows/gpt54-time-budget-first-v2.yml)
 adds one manual route to that same callable, through
-[`gpt54_time_budget_v2_ci.py`](gpt54_time_budget_v2_ci.py). It accepts only the
-first V2 cell above. It has a 45-minute job ceiling for setup, the unchanged
+[`gpt54_time_budget_v2_ci.py`](gpt54_time_budget_v2_ci.py). It uses the existing
+`request.cell.task_id` to select one registered task of the first V2 run above;
+there is no new workflow input or scheduler. The workflow's early fixed-cohort
+guard precedes a full credential-free check against the source-verified
+registration. The same selection binds input, handoff, direction, result,
+private claim/retention and completion metadata. It has a 45-minute job ceiling
+for setup, the unchanged
 1200-second generation budget and shared 20-second cleanup, and private
 retention. That ceiling is not a money cap or a remote-cancellation guarantee.
-The test-only Bash-continuation correction's single offline `[linked]` case
-reported **1 passed in 9.88s**, exit 0, at
-`980e2666483aa787a847d107bce095c491df2b04`. It parsed the actual workflow
-commands, checked their full argv and reached `ci.main(validate-request)`
-with the exact completed output. Genuine linked R/F, no-clobber and no-effect
-checks remained intact; production and workflow bytes are unchanged. The
+The new selector at `e99fbc774a6fa2e2c02624e8f78bcc40200928cb`, tree
+`4b1d7aadd4813be2f746e4ae8d4dfbdfb5c8aa71`, reported **6 passed, 4 failed,
+1 setup error in 215.64s**, exit 1. Four cases stopped at a test-only lookup of
+`task_ids` on the configuration wrapper rather than its `configuration` member;
+the source-mismatch case timed out during linked-worktree setup. Task2's
+runner/result/retention and cross-task direction/result assertions were not
+reached. The single-line correction `9b1d5b7fddf887a4233630452a261ff3bebfe880`
+was not rerun; production/workflow bytes did not change after that proof.
+The passing cases covered invalid task/run/condition/repeat/prefix refusal and
+preservation/refusal of synthetic pre-existing Task1 claim/output bytes. The
+[prior isolated CLI proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/83d615c5516efbe1c4b20f273c493e1cc9dce208/tasks/LATEST_TASK_RESULT/README.md)
+remains **1 passed in 9.88s**, separate from this failed invocation. The
 [earlier layout proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md)
 remains **6 passed, 1 failed in 58.33s**, exit 1, not a successful invocation.
 The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md),
@@ -520,8 +537,19 @@ The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob
 and [original failed invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
 remain separate evidence, not an aggregate 25-pass result. See the
 [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact
-tested/reviewed identities and pending final-HEAD review, new CI and live gates.
+tested/reviewed identities, incomplete coverage, pending diagnostics integration,
+final-HEAD review, new CI and live gates.
 These synthetic tests are not real host, inference or publication evidence.
+
+Historical real run `37456739936` / attempt 1 / job `112246098370` retained
+acknowledged uncertainty for Task1, with immutable claim
+`e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` and output
+`f602355f945471963a338ccf79783a6f802ac6dd`. It remains one uncertain planned cell,
+not a zero score or excluded observation. Its first throw, model-call count and
+cost are unknown. The separately reviewed [PR759 diagnostic proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/7aebe28c402cfb71463231f2fb1a75825a26391f/tasks/LATEST_TASK_RESULT/README.md)
+remain 5 passed in 95.25s and 8 passed in 162.87s, not evidence for this selector.
+Task2 requires accepted diagnostic/selector source and a new leader-issued
+immutable request; no source in this change is declared an approved runtime.
 
 The following is the future command shape, **not permission to dispatch**:
 
@@ -571,7 +599,7 @@ below is required; uppercase placeholders must be replaced with genuine values:
     "study_id": "gpt54_sandboxv2_codex_time_budget_v1",
     "run_id": "gpt54_time_budget_v1_v2_r1",
     "condition": "sandbox_v2", "repeat": 1,
-    "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"
+    "task_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
   },
   "ci": {
     "repository": "hyeonsangjeon/gdpval-realworks",
@@ -588,7 +616,7 @@ below is required; uppercase placeholders must be replaced with genuine values:
   "storage": {
     "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
     "branch": "main",
-    "prefix": "time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a",
+    "prefix": "time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
     "expected_parent": "EXACT_PRIVATE_MAIN_COMMIT"
   },
   "not_before_unix": "INTEGER_ADMISSION_START",
@@ -599,6 +627,15 @@ below is required; uppercase placeholders must be replaced with genuine values:
 `run_number`, `not_before_unix` and `expires_unix` must be JSON integers, not the
 placeholder strings shown here. The admission window must be finite and no
 longer than 2700 seconds; it does not renew the generation clock.
+The prefix must match the independently requested registered task, never a
+result filename. Task1 keeps exactly
+`time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a`;
+its existing claim/output cannot be relabeled or adopted as a fresh attempt.
+The read-only metadata workflow remains Task1-only. Its earlier parent/prefix
+observation does not establish Task2's current state. The request still needs
+the actual next run number, final accepted R/tree, finite window, independent
+digest, canonical host paths and current expected private parent. Nothing in
+this example resets attempt or run-number controls.
 `registration_sha256` is the genuine compiled registration's `manifest_sha256`,
 not a raw YAML file hash. `dataset_sha256` is
 `core.agentic_v2_preregistration.seal(plan["shared"]["dataset"])` from that
@@ -663,7 +700,8 @@ missing-interface admission refusal remains a separate observation. Neither
 establishes support for this changed source/another host, server-side
 cancellation, billing bounds or live authorization. Omitted control preserves the prior
 runner behavior, including the separate closed `CodexTaskDeadlineStore` contract.
-No dispatcher or capture path selects this control yet. Measurement availability,
+The directed single-task V2 route above selects this control; it adds no scheduler.
+Measurement availability,
 credentialed-input authority and live source-bound execution remain unverified;
 all existing launch refusals remain. Do not pass this manifest to the old preparer
 or runtime as an execution config, or relabel an older prepared source snapshot.

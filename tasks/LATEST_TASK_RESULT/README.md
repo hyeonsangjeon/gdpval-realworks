@@ -1,167 +1,152 @@
 # Latest task result
 
-## PR757: accepted-source integration and real storage metadata
+## One explicitly selected registered V2 task: failed offline proof
 
-The first-V2 route is combined with the accepted read-only metadata route.
-Both parent sources passed all ten applicable checks. Source, workflow and
-test bytes are preserved; the combined HEAD still needs review and CI.
-No new local selector, input acquisition, inference or grading was performed
-for this integration.
-
-### Reviewed sources and integration
-
-The first-V2 source is `83d615c5516efbe1c4b20f273c493e1cc9dce208`, tree
-`761d2ad208d355e515bdabce67226837569ff9f7`, accepted in review `5426656908`.
-Accepted main is `536d2466b63b2f845a691a8953901e02a1757b05`, tree
-`b72496e0151609defcbd40407e9f37479e0bd5a6`, containing metadata source
-`b759affe6abdf2eba8b32f0470837f6c2145997e`, accepted in review `5426656614`.
-Only CHANGELOG, this record and the usage README overlap. The README combines
-both sections without a content conflict; every non-document blob is retained
-exactly from its parent. Earlier proofs are not tests of the combined tree.
-
-### Actual read-only metadata
-
-Corrected metadata source `b759affe6abdf2eba8b32f0470837f6c2145997e` passed
-all 25 metadata cases in CI run `37438423265`, job `112185883536`, attempt 1.
-The main selector reported **13573 passed, 64 skipped, 46 deselected,
-1 warning in 2334.76s**; the separate scripts selector reported **186 passed
-in 45.51s**. Log SHA256:
-`899cc398018a8cfafbefc63420b14dd77950733f2b510b511cf012997c2ebe9b`.
-The original local **17 failed, 8 passed, 1 teardown error in 5.31s** remains
-failed historical evidence; it is not converted into a local pass.
-
-Authorized read-only [metadata run 37446326232][metadata-run], attempt 1,
-succeeded from source `536d2466b63b2f845a691a8953901e02a1757b05`.
-The leader verified artifact `11403029974` against its exact schema and
-source/run identities. At `2026-10-06T09:58:18Z`, it reported the fixed target
-as private and the first-observation prefix as absent, at parent
-`d25e0b9daf5d80082641a6e6a99448507cc5fdf4`. Envelope SHA256:
-`bb20c398b98266838c4f09fc8c047dbe7f069457d8b40fa1f87fae8023e08a5d`.
-Its target hash is
-`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
-The only inspected prefix was
-`time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a`.
-No credential was copied to NAS, private body downloaded, HF object written
-or model/grader called. This observation supplies a candidate parent only.
-The actual claim must still match the remote parent and all source, input,
-host, attempt and direction checks; prefix absence is not execution authority.
-
-### Prior isolated CLI proof
-
-The single `[linked]` case reported **1 passed in 9.88s**, exit 0. It parsed
-the actual workflow commands, checked every argument and reached
-`ci.main(validate-request)` with the exact completed output. Only the test's
-backslash-newline handling changed. This is one synthetic CLI proof, separate
-from every earlier invocation; no other case was rerun.
+The existing route now carries `request.cell.task_id` through the source-verified
+first V2 run. The one new offline selector reported **6 passed, 4 failed,
+1 setup error in 215.64s**, exit 1. Its downstream Task2 execution/retention
+coverage is incomplete. A one-line test correction was committed afterward
+without a rerun; this is not an 11-pass result or live authorization.
 
 ### Scope and reviewed basis
 
-Work resumed in the clean repair worktree at leader-reviewed
-`f81fe508b34c74f21b2e128ae2354da663d24203`, tree
-`3af3c9407a6c10c9c9b79e7890993ba50f734216`. The leader reviewed the workflow,
-controller, source fixtures and records, accepted the production layout repair,
-and identified this test-parser defect. No new architecture review or reviewer
-harness invocation occurred. The earlier CI/source decision was leader-executed,
-not a successful spawned-model review; its provenance remains in the
-[prior layout record][layout].
+The fresh independent branch starts at accepted main
+`7f4daa09944f6d9635e9bff3d945c224cfc76392`, tree
+`9bc2b0bb655c4cd69fb3b59162776743b5a9278a`. No prior worktree, remote claim or
+output was changed. Pending PR759 diagnostics were not copied or stacked here.
 
-Bash removes physical backslash-newline continuations before argument parsing.
-The test now folds only those exact pairs in the extracted workflow command
-before environment expansion and `shlex.split`. Quotes, whitespace within
-arguments, every flag/value, the full exact-argv assertion and the actual CLI
-call remain unchanged. There is no handwritten replacement command or filtering
-of arbitrary newline arguments.
+The leader separately performed the read-only CI/source pre-edit decision and
+approved implementation plus one synthetic proof. Its critical risk is aliasing
+a selected task to another task's prefix/claim, especially treating consumed
+Task1 as fresh. This is the leader's review, not a successful spawned-model
+review; the unavailable reviewer harness was not retried. `experiment-design`
+was applied only to preserve the existing registration, not to reopen its axes.
 
-All production, workflow, source-fixture and validator bytes remain identical
-to the reviewed basis. Actual `GITHUB_WORKSPACE` stays the ordinary bootstrap;
-R and F remain genuine detached registered linked worktrees at
-`$RUNNER_TEMP/time-budget-v2-runtime` and
-`$RUNNER_TEMP/time-budget-v2-frozen`. State remains at
-`$RUNNER_TEMP/time-budget-first-v2`. The existing bootstrap commit/tree,
-canonical-path, common Git, held-directory and final-reread checks are unchanged.
-No core, ownership, manifest, source pin, frozen F, permission or study policy
-changed. The first V2 cell, fixed 20-observation study, GPT-5.4/direct-v1/xhigh,
-concurrency 1, one attempt, 1200-second generation, shared 20-second cleanup and
-45-minute job ceiling remain fixed. The ceiling is not a money cap.
+Only `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 and one of its five
+registered tasks can be selected per invocation. The workflow's early guard
+checks that fixed cohort; the credential-free full validator independently
+compiles reviewed R/F and resolves the task from the run specification. The
+next intended task is `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`, not authorized to
+execute by this change. The selected task binds input/handoff, observation
+control, direction, canonical row/deliverables, private prefix/CAS, retention
+and the existing allowlisted completion schema. Historical first-cell names
+remain compatible; execution does not switch tasks through mutable globals.
 
-### Pinned correction and one proof
+There is no new scheduler, workflow, task input, permission or experiment.
+The five-task / 20-planned-observation ABBA design, GPT-5.4/direct-v1/xhigh,
+V2 9-turn/8192-output settings, concurrency 1, one external attempt, 1200-second
+generation including waits/recovery, shared 20-second cleanup and 45-minute job
+ceiling are unchanged. F `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
+`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, TEMPLATE
+`37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`, core,
+manifest, grader/judge policy and legacy launch guards remain unchanged.
 
-- Tested HEAD: `980e2666483aa787a847d107bce095c491df2b04`.
-- Tested tree: `f4a9fae1eb6852f1b123f2ea85146d60418f3a83`.
-- Test-only delta: one line replaced in `batch-runner/tests/test_time_budget_first_v2_ci.py`.
-- Selector: `tests/test_time_budget_first_v2_ci.py::test_time_budget_first_v2_ci_source_layout[linked]`.
-- Python 3.10.12, one offline invocation, 300 seconds plus 5 seconds termination
-  grace, no `-x`. JUnit records one case, zero failures, zero errors and zero
-  skips. No other layout, PR757, PR758, study, platform or full-suite case ran.
+### Exact source and one invocation
 
-The case used genuine temporary Git/source validators and executed the
-workflow's linked-worktree creation command with explicit synthetic F anchors.
-It verified no-clobber refusal, complete argv for all five controller commands,
-and the real `ci.main` return value 0 with
-`{"operation": "validate-request", "outcome": "completed"}`. Truthful
-`GITHUB_WORKSPACE`, socket and external-write sentinels stayed intact. No
-credentialed intake, CAS, admission or provider effect occurred. This does not
-claim that the other four controller operations executed in this invocation.
+- Tested HEAD: `e99fbc774a6fa2e2c02624e8f78bcc40200928cb`.
+- Tested tree: `4b1d7aadd4813be2f746e4ae8d4dfbdfb5c8aa71`.
+- Selector: `tests/test_time_budget_first_v2_ci.py::test_time_budget_v2_registered_task_selection`.
+- Python 3.10.12; offline, telemetry disabled, network/provider/grader/write
+  sentinels retained; 300 seconds plus 5 seconds termination grace; no `-x`.
+- Started `2026-10-06T13:13:54Z`; 11 selected cases, **6 passed, 4 failed,
+  1 setup error in 215.64s**, exit 1. No old selector was run.
 
-Artifacts remain at `/tmp/pr757-linked-cli-proof.MKeaJT/`. `command.sh`
-contains the complete invocation and clean HEAD/tree guards; its digest is
-not the hash of shortened or redacted command text.
+The six passing parameters are `unregistered_task`, `run`, `condition`,
+`repeat`, `prefix` and `old_task1_claim`. They exercised genuine request/source
+validation and rejected invalid task/run/condition/repeat/prefix declarations
+before credentialed intake. The old-claim case used explicitly synthetic old
+Task1 objects, refused their occupied prefix without reading/adopting bodies or
+making a new CAS, preserved their exact bytes, and blocked execution and local
+re-preparation. No real private claim or result was read.
+
+The four failed parameters are `task2`, `direction_task`, `result_task` and
+`result_source`. Each reached real Task2 input validation, handoff preparation
+and an acknowledged synthetic private claim, then stopped at test line 382:
+`config["task_ids"]` raised `KeyError`. The genuine `configuration.json` wrapper
+holds those fields inside `configuration`; the test omitted that lookup.
+None reached its runner, cross-task direction, result-mismatch or retention
+assertions. This does not demonstrate a production failure at those boundaries.
+
+The `source` parameter errored before its test body. The existing
+`actions_layout` fixture's actual Bash linked-R/F creation command exceeded its
+30-second subprocess bound. The source-refusal assertion did not run. The
+record establishes a setup timeout; it does not identify the specific Git
+operation or a kernel/provider cause. The outer invocation finished within its bound.
+
+Artifacts remain in `/tmp/pr760-v2-registered-task-proof.XaKNtvU9/`; the command
+includes exact clean HEAD/tree guards and the full invocation.
 
 | Artifact | Bytes | SHA256 |
 | --- | --- | --- |
-| `command.sh` | 1093 | `874fa9bcb5082ac0293fdb3faf3d4437aa203a58b5d10625d74adcfd380e5bfd` |
-| `pytest.log` | 609 | `41123833940c955ba1c8318829bfe3fe2ab0f8a4087260575eecb05f491fe79a` |
-| `junit.xml` | 438 | `162e57b2ed485cba1b0bf852f67f4fc64c0040b0e68b464d61efd8f89f1cab89` |
-| `exit.txt` | 12 | `bde294368bfed77c2cddf8cec271d398aee9cdbab3b26e1059281bd33adb0120` |
+| `command.sh` | 1435 | `85ab70d2b73cd6946ed42fa7219b861fc5989e0ebe3560cf02038a4f59856c61` |
+| `pytest.log` | 6234 | `b7f83e5303782ec236e6813469ff78e275b73c6bede6b7aad722a1f0ae4cee2c` |
+| `junit.xml` | 6129 | `437ab75f9ef5cffb121eda56b9d9b87e05217a188349e4351050ae668ae89217` |
+| `exit-status` | 2 | `4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865` |
 
-### Separate evidence and remaining gates
+### Post-proof delta and pending coverage
 
-The [first layout invocation][layout] remains **6 passed, 1 failed in 58.33s**,
-exit 1, at `14fe35b08018af3c92e02bfc474b5aef6777c724`, tree
-`27c5c4f7f275a9cb5a06633ebb5298733f3e7ae9`. Its `[linked]` case stopped before
-`ci.main` at the command-tokenization assertion. Its six passing refusal cases
-were not repeated. That failed observation and its exact artifacts remain
-unchanged, not relabeled as a seven-pass result.
+Test-only correction `9b1d5b7fddf887a4233630452a261ff3bebfe880`, tree
+`098626359b138c45fc53029fa55ed8cb7a21fe65`, adds only `["configuration"]` to the
+new test's wrapper read. It preserves every assertion and was not rerun.
+Production and workflow bytes are identical to the tested source. The remaining
+post-proof delta is only `CHANGELOG.md`, this LATEST record and directly related
+`batch-runner/README.md` usage/evidence. `im-not-ai-en` checks only these changed
+English passages; that editorial check is not software validation.
 
-The [original invocation][original] remains **14 passed, 11 failed and
-11 teardown errors in 16.57s**, exit 1, at
-`8be989167037f91b98866a2fdb8bc887b11a4c54`. The telemetry correction
-`1585ef4309f03fc08d0e7c553341d62826b182d0` was unrerun at that handoff.
-The [11-node continuation][continuation] remains **10 passed, 1 failed in
-68.02s**, exit 1, at `0fe559377bbbd20eab790dd7a5c48e4509911c90`.
-The [missing-usage retention proof][missing-usage] remains **1 passed in
-15.88s**, exit 0, at `d82fbd9b47b3af97d56510ee98db5370830d30fb`; its accepted
-correction is `32b5fadcb4346fc576b1e5e631b164c596f68bf4`, review `5425328389`.
-These immutable records retain their artifacts and earlier software, grading,
-NAS-refusal and real CI host evidence. No aggregate 25-pass result is claimed.
+Existing test expectations now use an unregistered task for the refusal case,
+pass the independently expected cell to completion validation, and bind the
+ordinary model-free transport to its supplied observation. The old selectors
+were not run; their changed expectations still need ordinary CI coverage.
+The four unreached downstream paths and the source-setup error remain explicit
+verification gaps. No subsequent successful test is implied by the correction.
 
-The exact post-proof repository delta is only `CHANGELOG.md`, this LATEST
-record and the affected evidence paragraph in `batch-runner/README.md`.
-Production, workflow and test bytes remain identical to the tested correction;
-README request paths and usage commands are unchanged. `im-not-ai-en` is limited
-to these changed English records, preserving failures, counts, paths, identities
-and gates. Its bounded fidelity check is editorial, not another software test.
+### Historical Task1 remains permanently consumed/uncertain
 
-Remaining work is combined-HEAD review and ordinary CI, followed by the
-leader's runtime-source decision. The earlier proof's accepted base was
-`b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
-`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`; the current integration basis is
-listed above. This repair does not select an approved runtime.
-Genuine input/actual-host values, the checked remote parent, the finite
-window and a separately issued digest-bound live request are still required.
-Actual kernel ownership admission and provider identity checks remain mandatory.
-The [usage section](../../batch-runner/README.md#first-v2-observation-on-github-actions)
-shows the future request path contract; it is not permission to dispatch.
+The leader-read real [run 37456739936](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37456739936),
+attempt 1 / job `112246098370`, used accepted source `7f4daa09944f6d9635e9bff3d945c224cfc76392`.
+Request validation, genuine inputs/preparation/permanent claim, login and OIDC
+checks succeeded; execution returned exit 2 with a generic uncertainty outcome.
+Retention and artifact publication succeeded. This is one uncertain planned
+cell, not a zero score, excluded datum or permission to replay it.
 
-During that isolated parser correction, the old PR757 worktree and PR758
-branch were left untouched. No CI query,
-dispatch, retry or poll; private HF/input/receipt access; model/grader/Azure
-operation; permission expansion; Project edit or merge occurred. This is
-synthetic source-layout evidence, not real input, host, inference or publication
-evidence.
+- Completion artifact `11409044632`, SHA256
+  `06eb9a0c78858da29089cbd9d162e690320e45e40e3f8837de5bfaf11ef9e468`.
+- Job-log SHA256 `3e606025e66106575a472cb20073ec705ff60fd0cd532d972b589faf710f9a83`.
+- Permanent claim `e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288`;
+  private output `f602355f945471963a338ccf79783a6f802ac6dd`.
+- Request SHA256 `6425b2b65ad94b6d7e1455df2d1717eccae18f937bf632f68222b80bf75f79bf`;
+  host SHA256 `a84bfb9c4e87bd9911654714c629c00ca32466c381376b4f3f07416721ef1c87`.
 
-[original]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md
-[continuation]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md
-[missing-usage]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md
-[layout]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md
-[metadata-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37446326232
+Its result/fingerprint, terminal reason, usage, cleanup completion and host reuse
+are null. Historical first throw, model-call count and cost cannot be recovered
+from the retained facts and are not inferred here. The old claim/output and
+namespace remain untouched.
+
+The reviewed [PR759 diagnostic record][diagnostics] at
+`7aebe28c402cfb71463231f2fb1a75825a26391f`, tree
+`0165ff4f9f7d226a4cac8f34803d6134f53ba693`, keeps its **5 passed in 95.25s**
+private-receipt proof separate from **8 passed in 162.87s** for the safe CI
+event. Neither was repeated, imported or used as proof of this selector.
+The [prior route and layout record][prior] preserves its earlier 14/11/10/1
+outcomes and immutable links without aggregating them into a passing suite.
+
+### Remaining gates
+
+The leader must review this implementation and the unrerun fixture correction,
+resolve the failed-path coverage, integrate the accepted diagnostics and run
+ordinary final/integrated-HEAD CI. Source review does not authorize execution.
+Task2 still requires a new leader-issued immutable request with final R/tree,
+actual next workflow run number, finite admission window, exact request digest,
+genuine input/registration/preparation identities, canonical paths/host values
+and a current independently expected private parent. Actual selected-prefix
+CAS, source/provider checks and kernel ownership admission cannot be waived.
+The existing metadata route remains Task1-only; its old parent/prefix finding
+does not establish Task2's current state. Genuine inference-publication/intake
+and any later grade need their own bindings and authority; none is invented.
+
+See the [direct usage](../../batch-runner/README.md#one-selected-v2-observation-on-github-actions).
+No live input, HF, provider/model/grader, Azure management, CI query/dispatch/
+retry/poll, Project edit, merge or prior-worktree modification occurred.
+
+[diagnostics]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/7aebe28c402cfb71463231f2fb1a75825a26391f/tasks/LATEST_TASK_RESULT/README.md
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/7f4daa09944f6d9635e9bff3d945c224cfc76392/tasks/LATEST_TASK_RESULT/README.md
