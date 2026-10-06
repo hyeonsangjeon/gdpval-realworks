@@ -1,124 +1,162 @@
 # Latest task result
 
-## Task2 failure event and uncertainty retention
+## Backend time-budget contract partition
 
-Exactly one synthetic test exercised the new Task2 interaction:
-**1 passed in 19.36s**, exit 0. The test reached the reserved construction
-failure, exact safe stderr event, private uncertainty retention and duplicate
-execution refusal. It added no production or workflow change and authorized
-no live observation.
+The requested CI partition is implemented. The single collection/structure
+probe **failed in 0.330s**, exit 1, before collecting tests because the existing
+offline Python environment could not import `pytest_timeout`. Source-scope
+and parsed-YAML assertions passed, but node-set equivalence remains unproved.
+No test body was executed, no dependency was installed and no retry was made.
 
 ### Reviewed and tested source
 
-| Basis | Exact identity and evidence |
+| Basis | Exact identity |
 | --- | --- |
-| Leader-reviewed integration | `741c0fabcf7ad612b470df0c966d32a7e17f8b23`, tree `fdbfaf46a168868ac529bf7da30797b7d8e90ec0` |
-| Selected-task parent | `0ff2bd7378c392f3d3380a2983107a696f0bc75b`, tree `1c1b29aad70c3b31a4ea980ef6a4d43f1183d11f`; review `5429517883` |
-| Diagnostic parent | `86bf684706bdbfc641f10c2774b7e4884d8fc7cd`; reviewed diagnostic source `7aebe28c402cfb71463231f2fb1a75825a26391f`, tree `0165ff4f9f7d226a4cac8f34803d6134f53ba693`, review `5428735621` |
-| New test commit, tested clean | `3d66290d364f41efabfeb598bf9e322fa1b8596b`, tree `88f2c0db1e6d8b5f9aed1b5a402ac76d40fe2733` |
+| Clean starting PR760 source | `ca84a224fe565d255194a33e1f2ea18340af70a7`, tree `1cdfddb4b3335366e418d18a36fc3417a9076a42`; leader review `5429965072`, conditional on final CI |
+| Workflow-only commit used for the probe | `55ef11739f8bcf441e01d36f11396c27ad7ea223`, tree `6fdd8664bb971baa15a8a5914ecbc1fb0811d383` |
+| Baseline workflow SHA256 | `b428849ab15f2fe28cef62b89e1bb8fa644eea09043a1cbfbbd8e4adde256111` |
+| New workflow SHA256 | `4afc013fa51044cc72ecb71be785e0d78b9792592eb138fa1ffcf1643e42dfd5` |
 
-The existing clean PR760 worktree was fetched and fast-forwarded to the exact
-integration commit after its tree, parents and ancestry were checked. No other
-worktree was altered. The leader supplied the Python parse, AST and complete
-1783-blob integration checks. Those checks establish structure, not behavior;
-they were not repeated or relabeled as a combined pass. This one test adds
-behavioral evidence only for the selected Task2 failure-retention interaction.
+The leader supplied the source-grounded pre-edit CI decision for this narrow
+partition. The mandatory extreme-reasoner invocation failed before execution
+because its legacy Opus preference was unavailable. It produced no review and
+was not retried. The existing PR760 worktree was clean at the exact starting
+HEAD/tree. No branch integration or change to another worktree was performed;
+PR761 remains untouched.
 
-### What the test reached
+### Confirmed CI ceiling failure
 
-The existing request selects registered Task2
-`0112fc9b-c3b2-4084-8993-5a4abb1f54f1` in
-`gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 without changing
-`CELL` or `PREFIX`. Existing temporary linked-source, registration, synthetic
-input, direction, kernel and private transport fixtures run the real validators.
-After the invocation reserves execution and constructs the observation control,
-the ordinary voice-construction seam raises the existing secret-bearing test
-exception. Its text is never formatted.
+The following evidence was supplied by the leader, not queried again:
 
-The invocation returns CLI exit 2 with the unchanged generic stdout. Its exact
-four-field stderr event is non-authoritative diagnostic metadata:
+| Field | Observed value |
+| --- | --- |
+| Run / attempt / pytest job | `37478077525` / 1 / `112319417386` |
+| Cancellation annotation | `The job has exceeded the maximum execution time of45m0s` |
+| Setup | Succeeded |
+| Run tests interval | `2026-10-06T14:24:10Z` to `2026-10-06T15:06:52Z` |
+| Selected / latest output | 13693 / 94%, at `tests/test_time_budget_grading_preparation.py` |
+| Other checks | Nine succeeded |
+| Log bytes / SHA256 | 201254 / `dff51180e425daa8655b0c88be82244439c4084bcbafd87be7aaf9e6b1a75a22` |
 
-```json
-{"category":"unexpected_error","format":"gpt54-time-budget-first-v2-ci-failure-v1","reason":"execution_refused_or_uncertain","stage":"observation_callable"}
+There is no final pytest verdict. The cancellation establishes that this CI
+job exceeded its ceiling; it is neither a complete test pass nor a model or
+observation-runtime failure. The cancelled configuration was not rerun.
+
+### Exact workflow delta
+
+The general `Run tests` command adds only
+`--ignore-glob='tests/test_time_budget_*.py'`. The new
+`time-budget-contracts` job uses the six existing plain contract setup/guard
+steps and this command from `batch-runner`:
+
+```bash
+python -m pytest -m "not integration" --tb=short -q -rs tests/test_time_budget_*.py
 ```
 
-The actual failure receipt is read for the snapshot and reread before private
-retention. The synthetic CAS and immutable readback acknowledge only Task2's
-claim and output manifest under its selected namespace. Completion is checked
-against the independently requested cell, never against the returned cell.
-Its status is `uncertain`; result identity, result fingerprint, terminal reason,
-usage, cleanup and host reuse remain null. The manifest retains the safe receipt
-with `unavailable_no_fabricated_study_row` and no result files.
+Both the general job and new job retain 45-minute ceilings. Python remains
+3.10.12; dependencies still come from `batch-runner/requirements.txt`.
+Dispatch SHA checks, exact checkout, full history, nonpersistent checkout
+credentials and both integration-marker guards match the existing plain job.
+The new job does not receive the comparison job's receipt-extraction step.
 
-Duplicate execution refuses with `execution_already_consumed`, without another
-construction, request, event or claim. The one permanent Task2 claim and local
-reservation bytes remain intact. Explicitly invented old Task1 claim/output
-bytes and their writers are preserved in every checked synthetic revision.
-Storage tokens are absent at construction, and the event, receipt, manifest
-and completion contain no secret text. These are model-free transport facts,
-not live host, provider, publication or billing evidence.
+The probe restored the old general command in a parsed copy and removed only
+the new job, then required equality with the baseline YAML. That assertion
+passed. All other job bodies and selectors, the repo-root script tests,
+permissions, triggers, concurrency and positive-host receipt producer are
+unchanged. The suite-growth warning against raising 45 minutes remains.
+Only the partition comments changed in addition to those two semantic edits.
 
-### One bounded proof
+### One bounded collection-only probe
 
-Only this full node was run, once:
+The probe ran once using the existing offline Python 3.10.12 environment,
+one overall 300-second limit plus 5 seconds termination grace, no `-x`, and
+Git subprocess limits of at most 30 seconds. It extracted the baseline and new
+commands from the two exact workflow versions. The probe was configured to
+hold the test inventory and offline settings fixed at the pinned source, whose
+only changed tracked file was the workflow. It did not switch source trees.
+
+The source and YAML assertions completed. The first actual failing operation
+was pytest's explicit plugin import during baseline command-line parsing:
 
 ```text
-tests/test_time_budget_first_v2_ci.py::test_time_budget_v2_selected_task_failure_retention
+ImportError: Error importing plugin "pytest_timeout": No module named 'pytest_timeout'
 ```
 
-The existing Python 3.10.12 environment ran with a clean pinned HEAD/tree,
-300 seconds plus 5 seconds termination grace, no `-x`, and the unchanged
-30-second temporary Git setup bound. Socket, write and credential sentinels
-remained active. No old selector, full suite, kernel probe or CI operation ran.
+The probe wrapper explicitly requested that plugin, which is listed in the
+repository requirements but unavailable in this existing local environment.
+The baseline process exited 1 in 0.214s, before test collection or loading the
+reporting/socket-sentinel plugin. The complete probe exited 1 in 0.330s at
+`2026-10-06T15:46:07.545860+00:00`. No sentinel coverage is claimed for this
+aborted collection.
 
-Artifacts are retained in `/tmp/pr760-selected-task-failure-proof.pVEtO1SO/`:
+| Selection | Outcome | Selected-node count / set digest |
+| --- | --- | --- |
+| Baseline general command | Plugin import failed before collection | Unavailable / unavailable |
+| New general command | Not invoked after the first failure | Unavailable / unavailable |
+| New time-budget command | Not invoked after the first failure | Unavailable / unavailable |
+
+No node sets were manufactured from empty stdout. Union equality, disjointness,
+absence of lost/additional nodes and integration deselection have not been
+established by collection. No full suite, old selector, native proof, V2 proof
+or platform probe was executed.
+
+Artifacts are retained in `/tmp/pr760-time-budget-partition-proof.ZQNLNGBi/`:
 
 | Artifact | Bytes | SHA256 |
 | --- | ---: | --- |
-| `command.sh` | 1311 | `867ae5871d3886d8df15a4018411bd5509d798b25eaff46e9c62124ee4137d1a` |
-| `pytest.log` | 614 | `7d855c859382bdac8f4e4bfb10436f82cbbdc5aa3b09f729ace0043aa24b2aff` |
-| `junit.xml` | 441 | `4fce83bb8423462c0d84373cab8abddffe18724e7a612141f542d27c696ba31b` |
-| `exit-status` | 2 | `9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa` |
+| `command.sh` | 962 | `5e22e7271eae8c419691309b951501f71b960acc226c6fd40188d431323b2b5d` |
+| `baseline.command.sh` | 1305 | `d9453d815d868b0dda4275a23ce85eb927841a60c63c955c562589bb207abd07` |
+| `baseline.command.json` | 2290 | `81f5a606887f965d36bfc83b1383672f1123cd3136cf50a94926ac97ce33da10` |
+| `baseline.stdout` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| `baseline.stderr` | 3368 | `09f3545cb281bee063adb4841edee215d74115bd1bada1c3902deca863796120` |
+| `structure.json` | 742 | `0973988f4d21f706b7bcabad21e75e972cc5212ff7354b3d24f980a92785e827` |
+| `result.json` | 2604 | `c9aad86688a532be0eb56960a5e7165b8dc0f2d3d8a0d87bbba791f007d30dd2` |
+| `artifacts.json` | 1542 | `66d88b5b986a8436f0431b642e4bf66e666674ee8a370ab6c6f0b2df8e1440df` |
+| `probe.log` | 232 | `3503f83acc2df336c8318d44600108b7215cbfadfee7b51dec8b7176ae8c7d66` |
+| `exit-status` | 2 | `4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865` |
 
-### Separate earlier evidence
+The artifact manifest also binds the probe source, collection plugin, both
+workflow snapshots and exact workflow diff. Commands retain the sanitized
+offline environment and actual invocation. The failed proof is preserved
+without installing a dependency, changing the wrapper or repeating collection.
 
-The [five-path selection continuation][selection] remains **5 passed in
-96.48s**, exit 0, at `70a02619276bc9da072567d5ee0e4060aed6dbbf`, tree
-`1d85a59c1baf5660d80a3abd5eedf14053dc54b2`. The [original failed
-invocation][original] at `e99fbc774a6fa2e2c02624e8f78bcc40200928cb` remains
-**6 passed, 4 failed, 1 setup error in 215.64s**, exit 1. Correction
-`9b1d5b7fddf887a4233630452a261ff3bebfe880` was unrerun at that handoff.
-The [diagnostic proofs][diagnostics] remain **5 passed in 95.25s** and
-**8 passed in 162.87s**. None of those tests was repeated. These separate
-observations do not become an aggregate selector pass.
+### Known remaining gates and unchanged evidence
 
-Historical Task1 run `37456739936` / attempt 1 / job `112246098370` remains
-permanently consumed and uncertain. Claim
-`e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` and acknowledged output
-`f602355f945471963a338ccf79783a6f802ac6dd` were not read or changed. Its first
-throw, model-call count, cost and cleanup remain unknown. It is not a zero
-score, an excluded planned cell or permission to replay, resume, regrade or
-adopt old state.
+The unchanged `tests/test_ghcp_vm_gate_contract.py` pins the old workflow hash.
+`tests/test_a_test_file_nobody_runs_is_not_a_test.py` also pins that hash,
+the nine-job inventory and historical YAML reconstruction. These expectations
+are now stale and remain a known CI blocker. They were read, not executed or
+edited. Updating directly affected expectations requires separate scope;
+collection-only evidence would not establish their behavioral success anyway.
 
-### Post-proof delta and remaining gates
+The [prior PR760 record][prior] retains **1 passed in 19.36s** at
+`3d66290d364f41efabfeb598bf9e322fa1b8596b`, tree
+`88f2c0db1e6d8b5f9aed1b5a402ac76d40fe2733`. Its earlier selection proof
+remains **5 passed in 96.48s**, and the original invocation remains
+**6 passed, 4 failed, 1 setup error in 215.64s**. The fixture correction was
+unrerun at that handoff. The separate diagnostic proofs remain **5 passed in
+95.25s** and **8 passed in 162.87s**. No earlier proof was rerun or combined
+with this failed collection probe into an aggregate pass.
 
-The post-proof delta is exactly `CHANGELOG.md`, this LATEST record and the
-direct evidence paragraph in `batch-runner/README.md`. The new test and all
-production/workflow bytes remain those of the tested commit. The final
-records-only child commit's exact HEAD/tree is returned in the delivery handoff;
-no final-HEAD behavioral or CI pass is claimed.
+The post-proof delta is exactly `CHANGELOG.md` and this LATEST record.
+The final records-only child HEAD/tree is returned in the handoff; its workflow
+bytes remain those of the pinned probe commit. The existing README CI usage
+does not name these job partitions, so no README usage or experiment passage
+was edited. No production, test, manifest, frozen F or experiment-workflow
+bytes changed.
 
-Final review and ordinary final-HEAD CI remain leader-owned. A live Task2
-request still requires accepted combined runtime source, independently bound
-input/direction identities, actual run/host/canonical paths, a finite window
-and the private parent CAS. Existing one-attempt/1200+20/host guards and the
-fixed 20-observation study are unchanged. No live request, private input/result
-read, HF, Azure, provider, model or grader operation was performed.
+New-source review, a successful collection-equivalence proof and ordinary
+new-HEAD CI remain pending. The workflow-assertion gap above is not hidden by
+the partition. No CI query, dispatch, retry, cancellation or polling occurred.
+The actual V2 job stays at 45 minutes, with one external attempt, concurrency 1,
+1200 seconds of generation and one shared 20-second cleanup period. The fixed
+20-observation study and all live gates remain unchanged. Historical Task1
+stays permanently consumed/uncertain, not a zero score or excluded cell, and
+its claims and outputs were neither accessed nor changed. No Task2 authority,
+observation replay, private HF/input/result access, Azure, provider, model or
+grader operation was performed.
 
-The retained source/CI guidance and `im-not-ai-en` were applied to the changed
-English records. No new design review or unavailable reviewer-harness retry
-was undertaken; the leader's reviews are not attributed to a spawned model.
+Retained source/CI guidance and `im-not-ai-en` were applied to the changed
+English evidence. No new experiment design or reviewer-harness loop occurred.
 
-[selection]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/0ff2bd7378c392f3d3380a2983107a696f0bc75b/tasks/LATEST_TASK_RESULT/README.md
-[original]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/70a02619276bc9da072567d5ee0e4060aed6dbbf/tasks/LATEST_TASK_RESULT/README.md
-[diagnostics]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/7aebe28c402cfb71463231f2fb1a75825a26391f/tasks/LATEST_TASK_RESULT/README.md
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md

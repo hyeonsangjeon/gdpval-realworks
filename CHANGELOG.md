@@ -13,6 +13,48 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Move only `tests/test_time_budget_*.py` from the general backend pytest
+  invocation into one plain `time-budget-contracts` job. Both jobs retain
+  45-minute ceilings. The new job matches the existing interpreter,
+  dependency installation, non-integration selection and dispatch/checkout
+  guards. All other job bodies, selectors, root-script tests, permissions,
+  triggers, concurrency and the positive-host receipt producer are unchanged.
+  No production, test, manifest, frozen-source or experiment-workflow bytes
+  changed. Experimental observations still have one attempt, concurrency 1,
+  1200 seconds of generation and shared 20-second cleanup; the V2 job still
+  has a 45-minute ceiling.
+
+  The leader-reviewed basis is `ca84a224fe565d255194a33e1f2ea18340af70a7`,
+  tree `1cdfddb4b3335366e418d18a36fc3417a9076a42`, review `5429965072`.
+  The leader reported that run `37478077525` / attempt 1 / pytest job
+  `112319417386` exceeded its 45-minute maximum after setup succeeded.
+  Its 13693 selected tests reached 94%, with no final pytest verdict.
+  The 201254-byte log has SHA256
+  `dff51180e425daa8655b0c88be82244439c4084bcbafd87be7aaf9e6b1a75a22`.
+  Nine other checks succeeded. This is CI ceiling evidence, not a full test
+  pass or model/runtime failure. The leader supplied the pre-edit CI decision;
+  the unavailable extreme-reasoner harness produced no review and was not
+  retried.
+
+  One offline Python 3.10.12 collection/structure probe at
+  `55ef11739f8bcf441e01d36f11396c27ad7ea223`, tree
+  `6fdd8664bb971baa15a8a5914ecbc1fb0811d383`, used a single 300s+5s bound
+  without `-x`. Parsed YAML and source-scope assertions passed, but the probe
+  **failed in 0.330s**, exit 1. The baseline process could not import the
+  explicitly requested `pytest_timeout` plugin from the existing offline
+  environment. Collection never started; neither new selector ran. No node
+  sets, counts or partition-equivalence result exist, and no tests executed.
+  The [current record](tasks/LATEST_TASK_RESULT/README.md) retains exact
+  commands, outputs and artifact hashes. Nothing was installed or retried.
+
+  Existing tests still pin the old workflow hash and nine-job layout. Those
+  known stale expectations were left unchanged under the test-byte restriction
+  and remain a CI blocker. The [prior proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md),
+  including 1 passed in 19.36s and the earlier failed invocation, remain
+  separate. The post-proof delta is only this entry and LATEST. Review of the
+  new HEAD, collection equivalence and ordinary new-HEAD CI remain pending.
+  No CI operation, live observation or replay was performed.
+
 - Verify the integrated Task2 failure-event and uncertainty-retention path
   with one new synthetic test. The reviewed integration basis is
   `741c0fabcf7ad612b470df0c966d32a7e17f8b23`, tree
