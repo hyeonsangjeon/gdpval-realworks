@@ -11,6 +11,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Update the native retry fixture to snapshot descendants before runtime
+  startup, close the SDK, reuse the existing `sweep_orphans` lifecycle, then
+  delete its workspace. Teardown errors propagate. Preserve stream
+  consumption, the localhost refusing-server measurement, synthetic token
+  printer, provider/auth isolation and original request-count assertions.
+  One focused regression uses real child handles and sweeping to check
+  cleanup order and exclude a pre-existing child; unsupported enumeration
+  must fail, not count as a positive. Only the retry test file changes.
+
+  The leader-read CI run `37497507989`, job `112385735261`, at
+  `2fe4adf221078c9b36ec53fdb6d76cce31f8ce10`, tree
+  `e311f122e6a01361b5e243c410e73af7b9a7a871`, completed **1 failed, 13391
+  passed, 64 skipped, 46 deselected, 1 warning in 1982.61s**; ten other checks
+  succeeded. The reported failure was `OSError` errno `39` during workspace
+  deletion of `codex_home/.tmp/plugins-clone-.../plugins/zoom/skills`, not a
+  retry-count assertion or timeout. Its 219971-byte log SHA256 is
+  `dcf8b8d537c76243118ecbb8a6319d1addcac76fb72e22225e2092132f7eec2a`.
+  A still-active plugin writer remains a hypothesis, not proven ownership.
+
+  The single local proof attempt pinned
+  `bebce09ff6893ed6308127df36c14e4c2bc7ce97`, tree
+  `c5a10eed1d0c0106a9903edf1141032d3f5683d0`, for the failed HTTP 500 node
+  and new cleanup-order regression only. Its wrapper exited **127** because
+  `/usr/bin/time` was unavailable, before pytest started. No node was
+  collected or executed; no JUnit report or test duration exists. No retry
+  followed. The intended Python 3.10.12 command retains 300s+5s/no-`-x`.
+  Artifacts are in `/tmp/pr761-retry-cleanup-proof.oyHpxk/`; launch-log SHA256
+  is `622780fbfd1284f1c6a79c28f948c5258dcf82ac8bc3e3c6e78be73683ff602e`.
+  This fixture correction is unverified. Only this changelog and LATEST
+  changed after the attempted proof. Final review, behavioral validation,
+  new-HEAD CI, leader integration and existing live gates remain. The native
+  9-pass proof and prior CI outcomes stay separate. No production/workflow,
+  experiment limit, historical claim or PR762 source changed; no observation
+  was replayed. See [the current evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
 ### Changed
 
 - Reuse the reviewed backend time-budget partition from
