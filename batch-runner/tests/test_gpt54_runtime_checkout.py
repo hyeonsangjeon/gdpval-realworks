@@ -400,6 +400,7 @@ def _anchored_input_seed(tmp_path_factory, frozen_local_comparison_source):
     current = preflight.inspect_plan(preflight.load_plan(preflight.ROOT / _PROSPECTIVE_MANIFEST))
     assert current["configuration_valid"] is current["launch_allowed"] is False
     assert current["configuration_problems"] == [
+        "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
     ]

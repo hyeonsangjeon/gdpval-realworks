@@ -68,6 +68,7 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(
     current = preflight.inspect_plan(preflight.load_plan(root / _PROSPECTIVE_MANIFEST))
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
     ]
@@ -145,6 +146,7 @@ def test_comparison_runtime_launch_boundary_current_source_bindings(
         "source_pin:batch-runner/step2_run_inference.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
         "source_pin:batch-runner/gpt54_run_config_bundle.py",
+        "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/core/codex_task_deadline.py",
     ]

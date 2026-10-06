@@ -406,6 +406,7 @@ def test_time_budget_registration_preserves_historical_and_default_refusals(monk
     assert report["configuration_valid"] is False
     assert report["configuration_problems"] == [
         f"source_pin:batch-runner/{name}" for name in (
+            "gpt54_prepared_input_attestation.py",
             "gpt54_codex_input_capture.py", "gpt54_v2_input_capture.py",
             "gpt54_run_config_bundle.py", "gpt54_run_input_bundle.py",
             "gpt54_disposable_checkout.py", "gpt54_workflow_gate.py",

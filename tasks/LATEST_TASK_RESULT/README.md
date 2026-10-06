@@ -1,12 +1,27 @@
 # Latest task result
 
-## PR756 prospective grading filename correction
+## PR756 filename correction and accepted-main integration
 
 The approved filename-only repair is implemented. One bounded offline
 invocation reported **3 passed in 24.63s**, exit 0. The two retained
-partial-output and timeout assertions pass unchanged. Final-HEAD source
-review, applicable CI and leader-owned integration remain pending. No real
-grade or study observation was executed.
+partial-output and timeout assertions pass unchanged. Source
+`87fec0a0a4cd3b6b585896782a60690cd1cd7ca8`, tree
+`464b7556461664ef389798d0db5ae1737c36ba80`, was accepted in review
+`5424037416`, conditional on integration and CI. No real grade or study
+observation was executed.
+
+### Accepted-main integration
+
+The leader combines that reviewed source with accepted main
+`e2b8c5e15296eefbb2c1ee21d6b8ba3725d75506`, tree
+`820bc59533a7fd6ba65e237501e6b3ce2c759ced`. Its V2 source
+`39362bb804b1f0823091cb597e1d6ae4db58ec15` was reviewed in `5423539947`
+and passed all 11 applicable checks; deploy was skipped. Only CHANGELOG and
+LATEST overlap between the two changes. Every source/test blob is retained
+from its respective parent; only these two records are reconciled. There is
+no new local test result or live operation, and earlier proofs are not
+relabelled as tests of the combined tree. The combined HEAD still requires
+review and applicable CI before delivery.
 
 ### Scope and source roles
 
@@ -17,7 +32,7 @@ The leader accepted the complete result-byte tuple comparison following
 tree `e27f9e2d573581feb20f052ac2be8c8034027b3d`, and explicitly approved this
 prospective filename exception. That approval is not final-HEAD CI or live
 execution authority. PR755, other worktrees and historical artifacts remain
-untouched; integration with newer main is left to the leader.
+untouched during that proof; the later leader integration is described above.
 
 The first failure occurred during real checkpoint temporary-file creation, not
 in `TaskProgressDraft` or `build_progress`: the grade, checkpoint and temporary
@@ -141,8 +156,8 @@ fixture correction, and supplied CI **31 failed, 13482 passed, 64 skipped,
 also preserves the separate 53/41/8-case proofs and earlier host evidence.
 No prior successful selector was repeated or combined into an aggregate pass.
 
-Final-HEAD source review, applicable CI and leader-owned integration remain
-pending. Genuine inference-publication/intake locators, verified private
+Review of the combined HEAD and applicable CI remain pending.
+Genuine inference-publication/intake locators, verified private
 input/result/deliverable identities, reviewed C/R/F, actual host context and
 a leader-issued digest-bound live direction are still required. No source
 locator was invented. Local claim checks do not prove distributed once-only
