@@ -550,6 +550,59 @@ dispatcher/capture path that binds this control and the two independently anchor
 sources to verified inputs. That path must preserve the separate launch refusals;
 this API and a compiled registration grant no execution authority.
 
+#### Read-only first-cell storage metadata in Actions
+
+The dedicated `gpt54-time-budget-storage-metadata.yml` workflow uses the existing
+Actions `HF_TOKEN` to inspect only the fixed private target's main commit and
+the prefix
+`time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a`.
+The target identity is
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+No repository, branch or prefix is caller-selectable. It performs no original
+intake, claim, HF write, Azure login, inference or grading.
+
+This route is not yet locally validated. The one selector at
+`7984413c3829c157eef50a8499c9a3549e869dbf` reported **17 failed, 8 passed and
+1 teardown error in 5.31s**, exit 1. Source setup used an ordinary checkout
+where the existing validator requires a registered linked worktree. The
+workflow/helper/fixture correction at `26b1b4c161e33d956c2f3b4b3a392e95afa3a843`
+was not rerun; downstream metadata paths remain unproved. See the
+[current task record](../tasks/LATEST_TASK_RESULT/README.md) for the exact
+failed observation and its separate prior evidence. Review and corrected-HEAD
+CI are still required before delivery and a leader-authorized metadata dispatch.
+
+After those gates, the leader supplies the accepted-main workflow/helper commit
+and independently reviewed tree. This command is a usage example, not an
+instruction to dispatch during implementation:
+
+```bash
+gh workflow run gpt54-time-budget-storage-metadata.yml \
+  --repo hyeonsangjeon/gdpval-realworks --ref main \
+  -f reviewed_source_sha=LEADER_SELECTED_ACCEPTED_MAIN_SHA \
+  -f reviewed_source_tree=INDEPENDENT_REVIEWED_TREE
+```
+
+The route checks owner/repository/main/workflow/checkout identity and attempt 1
+before credentials, then runs from a genuine linked checkout of that exact
+source. Only the metadata step receives `HF_TOKEN`; setup and envelope checks
+do not. GitHub permission is only `contents: read`, checkout credentials are
+nonpersistent, and SDK telemetry is disabled. At most two metadata requests
+share 60 seconds without retry or redirects. The first asks only for private/head
+fields; the second uses the returned immutable commit and exact prefix.
+HTTP 401/403/404, missing credentials, timeout and malformed metadata mean
+refusal or unknown state, never an absent prefix. The metadata job's setup and
+retention ceiling is 10 minutes; it does not change the observation's limits.
+
+The only artifact is `time-budget-storage-metadata.json`. Its allowlisted
+fields are `format`, `source`, `ci`, `timestamp_utc`, `target_identity_sha256`,
+`verified_private`, `parent_commit`, `prefix` and `prefix_outcome`.
+It contains no token, headers, raw exception, original prompt or private object.
+A verified first response can remain in a `refused` second-operation envelope;
+that is not a complete prefix check. Even an `absent` result supplies only a
+candidate expected parent. It verifies neither inputs nor host support and
+does not authorize a paid observation. The later V2 parent CAS, permanent
+claim, source/direction checks and actual kernel admission remain unchanged.
+
 #### Direct comparison runtime launch refusal
 
 `verify_codex_input_capture` and `capture_v2_pre_execution_input` share the

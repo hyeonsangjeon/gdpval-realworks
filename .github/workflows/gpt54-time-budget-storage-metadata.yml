@@ -1,0 +1,118 @@
+# Read-only metadata for one fixed private prefix. Never observation admission.
+name: GPT-5.4 time budget — private storage metadata
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_source_sha:
+        description: Leader-selected accepted main/workflow commit, full SHA
+        required: true
+        type: string
+      reviewed_source_tree:
+        description: Independently reviewed tree of that exact commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+      METADATA_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      REVIEWED_SOURCE_SHA: ${{ inputs.reviewed_source_sha }}
+      REVIEWED_SOURCE_TREE: ${{ inputs.reviewed_source_tree }}
+    steps:
+      - name: Refuse other callers, sources and reruns before credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_ACTOR" == hyeonsangjeon && "$GITHUB_TRIGGERING_ACTOR" == hyeonsangjeon ]]
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]
+          [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ && "$REVIEWED_SOURCE_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$REVIEWED_SOURCE_SHA" && "$METADATA_WORKFLOW_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+          [[ "$GITHUB_WORKFLOW_REF" == hyeonsangjeon/gdpval-realworks/.github/workflows/gpt54-time-budget-storage-metadata.yml@refs/heads/main ]]
+
+      - name: Check out the exact reviewed workflow and helper
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.reviewed_source_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify the checkout and create its exact linked metadata source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA" ]]
+          [[ "$(git rev-parse HEAD^{tree})" == "$REVIEWED_SOURCE_TREE" ]]
+          [[ ! -e "$RUNNER_TEMP/time-budget-metadata-source" && ! -L "$RUNNER_TEMP/time-budget-metadata-source" ]]
+          git worktree add --detach "$RUNNER_TEMP/time-budget-metadata-source" "$REVIEWED_SOURCE_SHA"
+
+      - name: Setup pinned Python without storage credentials
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install existing declared dependencies without credentials
+        timeout-minutes: 5
+        run: python3 -m pip install -r "$RUNNER_TEMP/time-budget-metadata-source/batch-runner/requirements.txt"
+
+      - name: Validate held source bytes and actual Actions identity
+        id: source
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/time-budget-metadata-source/batch-runner/gpt54_time_budget_storage_metadata.py" validate-source \
+            --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
+            --runtime-root "$RUNNER_TEMP/time-budget-metadata-source"
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+
+      - name: Read only the fixed private head and exact prefix metadata
+        id: metadata
+        timeout-minutes: 2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 60s \
+            python3 "$RUNNER_TEMP/time-budget-metadata-source/batch-runner/gpt54_time_budget_storage_metadata.py" inspect \
+              --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
+              --runtime-root "$RUNNER_TEMP/time-budget-metadata-source"
+
+      - name: Check the exact public envelope without credentials
+        id: envelope
+        if: always() && steps.source.outputs.validated == 'true' && steps.metadata.outcome != 'skipped'
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/time-budget-metadata-source/batch-runner/gpt54_time_budget_storage_metadata.py" verify-envelope \
+            --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
+            --runtime-root "$RUNNER_TEMP/time-budget-metadata-source"
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+
+      - name: Retain only the allowlisted metadata envelope
+        if: always() && steps.envelope.outputs.validated == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: time-budget-storage-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/time-budget-storage-metadata.json
+          if-no-files-found: error
+          retention-days: 7
