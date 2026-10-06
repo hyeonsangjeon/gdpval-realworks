@@ -378,7 +378,7 @@ def test_time_budget_v2_registered_task_selection(case, actions_layout, monkeypa
     assert claim["observation"] == marker["observation"]
     assert marker["inputs"]["task_id"] == marker["observation"]["task_id"] == task2
     assert marker["inputs"]["step0_manifest"] is None
-    config = ci._read(case.root / "preparation/configuration.json")
+    config = ci._read(case.root / "preparation/configuration.json")["configuration"]
     assert config["task_ids"] == [task2]
     assert config["fixed_settings"]["retry_max_attempts"] == 1
     assert config["fixed_settings"]["per_task_timeout_seconds"] == 1200
