@@ -1,92 +1,69 @@
-# Latest task result
+# First-cell private storage metadata route — 2026-10-06
 
-## PR756 filename correction and accepted-main integration
+The fixed read-only Actions route and its helper are implemented, but local
+validation failed. The sole selector reported **17 failed, 8 passed and
+1 teardown error in 5.31s**, exit 1. A narrow linked-source correction followed
+without another invocation. Corrected-source review and CI remain required;
+there is no positive private-target or prefix observation from this task.
 
-The approved filename-only repair is implemented. One bounded offline
-invocation reported **3 passed in 24.63s**, exit 0. The two retained
-partial-output and timeout assertions pass unchanged. Source
-`87fec0a0a4cd3b6b585896782a60690cd1cd7ca8`, tree
-`464b7556461664ef389798d0db5ae1737c36ba80`, was accepted in review
-`5424037416`, conditional on integration and CI. No real grade or study
-observation was executed.
+## Scope and review basis
 
-### Accepted-main integration
+The independent branch starts from accepted main
+`b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
+`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`. PR757 and its old worktree were
+left untouched; no PR757 source was stacked or copied into this branch.
 
-The leader combines that reviewed source with accepted main
-`e2b8c5e15296eefbb2c1ee21d6b8ba3725d75506`, tree
-`820bc59533a7fd6ba65e237501e6b3ce2c759ced`. Its V2 source
-`39362bb804b1f0823091cb597e1d6ae4db58ec15` was reviewed in `5423539947`
-and passed all 11 applicable checks; deploy was skipped. Only CHANGELOG and
-LATEST overlap between the two changes. Every source/test blob is retained
-from its respective parent; only these two records are reconciled. There is
-no new local test result or live operation, and earlier proofs are not
-relabelled as tests of the combined tree. The combined HEAD still requires
-review and applicable CI before delivery.
+The leader performed the actual read-only pre-edit CI/secret-charter review,
+separately from implementation, and issued **APPROVE-WITH-CONDITIONS** for
+implementation and one synthetic proof. The supervisor retains
+`project5-storage-metadata-decision-1715.md`; its operative conditions were
+supplied in the task. This is not a successful spawned-agent review. The
+unavailable model harness was not retried, and no agent, model, billing or
+account setting changed.
 
-### Scope and source roles
+Only these implementation surfaces were added:
 
-Work started from clean `91272409148a68c8d2c57b7c45d0541ee86b2810`, tree
-`0f87a5fb45fe538d8ba0cc692f8379833ff7bfef`, on the existing PR756 branch.
-The leader accepted the complete result-byte tuple comparison following
-[review 5423395811][review] of `8722a9d91c3ef1b7c77a6e6b529052b0ce621cf8`,
-tree `e27f9e2d573581feb20f052ac2be8c8034027b3d`, and explicitly approved this
-prospective filename exception. That approval is not final-HEAD CI or live
-execution authority. PR755, other worktrees and historical artifacts remain
-untouched during that proof; the later leader integration is described above.
+- `.github/workflows/gpt54-time-budget-storage-metadata.yml`
+- `batch-runner/gpt54_time_budget_storage_metadata.py`
+- `batch-runner/tests/test_time_budget_storage_metadata.py`
 
-The first failure occurred during real checkpoint temporary-file creation, not
-in `TaskProgressDraft` or `build_progress`: the grade, checkpoint and temporary
-basenames were 221, 259 and 263 bytes against `NAME_MAX=255`. It occurred
-before grade publication and the fixture's simulated `TimeoutExpired`.
-The controller therefore retained `failed`; the test never reached its
-intended timeout. Frozen checkpoint code did not change.
+The workflow binds `hyeonsangjeon`, the fixed repository, main, exact reviewed
+workflow/checkout commit and tree, and attempt 1 before the credentialed step.
+Checkout credentials are nonpersistent. Setup is credential-free; only the
+single metadata step receives `HF_TOKEN`. Effective permission is
+`contents: read`, with no `id-token: write` or Azure login. The metadata job has
+a 10-minute ceiling including setup; its HF operations share a 60-second
+deadline and a two-request limit, without retry or redirects.
 
-`gpt54_time_budget_grading_preparation._materialized_config` now supplies both
-preparation and executor reconstruction with this exact fixed value:
+The helper reuses the existing bounded HF transport and exact private-target
+validator. It requests only privacy/head fields at main, then metadata for
+the exact prefix at that returned immutable commit. The SDK's paths-info POST
+is read-only metadata, not an HF write. No sibling listing, claim/result body,
+original input, repository creation, branch setup, upload, model or grader
+operation is selected. Access errors, malformed metadata and timeout cannot
+become an absent-prefix result.
 
-```text
-{exp_id}__{judge_slug}__{config_name}__{config_hash}__{rubric_sha}__{inference_sha}__{grader_source_hash_short}__{prompt_v}.json
-```
+The only public artifact is `time-budget-storage-metadata.json`, containing
+`format`, `source`, `ci`, `timestamp_utc`, `target_identity_sha256`,
+`verified_private`, `parent_commit`, `prefix` and `prefix_outcome`.
+`verified_private` is true only after the exact private-target check, otherwise
+null. Prefix outcomes are `absent`, `present` or `refused`; a verified first
+response may be retained when the second operation refuses. Raw exceptions,
+tokens, headers and private objects are excluded by the publication schema.
+This is only a candidate parent for a later request, not input verification,
+host support, paid permission or observation admission.
 
-Only the literal `judge_`, `cfg_`, `rubric_`, `inference_` and `src_` labels are
-removed, saving 31 ASCII bytes. All eight placeholders, their order, format
-specifications, conversions, separators and full values remain intact. The
-existing rubric revision/cache changes remain; every other config/output
-field, including the output directory, stays fixed. This common naming rule
-applies to both registered conditions, without adding a study axis or an
-arbitrary filename override. The 20-observation policy, 1200/20 deadline,
-single grading attempt and no-score-driven-regrade rule are unchanged.
+## One bounded proof
 
-The independent controller C/runtime R helper bytes change. Frozen F stays
-`882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, with TEMPLATE
-`37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`.
-No core, grader algorithm, frozen profile, manifest, workflow or launch gate
-changed. The shared helper is verified against the supplied source anchor;
-config bytes and whole-source fingerprints are genuinely recomputed and
-bound in the reservation, preparation, direction and executor reconstruction.
-Stale preparations are refused, never rewritten or adopted.
+Tested HEAD: `7984413c3829c157eef50a8499c9a3549e869dbf`
 
-At `source/batch-runner/time-budget-grading.json`, the synthetic proof measured:
+Tested tree: `ff76c9b2d4eedbf01740248ae6d7732e4f84e46e`
 
-| Identity | Approved materialization | Synthetic obsolete rule at the same path |
-| --- | --- | --- |
-| Config bytes | 2275 | 2306 |
-| Config SHA256 | `094dd4c5da047a71c3cb087d023c57442c137d48fe621cbb0c4aa197b3597377` | `62a6d99d9e74d187e517d60d9a5afb112e38926917710ac6e6606eb28404dfa0` |
-| Whole-source materialized SHA256 | `c7e08daf5fc7b5d92f234daa35837b20c1df3abf67501f7ce12eab1203680937` | `51d42b300d17d933fffbd73b2cdea645a803c63a4246af4f37cb193bf951bd7c` |
+The retained command checked that exact clean HEAD/tree before and after the
+invocation. It used Python 3.10.12, synthetic temporary Git identities and
+synthetic HTTP responses, with socket/write sentinels and telemetry disabled.
+No live HF metadata or private asset was accessed.
 
-These are actual config/closure hashes from synthetic preparation, not new
-TEMPLATE identities or claims about private inputs. The obsolete config,
-reservation and marker were coherently rehashed in the test and refused with
-`exact grading preparation mismatch` before admission/publication effects.
-No real historical artifact was read or modified.
-
-### One bounded correction proof
-
-Tested HEAD `4f8deffb4080785b70d8f27bebf89b8047cec70d`, tree
-`eee63b994df82d0ea6522e4717e5252ed4866d88`, changes only the preparation
-helper, executor reconstruction and their shared test module. The retained
-command checks this exact clean HEAD/tree before and after the invocation.
 From `batch-runner`:
 
 ```bash
@@ -94,83 +71,98 @@ timeout --signal=TERM --kill-after=5s 300s \
   env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
   LANG=C.UTF-8 LC_ALL=C.UTF-8 \
   PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS= \
-  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 \
   GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 \
   /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest \
   -o addopts= -o junit_family=xunit1 -p no:cacheprovider -m 'not integration' \
   -vv --tb=short --color=no \
-  --basetemp=/tmp/pr756-materialized-filename-proof.9WaUXK/pytest-tmp \
-  --junitxml=/tmp/pr756-materialized-filename-proof.9WaUXK/junit.xml \
-  'tests/test_time_budget_grading_preparation.py::test_time_budget_first_f_grading_executor_roundtrip[partial-failed]' \
-  'tests/test_time_budget_grading_preparation.py::test_time_budget_first_f_grading_executor_roundtrip[timeout-timeout]' \
-  'tests/test_time_budget_grading_preparation.py::test_time_budget_f_grading_materialized_filename_contract'
+  --basetemp=/tmp/pr758-storage-metadata-proof.SFIDHpPp/pytest-tmp \
+  --junitxml=/tmp/pr758-storage-metadata-proof.SFIDHpPp/junit.xml \
+  tests/test_time_budget_storage_metadata.py
 ```
 
-All three named nodes passed: **3 passed in 24.63s**, exit 0, with no failed,
-skipped or incomplete node and no `-x`. The two roundtrips retain partial
-grade/checkpoint/ledger output, the correct `failed`/`timeout` terminal reason
-and the permanent claim; a second attempt still refuses. Real source, input,
-result, config, direction and serializer validators ran through the ordinary
-model-free process seam. Namespaces, inputs, results and process outcomes are
-explicitly synthetic; this was not a real Step8/provider or kernel probe.
+The reported outcome was **17 failed, 8 passed, 1 error in 5.31s**, exit 1.
+There was no `-x`, skipped/deselected case or bound expiry. All 25 selected
+cases finished; `[blob]` passed its call phase but failed teardown. That is not
+an additional passing case or a successful invocation.
 
-The new contract used the real output formatter and checkpoint writer,
-observing its actual temporary-file rename. Each row covers both repeats and
-five tasks, for 20 registered run/task variants in total:
+The exact node prefix below is `tests/test_time_budget_storage_metadata.py::`:
 
-| Condition | Grade | Checkpoint | Temporary checkpoint | SQLite ledger | JSONL ledger |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| V2 | 190 | 228 | 232 | 205 | 203 |
-| Codex | 193 | 231 | 235 | 208 | 206 |
+| Function | Exact parameter IDs | Outcome |
+| --- | --- | --- |
+| `test_time_budget_storage_metadata_roundtrip` | `absent`, `present` | Both failed at credential-free `validate-source` |
+| `test_time_budget_storage_metadata_source_refusal` | `actor`, `ref`, `source`, `tree`, `attempt` | Passing call phases |
+| `test_time_budget_storage_metadata_source_refusal` | `blob` | Passing call phase, teardown error |
+| `test_time_budget_storage_metadata_target_refusal` | `missing_credential`, `nonprivate`, `wrong_target`, `bad_parent` | All failed |
+| `test_time_budget_storage_metadata_transport_refusal` | `head_401`, `head_403`, `head_404`, `prefix_404`, `prefix_timeout`, `prefix_redirect` | All failed |
+| `test_time_budget_storage_metadata_malformed_prefix` | `not_list`, `wrong_path`, `duplicate` | All failed |
+| `test_time_budget_storage_metadata_cumulative_bound` | No parameter | Failed; transport call count was zero |
+| `test_time_budget_storage_metadata_final_source_reread` | No parameter | Failed; transport call count was zero |
+| `test_time_budget_storage_metadata_envelope_allowlist` | No parameter | Passed |
+| `test_time_budget_storage_metadata_workflow_contract` | No parameter | Passed |
 
-All measurements are UTF-8 basename bytes and fit 255 bytes. The 232-byte V2
-temporary name is now measured software evidence, not only a calculation.
-The existing shared config assertions were updated only for the approved
-filename value; their four parametrized preparation cases were not rerun
-locally and still need ordinary corrected-HEAD CI coverage.
-
-Artifacts remain under `/tmp/pr756-materialized-filename-proof.9WaUXK/`:
+Artifacts are retained at `/tmp/pr758-storage-metadata-proof.SFIDHpPp`:
 
 | Artifact | SHA256 |
 | --- | --- |
-| `command.sh` | `2ae3088d17167f104c8ccd9d1385da5ada7974db471e093c68b21fec3405e20e` |
-| `output.log` | `77d79b68ca3b9f9453172d34d00487ed3431c38a3bab92a2a3af6aaeee405421` |
-| `junit.xml` | `c538ef8c411406758ea7e695d5b70b24283d286b14d21ba3944406a75e45ce41` |
-| `receipt.json` | `63e1b594024628e54b81f5eb5b44f178c3505c829e0cfad75431f34790621f4e` |
+| `run-proof.sh`, exact unredacted invocation and pin checks | `fbd4c94d113132c6acc32f82237e5d27d2081bbfd561e6db0e1c202c9490a088` |
+| `pytest.log` | `a22910af6f139bd9f05605a9b36012921d503f6d289c68d7f35ab3acd02621b0` |
+| `junit.xml` | `9dbb8a2fe8fb5a402ba503cf53438c9743f8a19cbfde69b406b60e63f1b9ad87` |
 
-The command digest identifies the full retained file, including its source
-guards, not redacted display text. JUnit retains all 20 filename measurements.
-The post-proof repository delta is exactly `CHANGELOG.md` and this LATEST
-record; the complete correction adds only the three tested files above.
+## First failure and unrerun correction
 
-### Distinct prior evidence and remaining gates
+The first observed failure was `roundtrip[absent]`: `validate-source` returned
+2 before the first metadata request. Read-only inspection of its retained
+fixture showed an ordinary detached repository with a `.git` directory.
+The reused `_registered_gitdir` validator requires a linked worktree under
+the common repository's `worktrees` directory, including reciprocal Git
+registration files. The fixture and the original workflow setup did not meet
+that contract. The downstream absence of an envelope was not a private-target
+or access-error result. The tree/blob negative cases do not prove their
+intended guards when the source layout already refuses.
 
-The [prior immutable record][prior] retains **29 passed, 2 failed, 49 deselected
-in 226.13s**, exit 1, at `b3587f7dc865812e416d6b49b3914d0d3c6ed037`, tree
-`dbe3f311d35b20b941b4e61b9306cbe80647d118`, including the exact passed-node
-inventory. That observation remains separate from this three-node result.
-Its links retain the earlier local **31 failed, 49 deselected in 132.68s**
-namespace failure, the separate unrerun-at-the-time `3642428f` synthetic
-fixture correction, and supplied CI **31 failed, 13482 passed, 64 skipped,
-46 deselected, 1 warning in 1376.58s** at `8722a9d`. The [initial record][initial]
-also preserves the separate 53/41/8-case proofs and earlier host evidence.
-No prior successful selector was repeated or combined into an aggregate pass.
+The teardown sentinel recorded one generic forbidden effect, without a
+call-site label. Its exact source is not claimed. The original fixture also
+forbade every `time.sleep`, including ordinary bounded Git subprocess waiting.
+The correction confines that prohibition to the online HF session while
+retaining socket and HF-write sentinels. No successful source, privacy or
+digest validator is mocked or weakened.
 
-Review of the combined HEAD and applicable CI remain pending.
-Genuine inference-publication/intake locators, verified private
-input/result/deliverable identities, reviewed C/R/F, actual host context and
-a leader-issued digest-bound live direction are still required. No source
-locator was invented. Local claim checks do not prove distributed once-only
-protection, backend cancellation, billing bounds or live enforcement.
+Unrerun correction HEAD: `26b1b4c161e33d956c2f3b4b3a392e95afa3a843`
 
-The catalog was checked once. `experiment-design` kept this approved config
-exception limited to output naming; grading/source guidance preserved the
-judge and independent source roles. `im-not-ai-en` was applied only to the
-changed English records with a bounded fidelity check. No real original,
-result, receipt or consumed preparation was accessed. No provider/model/
-grader/HF/Azure operation, platform probe, CI dispatch/retry/poll, Project
-edit, merge or launch enablement occurred.
+Unrerun correction tree: `17c7dc2eaaa7404913f947ca48bf4c3f00c524db`
 
-[review]: https://github.com/hyeonsangjeon/gdpval-realworks/pull/756#pullrequestreview-5423395811
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/91272409148a68c8d2c57b7c45d0541ee86b2810/tasks/LATEST_TASK_RESULT/README.md
-[initial]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/8722a9d91c3ef1b7c77a6e6b529052b0ce621cf8/tasks/LATEST_TASK_RESULT/README.md
+That correction creates a genuine detached linked metadata source during
+credential-free workflow setup, binds it to the actual Actions checkout's
+common repository and exact commit/tree, and uses the same layout in the
+synthetic fixture. The existing source validator remains unchanged. Neither
+the corrected route nor its downstream metadata behavior was rerun locally.
+
+The exact post-proof scope is the new workflow, helper and test correction
+plus CHANGELOG, this LATEST record and the README's direct usage section.
+After the correction commit, only those three documentation files change.
+No core, old workflow, registration, frozen F/profile/hash, input or inference
+route was edited. The fixed 20-observation study, GPT-5.4/direct-v1/xhigh,
+1200-second generation/shared 20-second cleanup, one attempt, concurrency 1
+and 45-minute observation-job ceiling remain unchanged.
+
+## Remaining gates and earlier evidence
+
+Final source review and corrected-HEAD ordinary CI must establish the unproved
+paths before acceptance. No CI query, dispatch, retry or poll was performed.
+After delivery, the leader must select the accepted-main SHA/tree and authorize
+the separate read-only metadata dispatch shown in the README. No real private
+flag, parent commit or prefix state is established here; the earlier NAS packet
+still has zero HF operations and unknown values. The leader reported that the
+Actions secret list contains `HF_TOKEN`; its value was not read or moved to NAS.
+
+Any later observation still needs its own exact source/input/host/request
+identities and independent live direction. Existing parent CAS, nonrenewable
+claims, kernel ownership admission and grading gates remain mandatory.
+
+The [accepted-basis record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b4e15f02c1db8674ffeff83f133c710627c696e8/tasks/LATEST_TASK_RESULT/README.md)
+preserves the earlier grading, observation and host evidence through immutable
+links. PR757's [1 passed in 15.88s correction](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md)
+remains separate from its [10 passed / 1 failed continuation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
+and [original failed invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md).
+None is blended with this failed metadata selector or treated as live authority.

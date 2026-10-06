@@ -11,6 +11,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a fixed, read-only Actions metadata route for the first time-budget V2
+  cell, using accepted main `b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
+  `5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`. It binds the owner, repository,
+  main/workflow/checkout commit and tree, and attempt 1 before credentials.
+  Only the bounded metadata step receives the existing `HF_TOKEN` secret.
+  Effective GitHub permission is `contents: read`; there is no Azure login,
+  model/input operation, HF write or study admission. Existing private-target
+  validation and bounded transport permit at most two metadata operations
+  within 60 cumulative seconds, without retry: private/head fields at main,
+  then only the fixed prefix at the returned immutable commit. The sole
+  artifact is a schema-checked metadata envelope, not input, host or live
+  authority. The leader separately performed the pre-edit charter review and
+  approved implementation plus one synthetic proof with conditions, recorded
+  in `project5-storage-metadata-decision-1715.md`. No spawned-review success is
+  claimed and the unavailable harness was not retried.
+
+  The one offline Python 3.10.12 selector at
+  `7984413c3829c157eef50a8499c9a3549e869dbf`, tree
+  `ff76c9b2d4eedbf01740248ae6d7732e4f84e46e`, reported **17 failed, 8 passed,
+  1 teardown error in 5.31s**, exit 1, under 300 seconds plus 5 seconds grace
+  without `-x`. All 25 selected cases completed; the passing call phase for
+  `[blob]` also had the teardown error. Positive cases stopped at source
+  validation. The ordinary detached checkout did not meet the reused
+  validator's linked-worktree contract, so downstream metadata paths remain
+  unproved. A separate, unrerun correction at
+  `26b1b4c161e33d956c2f3b4b3a392e95afa3a843`, tree
+  `17c7dc2eaaa7404913f947ca48bf4c3f00c524db`, supplies the genuine linked
+  source in the workflow and fixture, binds it to the Actions checkout, and
+  limits the fixture's sleep prohibition to the HF transport scope. Socket,
+  source and private-target checks remain intact. The total post-proof delta
+  is that new workflow/helper/test correction plus CHANGELOG, LATEST and the
+  README usage section. Final source review, corrected-HEAD CI and a later
+  leader-authorized metadata dispatch remain pending. No live metadata was
+  read, and PR757 was not changed. Prior evidence remains in the
+  [accepted-basis record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b4e15f02c1db8674ffeff83f133c710627c696e8/tasks/LATEST_TASK_RESULT/README.md)
+  and [PR757's separate correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md).
+
 ### Fixed
 
 - Integrate reviewed grading source
