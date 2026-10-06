@@ -13,6 +13,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Integrate reviewed first-V2 source
+  `83d615c5516efbe1c4b20f273c493e1cc9dce208` (review `5426656908`) with
+  accepted metadata source `536d2466b63b2f845a691a8953901e02a1757b05`.
+  Each source passed its ten applicable checks. Preserve all source, workflow
+  and test blobs, combine both usage sections, and reconcile the completion
+  records. The combined HEAD still needs review and CI; no local selector or
+  model operation was repeated for integration.
+
+- Add one manual Actions route and a companion controller for the first
+  registered V2 observation only. The route validates reviewed main/workflow
+  source, the fixed cell, attempt 1 and the independently digest-bound request
+  before credentials. It connects genuine V2 original-input validation and
+  handoff preparation to an observation-keyed private CAS claim, the existing
+  approved login and real V2 callable, then private result retention and an
+  allowlisted metadata envelope. Existing runtime, ownership, source pins,
+  frozen F, study policy and legacy launch guards are unchanged. The job ceiling
+  is 45 minutes; generation remains 1200 seconds with one shared 20-second
+  cleanup remainder, not a money cap or remote-cancellation guarantee.
+
+  The accepted starting source was `e2b8c5e15296eefbb2c1ee21d6b8ba3725d75506`,
+  tree `820bc59533a7fd6ba65e237501e6b3ce2c759ced`. The leader performed the
+  pre-edit extreme-reasoner charter review and approved implementation and one
+  synthetic proof with conditions, retained as
+  `project5-first-v2-workflow-review-1440.md`. This was a leader-executed review,
+  not a successful spawned-agent review; the unavailable-model invocation and
+  two earlier HTTP 400 failures did not produce a review.
+
+  The [missing-usage retention proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md)
+  remains **1 passed in 15.88s**, exit 0. The [11-node continuation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
+  remains **10 passed, 1 failed in 68.02s**, exit 1. The [original invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
+  remains **14 passed, 11 failed and 11 teardown errors in 16.57s**, exit 1.
+  Those records preserve the exact source identities, artifacts, telemetry
+  correction's unrerun status at its first handoff and earlier evidence.
+  No aggregate 25-pass result or real host, inference or publication evidence
+  is claimed. The source-layout correction and its separate failed proof are
+  recorded below.
+
 - Add a fixed, read-only Actions metadata route for the first time-budget V2
   cell, using accepted main `b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
   `5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`. It binds the owner, repository,
@@ -36,21 +73,72 @@ entries land under a fresh dated heading the day they merge to `main`.
   without `-x`. All 25 selected cases completed; the passing call phase for
   `[blob]` also had the teardown error. Positive cases stopped at source
   validation. The ordinary detached checkout did not meet the reused
-  validator's linked-worktree contract, so downstream metadata paths remain
-  unproved. A separate, unrerun correction at
+  validator's linked-worktree contract, so downstream metadata paths were
+  unproved in that invocation. A separate correction, not rerun locally at
+  its original handoff, at
   `26b1b4c161e33d956c2f3b4b3a392e95afa3a843`, tree
   `17c7dc2eaaa7404913f947ca48bf4c3f00c524db`, supplies the genuine linked
   source in the workflow and fixture, binds it to the Actions checkout, and
   limits the fixture's sleep prohibition to the HF transport scope. Socket,
   source and private-target checks remain intact. The total post-proof delta
   is that new workflow/helper/test correction plus CHANGELOG, LATEST and the
-  README usage section. Final source review, corrected-HEAD CI and a later
-  leader-authorized metadata dispatch remain pending. No live metadata was
-  read, and PR757 was not changed. Prior evidence remains in the
+  README usage section. The later corrected source
+  `b759affe6abdf2eba8b32f0470837f6c2145997e` was accepted in review
+  `5426656614` after ten successful checks. CI run `37438423265`, job
+  `112185883536`, attempt 1 explicitly passed all 25 metadata cases; this
+  does not relabel the failed local invocation.
+
+  One authorized read-only run `37446326232`, attempt 1, then succeeded from
+  source `536d2466b63b2f845a691a8953901e02a1757b05`. Its allowlisted artifact
+  `11403029974` verified the fixed target as private and the exact first-cell
+  prefix as absent at `2026-10-06T09:58:18Z`, at parent
+  `d25e0b9daf5d80082641a6e6a99448507cc5fdf4`. Envelope SHA256:
+  `bb20c398b98266838c4f09fc8c047dbe7f069457d8b40fa1f87fae8023e08a5d`.
+  No HF object, original input, model or grader was written or executed.
+  The parent is a point-in-time observation, not a waiver of the later CAS,
+  source/input/host checks or live direction. Prior evidence remains in the
   [accepted-basis record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b4e15f02c1db8674ffeff83f133c710627c696e8/tasks/LATEST_TASK_RESULT/README.md)
   and [PR757's separate correction record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md).
 
 ### Fixed
+
+- Repair the first-V2 Actions source layout from reviewed
+  `1a1e9f9199497ccb804f1d00ece46515f75544ff`, tree
+  `0392fc326b3293ffbf30e75e25570b0912c2da15` (review `5425363467`). The ordinary
+  bootstrap at `GITHUB_WORKSPACE` could not satisfy the existing detached
+  linked-worktree validator when passed as R. Keep that validator unchanged,
+  create no-clobber linked R at `$RUNNER_TEMP/time-budget-v2-runtime`, preserve
+  distinct linked F at `$RUNNER_TEMP/time-budget-v2-frozen`, and run the
+  controller from R. Bind canonical paths, the bootstrap commit/tree and
+  common Git directory before credentialed work and on final reread, with
+  held-directory checks. Permissions, input/direction/CAS/host checks and
+  the fixed study remain unchanged. The leader supplied the actual pre-edit
+  CI/source decision for this repair; no spawned-model review was claimed.
+
+  The [first layout proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md)
+  at `14fe35b08018af3c92e02bfc474b5aef6777c724`, tree
+  `27c5c4f7f275a9cb5a06633ebb5298733f3e7ae9`, remains **6 passed, 1 failed in
+  58.33s**, exit 1. Its `[linked]` case failed before `ci.main` because
+  `shlex.split` retained Bash continuation newlines as arguments. The six
+  passing refusal cases were not rerun.
+
+  From leader-reviewed `f81fe508b34c74f21b2e128ae2354da663d24203`, tree
+  `3af3c9407a6c10c9c9b79e7890993ba50f734216`, change only the test parser to
+  remove exact backslash-newline pairs before environment expansion and
+  tokenization. The exact-argv assertion, real CLI call, fixtures, source
+  validators and all production/workflow bytes are unchanged. The correction
+  is `980e2666483aa787a847d107bce095c491df2b04`, tree
+  `f4a9fae1eb6852f1b123f2ea85146d60418f3a83`. One offline Python 3.10.12
+  invocation of `[linked]` alone reported **1 passed in 9.88s**, exit 0,
+  bounded by 300 seconds plus 5 seconds termination grace without `-x`.
+  It reached `ci.main(validate-request)` and checked the exact completed
+  output with the no-effect sentinels intact. No aggregate pass result is
+  claimed. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the exact
+  command and artifacts. The post-proof delta is only CHANGELOG, LATEST and
+  the affected README evidence paragraph. Final-HEAD review and new CI,
+  including the older fixture consumers, remain pending. Leader-selected
+  accepted R, genuine input/host/private-parent values and a separately issued
+  live request remain gates; earlier CI does not supply execution authority.
 
 - Integrate reviewed grading source
   `87fec0a0a4cd3b6b585896782a60690cd1cd7ca8` (review `5424037416`) with

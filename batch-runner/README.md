@@ -499,6 +499,137 @@ error rows; pre-admission refusal produces no study row. These bytes can feed
 entrypoint neither grades nor uploads. No real input, provider, host or live-run
 acceptance follows from a passing synthetic test.
 
+##### First V2 observation on GitHub Actions
+
+[`gpt54-time-budget-first-v2.yml`](../.github/workflows/gpt54-time-budget-first-v2.yml)
+adds one manual route to that same callable, through
+[`gpt54_time_budget_v2_ci.py`](gpt54_time_budget_v2_ci.py). It accepts only the
+first V2 cell above. It has a 45-minute job ceiling for setup, the unchanged
+1200-second generation budget and shared 20-second cleanup, and private
+retention. That ceiling is not a money cap or a remote-cancellation guarantee.
+The test-only Bash-continuation correction's single offline `[linked]` case
+reported **1 passed in 9.88s**, exit 0, at
+`980e2666483aa787a847d107bce095c491df2b04`. It parsed the actual workflow
+commands, checked their full argv and reached `ci.main(validate-request)`
+with the exact completed output. Genuine linked R/F, no-clobber and no-effect
+checks remained intact; production and workflow bytes are unchanged. The
+[earlier layout proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md)
+remains **6 passed, 1 failed in 58.33s**, exit 1, not a successful invocation.
+The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md),
+[earlier 11-node failure](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
+and [original failed invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
+remain separate evidence, not an aggregate 25-pass result. See the
+[current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact
+tested/reviewed identities and pending final-HEAD review, new CI and live gates.
+These synthetic tests are not real host, inference or publication evidence.
+
+The following is the future command shape, **not permission to dispatch**:
+
+```bash
+gh workflow run gpt54-time-budget-first-v2.yml --ref main \
+  -f reviewed_source_sha=R_COMMIT \
+  -f reviewed_source_tree=R_TREE \
+  -f request_sha256=LEADER_RECORDED_REQUEST_SHA256 \
+  -F request_json=@leader-request.json
+```
+
+The leader must select R after acceptance. R must equal the actual main,
+workflow and checkout commit, with its independently reviewed tree.
+`GITHUB_WORKSPACE` remains the ordinary bootstrap checkout, not R's runtime
+path. The workflow verifies that commit/tree and creates two new detached,
+registered worktrees: R at `$RUNNER_TEMP/time-budget-v2-runtime` and F at
+`$RUNNER_TEMP/time-budget-v2-frozen`. The workflow refuses if either destination exists.
+All controller commands, dependency installation and the existing identity
+preflight use linked R's source. The controller binds those canonical paths
+to the bootstrap's common Git directory and rechecks its commit/tree and held
+directories before credentialed work and on final reread. The source validator
+still refuses an ordinary checkout as R; `GITHUB_WORKSPACE` is never changed
+to impersonate a linked worktree. The request
+contains no credentials, original bodies or self-authorizing digest. Its exact
+UTF-8 bytes must match the separately issued `request_sha256`; do not derive the
+trusted expected value from a downloaded artifact on the runner. Every field
+below is required; uppercase placeholders must be replaced with genuine values:
+
+```json
+{
+  "format": "gpt54-time-budget-first-v2-ci-request-v1",
+  "purpose": "execute_and_privately_retain_first_v2_observation",
+  "source": {"sha": "R_COMMIT", "tree": "R_TREE"},
+  "frozen_source": {
+    "sha": "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2",
+    "tree": "45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca"
+  },
+  "input_registration": {
+    "source_sha": "882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2",
+    "source_tree": "45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca",
+    "path": "batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml",
+    "sha256": "81b9930102a19f298dfbb5e45c8f0d39045b89512aa5dc9b4d5543312835cbbe"
+  },
+  "registration_sha256": "REGISTRATION_SHA256",
+  "dataset_sha256": "REGISTERED_DATASET_FACTS_SHA256",
+  "cell": {
+    "study_id": "gpt54_sandboxv2_codex_time_budget_v1",
+    "run_id": "gpt54_time_budget_v1_v2_r1",
+    "condition": "sandbox_v2", "repeat": 1,
+    "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"
+  },
+  "ci": {
+    "repository": "hyeonsangjeon/gdpval-realworks",
+    "workflow": ".github/workflows/gpt54-time-budget-first-v2.yml",
+    "ref": "refs/heads/main", "actor": "hyeonsangjeon",
+    "job": "observation", "attempt": 1, "run_number": "EXACT_INTEGER_RUN_NUMBER",
+    "runner": "ubuntu-22.04", "runner_os": "Linux", "runner_arch": "X64"
+  },
+  "paths": {
+    "runtime_root": "/ACTUAL_RUNNER_TEMP/time-budget-v2-runtime",
+    "frozen_root": "/ACTUAL_RUNNER_TEMP/time-budget-v2-frozen",
+    "state_root": "/ACTUAL_RUNNER_TEMP/time-budget-first-v2"
+  },
+  "storage": {
+    "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
+    "branch": "main",
+    "prefix": "time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a",
+    "expected_parent": "EXACT_PRIVATE_MAIN_COMMIT"
+  },
+  "not_before_unix": "INTEGER_ADMISSION_START",
+  "expires_unix": "INTEGER_ADMISSION_END"
+}
+```
+
+`run_number`, `not_before_unix` and `expires_unix` must be JSON integers, not the
+placeholder strings shown here. The admission window must be finite and no
+longer than 2700 seconds; it does not renew the generation clock.
+`registration_sha256` is the genuine compiled registration's `manifest_sha256`,
+not a raw YAML file hash. `dataset_sha256` is
+`core.agentic_v2_preregistration.seal(plan["shared"]["dataset"])` from that
+registration. The controller checks these declarations against independent R/F
+Git sources before credentials, then reads and verifies the original parquet
+and both registered references. It never reads Codex Step0. It uses the existing
+`HF_TOKEN` and approved Azure OIDC secrets/identity variables and Foundry project
+connection; no new resource, credential, account, region or permission is needed.
+
+The trusted controller prepares and independently reconstructs the handoff,
+measures this job's host identity, and records the actual run/job/attempt and
+verified input/preparation/path bindings in a permanent observation-keyed CAS
+claim. It then constructs the concrete finite-window direction and passes its
+digest separately to the real callable. Host metadata and older CI receipts
+cannot bypass actual `TimeBudgetObservation` kernel admission. Storage tokens
+are removed before inference. Concurrency is 1; a rerun, existing claim, parent
+race, lost acknowledgement or partial local state does not authorize recovery,
+an alternate destination or another attempt.
+
+Within the existing private target, the new prefix receives `admission.json`,
+`output-manifest.json`, `result/step2_inference_results.json` and any verified
+`result/upload/deliverable_files/<task-id>/<relative-file>`. Add-only commits
+check the independently expected parent and read back immutable objects and
+control bytes. The result fingerprint and canonical payload remain unchanged.
+A failed row is retained; a missing return remains explicit uncertainty without
+a fabricated study row. Missing usage remains unavailable. Only schema-allowlisted
+`completion.json` metadata can become the seven-day Actions artifact. Original
+inputs, private receipts and raw exceptions are not public artifacts. This is
+private retention, not a fabricated inference `source_repo_id`/`source_revision`
+or grading intake. There is no grading, retry, resume or other-cell dispatcher.
+
 `core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
 in a private host-owned directory before generation. The identity includes
 study/run/condition/repeat/task and reviewed source, registration and input hashes.
@@ -561,17 +692,21 @@ The target identity is
 No repository, branch or prefix is caller-selectable. It performs no original
 intake, claim, HF write, Azure login, inference or grading.
 
-This route is not yet locally validated. The one selector at
+The original local selector at
 `7984413c3829c157eef50a8499c9a3549e869dbf` reported **17 failed, 8 passed and
 1 teardown error in 5.31s**, exit 1. Source setup used an ordinary checkout
 where the existing validator requires a registered linked worktree. The
 workflow/helper/fixture correction at `26b1b4c161e33d956c2f3b4b3a392e95afa3a843`
-was not rerun; downstream metadata paths remain unproved. See the
-[current task record](../tasks/LATEST_TASK_RESULT/README.md) for the exact
-failed observation and its separate prior evidence. Review and corrected-HEAD
-CI are still required before delivery and a leader-authorized metadata dispatch.
+was not rerun locally. Corrected source
+`b759affe6abdf2eba8b32f0470837f6c2145997e` subsequently passed all 25 metadata
+cases in CI run `37438423265`, job `112185883536`.
+Read-only run `37446326232` then succeeded and verified the fixed private
+target and absent first-cell prefix at `2026-10-06T09:58:18Z`. These later
+observations do not relabel the original failure. The
+[current task record](../tasks/LATEST_TASK_RESULT/README.md) preserves their
+separate source identities, evidence and remaining live-observation gates.
 
-After those gates, the leader supplies the accepted-main workflow/helper commit
+For each authorized metadata read, the leader supplies the accepted-main workflow/helper commit
 and independently reviewed tree. This command is a usage example, not an
 instruction to dispatch during implementation:
 
