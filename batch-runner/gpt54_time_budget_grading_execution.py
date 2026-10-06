@@ -292,8 +292,9 @@ def _checked_preparation(plan: dict, arguments: dict) -> Iterator[dict]:
 
         def reread(*, initial: bool = False, installed: bool = False) -> None:
             _same("input final reread", inputs(), verified_inputs)
-            _same("result final reread", preparation._result(a["result_path"], result_identity,
-                  observation, plan, a["deliverables_root"]), (result_data, result, deliverables, fingerprint))
+            _require(preparation._result(a["result_path"], result_identity,
+                     observation, plan, a["deliverables_root"])
+                     == (result_data, result, deliverables, fingerprint), "grading_result_changed")
             _read_bytes(reservation, **_identity(reservation_data))
             for role, data in files.items():
                 _read_bytes(_path(output, role), **_identity(data))
