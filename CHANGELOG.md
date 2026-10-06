@@ -13,33 +13,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Compare all four result-reread components directly in
-  `gpt54_time_budget_grading_execution`: raw result bytes, parsed payload,
-  deliverable bytes and fingerprint. A mismatch explicitly refuses with
-  `grading_result_changed`, matching the existing preparation pattern. The
-  generic JSON helper, validators, F/template/materialized-source bindings,
-  independent direction and permanent local attempt claim are unchanged.
+- Apply the owner-approved prospective grading filename rule through one
+  shared config-materialization helper used by preparation and executor
+  reconstruction. Remove only the literal `judge_`, `cfg_`, `rubric_`,
+  `inference_` and `src_` labels, saving 31 ASCII bytes while preserving all
+  eight placeholders and their values, order, formatting and separators.
+  The first failing operation was checkpoint temporary-file creation:
+  grade/checkpoint/temporary basenames were 221/259/263 bytes against
+  `NAME_MAX=255`, before grade publication or the simulated `TimeoutExpired`.
+  Frozen checkpoint code, F/TEMPLATE, judge/scoring policy and all admission,
+  input/result/source and permanent-attempt checks remain unchanged. The
+  actual materialized config and whole-source fingerprints are recomputed;
+  a coherently rehashed obsolete config still refuses.
 
-  The clean reviewed basis was `8722a9d91c3ef1b7c77a6e6b529052b0ce621cf8`, tree
-  `e27f9e2d573581feb20f052ac2be8c8034027b3d`, review `5423395811`.
-  Supplied CI run `37405741472`, job `112082795143`, attempt 1, reported
-  **31 failed, 13482 passed, 64 skipped, 46 deselected, 1 warning in 1376.58s**.
-  All 31 executor failures reached the production bytes-serialization call;
-  the log SHA256 is
-  `21d3c237d56e8bc4b53afb3cda872b775c6800c1436c43a111bc5662abf690e4`.
-
+  The clean correction basis was `91272409148a68c8d2c57b7c45d0541ee86b2810`,
+  tree `0f87a5fb45fe538d8ba0cc692f8379833ff7bfef`. The accepted tuple fix and
+  review `5423395811` remain documented in the
+  [prior immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/91272409148a68c8d2c57b7c45d0541ee86b2810/tasks/LATEST_TASK_RESULT/README.md),
+  including its distinct **29 passed, 2 failed, 49 deselected in 226.13s**.
   One offline Python 3.10.12 invocation at
-  `b3587f7dc865812e416d6b49b3914d0d3c6ed037`, tree
-  `dbe3f311d35b20b941b4e61b9306cbe80647d118`, reported **2 failed, 29 passed,
-  49 deselected in 226.13s**, exit 1, under 300 seconds plus 5 seconds
-  termination grace without `-x`. All 31 selected cases completed. The partial
-  roundtrip lacked a `/_progress/` sidecar; the timeout roundtrip returned
-  `failed` instead of `timeout`. Neither failure was repaired or rerun here.
-  No test or assertion changed. The post-proof delta is CHANGELOG and LATEST
-  only; the full correction adds just the production comparison above.
-  Delivery remains HOLD for those failures, corrected-HEAD review/CI and
-  genuine inference-publication/intake and source-bound live execution gates.
-  No source locator was invented, and PR755 is untouched.
+  `4f8deffb4080785b70d8f27bebf89b8047cec70d`, tree
+  `eee63b994df82d0ea6522e4717e5252ed4866d88`, reported **3 passed in 24.63s**,
+  exit 0, under 300 seconds plus 5 seconds grace without `-x`. Only the two
+  retained roundtrips and the new filename contract ran. Real formatter and
+  checkpoint writes measured temporary basenames of 232 bytes for V2 and
+  235 for Codex across all 20 registered run/task variants; every checked
+  basename fits 255 UTF-8 bytes. Partial-sidecar and timeout assertions are
+  unchanged. Older updated config assertions await ordinary CI coverage.
+  The post-proof delta is CHANGELOG and LATEST only. Final-HEAD review/CI,
+  leader-owned integration and genuine input/publication/host/live-direction
+  gates remain pending; this is synthetic software evidence, not a real grade.
 
 - Integrate the reviewed handoff consumer with the accepted F-derived grading
   preparation without changing either implementation. The consumer source is
