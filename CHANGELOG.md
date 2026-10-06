@@ -57,20 +57,30 @@ entries land under a fresh dated heading the day they merge to `main`.
   the fixed study remain unchanged. The leader supplied the actual pre-edit
   CI/source decision for this repair; no spawned-model review was claimed.
 
-  The implementation is `14fe35b08018af3c92e02bfc474b5aef6777c724`, tree
-  `27c5c4f7f275a9cb5a06633ebb5298733f3e7ae9`. One new offline Python 3.10.12
-  source-layout selector reported **6 passed, 1 failed in 58.33s**, exit 1,
+  The [first layout proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md)
+  at `14fe35b08018af3c92e02bfc474b5aef6777c724`, tree
+  `27c5c4f7f275a9cb5a06633ebb5298733f3e7ae9`, remains **6 passed, 1 failed in
+  58.33s**, exit 1. Its `[linked]` case failed before `ci.main` because
+  `shlex.split` retained Bash continuation newlines as arguments. The six
+  passing refusal cases were not rerun.
+
+  From leader-reviewed `f81fe508b34c74f21b2e128ae2354da663d24203`, tree
+  `3af3c9407a6c10c9c9b79e7890993ba50f734216`, change only the test parser to
+  remove exact backslash-newline pairs before environment expansion and
+  tokenization. The exact-argv assertion, real CLI call, fixtures, source
+  validators and all production/workflow bytes are unchanged. The correction
+  is `980e2666483aa787a847d107bce095c491df2b04`, tree
+  `f4a9fae1eb6852f1b123f2ea85146d60418f3a83`. One offline Python 3.10.12
+  invocation of `[linked]` alone reported **1 passed in 9.88s**, exit 0,
   bounded by 300 seconds plus 5 seconds termination grace without `-x`.
-  `[linked]` failed at the test's exact-argv assertion: `shlex.split` retained
-  Bash continuation newlines as arguments, before `ci.main` ran. The six
-  refusal cases passed. No source/test/workflow correction or rerun followed.
-  The positive CLI path remains unproved, and the older fixture consumers
-  await CI. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records all outcomes
-  and exact artifacts. The post-proof delta is only CHANGELOG, LATEST and the
-  directly affected README evidence/request-path/usage passages. The leader's
-  reported 10 checks at the prior source do not establish this correction or
-  live authority. Final-HEAD review/CI, leader-selected accepted R and genuine
-  input/host/private-parent values with a separate live request remain gates.
+  It reached `ci.main(validate-request)` and checked the exact completed
+  output with the no-effect sentinels intact. No aggregate pass result is
+  claimed. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the exact
+  command and artifacts. The post-proof delta is only CHANGELOG, LATEST and
+  the affected README evidence paragraph. Final-HEAD review and new CI,
+  including the older fixture consumers, remain pending. Leader-selected
+  accepted R, genuine input/host/private-parent values and a separately issued
+  live request remain gates; earlier CI does not supply execution authority.
 
 - Integrate reviewed grading source
   `87fec0a0a4cd3b6b585896782a60690cd1cd7ca8` (review `5424037416`) with

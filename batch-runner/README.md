@@ -507,18 +507,21 @@ adds one manual route to that same callable, through
 first V2 cell above. It has a 45-minute job ceiling for setup, the unchanged
 1200-second generation budget and shared 20-second cleanup, and private
 retention. That ceiling is not a money cap or a remote-cancellation guarantee.
-The source-layout correction's single offline selector reported **6 passed,
-1 failed in 58.33s**, exit 1. The linked case created genuine R/F worktrees and
-checked no-clobber behavior, then failed in its command-tokenization assertion
-before invoking `ci.main`: `shlex.split` retained Bash continuation newlines
-as arguments. The six refusal cases passed; the positive CLI path remains
-unproved. The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md),
+The test-only Bash-continuation correction's single offline `[linked]` case
+reported **1 passed in 9.88s**, exit 0, at
+`980e2666483aa787a847d107bce095c491df2b04`. It parsed the actual workflow
+commands, checked their full argv and reached `ci.main(validate-request)`
+with the exact completed output. Genuine linked R/F, no-clobber and no-effect
+checks remained intact; production and workflow bytes are unchanged. The
+[earlier layout proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f81fe508b34c74f21b2e128ae2354da663d24203/tasks/LATEST_TASK_RESULT/README.md)
+remains **6 passed, 1 failed in 58.33s**, exit 1, not a successful invocation.
+The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md),
 [earlier 11-node failure](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
 and [original failed invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
 remain separate evidence, not an aggregate 25-pass result. See the
 [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact
-source/proof identities and pending correction/review/CI/live gates. These
-synthetic tests are not real host, inference or publication evidence.
+tested/reviewed identities and pending final-HEAD review, new CI and live gates.
+These synthetic tests are not real host, inference or publication evidence.
 
 The following is the future command shape, **not permission to dispatch**:
 
