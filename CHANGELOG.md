@@ -49,6 +49,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `gpt54_time_budget_grading_execution.execute_first_observation_grading`
+  and its CLI for only `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 /
+  `02aa1805-c658-4069-8a6a-02dec146063a`. The adapter revalidates the accepted
+  F-derived preparation, independent controller/runtime/frozen-source anchors,
+  original input/result identities, copied F blobs and the actual materialized
+  config hash. A concrete digest-bound direction with a finite admission window
+  and a permanent observation-keyed claim precede the copied F Step8 process.
+  Once-only protection is limited to the independently named local attempt
+  store. Existing F grading policy, provider route and timeout/retry semantics
+  are unchanged; no historical study authority, generation entrypoint or
+  workflow is reused. Returned Step8 grade bytes, ledger pointers and partial
+  checkpoints remain distinct from the execution receipt and usage availability.
+
+  The one offline invocation at `362587b029d069f8a27226fbd37e60a6484649b0`,
+  tree `bc326cbcc6b16ed3b39e5d3596b98ba28904f50a`, reported **31 failed,
+  49 deselected in 132.68s**, exit 1. Every case stopped in shared test setup
+  because `/proc/self/ns/user` was absent on this NAS host (`FileNotFoundError`,
+  errno 2), before direction construction or executor assertions. These failures
+  are not positive refusal or host-support evidence. Test-only correction
+  `3642428f88e5d7a6f159be9978e3a6137d7f4bf1`, tree
+  `58074aae1c1a83c7f00d47ef8b821795dc305c7b`, supplies explicit synthetic
+  namespace metadata; the real context hash, direction/source validators and
+  production refusal are unchanged. The corrected cases were not rerun.
+  The exact post-proof delta is that 11-line fixture correction plus CHANGELOG
+  and LATEST. [The current record](tasks/LATEST_TASK_RESULT/README.md) retains
+  the failed command/evidence, callable shape and separate prior proofs.
+  Draft source review, corrected-HEAD CI and genuine source-bound execution
+  values remain required. No real grader, provider, private input or CI query ran;
+  PR755's branch was not modified.
+
 - Add `gpt54_time_budget_comparison.consume_observation_handoff` to revalidate
   one prepared run/task against an independent preparation digest/size and
   explicit runtime, frozen-grader and input-source anchors. It checks the
