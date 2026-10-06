@@ -74,10 +74,11 @@ def _store_result(arguments, payload):
     arguments["expected_result_identity"] = _identity(data)
 
 
-def _case(seed, tmp_path, *, condition="sandbox_v2", status="success"):
+def _case(seed, tmp_path, *, condition="sandbox_v2", status="success", task_index=None):
     # Reuse the accepted preparer's genuine input/source checks to create the
     # expected identity. This is synthetic fixture setup, not a prior selector.
-    task_index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
+    if task_index is None:
+        task_index = next(index for index, row in enumerate(seed.rows) if row["reference_files"])
     handoff = _handoff_arguments(seed, tmp_path, condition=condition, task_index=task_index)
     prepared = registration.prepare_observation_handoff(seed.plan, **handoff)
     observation = ObservationIdentity(**prepared["observation"])
@@ -382,3 +383,384 @@ def test_time_budget_f_grading_preparation_final_rereads(handoff_sources, tmp_pa
     finally:
         for target, data in restore:
             target.write_bytes(data)
+
+
+# The executor tests use the accepted preparation and source fixtures above.
+# They do not invoke any prior selector, provider, grader or real owned child.
+def _execution_case(seed, roots, tmp_path, monkeypatch, *, status="success"):
+    from types import SimpleNamespace
+    import gpt54_time_budget_grading_execution as execution
+    from gpt54_disposable_checkout import _git
+
+    arguments, payload, _ = _case(seed, tmp_path, status=status, task_index=0)
+    assert arguments.pop("step0_manifest") is None
+    # Explicit synthetic publication-locator declarations, not a claim that a
+    # result was published or that dataset/runtime SHAs are inference SHAs.
+    payload.update(source_repo_id="synthetic/time-budget-results", source_revision="1" * 40)
+    _store_result(arguments, payload)
+    parquet = tmp_path / "isolated-synthetic-original.parquet"
+    parquet.write_bytes(seed.parquet.read_bytes())
+    arguments["dataset_parquet"] = parquet
+    marker = preparation.prepare_observation_grading(seed.plan, **arguments)
+    prepared = arguments.pop("destination")
+    store = tmp_path / "attempts"
+    store.mkdir(mode=0o700)
+    tree = _git(roots["runtime"], "rev-parse", "--verify", roots["runtime_sha"] + "^{tree}").stdout.decode().strip()
+    arguments.update(
+        preparation_directory=prepared, expected_preparation_identity=_identity((prepared / preparation.READY).read_bytes()),
+        expected_observation_identity=_identity(execution._encoded(asdict(arguments["observation"]))),
+        expected_input_binding_identity=_identity(execution._encoded(arguments["expected_input_binding"])),
+        controller_root=roots["runtime"], expected_controller_source_sha=roots["runtime_sha"],
+        expected_controller_source_tree=tree, direction_file=tmp_path / "direction.json",
+        expected_direction_sha256="0" * 64, expected_execution_context_sha256=execution.execution_context_sha256(),
+        attempt_store=store, destination=tmp_path / "publications" / "one-execution",
+    )
+    clock = {"now": 1000}
+    monkeypatch.setattr(execution, "time", SimpleNamespace(time=lambda: clock["now"]))
+    _execution_direction(seed.plan, arguments)
+    return arguments, marker, clock
+
+
+def _execution_direction(plan, arguments):
+    import gpt54_time_budget_grading_execution as execution
+
+    # The fixture author declares an independent expected digest. Both here and
+    # in the consumer, genuine Git/blob/input/config/result validators run.
+    with execution._checked_preparation(plan, arguments) as checked:
+        binding = execution._execution_binding(checked, arguments)
+    document = {"direction_version": execution.DIRECTION_VERSION, "binding": binding.as_dict(),
+                "not_before": 990, "expires_at": 1100}
+    data = execution._encoded(document)
+    arguments["direction_file"].write_bytes(data)
+    arguments["expected_direction_sha256"] = _identity(data)["sha256"]
+    return document
+
+
+def _execution_transport(arguments, monkeypatch, *, mode="complete", after=None):
+    import gpt54_time_budget_grading_execution as execution
+    from core.cost_receipts import CostReceipt
+    from core.grader import ItemGrade, TaskGrade
+
+    calls = []
+
+    def process(_self, command, *, ownership, **options):
+        calls.append(tuple(command))
+        key = execution._observation_key(arguments["observation"])
+        claim_path = arguments["attempt_store"] / (key + ".json")
+        claim = json.loads(claim_path.read_bytes())
+        binding = claim["binding"]
+        assert claim["state"] == "consumed_before_child_never_reusable" and claim["attempt"] == 1
+        assert claim["direction_sha256"] == arguments["expected_direction_sha256"]
+        assert command == binding["command"]
+        batch = arguments["preparation_directory"] / "source/batch-runner"
+        assert command[1] == str(batch / "step8_grade.py") and options["cwd"] == batch
+        assert (batch / "step8_grade.py").read_bytes() == (arguments["frozen_grader_root"] / "batch-runner/step8_grade.py").read_bytes()
+        config_path = Path(command[command.index("--config") + 1])
+        assert config_path == arguments["preparation_directory"] / preparation.CONFIG
+        config = json.loads(config_path.read_bytes())
+        actual_hash = step8_grade.compute_grader_source_hash(config_path, config, batch_root=batch)
+        assert actual_hash == binding["grader"]["materialized_source_sha256"]
+        assert actual_hash != registration.FROZEN_TEMPLATE_SHA256
+        assert binding["grader"]["template_source_sha256"] == registration.FROZEN_TEMPLATE_SHA256
+        experiment = json.loads((arguments["preparation_directory"] / execution.EXPERIMENT).read_bytes())
+        assert experiment["experiment"]["id"] == execution.FIRST_RUN
+        assert experiment["data"]["filter"]["task_ids"] == [execution.FIRST_TASK]
+        assert experiment["condition_a"]["model"]["deployment"] == "gpt-5.4"
+        assert experiment["output"] == {"publish_to_hf": False, "submit_to_evals": False}
+        assert options["timeout"] == 14520 and options["env"]["GRADER_TIME_BUDGET_SEC"] == "14400"
+        assert options["env"]["HF_HUB_OFFLINE"] == options["env"]["HF_DATASETS_OFFLINE"] == "1"
+        assert not {"GITHUB_TOKEN", "HF_TOKEN", "GITHUB_OUTPUT", "PYTHONPATH", "PYTHONHOME"} & options["env"].keys()
+        assert options["stdout"] == options["stderr"] == subprocess.DEVNULL
+        assert os.fstat(options["pass_fds"][0]).st_ino == claim_path.stat().st_ino
+        owner_path, owner_binding = ownership
+        assert owner_binding["cell_id"] == key and owner_binding["stage"] == "time_budget_f_grading"
+        confirmed = mode != "cleanup_lost"
+        owner_path.write_bytes(execution._encoded({**owner_binding,
+            "phase": "reaped" if confirmed else "cleanup_unresolved",
+            "tree_reaped": confirmed, "owner_reaped": confirmed}))
+        if mode not in {"missing", "cancelled"}:
+            loader = RubricLoader(config["rubric"]["repo_id"], config["rubric"]["revision"],
+                                  str(arguments["preparation_directory"] / preparation.CACHE))
+            rubric = loader.load(execution.FIRST_TASK)
+            task = TaskGrade(task_id=execution.FIRST_TASK, sector=rubric.sector, occupation=rubric.occupation,
+                items=[ItemGrade(rubric_item_id=item.rubric_item_id, criterion=item.criterion,
+                    max_score=item.score, awarded_score=0, verdict="fail", decided_by="precheck",
+                    required=None, evidence="explicit synthetic process output, no judge call",
+                    precheck_pattern_id="file_exists_or_name") for item in rubric.rubric_items],
+                total_awarded=0, total_max=0, pct=0, critical_fail=False, gold_referenced=False,
+                judge_call_count=0, precheck_count=len(rubric.rubric_items), judge_total_latency_ms=0,
+                judge_input_tokens=0, judge_output_tokens=0,
+                error="synthetic_grading_failure" if mode == "error" else None,
+                usage_complete=mode != "error")
+            tasks = [] if mode in {"partial", "timeout"} else [step8_grade._task_to_dict(task, grading_wall_time_ms=0.0)]
+            for row in tasks:
+                row["grading_cost"] = CostReceipt.unavailable().as_dict()
+            payload = step8_grade._build_grade_payload(exp_name=execution.FIRST_RUN,
+                inf_results=json.loads((arguments["preparation_directory"] / preparation.RESULT).read_bytes()),
+                config=config, config_hash=step8_grade.hash_config(str(config_path)), loader=loader,
+                prompt_version=config["prompt"]["version"], task_dicts=tasks, grader_source_hash=actual_hash,
+                source_inference_repo_id="synthetic/time-budget-results", source_inference_revision="1" * 40,
+                azure_ai_runtime_fingerprint="f" * 64,
+                azure_ai_routes=[{"workload": "grader", "runtime_fingerprint": "f" * 64,
+                                  "profile": "direct-v1", "endpoint_kind": "direct-v1"}],
+                run_status="partial" if mode in {"partial", "timeout"} else "diagnostic",
+                expected_task_ids=[execution.FIRST_TASK], source_experiment_id=execution.FIRST_RUN,
+                renderer_fingerprint={"libreoffice_binary": "synthetic-no-renderer",
+                    "libreoffice_version": "synthetic-no-renderer", "pymupdf_version": "synthetic-no-renderer"})
+            grade_path = Path(binding["grade_path"])
+            ledger_path = grade_path.with_name(grade_path.stem + ".cost_ledger.jsonl")
+            ledger_path.parent.mkdir(parents=True, exist_ok=True)
+            ledger_path.write_bytes(b"")  # Explicit no-call synthetic ledger, not real usage.
+            from core.cost_receipts import ledger_reference
+            payload["cost_ledger"] = ledger_reference(ledger_path.relative_to(batch.parent), _identity(b"")["sha256"])
+            if mode in {"partial", "timeout"}:
+                from core.task_checkpoint import TaskProgressDraft, build_progress, write_checkpoint
+                write_checkpoint(grade_path, build_progress(task_id=execution.FIRST_TASK,
+                    grader_source_hash=actual_hash, rubric_item_ids=[item.rubric_item_id for item in rubric.rubric_items],
+                    draft=TaskProgressDraft()))
+            # Existing serializer/schema, not a fabricated successful validator.
+            from core.grade_payload import validate_grade_payload
+            validate_grade_payload(payload, json.loads((batch / "schemas/grade.schema.json").read_bytes()))
+            step8_grade._save_json(grade_path, payload)
+        if after is not None:
+            after()
+        if mode == "timeout":
+            raise subprocess.TimeoutExpired(command, options["timeout"])
+        if mode == "cancelled":
+            raise KeyboardInterrupt
+        return subprocess.CompletedProcess(command, 1 if mode in {"error", "partial"} else 0)
+
+    monkeypatch.setattr(execution.owned.LocalTransport, "process", process)
+    return calls
+
+
+def _execution_cli(arguments, tmp_path):
+    import gpt54_time_budget_grading_execution as execution
+
+    values = dict(arguments)
+    observation_path, input_path = tmp_path / "observation.json", tmp_path / "input-binding.json"
+    observation_path.write_bytes(execution._encoded(asdict(values.pop("observation"))))
+    input_path.write_bytes(execution._encoded(values.pop("expected_input_binding")))
+    values.update(observation_file=observation_path, input_binding_file=input_path)
+    for name in ("observation", "input_binding", "result", "preparation"):
+        identity = values.pop("expected_" + name + "_identity")
+        values[name + "_sha256"], values[name + "_size"] = identity["sha256"], identity["size"]
+    for name in ("controller_source_sha", "controller_source_tree", "reviewed_source_sha", "grader_source_sha",
+                 "input_source_sha", "direction_sha256", "execution_context_sha256"):
+        values[name] = values.pop("expected_" + name)
+    return [part for key, value in values.items() for part in ("--" + key.replace("_", "-"), str(value))]
+
+
+@pytest.mark.parametrize("mode,terminal", [
+    ("complete", "completed"), ("error", "failed"), ("partial", "failed"),
+    ("timeout", "timeout"), ("cleanup_lost", "cleanup_unconfirmed"),
+    ("missing", "missing_grade"), ("cancelled", "cancelled"),
+])
+def test_time_budget_first_f_grading_executor_roundtrip(handoff_sources, dual_roots, tmp_path, monkeypatch,
+                                                     offline, capsys, mode, terminal):
+    import gpt54_time_budget_grading_execution as execution
+
+    arguments, marker, _ = _execution_case(handoff_sources, dual_roots, tmp_path, monkeypatch,
+                                         status="error" if mode == "error" else "success")
+    calls = _execution_transport(arguments, monkeypatch, mode=mode)
+    if mode == "complete":
+        assert execution.main(_execution_cli(arguments, tmp_path)) == 0
+        assert json.loads(capsys.readouterr().out) == {"terminal_reason": "completed", "retry_allowed": False}
+        result = json.loads((arguments["destination"] / execution.RESULT).read_bytes())
+    else:
+        result = execution.execute_first_observation_grading(handoff_sources.plan, **arguments)
+    assert len(calls) == 1 and offline == []
+    assert result["terminal_reason"] == terminal and result["retry_allowed"] is False
+    assert result["cleanup_confirmed"] is (mode != "cleanup_lost")
+    assert result["binding"]["result"] == marker["result"]
+    assert result["binding"]["frozen_grader_source"] == marker["frozen_grader_source"]
+    assert result["binding"]["once_only_scope"] == "this_independently_named_local_attempt_store_not_distributed_global"
+    assert json.loads((arguments["destination"] / execution.RESULT).read_bytes()) == result
+    if result["grade_file"] is not None:
+        grade_data = (arguments["destination"] / "grade.json").read_bytes()
+        assert _identity(grade_data) == {name: result["grade_file"][name] for name in ("sha256", "size")}
+        assert grade_data == Path(result["binding"]["grade_path"]).read_bytes()
+        assert json.loads(grade_data)["source_inference_experiment_id"] == execution.FIRST_RUN
+        pointer = json.loads(grade_data)["cost_ledger"]
+        assert (arguments["destination"] / pointer["path"]).read_bytes() == b""
+        assert any(row["path"] == pointer["path"] and row["sha256"] == pointer["sha256"] for row in result["sidecar_files"])
+        assert result["usage"]["complete"] is (mode not in {"error", "partial", "timeout"})
+        assert result["usage"]["invoice_complete"] is False
+    assert any("/_progress/" in row["path"] for row in result["sidecar_files"]) is (mode in {"partial", "timeout"})
+    claim = arguments["attempt_store"] / (execution._observation_key(arguments["observation"]) + ".json")
+    assert claim.is_file()
+    with pytest.raises(execution.GradingExecutionRefused, match="^grading_attempt_already_claimed$"):
+        execution.execute_first_observation_grading(handoff_sources.plan, **arguments)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("change", ["missing", "digest", "extra", "binding", "future", "expired", "context"])
+def test_time_budget_first_f_grading_executor_direction_refusal(handoff_sources, dual_roots, tmp_path,
+                                                              monkeypatch, offline, change):
+    import gpt54_time_budget_grading_execution as execution
+
+    arguments, _, clock = _execution_case(handoff_sources, dual_roots, tmp_path, monkeypatch)
+    calls = _execution_transport(arguments, monkeypatch)
+    path = arguments["direction_file"]
+    document = json.loads(path.read_bytes())
+    if change == "missing":
+        path.unlink()
+    elif change == "digest":
+        arguments["expected_direction_sha256"] = "0" * 64
+    elif change == "expired":
+        clock["now"] = 1100
+    elif change == "future":
+        clock["now"] = 989
+    else:
+        if change == "extra":
+            document["approved"] = True
+        elif change == "binding":
+            document["binding"]["controller"]["source_tree"] = "0" * 40
+        else:
+            document["binding"]["execution_context_sha256"] = "0" * 64
+            arguments["expected_execution_context_sha256"] = "0" * 64
+        data = execution._encoded(document)
+        path.write_bytes(data)
+        arguments["expected_direction_sha256"] = _identity(data)["sha256"]
+    with pytest.raises(execution.GradingExecutionRefused):
+        execution.execute_first_observation_grading(handoff_sources.plan, **arguments)
+    assert calls == offline == [] and list(arguments["attempt_store"].iterdir()) == []
+    assert not arguments["destination"].exists()
+    assert not (arguments["preparation_directory"] / execution.EXPERIMENT).exists()
+
+
+@pytest.mark.parametrize("change", ["preparation_digest", "coherent_core", "extra_member", "result", "input",
+                                  "missing_inference_source", "result_fingerprint", "materialized_config",
+                                  "controller", "frozen_root", "other_cell", "clobber"])
+def test_time_budget_first_f_grading_executor_binding_refusal(handoff_sources, dual_roots, tmp_path,
+                                                            monkeypatch, offline, change):
+    import gpt54_time_budget_grading_execution as execution
+
+    arguments, marker, _ = _execution_case(handoff_sources, dual_roots, tmp_path, monkeypatch)
+    calls = _execution_transport(arguments, monkeypatch)
+    prepared = arguments["preparation_directory"]
+    if change == "preparation_digest":
+        arguments["expected_preparation_identity"] = {**arguments["expected_preparation_identity"], "sha256": "0" * 64}
+    elif change == "coherent_core":
+        role = "source/batch-runner/core/codex_runner.py"
+        data = (prepared / role).read_bytes() + b"\n# explicitly synthetic replacement\n"
+        (prepared / role).write_bytes(data)
+        marker["files"][role] = _identity(data)
+        marker["grader"]["materialized_source_sha256"] = step8_grade.compute_grader_source_hash(
+            prepared / preparation.CONFIG, json.loads((prepared / preparation.CONFIG).read_bytes()),
+            batch_root=prepared / "source/batch-runner")
+        ready = execution._encoded(marker)
+        (prepared / preparation.READY).write_bytes(ready)
+        arguments["expected_preparation_identity"] = _identity(ready)
+    elif change == "extra_member":
+        (prepared / "extra.json").write_bytes(b"{}")
+    elif change == "result":
+        result = json.loads(arguments["result_path"].read_bytes())
+        result["results"][0]["task_id"] = handoff_sources.task_ids[1]
+        _store_result(arguments, result)
+    elif change == "missing_inference_source":
+        result = json.loads(arguments["result_path"].read_bytes())
+        result.pop("source_revision")
+        _store_result(arguments, result)
+    elif change == "result_fingerprint":
+        result = json.loads(arguments["result_path"].read_bytes())
+        result["result_fingerprint"] = "0" * 64
+        data = execution._encoded(result)
+        arguments["result_path"].write_bytes(data)
+        arguments["expected_result_identity"] = _identity(data)
+    elif change == "materialized_config":
+        path = prepared / preparation.CONFIG
+        config = json.loads(path.read_bytes())
+        config["judge"]["generation"]["seed"] += 1
+        path.write_bytes(execution._encoded(config))
+    elif change == "input":
+        arguments["dataset_parquet"].write_bytes(b"synthetic drift")
+    elif change == "controller":
+        arguments["expected_controller_source_tree"] = "0" * 40
+    elif change == "frozen_root":
+        arguments["frozen_grader_root"] = arguments["runtime_root"]
+        arguments["expected_grader_source_sha"] = arguments["expected_reviewed_source_sha"]
+    elif change == "other_cell":
+        arguments["observation"] = replace(arguments["observation"], task_id=handoff_sources.task_ids[1])
+        arguments["expected_observation_identity"] = _identity(execution._encoded(asdict(arguments["observation"])))
+    else:
+        arguments["destination"].mkdir()
+    with pytest.raises(execution.GradingExecutionRefused):
+        execution.execute_first_observation_grading(handoff_sources.plan, **arguments)
+    assert calls == offline == [] and list(arguments["attempt_store"].iterdir()) == []
+    assert not (prepared / execution.EXPERIMENT).exists()
+
+
+@pytest.mark.parametrize("change", ["second_preparation", "claim_fsync", "final_input_drift",
+                                  "ledger_drift", "missing_ledger"])
+def test_time_budget_first_f_grading_executor_attempt_retention(handoff_sources, dual_roots, tmp_path,
+                                                              monkeypatch, offline, change):
+    import stat
+    import gpt54_time_budget_grading_execution as execution
+
+    arguments, _, _ = _execution_case(handoff_sources, dual_roots, tmp_path, monkeypatch)
+    key = execution._observation_key(arguments["observation"])
+    if change == "second_preparation":
+        # A genuinely valid second preparation at another path is checked
+        # BEFORE the first attempt; this negative cannot hide bad layout.
+        second_arguments = {name: arguments[name] for name in (
+            "observation", "expected_input_binding", "runtime_root", "expected_reviewed_source_sha",
+            "frozen_grader_root", "expected_grader_source_sha", "input_registration_root",
+            "expected_input_source_sha", "input_registration_path", "dataset_parquet", "reference_root",
+            "result_path", "expected_result_identity", "deliverables_root")}
+        other = tmp_path / "publications" / "second-preparation"
+        preparation.prepare_observation_grading(handoff_sources.plan, **second_arguments, destination=other)
+        second = {**arguments, "preparation_directory": other,
+            "expected_preparation_identity": _identity((other / preparation.READY).read_bytes()),
+            "direction_file": tmp_path / "second-direction.json", "destination": tmp_path / "publications" / "other-grade"}
+        _execution_direction(handoff_sources.plan, second)
+        calls = _execution_transport(arguments, monkeypatch)
+        assert execution.execute_first_observation_grading(handoff_sources.plan, **arguments)["terminal_reason"] == "completed"
+        with pytest.raises(execution.GradingExecutionRefused, match="^grading_attempt_already_claimed$"):
+            execution.execute_first_observation_grading(handoff_sources.plan, **second)
+        assert len(calls) == 1 and not second["destination"].exists()
+        assert not (other / execution.EXPERIMENT).exists()
+    elif change == "claim_fsync":
+        original = os.fsync
+        inode = arguments["attempt_store"].stat().st_ino
+        events = []
+
+        def refuse_directory_sync(fd):
+            info = os.fstat(fd)
+            if stat.S_ISDIR(info.st_mode) and info.st_ino == inode:
+                events.append("uncertain_directory_fsync")
+                raise OSError("controlled local durability failure")
+            return original(fd)
+
+        monkeypatch.setattr(os, "fsync", refuse_directory_sync)
+        calls = _execution_transport(arguments, monkeypatch)
+        with pytest.raises(execution.GradingExecutionRefused):
+            execution.execute_first_observation_grading(handoff_sources.plan, **arguments)
+        assert events == ["uncertain_directory_fsync"] and calls == []
+        assert not arguments["destination"].exists()
+    elif change == "final_input_drift":
+        calls = _execution_transport(arguments, monkeypatch,
+            after=lambda: arguments["dataset_parquet"].write_bytes(b"controlled post-child input drift"))
+        with pytest.raises(execution.GradingExecutionRefused):
+            execution.execute_first_observation_grading(handoff_sources.plan, **arguments)
+        assert len(calls) == 1 and not (arguments["destination"] / execution.RESULT).exists()
+    else:
+        def alter_ledger():
+            claim = json.loads((arguments["attempt_store"] / (key + ".json")).read_bytes())
+            path = Path(claim["binding"]["grade_path"])
+            ledger = path.with_name(path.stem + ".cost_ledger.jsonl")
+            if change == "ledger_drift":
+                ledger.write_bytes(b"explicit synthetic ledger drift\n")
+            else:
+                ledger.unlink()
+
+        calls = _execution_transport(arguments, monkeypatch, after=alter_ledger)
+        with pytest.raises(execution.GradingExecutionRefused):
+            execution.execute_first_observation_grading(handoff_sources.plan, **arguments)
+        assert len(calls) == 1 and not (arguments["destination"] / execution.RESULT).exists()
+    claim = arguments["attempt_store"] / (key + ".json")
+    before = claim.read_bytes()
+    with pytest.raises(execution.GradingExecutionRefused, match="^grading_attempt_already_claimed$"):
+        execution.execute_first_observation_grading(handoff_sources.plan,
+            **{**arguments, "destination": tmp_path / "publications" / "never-retry"})
+    assert claim.read_bytes() == before and offline == []
