@@ -135,7 +135,7 @@ def _without_time_budget_contracts(workflow):
     jobs = previous["jobs"]
     family = jobs["time-budget-contracts"]
     assert set(family) == {"runs-on", "timeout-minutes", "steps"}
-    assert family["runs-on"] == "ubuntu-latest"
+    assert family["runs-on"] == "ubuntu-22.04"
     assert family["timeout-minutes"] == jobs["pytest"]["timeout-minutes"] == 45
     assert family["steps"] == jobs["budget-readout-contracts"]["steps"][:6] + [{
         "name": "Run time-budget contracts", "run": TIME_BUDGET_RUN,
@@ -525,7 +525,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     for name, job in jobs.items():
         # No renamed check, matrix, dependencies, credentials or job-level skip.
         assert set(job) == {"runs-on", "timeout-minutes", "steps"}
-        assert job["runs-on"] == "ubuntu-latest"
+        assert job["runs-on"] == ("ubuntu-22.04" if name == "time-budget-contracts" else "ubuntu-latest")
         assert job["timeout-minutes"] == (60 if name == "native-host-contracts" else 45)
 
     core = jobs["pytest"]["steps"]

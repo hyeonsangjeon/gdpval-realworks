@@ -271,6 +271,40 @@ import pytest
 from .test_gpt54_time_budget_comparison import dual_roots, handoff_source_seed  # noqa: F401
 
 
+def _workflow_startup_environment():
+    """Read the real job's static startup controls, never credentials or inputs."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    observation = yaml.load(
+        (root / ".github/workflows/gpt54-time-budget-first-v2.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )["jobs"]["observation"]
+    contracts = yaml.load(
+        (root / ".github/workflows/backend-tests.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )["jobs"]["time-budget-contracts"]
+    assert observation["runs-on"] == contracts["runs-on"] == "ubuntu-22.04"
+    assert observation["timeout-minutes"] == contracts["timeout-minutes"] == "45"
+    expected = {
+        "PYTHONDONTWRITEBYTECODE": "1", "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1",
+        "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1", "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1",
+        "JE_ARROW_MALLOC_CONF": "background_thread:false",
+    }
+    environment = {key: observation["env"][key] for key in expected}
+    assert environment == expected
+    assert "MALLOC_CONF" not in observation["env"]
+    assert "ARROW_DEFAULT_MEMORY_POOL" not in observation["env"]
+    return environment
+
+
+def test_time_budget_owned_startup_workflow_contract():
+    """This static contract does not execute the separate real-kernel body."""
+    environment = _workflow_startup_environment()
+    assert environment["JE_ARROW_MALLOC_CONF"] == "background_thread:false"
+
+
 def test_time_budget_owned_startup(handoff_source_seed, tmp_path):
     """One fresh process, real R/F/input/direction validators and kernel control."""
     seed = handoff_source_seed
@@ -290,9 +324,7 @@ def test_time_budget_owned_startup(handoff_source_seed, tmp_path):
     environment = {
         "PATH": str(Path(sys.executable).parent) + os.pathsep + os.defpath,
         "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PYTHONPATH": str(seed.runtime / "batch-runner"),
-        "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1",
-        "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1",
-        "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1",
+        "PYTHONNOUSERSITE": "1", **_workflow_startup_environment(),
         "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_NO_LAZY_FETCH": "1",
     }
     command = [sys.executable, "-u", str(Path(__file__).resolve()), str(packet_path)]
