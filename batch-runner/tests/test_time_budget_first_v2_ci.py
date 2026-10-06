@@ -322,7 +322,7 @@ def test_time_budget_first_v2_ci_source_layout(case, actions_layout, monkeypatch
             command = next(step["run"] for step in steps if prefix in step.get("run", ""))
             lines = command[command.index(prefix):].splitlines()
             end = next(index for index, line in enumerate(lines) if not line.endswith("\\"))
-            argv = shlex.split(os.path.expandvars("\n".join(lines[:end + 1])))
+            argv = shlex.split(os.path.expandvars("\n".join(lines[:end + 1]).replace("\\\n", "")))
             assert argv == ["python3", str(layout.runtime / ci.HELPER), operation,
                 "--reviewed-source-sha", case.seed.runtime_sha, "--reviewed-source-tree", case.seed.runtime_tree,
                 "--expected-request-sha256", case.args["expected_request_sha256"],
