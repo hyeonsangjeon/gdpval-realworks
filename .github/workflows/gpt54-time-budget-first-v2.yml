@@ -1,6 +1,6 @@
-# Only the first registered time-budget V2 observation. No grading or replay.
+# One explicitly selected registered task of the first V2 run. No grading or replay.
 # Source review and this workflow's existence do not authorize a paid dispatch.
-name: GPT-5.4 time budget — first V2 observation
+name: GPT-5.4 time budget — one registered V2 observation
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ on:
         required: true
         type: string
       request_json:
-        description: Nonsecret first-cell request with exact source/input/context/path/private-parent bindings and finite window
+        description: Nonsecret single-task V2 run-1 request with exact source/input/context/path/private-parent bindings and finite window
         required: true
         type: string
 
@@ -72,7 +72,18 @@ jobs:
           assert hashlib.sha256(data).hexdigest() == os.environ["REQUEST_SHA256"]
           request = json.loads(data)
           assert request["source"] == {"sha": os.environ["REVIEWED_SOURCE_SHA"], "tree": os.environ["REVIEWED_SOURCE_TREE"]}
-          assert request["cell"] == {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": "gpt54_time_budget_v1_v2_r1", "condition": "sandbox_v2", "repeat": 1, "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"}
+          # Early fixed-cohort refusal only. The credential-free validate-request
+          # step below must independently compile the exact reviewed registration.
+          task_id = request["cell"]["task_id"]
+          assert type(task_id) is str and task_id in (
+              "02aa1805-c658-4069-8a6a-02dec146063a",
+              "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
+              "2ea2e5b5-257f-42e6-a7dc-93763f28b19d",
+              "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+              "0818571f-5ff7-4d39-9d2c-ced5ae44299e",
+          )
+          assert type(request["cell"]["repeat"]) is int
+          assert request["cell"] == {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": "gpt54_time_budget_v1_v2_r1", "condition": "sandbox_v2", "repeat": 1, "task_id": task_id}
           assert request["ci"]["run_number"] == int(os.environ["GITHUB_RUN_NUMBER"])
           PY
 

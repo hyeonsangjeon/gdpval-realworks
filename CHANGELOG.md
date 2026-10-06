@@ -50,6 +50,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Integrate native candidate `55639ee4f642a4f951909a3d4e066eee3776cfd7`
+  with accepted main `793c8778a75348fcb4070f2c8bec135b428ae731`.
+  Preserve every non-document blob from both sources; their shared CI blobs
+  are identical. Reconcile only usage and completion records so combined-HEAD
+  CI can run without a merge conflict. The native callable keeps review
+  `5431353775`; its later cleanup fixture remains unverified because the
+  local wrapper exited 127 before pytest. No successful test was repeated
+  and no combined behavioral pass or live authority is claimed.
+
 - Reuse the reviewed backend time-budget partition from
   `e817d592ca0e38be29d26da4122d5b6d7ed7395f` (review `5431664726`) for the
   native Codex branch. Copy the exact workflow and two CI-contract test blobs;
@@ -62,6 +71,162 @@ entries land under a fresh dated heading the day they merge to `main`.
   The donor's 13693-node collection partition and three passing assertions
   remain donor evidence, not a new native-branch test count or CI pass.
   No local proof, model, input, grading or consumed observation was rerun.
+
+- Accept reviewed V2/CI source `e817d592ca0e38be29d26da4122d5b6d7ed7395f`,
+  tree `5b02bae6484cc1a19fa8c735a8bf754b6091bc48`, review `5431664726`,
+  after all eleven applicable checks succeeded. Update only completion
+  records after that validation; runtime, workflow and test bytes stay
+  identical to the reviewed source.
+  Authorize one separately digest-bound request for registered V2 r1 Task2
+  `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`, not a replay of consumed Task1.
+  The executor must still bind the actual accepted source, originals,
+  host, workflow attempt and task-specific private CAS before execution.
+  One attempt, 1200-second generation, shared 20-second cleanup and the
+  45-minute execution-job ceiling remain unchanged. No Task2 result or grade
+  is claimed by this pre-dispatch record.
+
+- Complete the backend time-budget partition checks after restoring only
+  `pytest-timeout==2.4.0` in the existing Python 3.10.12 proof virtualenv.
+  The before/after package inventory confirms no removals or unrelated
+  upgrades. Requirements already declared the dependency and are unchanged.
+  Correct the current workflow hash and partition assertions in
+  `test_ghcp_vm_gate_contract.py` and
+  `test_a_test_file_nobody_runs_is_not_a_test.py` for ten jobs, identical setup,
+  the extra ignore glob and exactly-once node/file coverage. Historical
+  reconstruction removes only the validated time-budget job and its ignore
+  token; the canonical historical hash remains
+  `fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47`.
+  HISTORICAL, FOUNDRY, F and source-profile hashes are unchanged.
+
+  The leader reviewed the starting source
+  `453cb1371a3f8b2ce764ab00a654b5c61a687d9b`, tree
+  `845f6d176d8323879260e8abe8a8a00134765123`, and authorized this dependency
+  restoration and the two test corrections. The workflow still has SHA256
+  `4afc013fa51044cc72ecb71be785e0d78b9792592eb138fa1ffcf1643e42dfd5`.
+  Its only partition changes remain the general time-budget ignore glob and
+  the plain `time-budget-contracts` job. All other selectors, guards,
+  permissions and the positive-host receipt producer are unchanged.
+
+  One offline continuation at `c3312abb7c139779259371b756f3f144d3687ad2`,
+  tree `541d3901bb5a86f32e0d223acd0f932136acaa0c`, completed in **90.060s**,
+  exit 0, under one 300s+5s/no-`-x` bound. Collection proved the exact disjoint
+  partition **13693 = 13454 general + 239 time-budget nodes**, with no lost,
+  additional or selected integration nodes. The three authorized assertion
+  tests separately reported **3 passed in 19.57s**, exit 0. The original
+  reporting/socket sentinel and explicit timeout plugin were retained.
+  The node counts are collection evidence, not a full behavioral CI pass or a
+  guarantee that the partitioned jobs will finish within their ceilings.
+  The [current record](tasks/LATEST_TASK_RESULT/README.md) retains exact
+  commands, node-set digests and artifacts under
+  `/tmp/pr760-partition-continuation.KrS7hcz9/`; `result.json` has SHA256
+  `e81dce77c624d31014dfce53770f688882be930132cd5539f0f3bab83a218d39`.
+
+  The [original probe](https://github.com/hyeonsangjeon/gdpval-realworks/blob/453cb1371a3f8b2ce764ab00a654b5c61a687d9b/tasks/LATEST_TASK_RESULT/README.md)
+  remains a separate **0.330s failure**, exit 1, at
+  `55ef11739f8bcf441e01d36f11396c27ad7ea223`, tree
+  `6fdd8664bb971baa15a8a5914ecbc1fb0811d383`: the missing explicit
+  `pytest_timeout` import stopped it before any nodes were collected.
+  Neither new selector ran in that invocation. Its artifacts are untouched.
+  The leader-reported CI run `37478077525` / attempt 1 / pytest job
+  `112319417386` also remains a distinct 45-minute cancellation after setup
+  succeeded, with 13693 selected tests, latest output at 94% and no final
+  pytest verdict. Nine other checks succeeded. Its 201254-byte log has SHA256
+  `dff51180e425daa8655b0c88be82244439c4084bcbafd87be7aaf9e6b1a75a22`.
+  The unavailable extreme-reasoner harness produced no review; the leader
+  supplied the source-grounded CI decision, and the harness was not retried.
+
+  The [prior observation proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md)
+  remain separate. The post-proof delta is only this entry and LATEST.
+  Final-source review and ordinary new-HEAD CI remain pending. Workflow,
+  production, native, manifest, frozen-source and experiment bytes did not
+  change in this continuation. Both backend ceilings and the actual V2 job
+  remain 45 minutes; observations retain one attempt, concurrency 1,
+  1200 seconds of generation and shared 20-second cleanup. Historical Task1
+  remains consumed/uncertain. No CI operation, live observation or replay was
+  performed; PR761 is untouched.
+
+- Verify the integrated Task2 failure-event and uncertainty-retention path
+  with one new synthetic test. The reviewed integration basis is
+  `741c0fabcf7ad612b470df0c966d32a7e17f8b23`, tree
+  `fdbfaf46a168868ac529bf7da30797b7d8e90ec0`, combining selected-task source
+  `0ff2bd7378c392f3d3380a2983107a696f0bc75b` (review `5429517883`) with
+  diagnostic main `86bf684706bdbfc641f10c2774b7e4884d8fc7cd`. The leader's
+  AST and 1783-blob integration checks remain structural evidence, not a
+  combined behavioral pass.
+
+  The single new node reported **1 passed in 19.36s**, exit 0, at
+  `3d66290d364f41efabfeb598bf9e322fa1b8596b`, tree
+  `88f2c0db1e6d8b5f9aed1b5a402ac76d40fe2733`. Offline Python 3.10.12 used
+  the unchanged 300s+5s/no-`-x` limits and 30-second temporary Git setup bound.
+  The test exercises the real source/input/direction validators, Task2's
+  reserved secret-bearing construction failure, the exact four-field safe
+  stderr event, both uncertainty-receipt reads and private CAS/readback.
+  Completion has the independently expected Task2 cell and null result,
+  usage and cleanup fields. One permanent Task2 claim survives duplicate
+  execution refusal; seeded synthetic Task1 bytes are unchanged. No row or
+  historical diagnosis is fabricated.
+
+  [Exact proof and artifact hashes](tasks/LATEST_TASK_RESULT/README.md) are
+  recorded separately from the 5-pass/96.48s selection, 5-pass/95.25s
+  private-receipt and 8-pass/162.87s stderr proofs. The original invocation
+  remains 6 passed, 4 failed and 1 setup error in 215.64s. Its correction was
+  unrerun at that handoff; neither is relabeled by this proof. No aggregate
+  pass or old-selector rerun is claimed. Production and workflow bytes are
+  unchanged. The post-proof delta
+  is only this entry, LATEST and the direct README evidence paragraph.
+  Final-source review, final-HEAD CI and a new leader-issued live request
+  remain gates. Historical Task1 is still consumed/uncertain; its first throw,
+  model-call count and cost remain unknown. No live run or replay is granted.
+
+- Let the existing directed V2 route select one task from the verified five-task
+  registration for `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1. The
+  existing `request.cell.task_id` now binds input preparation, the callable,
+  result/deliverable paths, direction, private claim/retention prefix and
+  completion metadata. No scheduler, new workflow/input, study axis, permission,
+  model/budget change or frozen-source repin is introduced. Task1's prefix stays
+  unchanged so its permanent claim still blocks under a new source. This is an
+  implementation-only change; Task2 has no live authorization.
+
+  The accepted basis is `7f4daa09944f6d9635e9bff3d945c224cfc76392`, tree
+  `9bc2b0bb655c4cd69fb3b59162776743b5a9278a`. The leader separately approved
+  this bounded wiring change under the CI/source charter, with task/prefix/claim
+  aliasing as the critical risk. This was a leader-executed read-only decision,
+  not a successful spawned-model review; no reviewer harness was retried.
+
+  The five-node continuation at leader-reviewed
+  `70a02619276bc9da072567d5ee0e4060aed6dbbf`, tree
+  `1d85a59c1baf5660d80a3abd5eedf14053dc54b2`, reported **5 passed in 96.48s**,
+  exit 0. One offline Python 3.10.12 invocation used 300 seconds plus 5 seconds
+  grace, no `-x`, and the unchanged 30-second temporary Git setup bound. It
+  reached Task2's genuine synthetic input/runner/canonical-result/private-prefix
+  readback path, permanent-claim checks and the intended direction, result-task,
+  result-source and request-source refusals. No production, workflow, test,
+  assertion or validator changed for this proof-only continuation.
+
+  The [prior invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/70a02619276bc9da072567d5ee0e4060aed6dbbf/tasks/LATEST_TASK_RESULT/README.md)
+  at `e99fbc774a6fa2e2c02624e8f78bcc40200928cb`, tree
+  `4b1d7aadd4813be2f746e4ae8d4dfbdfb5c8aa71`, remains **6 passed, 4 failed,
+  1 setup error in 215.64s**, exit 1. Its configuration-wrapper lookup failures
+  and source-case setup timeout are not relabeled as passes. Test correction
+  `9b1d5b7fddf887a4233630452a261ff3bebfe880`, tree
+  `098626359b138c45fc53029fa55ed8cb7a21fe65`, was unrerun at that handoff.
+  The six passing nodes were not repeated; there is no aggregate 11-pass claim.
+  The [current record](tasks/LATEST_TASK_RESULT/README.md) retains exact source,
+  node and artifact identities. The post-proof delta is only this entry, LATEST
+  and the direct README evidence paragraph.
+
+  Historical Task1 run `37456739936` / attempt 1 / job `112246098370` remains
+  permanently consumed/uncertain, with acknowledged private retention, not a
+  zero score or a removed planned observation. Its claim
+  `e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288` and output
+  `f602355f945471963a338ccf79783a6f802ac6dd` were not accessed or changed.
+  First throw, model-call count and cost remain unknown. The pending
+  [diagnostics evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/7aebe28c402cfb71463231f2fb1a75825a26391f/tasks/LATEST_TASK_RESULT/README.md)
+  keeps its 5-pass and 8-pass proofs separate; none was repeated or copied into
+  this branch. Final-source review, diagnostics integration, ordinary
+  final/integrated-HEAD CI and a new leader-issued request with genuine live
+  values remain gates. This synthetic proof supplies no live authorization.
+  No live input, HF, provider, grader or CI operation ran for this continuation.
 
 ### Added
 

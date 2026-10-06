@@ -142,11 +142,11 @@ def _transport(monkeypatch, case, *, outcome="success", during_response=None):
         events.append("admission")
 
     def real_build(**kwargs):
-        assert kwargs["observation_for"](entry.TASK, 1) is controls[0]
+        assert kwargs["observation_for"](case.arguments["observation"].task_id, 1) is controls[0]
         factory = build(**kwargs)
 
         def task_factory(task):
-            assert task.task_id == entry.TASK
+            assert task.task_id == case.arguments["observation"].task_id
             assert "rubric" not in task.prompt and "withheld" not in task.prompt
             runner = factory(task)
             assert runner.observation_control is controls[0]
