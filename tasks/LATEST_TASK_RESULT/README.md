@@ -1,197 +1,134 @@
 # Latest task result
 
-## PR757: retention proof and accepted-main integration
+## PR757: linked Actions runtime repair; focused proof failed
 
-The corrected missing-usage test completed its full failed-result retention
-path. The one invocation reported **1 passed in 15.88s**, exit 0. The only
-software change is the test's two status expectations and assertions for the
-exact missing-usage outcome. Production, workflow, response fixture, serializer
-and validator bytes are unchanged. This is one synthetic proof, not a live
-observation or publication.
+The source-layout repair is implemented. Its one new offline selector reported
+**6 passed, 1 failed in 58.33s**, exit 1. The failed `[linked]` case stopped at
+the test's exact-argv assertion before `ci.main`: `shlex.split` retained Bash
+continuation newlines as arguments. No source/test/workflow change or test
+rerun followed. The positive workflow CLI path remains unproved.
 
-### Accepted-main integration
+### Scope and reviewed basis
 
-The leader accepted source `32b5fadcb4346fc576b1e5e631b164c596f68bf4`, tree
-`c2aa0c86a85fae86426f839009ce63221eeba8e4`, in review `5425328389`,
-conditional on integration and CI. It is combined with accepted main
-`b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
-`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`. That main contains grading
-source `a511e7453233db4690478685d3227b3bb5e88a0e`, reviewed in `5424085140`
-with all 10 applicable checks successful.
+Work started in a fresh worktree from exact reviewed
+`1a1e9f9199497ccb804f1d00ece46515f75544ff`, tree
+`0392fc326b3293ffbf30e75e25570b0912c2da15`, review `5425363467`.
+The leader supplied the confirmed defect and the actual pre-edit CI/source
+charter approval for this bounded repair and one synthetic proof. This was
+a leader-executed review, not a successful spawned-model review. The unavailable
+reviewer harness was not retried. The leader also reported 10 prior CI checks
+passing; those checks did not exercise this Actions layout and do not validate
+the correction or authorize execution.
 
-Only CHANGELOG and LATEST overlap between the changes. Every source, test,
-workflow and usage blob is retained exactly from its respective parent;
-only the two completion records are reconciled. Prior proofs are not
-relabeled as tests of this combined tree. No local selector or live operation
-was run for integration. The combined HEAD still requires review and CI.
+The established cause was the ordinary `actions/checkout` directory at
+`GITHUB_WORKSPACE` being passed as runtime R. The existing
+`registration._reviewed_source` path requires a genuinely registered detached
+linked worktree through `_runtime_revision` and `_registered_gitdir`; the
+ordinary `.git` directory could not satisfy that contract. The validators
+were not changed or weakened.
 
-### Scope and reviewed source
+The workflow now verifies the bootstrap's reviewed commit/tree, refuses
+existing runtime or frozen destinations, and creates detached linked R at
+`$RUNNER_TEMP/time-budget-v2-runtime` and distinct linked F at
+`$RUNNER_TEMP/time-budget-v2-frozen`. State remains at
+`$RUNNER_TEMP/time-budget-first-v2`. Actual `GITHUB_WORKSPACE` stays the ordinary
+bootstrap. Controller calls, dependency installation and the existing identity
+preflight use linked R. The independently digest-bound request must name the
+new R path. The controller checks canonical paths, shared common Git identity,
+bootstrap commit/tree and held directories before credentialed work and on
+final reread. Existing R/F blob, input, direction, CAS, host and no-retry checks
+remain in place.
 
-Work started from clean leader-read
-`561219c661e8a5f05cd20c1637aac792d782a887`, tree
-`42ab0ceae2b32f858618a0c7f9c99251ffde854a`, on
-`b/codex-time-budget-first-v2-actions-20261006`. The leader confirmed the
-existing missing-usage contract and directed this narrow test correction and
-one-node proof. The established cause was not investigated again: unchanged
-`AzureFoundryVoice` returns `GaveUp` when usage is absent, before interpreting
-the offered tool. Its existing entrypoint test expects error/failed/no
-deliverables and unavailable usage. Neither runtime policy nor the synthetic
-response was changed to make the CI test pass.
+Only the workflow, controller and directly coupled test module changed before
+the proof. The old fixtures now construct the same ordinary-bootstrap/linked-R/F
+layout with real temporary Git objects and explicit synthetic input declarations.
+Their older test cases were not rerun; their coverage remains pending CI.
+No core, ownership, manifest, source pin, frozen F, permission or study policy
+was changed. The first registered V2 cell, 20-observation study, GPT-5.4/direct-v1/xhigh,
+concurrency 1, one attempt, 1200-second generation, shared 20-second cleanup and
+45-minute job ceiling remain fixed. The ceiling is not a money cap.
 
-The pinned correction is `d82fbd9b47b3af97d56510ee98db5370830d30fb`, tree
-`c1da94784a28100f0ce10ff9607d6271e99b52c9`. Its entire delta is one test file,
-17 insertions and two deletions. Both returned-status and envelope-status
-expectations now classify `missing_usage` as `error` alongside `failed`;
-`success` and `not_started`/`uncertain` remain distinct. Additional assertions
-check canonical result semantics, exact retention identity and consumed
-reservations. All existing admission/direction/claim/CAS/readback, credential
-isolation and duplicate-refusal assertions remain in place.
+### Pinned implementation and one proof
 
-The five-line fixture correction
-`1585ef4309f03fc08d0e7c553341d62826b182d0` was already present. It matches the
-workflow's cached SDK telemetry-disabled setting. Its earlier unrerun status
-is preserved in the [immutable original handoff][original]. The workflow and
-controller remain byte-identical to
-`8be989167037f91b98866a2fdb8bc887b11a4c54`; the offline socket sentinel and all
-real source/input/direction/digest validators are unchanged. No network
-connection or successful-validator substitute was allowed.
+- Tested HEAD: `14fe35b08018af3c92e02bfc474b5aef6777c724`.
+- Tested tree: `27c5c4f7f275a9cb5a06633ebb5298733f3e7ae9`.
+- Implementation delta: three files, 192 insertions and 27 deletions.
+- Selector: `tests/test_time_budget_first_v2_ci.py::test_time_budget_first_v2_ci_source_layout`.
+- Python 3.10.12, one offline invocation, 300 seconds plus 5 seconds termination
+  grace, no `-x`. JUnit records seven cases, one failure, zero errors and zero
+  skips. No previous PR757, PR758, study, platform or full-suite selector ran.
 
-The existing base `e2b8c5e15296eefbb2c1ee21d6b8ba3725d75506`, tree
-`820bc59533a7fd6ba65e237501e6b3ce2c759ced`, is intentional for this proof.
-The proof did not integrate newer main or change a prior worktree. The later
-leader integration is described above; no rebase, reset or stash was used.
-The leader-executed pre-edit charter review and failed reviewer-harness
-provenance remain in the original handoff; neither review nor harness was
-repeated. The catalog was checked once, retained source/CI guidance applied,
-and no new experiment-design review was needed.
+All seven completed parameter outcomes are retained:
 
-### Exact bounded invocation
-
-Python was 3.10.12. The command checked the exact clean HEAD/tree and unchanged
-workflow/controller before selecting only the missing-usage node. It used tiny
-synthetic inputs, genuine temporary source identities and the existing
-ordinary transport seams, not a real provider or storage service. The complete
-retained `command.sh` is:
-
-```bash
-#!/usr/bin/env bash
-set -uo pipefail
-cd /ai-work/copilot/worktrees/codex-time-budget-first-v2-actions-20261006/batch-runner || exit 2
-[[ "$(git rev-parse HEAD)" == d82fbd9b47b3af97d56510ee98db5370830d30fb ]] || exit 2
-[[ "$(git rev-parse 'HEAD^{tree}')" == c1da94784a28100f0ce10ff9607d6271e99b52c9 ]] || exit 2
-[[ -z "$(git status --porcelain)" ]] || exit 2
-git diff --quiet 8be989167037f91b98866a2fdb8bc887b11a4c54 HEAD -- ../.github/workflows/gpt54-time-budget-first-v2.yml gpt54_time_budget_v2_ci.py || exit 2
-[[ "$(/ai-work/venvs/gdpval-realworks-py310/bin/python --version)" == 'Python 3.10.12' ]] || exit 2
-timeout --signal=TERM --kill-after=5s 300s \
-  env -i PATH=/ai-work/venvs/gdpval-realworks-py310/bin:/usr/bin:/bin \
-  LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
-  PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS= \
-  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
-  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 \
-  /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest \
-  -o addopts= -p no:cacheprovider -m 'not integration' \
-  -vv --tb=short --color=no \
-  --basetemp=/tmp/pr757-missing-usage-retention-proof.nGPcoc/pytest-tmp \
-  --junitxml=/tmp/pr757-missing-usage-retention-proof.nGPcoc/junit.xml \
-  'tests/test_time_budget_first_v2_ci.py::test_time_budget_first_v2_ci_roundtrip[missing_usage]' \
-  2>&1 | tee /tmp/pr757-missing-usage-retention-proof.nGPcoc/pytest.log
-proof_exit=${PIPESTATUS[0]}
-printf 'PROOF_EXIT=%s\n' "$proof_exit"
-exit "$proof_exit"
-```
-
-Pytest reported **1 passed in 15.88s**, exit 0. JUnit records one case, zero
-failures, zero errors and zero skips. There was one invocation, bounded by
-300 seconds plus 5 seconds termination grace without
-`-x`. The only completed node was
-`tests/test_time_budget_first_v2_ci.py::test_time_budget_first_v2_ci_roundtrip[missing_usage]`.
-Neither the 10 nor the 14 previously passing nodes were repeated. The full
-11/25-node selectors, prior platform/study selectors and broad suites were not
-run, and there was no rerun after this result.
-
-### Verified failed-result retention
-
-The case reached all previously unreached private-retention assertions.
-The canonical row retains status `error`, terminal reason `failed`, null
-usage and `usage_availability.usage_complete: false`; its deliverable records
-and file lists are empty, and no deliverable file is present. The unchanged
-envelope has status `error`, terminal reason `failed`, `usage: null` and
-`retention: acknowledged`. It has no new `usage_complete` field.
-
-The real retention validators and existing synthetic storage transport
-confirmed the private object bytes and immutable readback. The returned,
-canonical and envelope result fingerprints match the recomputed fingerprint;
-result byte identities also match. Claim and execution reservations remain
-present. Existing duplicate execution and duplicate retention assertions
-refuse another attempt, and the transport records only the claim and output
-commits. Storage credentials remain absent during inference, original inputs
-remain outside the public envelope, and V2 still has no Codex Step0 input.
-The socket sentinel remained intact with no external connection. None of
-this is evidence of a real host, model call or HF publication.
-
-The synthetic result is retained under the proof directory at
-`pytest-tmp/test_time_budget_first_v2_ci_r0/time-budget-first-v2/result/step2_inference_results.json`:
-6219 bytes, SHA256
-`2771a2d014ced95cbf4b2d73118861d5b981b8880a13e40653d4a74ddf3a89ba`,
-canonical result fingerprint
-`15f34d9da63186f177d7fbbdecdcba04f644539bb3d281076da930dfc5242aff`.
-The same synthetic state's `completion.json` has SHA256
-`b9e61b087221b5745431245b3e8d36e164283f8ec56bfb14a3286e3f7d43056e`.
-These are explicitly synthetic outputs, not private live receipts.
-
-Proof artifacts remain at `/tmp/pr757-missing-usage-retention-proof.nGPcoc/`:
-
-| Artifact | SHA256 |
+| Parameter | Result |
 | --- | --- |
-| `command.sh` | `9d2e903ec1d3229e6d4eb0353f6a6a34d72c23821cb70d8712d1fd605386dbbe` |
-| `pytest.log` | `1a9cb27d74be42836805f4c7852da62be47729b730aed55aa58a841f8eb7609d` |
-| `junit.xml` | `48d7dfbedd308503b11f7a284c9f07856e1074922fb3d12a100e249bdb0c55dd` |
-| `receipt.json` | `17bece34c94fdfaa409922e75dff390a968a0a293a93af38f3da80e1c47f7b31` |
+| `linked` | Failed at line 326, before the CLI call |
+| `ordinary_runtime` | Passed |
+| `bootstrap_commit` | Passed |
+| `bootstrap_tree` | Passed |
+| `bootstrap_common` | Passed |
+| `final_bootstrap_commit` | Passed |
+| `final_bootstrap_common` | Passed |
 
-The command digest identifies the complete retained file shown above,
-including its source guards, not a shortened or redacted command.
+The failed case had already executed the workflow's worktree-creation shell
+with explicit synthetic F anchors and checked no-clobber refusal. Its Python
+command parser then produced literal newline arguments where Bash removes
+backslash-newline continuations. This test failure is retained, not relabeled
+as successful workflow execution. The six refusal cases use genuine source
+validators, including final bootstrap commit movement and common-directory
+replacement. Their intake, private-store, admission and provider effect checks
+remained clear. Socket and external-write sentinels stayed enabled.
 
-### Separate prior evidence, post-proof delta and remaining gates
+Artifacts remain at `/tmp/pr757-source-layout-proof.cp7wxA/`. `command.sh`
+contains the complete invocation and clean HEAD/tree guards; its digest is
+not the hash of shortened or redacted command text.
 
-The [11-node continuation][continuation] remains **10 passed, 1 failed in
-68.02s**, exit 1, at `0fe559377bbbd20eab790dd7a5c48e4509911c90`, tree
-`4bb9ff1cd758b247a7d304f86b3850ccdd34b87f`. It stopped the missing-usage case
-before private-retention assertions; its exact artifacts remain at
-`/tmp/pr757-first-v2-continuation-proof.cQ5q9i/`.
+| Artifact | Bytes | SHA256 |
+| --- | --- | --- |
+| `command.sh` | 1322 | `4c72dc3fa89782c81d41f7dc10218c511c6cd6a3c6b90653025ab0dda3196ef1` |
+| `pytest.log` | 7810 | `4ccf56767353578b39abba8c212c1ba0e31bbb021039dbf3602d2d2469891295` |
+| `junit.xml` | 7929 | `e7d61f72019639b49a57fa7b911b6a4801b87ec792a0de55e286b17806d5a12a` |
+| `exit.txt` | 13 | `b3f1a96987ccc7d792693aedce90d59a97a3a52df9aeba6c89066b61a182b0e0` |
+
+### Separate evidence and remaining gates
 
 The [original invocation][original] remains **14 passed, 11 failed and
 11 teardown errors in 16.57s**, exit 1, at
-`8be989167037f91b98866a2fdb8bc887b11a4c54`, tree
-`b93f57343935fd1a52b1f882e16662503904287c`. Its exact command, log, JUnit and
-receipt at `/tmp/time-budget-first-v2-actions-proof.aB4lci/` were preserved.
-Both earlier artifact sets had their recorded SHA256 identities rechecked.
-The telemetry correction's unrerun status at the original handoff remains
-historical fact. This one-node pass does not turn either failed invocation
-into a pass, and no aggregate 25-pass result is claimed. Immutable links
-in the original record preserve all earlier study, software, NAS-refusal,
-CI-host and grading proofs separately.
+`8be989167037f91b98866a2fdb8bc887b11a4c54`. The telemetry correction
+`1585ef4309f03fc08d0e7c553341d62826b182d0` was unrerun at that handoff.
+The [11-node continuation][continuation] remains **10 passed, 1 failed in
+68.02s**, exit 1, at `0fe559377bbbd20eab790dd7a5c48e4509911c90`.
+The [missing-usage retention proof][missing-usage] remains **1 passed in
+15.88s**, exit 0, at `d82fbd9b47b3af97d56510ee98db5370830d30fb`; its accepted
+correction is `32b5fadcb4346fc576b1e5e631b164c596f68bf4`, review `5425328389`.
+These immutable records retain their artifacts and earlier software, grading,
+NAS-refusal and real CI host evidence. No aggregate 25-pass result is claimed.
 
-The exact repository delta after this proof is `CHANGELOG.md`, this LATEST
-record and only the directly affected evidence paragraph in
-`batch-runner/README.md`. The total correction also includes the pinned test
-change; no further test change follows the proof. Production, workflow,
-configuration, source pin, permission, claim, direction, limit and launch-flag
-bytes remain unchanged. The fixed study, first cell, 1200/20-second policy
-and 45-minute job ceiling remain unchanged.
-`im-not-ai-en` is limited to the changed English records and usage passage,
-preserving counts, identities, failure semantics, links and pending gates.
-One bounded changed-passage fidelity check passed without warnings; it was
-an editorial check, not another software invocation.
+The exact post-proof repository delta is only `CHANGELOG.md`, this LATEST
+record and the directly affected evidence/request-path/usage passages in
+`batch-runner/README.md`. Production, workflow and test bytes remain identical
+to the tested implementation. `im-not-ai-en` is limited to these changed
+English passages, preserving failures, counts, paths, identities and gates.
+One bounded changed-passage fidelity check passed without warnings; it was an
+editorial check, not another software test or evidence of live readiness.
 
-Remaining work is integrated-HEAD review and CI acceptance, and genuine
-source/input/host/private-parent values with a separate leader-issued
-execution direction. The unchanged
-[usage section](../../batch-runner/README.md#first-v2-observation-on-github-actions)
-specifies the future command and required identities. Actual-host kernel
-admission and provider identity checks remain mandatory; model-free test
-results grant no live permission, backend-cancellation guarantee or money
-cap. No CI query/dispatch/retry/poll, model/grader/HF/Azure operation, real
-private-input or receipt access, Project edit or merge occurred.
+Remaining work includes the failed test's shell-tokenization correction and
+positive CLI evidence, final-HEAD source review and ordinary CI, then the
+leader's source/integration decision. Accepted main remains
+`b4e15f02c1db8674ffeff83f133c710627c696e8`, tree
+`5de4c1ce82dcfeddf0178a52c6c3bf0e40bae54f`. This repair does not select an
+approved runtime. Genuine input/private-parent/actual-host values, the finite
+window and a separately issued digest-bound live request are still required.
+Actual kernel ownership admission and provider identity checks remain mandatory.
+The [usage section](../../batch-runner/README.md#first-v2-observation-on-github-actions)
+shows the future request path contract; it is not permission to dispatch.
+
+The old PR757 worktree and PR758 branch were left untouched. No CI query,
+dispatch, retry or poll; private HF/input/receipt access; model/grader/Azure
+operation; permission expansion; Project edit or merge occurred. This is
+synthetic source-layout evidence, not real input, host, inference or publication
+evidence.
 
 [original]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md
 [continuation]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md
+[missing-usage]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md

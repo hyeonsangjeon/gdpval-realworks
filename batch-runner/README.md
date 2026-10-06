@@ -507,15 +507,18 @@ adds one manual route to that same callable, through
 first V2 cell above. It has a 45-minute job ceiling for setup, the unchanged
 1200-second generation budget and shared 20-second cleanup, and private
 retention. That ceiling is not a money cap or a remote-cancellation guarantee.
-The missing-usage retention case reported **1 passed in 15.88s**, exit 0, in
-one offline invocation after its test-only expectation correction. It verified
-an error/failed result with unavailable usage and no deliverables through
-acknowledged synthetic private retention. The [earlier 11-node failure](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
+The source-layout correction's single offline selector reported **6 passed,
+1 failed in 58.33s**, exit 1. The linked case created genuine R/F worktrees and
+checked no-clobber behavior, then failed in its command-tokenization assertion
+before invoking `ci.main`: `shlex.split` retained Bash continuation newlines
+as arguments. The six refusal cases passed; the positive CLI path remains
+unproved. The [missing-usage proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md),
+[earlier 11-node failure](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
 and [original failed invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
 remain separate evidence, not an aggregate 25-pass result. See the
-[current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for the exact
-result and remaining integrated-HEAD/CI/live gates. These controlled-transport
-tests are not real host, inference or publication evidence.
+[current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact
+source/proof identities and pending correction/review/CI/live gates. These
+synthetic tests are not real host, inference or publication evidence.
 
 The following is the future command shape, **not permission to dispatch**:
 
@@ -528,7 +531,17 @@ gh workflow run gpt54-time-budget-first-v2.yml --ref main \
 ```
 
 The leader must select R after acceptance. R must equal the actual main,
-workflow and checkout commit, with its independently reviewed tree. The request
+workflow and checkout commit, with its independently reviewed tree.
+`GITHUB_WORKSPACE` remains the ordinary bootstrap checkout, not R's runtime
+path. The workflow verifies that commit/tree and creates two new detached,
+registered worktrees: R at `$RUNNER_TEMP/time-budget-v2-runtime` and F at
+`$RUNNER_TEMP/time-budget-v2-frozen`. The workflow refuses if either destination exists.
+All controller commands, dependency installation and the existing identity
+preflight use linked R's source. The controller binds those canonical paths
+to the bootstrap's common Git directory and rechecks its commit/tree and held
+directories before credentialed work and on final reread. The source validator
+still refuses an ordinary checkout as R; `GITHUB_WORKSPACE` is never changed
+to impersonate a linked worktree. The request
 contains no credentials, original bodies or self-authorizing digest. Its exact
 UTF-8 bytes must match the separately issued `request_sha256`; do not derive the
 trusted expected value from a downloaded artifact on the runner. Every field
@@ -565,7 +578,7 @@ below is required; uppercase placeholders must be replaced with genuine values:
     "runner": "ubuntu-22.04", "runner_os": "Linux", "runner_arch": "X64"
   },
   "paths": {
-    "runtime_root": "/ACTUAL_GITHUB_WORKSPACE",
+    "runtime_root": "/ACTUAL_RUNNER_TEMP/time-budget-v2-runtime",
     "frozen_root": "/ACTUAL_RUNNER_TEMP/time-budget-v2-frozen",
     "state_root": "/ACTUAL_RUNNER_TEMP/time-budget-first-v2"
   },

@@ -13,16 +13,6 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
-- Integrate reviewed first-V2 Actions source
-  `32b5fadcb4346fc576b1e5e631b164c596f68bf4` (review `5425328389`) with
-  accepted main `b4e15f02c1db8674ffeff83f133c710627c696e8`, whose integrated
-  grading source `a511e7453233db4690478685d3227b3bb5e88a0e` passed all 10
-  applicable checks. Only CHANGELOG and LATEST overlap. Preserve every source,
-  test, workflow and usage blob from its respective parent and reconcile only
-  the two records. The single missing-usage proof and earlier mixed outcomes
-  remain separate. No new local test or live operation is claimed; the
-  combined HEAD still requires review and CI before delivery.
-
 - Add one manual Actions route and a companion controller for the first
   registered V2 observation only. The route validates reviewed main/workflow
   source, the fixed cell, attempt 1 and the independently digest-bound request
@@ -42,45 +32,45 @@ entries land under a fresh dated heading the day they merge to `main`.
   not a successful spawned-agent review; the unavailable-model invocation and
   two earlier HTTP 400 failures did not produce a review.
 
-  Correct only the CI test's missing-usage expectations: both returned and
-  envelope status are `error`, alongside `failed`, while success and
-  not-started uncertainty remain distinct. Add assertions for terminal
-  `failed`, null/incomplete usage, no deliverables, unchanged retained result
-  bytes/fingerprint and consumed claim/execution reservations. The envelope
-  keeps its existing fields; no `usage_complete` field is added. The reviewed
-  basis was `561219c661e8a5f05cd20c1637aac792d782a887`, tree
-  `42ab0ceae2b32f858618a0c7f9c99251ffde854a`. No production, workflow, response
-  fixture, serializer or validator changed.
-
-  One offline Python 3.10.12 invocation of only
-  `test_time_budget_first_v2_ci_roundtrip[missing_usage]` at
-  `d82fbd9b47b3af97d56510ee98db5370830d30fb`, tree
-  `c1da94784a28100f0ce10ff9607d6271e99b52c9`, reported **1 passed in 15.88s**,
-  exit 0, under 300 seconds plus 5 seconds termination grace without `-x`.
-  It completed the previously unreached private-retention assertions through
-  the existing synthetic transport and real validators, including readback,
-  token stripping and duplicate refusal. The [11-node continuation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
-  remains **10 passed, 1 failed in 68.02s**, exit 1, at `0fe559377`.
-  The [original invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
-  remains **14 passed, 11 failed and 11 teardown errors in 16.57s**, exit 1,
-  at `8be989167`. Their artifacts and the telemetry correction's unrerun status
-  at the original handoff remain intact. Neither passing subset was repeated;
-  no aggregate 25-pass result is claimed. Workflow/controller bytes remain
-  identical to `8be989167037f91b98866a2fdb8bc887b11a4c54`, with the socket
-  sentinel intact. The exact post-proof delta is CHANGELOG, LATEST and only
-  the README evidence paragraph; this task's total delta also includes the
-  pinned test correction.
-  [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains the complete command,
-  node outcomes and evidence hashes. [Earlier observation
-  proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/39362bb804b1f0823091cb597e1d6ae4db58ec15/tasks/LATEST_TASK_RESULT/README.md)
-  and [separate grading evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/87fec0a0a4cd3b6b585896782a60690cd1cd7ca8/tasks/LATEST_TASK_RESULT/README.md)
-  remain distinct. Correction review, leader-owned newer-main integration,
-  integrated-HEAD review/CI acceptance and genuine source/input/host/private-parent
-  values with a leader-issued live request remain required. Controlled transports are not
-  real host, inference or publication evidence. No dispatch, private-input
-  access, live operation or CI query/retry/poll occurred.
+  The [missing-usage retention proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/32b5fadcb4346fc576b1e5e631b164c596f68bf4/tasks/LATEST_TASK_RESULT/README.md)
+  remains **1 passed in 15.88s**, exit 0. The [11-node continuation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
+  remains **10 passed, 1 failed in 68.02s**, exit 1. The [original invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
+  remains **14 passed, 11 failed and 11 teardown errors in 16.57s**, exit 1.
+  Those records preserve the exact source identities, artifacts, telemetry
+  correction's unrerun status at its first handoff and earlier evidence.
+  No aggregate 25-pass result or real host, inference or publication evidence
+  is claimed. The source-layout correction and its separate failed proof are
+  recorded below.
 
 ### Fixed
+
+- Repair the first-V2 Actions source layout from reviewed
+  `1a1e9f9199497ccb804f1d00ece46515f75544ff`, tree
+  `0392fc326b3293ffbf30e75e25570b0912c2da15` (review `5425363467`). The ordinary
+  bootstrap at `GITHUB_WORKSPACE` could not satisfy the existing detached
+  linked-worktree validator when passed as R. Keep that validator unchanged,
+  create no-clobber linked R at `$RUNNER_TEMP/time-budget-v2-runtime`, preserve
+  distinct linked F at `$RUNNER_TEMP/time-budget-v2-frozen`, and run the
+  controller from R. Bind canonical paths, the bootstrap commit/tree and
+  common Git directory before credentialed work and on final reread, with
+  held-directory checks. Permissions, input/direction/CAS/host checks and
+  the fixed study remain unchanged. The leader supplied the actual pre-edit
+  CI/source decision for this repair; no spawned-model review was claimed.
+
+  The implementation is `14fe35b08018af3c92e02bfc474b5aef6777c724`, tree
+  `27c5c4f7f275a9cb5a06633ebb5298733f3e7ae9`. One new offline Python 3.10.12
+  source-layout selector reported **6 passed, 1 failed in 58.33s**, exit 1,
+  bounded by 300 seconds plus 5 seconds termination grace without `-x`.
+  `[linked]` failed at the test's exact-argv assertion: `shlex.split` retained
+  Bash continuation newlines as arguments, before `ci.main` ran. The six
+  refusal cases passed. No source/test/workflow correction or rerun followed.
+  The positive CLI path remains unproved, and the older fixture consumers
+  await CI. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records all outcomes
+  and exact artifacts. The post-proof delta is only CHANGELOG, LATEST and the
+  directly affected README evidence/request-path/usage passages. The leader's
+  reported 10 checks at the prior source do not establish this correction or
+  live authority. Final-HEAD review/CI, leader-selected accepted R and genuine
+  input/host/private-parent values with a separate live request remain gates.
 
 - Integrate reviewed grading source
   `87fec0a0a4cd3b6b585896782a60690cd1cd7ca8` (review `5424037416`) with
