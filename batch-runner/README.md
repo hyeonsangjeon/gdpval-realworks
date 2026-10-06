@@ -523,7 +523,20 @@ remain separate evidence, not an aggregate 25-pass result. See the
 tested/reviewed identities and pending final-HEAD review, new CI and live gates.
 These synthetic tests are not real host, inference or publication evidence.
 
-The following is the future command shape, **not permission to dispatch**:
+The first real attempt is now permanently consumed. Leader-verified
+[run 37456739936, attempt 1](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37456739936/attempts/1)
+at source `7f4daa09944f6d9635e9bff3d945c224cfc76392` completed with execute
+exit 2 and acknowledged uncertainty retention. Its claim is
+`e53fe8d4c47ef2a05aea8ffcc0fe1745a9b3c288`; private output is
+`f602355f945471963a338ccf79783a6f802ac6dd`. No canonical result, terminal
+control or usage was reported. The historical exception was discarded, so
+neither its first throw nor model-call count or cost is established. Do not
+replay, resume, regrade, delete or adopt that state. The new diagnostic selector
+reported **5 passed in 95.25s** at `1b21fe4d635b5d3934cfcd06699f6ca9c7c725ca`;
+that synthetic proof neither changes the live outcome nor authorizes a new cell.
+
+The following documents the command shape, **not permission to dispatch or
+repeat the consumed cell**:
 
 ```bash
 gh workflow run gpt54-time-budget-first-v2.yml --ref main \
@@ -629,6 +642,19 @@ a fabricated study row. Missing usage remains unavailable. Only schema-allowlist
 inputs, private receipts and raw exceptions are not public artifacts. This is
 private retention, not a fabricated inference `source_repo_id`/`source_revision`
 or grading intake. There is no grading, retry, resume or other-cell dispatcher.
+
+For future failures under reviewed source, the existing private
+`execution-receipt.json` may include `failure` with exactly `stage`, `category`
+and `reason`, each drawn from a static allowlist. The stage names the entered
+controller boundary, not an internal traceback or proof of whether a provider
+was called. Only the invocation that successfully reserved execution can write
+it; prior partial/consumed state is never annotated, and receipt publication is
+not retried. Pre-reservation failures or failed receipt I/O can still leave no
+diagnostic. Retention validates and rereads this metadata and includes it in
+the private output manifest while keeping the canonical result unavailable.
+The public completion envelope is unchanged. No raw exception, provider text,
+token, header, filename or original body is included in these diagnostics.
+This does not backfill the historical attempt or extend its cleanup allowance.
 
 `core.time_budget_observation_deadline.TimeBudgetObservation` reserves an identity
 in a private host-owned directory before generation. The identity includes
