@@ -32,38 +32,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   not a successful spawned-agent review; the unavailable-model invocation and
   two earlier HTTP 400 failures did not produce a review.
 
-  One proof-only continuation at leader-read
-  `0fe559377bbbd20eab790dd7a5c48e4509911c90`, tree
-  `4bb9ff1cd758b247a7d304f86b3850ccdd34b87f`, selected exactly the 11 previously
-  failed nodes and reported **10 passed, 1 failed in 68.02s**, exit 1, with zero
-  errors or skips. It used offline Python 3.10.12 under 300 seconds plus
-  5 seconds termination grace without `-x`. The sole failure is
-  `test_time_budget_first_v2_ci_roundtrip[missing_usage]`: line 272 expects
-  success, but the unchanged voice returns `GaveUp` when `_usage_from(response)`
-  sees `usage=None`. The retained synthetic result is terminal `failed`, with
-  unavailable usage and no deliverables. The existing entrypoint test already
-  expects error for this case; it was read, not rerun. The missing-usage case
-  did not reach its private-retention assertions. No source or assertion was
-  changed, and no case was repeated after this result.
+  Correct only the CI test's missing-usage expectations: both returned and
+  envelope status are `error`, alongside `failed`, while success and
+  not-started uncertainty remain distinct. Add assertions for terminal
+  `failed`, null/incomplete usage, no deliverables, unchanged retained result
+  bytes/fingerprint and consumed claim/execution reservations. The envelope
+  keeps its existing fields; no `usage_complete` field is added. The reviewed
+  basis was `561219c661e8a5f05cd20c1637aac792d782a887`, tree
+  `42ab0ceae2b32f858618a0c7f9c99251ffde854a`. No production, workflow, response
+  fixture, serializer or validator changed.
 
-  The original **14 passed, 11 failed and 11 teardown errors in 16.57s**, exit 1,
-  at `8be989167037f91b98866a2fdb8bc887b11a4c54` remains a separate failed
-  invocation. Its [immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
-  preserves the artifacts and `1585ef4309f03fc08d0e7c553341d62826b182d0` fixture
-  correction, which was unrerun at that handoff and is included in this tested
-  source. The 14 previously passing nodes were not repeated; no aggregate
-  25-pass result is claimed. Workflow/controller bytes remain identical to
-  `8be989167037f91b98866a2fdb8bc887b11a4c54`; the socket sentinel and all real
-  validators remain intact. This continuation's exact post-proof delta is
-  CHANGELOG, LATEST and only the README evidence paragraph.
+  One offline Python 3.10.12 invocation of only
+  `test_time_budget_first_v2_ci_roundtrip[missing_usage]` at
+  `d82fbd9b47b3af97d56510ee98db5370830d30fb`, tree
+  `c1da94784a28100f0ce10ff9607d6271e99b52c9`, reported **1 passed in 15.88s**,
+  exit 0, under 300 seconds plus 5 seconds termination grace without `-x`.
+  It completed the previously unreached private-retention assertions through
+  the existing synthetic transport and real validators, including readback,
+  token stripping and duplicate refusal. The [11-node continuation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
+  remains **10 passed, 1 failed in 68.02s**, exit 1, at `0fe559377`.
+  The [original invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
+  remains **14 passed, 11 failed and 11 teardown errors in 16.57s**, exit 1,
+  at `8be989167`. Their artifacts and the telemetry correction's unrerun status
+  at the original handoff remain intact. Neither passing subset was repeated;
+  no aggregate 25-pass result is claimed. Workflow/controller bytes remain
+  identical to `8be989167037f91b98866a2fdb8bc887b11a4c54`, with the socket
+  sentinel intact. The exact post-proof delta is CHANGELOG, LATEST and only
+  the README evidence paragraph; this task's total delta also includes the
+  pinned test correction.
   [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains the complete command,
   node outcomes and evidence hashes. [Earlier observation
   proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/39362bb804b1f0823091cb597e1d6ae4db58ec15/tasks/LATEST_TASK_RESULT/README.md)
   and [separate grading evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/87fec0a0a4cd3b6b585896782a60690cd1cd7ca8/tasks/LATEST_TASK_RESULT/README.md)
-  remain distinct. The missing-usage expectation and retention proof remain
-  unresolved. Leader-owned newer-main integration, integrated-HEAD review/CI
-  acceptance and genuine source/input/host/private-parent values with a
-  leader-issued live request remain required. Controlled transports are not
+  remain distinct. Correction review, leader-owned newer-main integration,
+  integrated-HEAD review/CI acceptance and genuine source/input/host/private-parent
+  values with a leader-issued live request remain required. Controlled transports are not
   real host, inference or publication evidence. No dispatch, private-input
   access, live operation or CI query/retry/poll occurred.
 

@@ -507,12 +507,12 @@ adds one manual route to that same callable, through
 first V2 cell above. It has a 45-minute job ceiling for setup, the unchanged
 1200-second generation budget and shared 20-second cleanup, and private
 retention. That ceiling is not a money cap or a remote-cancellation guarantee.
-The latest 11-node offline continuation reported **10 passed, 1 failed in
-68.02s**, exit 1. The missing-usage test expected success, but the unchanged
-route returned a terminal error with usage unavailable. Its private-retention
-assertions were not reached. The [original failed invocation and fixture
-correction](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
-remain separate evidence, not an aggregate pass. See the
+The missing-usage retention case reported **1 passed in 15.88s**, exit 0, in
+one offline invocation after its test-only expectation correction. It verified
+an error/failed result with unavailable usage and no deliverables through
+acknowledged synthetic private retention. The [earlier 11-node failure](https://github.com/hyeonsangjeon/gdpval-realworks/blob/561219c661e8a5f05cd20c1637aac792d782a887/tasks/LATEST_TASK_RESULT/README.md)
+and [original failed invocation](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
+remain separate evidence, not an aggregate 25-pass result. See the
 [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for the exact
 result and remaining integrated-HEAD/CI/live gates. These controlled-transport
 tests are not real host, inference or publication evidence.
