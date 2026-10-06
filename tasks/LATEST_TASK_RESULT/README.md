@@ -1,6 +1,90 @@
 # Latest task result
 
-## Bounded readout of one retained canonical result
+## Readout transport encoding continuation
+
+The new transport selector reported **3 passed in 2.55s**, exit 0. Its wrapper
+took **2.977388 seconds**. Both allowed GETs request `Accept-Encoding: identity`.
+An uncompressed metadata/result exchange succeeds. The reader refuses an
+unexpected gzip response after exactly one GET at metadata or two GETs at the
+result step, without retry or private-body output. This is synthetic transport
+evidence, not a private read, a kernel proof or live readout authorization.
+
+The leader reviewed the clean starting source
+`9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2`, tree
+`4e6d98481e329298da60cf4b9223e411d60f3d70`, including the helper, workflow,
+tests, records and reused storage transport. Within that inspected scope,
+the leader identified one conditional source-level mismatch: the metadata
+GET advertised the session's default compression while the reader accepted
+only absent/identity encoding. This was not a historical private-read
+observation. The retained CI/source guidance and that actual leader review
+govern this narrow continuation; no new design or reviewer-harness invocation
+was performed.
+
+The production delta is one session-header assignment before the metadata
+call. The result GET retains its explicit identity header. The response
+guard, shared storage transport, workflow, source/request bindings,
+credentials and two-GET/60-second limit are unchanged. No decompression,
+redirect or retry was added. The only test change adds one three-case
+parametrized selector and an optional gzip response at the existing synthetic
+HTTP transport seam. Existing assertions and named network/write/model
+sentinels remain intact; no successful validator stub was introduced.
+
+### Targeted proof and exact identities
+
+Tested implementation HEAD: `7a64df827012e57ad7391daf77b3c24688c43324`
+
+Tested tree: `cc9cba829a2e1f9981911c32231fd9cfe30ad144`
+
+The only test invocation in this continuation, from `batch-runner`, was:
+
+```bash
+/ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p pytest_timeout \
+  tests/test_time_budget_result_readout.py::test_time_budget_result_readout_identity_encoding \
+  -m 'not integration' --tb=short -ra \
+  --junitxml=/tmp/time-budget-result-readout-encoding.gECJqpwU/junit.xml
+```
+
+The wrapper ran once under `timeout --signal=TERM --kill-after=5s 300s`,
+without `-x`. It verified clean HEAD/tree, the exact two-file implementation
+delta and Python syntax before the selector. Python was 3.10.12, pytest
+9.1.1, pytest-timeout 2.4.0 and huggingface-hub 1.24.0. Temporary Git setup
+retained its 30-second bound. The passing proof's existing validated local
+Git/Bash seams were reused without a broader audit wrapper. No old selector,
+kernel/native probe, whole suite or real read ran.
+
+Artifacts are retained in `/tmp/time-budget-result-readout-encoding.gECJqpwU/`:
+
+| Artifact | SHA256 |
+| --- | --- |
+| `run-proof.py` | `9cfb8ac76c24bf963a79695ac78f5797b55f22ef44ba046e0a3e0908ebfdac82` |
+| `command.json` | `f6993e73f9fca48327eed0969101811a8f113c0ec8a9a07a70061bf2622e3db6` |
+| `source.json` | `21afd3c1811ea51898becb0195f90e7c23d5b53a2e9335a94b3cf21fa5fba2b3` |
+| `pytest.log` | `d00bcb68796658fb2fe400717fd5f565bc2e290894373b9cdabeec4620abbb2a` |
+| `junit.xml` | `accf84ad10db8c1b0d2da33a65b200d12832089b9a28cd5c314368c3b621f498` |
+| `outcome.json` | `35734d08c6ef609e8028f9cdbc58940a6e079ceb2ad24e8136e60969e6a5ec33` |
+
+The original **21 passed in 7.95s** / **8.412420-second** wrapper proof below
+remains separate evidence. It was not rerun, and there is no aggregate pass
+claim. Its full original record is [immutable at the reviewed starting source][original].
+
+### Current post-proof delta and remaining gates
+
+Only `CHANGELOG.md`, this record and the direct README transport/evidence
+passages change after the targeted proof. The helper and test remain at the
+tested HEAD above; workflow bytes are unchanged from the reviewed starting
+source. The exact final records-only HEAD/tree are recorded in the PR handoff
+and `/tmp/time-budget-result-readout-encoding.gECJqpwU/handoff.json`.
+
+Final review and ordinary new-HEAD CI, accepted-main controller C selection,
+and a separately issued immutable leader request for the real read remain
+required. No CI/private-storage query, credential search, live readout,
+provider/grader operation or replay was performed. Task1/Task2 uncertainty
+and Task3's consumed canonical error below are unchanged. Main, PR761 and
+prior worktrees were left untouched. The original study and execution limits
+remain fixed. im-not-ai-en was used only for the changed English records,
+preserving the separate source finding, synthetic outcomes and live evidence.
+
+## Original bounded readout proof, retained separately
 
 The new read-only helper and manual workflow passed their single offline
 selector: **21 passed in 7.95s**, exit 0. The wrapper took **8.412420 seconds**.
@@ -138,15 +222,17 @@ queries. Task1 and Task2 remain consumed/uncertain, and Task3 remains
 consumed/error. None may be replayed, adopted, deleted, scored as zero or
 removed from the planned denominator. The [prior accepted record][prior]
 retains the earlier separate proofs, failed checks and immutable evidence.
-Today's 21-case proof is not aggregated with any of them.
+That original 21-case proof is not aggregated with any of them.
 
-### Post-proof delta and remaining gates
+### Original post-proof delta and remaining gates
 
-After the proof, only `CHANGELOG.md`, this record and the directly related
-`batch-runner/README.md` passages changed. The final documentary HEAD/tree
-are recorded in the PR handoff and local
-`/tmp/time-budget-result-readout.YTwR9r/handoff.json`; helper, workflow and
-test bytes remain exactly those at the tested HEAD above.
+After the original proof, only `CHANGELOG.md`, this record and the directly
+related `batch-runner/README.md` passages changed, producing documentary
+HEAD `9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2`, tree
+`4e6d98481e329298da60cf4b9223e411d60f3d70`. Its handoff is retained at
+`/tmp/time-budget-result-readout.YTwR9r/handoff.json`. The helper, workflow
+and test remained at that original tested source until the separately
+recorded transport correction above.
 
 Final source review, ordinary CI, delivery to accepted main, and a separately
 issued immutable leader request for the real readout remain required. That
@@ -168,3 +254,4 @@ synthetic proof, reported usage and unmeasured billing/quality.
 
 [task3]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37524773961/job/112478881979
 [prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/f2eaccf1b3973a6fc683f169b38f6caddb5a1953/tasks/LATEST_TASK_RESULT/README.md
+[original]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2/tasks/LATEST_TASK_RESULT/README.md

@@ -958,8 +958,11 @@ checks run again before publication. Permissions remain `contents: read`,
 checkout credentials are nonpersistent and SDK telemetry is disabled.
 
 At most two requests share 60 cumulative seconds: private-identity metadata
-at the exact output commit, then one exact raw Git-object GET. No HEAD
-lookup, redirect, retry, LFS/cache follow-up or deliverable read occurs.
+at the exact output commit, then one exact raw Git-object GET. The scoped
+session requests `Accept-Encoding: identity` before the metadata call; the
+result GET also keeps its explicit identity header. The reader refuses either
+response if its content encoding is anything other than absent/identity. No HEAD
+lookup, decompression, redirect, retry, LFS/cache follow-up or deliverable read occurs.
 Missing/inaccessible credentials, nonprivate/wrong target, an LFS pointer,
 hash/fingerprint/source mismatch or unsupported schema returns an explicit
 refusal. The safe artifact may retain the requested expected identities and
@@ -975,17 +978,28 @@ raw exceptions, headers, tokens or an invented served-model string. Unknown
 fields in the projected schema refuse. Unavailable native counters and cost
 remain unavailable; this readout does not infer model-call counts or grades.
 
-The single offline selector at `2fa134ba2deeefe4cdc9e0098cb0c5117a6f51a5`,
+The original offline selector at `2fa134ba2deeefe4cdc9e0098cb0c5117a6f51a5`,
 tree `4be69ae48d1502e669c962110016ca0218e1e686`, reported **21 passed in
-7.95s**, exit 0, under Python 3.10.12/300s+5s/no-`-x`. It used genuine linked
-source fixtures and real validators with synthetic HTTP responses; no private
-read or kernel-positive claim follows. Its artifacts are at
-`/tmp/time-budget-result-readout.YTwR9r/`. Only the three evidence/usage records
-change after that proof. Final source review, ordinary CI, accepted-main C
-selection and the separately directed real read remain pending. The leader's
-read-only pre-edit decision is the review provenance; the unavailable reviewer
-invocation did not execute and was not retried. The study, existing execution
-workflow, 1200+20 observation budget and 45-minute execution ceiling are unchanged.
+7.95s**, exit 0, with an **8.412420-second** wrapper. That [original proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2/tasks/LATEST_TASK_RESULT/README.md#one-offline-proof)
+and `/tmp/time-budget-result-readout.YTwR9r/` artifacts remain separate and
+were not rerun. The leader's review of `9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2`,
+tree `4e6d98481e329298da60cf4b9223e411d60f3d70`, identified the metadata
+encoding negotiation mismatch as a conditional source defect, not a historical
+private-read failure. The new three-case transport selector at
+`7a64df827012e57ad7391daf77b3c24688c43324`, tree
+`cc9cba829a2e1f9981911c32231fd9cfe30ad144`, reported **3 passed in 2.55s**,
+exit 0, with a **2.977388-second** wrapper. It verified both identity headers,
+uncompressed success and gzip refusal at either step with exact call counts
+and no retry/private-body output. Both proofs used offline Python
+3.10.12/300s+5s/no-`-x`, genuine linked source fixtures, real validators and
+synthetic HTTP responses; neither is a private read or kernel-positive proof.
+New artifacts are at `/tmp/time-budget-result-readout-encoding.gECJqpwU/`.
+Only the three evidence/usage records change after the new proof; the [latest
+record](../tasks/LATEST_TASK_RESULT/README.md) identifies the final handoff.
+Final review, ordinary CI, accepted-main C selection and the separately
+directed real read remain pending. No reviewer harness was retried. The study,
+existing workflows, 1200+20 observation budget and 45-minute execution ceiling
+are unchanged.
 
 #### Direct comparison runtime launch refusal
 

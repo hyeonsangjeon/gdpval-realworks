@@ -11,6 +11,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Set `Accept-Encoding: identity` on the readout's scoped HTTP session before
+  the private-identity metadata GET. The exact-result GET keeps its explicit
+  identity header. The existing response guard still refuses any encoding
+  other than absent/identity; shared storage transport, workflow, bindings,
+  credentials and the two-GET/60-second limit are unchanged. The leader
+  identified a conditional source-level mismatch at
+  `9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2`, tree
+  `4e6d98481e329298da60cf4b9223e411d60f3d70`, not a historical private-read
+  failure. No new design or reviewer-harness invocation was performed.
+
+  One new three-case selector at `7a64df827012e57ad7391daf77b3c24688c43324`,
+  tree `cc9cba829a2e1f9981911c32231fd9cfe30ad144`, reported **3 passed in
+  2.55s**, exit 0, with a **2.977388-second** wrapper duration under the
+  existing offline Python 3.10.12/300s+5s/no-`-x` bound. It verified identity
+  headers on both GETs and uncompressed success, plus gzip refusal after
+  exactly one metadata GET or two GETs at the result step, without retry or
+  private-body output. Real validators and the existing named sentinels remain
+  in use. Artifacts are at `/tmp/time-budget-result-readout-encoding.gECJqpwU/`;
+  the pytest log SHA256 is
+  `d00bcb68796658fb2fe400717fd5f565bc2e290894373b9cdabeec4620abbb2a`.
+  The original **21 passed in 7.95s**, with an **8.412420-second** wrapper,
+  remains separate evidence and was not rerun. Only CHANGELOG, LATEST and
+  the direct README transport/evidence passages change after this proof.
+  Final review/CI, accepted controller C selection and a separately directed
+  real read remain required. See the [exact source and proof record](tasks/LATEST_TASK_RESULT/README.md).
+
 ### Added
 
 - Add a manual, read-only view of one retained canonical V2 time-budget
@@ -35,7 +63,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   fingerprint validators with synthetic HTTP transport. Artifacts are at
   `/tmp/time-budget-result-readout.YTwR9r/`; the pytest log SHA256 is
   `821675614ef942e47244da0c15f6683d4732e28546541f2f64c451f90536ee3d`.
-  Only CHANGELOG, LATEST and direct README usage change after this proof.
+  The original post-proof delta changed only CHANGELOG, LATEST and direct
+  README usage; the transport correction and its proof are recorded separately above.
 
   Separately, the leader verified actual Task3 run `37524773961`, job
   `112478881979`, attempt 1, at accepted source
