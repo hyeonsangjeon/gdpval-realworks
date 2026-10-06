@@ -13,6 +13,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `gpt54_time_budget_codex_observation.run_codex_observation` and its CLI
+  for one explicitly selected task in the registered Codex r1/r2 rows. The
+  callable installs concrete `CodexProviderSettings` through the existing
+  consumer and real runner, checks an independently digest-bound direction,
+  reviewed R/F/input/Step0 and preparation identities, and captures the actual
+  terminal Step2 row, fingerprint and verified deliverable bytes to a new
+  no-clobber destination. Native counters and cost unavailable through the
+  consumer remain null. Existing provider/auth isolation, pinned SDK/runtime,
+  ownership, permanent local claim, 1200-second generation and shared
+  20-second cleanup controls are unchanged. V2, core, registration, workflows,
+  frozen F, grading policy and the closed 30-cell/eight-observation studies
+  were not changed.
+
+  The starting source was accepted main
+  `86bf684706bdbfc641f10c2774b7e4884d8fc7cd`, tree
+  `0165ff4f9f7d226a4cac8f34803d6134f53ba693`, verified against `origin/main`
+  before creating the independent worktree. The single new offline selector
+  at `c6c8b2135f7e363d6c3371f023187641dbc0802f`, tree
+  `4f14c866b6b05def538e05ca9296b75837e78e73`, reported **9 passed in 22.91s**,
+  exit 0, with Python 3.10.12 and the 300-second plus 5-second/no-`-x` bound.
+  It exercised real validators, consumer, pinned SDK facade and runner through
+  synthetic auth/native I/O and kernel seams, including failure capture and
+  copied-handoff duplicate refusal. The exact command, log, JUnit and exit
+  artifacts are retained at `/tmp/codex-time-budget-native-proof.0X57Ez/`;
+  log SHA256 is `5edc111eebd46ff05e2c16758ff8e9b2e78c862abc0addb68bc833ecf63113d8`.
+  [Prior V2 diagnostics and live uncertainty](https://github.com/hyeonsangjeon/gdpval-realworks/blob/86bf684706bdbfc641f10c2774b7e4884d8fc7cd/tasks/LATEST_TASK_RESULT/README.md)
+  and [PR760's separate proof](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ca84a224fe565d255194a33e1f2ea18340af70a7/tasks/LATEST_TASK_RESULT/README.md)
+  retain their own outcomes. The first real V2 cell remains consumed/uncertain;
+  no model-call count, cost, score or replay authority is inferred. Only the
+  three evidence/usage records changed after this proof. New-source review,
+  final-HEAD CI, a trusted controller, actual host/input/auth values and a
+  leader-issued live direction remain gates; no real execution was authorized.
+
 - Integrate reviewed first-V2 source
   `83d615c5516efbe1c4b20f273c493e1cc9dce208` (review `5426656908`) with
   accepted metadata source `536d2466b63b2f845a691a8953901e02a1757b05`.
