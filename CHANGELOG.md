@@ -32,26 +32,40 @@ entries land under a fresh dated heading the day they merge to `main`.
   not a successful spawned-agent review; the unavailable-model invocation and
   two earlier HTTP 400 failures did not produce a review.
 
-  One offline Python 3.10.12 invocation at
-  `8be989167037f91b98866a2fdb8bc887b11a4c54`, tree
-  `b93f57343935fd1a52b1f882e16662503904287c`, reported **14 passed, 11 failed and
-  11 teardown errors in 16.57s**, exit 1, under 300 seconds plus 5 seconds
-  termination grace without `-x`. The 25 selected nodes produced 36 JUnit
-  records because each failed node also had a teardown error. An HF SDK
-  telemetry lookup reached the offline socket sentinel before the synthetic
-  original-file transport; no external connection completed. The affected
-  end-to-end, input/direction, CAS and retention paths remain unproved.
-  `1585ef4309f03fc08d0e7c553341d62826b182d0` makes only a five-line fixture
-  correction to match the workflow's telemetry-disabled setting; it has not
-  been rerun. The exact post-proof delta is that test fixture plus the usage
-  README and these two records. The workflow and controller remain identical
-  to the tested source. [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains the
-  exact command, node inventory and evidence hashes. [Earlier observation
+  One proof-only continuation at leader-read
+  `0fe559377bbbd20eab790dd7a5c48e4509911c90`, tree
+  `4bb9ff1cd758b247a7d304f86b3850ccdd34b87f`, selected exactly the 11 previously
+  failed nodes and reported **10 passed, 1 failed in 68.02s**, exit 1, with zero
+  errors or skips. It used offline Python 3.10.12 under 300 seconds plus
+  5 seconds termination grace without `-x`. The sole failure is
+  `test_time_budget_first_v2_ci_roundtrip[missing_usage]`: line 272 expects
+  success, but the unchanged voice returns `GaveUp` when `_usage_from(response)`
+  sees `usage=None`. The retained synthetic result is terminal `failed`, with
+  unavailable usage and no deliverables. The existing entrypoint test already
+  expects error for this case; it was read, not rerun. The missing-usage case
+  did not reach its private-retention assertions. No source or assertion was
+  changed, and no case was repeated after this result.
+
+  The original **14 passed, 11 failed and 11 teardown errors in 16.57s**, exit 1,
+  at `8be989167037f91b98866a2fdb8bc887b11a4c54` remains a separate failed
+  invocation. Its [immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
+  preserves the artifacts and `1585ef4309f03fc08d0e7c553341d62826b182d0` fixture
+  correction, which was unrerun at that handoff and is included in this tested
+  source. The 14 previously passing nodes were not repeated; no aggregate
+  25-pass result is claimed. Workflow/controller bytes remain identical to
+  `8be989167037f91b98866a2fdb8bc887b11a4c54`; the socket sentinel and all real
+  validators remain intact. This continuation's exact post-proof delta is
+  CHANGELOG, LATEST and only the README evidence paragraph.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains the complete command,
+  node outcomes and evidence hashes. [Earlier observation
   proofs](https://github.com/hyeonsangjeon/gdpval-realworks/blob/39362bb804b1f0823091cb597e1d6ae4db58ec15/tasks/LATEST_TASK_RESULT/README.md)
   and [separate grading evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/87fec0a0a4cd3b6b585896782a60690cd1cd7ca8/tasks/LATEST_TASK_RESULT/README.md)
-  remain distinct. Final-HEAD review, ordinary CI acceptance and genuine
-  source/input/host/private-parent values with a leader-issued live request
-  remain required. No dispatch, private-input access or live operation occurred.
+  remain distinct. The missing-usage expectation and retention proof remain
+  unresolved. Leader-owned newer-main integration, integrated-HEAD review/CI
+  acceptance and genuine source/input/host/private-parent values with a
+  leader-issued live request remain required. Controlled transports are not
+  real host, inference or publication evidence. No dispatch, private-input
+  access, live operation or CI query/retry/poll occurred.
 
 ### Fixed
 

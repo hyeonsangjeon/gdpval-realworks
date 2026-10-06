@@ -507,10 +507,15 @@ adds one manual route to that same callable, through
 first V2 cell above. It has a 45-minute job ceiling for setup, the unchanged
 1200-second generation budget and shared 20-second cleanup, and private
 retention. That ceiling is not a money cap or a remote-cancellation guarantee.
-The new route's local proof is incomplete: **14 passed, 11 failed and 11 teardown
-errors in 16.57s**. A fixture-only telemetry correction has not been rerun.
-See the [current evidence record](../tasks/LATEST_TASK_RESULT/README.md) before
-treating this route as ready for an authorized observation.
+The latest 11-node offline continuation reported **10 passed, 1 failed in
+68.02s**, exit 1. The missing-usage test expected success, but the unchanged
+route returned a terminal error with usage unavailable. Its private-retention
+assertions were not reached. The [original failed invocation and fixture
+correction](https://github.com/hyeonsangjeon/gdpval-realworks/blob/0fe559377bbbd20eab790dd7a5c48e4509911c90/tasks/LATEST_TASK_RESULT/README.md)
+remain separate evidence, not an aggregate pass. See the
+[current evidence record](../tasks/LATEST_TASK_RESULT/README.md) for the exact
+result and remaining integrated-HEAD/CI/live gates. These controlled-transport
+tests are not real host, inference or publication evidence.
 
 The following is the future command shape, **not permission to dispatch**:
 
