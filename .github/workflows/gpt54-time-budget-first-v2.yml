@@ -76,20 +76,26 @@ jobs:
           assert request["ci"]["run_number"] == int(os.environ["GITHUB_RUN_NUMBER"])
           PY
 
-      - name: Check out the exact reviewed runtime and workflow
+      - name: Check out the exact reviewed bootstrap and workflow
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ inputs.reviewed_source_sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify checkout tree and create only the frozen source worktree
+      - name: Verify bootstrap and create distinct linked runtime and frozen sources
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$(pwd -P)" == "$GITHUB_WORKSPACE" ]]
+          [[ -d "$GITHUB_WORKSPACE/.git" && ! -L "$GITHUB_WORKSPACE/.git" ]]
+          [[ "$(realpath "$RUNNER_TEMP")" == "$RUNNER_TEMP" ]]
           [[ "$(git rev-parse HEAD)" == "$REVIEWED_SOURCE_SHA" ]]
           [[ "$(git rev-parse HEAD^{tree})" == "$REVIEWED_SOURCE_TREE" ]]
           [[ "$(git rev-parse 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2^{tree})" == 45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca ]]
+          [[ ! -e "$RUNNER_TEMP/time-budget-v2-runtime" && ! -L "$RUNNER_TEMP/time-budget-v2-runtime" ]]
+          [[ ! -e "$RUNNER_TEMP/time-budget-v2-frozen" && ! -L "$RUNNER_TEMP/time-budget-v2-frozen" ]]
+          git worktree add --detach "$RUNNER_TEMP/time-budget-v2-runtime" "$REVIEWED_SOURCE_SHA"
           git worktree add --detach "$RUNNER_TEMP/time-budget-v2-frozen" 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2
 
       - name: Setup pinned Python
@@ -101,16 +107,16 @@ jobs:
 
       - name: Install existing declared dependencies
         timeout-minutes: 10
-        run: python3 -m pip install -r batch-runner/requirements.txt
+        run: python3 -m pip install -r "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/requirements.txt"
 
       - name: Validate the full source-bound request without credentials
         timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
-          python3 batch-runner/gpt54_time_budget_v2_ci.py validate-request \
+          python3 "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/gpt54_time_budget_v2_ci.py" validate-request \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-            --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$GITHUB_WORKSPACE" \
+            --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$RUNNER_TEMP/time-budget-v2-runtime" \
             --frozen-root "$RUNNER_TEMP/time-budget-v2-frozen" --state-root "$RUNNER_TEMP/time-budget-first-v2"
 
       - name: Verify original V2 inputs, prepare one handoff and permanently claim it
@@ -123,9 +129,9 @@ jobs:
           set -euo pipefail
           umask 077
           timeout --signal=TERM --kill-after=5s 330s \
-            python3 batch-runner/gpt54_time_budget_v2_ci.py prepare-and-claim \
+            python3 "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/gpt54_time_budget_v2_ci.py" prepare-and-claim \
               --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-              --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$GITHUB_WORKSPACE" \
+              --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$RUNNER_TEMP/time-budget-v2-runtime" \
               --frozen-root "$RUNNER_TEMP/time-budget-v2-frozen" --state-root "$RUNNER_TEMP/time-budget-first-v2"
           echo "acknowledged=true" >> "$GITHUB_OUTPUT"
 
@@ -144,7 +150,7 @@ jobs:
           AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
           AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
           AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
-        run: python3 batch-runner/scripts/azure_oidc_identity_preflight.py --verify-session
+        run: python3 "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/scripts/azure_oidc_identity_preflight.py" --verify-session
 
       - name: Execute the real first V2 callable once on this host
         if: success() && steps.admission.outputs.acknowledged == 'true'
@@ -156,9 +162,9 @@ jobs:
           set -euo pipefail
           umask 077
           unset HF_TOKEN HUGGING_FACE_HUB_TOKEN GITHUB_TOKEN GH_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
-          python3 batch-runner/gpt54_time_budget_v2_ci.py execute \
+          python3 "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/gpt54_time_budget_v2_ci.py" execute \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-            --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$GITHUB_WORKSPACE" \
+            --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$RUNNER_TEMP/time-budget-v2-runtime" \
             --frozen-root "$RUNNER_TEMP/time-budget-v2-frozen" --state-root "$RUNNER_TEMP/time-budget-first-v2"
 
       - name: Retain canonical output or explicit uncertainty privately without retry
@@ -171,9 +177,9 @@ jobs:
           set -euo pipefail
           umask 077
           timeout --signal=TERM --kill-after=5s 210s \
-            python3 batch-runner/gpt54_time_budget_v2_ci.py retain \
+            python3 "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/gpt54_time_budget_v2_ci.py" retain \
               --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-              --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$GITHUB_WORKSPACE" \
+              --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$RUNNER_TEMP/time-budget-v2-runtime" \
               --frozen-root "$RUNNER_TEMP/time-budget-v2-frozen" --state-root "$RUNNER_TEMP/time-budget-first-v2"
 
       - name: Validate only the allowlisted nonsecret completion envelope
@@ -182,9 +188,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 batch-runner/gpt54_time_budget_v2_ci.py verify-envelope \
+          python3 "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/gpt54_time_budget_v2_ci.py" verify-envelope \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-            --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$GITHUB_WORKSPACE" \
+            --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$RUNNER_TEMP/time-budget-v2-runtime" \
             --frozen-root "$RUNNER_TEMP/time-budget-v2-frozen" --state-root "$RUNNER_TEMP/time-budget-first-v2"
           echo "safe=true" >> "$GITHUB_OUTPUT"
 

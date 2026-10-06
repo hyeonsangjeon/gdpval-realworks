@@ -7,6 +7,7 @@ The temporary Git declarations name synthetic input bytes, not paid evidence.
 import io
 import json
 import os
+import shlex
 import socket
 import subprocess
 import time
@@ -31,6 +32,7 @@ from .test_gpt54_time_budget_comparison import (
     dual_roots, handoff_source_seed, handoff_sources, observation_kernel,
 )
 from .test_time_budget_first_v2_observation import _transport
+from .test_gpt54_disposable_checkout import _FIXTURE_ENV
 
 _REAL_RUN, _REAL_POPEN = subprocess.run, subprocess.Popen
 TOKEN = "explicitly-synthetic-storage-token"
@@ -104,8 +106,48 @@ class PrivateStore:
         return SimpleNamespace(oid=revision)
 
 
+@pytest.fixture
+def actions_layout(handoff_source_seed, tmp_path, monkeypatch):
+    """Ordinary Actions bootstrap plus real registered R/F; no credential use."""
+    seed = handoff_source_seed
+    bootstrap, runner_temp = tmp_path / "bootstrap", tmp_path / "runner-temp"
+    runner_temp.mkdir()
+    environment = {**_FIXTURE_ENV, "GIT_ALLOW_PROTOCOL": "file",
+                   "GITHUB_WORKSPACE": str(bootstrap), "RUNNER_TEMP": str(runner_temp),
+                   "REVIEWED_SOURCE_SHA": seed.runtime_sha, "REVIEWED_SOURCE_TREE": seed.runtime_tree}
+
+    def local(command, *, check=True, cwd=None):
+        # Only this explicit fixture setup may write temporary Git metadata.
+        # The controller's ordinary subprocess seam below stays read-only.
+        with monkeypatch.context() as process:
+            process.setattr(subprocess, "Popen", _REAL_POPEN)
+            return _REAL_RUN(command, check=check, cwd=cwd, env=environment,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+
+    local(["/usr/bin/git", "clone", "--shared", "--", str(seed.runtime), str(bootstrap)])
+    local(["/usr/bin/git", "-C", str(bootstrap), "fetch", "--no-tags", "--", str(seed.frozen), seed.frozen_sha])
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.load((root / ci.WORKFLOW).read_text(), Loader=yaml.BaseLoader)
+    steps = workflow["jobs"][ci.JOB]["steps"]
+    layout_command = next(step["run"] for step in steps if "git worktree add --detach" in step.get("run", ""))
+    # Only the independently declared synthetic F identities replace literals;
+    # all path, no-clobber and actual worktree commands are the workflow's bytes.
+    layout_command = layout_command.replace("882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2", seed.frozen_sha)
+    layout_command = layout_command.replace("45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca", seed.frozen_tree)
+
+    def create_sources():
+        return local(["/bin/bash", "-c", layout_command], cwd=bootstrap, check=False)
+
+    created = create_sources()
+    assert created.returncode == 0, created.stderr.decode()
+    runtime, frozen = runner_temp / ci.RUNTIME_BASENAME, runner_temp / ci.FROZEN_BASENAME
+    return SimpleNamespace(bootstrap=bootstrap, runner_temp=runner_temp, runtime=runtime, frozen=frozen,
+                           workflow=workflow, local=local, create_sources=create_sources,
+                           git_roots={bootstrap, runtime, frozen})
+
+
 @pytest.fixture(autouse=True)
-def offline(monkeypatch, handoff_sources, dual_roots, observation_kernel):
+def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, observation_kernel):
     import huggingface_hub
     from huggingface_hub import constants
     import step8_grade
@@ -131,8 +173,9 @@ def offline(monkeypatch, handoff_sources, dual_roots, observation_kernel):
     def git(command, **kwargs):
         assert command[:2] == ["/usr/bin/git", "--no-replace-objects"]
         index = command.index("-C")
-        assert Path(command[index + 1]) in {handoff_sources.runtime, handoff_sources.frozen,
-                                           dual_roots["runtime"], dual_roots["frozen"], dual_roots["substitute"]}
+        assert Path(command[index + 1]) in actions_layout.git_roots | {
+            handoff_sources.runtime, handoff_sources.frozen,
+            dual_roots["runtime"], dual_roots["frozen"], dual_roots["substitute"]}
         assert command[index + 2] in {"config", "rev-parse", "ls-tree", "cat-file"}
         assert kwargs["env"]["GIT_ALLOW_PROTOCOL"] == "" and kwargs["env"]["GIT_NO_LAZY_FETCH"] == "1"
         with monkeypatch.context() as actual:
@@ -163,9 +206,10 @@ def offline(monkeypatch, handoff_sources, dual_roots, observation_kernel):
 
 
 @pytest.fixture
-def case(handoff_sources, tmp_path, monkeypatch):
-    seed = handoff_sources
-    root = tmp_path / "time-budget-first-v2"
+def case(handoff_sources, actions_layout, monkeypatch):
+    seed = SimpleNamespace(**{**vars(handoff_sources), "runtime": actions_layout.runtime,
+                              "frozen": actions_layout.frozen})
+    root = actions_layout.runner_temp / "time-budget-first-v2"
     request = {
         "format": ci.REQUEST_VERSION, "purpose": "execute_and_privately_retain_first_v2_observation",
         "source": {"sha": seed.runtime_sha, "tree": seed.runtime_tree},
@@ -187,7 +231,7 @@ def case(handoff_sources, tmp_path, monkeypatch):
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + ci.WORKFLOW + "@refs/heads/main",
         "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu22",
         "GITHUB_RUN_ID": "7001", "RUNNER_NAME": "explicitly-synthetic-Actions-host",
-        "GITHUB_WORKSPACE": str(seed.runtime), "RUNNER_TEMP": str(tmp_path),
+        "GITHUB_WORKSPACE": str(actions_layout.bootstrap), "RUNNER_TEMP": str(actions_layout.runner_temp),
         "AZURE_AI_ROUTE_PROFILE": "direct-v1",
         "FOUNDRY_PROJECT_ENDPOINT": "https://hjeon-fdpo-foundry-eus2.services.ai.azure.com/api/projects/gdpval-realworks",
         "HF_TOKEN": TOKEN,
@@ -246,6 +290,95 @@ def _effects(case, monkeypatch, outcome):
 
 def _assert_no_storage_tokens():
     assert not any(os.environ.get(key) for key in ci.TOKEN_KEYS)
+
+
+@pytest.mark.parametrize("change", [
+    "linked", "ordinary_runtime", "bootstrap_commit", "bootstrap_tree", "bootstrap_common",
+    "final_bootstrap_commit", "final_bootstrap_common",
+])
+def test_time_budget_first_v2_ci_source_layout(case, actions_layout, monkeypatch, observation_kernel, capsys, change):
+    """Exercise the real workflow layout and source guards, never input intake."""
+    layout = actions_layout
+    assert (layout.bootstrap / ".git").is_dir()
+    for root in (layout.runtime, layout.frozen):
+        assert (root / ".git").is_file()
+        assert ci._repository(root)[1] == layout.bootstrap / ".git"
+    assert layout.runtime != layout.frozen
+
+    if change == "linked":
+        before = [(root / ".git").read_bytes() for root in (layout.runtime, layout.frozen)]
+        assert layout.create_sources().returncode != 0  # No adoption or clobber.
+        assert [(root / ".git").read_bytes() for root in (layout.runtime, layout.frozen)] == before
+        assert (layout.runtime / ci.HELPER).read_bytes() == Path(ci.__file__).read_bytes()
+        for key, value in {"REVIEWED_SOURCE_SHA": case.seed.runtime_sha,
+                           "REVIEWED_SOURCE_TREE": case.seed.runtime_tree,
+                           "REQUEST_SHA256": case.args["expected_request_sha256"],
+                           "TIME_BUDGET_REQUEST_JSON": case.args["request_json"]}.items():
+            monkeypatch.setenv(key, value)
+        monkeypatch.delenv("HF_TOKEN")
+        steps = layout.workflow["jobs"][ci.JOB]["steps"]
+        for operation in ("validate-request", "prepare-and-claim", "execute", "retain", "verify-envelope"):
+            prefix = 'python3 "$RUNNER_TEMP/time-budget-v2-runtime/' + ci.HELPER + '" ' + operation
+            command = next(step["run"] for step in steps if prefix in step.get("run", ""))
+            lines = command[command.index(prefix):].splitlines()
+            end = next(index for index, line in enumerate(lines) if not line.endswith("\\"))
+            argv = shlex.split(os.path.expandvars("\n".join(lines[:end + 1])))
+            assert argv == ["python3", str(layout.runtime / ci.HELPER), operation,
+                "--reviewed-source-sha", case.seed.runtime_sha, "--reviewed-source-tree", case.seed.runtime_tree,
+                "--expected-request-sha256", case.args["expected_request_sha256"],
+                "--runtime-root", str(layout.runtime), "--frozen-root", str(layout.frozen), "--state-root", str(case.root)]
+            if operation == "validate-request":
+                assert ci.main(argv[2:]) == 0
+                assert json.loads(capsys.readouterr().out) == {"operation": operation, "outcome": "completed"}
+        assert os.environ["GITHUB_WORKSPACE"] == str(layout.bootstrap)
+    else:
+        peer = None
+        if change.endswith("common"):
+            peer = layout.bootstrap.with_name("other-bootstrap")
+            layout.local(["/usr/bin/git", "clone", "--shared", "--", str(layout.bootstrap), str(peer)])
+            layout.git_roots.add(peer)
+            assert ci._git(peer, "rev-parse", "HEAD").stdout == (case.seed.runtime_sha + "\n").encode()
+            assert ci._git(peer, "rev-parse", "HEAD^{tree}").stdout == (case.seed.runtime_tree + "\n").encode()
+
+        def change_bootstrap():
+            if change.endswith("commit"):
+                (layout.bootstrap / ".git/HEAD").write_text(case.seed.frozen_sha + "\n")
+            elif change == "final_bootstrap_common":
+                (layout.bootstrap / ".git").rename(layout.bootstrap / ".git-previous")
+                (peer / ".git").rename(layout.bootstrap / ".git")
+            else:
+                monkeypatch.setenv("GITHUB_WORKSPACE", str(peer))
+
+        if change.startswith("final_"):
+            reason = "bundle parent changed" if change.endswith("common") else "actions_bootstrap_commit_or_tree_changed"
+            with pytest.raises(ValueError, match=reason):
+                with ci.checked_request(**case.args):
+                    change_bootstrap()
+        else:
+            reason = "actions_bootstrap_commit_or_tree_changed"
+            if change == "ordinary_runtime":
+                # The shared source validator still refuses an ordinary .git.
+                with pytest.raises(ValueError, match="detached checkout registration mismatch"):
+                    with registration._reviewed_source(layout.bootstrap, case.seed.runtime_sha, ci.SOURCE_ROLES):
+                        pytest.fail("ordinary bootstrap admitted as runtime")
+                case.args["runtime_root"] = layout.bootstrap
+                case.request["paths"]["runtime_root"] = str(layout.bootstrap)
+                reason = "ci_canonical_roots_required"
+            elif change == "bootstrap_tree":
+                case.args["reviewed_source_tree"] = case.seed.frozen_tree
+                case.request["source"]["tree"] = case.seed.frozen_tree
+            else:
+                change_bootstrap()
+                if change == "bootstrap_common":
+                    reason = "actions_linked_common_git_required"
+            _request_changed(case)
+            with pytest.raises(ci.FirstV2CIRefused, match=reason):
+                _prepare(case)
+
+    assert case.downloads == [] and case.api.calls == [] and case.api.commits == []
+    assert not case.root.exists()
+    assert observation_kernel.subreaper == 0 and observation_kernel.processes == {}
+    assert observation_kernel.signals == [] and observation_kernel.reaped == []
 
 
 @pytest.mark.parametrize("outcome", ["success", "failed", "missing_usage", "not_started"])
@@ -472,7 +605,7 @@ def test_time_budget_first_v2_ci_workflow_command_and_guard_contract():
     checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"] == {"ref": "${{ inputs.reviewed_source_sha }}", "fetch-depth": "0", "persist-credentials": "false"}
     for operation in ("validate-request", "prepare-and-claim", "execute", "retain", "verify-envelope"):
-        command = "python3 batch-runner/gpt54_time_budget_v2_ci.py " + operation
+        command = 'python3 "$RUNNER_TEMP/time-budget-v2-runtime/batch-runner/gpt54_time_budget_v2_ci.py" ' + operation
         selected = [step for step in steps if command in step.get("run", "")]
         assert len(selected) == 1
         for flag in ("--reviewed-source-sha", "--reviewed-source-tree", "--expected-request-sha256",
@@ -480,8 +613,8 @@ def test_time_budget_first_v2_ci_workflow_command_and_guard_contract():
             assert flag in selected[0]["run"]
     claim = next(index for index, step in enumerate(steps) if step.get("id") == "admission")
     login = next(index for index, step in enumerate(steps) if step.get("uses", "").startswith("azure/login@"))
-    execute = next(index for index, step in enumerate(steps) if "gpt54_time_budget_v2_ci.py execute" in step.get("run", ""))
-    retain = next(index for index, step in enumerate(steps) if "gpt54_time_budget_v2_ci.py retain" in step.get("run", ""))
+    execute = next(index for index, step in enumerate(steps) if 'gpt54_time_budget_v2_ci.py" execute' in step.get("run", ""))
+    retain = next(index for index, step in enumerate(steps) if 'gpt54_time_budget_v2_ci.py" retain' in step.get("run", ""))
     assert claim < login < execute < retain
     assert "steps.admission.outputs.acknowledged == 'true'" in steps[login]["if"]
     assert "steps.admission.outputs.acknowledged == 'true'" in steps[execute]["if"]

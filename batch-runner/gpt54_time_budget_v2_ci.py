@@ -31,6 +31,7 @@ from core.reference_integrity import validate_reference_relative_path
 from core.time_budget_observation_deadline import ObservationIdentity, TIMEOUT
 from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
 from gpt54_comparison_preflight import _canonical_json
+from gpt54_disposable_checkout import _git, _repository
 from gpt54_prepared_input_attestation import _identity
 from gpt54_run_config_bundle import _held_parents, _path
 from gpt54_time_budget_grading_preparation import _result
@@ -41,6 +42,8 @@ WORKFLOW = ".github/workflows/gpt54-time-budget-first-v2.yml"
 REPOSITORY = "hyeonsangjeon/gdpval-realworks"
 OWNER = "hyeonsangjeon"
 JOB = "observation"
+RUNTIME_BASENAME = "time-budget-v2-runtime"
+FROZEN_BASENAME = "time-budget-v2-frozen"
 REQUEST_VERSION = "gpt54-time-budget-first-v2-ci-request-v1"
 ENVELOPE_VERSION = "gpt54-time-budget-first-v2-ci-completion-v1"
 # Existing verified private target, not its closed pilot's admission authority.
@@ -152,12 +155,29 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
     roots = {"runtime_root": _canonical_path(str(runtime_root)), "frozen_root": _canonical_path(str(frozen_root)),
              "state_root": _canonical_path(str(state_root))}
     _same("request canonical paths", request["paths"], {name: str(path) for name, path in roots.items()})
-    _require(str(roots["runtime_root"]) == os.environ.get("GITHUB_WORKSPACE")
-             and roots["state_root"].parent == _canonical_path(os.environ.get("RUNNER_TEMP", "")),
+    bootstrap = _canonical_path(os.environ.get("GITHUB_WORKSPACE", ""))
+    runner_temp = _canonical_path(os.environ.get("RUNNER_TEMP", ""))
+    common = bootstrap / ".git"
+    _require(roots["runtime_root"] == runner_temp / RUNTIME_BASENAME
+             and roots["frozen_root"] == runner_temp / FROZEN_BASENAME
+             and roots["state_root"].parent == runner_temp,
              "ci_canonical_roots_required")
+    source_paths = [bootstrap, *roots.values()]
     _require(all(not a.is_relative_to(b) and not b.is_relative_to(a)
-                 for index, a in enumerate(roots.values()) for b in list(roots.values())[index + 1:]),
+                 for index, a in enumerate(source_paths) for b in source_paths[index + 1:]),
              "source_state_overlap")
+
+    def check_bootstrap() -> None:
+        _require(os.environ.get("GITHUB_WORKSPACE") == str(bootstrap)
+                 and os.environ.get("RUNNER_TEMP") == str(runner_temp), "actions_bootstrap_path_changed")
+        _require(common.is_dir() and _repository(bootstrap) == (bootstrap, common),
+                 "ordinary_actions_bootstrap_required")
+        for revision, expected in (("HEAD^{commit}", reviewed_source_sha), ("HEAD^{tree}", reviewed_source_tree)):
+            _require(_git(bootstrap, "rev-parse", "--verify", "--end-of-options", revision).stdout
+                     == (expected + "\n").encode("ascii"), "actions_bootstrap_commit_or_tree_changed")
+        _require(all(_repository(roots[name])[1] == common for name in ("runtime_root", "frozen_root")),
+                 "actions_linked_common_git_required")
+
     target = request["storage"]
     _require(type(target) is dict and storage._hash(target.get("expected_parent"), 40),
              "independent_private_parent_required")
@@ -165,6 +185,8 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
           "prefix": PREFIX, "expected_parent": target["expected_parent"]})
     _require(_identity(TARGET.encode())["sha256"] == TARGET_SHA256, "fixed_private_target_identity")
     with ExitStack() as sources:
+        check_bootstrap_parents = sources.enter_context(_held_parents(bootstrap, (".git/HEAD",)))
+        check_bootstrap()
         check_parent = sources.enter_context(_held_parents(roots["state_root"].parent, (roots["state_root"].name,)))
         check_state = (sources.enter_context(_held_parents(roots["state_root"], ("request.json",)))
                        if roots["state_root"].exists() else None)
@@ -187,7 +209,11 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         host = observation.execution_host_identity(reviewed_source_sha)
         context = {"request": request, "request_identity": _identity(data), "plan": plan, "roots": roots,
                    "host": host, "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
+        check_bootstrap_parents()
+        check_bootstrap()
         yield context
+        check_bootstrap_parents()
+        check_bootstrap()
         _same("final live host", observation.execution_host_identity(reviewed_source_sha), host)
         check_parent()
         if check_state is not None:
