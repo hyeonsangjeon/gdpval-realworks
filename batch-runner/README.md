@@ -1458,7 +1458,8 @@ claim, source/direction checks and actual kernel admission remain unchanged.
 uses [`gpt54_time_budget_result_readout.py`](gpt54_time_budget_result_readout.py)
 to project safe structured fields from one existing private V2 result or the
 fixed native uncertainty manifest described below. A separate native canonical
-purpose is implemented below but remains HOLD after its failed local proof.
+purpose is implemented below, with the fixture-corrected local proof recorded;
+fixed-HEAD review and final CI remain pending.
 No purpose executes, adopts, retries or grades an observation. The canonical V2 route's initial
 target is the retained Task3 result at immutable output commit
 `2460c45c3896371b011624f13fc7817d5f670969`, with this registered path:
@@ -1599,7 +1600,7 @@ workflow is unchanged. Final review/CI, accepted C and a separately directed
 real read remain required; the study, 1200+20 observation budget and 45-minute
 execution ceiling are unchanged.
 
-##### Native canonical result readout (HOLD)
+##### Native canonical result readout (pending review/CI)
 
 The new request format is `gpt54-time-budget-native-canonical-readout-request-v1`
 with purpose `read_one_retained_native_canonical_result`. It uses the same
@@ -1648,18 +1649,38 @@ The [current record](../tasks/LATEST_TASK_RESULT/README.md) retains the full
 claim, request, artifact, completion and log identities supplied by the leader.
 This implementation did not fetch those private bytes or regenerate their identity.
 
-The one new offline selector
+The original offline selector
 `tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout`
 at `974f5f33713a17b7e9fa0de90f646cd59814139c`, tree
 `b42b31e39599b4b81261aa2df56dab4c53a57baa`, reported **18 failed, 2 passed in
 4.52s**, exit 1; wrapper **5.107217s**, under Python 3.10.12/300s+5s/no-`-x`
 and existing 30s Git fixture bounds. Each native case failed while reading
 the template absent from the synthetic linked source, before native capture
-or readout validation. Only the new V2 and fixed-Task1 uncertainty compatibility
-cases passed. Artifacts are in `/tmp/native-canonical-readout.YqBcYa/`; the
-native path is not proved and no cases were rerun. The fixtures forbid native,
-kernel, provider, HF-write and grader operations; this is not a host positive.
-The failed fixture, fixed-HEAD review/CI, accepted controller C and one
+or readout validation. Only `canonical_v2` and `fixed_uncertainty` passed.
+The original failed invocation and its artifacts in
+`/tmp/native-canonical-readout.YqBcYa/` remain unchanged.
+
+Separately, the leader-read CI run `37639736598`, job `112855194221`, failed
+with the same 18 `FileNotFoundError` cases. Its log is 143123 bytes, SHA256
+`5fbbef1ed8c1fede56d41fd7c23344c4be036f7d181e5da246f88222d77030fb`.
+No CI query or retry was made for this continuation.
+
+The one-line fixture correction adds the real `registration.CODEX_TEMPLATE`
+to the copied dependencies before synthetic R/C commits are sealed. Production
+source roles, workflows, validators and all assertions are unchanged. At
+`102dee649002366b3fa95b4ddccd81354f2e881c`, tree
+`696f5c745a98663dfbd2c4fa7fcc9958dfdc617f`, exactly the 18 previously failed
+nodes reported **18 passed in 7.20s**, exit 0; wrapper **7.740273s**, together
+once under the same Python 3.10.12/300s+5s/no-`-x`/30s Git bounds. The two
+prior compatibility passes were excluded, not repeated or combined into an
+aggregate pass claim. Exact selection, per-node outcomes and proof hashes
+are in `/tmp/native-canonical-readout-fixture.5nJnSc/`; `handoff.json` records
+the tested/final HEAD/tree and unchanged source identities after the evidence
+commit. Only the test and three evidence records change in this continuation.
+
+The fixtures forbid native, kernel, provider, HF-write and grader operations;
+this synthetic readout proof is not a private read or host positive.
+Fixed-HEAD review/CI, accepted controller C and one
 separately directed read remain gates. Future grading requires genuine retained
 bytes and frozen F, not an invented publication/intake association. The unchanged
 20-cell study and consumed native Task1/Task2/Task3 permit no replay or Task4 advance.

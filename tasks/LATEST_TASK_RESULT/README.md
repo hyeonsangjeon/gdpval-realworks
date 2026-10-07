@@ -1,24 +1,44 @@
 # Latest task result
 
-## Native canonical readout draft: HOLD after fixture failure
+## Native canonical readout fixture corrected; 18-node proof passed
 
-The native canonical-result extension is implemented but not locally proved.
-The only new selector reported **18 failed, 2 passed in 4.52s**, exit 1;
-wrapper **5.107217s**. All native cases failed during fixture preparation,
-before capture or native readout validation. The two new compatibility cases
-passed. No test was rerun and no live/private read or observation execution occurred.
+The test-only continuation reported **18 passed in 7.20s**, exit 0; wrapper
+**7.740273s**. It copies the real native template before the fixture seals
+its synthetic source commits. Production code, workflows and all assertions
+are unchanged. Fixed-HEAD review and final CI remain pending.
+
+The original local invocation remains **18 failed, 2 passed in 4.52s**, exit 1;
+wrapper **5.107217s**. The leader-read CI failure and the two prior compatibility
+passes are separate evidence below. Those two passes were not rerun or combined
+with this 18-node result. No live/private read or observation execution occurred.
 
 ### Scope and source identities
 
-The fresh branch is based on accepted main
+PR774 originated from accepted main
 `33e24e9c1402ec0b7c92a71222998d1407646a92`, tree
-`6e67da4e12169b41a837d92eaf946db15e71010e`; the one origin/main check matched.
-The tested implementation is `974f5f33713a17b7e9fa0de90f646cd59814139c`, tree
-`b42b31e39599b4b81261aa2df56dab4c53a57baa`. It changes only
-`gpt54_time_budget_result_readout.py` and its existing test file. Only this
-record, CHANGELOG and direct README usage change after that failed invocation.
-The final HEAD/tree, draft PR and unchanged tested blob identities are recorded
-after the evidence commit in `/tmp/native-canonical-readout.YqBcYa/handoff.json`.
+`6e67da4e12169b41a837d92eaf946db15e71010e`; its original origin/main check matched.
+The original tested implementation is `974f5f33713a17b7e9fa0de90f646cd59814139c`,
+tree `b42b31e39599b4b81261aa2df56dab4c53a57baa`. Its helper/test implementation
+and failed proof are retained in the original record and
+`/tmp/native-canonical-readout.YqBcYa/handoff.json`.
+
+This continuation uses the existing clean worktree at
+`94368d8b16353758cfb7fa115d0f3459a1d3c47b`, tree
+`8617a94b6d61055b9734e1295a6cedcffa00bfb7`. The test-only correction is pinned
+and tested at `102dee649002366b3fa95b4ddccd81354f2e881c`, tree
+`696f5c745a98663dfbd2c4fa7fcc9958dfdc617f`. Only this record, CHANGELOG and the
+direct README evidence change after that invocation. The final HEAD/tree,
+existing PR774 and unchanged tested blob identities are recorded after the
+evidence commit in `/tmp/native-canonical-readout-fixture.5nJnSc/handoff.json`.
+No new branch, worktree or main integration is part of this continuation.
+
+The sole fixture change adds `subject.registration.CODEX_TEMPLATE` to its
+copied-role set before creating either synthetic R or C commit. It copies
+`batch-runner/experiments/exp033_codex_foundry_fixed5.yaml` from the reviewed
+repository: blob `fd54aeb9305624ee480ca34c38ad6c2139c104ec`, SHA256
+`5af7bd64ec00c6ac45c6d2a2f472833b90c4920221fd61dfdc9bbc324c745763`.
+No template bytes were invented or injected after source sealing. Production
+`SOURCE_ROLES`, validators and every existing test assertion remain unchanged.
 
 The new explicit purpose is `read_one_retained_native_canonical_result`, with
 request format `gpt54-time-budget-native-canonical-readout-request-v1` and
@@ -80,10 +100,11 @@ replayed. Canonical success is not quality or evidence that the study is complet
 The [prior record][prior] retains the accepted Step0 correction, earlier failed
 observations and pre-attempt direction; it is not rewritten as a Task3 outcome.
 
-### One bounded offline invocation
+### Original local invocation (failed)
 
-Only `tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout`
-was selected, once, using Python 3.10.12, pytest 9.1.1 and pytest-timeout 2.4.0,
+The original invocation selected only
+`tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout`,
+once, using Python 3.10.12, pytest 9.1.1 and pytest-timeout 2.4.0,
 an outer 300s TERM bound plus 5s KILL grace, no `-x`, and existing 30s Git
 fixture bounds. Python `perf_counter` measured the wrapper; `/usr/bin/time`
 was not used. AST checks confirmed the function accepts `scenario` and all
@@ -102,8 +123,8 @@ The failed scenarios were `native_success`, `native_error`, `cell`, `R`,
 `digest`, `fingerprint`, `mode`, `unsafe_field`, `unsafe_error`,
 `unsafe_diagnostics`, `counter`, `wrong_R_tree`, `registration`, `r2`,
 `unregistered_task`, `cumulative_bound`, `gzip_metadata` and `gzip_result`.
-Their intended native validations remain unproved. Only `canonical_v2` and
-`fixed_uncertainty` passed through real request/source/schema/transport guards
+Their intended native validations were unreached in that invocation. Only
+`canonical_v2` and `fixed_uncertainty` passed through real request/source/schema/transport guards
 with synthetic data. The overall invocation remains failed, not a 20-case pass.
 
 The unchanged fixtures forbid actual network, HF writes, Azure/model/native
@@ -124,17 +145,71 @@ Artifacts remain under `/tmp/native-canonical-readout.YqBcYa/`:
 | `command.json` | `78942edca00a7c133a52fd81d152e39b2613cdac21ea58f7a133afd799e2bbd5` |
 | `run-proof.py` | `3bdee2808728850957e53a3bd7288bec6e0cb3172a84c7de006d81e3ddc541ff` |
 
-`proof-hashes.sha256` inventories those immutable proof artifacts. Evidence
-checkpoints, literal inventories and the condition/claim ledger are retained
-under `records/`. Final commit/tree and draft PR are in the external handoff
-so these committed records do not pretend to contain their own future hash.
+`proof-hashes.sha256` inventories those immutable proof artifacts. The original
+checkpoints, literal inventories, condition/claim ledger and handoff remain
+untouched in that directory.
+
+### Leader-read CI fixture failure (separate evidence)
+
+Actual CI run `37639736598`, job `112855194221`, failed with the same 18
+`FileNotFoundError` cases. The leader read its 143123-byte log, SHA256
+`5fbbef1ed8c1fede56d41fd7c23344c4be036f7d181e5da246f88222d77030fb`.
+The absent member was
+`/runner-temp/time-budget-readout-source/batch-runner/experiments/exp033_codex_foundry_fixed5.yaml`.
+It failed at the fixture's template read, before native capture/readout
+validation. No CI query, download or retry was made in this continuation;
+total CI counts and duration were not supplied and are not inferred.
+`/tmp/native-canonical-readout-fixture.5nJnSc/leader-ci.json` preserves those
+supplied facts. This CI failure is not relabeled by the local proof below.
+
+### One bounded 18-node continuation
+
+At the test-only commit above, exactly the 18 authorized full node IDs were
+passed to pytest together once. Before launch, AST and argv checks confirmed
+the `scenario` parameter, the 18 unique selections and the exclusion of
+`canonical_v2` and `fixed_uncertainty`. The wrapper also verified the exact
+one-line fixture delta, real template identity, clean source/tree and unchanged
+production/workflow/registration bytes.
+
+Every selected scenario passed: `native_success`, `native_error`, `cell`, `R`,
+`digest`, `fingerprint`, `mode`, `unsafe_field`, `unsafe_error`,
+`unsafe_diagnostics`, `counter`, `wrong_R_tree`, `registration`, `r2`,
+`unregistered_task`, `cumulative_bound`, `gzip_metadata` and `gzip_result`.
+Pytest reported **18 passed in 7.20s**, exit 0; Python `perf_counter` recorded
+**7.740273s** for the wrapper. Python 3.10.12, pytest 9.1.1, pytest-timeout
+2.4.0, 300s TERM plus 5s KILL grace, no `-x`, existing 30s Git bounds and the
+named local Git/Bash allowances were retained. No other selector ran.
+
+These cases exercise real capture/readout validators with synthetic data and
+HTTP transport. The existing effect sentinels stayed in place. They are not
+a private read, native execution, kernel/host positive, quality score or
+grading-intake association. The two prior compatibility passes remain separate;
+there is no aggregate 20-case pass claim.
+
+New proof artifacts are in `/tmp/native-canonical-readout-fixture.5nJnSc/`:
+
+| Artifact | SHA256 |
+| --- | --- |
+| `pytest.log` | `780ca975f5c319a0e88903a5dd5809024520e33a92ea1c589598c8545b859644` |
+| `junit.xml` | `4c6ac2bc5575d8fdd6cd3836aa6c8efcbd39807abab421bd61419faa2f5bc9de` |
+| `cases.json` | `76d4dbeb5f7396ed0421e6fa8333700a0bdddaf7283831bf4e8e6ebc44d64d59` |
+| `outcome.json` | `05bdd6a04fbabfebdf1ebcb192b8bd97f0cf49c960b2269fda8889611bab6f30` |
+| `source.json` | `d834e3888f4733f78e7ab05027c1c53572a2c291a8916c5ec8eb1fc3bda1656f` |
+| `selection.json` | `1c092154c3262fc576e4f87648df4dd01e0b3b8dfdb3e87693209f62079c80af` |
+| `command.json` | `1a009bf72d8229dd7b5e5d19e5943d7b55fc1bf28d6ccdf4067906f965f2f69f` |
+| `run-proof.py` | `53d9c8f56307b4197c38f030e843a8ff412f9663eb5e4be623304c7b364f46bf` |
+
+`proof-hashes.sha256` inventories the new proof. The bounded evidence checkpoints
+and protection/change ledger are in `records/`. Final commit/tree and existing
+PR774 are in the external handoff, avoiding a self-referential commit hash in
+these committed records.
 
 ### Remaining gates
 
-The missing fixture member requires a separately directed correction before
-the native-specific proof, fixed-HEAD source review and final CI can be
-accepted. One real read requires an accepted controller and independently
-bound request under separate direction. Genuine retained bytes and frozen F
+The fixture correction has the bounded local proof above; fixed-HEAD source
+review and final CI remain gates. One real read requires an accepted controller
+and an independently bound request under separate direction. Genuine retained
+bytes and frozen F
 must govern any later once-only grading intake; no publication/intake
 association, score, exact native call count or cost is inferred here.
 
@@ -148,10 +223,12 @@ relabeled as a quality score.
 The catalog was read once. `experiment-design` preserves the existing
 20-cell cohort/model/budget/F design; this is visibility only.
 `experiment-report-en` and `im-not-ai-en` keep leader-supplied measurements,
-failed local outcomes and unavailable quantities separate. No new reviewer
+the failed local and CI observations, prior compatibility passes, the new
+18-node proof and unavailable quantities separate. No new reviewer
 invocation or CI query is claimed. No Project edit, merge, manual dispatch,
 retry, Azure/private-HF operation, readout execution, Task4 or ABBA advance
-was performed or authorized. The tested helper and tests stay unchanged
-after the first failure; earlier worktrees remain untouched.
+was performed or authorized. The helper and all production/workflow bytes
+stay unchanged throughout this continuation; the corrected test stays unchanged
+after its one invocation. Earlier worktrees remain untouched.
 
 [prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/33e24e9c1402ec0b7c92a71222998d1407646a92/tasks/LATEST_TASK_RESULT/README.md
