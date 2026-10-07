@@ -808,6 +808,14 @@ the accepted native callable above. It permits only
 refuses. This implementation adds no live authority or permission to advance
 ABBA order. The closed pilot and retention studies remain closed.
 
+This fixed cell is now consumed. The leader verified run `37574558224`,
+attempt 1: execute returned 2, retention was acknowledged and the public
+completion remained uncertain with null result/usage/cleanup fields. No
+native cause, model-call count or cost is known from that envelope. Do not
+replay it. The [native uncertainty readout](#native-uncertainty-manifest-readout)
+below is a read-only diagnostic route requiring separate direction, not a
+new observation or claim.
+
 The manual workflow takes `reviewed_source_sha`, `reviewed_source_tree`,
 `request_sha256` and `request_json`. The leader must supply the exact accepted
 main/workflow source and independent digest of the request bytes. The strict
@@ -1293,13 +1301,14 @@ candidate expected parent. It verifies neither inputs nor host support and
 does not authorize a paid observation. The later V2 parent CAS, permanent
 claim, source/direction checks and actual kernel admission remain unchanged.
 
-#### Read-only view of one retained canonical result
+#### Read-only view of a retained result or native uncertainty
 
 [`gpt54-time-budget-result-readout.yml`](../.github/workflows/gpt54-time-budget-result-readout.yml)
 uses [`gpt54_time_budget_result_readout.py`](gpt54_time_budget_result_readout.py)
-to project safe structured fields from one existing private V2 result. This
-does not execute, adopt, retry or grade an observation. The initial intended
-read is the retained Task3 result at immutable output commit
+to project safe structured fields from one existing private V2 result or the
+fixed native uncertainty manifest described below. Neither purpose executes,
+adopts, retries or grades an observation. The canonical V2 route's initial
+target is the retained Task3 result at immutable output commit
 `2460c45c3896371b011624f13fc7817d5f670969`, with this registered path:
 
 ```text
@@ -1307,15 +1316,16 @@ time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/2ea2
 ```
 
 The target remains `HyeonSang/gdpval-codex-budget-pilot-ci-20260923`. No
-repository, path or branch is an input. Only the current V2 capture schema
-and one V2 row of the source-verified registration are supported. Controller
-C must be the accepted readout workflow/helper source selected for the later
+repository, path or branch is an input. The canonical purpose supports only
+the current V2 capture schema and one V2 row of the source-verified
+registration. Controller C must be the accepted readout workflow/helper
+source selected for the later
 request. Retained result R is the original execution source, not C. For Task3, R is
 `f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, tree
 `72a9d2fa2c22b1409a8b19e01d6a24ac5f29f9cf`.
 
 The leader supplies a UTF-8 request and its independently recorded exact-byte
-SHA256. Its exact top-level fields are:
+SHA256. The canonical request's exact top-level fields are:
 
 - `format`: `gpt54-time-budget-result-readout-request-v1`.
 - `purpose`: `read_one_retained_canonical_result`.
@@ -1344,7 +1354,7 @@ For Task3, the independent result identity is 6632 bytes, SHA256
 fingerprint `0374270431f6352211715da432d886f8557514324c89d60c230f81f65a2a5b61`.
 The original execution request SHA256 is
 `6748374c1b4ad0bbcbafb47117c6c641976d85ece836486eb8ce553c65719c1a`.
-The [evidence record](../tasks/LATEST_TASK_RESULT/README.md) retains the claim,
+The [original evidence record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/9e6ed17b8cc0c93cc540a8cc8593089453a3f6a2/tasks/LATEST_TASK_RESULT/README.md) retains the claim,
 completion artifact, envelope and log identities. The canonical result does
 not embed the original request hash; the readout relies on the leader's
 verified completion for that association and does not fetch the claim or
@@ -1390,7 +1400,7 @@ refusal. The safe artifact may retain the requested expected identities and
 verified privacy on refusal, but its `summary` is null and `outcome` is
 `refused`. It grants no retry permission.
 
-Only `time-budget-result-readout.json` is published. Its strict projection
+Only `time-budget-result-readout.json` is published. The canonical projection
 contains status/error enums, runner/admission/terminal/cleanup flags, reported
 usage and availability counters, model-binding categories and route fingerprint
 where present, plus aggregate deliverable count/bytes from authenticated
@@ -1436,6 +1446,72 @@ pins and checkout depth, respectively. Apart from that depth change, the
 workflow is unchanged. Final review/CI, accepted C and a separately directed
 real read remain required; the study, 1200+20 observation budget and 45-minute
 execution ceiling are unchanged.
+
+##### Native uncertainty manifest readout
+
+The same unchanged workflow also accepts request format
+`gpt54-time-budget-native-uncertainty-readout-request-v1` with purpose
+`read_one_retained_native_uncertainty_manifest`. Use the same controller/CI,
+registration, cell and completion fields above, plus independently supplied
+`execution_request_identity` containing the original execution request's
+`sha256` and `size`. No workflow input, permission, secret step or timeout is
+added. This purpose permits only `gpt54_time_budget_v1_codex_r1` / `codex` /
+repeat 1 / `02aa1805-c658-4069-8a6a-02dec146063a` and its validated native
+completion with acknowledged uncertainty and no canonical result.
+
+For the leader-verified consumed attempt, output commit is
+`d443e8045f58b6f7b4b35ed7f1888182b62296e0`, claim commit is
+`4ca4fd9c86fe1253059fffc66f6e4397c34c3c4e`, and the original execution request
+is 2369 bytes with SHA256
+`c78a581c482baf495b09efad70899e0067293752f3cc7320f54f2af0079fa062`.
+R's exact commit/tree must come from the independently verified completion,
+not an assumed controller or implementation base. Its original registration
+is resolved through the existing historical R loader before credentials.
+
+The helper derives this fixed member from the native producer's `MANIFEST`:
+
+```text
+time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_codex_r1/02aa1805-c658-4069-8a6a-02dec146063a/output-manifest.json
+```
+
+Only private-identity metadata and that exact raw object at the trusted output
+commit may be read, within the same two-GET/60-second cumulative limit and
+identity-encoding guards. The helper validates canonical producer bytes,
+format `gpt54-time-budget-first-codex-private-output-v1`, observation/R/cell/
+registration/request/claim bindings, empty files, no result and no grading,
+then the existing private execution-failure schema. It does not fetch the
+claim, original request, deliverables or latest HEAD.
+
+The completion carries no independent manifest size/hash. Immutable commit,
+fixed member and trusted known fields bind this read; the downloaded
+`observed_manifest_identity` is explicitly
+`observed_not_independently_expected`. Claim and request objects are
+`not_reread`. The public envelope uses the separate format
+`gpt54-time-budget-native-uncertainty-readout-v1`, retaining only binding
+identities, that observed identity, validated static `stage`/`category`/`reason`
+and absent/unavailable classifications. Result identity/fingerprint stay
+null. Missing or malformed receipts, missing static codes and extra private
+fields refuse with a null summary. No raw error, class name, prose, filename, path,
+credential, header or full manifest is published. A validated static code is
+a retained diagnostic, not proof of model-call count, cost or retry authority.
+
+At tested source `ca8cacc0a7b9f9de1edd441bf0a337c1a9b5bee6`, tree
+`87f9f769addfaeb98019340bd3052414a99cdc71`, the one new offline selector
+`tests/test_time_budget_result_readout.py::test_time_budget_native_uncertainty_readout`
+reported **17 passed in 5.92s**, exit 0; wrapper **6.351552s**. It covered
+native uncertainty, source/cell/registration/request/claim and receipt
+refusals, missing/extra private fields, R binding, canonical encoding,
+the cumulative bound and one canonical V2 compatibility case. Real validators
+ran with synthetic HTTP and credential/write/native/model sentinels. Python
+3.10.12/300s+5s/no-`-x` and the existing 30s Git bounds were preserved.
+Artifacts are at `/tmp/native-uncertainty-readout-proof.ygvebVCU/`; the
+[evidence record](../tasks/LATEST_TASK_RESULT/README.md) records their exact
+hashes, leader-supplied native uncertainty and final handoff location.
+Only the three evidence/usage records changed after the proof. Earlier
+selectors were not rerun or aggregated. Final review/CI, accepted controller C
+and one separately directed real read remain gates. This implementation did
+not read the actual native receipt or establish its cause, model-call count,
+cost or host readiness. It grants no replay, next cell or grading authority.
 
 #### Direct comparison runtime launch refusal
 
