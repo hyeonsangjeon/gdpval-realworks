@@ -13,6 +13,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept test-only native boundary source
+  `ab0662ec687369bb41a1d62bd43c6b38a4c4f273`, tree
+  `89e49c81340ab948510fc526dc5253e4d2b4e616`, review `5439766309`,
+  after all eleven checks succeeded. Preserve the existing safe-event test
+  and new boundary test as an exact full-module AST union, with no overlapping
+  changed definition and no production change. Reconcile completion/usage
+  records only after structural validation. The synthetic pass is not an
+  actual-host or historical-cause proof and grants no replay or live authority.
+
+### Added
+
+- Add one test-only native callable validation regression from accepted main
+  `9fbdc37fb0ec0e4eb79d32b22f37641235a24186`. At tested source
+  `35ba64b8145ca5ff9401020a94f2f4aaec807662`, tree
+  `98707a1b6a02372f72e9c7630b61ab70d882f6a5`, the single new selector
+  reported **1 passed, 1 warning in 21.97s**, exit 0; wrapper **22.641730s**.
+  Real direction/source/input validators, consumer, native constructor,
+  pinned-runtime check and canonical capture completed with synthetic
+  auth/RPC and kernel fixtures. No deterministic mismatch was reproduced;
+  no production fix or runtime-pin change is made. The leader's actual
+  readout retains only `observation_callable` / `validation_refused` /
+  `execution_refused_or_uncertain`, not the first historical guard. Native
+  Task1 remains consumed/uncertain; model calls, cost and cleanup remain
+  unknown, not zero. Artifacts and exact source/hash identities are in
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md). Final source review and CI
+  remain pending; PR769, workflows, registration/F and all consumed cells
+  are unchanged. No new observation or replay is authorized.
+
+### Changed
+
 - Accept prospective safe-event source
   `2a8f6c754a160c50c4a13589132d09c99828b28b`, tree
   `6996b650258e86fdf52643819458eb825eba5ef1`, review `5438792501`,

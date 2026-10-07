@@ -437,6 +437,121 @@ def test_time_budget_first_codex_ci(case, actions_layout, offline, local_kernel,
         ci.validate_envelope({**envelope, "raw_exception": _SECRET})
 
 
+def test_time_budget_native_callable_validation_boundary(case, offline, monkeypatch, capsys, record_property):
+    """Trace real validation/constructor/capture, not a historical-cause claim."""
+    import sys
+    from inspect import unwrap
+    from core import codex_runner, codex_runtime_config
+
+    assert _invoke(case, monkeypatch, "prepare-and-claim") == 0
+    assert len(case.downloads) == 4 and case.api.commits == ["claim"]
+    claim_bytes = case.api.trees[case.api.head][ci.CLAIM]
+    marker = ci._read(case.root / "preparation" / ci.registration.HANDOFF_READY)
+    direction_bytes = (case.root / "direction.json").read_bytes()
+    step0_bytes = (case.root / "inputs" / ci.originals.STEP0).read_bytes()
+    assert _identity(step0_bytes) == case.request["step0"]["identity"]
+    assert marker["inputs"]["step0_manifest"] == _identity(step0_bytes)
+    # Only synthetic login state changes between preparation and execution;
+    # the already-created private directory and auth argv remain the same.
+    (offline.login / "synthetic-session").write_bytes(b"Synthetic login state; not credentials.")
+    spec = SimpleNamespace(arguments={"observation": deadline.ObservationIdentity(**marker["observation"])},
+                           marker=marker, consumed=case.root / ("preparation" + ci.registration.HANDOFF_CONSUMED_SUFFIX))
+    native = _native_transport(monkeypatch, spec, offline, outcome="success")
+    assert codex_runner.require_pinned_runtime is codex_runtime_config.require_pinned_runtime
+    # Tracing observes unmodified function code. No source/input/direction,
+    # provider, constructor, runtime-version or capture verdict is replaced.
+    functions = {
+        "controller_execute": ci.execute,
+        "native_callable": ci.observation.run_codex_observation,
+        "native_run_root": codex_runtime_config.resolve_run_root_base,
+        "reviewed_source": ci.registration._reviewed_source,
+        "input_reconstruction": ci.registration._observation_handoff_data,
+        "provider_settings": ci.observation._provider,
+        "direction_validation": ci.observation._ExecutionDirection.__init__,
+        "direction_admission": ci.observation._ExecutionDirection.require_execution_direction,
+        "handoff_consumer": ci.registration.consume_observation_handoff,
+        "runner_binding": ci.registration._bind_observation_runner,
+        "native_constructor": codex_runner.CodexAgentRunner.__init__,
+        "pinned_runtime": codex_runtime_config.require_pinned_runtime,
+        "native_run": codex_runner.CodexAgentRunner.run,
+        "canonical_capture": ci.observation._capture,
+        "native_required_guard": ci.observation._require,
+        "shared_equality_guard": ci.observation._same,
+    }
+    labels = {unwrap(function).__code__: name for name, function in functions.items()}
+    calls, completed, constructors = {}, set(), []
+    evidence = {"first_refusal": None, "kernel_evidence": "synthetic_fixture_not_host_proof"}
+
+    def trace(frame, event, argument):
+        operation = labels.get(frame.f_code)
+        if operation is None:
+            return None
+        frame.f_trace_lines = False
+        if event == "call":
+            calls[operation] = calls.get(operation, 0) + 1
+        elif event == "exception" and evidence["first_refusal"] is None:
+            # No exception object, text, class name, locals or caller paths are
+            # copied. Code labels and source line numbers are static metadata.
+            caller = frame.f_back
+            evidence["first_refusal"] = {
+                "operation": operation, "source_line": frame.f_lineno,
+                "caller": labels.get(caller.f_code, "other_static_caller"),
+                "caller_source_line": caller.f_lineno,
+            }
+        elif event == "return":
+            completed.add(operation)
+            if operation == "native_constructor":
+                constructors.append(frame.f_locals["self"])
+        return trace
+
+    assert sys.gettrace() is None
+    try:
+        sys.settrace(trace)
+        exit_code = _invoke(case, monkeypatch, "execute")
+    finally:
+        sys.settrace(None)
+        evidence.update(calls=calls, completed=sorted(completed),
+                        constructor_count=len(constructors), auth_transport_calls=len(offline.auth_calls),
+                        rpc_methods=[method for method, _ in native.requests])
+        record_property("native_callable_boundary", json.dumps(evidence, sort_keys=True))
+
+    assert exit_code == 0, evidence
+    assert evidence["first_refusal"] is None, evidence
+    assert set(functions) <= completed, evidence
+    for name in ("native_callable", "handoff_consumer", "runner_binding", "native_constructor",
+                 "pinned_runtime", "native_run", "canonical_capture"):
+        assert calls[name] == 1, evidence
+    assert len(constructors) == len(native.controls) == len(native.clients) == len(offline.auth_calls) == 1
+    runner, control = constructors[0], native.controls[0]
+    assert type(runner) is codex_runner.CodexAgentRunner
+    assert type(runner.provider) is codex_runtime_config.CodexProviderSettings
+    assert runner.provider == _expected_provider()
+    assert runner.observation_control is control and runner.preflight_auth is True and runner.codex_bin is None
+    assert runner.run_id == ci.CELL["run_id"] and runner.condition_name == "codex" and runner.timeout == 1200
+    assert evidence["rpc_methods"] == ["initialize", "thread/start", "turn/start"]
+    result_path = case.root / "result" / ci.observation.RESULT
+    data, receipt = result_path.read_bytes(), ci._read(case.root / "execution-receipt.json")
+    payload = json.loads(data)
+    assert receipt["outcome"] == "returned" and receipt["returned"]["result_identity"] == _identity(data)
+    assert receipt["returned"]["result_fingerprint"] == validate_inference_result_fingerprint(payload)
+    assert payload["condition"] == "codex" and payload["execution_mode"] == "codex_foundry"
+    assert payload["results"][0]["task_id"] == ci.CELL["task_id"] and payload["results"][0]["status"] == "success"
+    assert payload["time_budget_observation"] == control.as_record()
+    assert control.cleanup_complete and control.as_record()["host_reusable"]
+    assert control.cleanup_deadline - control.terminal_at == 20
+    assert (case.root / "result/upload/deliverable_files" / ci.CELL["task_id"] / "deliverable.txt").read_bytes() == _FILE
+    assert all(value is None for value in payload["results"][0]["observability"]["native_measurements"].values())
+    assert spec.consumed.is_file() and (case.root / "execution-reserved.json").is_file()
+    assert (case.root / "direction.json").read_bytes() == direction_bytes
+    assert (case.root / "inputs" / ci.originals.STEP0).read_bytes() == step0_bytes
+    assert case.api.commits == ["claim"] and case.api.trees[case.api.head][ci.CLAIM] == claim_bytes
+    assert case.api.trees[case.api.head][case.prior] == case.prior_bytes
+    assert not any(os.environ.get(key) for key in ci.shared.TOKEN_KEYS)
+    captured = capsys.readouterr()
+    public = captured.out + captured.err + json.dumps(evidence)
+    assert all(secret not in public for secret in (TOKEN, _SECRET, "Synthetic final answer.", "deliverable.txt", "reference_files"))
+
+
 @pytest.mark.parametrize("mode", [
     "fresh_secret", "pre_reservation", "old_state", "reservation_io", "receipt_io", "receipt_ack_io",
     "missing_metadata", "malformed_metadata", "invalid_protocol", "stderr_io", "v2_compatibility",

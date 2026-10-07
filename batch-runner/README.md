@@ -816,6 +816,34 @@ replay it. The [native uncertainty readout](#native-uncertainty-manifest-readout
 below is a read-only diagnostic route requiring separate direction, not a
 new observation or claim.
 
+The leader later verified readout `37585054563`, run number 4, attempt 1,
+artifact `11466485746`. The retained failure is exactly
+`stage=observation_callable`, `category=validation_refused`,
+`reason=execution_refused_or_uncertain`. It identifies no first guard or raw
+exception. The downloaded manifest identity, 1096 bytes / SHA256
+`458db9999f436360072181f5e1907b15c4c9f2c1ed018829137920fd495ade5e`,
+is observed, not independently expected. Native Task1 remains uncertain;
+model calls, cost and cleanup remain unknown, not zero.
+
+One new test-only regression at
+`35ba64b8145ca5ff9401020a94f2f4aaec807662`, tree
+`98707a1b6a02372f72e9c7630b61ab70d882f6a5`, exercised the real controller,
+callable, direction/source/input validators, consumer, native constructor,
+pinned-runtime check and canonical capture. It reported **1 passed,
+1 warning in 21.97s**, exit 0; wrapper **22.641730s**, with no refusal in
+the traced operations. The warning concerns JUnit property formatting;
+the safe boundary record was retained. Auth and SDK RPC were synthetic,
+and kernel state came from the existing fixture, not a real-host proof.
+No deterministic mismatch was reproduced on this source, so no production
+fix or source-pin change is made. The single selector was
+`tests/test_time_budget_first_codex_ci.py::test_time_budget_native_callable_validation_boundary`;
+artifacts are at `/tmp/native-callable-boundary-proof.dW9NqX/`.
+The [evidence record](../tasks/LATEST_TASK_RESULT/README.md) preserves exact
+source/artifact identities and the distinction between the historical
+classification and this synthetic result. Final review/CI remain pending.
+PR769 and previous proofs remain separate; no replay, next cell or live
+authority follows.
+
 The manual workflow takes `reviewed_source_sha`, `reviewed_source_tree`,
 `request_sha256` and `request_json`. The leader must supply the exact accepted
 main/workflow source and independent digest of the request bytes. The strict
