@@ -167,6 +167,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a focused but currently uncollectable V2 directory-root regression on
+  accepted main `4c5a32f7a0347081867fb95f94fc712bc0032ff6`, tree
+  `6800b87747919ea571c7908ae2b951d15a30fe20`. Test-only source
+  `473c04d51bd3db4ee7d23bdc81abd23fd587dae2`, tree
+  `fe14ba39b269782b59607f440a62e4818bb7af68`, declares empty-root, written-file,
+  file/missing-directory, traversal and symlink checks through the real
+  dispatcher/backend and provenance verifiers. The single bounded invocation
+  stopped during collection: **0 collected, 1 error in 0.75s**, exit 4;
+  wrapper **1.121007s**. The test author omitted the `case` argument from its
+  parametrized function signature. No test body ran, no behavioral finding
+  is established, and no correction or retry followed. Python 3.10.12,
+  300s+5s/no-`-x` and 30s read-only Git bounds were retained. Artifacts are in
+  `/tmp/v2-directory-root-proof.Pi7089uf/`; log SHA256 is
+  `dd81ffbb50e1b2f3b8f4dab28b7cc056b42976bd0c87f57f0e38514cfb116d44`.
+
+  Separately, the leader verified consumed Task4 run `37559598835`, attempt 1,
+  and readout `37561844854`, attempt 1, artifact `11457461122`. Its canonical
+  error and verified runner error are `path_not_directory`, with no
+  deliverables, confirmed cleanup/host reuse and reported usage of 2462 input
+  / 570 output tokens. Cached input 0 and reasoning output 546 are subsets;
+  native attempts, cost and score are not inferred. The safe projection does
+  not disclose the requested path. Source inspection accepts `"."` and opens
+  the root descriptor without depending on directory entries; this is not a
+  behavioral proof or an explanation of Task4. No production fix, runtime
+  source-pin change, workflow change or study change is justified here.
+  Only the three evidence/usage records change after the failed invocation.
+  The test signature and its unstarted assertions need a separate continuation
+  before review/CI; no draft PR or live authority follows from this failure.
+  Task1-Task4 remain consumed, and PR764 is untouched. See the
+  [exact identities and remaining gates](tasks/LATEST_TASK_RESULT/README.md),
+  including the final local HEAD/tree in the proof directory's `handoff.json`.
+
 - Add a manual, read-only view of one retained canonical V2 time-budget
   result through `gpt54_time_budget_result_readout.py` and
   `gpt54-time-budget-result-readout.yml`. A separately digest-bound leader

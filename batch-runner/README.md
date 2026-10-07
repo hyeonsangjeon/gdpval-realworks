@@ -439,8 +439,9 @@ one explicitly selected task from that run's verified five-task registration.
 All other runs, conditions, repeats and unregistered tasks refuse. Task1
 `02aa1805-c658-4069-8a6a-02dec146063a` and Task2
 `0112fc9b-c3b2-4084-8993-5a4abb1f54f1` remain permanently consumed/uncertain;
-Task3 `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` is consumed with a canonical
-error. No Task4, other live cell or replay is authorized here. The callable
+Task3 `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` and Task4
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3` are consumed with canonical errors.
+No Task5, other live cell or replay is authorized here. The callable
 installs the existing same-host `AgenticV2FixtureBackend` (its limited tools are not a
 microVM), `AzureFoundryVoice`, and typed Azure inference client. Client creation
 and connection waits begin inside supervised generation; the client closes
@@ -580,6 +581,37 @@ F/TEMPLATE, the old profile and its 37 pins, the registered model/prompt,
 are unchanged. Task1-Task3 stay consumed. See the
 [full evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact source,
 readout and artifact identities.
+
+The leader's later Task4 readout (`37561844854` / attempt 1, artifact
+`11457461122`) matched the canonical result from run `37559598835` / attempt 1.
+Both error fields are `path_not_directory`; runner verification is true,
+runner success is false, the required file is missing and there are no
+deliverables. Admission, cleanup and host reuse are confirmed; terminal reason
+is `failed`, without interruption. Reported usage is 2462 input / 570 output
+tokens, with cached input 0 and reasoning output 546 as subsets. The client
+construction, Responses invocation and completed-response counters are each
+1, with model binding `matched`; native attempts, cost and score remain
+unknown. The original requested path is not in this safe projection.
+
+The declared workspace root is `"."`. Source inspection shows the backend
+opens the existing root descriptor without depending on its entries. A new
+model-free regression was pinned at
+`473c04d51bd3db4ee7d23bdc81abd23fd587dae2` / tree
+`fe14ba39b269782b59607f440a62e4818bb7af68`, from accepted main
+`4c5a32f7a0347081867fb95f94fc712bc0032ff6` / tree
+`6800b87747919ea571c7908ae2b951d15a30fe20`. Its only invocation stopped before
+behavior: **0 collected, 1 error in 0.75s**, exit 4; wrapper **1.121007s**.
+The parametrized test function omitted its `case` argument. No backend or
+verifier assertion ran, so there is no tested negative finding or production
+fix. No retry or post-outcome test change followed. Artifacts and final local
+HEAD/tree are in `/tmp/v2-directory-root-proof.Pi7089uf/` and its
+`handoff.json`; log SHA256 is
+`dd81ffbb50e1b2f3b8f4dab28b7cc056b42976bd0c87f57f0e38514cfb116d44`.
+The failed regression needs a separately directed correction/proof before
+review and CI. Runtime, workflow, prompt, source pins, frozen F, the twenty
+planned observations and 1200+20 limits remain unchanged. No Task4 cause,
+replay permission or further live-cell authority is established. Full Task4
+result/readout identities are in the evidence record linked above.
 
 ##### One registered Codex time-budget observation
 
