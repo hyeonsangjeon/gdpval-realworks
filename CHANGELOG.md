@@ -13,6 +13,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept native uncertainty readout source
+  `4b5088a9f338adee58fe89436836ccc6c9f3363c`, tree
+  `ab4c3af7e9daa726430bb5d97adceb886059cfe5`, review `5438334969`,
+  after all eleven checks succeeded. Preserve reviewed helper, test and
+  workflow bytes; update completion records only after validation.
+  Authorize one independently bound, two-GET/60-second read of the retained
+  native r1/Task1 uncertainty manifest at immutable output
+  `d443e8045f58b6f7b4b35ed7f1888182b62296e0`. Manifest identity is observed,
+  not independently expected. No private body publication, replay, model
+  call, next cell or grade is authorized; no historical cause is claimed.
+
+### Changed
+
 - Accept native grading-preparation compatibility source
   `1594feeb82da140cc9549a80fb41a644fd8a929f`, tree
   `8662d28dc91d334854907157eb71807c0ab44a6f`, review `5437514089`,
@@ -43,6 +56,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   without inferring its undisclosed requested path or replaying it.
 
 ### Added
+
+- Extend the existing read-only result route with the explicit
+  `read_one_retained_native_uncertainty_manifest` purpose for the consumed
+  native r1/Task1 cell. Validate the native completion, original execution
+  request size/hash, historical R/tree/registration and fixed private
+  manifest schema before projecting only static receipt codes and binding
+  identities. Read the producer's constant manifest member at the trusted
+  immutable output commit. Its downloaded size/hash is **observed**, not an
+  independently expected identity; no claim or request object is reread.
+  Missing/malformed receipts and unknown private fields refuse. Canonical
+  V2 semantics, workflow bytes, two GETs/60 cumulative seconds, identity
+  encoding and the no-retry/no-write boundaries remain unchanged.
+
+  The leader verified native run `37574558224`, attempt 1, job
+  `112640438630`: execute returned 2, retention was acknowledged and status
+  remained uncertain. The permanent claim is
+  `4ca4fd9c86fe1253059fffc66f6e4397c34c3c4e`; output is
+  `d443e8045f58b6f7b4b35ed7f1888182b62296e0`. Result, usage and cleanup
+  evidence remain unavailable. No actual failure cause, model-call count,
+  cost or zero quality score is inferred; the cell cannot be replayed.
+
+  Accepted base `b0bba8c71369605fd4261c59259e3cc3924de981`, tree
+  `f9bb914a717d3fc1326ac8e1e925119cfaee307f`; tested source
+  `ca8cacc0a7b9f9de1edd441bf0a337c1a9b5bee6`, tree
+  `87f9f769addfaeb98019340bd3052414a99cdc71`. One new model-free selector
+  reported **17 passed in 5.92s**, exit 0; wrapper **6.351552s**, using
+  Python 3.10.12/300s+5s/no-`-x` and the existing 30s Git bounds. Real
+  source/manifest/receipt validators ran with synthetic HTTP, including
+  source/cell/request/claim/refusal cases and one canonical V2 compatibility
+  case. This is not a private read, native execution or kernel proof.
+  Artifacts: `/tmp/native-uncertainty-readout-proof.ygvebVCU/`; log SHA256
+  `581a5a06df26618e75983378cafe24225ea8cad1b2a71e216341a5c27aafbe70`.
+  Only this changelog, LATEST and direct README records change after the
+  proof. The [evidence record](tasks/LATEST_TASK_RESULT/README.md) preserves
+  complete historical/artifact identities and the final handoff location.
+  Registration, frozen F, twenty planned observations and 1200+20 remain
+  fixed. Final review/CI, accepted controller C and one separately directed
+  read remain gates; no replay, next cell or grade is authorized.
 
 - Add one manual native Actions route through
   `gpt54_time_budget_codex_ci.py` to the accepted `run_codex_observation`

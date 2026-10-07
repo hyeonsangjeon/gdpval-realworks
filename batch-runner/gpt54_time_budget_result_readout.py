@@ -1,4 +1,4 @@
-"""Read one immutable, independently identified result; publish no private prose.
+"""Read one bound retained result or native uncertainty; publish no private prose.
 
 The leader's digest-bound request supplies an already verified completion
 envelope, not authority discovered in storage. C is this readout's source; R is
@@ -25,6 +25,7 @@ from urllib.parse import parse_qs
 import yaml
 
 import codex_budget_pilot_output as storage
+import gpt54_time_budget_codex_ci as native_execution
 import gpt54_time_budget_comparison as registration
 import gpt54_time_budget_storage_metadata as metadata
 import gpt54_time_budget_v2_ci as execution
@@ -52,9 +53,14 @@ BASENAME = "time-budget-result-readout.json"
 FORMAT = "gpt54-time-budget-result-readout-v1"
 REQUEST_FORMAT = "gpt54-time-budget-result-readout-request-v1"
 PURPOSE = "read_one_retained_canonical_result"
+UNCERTAINTY_FORMAT = "gpt54-time-budget-native-uncertainty-readout-v1"
+UNCERTAINTY_REQUEST_FORMAT = "gpt54-time-budget-native-uncertainty-readout-request-v1"
+UNCERTAINTY_PURPOSE = "read_one_retained_native_uncertainty_manifest"
+# The fixed private format written by native_execution.retain, not a result row.
+UNCERTAINTY_MANIFEST_FORMAT = "gpt54-time-budget-first-codex-private-output-v1"
 SECONDS = metadata.SECONDS
 MAX_ENVELOPE_BYTES = 65536
-SOURCE_ROLES = metadata.SOURCE_ROLES | execution.SOURCE_ROLES | {
+SOURCE_ROLES = metadata.SOURCE_ROLES | execution.SOURCE_ROLES | native_execution.SOURCE_ROLES | {
     HELPER, WORKFLOW, registration.REGISTRATION_PATH, "batch-runner/ghcp_vm_input_bundle.py",
 }
 CELL_KEYS = {"study_id", "run_id", "condition", "repeat", "task_id"}
@@ -124,8 +130,11 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
     _require(0 < len(data) <= execution.MAX_REQUEST_BYTES and storage._hash(expected_request_sha256)
              and _identity(data)["sha256"] == expected_request_sha256, "independent_request_digest_required")
     request = json.loads(data, object_pairs_hook=_object)
-    _keys(request, {"format", "purpose", "controller", "ci", "registration_sha256", "cell", "completion"})
-    _require(request["format"] == REQUEST_FORMAT and request["purpose"] == PURPOSE,
+    uncertainty = type(request) is dict and request.get("purpose") == UNCERTAINTY_PURPOSE
+    _keys(request, {"format", "purpose", "controller", "ci", "registration_sha256", "cell", "completion"}
+          | ({"execution_request_identity"} if uncertainty else set()))
+    _require((request["format"], request["purpose"]) == (
+        (UNCERTAINTY_REQUEST_FORMAT, UNCERTAINTY_PURPOSE) if uncertainty else (REQUEST_FORMAT, PURPOSE)),
              "readout_request_required")
     _require(storage._hash(reviewed_source_sha, 40) and storage._hash(reviewed_source_tree, 40),
              "independent_controller_identity_required")
@@ -178,18 +187,31 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         cell = request["cell"]
         _keys(cell, CELL_KEYS)
         completion = request["completion"]
-        execution.validate_envelope(completion, expected_cell=cell)
-        _require(completion["retention"] == "acknowledged" and completion["status"] in ("success", "error"),
-                 "retained_canonical_result_required")
+        if uncertainty:
+            _same("fixed native uncertainty cell", cell, native_execution.CELL)
+            native_execution.validate_envelope(completion)
+            _require(completion["retention"] == "acknowledged" and completion["status"] == "uncertain",
+                     "retained_native_uncertainty_required")
+            identity = request["execution_request_identity"]
+            _keys(identity, {"sha256", "size"})
+            validate_reference_record(identity)
+            _require(0 < identity["size"] <= execution.MAX_REQUEST_BYTES, "execution_request_size_refused")
+            _same("independent execution request hash", identity["sha256"], completion["request_sha256"])
+        else:
+            execution.validate_envelope(completion, expected_cell=cell)
+            _require(completion["retention"] == "acknowledged" and completion["status"] in ("success", "error"),
+                     "retained_canonical_result_required")
         plan = _result_registration(root, completion["source"])
         _same("source-bound registration", request["registration_sha256"], seal(plan))
-        # The current retained schema is the existing V2 producer, not a new
-        # Codex capture format. Select only a row of the unchanged registration.
-        _require(cell["study_id"] == registration.STUDY_ID and cell["condition"] == "sandbox_v2"
+        # Canonical rows remain V2-only. The native branch reads no result row.
+        _require(cell["study_id"] == registration.STUDY_ID
+                 and cell["condition"] == ("codex" if uncertainty else "sandbox_v2")
                  and type(cell["repeat"]) is int and any(
                      all(cell[key] == run[key] for key in ("run_id", "condition", "repeat")) for run in plan["runs"])
                  and cell["task_id"] in [row["task_id"] for row in plan["shared"]["dataset"]["tasks"]],
                  "registered_observation_required")
+        if uncertainty:
+            _same("registered first native task", cell["task_id"], plan["shared"]["dataset"]["tasks"][0]["task_id"])
         yield {"request": request, "request_sha256": expected_request_sha256, "plan": plan,
                "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
     check_bootstrap()
@@ -337,14 +359,73 @@ def project_result(data: bytes, context: dict) -> dict:
     return summary
 
 
+UNCERTAINTY_SUMMARY = {
+    "status": "uncertain", "result": "unavailable_no_fabricated_study_row", "retained_files": "empty",
+    "terminal_reason": None, "usage": None, "cleanup_complete": None, "host_reusable": None,
+    "native_model_calls_and_cost": "unavailable",
+    "manifest_identity_basis": "observed_not_independently_expected",
+    "claim_and_request_objects": "not_reread",
+    "failure_authority": "retained_static_diagnostic_only",
+}
+
+
+def _uncertainty_summary(value: dict) -> None:
+    _keys(value, set(UNCERTAINTY_SUMMARY) | {"failure", "observed_manifest_identity"})
+    _same("uncertainty classifications", {name: value[name] for name in UNCERTAINTY_SUMMARY}, UNCERTAINTY_SUMMARY)
+    identity = value["observed_manifest_identity"]
+    _keys(identity, {"sha256", "size"})
+    validate_reference_record(identity)
+    _require(0 < identity["size"] <= storage.MAX_MANIFEST_BYTES, "observed_manifest_size_refused")
+    execution._check_execution_failure({"outcome": "refused_or_uncertain", "returned": None,
+                                       "failure": value["failure"]})
+
+
+def project_uncertainty_manifest(data: bytes, context: dict) -> dict:
+    """Bind the immutable manifest without inventing an independent byte hash."""
+    request, completion = context["request"], context["request"]["completion"]
+    _require(0 < len(data) <= storage.MAX_MANIFEST_BYTES, "uncertainty_manifest_size_refused")
+    manifest = json.loads(data, object_pairs_hook=_object)
+    _keys(manifest, {"format", "observation", "request_identity", "claim_commit", "claim_identity",
+                     "execution_receipt", "result", "files", "grading_performed"})
+    _require(data == native_execution._encoded(manifest), "canonical_uncertainty_manifest_required")
+    _same("native uncertainty format", manifest["format"], UNCERTAINTY_MANIFEST_FORMAT)
+    identity = asdict(ObservationIdentity(**manifest["observation"]))
+    _same("manifest cell", {name: identity[name] for name in CELL_KEYS}, request["cell"])
+    _same("manifest R", {"sha": identity["reviewed_source_sha"], "tree": identity["reviewed_source_tree"]},
+          completion["source"])
+    _same("manifest registration", identity["registration_sha256"], request["registration_sha256"])
+    _same("manifest execution request", manifest["request_identity"], request["execution_request_identity"])
+    _same("manifest claim commit", manifest["claim_commit"], completion["claim_commit"])
+    _keys(manifest["claim_identity"], {"sha256", "size"})
+    validate_reference_record(manifest["claim_identity"])
+    _require(0 < manifest["claim_identity"]["size"] <= storage.MAX_MANIFEST_BYTES, "manifest_claim_size_refused")
+    _same("manifest absent result", manifest["result"], "unavailable_no_fabricated_study_row")
+    _keys(manifest["files"], set())
+    _require(manifest["grading_performed"] is False, "manifest_grading_refused")
+    receipt = manifest["execution_receipt"]
+    _require(type(receipt) is dict, "retained_failure_receipt_required")
+    execution._check_execution_failure(receipt)
+    _require("failure" in receipt, "retained_failure_codes_unavailable")
+    summary = {**UNCERTAINTY_SUMMARY, "failure": dict(receipt["failure"]),
+               "observed_manifest_identity": _identity(data)}
+    _uncertainty_summary(summary)
+    return summary
+
+
 def _binding(context: dict) -> dict:
     request, completion = context["request"], context["request"]["completion"]
-    return {"format": FORMAT, "controller": request["controller"], "ci": context["ci"],
+    binding = {"format": FORMAT, "controller": request["controller"], "ci": context["ci"],
             "request_sha256": context["request_sha256"], "target_identity_sha256": metadata.TARGET_SHA256,
             "cell": request["cell"], "result_source": completion["source"],
             "execution_request_sha256": completion["request_sha256"], "output_commit": completion["output_commit"],
             "result_identity": completion["result_identity"], "result_fingerprint": completion["result_fingerprint"],
             "retry_allowed": False, "grading_performed": False}
+    if request["purpose"] == UNCERTAINTY_PURPOSE:
+        binding.update(format=UNCERTAINTY_FORMAT, observation_source=binding.pop("result_source"),
+                       execution_request_identity=request["execution_request_identity"],
+                       registration_sha256=request["registration_sha256"], claim_commit=completion["claim_commit"],
+                       host_sha256=completion["host_sha256"])
+    return binding
 
 
 def validate_envelope(value: dict, context: dict) -> None:
@@ -358,7 +439,10 @@ def validate_envelope(value: dict, context: dict) -> None:
     _require(value["outcome"] in ("read", "refused"), "readout_outcome_refused")
     if value["outcome"] == "read":
         _require(value["verified_private"] is True, "private_result_required")
-        _summary(value["summary"], context["request"]["completion"])
+        if context["request"]["purpose"] == UNCERTAINTY_PURPOSE:
+            _uncertainty_summary(value["summary"])
+        else:
+            _summary(value["summary"], context["request"]["completion"])
     else:
         _require(value["summary"] is None, "refusal_has_no_result")
     _require(len(_bytes(value)) <= MAX_ENVELOPE_BYTES, "readout_envelope_bound")
@@ -369,7 +453,9 @@ def _read_result(context: dict) -> dict:
              "verified_private": None, "outcome": "refused", "summary": None}
     completion, cell = context["request"]["completion"], context["request"]["cell"]
     revision = completion["output_commit"]
-    member = execution._namespace(cell)[0] + "/result/" + execution.observation.RESULT
+    uncertainty = context["request"]["purpose"] == UNCERTAINTY_PURPOSE
+    member = native_execution.MANIFEST if uncertainty else execution._namespace(cell)[0] + "/result/" + execution.observation.RESULT
+    limit = storage.MAX_MANIFEST_BYTES if uncertainty else max(65536, completion["result_identity"]["size"])
     try:
         _require(_identity(metadata.TARGET.encode())["sha256"] == metadata.TARGET_SHA256, "fixed_target_identity")
         token = os.environ.get("HF_TOKEN", "")
@@ -380,8 +466,7 @@ def _read_result(context: dict) -> dict:
             from huggingface_hub.utils import _http
 
             _require(constants.HF_HUB_DISABLE_TELEMETRY, "sdk_telemetry_must_be_disabled")
-            with storage._hf_client(token, deadline, response_bytes_limit=max(
-                    65536, completion["result_identity"]["size"])) as api:
+            with storage._hf_client(token, deadline, response_bytes_limit=limit) as api:
                 session, attempts = _http.get_session(), 0
                 session.follow_redirects = False
                 session.headers["Accept-Encoding"] = "identity"
@@ -418,7 +503,7 @@ def _read_result(context: dict) -> dict:
                     data = response.read()
                 storage._remaining(deadline)
                 _require(attempts == 2, "two_read_operations_required")
-                value["summary"] = project_result(data, context)
+                value["summary"] = (project_uncertainty_manifest if uncertainty else project_result)(data, context)
                 storage._remaining(deadline)
                 value["outcome"] = "read"
     except (Exception, KeyboardInterrupt):
