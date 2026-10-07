@@ -436,11 +436,12 @@ or validating a packet is not execution permission.
 The callable `gpt54_time_budget_v2_observation.run_first_v2_observation` and its
 CLI serve **only** run `gpt54_time_budget_v1_v2_r1`, `sandbox_v2`, repeat 1, and
 one explicitly selected task from that run's verified five-task registration.
-All other runs, conditions, repeats and unregistered tasks refuse. The next
-intended task is `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`; this code change does not
-authorize it. Task `02aa1805-c658-4069-8a6a-02dec146063a` remains permanently
-consumed/uncertain and cannot be replayed. The callable installs the
-existing same-host `AgenticV2FixtureBackend` (its limited tools are not a
+All other runs, conditions, repeats and unregistered tasks refuse. Task1
+`02aa1805-c658-4069-8a6a-02dec146063a` and Task2
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1` remain permanently consumed/uncertain;
+Task3 `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` is consumed with a canonical
+error. No Task4, other live cell or replay is authorized here. The callable
+installs the existing same-host `AgenticV2FixtureBackend` (its limited tools are not a
 microVM), `AzureFoundryVoice`, and typed Azure inference client. Client creation
 and connection waits begin inside supervised generation; the client closes
 through the existing shared cleanup control. The registered
@@ -455,7 +456,7 @@ independent preparation, registration, input and host identities:
 ```bash
 python batch-runner/gpt54_time_budget_v2_observation.py \
   --run-id gpt54_time_budget_v1_v2_r1 \
-  --task-id 0112fc9b-c3b2-4084-8993-5a4abb1f54f1 \
+  --task-id REGISTERED_TASK_ID \
   --runtime-root /reviewed/R --reviewed-source-sha R_COMMIT --reviewed-source-tree R_TREE \
   --frozen-grader-root /frozen/F --grader-source-sha 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2 \
   --input-registration-root /anchored/I --input-source-sha I_COMMIT \
@@ -503,6 +504,46 @@ error rows; pre-admission refusal produces no study row. These bytes can feed
 `prepare_observation_grading` with independent result/input identities, but this
 entrypoint neither grades nor uploads. No real input, provider, host or live-run
 acceptance follows from a passing synthetic test.
+
+The leader-verified Task3 readout (`37546159098` / attempt 1, artifact
+`11450457583`) reports `time_budget_observation_non_success`, runner success
+and verification both false, no runner error code, and no deliverables.
+Cleanup and host reuse were confirmed. Reported usage is 2913 input / 326
+output tokens; cached input 0 and reasoning output 302 are subsets. The
+construction, Responses invocation and completed-response counters are each
+1, with model binding `matched`. These counters do not establish native model
+attempts, price or score. The original tool/model reply is not in the safe
+projection, so the first failure remains unknown.
+
+A separate synthetic reproduction at accepted main
+`d7aad7abc1e1626e72178f9e8d85090a63825cd2` / tree
+`749155e1f967699036f887bbf58a6bddbde2aa0c` confirmed typed
+`AzureFoundryVoice` write/finalize success and exact faithful second-request
+construction. It also demonstrated that the consumer overwrites a verifiable
+`artifact_not_openable` failure with control reason `failed`, causing capture
+to reject the receipt. Its **2 passed in 14.34s**, wrapper **14.933481s**,
+are reproduction assertions, not a fix proof or an explanation of Task3's
+original error. Artifacts: `/tmp/v2-real-voice-boundary-repro.nWLuBtNR/`.
+
+The proposed verified-failure preservation and new regression are pinned at
+`7e6e441fa64dcca804b23383b43bd90830844247` / tree
+`12117a30c37d53a38c7cf407f1fc60b8e27f4b4b`. The one correction selector
+reported **2 failed in 6.35s**, exit 1, wrapper **6.956347s**: both cases
+stopped at preparation's `runtime_source_roles` guard because the unchanged
+registration still pins the prior compiler bytes. Neither reached the new
+correction. The source-pin guard was not weakened or repinned; no retry
+followed. This candidate is blocked and must not be used as an accepted
+runtime. Artifacts: `/tmp/v2-real-voice-boundary-proof.TnBlJliY/`.
+
+Both invocations used offline Python 3.10.12, 300s+5s/no-`-x`, 30s Git
+bounds, synthetic inputs/transports and an explicitly synthetic kernel
+fixture. Neither is a real-host positive. Only the three evidence/usage
+records change after the failed selector. Source-pin reconciliation,
+corrected-source proof, final review/CI and independently directed live
+execution remain gates. The registered model, prompt, 9-turn/8192 settings,
+1200+20, one attempt and consumed observations are unchanged. See the
+[full evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact source,
+readout and artifact identities.
 
 ##### One registered Codex time-budget observation
 

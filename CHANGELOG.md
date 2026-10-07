@@ -13,6 +13,58 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Add a candidate correction for V2 failure-code loss at the returned-result
+  boundary. On accepted main `d7aad7abc1e1626e72178f9e8d85090a63825cd2`, tree
+  `749155e1f967699036f887bbf58a6bddbde2aa0c`, one bounded synthetic reproduction
+  used real typed `AzureFoundryVoice` responses, consumer, runner, backend and
+  capture. A declared `workspace_apply` followed by valid `finalize` succeeded
+  with exact faithful replay. A controlled finalize refusal returned a
+  verifiable `artifact_not_openable` receipt, but the consumer replaced its
+  code with control reason `failed`; capture then rejected the receipt and
+  emitted `time_budget_observation_non_success`. The reproduction's
+  **2 passed in 14.34s**, exit 0, wrapper **14.933481s**, confirm those
+  observations, not a corrected-source pass. Artifacts are in
+  `/tmp/v2-real-voice-boundary-repro.nWLuBtNR/`.
+
+  The proposed correction preserves the original code only for a verified V2
+  failure with terminal `failed` and complete cleanup. Timeout, unconfirmed
+  cleanup, invalid receipts and native results keep the existing control
+  override. No validator is loosened or error promoted to success. Tested
+  implementation `7e6e441fa64dcca804b23383b43bd90830844247`, tree
+  `12117a30c37d53a38c7cf407f1fc60b8e27f4b4b`, adds one focused typed-response
+  regression. Its single offline selector **failed: 2 failed in 6.35s**,
+  exit 1, wrapper **6.956347s**. Both cases stopped in preparation at
+  `_dual_root_sources` / `runtime_source_roles`, before Responses or the new
+  correction ran. The unchanged registration still pins compiler SHA256
+  `2766e58f769e2bf617c26c15cc124329c8c9bd5f17bf03fb88a3066f78140f96`;
+  the changed compiler hashes to
+  `f4e41540a089e4ed164063bec60ce124a901eb5195065e456502e902814cd3a2`.
+  No pin, assertion or bound was changed and no retry followed. The candidate
+  is blocked, not ready for execution. Failed-proof artifacts are in
+  `/tmp/v2-real-voice-boundary-proof.TnBlJliY/`; log SHA256 is
+  `32482584c0b156772222d8c7e0f74a29fb916a8250b7ccc7a4619a17ea86eeb2`.
+
+  Separately, leader-verified Task3 readout run `37546159098`, attempt 1,
+  artifact `11450457583`, retained a 2597-byte safe projection with SHA256
+  `53570348019f1fcfcdccbfb11beb63470b495223b6e23366db60ca54fe666331`.
+  It reports canonical error, no verified runner result or deliverables,
+  successful cleanup, one completed model-matched Responses invocation and
+  complete reported usage of 2913 input / 326 output tokens. Cached input 0
+  and reasoning output 302 are subsets, not additional tokens. This excludes
+  missing response/model-binding mismatch in that retained invocation; it
+  does not recover the original tool error or establish price, score or native
+  model-attempt count. The synthetic refusal is not Task3's diagnosis.
+
+  Only CHANGELOG, LATEST and direct V2 usage change after the failed proof.
+  Python 3.10.12, 300s+5s/no-`-x`, 30s fixture Git bounds, the twenty-cell
+  registration, 9-turn/8192 settings, 1200+20 and one attempt remain fixed.
+  Registration/F/history, workflows, HF upload and core runtime bytes are
+  unchanged. The leader directed this narrow task; no unavailable reviewer
+  harness was retried or claimed successful. Source-pin reconciliation,
+  corrected-source behavioral proof, final review/CI and a separate future
+  live decision remain gates. Task1-Task3 stay consumed; PR764 is untouched.
+  See the [separate evidence and immutable identities](tasks/LATEST_TASK_RESULT/README.md).
+
 - Set `Accept-Encoding: identity` on the readout's scoped HTTP session before
   the private-identity metadata GET. The exact-result GET keeps its explicit
   identity header. The existing response guard still refuses any encoding
