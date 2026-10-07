@@ -167,20 +167,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
-- Add a focused but currently uncollectable V2 directory-root regression on
+- Add a focused V2 directory-root regression on
   accepted main `4c5a32f7a0347081867fb95f94fc712bc0032ff6`, tree
-  `6800b87747919ea571c7908ae2b951d15a30fe20`. Test-only source
+  `6800b87747919ea571c7908ae2b951d15a30fe20`. Original test-only source
   `473c04d51bd3db4ee7d23bdc81abd23fd587dae2`, tree
   `fe14ba39b269782b59607f440a62e4818bb7af68`, declares empty-root, written-file,
   file/missing-directory, traversal and symlink checks through the real
-  dispatcher/backend and provenance verifiers. The single bounded invocation
+  dispatcher/backend and provenance verifiers. Its first bounded invocation
   stopped during collection: **0 collected, 1 error in 0.75s**, exit 4;
   wrapper **1.121007s**. The test author omitted the `case` argument from its
-  parametrized function signature. No test body ran, no behavioral finding
-  is established, and no correction or retry followed. Python 3.10.12,
-  300s+5s/no-`-x` and 30s read-only Git bounds were retained. Artifacts are in
+  parametrized function signature. No test body ran in that invocation;
+  it remains a collection failure, not behavioral evidence. Its artifacts are in
   `/tmp/v2-directory-root-proof.Pi7089uf/`; log SHA256 is
   `dd81ffbb50e1b2f3b8f4dab28b7cc056b42976bd0c87f57f0e38514cfb116d44`.
+
+  The leader reviewed the completion at
+  `bdf2bbe729527b7ae057c8db44d13f2ad985e38d`, tree
+  `37a7a1c6413ce02734338c072aee84f61e1b1c96`, and authorized only the missing
+  argument correction. Tested source `207604585333e73b2fce72bb55f9c4fc10236019`,
+  tree `62d9a24bacd876ba7ff0502018cde640be89ff7f`, keeps all other test bytes
+  unchanged. One continuation reported **5 passed, 5 warnings in 0.99s**,
+  exit 0; wrapper **1.408577s**, under Python 3.10.12, 300s+5s/no-`-x` and
+  30s read-only Git bounds. Empty `"."` lists no entries; after a write it
+  lists the synthetic file. File-as-directory and missing-directory return
+  exact `path_not_directory`; traversal returns `invalid_arguments`; an
+  unsafe initial symlink returns `compute_start_failed` at startup with no
+  tool events. The real provenance verifiers accept the corresponding
+  results and reject forged traces. The five warnings concern
+  `record_property` with xunit2 and remain in the log. No deterministic
+  empty-root defect was demonstrated on this source. New artifacts are in
+  `/tmp/v2-directory-root-continuation-proof.Tj987B1r/`; log SHA256 is
+  `60b7d7636dbb610fb574170da048037a0f5e8909babf8746765eb91cd055b85e`.
 
   Separately, the leader verified consumed Task4 run `37559598835`, attempt 1,
   and readout `37561844854`, attempt 1, artifact `11457461122`. Its canonical
@@ -188,16 +205,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   deliverables, confirmed cleanup/host reuse and reported usage of 2462 input
   / 570 output tokens. Cached input 0 and reasoning output 546 are subsets;
   native attempts, cost and score are not inferred. The safe projection does
-  not disclose the requested path. Source inspection accepts `"."` and opens
-  the root descriptor without depending on directory entries; this is not a
-  behavioral proof or an explanation of Task4. No production fix, runtime
-  source-pin change, workflow change or study change is justified here.
-  Only the three evidence/usage records change after the failed invocation.
-  The test signature and its unstarted assertions need a separate continuation
-  before review/CI; no draft PR or live authority follows from this failure.
+  not disclose the requested path. The synthetic regression does not recover
+  that path or establish Task4's historical cause. No production fix, runtime
+  source-pin change, workflow change or study change is made. Only the three
+  evidence/usage records change after the new proof. Review and final CI
+  remain required; no live authority follows from this regression.
   Task1-Task4 remain consumed, and PR764 is untouched. See the
   [exact identities and remaining gates](tasks/LATEST_TASK_RESULT/README.md),
-  including the final local HEAD/tree in the proof directory's `handoff.json`.
+  including the final HEAD/tree in the new proof directory's `handoff.json`.
 
 - Add a manual, read-only view of one retained canonical V2 time-budget
   result through `gpt54_time_budget_result_readout.py` and
