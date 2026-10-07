@@ -1,62 +1,65 @@
 # Latest task result
 
-## Accepted native Actions route; first V2 repeat retained
+## Accepted native grading compatibility; one directed native observation
 
-Native source `e25e357856d89edd98d84af27c83adbbf7fe9338`, tree
-`44325fe04750d6410a2e51cf39caf9e66d662db6`, passed all eleven checks.
-Review `5437145456`, following complete controller/workflow/test review
-`5437127925`, accepted the fixed Codex r1/Task1 route subject to these checks.
-The subsequent main change contains only the independently reviewed and
-passing directory regression plus documentation, not a runtime change.
-The exact merge union preserves both sets of tested non-document blobs.
-Only the three completion/usage records are reconciled after validation.
+Reviewed source `1594feeb82da140cc9549a80fb41a644fd8a929f`, tree
+`8662d28dc91d334854907157eb71807c0ab44a6f`, passed all eleven checks.
+Review `5437514089` accepted the exact `codex_foundry` producer/preparer
+alignment and nine-case compatibility proof. The merge retains current native
+controller and directory-regression blobs unchanged; the code changes are
+disjoint and only three documentation files are reconciled after validation.
+Frozen F, scoring and valid captured bytes/fingerprints are unchanged.
 
-The route binds reviewed source, original inputs and full Step0, canonical
-linked roots, fixed cell, approved auth location, permanent private claim
-and canonical/uncertain retention. Source and path guards, credential
-isolation and the shared V2/native concurrency group remain in force.
-The eight-case synthetic controller proof and separate two-node bootstrap
-proof are retained in the [native record][native], not aggregated or rerun.
-Synthetic kernel fixtures do not establish actual execution-host readiness.
-No native live request, grading operation or replay is granted here.
+The separate proof reported 9 passed in 28.73s, wrapper 29.206231s, using
+actual capture/preparation with synthetic return data. It is neither a
+native/host proof nor a grade. The [reviewed record][prior] preserves exact
+positive/refusal cases, original inputs and immutable-source checks.
 
-All five V2 r1 cells have now consumed their directed attempts and retained
-outcomes: Task1/Task2 are uncertain; Task3/Task4/Task5 are canonical errors.
-These are not five successful tasks or zero quality scores. None is removed
-from the planned denominator or replayed.
+The five first-repeat V2 attempts have been retained: Task1/Task2 uncertain
+and Task3/Task4/Task5 canonical errors. This does not mean successful work
+or zero quality scores. Task4's verified error is `path_not_directory`;
+Task5's is `invalid_arguments`. Both had matched model responses and confirmed
+cleanup. Original arguments are unavailable and no speculative runtime or
+prompt correction is made. No consumed cell is replayed.
 
-Task5 run `37569248343`, attempt 1, job `112623925382`, at runtime source
-`bfab0c72df6f4a51d8627160c78cda9011c40fe2`, tree
-`a538c96e87aeca6aff4aae50243384a7bb270799`, returned an error with terminal
-`failed`, reported 2508 input / 244 output tokens and confirmed cleanup/host
-reuse. Private claim `c61083b7e0a265d3794cb8a8f059f6d28039515d` and output
-`4a92c2af42b639eea589db6bb60fe32bcdf49c5d` were acknowledged.
+Task5 readout `37571620545`, artifact `11461620386`, is 2594 bytes with SHA256
+`4aa9185d722e583f1614d84689b7719b93e79026325502b3c6a726963cbd65e3`.
+It retains 2508 input / 244 output reported tokens, with reasoning output
+220 a subset, one completed client Responses invocation and zero deliverables.
+Native attempts, cost and quality scores are not inferred.
 
-The result is 6627 bytes, SHA256
-`149eca5529ce62c8cbd732772e12d9c110c117a7d638dcfced1b11a525232dbd`,
-fingerprint `6ca38073318a1fdfac60fb08054c0b5bc7179bdae412fad57b3d93135402d8ea`.
-Completion artifact `11459503748` has envelope SHA256
-`a665836f0b887273a7ba7c1851330f68604bd93bd97312f5ecca490f553bd89e`.
-The exact source/request/cell/run bindings were independently checked.
-Its private runner error has not yet been read, and reported tokens are
-not an invoice or a native-attempt count.
+The leader authorizes one subsequent immutable request for
+`gpt54_time_budget_v1_codex_r1` / `codex` / repeat 1 /
+`02aa1805-c658-4069-8a6a-02dec146063a`, the next registered ABBA run row.
+It must bind actual accepted runtime/workflow source and tree, the actual
+next workflow run number, attempt 1, finite admission window and independently
+recorded exact request digest. Source-known fields are not live validation.
 
-One bounded read-only request has been issued against the existing accepted
-controller `bfab0c72df6f4a51d8627160c78cda9011c40fe2` for this immutable
-Task5 result. Its exact 1911-byte request SHA256 is
-`4fe204b74ae0f7bb988d3b257a5230559127d098069d06d50478596e15e51c14`.
-Only private identity and the exact canonical object may be read, with
-two GETs/60 seconds, no retry/write/model/grade and a safe projection only.
-This record makes no claim about that read's eventual result.
+The original full Step0 expectation is 218405 bytes, SHA256
+`463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512`,
+member `step0_needs_files_manifest.json`, revision
+`6c7e07ee7365f145dfcf898263365b5c8c97b224`, repository-name hash
+`88c9f1ba301718d90f8d59d8ddb681ee0c5e8ae7c2cbfd1b9ad246c10e15cccf`.
+These values were extracted from accepted source, not from newly read inputs.
+The executor must validate the actual original parquet, references and full
+Step0, approved auth, real host ownership, direction and canonical paths.
 
-Task4's verified `path_not_directory` and the passing empty-root regression
-remain distinct: the actual requested path is unknown and no deterministic
-empty-root defect was demonstrated. Frozen F, all historical observations,
-the twenty-cell ABBA study and 1200+20 limits remain unchanged.
+Last acknowledged private output
+`4a92c2af42b639eea589db6bb60fe32bcdf49c5d` is only the independent expected
+parent. Actual metadata, absence of this native prefix and permanent CAS/readback
+must agree; a mismatch grants no retry. Existing secrets remain confined to
+their reviewed steps and the model sees no storage credentials.
 
-Remaining work is the Task5 safe readout, final native grading-mode delivery,
-and genuine input/Step0/auth/host/source/direction gates before the first
-native observation. No source marker or implementation acceptance substitutes
-for those gates or authorizes a new model call.
+The current registration seal is
+`3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f`;
+historical seals, frozen F and twenty planned observations remain fixed.
+GPT-5.4/direct-v1/xhigh, null native context override, pinned SDK/CLI, shared
+concurrency 1, one external attempt, 1200-second generation, shared 20-second
+cleanup and 45-minute job ceiling are unchanged. None is a money cap.
 
-[native]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e25e357856d89edd98d84af27c83adbbf7fe9338/tasks/LATEST_TASK_RESULT/README.md
+This record stops at source acceptance and direction scope. No native result
+or score is claimed. Remaining work is the exact directed attempt, its
+verified result/uncertainty retention and separately authorized grading.
+No further cell, replay or grade is authorized.
+
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/1594feeb82da140cc9549a80fb41a644fd8a929f/tasks/LATEST_TASK_RESULT/README.md

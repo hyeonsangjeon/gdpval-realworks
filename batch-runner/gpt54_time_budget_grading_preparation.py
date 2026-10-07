@@ -101,7 +101,7 @@ def _result(path: Path, identity: dict, observation: ObservationIdentity,
         "condition": observation.condition,
         "model": plan["shared"]["model"]["deployment"],
         "source": plan["shared"]["dataset"]["repo_id"],
-        "execution_mode": "codex" if observation.condition == "codex" else "agentic_sandbox_v2",
+        "execution_mode": "codex_foundry" if observation.condition == "codex" else "agentic_sandbox_v2",
     }.items():
         _same("result " + field, payload[field], expected)
     control = payload["time_budget_observation"]
