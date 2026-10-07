@@ -25,6 +25,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct only the new PR777 workflow's literal identity-guard spelling from
+  `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: "1"` to
+  `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'`. Complete old/new YAML parses are
+  equal and both values remain the string `1`; this is not evidence that the
+  earlier spelling disabled identity enforcement. The leader reviewed source
+  `59fe40cc1a1c693ad013ccb52186c74f093a2def`, tree
+  `c39120a33366bde6453b35f6564e506ca9a00372`, in review `5449259458`, conditional
+  on CI. Run `37695792367`, pytest job `113047068617`, reported **1 failed,
+  13395 passed, 64 skipped, 46 deselected, 1 warning in 1821.67s**; the failure
+  was the line-495 literal `assert "'1'" in value` in
+  `test_every_run_place_that_can_spend_turns_identity_pinning_on`.
+  At `980ea0f028a79b1b9ca14308673ec941b9ab5782`, tree
+  `de000e4ef734be1dd1a51b3e29b6ec880b8bcd6a`, only that full node ran once:
+  **1 passed in 0.19s**, exit 0, wrapper **0.521549s**, under Python 3.10.12 /
+  300s+5s/no-`-x` and 30-second Git bounds. Artifacts are in
+  `/tmp/pr777-quote-contract.859Mwc/`, log SHA256
+  `3b0357352e43af90dfd85efa2b51dfa854d132cccd90ee96c9893d76b054c17b`;
+  its `handoff.json` records final HEAD/tree after the three-record commit.
+  The original seven-case **7 passed in 294.01s** proof, wrapper
+  **298.027932s**, remains separate and was not rerun; its synthetic limits
+  still apply. Separately, time-budget job `113047068253` failed at
+  `2026-10-07T22:44:22Z` with the leader-read annotation
+  `System.IO.IOException: No space left on device` in
+  `_diag/Worker_20261007-222248-utc.log`. Its log endpoint was unavailable;
+  run-tests/post-cleanup conclusions were null. This establishes runner disk
+  exhaustion, not a proven assertion, timeout or transient GitHub-wide outage.
+  Consuming files and the reached test remain unknown; the quote correction
+  does not solve that failure. Controller/tests/executor, permissions, identity
+  values, source/study/input pins and budgets are unchanged. Final fixed-HEAD
+  review/CI and hosted admission remain gates; source acceptance authorizes
+  neither merge nor grading. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  keeps the CI failures, scoped retention-boundary observation and local
+  proofs separate. No manual CI retry or monitoring occurred.
+
 - Correct only PR776's native-grading test fixture for the unsupported
   `condition` case. Its replacement now sets both
   `run_id="gpt54_time_budget_v1_v2_r1"` and `condition="sandbox_v2"`, retaining

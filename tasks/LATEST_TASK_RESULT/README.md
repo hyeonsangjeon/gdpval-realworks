@@ -1,5 +1,125 @@
 # Latest task result
 
+## PR777 continuation: quote contract corrected; one node passed
+
+Only the new hosted workflow's line changed from
+`AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: "1"` to
+`AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'`. The complete old/new YAML parses
+are equal; both values are the string `1`. The failing contract inspects
+literal quote spelling. It does not establish that the earlier parsed value
+disabled identity enforcement. No controller, test, guard, permission,
+identity value, executor, study/source/input pin or budget changed.
+
+The leader accepted source `59fe40cc1a1c693ad013ccb52186c74f093a2def`, tree
+`c39120a33366bde6453b35f6564e506ca9a00372`, in review `5449259458`, conditional
+on CI. This continuation does not turn source acceptance into merge or grade
+authority. The [original seven-case record][pr777-original] is retained below
+as historical evidence; only its review status is superseded by this section.
+
+### Known CI evidence, supplied by the leader
+
+Run `37695792367`, pytest job `113047068617`, finished with **1 failed,
+13395 passed, 64 skipped, 46 deselected, 1 warning in 1821.67s**. The exact
+failed node was
+`tests/test_envelope_azure_applies_the_run_rules.py::test_every_run_place_that_can_spend_turns_identity_pinning_on`.
+Line 495 asserted `assert "'1'" in value`. The one-line correction conforms to
+that unchanged literal contract; it changes no identity value or enforcement
+setting. These CI results were not queried or rediscovered in this continuation.
+
+Separately, the same run's `time-budget-contracts` job `113047068253` concluded
+failure at `2026-10-07T22:44:22Z`. Its actual check-run annotation reported
+`System.IO.IOException: No space left on device` in
+`_diag/Worker_20261007-222248-utc.log`. The log endpoint was unavailable to the
+leader, and the run-tests/post-cleanup step conclusions were null. This is
+evidence of runner disk exhaustion, not a proven test assertion, timeout or
+transient GitHub-wide outage. The space-consuming files and reached test are
+not established. The quote change does not resolve this separate failure.
+
+The permitted static inspection found a possible retention boundary:
+`batch-runner/tests/test_time_budget_native_grading_ci.py` creates an ordinary
+`--shared` bootstrap clone, fetches synthetic R/F objects, adds linked C/R/F
+worktrees and keeps per-case state under `tmp_path`. Its `hosted` fixture
+returns without fixture-local directory removal. The existing
+`time-budget-contracts` job runs
+`python -m pytest -m "not integration" --tb=short -q -rs tests/test_time_budget_*.py`
+in one process, without a `--basetemp` or temporary-retention override, under
+its unchanged 45-minute ceiling. This source-visible boundary could retain
+data across cases; it is not a measurement of disk use or attribution of the
+runner failure to this fixture. No reproducer, broad disk scan, cleanup,
+pytest-policy change, shard or speculative source fix was added.
+
+### One targeted local invocation
+
+At tested HEAD `980ea0f028a79b1b9ca14308673ec941b9ab5782`, tree
+`de000e4ef734be1dd1a51b3e29b6ec880b8bcd6a`, only the exact failed full node
+above ran once: **1 passed in 0.19s**, exit 0. Python wrapper elapsed time was
+**0.521549s**. Python 3.10.12, the existing environment, 300s+5s/no-`-x` and
+30-second Git bounds were retained. AST inspection checked the unparametrized
+function before launch; the task-local hook confirmed exactly one collected
+node and retained setup/call/teardown reports plus final JUnit. No warning or
+failure occurred. This proves the static quote contract, not hosted readiness.
+
+The original hosted-route invocation remains **7 passed in 294.01s**, exit 0,
+wrapper **298.027932s**, with seven JUnit `record_property`/`xunit2` warnings.
+Its tested source remains `86d628b4d227b40787b1b958b54b6acb3a6aac51`, tree
+`ded2db9655c5ec581a9b64317ce35957348e1f45`, and its artifacts remain in
+`/tmp/native-task3-hosted-grade.b5J2SO/`. None of those cases ran again, and
+these results are not pooled. That proof used real accepted validators but
+synthetic originals, HTTP/auth/CAS RPC, owned child and kernel facts. It did
+not establish actual private hydration, host support, model use or grading.
+
+### Identities and retained artifacts
+
+The tested correction changed only the workflow blob from
+`5dd06caef6d89104f5258597eac2bfa81a42bcf7` to
+`34a4b782232118aced1496dade3a767c43d80a99`. Controller blob
+`f12ec5f4a812d53e0105bee1fc01df10d34d3b74`, hosted test blob
+`89367c669766f0351f431e5a36c7a3e71e94fea6`, executor blob
+`10d8e56c5569cc3dea484e4bb9d875712a0d5b4c`, intake blob
+`69982bebbe202d516eab101509635e037a7b8efd` and preparer blob
+`24a430137fb47bced1e5a450b5b5568d477a5b2e` are unchanged. The test containing
+the failed CI assertion and the time-budget job configuration are unchanged.
+
+New artifacts are in `/tmp/pr777-quote-contract.859Mwc/`: the retained wrapper
+and immediate-report hook, `command.json`, `selection.json`, `source.json`,
+`quote-equivalence.json`, `pytest.log`, `reports.jsonl`, `cases.json`,
+`junit.xml`, `junit-cases.json` and `outcome.json`.
+
+- Log SHA256: `3b0357352e43af90dfd85efa2b51dfa854d132cccd90ee96c9893d76b054c17b`.
+- JUnit SHA256: `0faac14e6126729b9b6c71f211429d5f05388043875f2432f14f85943491586f`.
+- Outcome SHA256: `5319a6a4100f923ee8f6b14aca6925f328728804d2503c7b151f42c5f2355798`.
+- YAML-equivalence SHA256: `a87aaab1423e4a5658a53648de355f17645ed6bc58b34dc29424f19934110b7c`.
+
+Only CHANGELOG, this record and the direct README evidence changed after the
+tested commit. `handoff.json` in the new artifact directory records exact
+final HEAD/tree, unchanged tested blobs and artifact identities after that
+records commit, avoiding a self-referential identity inside these documents.
+
+### Remaining gates
+
+Final fixed-HEAD review/CI, including new evidence for the separate runner I/O
+failure, remains outstanding. Normal PR synchronization may produce new CI
+evidence; no manual retry, dispatch, query or monitoring occurred here. Hosted
+admission still requires actual host/auth/input checks, a live expected-parent
+check and one exact leader request. Source acceptance is not permission to
+merge or grade. Actual Task3 remains ungraded; its two declared files/408601
+bytes have not been hydrated for grading here. Usage/cost/served identity/
+native counters are unknown, and `items_seen=56` is not a model-call count.
+
+The skill catalog was read once. Experiment-design kept the twenty-cell study,
+model, pins and budgets fixed; experiment-report-en and im-not-ai-en kept the
+three prior evidence groups and this local result separate. Prior unavailable
+specialist invocations failed before execution and remain non-endorsements;
+none was retried. No Project edit, merge, Azure management, private fetch,
+live claim/model/grade/readout, replay, Task5 or next-cell advance occurred.
+
+[pr777-original]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/59fe40cc1a1c693ad013ccb52186c74f093a2def/tasks/LATEST_TASK_RESULT/README.md
+
+## Original hosted-route record (not rerun)
+
+The following is the prior record, preserved without changing its results or
+synthetic limits. The continuation above supplies the later review/CI facts.
+
 ## Fixed native Task3 hosted grading draft: seven offline cases passed
 
 One new selector passed all seven cases in **294.01s**, exit 0; its Python

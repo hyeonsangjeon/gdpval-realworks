@@ -1001,6 +1001,49 @@ actual host/auth/input readiness and one exact leader request still gate
 credentialed use. This fixed-cell route adds no study condition, replay,
 scheduler or next-cell authority.
 
+PR777's quote-only continuation changes the new workflow's
+`AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: "1"` to the repository's canonical
+`AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'`. Complete old/new YAML parses are
+equal and both values remain the string `1`; identity enforcement was not
+shown to be disabled by the earlier spelling. The leader reviewed source
+`59fe40cc1a1c693ad013ccb52186c74f093a2def`, tree
+`c39120a33366bde6453b35f6564e506ca9a00372`, in review `5449259458`, conditional
+on CI. In run `37695792367`, pytest job `113047068617` reported **1 failed,
+13395 passed, 64 skipped, 46 deselected, 1 warning in 1821.67s**. Its sole
+failure was the literal `assert "'1'" in value` at line 495 of
+`tests/test_envelope_azure_applies_the_run_rules.py`.
+
+Only
+`tests/test_envelope_azure_applies_the_run_rules.py::test_every_run_place_that_can_spend_turns_identity_pinning_on`
+ran once for this correction: **1 passed in 0.19s**, exit 0, wrapper
+**0.521549s**, at `980ea0f028a79b1b9ca14308673ec941b9ab5782`, tree
+`de000e4ef734be1dd1a51b3e29b6ec880b8bcd6a`, under the existing Python 3.10.12 /
+300s+5s/no-`-x`/30-second Git bounds. The seven hosted-route cases above were
+not repeated or pooled; their synthetic limits remain. New artifacts are in
+`/tmp/pr777-quote-contract.859Mwc/`, log SHA256
+`3b0357352e43af90dfd85efa2b51dfa854d132cccd90ee96c9893d76b054c17b`.
+The new `handoff.json` records final HEAD/tree after the three-record commit;
+controller, tests, executor, identity values, permissions, pins and budgets
+are unchanged.
+
+The separate time-budget job `113047068253` failed at
+`2026-10-07T22:44:22Z`. The leader-read check-run annotation was
+`System.IO.IOException: No space left on device` in
+`_diag/Worker_20261007-222248-utc.log`; its log endpoint was unavailable and
+run-tests/post-cleanup conclusions were null. This is runner disk-exhaustion
+evidence, not a proven assertion, timeout or transient GitHub-wide outage.
+The consuming files and reached test remain unknown, and the quote change
+does not solve it. Static inspection shows per-case bootstrap/worktree/state
+directories under `tmp_path`, no removal in the hosted fixture itself, and
+one time-budget glob in one pytest session. That is only a possible retention
+boundary, not measured attribution. No cleanup or pytest-policy change was made.
+
+[LATEST](../tasks/LATEST_TASK_RESULT/README.md) retains these separate CI and
+local records. Final fixed-HEAD review/CI and exact hosted admission remain
+outstanding. Source acceptance does not permit merge or grade; no manual CI
+retry/monitoring, actual private hydration, live claim/model/grade or replay
+occurred. A normal PR synchronization can supply new CI evidence later.
+
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
 `fe47d236845882433dc6cb6309f8b8f0beeff849`, from accepted main
