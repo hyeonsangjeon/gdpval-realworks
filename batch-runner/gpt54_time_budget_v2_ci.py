@@ -37,6 +37,7 @@ from gpt54_comparison_preflight import _canonical_json
 from gpt54_disposable_checkout import _git, _repository
 from gpt54_prepared_input_attestation import _identity
 from gpt54_run_config_bundle import _held_parents, _path
+from gpt54_time_budget_codex_observation import CodexObservationRefused
 from gpt54_time_budget_grading_preparation import _result
 from gpt54_v2_grading_input import _object as _json_object, _read_bytes, _same
 
@@ -83,7 +84,7 @@ FAILURE_CATEGORIES = frozenset({
 })
 # Exact existing static codes only. Exception messages, paths and tracebacks
 # are never serialized, even privately; an unknown reason stays unknown.
-FAILURE_REASONS = frozenset({
+_V2_FAILURE_REASONS = frozenset({
     "execution_refused_or_uncertain", "acknowledged_same_host_claim_required", "execution_already_consumed",
     "direction_not_current", "direction_schema", "direction_size_bound", "direction_admission_window",
     "result_destination_exists", "backend_workspace_exists", "direction_observation_already_consumed",
@@ -91,6 +92,22 @@ FAILURE_REASONS = frozenset({
     "source_bound_execution_direction_required", "observation_handoff_already_consumed",
     REFUSED, OWNERSHIP_REQUIRED, CLEANUP_UNCONFIRMED,
 })
+# Literal native _require/parser codes, not imported equality-check messages.
+# Keep this independent of the legacy classes' vocabulary: a native-only code
+# supplied by another exception class must not gain new diagnostic authority.
+CODEX_OBSERVATION_FAILURE_REASONS = frozenset({
+    "independent_sha256_required", "independent_identity_required", "independent_identity_size_bound",
+    "registered_codex_route_required", "direction_size_bound", "direction_schema",
+    "direction_admission_window", "direction_not_current", "execution_binding_type",
+    "returned_terminal_required", "codex_runner_result_shape", "codex_deliverable_shape",
+    "codex_deliverable_duplicate", "codex_diagnostics_shape", "codex_items_seen", "codex_http_status",
+    "codex_rate_limit_kind", "registered_codex_observation_only", "result_parent_required",
+    "result_source_overlap", "native_source_overlap", "input_registration_path_alias",
+    "result_destination_exists", "direction_observation_already_consumed", "handoff_member_symlink",
+    "codex_provider_already_installed", "codex_provider_not_installed", "captured_deliverable_bytes",
+    "result_member_symlink", "invalid_arguments",
+})
+FAILURE_REASONS = _V2_FAILURE_REASONS | CODEX_OBSERVATION_FAILURE_REASONS
 
 
 class FirstV2CIRefused(ValueError):
@@ -163,9 +180,14 @@ def _execution_failure(stage: str, error: BaseException) -> dict:
             category = name
             break
     reason = "execution_refused_or_uncertain"
-    if isinstance(error, (FirstV2CIRefused, observation.FirstV2ObservationRefused,
-                          registration.TimeBudgetRegistrationRefused, ObservationDeadlineRefused)):
-        if len(error.args) == 1 and type(error.args[0]) is str and error.args[0] in FAILURE_REASONS:
+    if isinstance(error, CodexObservationRefused):
+        args = error.args
+        if (type(args) is tuple and len(args) == 1 and type(args[0]) is str
+                and args[0] in CODEX_OBSERVATION_FAILURE_REASONS):
+            category, reason = "observation_refused", args[0]
+    elif isinstance(error, (FirstV2CIRefused, observation.FirstV2ObservationRefused,
+                            registration.TimeBudgetRegistrationRefused, ObservationDeadlineRefused)):
+        if len(error.args) == 1 and type(error.args[0]) is str and error.args[0] in _V2_FAILURE_REASONS:
             reason = error.args[0]
     return {"outcome": "refused_or_uncertain", "returned": None,
             "failure": {"stage": stage, "category": category, "reason": reason}}

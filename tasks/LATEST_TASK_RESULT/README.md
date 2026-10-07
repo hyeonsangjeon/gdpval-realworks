@@ -1,44 +1,55 @@
 # Latest task result
 
-## Native boundary regression accepted without changing production
+## Combined native refusal taxonomy and safe events accepted
 
-Reviewed source `ab0662ec687369bb41a1d62bd43c6b38a4c4f273`, tree
-`89e49c81340ab948510fc526dc5253e4d2b4e616`, passed all eleven checks.
-Review `5439766309` accepted the test-only native callable boundary evidence.
-Current main `84004faf99862606473dda939ceffb2ad149dc44` contains the separately
-accepted safe-event test. Their common test module is preserved as the exact
-AST union of two independent added definitions, with every existing node
-unchanged. Production and workflow bytes are unchanged from accepted main.
-The three completion/usage records are reconciled after this structural check.
+Source `b66a2a5f8329a362ccf48ea25469764e8a9325c5`, tree
+`d57f416fb2c608f227c8c1867e6ad4b3d7e069f8`, passed all eleven combined
+checks. Review `5440134625` inspected the exact shared-controller union.
+The later main change adds only the independently reviewed/passing native
+boundary regression and documentation. Every tested production/workflow/test
+blob is retained in the merge; only three documentation records are
+reconciled after validation.
 
-The [original boundary record][boundary] preserves 1 passed, 1 JUnit-property
-warning in 21.97s, wrapper 22.641730s, at
-`35ba64b8145ca5ff9401020a94f2f4aaec807662`. Real source/direction/consumer,
-native constructor, pinned-runtime and capture functions were reached
-without substituted success verdicts. Auth/RPC and kernel state remained
-synthetic, and `first_refusal` was null. No deterministic mismatch was
-reproduced. No old selector or combined behavioral suite was rerun here;
-the AST/tree checks are structural evidence, not another behavioral pass.
+Known native `CodexObservationRefused` instances preserve one of 30 explicit
+static codes under `observation_refused`. A code must be one exact built-in
+string in the finite native list. Unknown/malformed/native equality errors
+stay generic without formatting exception text. Legacy classes retain their
+original vocabulary rather than gaining access to native-only reasons.
 
-This neither proves actual hosted native execution nor identifies the
-historical first guard. The real retained native classification remains
+The accepted formatter emits only format/stage/category/reason after a fresh
+reservation and acknowledged current failure-receipt write. Native and V2
+formats are fixed; V2 default bytes are unchanged. Old receipts, earlier
+failures and unacknowledged I/O do not emit. I/O uncertainty never grants a
+retry, success result or deadline extension. Readout shares the finite
+receipt schema and keeps observed manifest identity separate from trusted
+bindings.
+
+The [candidate record][candidate] retains the separate 10-case taxonomy and
+11-case safe-event proofs, as well as the complete AST/tree union. The eleven
+successful combined CI checks now close that integration gate; no earlier
+local selector was repeated. This is diagnostic preservation, not a correction
+to native model behavior or evidence about the historical first guard.
+
+The actual consumed native r1/Task1 record still contains only
 `observation_callable` / `validation_refused` /
-`execution_refused_or_uncertain`. The known source/request/cell/claim/output
-bindings were verified by readout; manifest identity was observed rather than
-independently expected. Model calls, cost, terminal result and cleanup remain
-unknown, not zero.
+`execution_refused_or_uncertain`. The independently checked historical
+readout did not recover a more specific reason, calls, cost, terminal result
+or cleanup. Those unavailable values are not zero.
 
-The separately reviewed finite native taxonomy has been integrated with the
-accepted safe-event formatter on candidate
-`b66a2a5f8329a362ccf48ea25469764e8a9325c5`, review `5440134625`.
-Its combined CI remains the delivery gate; that candidate is not incorporated
-by this test-only work. Source and historical evidence remain distinct.
+The separate native boundary regression completed under synthetic auth/RPC/
+kernel state without a deterministic mismatch. It is not actual-host or
+historical-cause evidence. Production input, Step0, provider, source,
+ownership, sandbox and deadline guards remain unchanged.
 
-Five V2 cells and native r1/Task1 stay consumed. No original state is adopted,
-rewritten or replayed. Frozen F, model settings, registration, twenty-cell
-scope, concurrency and 1200+20 limits are unchanged. Remaining work is the
-taxonomy delivery gate and separately scoped implementation/authorization for
-the next unconsumed registered native task. No new observation, model call,
-readout or grade is authorized by this record.
+The browser worker is implementing explicit selection within the already
+registered native r1 cohort, without live authority or implicit iteration.
+It must preserve Task1's original fixed diagnostic path and permanent claim.
+That implementation and its outcomes are not accepted by this record.
 
-[boundary]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/ab0662ec687369bb41a1d62bd43c6b38a4c4f273/tasks/LATEST_TASK_RESULT/README.md
+Remaining work is its exact-source review, targeted evidence and ordinary CI
+before a separately authorized next unconsumed-cell request. Five V2 cells
+and native r1/Task1 remain consumed. No replay, private read, model call,
+next observation or grading is authorized here. Frozen F and the fixed
+twenty-cell study remain unchanged.
+
+[candidate]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/b66a2a5f8329a362ccf48ea25469764e8a9325c5/tasks/LATEST_TASK_RESULT/README.md
