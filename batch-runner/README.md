@@ -439,8 +439,9 @@ one explicitly selected task from that run's verified five-task registration.
 All other runs, conditions, repeats and unregistered tasks refuse. Task1
 `02aa1805-c658-4069-8a6a-02dec146063a` and Task2
 `0112fc9b-c3b2-4084-8993-5a4abb1f54f1` remain permanently consumed/uncertain;
-Task3 `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` is consumed with a canonical
-error. No Task4, other live cell or replay is authorized here. The callable
+Task3 `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` and Task4
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3` are consumed with canonical errors.
+No Task5, other live cell or replay is authorized here. The callable
 installs the existing same-host `AgenticV2FixtureBackend` (its limited tools are not a
 microVM), `AzureFoundryVoice`, and typed Azure inference client. Client creation
 and connection waits begin inside supervised generation; the client closes
@@ -580,6 +581,59 @@ F/TEMPLATE, the old profile and its 37 pins, the registered model/prompt,
 are unchanged. Task1-Task3 stay consumed. See the
 [full evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact source,
 readout and artifact identities.
+
+The leader's later Task4 readout (`37561844854` / attempt 1, artifact
+`11457461122`) matched the canonical result from run `37559598835` / attempt 1.
+Both error fields are `path_not_directory`; runner verification is true,
+runner success is false, the required file is missing and there are no
+deliverables. Admission, cleanup and host reuse are confirmed; terminal reason
+is `failed`, without interruption. Reported usage is 2462 input / 570 output
+tokens, with cached input 0 and reasoning output 546 as subsets. The client
+construction, Responses invocation and completed-response counters are each
+1, with model binding `matched`; native attempts, cost and score remain
+unknown. The original requested path is not in this safe projection.
+
+The declared workspace root is `"."`. A model-free directory regression was
+first pinned at
+`473c04d51bd3db4ee7d23bdc81abd23fd587dae2` / tree
+`fe14ba39b269782b59607f440a62e4818bb7af68`, from accepted main
+`4c5a32f7a0347081867fb95f94fc712bc0032ff6` / tree
+`6800b87747919ea571c7908ae2b951d15a30fe20`. Its first invocation stopped before
+behavior: **0 collected, 1 error in 0.75s**, exit 4; wrapper **1.121007s**.
+The parametrized test function omitted its `case` argument; no backend or
+verifier assertion ran. That collection failure remains separate evidence at
+`/tmp/v2-directory-root-proof.Pi7089uf/`, with its original completion
+HEAD/tree in `handoff.json`; log SHA256 is
+`dd81ffbb50e1b2f3b8f4dab28b7cc056b42976bd0c87f57f0e38514cfb116d44`.
+
+After the leader reviewed that completion at
+`bdf2bbe729527b7ae057c8db44d13f2ad985e38d` / tree
+`37a7a1c6413ce02734338c072aee84f61e1b1c96`, only the missing function argument
+changed. Tested commit `207604585333e73b2fce72bb55f9c4fc10236019` / tree
+`62d9a24bacd876ba7ff0502018cde640be89ff7f` preserves every other test byte.
+One offline Python 3.10.12 invocation of
+`tests/test_time_budget_v2_directory_root.py::test_time_budget_v2_directory_root`
+reported **5 passed, 5 warnings in 0.99s**, exit 0, wrapper **1.408577s**,
+under the existing 300s+5s/no-`-x` and 30s Git bounds. Through the real
+dispatcher/backend and provenance verifiers, empty `"."` lists no entries,
+then lists the synthetic file after a write. File-as-directory and missing
+directory give exact `path_not_directory`, traversal gives `invalid_arguments`,
+and an unsafe initial symlink gives `compute_start_failed` at startup with
+zero tool events. Outside bytes and cleanup checks pass; forged traces are
+rejected. The five `record_property`/xunit2 warnings are retained unchanged.
+No deterministic empty-root defect was demonstrated on this source.
+
+New artifacts and final HEAD/tree are in
+`/tmp/v2-directory-root-continuation-proof.Tj987B1r/` and its `handoff.json`;
+log SHA256 is
+`60b7d7636dbb610fb574170da048037a0f5e8909babf8746765eb91cd055b85e`.
+Only the three evidence records change after this proof. This is a test-only
+regression, not a production fix, historical Task4 diagnosis or real-host
+kernel proof. Review and final CI remain required. Runtime, workflow, prompt,
+source pins, frozen F, the twenty planned observations and 1200+20 limits
+remain unchanged. Task1-Task4 remain consumed; no replay, Task5 or further
+live-cell authority is established. Full Task4 result/readout identities are
+in the evidence record linked above.
 
 ##### One registered Codex time-budget observation
 
