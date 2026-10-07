@@ -1,54 +1,59 @@
 # Latest task result
 
-## Accepted native uncertainty reader and one directed historical read
+## Safe native failure events accepted; specific historical guard remains unknown
 
-Source `4b5088a9f338adee58fe89436836ccc6c9f3363c`, tree
-`ab4c3af7e9daa726430bb5d97adceb886059cfe5`, passed all eleven checks.
-Review `5438334969` accepted the bounded native uncertainty reader. Only
-completion records change after validation; helper, tests, workflow and
-other runtime bytes remain reviewed. The [prior record][prior] preserves
-the separate 17-case synthetic proof and its limits.
+Reviewed source `2a8f6c754a160c50c4a13589132d09c99828b28b`, tree
+`6996b650258e86fdf52643819458eb825eba5ef1`, passed all eleven checks.
+Review `5438792501` accepted the prospective four-field native event and
+unchanged V2 default. The current readout additions and event changes touch
+different non-document paths; their exact merge union preserves all tested
+code. Only three completion/usage records are reconciled after validation.
 
-The leader authorizes one independently digest-bound readout request naming
-actual accepted controller C/tree, the actual next workflow run number and
-attempt 1. It targets only the retained first native observation:
-`gpt54_time_budget_v1_codex_r1` / `codex` / repeat 1 /
-`02aa1805-c658-4069-8a6a-02dec146063a`.
+One event is emitted only after a fresh execution reservation and a
+successfully acknowledged current failure-receipt write. It uses the shared
+validator/formatter with one of two fixed formats. Old state, earlier
+failures, missing/malformed metadata and unacknowledged receipt I/O emit
+nothing. Stderr failure remains a refusal with no retry. Raw exception text,
+class names, private paths, tokens and bodies are not exposed.
 
-The trusted completion belongs to native run `37574558224`, run number 3,
-attempt 1, source R `b0bba8c71369605fd4261c59259e3cc3924de981`, tree
-`f9bb914a717d3fc1326ac8e1e925119cfaee307f`. Its acknowledged claim is
-`4ca4fd9c86fe1253059fffc66f6e4397c34c3c4e`; output commit is
-`d443e8045f58b6f7b4b35ed7f1888182b62296e0`. The original execution request
-is 2369 bytes, SHA256
-`c78a581c482baf495b09efad70899e0067293752f3cc7320f54f2af0079fa062`.
-Its registration seal remains
-`3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f`.
+The [prior event record][event] preserves the separate **11 passed in 89.78s**
+proof, wrapper 90.404412s, including exact V2 bytes, local I/O faults and
+secret-bearing errors without formatting. Synthetic inputs/storage were used;
+no native/kernel/provider/grade operation ran. No selector was repeated for
+delivery. Workflows, private/public receipt schemas, study and budgets remain
+unchanged. This does not change any historical receipt or recover its cause.
 
-The executor will read private identity at that immutable commit and the
-producer-derived fixed manifest member, at most two GETs sharing 60 seconds.
-It validates original R registration, observation/cell, request identity,
-claim commit and the no-result/no-grade/empty-files shape, then the existing
-private failure schema. Only validated static stage/category/reason and
-binding metadata may be projected. Raw error text, private prose, filenames,
-paths, headers, credentials and the full manifest must not be published.
+The actual native uncertainty readout `37585054563`, artifact `11466485746`,
+is 2027 bytes, SHA256
+`36882db90cc0a348c60f760134a1a5955a09d83ed2083da571795faa339aaee2`.
+Its independently checked bindings name original source
+`b0bba8c71369605fd4261c59259e3cc3924de981`, request
+`c78a581c482baf495b09efad70899e0067293752f3cc7320f54f2af0079fa062`
+(2369 bytes), claim `4ca4fd9c86fe1253059fffc66f6e4397c34c3c4e` and output
+`d443e8045f58b6f7b4b35ed7f1888182b62296e0`.
 
-The completion supplies no independent manifest size or hash. A downloaded
-identity is explicitly observed, not independently expected. Claim and
-original request objects are not reread. Missing or malformed diagnostic
-metadata must remain refused/unknown, not an invented cause. C's identity
-never replaces original R or its historical registration.
+The retained failure is exactly `observation_callable` /
+`validation_refused` / `execution_refused_or_uncertain`. Manifest identity
+1096 bytes / `458db9999f436360072181f5e1907b15c4c9f2c1ed018829137920fd495ade5e`
+is observed, not independently expected. Claim/request objects were not
+reread. The specific guard, model calls, cost, terminal result and cleanup
+remain unknown; none is inferred as zero.
 
-The native observation is already consumed and privately retained as
-uncertain. Result identity/fingerprint, usage, terminal reason, cleanup and
-host reuse are null. No model-call count, cost, score or zero-usage claim
-follows. This record stops before the actual diagnostic read and claims no
-historical failure classification.
+A separate synthetic full-path regression reported 1 passed, 1 JUnit warning
+in 21.97s at `35ba64b8145ca5ff9401020a94f2f4aaec807662`, with real validation,
+constructor, pinned-runtime and capture but synthetic auth/RPC/kernel state.
+It found no deterministic mismatch and is not historical or host evidence.
+That test-only source remains independently reviewed before delivery.
 
-All five first-repeat V2 outcomes remain unchanged and consumed; the first
-native cell cannot be replayed. The fixed study, frozen F and 1200+20
-execution limits remain unchanged. No new observation, grading, HF write,
-OIDC operation or model call is authorized. Remaining work is this bounded
-read's verified projection and a source-grounded decision from it.
+The worker is separately preserving a finite allowlist of exact native
+refusal codes so future native-specific codes need not collapse to the
+generic category. Its reported 10-case proof and candidate source remain
+separate and unaccepted here; unknown errors must remain generic. No runtime
+guard, condition, frozen F or budget change is justified by these diagnostics.
 
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/4b5088a9f338adee58fe89436836ccc6c9f3363c/tasks/LATEST_TASK_RESULT/README.md
+Remaining work is source/CI review of that precise taxonomy and a justified
+decision for the next unconsumed cell. Five V2 cells and native r1/Task1 stay
+consumed. No replay, private read, new model operation or grading is authorized
+by this record.
+
+[event]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/2a8f6c754a160c50c4a13589132d09c99828b28b/tasks/LATEST_TASK_RESULT/README.md

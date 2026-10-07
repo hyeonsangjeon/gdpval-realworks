@@ -445,6 +445,7 @@ def execute(context: dict) -> dict:
                 failure = shared._execution_failure(stage, error)
                 shared._check_execution_failure(failure)
                 _write(paths["root"] / "execution-receipt.json", failure)
+                shared._emit_execution_failure(failure, format_version=shared.CODEX_FAILURE_EVENT_VERSION)
             except (Exception, KeyboardInterrupt):
                 pass  # No receipt retry, deadline extension or invented result.
         raise FirstCodexCIRefused("execution_refused_or_uncertain") from None
