@@ -171,11 +171,32 @@ def test_time_budget_v2_real_voice_returned_result(handoff_sources, tmp_path, mo
     claims = list(case.arguments["observation_directory"].glob("*.claimed.json"))
     assert len(claims) == 1 and case.consumed.is_file()
     reserved = {path: path.read_bytes() for path in (case.consumed, *claims)}
-    before = (list(effects.events), len(typed), len(effects.requests))
-    with pytest.raises(entry.FirstV2ObservationRefused, match="direction_observation_already_consumed"):
+    destination = case.arguments["destination"]
+    published = {path: path.read_bytes() for path in destination.rglob("*") if path.is_file()}
+    assert published[Path(returned["result_path"])] == data
+    alternate = destination.with_name("unused-result")
+    alternate_reservation = alternate.with_name(alternate.name + entry.RESERVATION_SUFFIX)
+    assert not any(path.exists() or path.is_symlink() for path in (alternate, alternate_reservation))
+    before = (list(effects.events), len(typed), len(effects.requests), len(effects.controls),
+              len(effects.runners), len(raw_runner), len(at_capture))
+
+    with pytest.raises(entry.FirstV2ObservationRefused, match="^result_destination_exists$"):
         entry.run_first_v2_observation(handoff_sources.plan, **case.arguments)
-    assert (effects.events, len(typed), len(effects.requests)) == before
+    assert (effects.events, len(typed), len(effects.requests), len(effects.controls),
+            len(effects.runners), len(raw_runner), len(at_capture)) == before
+    assert set(case.arguments["observation_directory"].glob("*.claimed.json")) == set(claims)
     assert {path: path.read_bytes() for path in reserved} == reserved
+    assert {path: path.read_bytes() for path in destination.rglob("*") if path.is_file()} == published
+    assert not any(path.exists() or path.is_symlink() for path in (alternate, alternate_reservation))
+
+    with pytest.raises(entry.FirstV2ObservationRefused, match="^direction_observation_already_consumed$"):
+        entry.run_first_v2_observation(handoff_sources.plan, **{**case.arguments, "destination": alternate})
+    assert (effects.events, len(typed), len(effects.requests), len(effects.controls),
+            len(effects.runners), len(raw_runner), len(at_capture)) == before
+    assert set(case.arguments["observation_directory"].glob("*.claimed.json")) == set(claims)
+    assert {path: path.read_bytes() for path in reserved} == reserved
+    assert {path: path.read_bytes() for path in destination.rglob("*") if path.is_file()} == published
+    assert not any(path.exists() or path.is_symlink() for path in (alternate, alternate_reservation))
     assert capsys.readouterr() == ("", "")
     (tmp_path / "safe-boundary.json").write_text(json.dumps({
         "format": "v2-real-voice-result-boundary-proof-v1", "scenario": ending,
