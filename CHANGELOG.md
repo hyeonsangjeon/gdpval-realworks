@@ -11,6 +11,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Draft an explicit native-r1 Task3 entry in the shared frozen-F grading
+  executor. The existing V2-first API/CLI stays unchanged. The leader corrected
+  the earlier executor-unchanged constraint after the accepted source finding:
+  V2-only task/configuration paths, absent native Step0 and F's inference-origin
+  gate required a compatibility unit before a hosted route. The unchanged
+  retained intake now supplies a scoped in-memory handle to a separate
+  grading-only input; original result bytes, fingerprint and preparation stay
+  immutable. The derived input records only the authenticated private target,
+  immutable output revision and intake identity, with its own fingerprint.
+  Both identities remain distinct in the execution binding. Full native Step0,
+  source/input/direction checks, local once-only protection and 14400/14520-second
+  controls remain; F, scoring, registration, model and workflows are unchanged.
+  At tested HEAD `9c51dde2e626faad535b739838d936501ecb9e8e`, tree
+  `161e8fc14c963e2c60fd24f04d6fec2dc970a85f`, the single new 18-case offline
+  selector hit its 300-second bound: exit 124, wrapper 299.978913s. The progress
+  log records 13 passes, one `condition` failure, `partial` interrupted and
+  three cases not started. Pytest wrote no final traceback or JUnit file before
+  timeout, so the exact failing operation is unavailable. This is a failed,
+  incomplete proof, not eighteen passes. No body was rerun or guard relaxed.
+  Evidence is retained in
+  `/tmp/native-task3-grading-compatibility.s2Ef7S/`; log SHA256
+  `8028943ae71eed4a16a57a15269ab3d604a04f5166a4ac44b47a0072db94280b`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records individual outcomes,
+  original-versus-derived provenance, exact source/artifact identities and
+  the final-identity handoff. Actual Task3 remains unhydrated here and ungraded.
+  The earlier unavailable-model specialist invocations were not endorsements.
+  Implementation acceptance remains on hold; fixed-HEAD review/CI, the deferred
+  hosted route, genuine intake and an exact live direction remain gates.
+
 ### Changed
 
 - Accept retained Task3 grading-intake source

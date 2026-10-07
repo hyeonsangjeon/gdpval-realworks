@@ -814,7 +814,7 @@ contents were not fetched or verified. `items_seen=56` is not a model/request
 count; native usage, counters, served identity and cost remain null, and
 Task3 is ungraded. This implementation did not fetch its actual bundle.
 
-The new selector
+The prior intake selector
 `tests/test_time_budget_native_grading_intake.py::test_time_budget_native_retained_grading_intake`
 reported **21 passed in 40.03s**, exit 0, wrapper **40.587362s**, once at
 `8faa9c1c3adf9cc6cc8debd6335a72c6bd7e379f`, tree
@@ -832,6 +832,66 @@ Only the three records change after this proof; `handoff.json` records final
 HEAD/tree. Fixed-HEAD review/CI, separately authorized credentialed intake
 with genuine originals and later once-only grading authority remain gates.
 The prior mode-validation proof below is separate and was not rerun.
+
+The native Task3 execution compatibility draft is separate from that accepted
+intake. The leader corrected the earlier executor-unchanged constraint:
+`execute_first_observation_grading` is intentionally V2-first-only and must
+remain so. The new opt-in `execute_native_task3_grading` shares its internal
+executor but admits only native r1 Task3, with explicit full Step0 and the
+existing independent observation/input/preparation/source/direction bindings.
+Its old V2 API/CLI still forbids Step0. No hosted workflow/controller is added.
+
+For a future authorized caller, the context manager
+`prepare_native_task3_grading_execution(request_json=...,
+expected_request_sha256=..., execution_input_directory=...)` calls the accepted
+intake and real F preparation, then stages a fresh private grading-only tree.
+Pass its live handle as `native_preparation`, with explicit `step0_manifest`
+and the independently bound execution arguments, to the native entry. The
+handle expires on leaving the context and cannot be restored from a saved
+receipt. This model-free stage neither issues a direction nor claims a grade.
+An externally approved direction is still required before the shared local
+once-only executor can admit a child.
+
+The native canonical producer has no inference-origin annotation. F already
+requires `source_repo_id` and `source_revision`; this gate is unchanged.
+Only a separate grading-only result receives those fields and
+`source_identity_document_sha256`, from the authenticated fixed private target,
+immutable output and intake receipt. It has a distinct derived fingerprint;
+the binding records original and derived identities separately. Original
+generation bytes/fingerprint and accepted preparation are never rewritten.
+Caller-only origin strings, arbitrary revisions and saved ready markers do
+not issue the scoped handle. Full 218405-byte Step0 rereads, source/path
+protection, frozen rubric/scoring and the 14400/14520-second controls remain.
+
+The one new selector
+`tests/test_time_budget_native_grading_execution.py::test_native_task3_frozen_grading_compatibility`
+ran at `9c51dde2e626faad535b739838d936501ecb9e8e`, tree
+`161e8fc14c963e2c60fd24f04d6fec2dc970a85f`, from accepted
+`fbe64cc6bb90ad91d0330b0f734be272b984ad9b`, tree
+`785ef4ce91782c49e9eaae460b6dc619aae3fa4d`. It hit the 300-second bound:
+exit **124**, wrapper **299.978913s**. Its progress log records **13 passes,
+1 failure** (`condition`), `partial` interrupted and `timeout`, `grade_task`,
+`sidecar` not started. Final traceback/JUnit and the exact failing operation
+are unavailable; this is a failed, incomplete proof, not an eighteen-case
+pass. Python 3.10.12, 300s+5s/no-`-x`, named 30-second Git fixtures and Python
+timing were used once. No passed body or earlier selector was rerun.
+
+The native and legacy V2 positives passed with real validators and explicit
+synthetic HTTP/originals/namespace/child fixtures. Native started without
+origin fields and used an actual 218405-byte synthetic Step0, real intake/F
+preparation and F-compatible grade/sidecar checks. This is not actual private
+hydration, a kernel-support verdict, a judge decision or a quality score.
+The leader's Task3 declarations above remain declaration-only; its actual
+usage/cost/counters stay unknown and its files remain ungraded. Proof files
+are in `/tmp/native-task3-grading-compatibility.s2Ef7S/`, log SHA256
+`8028943ae71eed4a16a57a15269ab3d604a04f5166a4ac44b47a0072db94280b`;
+`handoff.json` records final HEAD/tree after the three evidence docs. The
+[latest record](../tasks/LATEST_TASK_RESULT/README.md) preserves per-case
+outcomes and exact identities. Implementation acceptance remains on hold.
+Fixed-HEAD review/CI, the deferred hosted route/distributed claim, genuine
+intake and exact live direction remain gates. The prior specialist-model
+invocations failed before execution, not as successful reviews; no retry or
+live authority follows from this draft.
 
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
