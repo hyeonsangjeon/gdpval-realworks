@@ -124,6 +124,8 @@ def offline(source, monkeypatch):
         (azure_ai_clients, ("OpenAI", "AzureOpenAI", "DefaultAzureCredential")),
         (subject.execution.observation, ("run_first_v2_observation",)),
         (subject.execution, ("prepare_and_claim", "execute", "retain")),
+        (subject.native_execution.observation, ("run_codex_observation",)),
+        (subject.native_execution, ("prepare_and_claim", "execute", "retain")),
         (subprocess, ("Popen", "check_call", "check_output")), (os, ("system",)),
     ):
         for name in names:
@@ -574,3 +576,160 @@ def test_time_budget_result_readout_workflow_binding(case, monkeypatch):
     assert steps[-1]["with"]["path"] == "${{ runner.temp }}/" + subject.BASENAME
     assert steps[-1]["with"]["retention-days"] == 7 and steps[-1]["with"]["if-no-files-found"] == "error"
     assert not any(word in json.dumps(workflow) for word in ("id-token", "azure/login", "step2_run_inference", "step8_grade"))
+
+
+@pytest.mark.parametrize("scenario", [
+    "native_uncertain", "manifest_source", "manifest_cell", "manifest_registration",
+    "manifest_request_hash", "manifest_request_size", "manifest_claim", "refused_receipt",
+    "missing_receipt", "missing_failure", "extra_private_field", "extra_failure_field",
+    "wrong_R_tree", "wrong_execution_request", "manifest_encoding", "cumulative_bound", "canonical_v2",
+])
+def test_time_budget_native_uncertainty_readout(case, transport, monkeypatch, capsys, scenario):
+    """One immutable manifest, no invented expected manifest hash or native run."""
+    formatted, expected_error = [], None
+    native = subject.native_execution
+    if scenario != "canonical_v2":
+        class PrivateConstructionError(TypeError):
+            def __str__(self):
+                formatted.append(True)
+                raise AssertionError("private exception must not be formatted")
+
+        case.cell = dict(native.CELL)
+        original_request = subject._bytes({"format": native.REQUEST_VERSION, "cell": case.cell,
+                                          "source": case.source.result_source, "synthetic_unissued": True})
+        request_identity = subject._identity(original_request)
+        case.request.update(format=subject.UNCERTAINTY_REQUEST_FORMAT, purpose=subject.UNCERTAINTY_PURPOSE,
+                            cell=case.cell, execution_request_identity=request_identity)
+        case.request["completion"].update(**case.cell, format=native.ENVELOPE_VERSION,
+            request_sha256=request_identity["sha256"], status="uncertain", result_identity=None,
+            result_fingerprint=None, terminal_reason=None, usage=None, cleanup_complete=None, host_reusable=None)
+        observation = subject.asdict(subject.ObservationIdentity(**case.cell,
+            reviewed_source_sha=case.source.result_source["sha"], reviewed_source_tree=case.source.result_source["tree"],
+            registration_sha256=subject.seal(case.plan), input_sha256=subject.seal({"synthetic_unread_input": True})))
+        manifest = {"format": subject.UNCERTAINTY_MANIFEST_FORMAT, "observation": observation,
+            "request_identity": dict(request_identity), "claim_commit": case.request["completion"]["claim_commit"],
+            "claim_identity": subject._identity(b"synthetic unread permanent claim"),
+            "execution_receipt": subject.execution._execution_failure(
+                "observation_callable", PrivateConstructionError(PRIVATE + TOKEN)),
+            "result": "unavailable_no_fabricated_study_row", "files": {}, "grading_performed": False}
+        assert manifest["execution_receipt"]["failure"] == {
+            "stage": "observation_callable", "category": "type_error", "reason": "execution_refused_or_uncertain"}
+        native.validate_envelope(case.request["completion"])
+        if scenario == "manifest_source":
+            manifest["observation"]["reviewed_source_sha"] = "0" * 40
+            expected_error = "manifest R mismatch"
+        elif scenario == "manifest_cell":
+            manifest["observation"]["task_id"] = case.plan["shared"]["dataset"]["tasks"][1]["task_id"]
+            expected_error = "manifest cell mismatch"
+        elif scenario == "manifest_registration":
+            manifest["observation"]["registration_sha256"] = "0" * 64
+            expected_error = "manifest registration mismatch"
+        elif scenario in {"manifest_request_hash", "manifest_request_size"}:
+            manifest["request_identity"].update(
+                {"sha256": "0" * 64} if scenario == "manifest_request_hash" else {"size": request_identity["size"] + 1})
+            expected_error = "manifest execution request mismatch"
+        elif scenario == "manifest_claim":
+            manifest["claim_commit"] = "0" * 40
+            expected_error = "manifest claim commit mismatch"
+        elif scenario == "refused_receipt":
+            manifest["execution_receipt"] = {"outcome": "returned", "returned": None}
+            expected_error = "execution_receipt_schema"
+        elif scenario == "missing_receipt":
+            manifest["execution_receipt"] = None
+            expected_error = "retained_failure_receipt_required"
+        elif scenario == "missing_failure":
+            manifest["execution_receipt"].pop("failure")
+            expected_error = "retained_failure_codes_unavailable"
+        elif scenario == "extra_private_field":
+            manifest["provider_message"] = PRIVATE + TOKEN
+            expected_error = "readout_schema_refused"
+        elif scenario == "extra_failure_field":
+            manifest["execution_receipt"]["failure"]["message"] = PRIVATE + TOKEN
+            expected_error = "execution_failure_schema"
+        elif scenario == "wrong_R_tree":
+            case.request["completion"]["source"] = {**case.source.result_source, "tree": "0" * 40}
+        elif scenario == "wrong_execution_request":
+            case.request["execution_request_identity"] = {**request_identity, "sha256": "0" * 64}
+        elif scenario == "manifest_encoding":
+            transport.gzip_at = 2
+        elif scenario == "cumulative_bound":
+            now = [time.monotonic()]
+            monkeypatch.setattr(time, "monotonic", lambda: now[0])
+            transport.hook = lambda number: now.__setitem__(0, now[0] + 35)
+        transport.data = native._encoded(manifest)
+        if expected_error:
+            # There is no expected manifest hash to recompute. These real
+            # semantic validators, not a fabricated outer identity, refuse.
+            with pytest.raises(ValueError, match="^" + expected_error + "$"):
+                subject.project_uncertainty_manifest(transport.data, _context(case))
+
+    before_credentials = scenario in {"wrong_R_tree", "wrong_execution_request"}
+    success = scenario in {"native_uncertain", "canonical_v2"}
+    credential_steps = []
+    if before_credentials:
+        def forbidden(*args, **kwargs):
+            credential_steps.append(True)
+            raise AssertionError("invalid source/request reached credentialed read")
+        monkeypatch.setattr(subject, "_read_result", forbidden)
+    assert _invoke(case) == (0 if success else 2)
+    assert credential_steps == formatted == []
+    output = capsys.readouterr()
+    assert output.err == "" and all(item not in output.out for item in (TOKEN, PRIVATE, "PrivateConstructionError"))
+    if before_credentials:
+        assert output.out == "result_readout_refused\n"
+        assert transport.calls == [] and not case.source.destination.exists()
+        return
+    assert len(transport.calls) == 2 and subject.SECONDS == 60
+    first, second = transport.calls
+    assert first.url.path == f"/api/datasets/{subject.metadata.TARGET}/revision/{OUTPUT_COMMIT}"
+    assert parse_qs(first.url.query.decode()) == {"expand": ["private", "sha"]}
+    member = native.MANIFEST if scenario != "canonical_v2" else (
+        subject.execution._namespace(case.cell)[0] + "/result/" + subject.execution.observation.RESULT)
+    assert second.url.path == f"/datasets/{subject.metadata.TARGET}/raw/{OUTPUT_COMMIT}/{member}"
+    assert not second.url.query
+    assert all(call.method == "GET" and call.headers["accept-encoding"] == "identity"
+               and 0 < call.extensions["timeout"]["read"] <= 30 for call in transport.calls)
+    if scenario == "cumulative_bound":
+        assert second.extensions["timeout"]["read"] == 25
+    value = json.loads(case.source.destination.read_bytes())
+    subject.validate_envelope(value, _context(case))
+    assert json.loads(output.out) == value and value["verified_private"] is True
+    assert value["outcome"] == ("read" if success else "refused")
+    assert value["retry_allowed"] is False and value["grading_performed"] is False
+    if scenario == "canonical_v2":
+        assert value["format"] == subject.FORMAT and value["result_source"] == case.source.result_source
+        assert value["result_identity"] == case.request["completion"]["result_identity"]
+        assert value["result_fingerprint"] == case.payload["result_fingerprint"]
+        assert value["summary"]["runner_error"] == "finalize_not_called"
+        assert "observed_manifest_identity" not in value["summary"] and "execution_request_identity" not in value
+    else:
+        assert set(value) == {"format", "controller", "ci", "request_sha256", "target_identity_sha256", "cell",
+            "observation_source", "execution_request_sha256", "execution_request_identity", "registration_sha256",
+            "output_commit", "claim_commit", "host_sha256", "result_identity", "result_fingerprint",
+            "retry_allowed", "grading_performed", "timestamp_utc", "verified_private", "outcome", "summary"}
+        assert value["format"] == subject.UNCERTAINTY_FORMAT
+        assert value["observation_source"] == case.source.result_source != value["controller"]
+        assert value["execution_request_identity"] == case.request["execution_request_identity"]
+        assert value["claim_commit"] == case.request["completion"]["claim_commit"]
+        assert value["registration_sha256"] == subject.seal(case.plan)
+        assert value["result_identity"] is value["result_fingerprint"] is None
+        assert "manifest_identity" not in case.request and "manifest_identity" not in case.request["completion"]
+        if success:
+            assert value["summary"] == {**subject.UNCERTAINTY_SUMMARY,
+                "failure": {"stage": "observation_callable", "category": "type_error",
+                            "reason": "execution_refused_or_uncertain"},
+                "observed_manifest_identity": subject._identity(transport.data)}
+            for mutation in ({"provider_message": PRIVATE}, {"manifest_identity_basis": "independently_expected"},
+                             {"failure": {**value["summary"]["failure"], "message": PRIVATE}}):
+                with pytest.raises(ValueError):
+                    subject.validate_envelope({**value, "summary": {**value["summary"], **mutation}}, _context(case))
+        else:
+            assert value["summary"] is None
+    if success:
+        assert _invoke(case, "verify-envelope") == 0 and len(transport.calls) == 2
+    public = case.source.destination.read_text() + output.out + output.err + capsys.readouterr().out
+    assert all(item not in public for item in (TOKEN, PRIVATE, "PRIVATE_FILENAME", "deliverable_text",
+        "PrivateConstructionError", "provider_message", "output-manifest.json", "claim_identity",
+        "execution_receipt", subject.metadata.TARGET))
+    assert set(case.source.runner_temp.iterdir()) == {case.source.root, case.source.destination}
+    assert case.source.destination.stat().st_mode & 0o777 == 0o600
