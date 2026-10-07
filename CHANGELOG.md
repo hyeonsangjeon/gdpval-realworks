@@ -25,6 +25,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a model-free caller for the fixed native-r1 Task3 retained bundle. It
+  binds independent C/R/F, request/completion and original-input identities,
+  authenticates the canonical result, verifies exactly two declared files
+  totaling 408601 bytes at one immutable revision, then calls the unchanged
+  frozen-F grading preparer. Four GETs share 60 seconds; private no-clobber
+  state survives failure. There is no workflow, grading admission, executor
+  or invented inference-publication association. At
+  `8faa9c1c3adf9cc6cc8debd6335a72c6bd7e379f`, tree
+  `f217eda6e2d0dace34c07aa591397ab31c83c9df`, the one new synthetic selector
+  passed all 21 cases in 40.03s, exit 0; wrapper 40.587362s. Evidence is in
+  `/tmp/native-task3-grading-bridge.zWCjyI/` and the latest task record.
+  Actual Task3 remains ungraded; the prior readout verified only declarations,
+  not its two file contents. Review/CI and separately authorized genuine
+  credentialed intake and once-only grading remain gates. F, scoring, the
+  twenty-cell registration, workflows and consumed observations are unchanged.
+
 - Add a draft native canonical-result purpose to the existing bounded readout
   helper for one independently bound native-r1 cell. It validates the native
   capture shape and projects only binding/status/control metadata, unavailable
