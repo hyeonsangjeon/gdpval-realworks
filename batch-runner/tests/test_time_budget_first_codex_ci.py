@@ -864,9 +864,10 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
     assert marker["inputs"]["step0_manifest"] == case.request["step0"]["identity"] == _identity(step0_bytes)
     assert claim["step0_provenance"] == case.request["step0"] and claim["storage"]["prefix"] == selected_prefix
     config = ci._read(case.root / "preparation" / ci.registration.HANDOFF_CONFIG)["configuration"]
-    assert config["task_ids"] == [task2]
-    assert config["fixed_settings"]["retry_max_attempts"] == 1
-    assert config["fixed_settings"]["per_task_timeout_seconds"] == 1200
+    assert config["data"]["filter"]["task_ids"] == [task2]
+    assert config["execution"]["max_retries"] == 0
+    assert config["execution"]["resume_max_rounds"] == 0
+    assert config["execution"]["timeout"] == 1200
     claim_tree = dict(case.api.trees[case.api.head])
     assert set(claim_tree) - set(old_objects) == {claim_path}
     assert {name: claim_tree[name] for name in old_objects} == old_objects
