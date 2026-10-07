@@ -18,16 +18,27 @@ entries land under a fresh dated heading the day they merge to `main`.
   checked completion. Keep Task1's legacy constants/readout, consumed state,
   safe-event formatter, reviewed test definitions and all study controls
   unchanged. The workflow delta is only the early five-UUID membership check.
-  Tested source `48bf0873d44b99c7364bbdcce43478826aa3466e`, tree
-  `033eb0c97f11f15cde7a97a1b22f1e28fe8577c9`, collected the one new selector's
-  13 cases: **5 failed, 8 passed in 99.94s**, exit 1; wrapper **100.917453s**.
-  All five failures are the new test's V2-only `configuration["task_ids"]`
-  lookup after synthetic Task2 preparation/claim. Native execution, capture
-  and retention assertions remain unreached. No test-body correction or
-  rerun follows this failed invocation. This draft is blocked, not a passing
-  roundtrip or live authorization. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
-  retains exact source/artifact identities, eight-pass scope, historical
-  uncertainty and remaining fixed-HEAD review/CI/host/input/authorization gates.
+  The original proof at `48bf0873d44b99c7364bbdcce43478826aa3466e`, tree
+  `033eb0c97f11f15cde7a97a1b22f1e28fe8577c9`, remains **5 failed, 8 passed
+  in 99.94s**, exit 1; wrapper **100.917453s**. All five failures were the
+  test's V2-only `configuration["task_ids"]` lookup after synthetic Task2
+  preparation/claim, before native execution, capture and retention assertions.
+  The eight prior passes were not repeated. The authorized continuation changes
+  only that test's assertions to native `data.filter.task_ids`,
+  `execution.max_retries=0`, `execution.resume_max_rounds=0` and
+  `execution.timeout=1200`; one external attempt is not a native retry alias.
+  Tested correction `242f7a2a55e2c1ed73214a56425b8c51e1bb243d`, tree
+  `a66a44cb4474143d905780569c26a9091129b838`, reported **5 passed in 98.69s**,
+  exit 0; wrapper **99.353259s**, for only `task2`, `direction_task`,
+  `result_task`, `result_source` and `result_file`. Real validators/callable
+  completed over synthetic auth/RPC/kernel/private-CAS fixtures. This is not
+  an aggregate thirteen-case pass, actual-host proof or live authorization.
+  No production/workflow/registration changes accompany the continuation.
+  Implementation acceptance remains HOLD for fixed-HEAD review/CI and
+  leader-owned integration, including preservation of main's newer taxonomy.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains both invocations,
+  exact tested/final source and artifact identities, historical uncertainty
+  and the remaining host/input/authorization gates.
 
 - Accept test-only native boundary source
   `ab0662ec687369bb41a1d62bd43c6b38a4c4f273`, tree

@@ -814,29 +814,42 @@ existing cells in the unchanged twenty-cell registration; it adds no live
 authority or permission to advance ABBA order. The closed pilot and retention
 studies remain closed.
 
-The selection draft's one new offline selector collected 13 cases and
+The selection draft's one new offline selector originally collected 13 cases and
 reported **5 failed, 8 passed in 99.94s**, exit 1; wrapper **100.917453s**,
 at `48bf0873d44b99c7364bbdcce43478826aa3466e`, tree
 `033eb0c97f11f15cde7a97a1b22f1e28fe8577c9`. All five failures were the new
 test's V2-only `configuration["task_ids"]` lookup after synthetic Task2
-preparation/claim. The native configuration uses `data.filter.task_ids` and
-`execution`; native execution, capture and retention assertions were not
-reached. The eight passes cover wrong selection/source/namespace, occupied
-synthetic Task1 state and fixed legacy readout bindings. They are not a
-successful Task2 roundtrip or an actual-host proof. No body was corrected or
-rerun. This draft is blocked pending a separately authorized test correction,
-fixed-HEAD review/CI and the actual host/input/authorization gates.
+preparation/claim. Native execution, capture and retention assertions were not
+reached in that invocation. Its eight passes cover wrong
+selection/source/namespace, occupied synthetic Task1 state and fixed legacy
+readout bindings; none was repeated in the continuation.
 
-The exact selector is
-`tests/test_time_budget_first_codex_ci.py::test_time_budget_native_registered_task_selection`.
-Artifacts are in `/tmp/native-r1-task-selection-proof.tGICRM/`; the
-[current record](../tasks/LATEST_TASK_RESULT/README.md) retains commands,
-case outcomes, hashes and unchanged registration/source boundaries. Final
-documentation-bearing HEAD/tree are recorded in that directory's
-`handoff.json`; only the three evidence records change after the failed proof.
-The source check confirmed that the existing test definitions and safe-event
-formatter were unchanged. Existing proofs below remain separate and were not
-rerun. PR771 and all earlier worktrees are untouched.
+The authorized test-only correction now asserts native
+`data.filter.task_ids == [task2]`, `execution.max_retries == 0`,
+`execution.resume_max_rounds == 0` and `execution.timeout == 1200`. One
+external attempt is not native `retry_max_attempts=1`. Every other test byte
+and all production/workflow/registration bytes remain unchanged. At tested
+HEAD `242f7a2a55e2c1ed73214a56425b8c51e1bb243d`, tree
+`a66a44cb4474143d905780569c26a9091129b838`, only the selector's `[task2]`,
+`[direction_task]`, `[result_task]`, `[result_source]` and `[result_file]`
+nodes ran together once: **5 passed in 98.69s**, exit 0; wrapper
+**99.353259s**. The synthetic Task2 controller/callable/retention path and
+the four expected refusal cases completed. This does not establish actual
+host readiness or combine the two invocations into a thirteen-case pass.
+
+The selector is
+`tests/test_time_budget_first_codex_ci.py::test_time_budget_native_registered_task_selection`;
+the [current record](../tasks/LATEST_TASK_RESULT/README.md) lists the five
+full node IDs, exact commands, outcomes and hashes. The original failure is
+retained at `/tmp/native-r1-task-selection-proof.tGICRM/`; continuation
+artifacts are at `/tmp/native-r1-selection-continuation.yJxqnl/`. Its
+`handoff.json` records final documentation-bearing HEAD/tree after the
+docs-only commit, not another test run. Implementation acceptance remains
+HOLD pending fixed-HEAD review/CI, leader-owned integration of main's newer
+taxonomy, and the actual host/input/authorization gates. No live Task2 or
+ABBA advance is authorized. Task1 constants/readout and consumed claims,
+PR771 and all earlier worktrees remain untouched. No prior passing case was
+rerun; the proofs below remain separate.
 
 Native r1/Task1, `02aa1805-c658-4069-8a6a-02dec146063a`, remains consumed.
 The leader verified run `37574558224`,
