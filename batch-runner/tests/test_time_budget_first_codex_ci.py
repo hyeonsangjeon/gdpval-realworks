@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import time
 from contextlib import contextmanager
+from copy import deepcopy
 from types import SimpleNamespace
 from urllib.parse import unquote, urlsplit
 
@@ -721,3 +722,257 @@ def test_time_budget_native_failure_event(case, offline, monkeypatch, capsys, mo
     finally:
         os.umask(previous_mask)
         ci.logging.disable(previous_logging)
+
+
+@pytest.mark.parametrize("change", [
+    "task2", "unregistered_task", "run", "condition", "repeat", "namespace", "source",
+    "direction_task", "result_task", "result_source", "result_file", "old_task1_claim", "legacy_task1_readout",
+])
+def test_time_budget_native_registered_task_selection(case, actions_layout, offline, monkeypatch, capsys, change):
+    """One selected native cell with real validators and synthetic auth/RPC/kernel.
+
+    Old Task1 objects here are invented fixture bytes, never the consumed
+    observation's private state. No case establishes actual host readiness.
+    """
+    import gpt54_time_budget_result_readout as readout
+
+    task1, task2 = "02aa1805-c658-4069-8a6a-02dec146063a", "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+    base = "time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_codex_r1/"
+    old_prefix, selected_prefix = base + task1, base + task2
+    legacy = {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": "gpt54_time_budget_v1_codex_r1",
+              "condition": "codex", "repeat": 1, "task_id": task1}
+    assert case.seed.task_ids == (task1, task2, "2ea2e5b5-257f-42e6-a7dc-93763f28b19d",
+                                 "3baa0009-5a60-4ae8-ae99-4955cb328ff3", "0818571f-5ff7-4d39-9d2c-ced5ae44299e")
+    assert (ci.CELL, ci.PREFIX, ci.CLAIM, ci.MANIFEST) == (
+        legacy, old_prefix, old_prefix + "/admission.json", old_prefix + "/output-manifest.json")
+    assert readout.native_execution is ci
+    assert readout.UNCERTAINTY_MANIFEST_FORMAT == "gpt54-time-budget-first-codex-private-output-v1"
+    selected = {**legacy, "task_id": task2}
+    keep_task1 = change in {"old_task1_claim", "legacy_task1_readout"}
+    case.request["cell"] = dict(legacy if keep_task1 else selected)
+    case.request["storage"]["prefix"] = old_prefix if keep_task1 else selected_prefix
+    claim_path = case.request["storage"]["prefix"] + "/admission.json"
+    manifest_path = case.request["storage"]["prefix"] + "/output-manifest.json"
+    # Keep the same transport instance captured by the existing client fixture.
+    case.api.claim, case.api.manifest = claim_path, manifest_path
+    case.api.trees[case.api.head].update({
+        ci.CLAIM: b"Synthetic old native permanent claim from another R; never adopt.\n",
+        ci.MANIFEST: b"Synthetic old native uncertainty; never rewrite.\n",
+    })
+    case.api.writers[case.api.head].update({ci.CLAIM: case.api.head, ci.MANIFEST: case.api.head})
+    original_head = case.api.head
+    old_objects = dict(case.api.trees[original_head])
+    original_trees, original_writers = deepcopy(case.api.trees), deepcopy(case.api.writers)
+    if change == "unregistered_task":
+        case.request["cell"]["task_id"] = "00000000-0000-4000-8000-000000000000"
+    elif change == "run":
+        case.request["cell"]["run_id"] = "gpt54_time_budget_v1_codex_r2"
+    elif change == "condition":
+        case.request["cell"]["condition"] = "sandbox_v2"
+    elif change == "repeat":
+        case.request["cell"]["repeat"] = 2
+    elif change == "namespace":
+        case.request["storage"]["prefix"] = old_prefix
+    elif change == "source":
+        case.request["source"]["sha"] = "f" * 40
+    arguments = {"request_json": ci._bytes(case.request).decode(), **_arguments(case, monkeypatch)}
+    guard = actions_layout.workflow["jobs"][ci.JOB]["steps"][0]["run"]
+    environment = {key: value for key, value in os.environ.items() if key not in ci.shared.TOKEN_KEYS}
+    guarded = subprocess.run(["/bin/bash", "--noprofile", "--norc", "-c", guard],
+                             env=environment, capture_output=True, timeout=5)
+    assert (guarded.returncode != 0) == (change in {"unregistered_task", "run", "condition", "repeat", "source"})
+
+    if change in {"unregistered_task", "run", "condition", "repeat", "namespace", "source"}:
+        reason = ("registered_first_codex_task_required" if change == "unregistered_task" else
+                  "private study storage mismatch" if change == "namespace" else
+                  "request source mismatch" if change == "source" else "request cell mismatch")
+        with pytest.raises(ValueError, match="^" + reason + "$"):
+            with ci.checked_request(**arguments) as context:
+                ci.prepare_and_claim(context)
+        if change == "namespace":
+            for control_cell, control_path, refusal in (
+                (selected, ci.CLAIM, "private_namespace_required"),
+                (legacy, claim_path, "private control cell mismatch"),
+            ):
+                control = {"observation": control_cell}
+                with pytest.raises(ValueError, match="^" + refusal + "$"):
+                    ci._commit(case.api, TOKEN, time.monotonic() + 30, cell=selected, parent=original_head,
+                               files={control_path: ci._encoded(control)}, control_path=control_path,
+                               control=control, cache=case.root / "unused")
+        assert case.downloads == case.api.calls == case.api.commits == offline.auth_calls == []
+        assert not case.root.exists()
+        assert case.api.trees == original_trees and case.api.writers == original_writers
+        return
+
+    if change == "legacy_task1_readout":
+        with ci.checked_request(**arguments) as context:
+            envelope = ci.shared._envelope(context, {"returned_commit": "2" * 40}, None,
+                                           commit="3" * 40, outcome="acknowledged")
+        envelope["format"] = ci.ENVELOPE_VERSION
+        readout.native_execution.validate_envelope(envelope)  # Historical default is independently fixed to Task1.
+        with pytest.raises(ValueError, match="^completion constants mismatch$"):
+            readout.native_execution.validate_envelope({**envelope, "task_id": task2})
+        failure = {"outcome": "refused_or_uncertain", "returned": None, "failure": {
+            "stage": "observation_callable", "category": "validation_refused", "reason": "execution_refused_or_uncertain"}}
+        manifest = {"format": readout.UNCERTAINTY_MANIFEST_FORMAT, "observation": {
+            **legacy, "reviewed_source_sha": case.seed.runtime_sha, "reviewed_source_tree": case.seed.runtime_tree,
+            "registration_sha256": seal(case.seed.plan), "input_sha256": "e" * 64},
+            "request_identity": context["request_identity"], "claim_commit": envelope["claim_commit"],
+            "claim_identity": _identity(b"Synthetic old claim identity only; no object read."),
+            "execution_receipt": failure, "result": "unavailable_no_fabricated_study_row", "files": {},
+            "grading_performed": False}
+        data = ci._encoded(manifest)
+        summary = readout.project_uncertainty_manifest(data, {"request": {
+            "cell": legacy, "completion": envelope, "registration_sha256": seal(case.seed.plan),
+            "execution_request_identity": context["request_identity"]}})
+        assert summary["failure"] == failure["failure"]
+        assert summary["observed_manifest_identity"] == _identity(data)
+        assert summary["manifest_identity_basis"] == "observed_not_independently_expected"
+        assert case.downloads == case.api.calls == case.api.commits == offline.auth_calls == []
+        assert not case.root.exists() and case.api.trees == original_trees and case.api.writers == original_writers
+        return
+
+    if change == "old_task1_claim":
+        with ci.checked_request(**arguments) as context, pytest.raises(
+                ci.FirstCodexCIRefused, match="^claim_unconfirmed_permanently_reserved$"):
+            ci.prepare_and_claim(context)
+        assert len(case.downloads) == 4
+        assert ci._read(case.root / "claim-receipt.json")["outcome"] == "unresolved"
+        assert case.api.calls == ["metadata", "objects"]  # No old-object body read, adoption or CAS.
+        assert case.api.head == original_head and case.api.commits == offline.auth_calls == []
+        assert case.api.trees == original_trees and case.api.writers == original_writers
+        with ci.checked_request(**arguments) as context, pytest.raises(
+                ci.FirstCodexCIRefused, match="^execution_refused_or_uncertain$"):
+            ci.execute(context)
+        assert case.api.calls == ["metadata", "objects"] and offline.auth_calls == []
+        assert not (case.root / "execution-reserved.json").exists() and not (case.root / "result").exists()
+        assert list((case.root / "observation").iterdir()) == []
+        return
+
+    with ci.checked_request(**arguments) as context:
+        assert context["cell"] == selected
+        admission = ci.prepare_and_claim(context)
+    assert len(case.downloads) == 4 and case.api.commits == ["claim"] and offline.auth_calls == []
+    claim = admission["claim"]
+    claim_bytes = case.api.trees[case.api.head][claim_path]
+    marker = ci._read(case.root / "preparation" / ci.registration.HANDOFF_READY)
+    assert claim["observation"] == marker["observation"]
+    assert {key: marker["observation"][key] for key in selected} == selected
+    assert marker["inputs"]["task_id"] == task2
+    step0_bytes = (case.root / "inputs" / ci.originals.STEP0).read_bytes()
+    assert step0_bytes == case.seed.step0.read_bytes()
+    assert marker["inputs"]["step0_manifest"] == case.request["step0"]["identity"] == _identity(step0_bytes)
+    assert claim["step0_provenance"] == case.request["step0"] and claim["storage"]["prefix"] == selected_prefix
+    config = ci._read(case.root / "preparation" / ci.registration.HANDOFF_CONFIG)["configuration"]
+    assert config["task_ids"] == [task2]
+    assert config["fixed_settings"]["retry_max_attempts"] == 1
+    assert config["fixed_settings"]["per_task_timeout_seconds"] == 1200
+    claim_tree = dict(case.api.trees[case.api.head])
+    assert set(claim_tree) - set(old_objects) == {claim_path}
+    assert {name: claim_tree[name] for name in old_objects} == old_objects
+    direction_path = case.root / "direction.json"
+    direction_bytes = direction_path.read_bytes()
+    direction = json.loads(direction_bytes)
+    assert json.loads(direction["execution_binding"]["observation_json"]) == marker["observation"]
+    assert claim["direction_identity"] == _identity(direction_bytes)
+    # Simulate the later approved-login step; no actual credential is acquired.
+    (offline.login / "synthetic-session").write_bytes(b"Synthetic login state; not credentials.")
+    spec = SimpleNamespace(arguments={"observation": deadline.ObservationIdentity(**marker["observation"])},
+                           marker=marker, consumed=case.root / ("preparation" + ci.registration.HANDOFF_CONSUMED_SUFFIX))
+    native = _native_transport(monkeypatch, spec, offline, outcome="success")
+    if change == "direction_task":
+        direction["execution_binding"]["observation_json"] = ci._canonical_json({**marker["observation"], "task_id": task1})
+        direction_path.write_bytes(ci._bytes(direction))
+        assert _invoke(case, monkeypatch, "execute") == 2
+        assert native.controls == native.clients == native.requests == offline.auth_calls == []
+        assert not (case.root / "execution-reserved.json").exists() and not spec.consumed.exists()
+        assert not (case.root / "result").exists() and case.api.trees[case.api.head] == claim_tree
+        assert capsys.readouterr().err == ""
+        return
+
+    assert _invoke(case, monkeypatch, "execute") == 0
+    assert not any(os.environ.get(key) for key in ci.shared.TOKEN_KEYS)
+    assert len(native.controls) == len(native.clients) == len(offline.auth_calls) == 1
+    assert [method for method, _ in native.requests] == ["initialize", "thread/start", "turn/start"]
+    task_text = native.requests[-1][1]["input"][0]["text"]
+    assert "Synthetic handoff task 1:" in task_text and "Synthetic handoff task 0:" not in task_text
+    control = native.controls[0]
+    assert control.identity == spec.arguments["observation"] and control.cleanup_complete
+    assert control.as_record()["host_reusable"] and control.cleanup_deadline - control.terminal_at == 20
+    assert spec.consumed.is_file() and (case.root / "execution-reserved.json").is_file()
+    result_path = case.root / "result" / ci.observation.RESULT
+    data = result_path.read_bytes()
+    payload = json.loads(data)
+    row = payload["results"][0]
+    deliverable = "deliverable_files/" + task2 + "/deliverable.txt"
+    assert payload["experiment_id"] == selected["run_id"] and payload["condition"] == "codex"
+    assert payload["execution_mode"] == "codex_foundry" and payload["source"] == case.seed.plan["shared"]["dataset"]["repo_id"]
+    assert payload["time_budget_observation"] == control.as_record()
+    assert payload["observation_execution"]["inputs"] == marker["inputs"]
+    assert payload["observation_execution"]["runtime_source"] == marker["runtime_source"]
+    assert row["task_id"] == task2 and row["status"] == "success" and row["usage"] is None
+    assert row["retried"] is False and row["resume_round"] is None
+    assert row["deliverable_files"] == [deliverable]
+    assert row["deliverable_file_records"] == [{"path": deliverable, **_identity(_FILE)}]
+    assert (case.root / "result/upload" / deliverable).read_bytes() == _FILE
+    assert all(value is None for value in row["observability"]["native_measurements"].values())
+    assert validate_inference_result_fingerprint(payload) == payload["result_fingerprint"]
+    assert direction_path.read_bytes() == direction_bytes
+    assert (case.root / "inputs" / ci.originals.STEP0).read_bytes() == step0_bytes
+    if change in {"result_task", "result_source", "result_file"}:
+        if change in {"result_task", "result_file"}:
+            if change == "result_task":
+                row["task_id"] = task1
+            row["deliverable_files"] = [deliverable.replace(task2, task1)]
+            row["deliverable_file_records"][0]["path"] = deliverable.replace(task2, task1)
+        else:
+            payload["observation_execution"]["runtime_source"]["source_sha"] = "f" * 40
+        payload["result_fingerprint"] = ci.observation.inference_result_fingerprint(payload)
+        changed = ci._bytes(payload)
+        result_path.write_bytes(changed)
+        execution = ci._read(case.root / "execution-receipt.json")
+        execution["returned"].update(result_identity=_identity(changed), result_fingerprint=payload["result_fingerprint"])
+        (case.root / "execution-receipt.json").write_bytes(ci._bytes(execution))
+        assert validate_inference_result_fingerprint(payload) == payload["result_fingerprint"]
+        calls = list(case.api.calls)
+        monkeypatch.setenv("HF_TOKEN", TOKEN)
+        reason = ("single selected result mismatch" if change == "result_task" else
+                  "captured runtime_source mismatch" if change == "result_source" else
+                  "deliverable path must stay under deliverable_files/" + task2 + "/")
+        with ci.checked_request(**arguments, admission=False) as context, pytest.raises(ValueError, match="^" + reason + "$"):
+            ci.retain(context)
+        assert case.api.calls == calls and case.api.trees[case.api.head] == claim_tree
+        assert not (case.root / "retention-reserved.json").exists() and not (case.root / "completion.json").exists()
+        assert (case.root / "result/upload" / deliverable).read_bytes() == _FILE
+    else:
+        monkeypatch.setenv("HF_TOKEN", TOKEN)
+        assert _invoke(case, monkeypatch, "retain") == 0
+        envelope = ci._read(case.root / "completion.json")
+        ci.validate_envelope(envelope, expected_cell=selected)
+        assert _invoke(case, monkeypatch, "verify-envelope") == 0
+        assert {name: envelope[name] for name in selected} == selected
+        assert envelope["retention"] == "acknowledged" and envelope["status"] == "success" and envelope["usage"] is None
+        assert envelope["retry_allowed"] is False and envelope["grading_performed"] is False and envelope["other_cells_executed"] == 0
+        assert envelope["result_identity"] == _identity(data) and envelope["result_fingerprint"] == payload["result_fingerprint"]
+        assert case.api.commits == ["claim", "output"]
+        tree = case.api.trees[case.api.head]
+        assert all(name.startswith(selected_prefix + "/") for name in set(tree) - set(old_objects))
+        assert tree[selected_prefix + "/result/" + ci.observation.RESULT] == data
+        manifest = json.loads(tree[manifest_path])
+        assert manifest["observation"] == marker["observation"] and manifest["claim_commit"] == admission["returned_commit"]
+        for name, identity in manifest["files"].items():
+            assert _identity(tree[selected_prefix + "/" + name]) == identity
+        with pytest.raises(ValueError, match="^completion constants mismatch$"):
+            ci.validate_envelope({**envelope, "task_id": task1}, expected_cell=selected)
+        with pytest.raises(ValueError, match="^completion constants mismatch$"):
+            ci.validate_envelope(envelope)  # The legacy reader must not silently retarget to Task2.
+        # The CLI binds the completion against its independent request, too.
+        (case.root / "completion.json").write_bytes(ci._bytes({**envelope, "task_id": task1}))
+        assert _invoke(case, monkeypatch, "verify-envelope") == 2
+    assert case.api.trees[case.api.head][claim_path] == claim_bytes
+    assert {name: case.api.trees[case.api.head][name] for name in old_objects} == old_objects
+    assert {name: case.api.writers[case.api.head][name] for name in old_objects} == original_writers[original_head]
+    assert case.api.trees[original_head] == old_objects
+    captured = capsys.readouterr()
+    assert all(secret not in captured.out + captured.err for secret in
+               (TOKEN, _SECRET, "Synthetic final answer.", "deliverable.txt", "reference_files"))
