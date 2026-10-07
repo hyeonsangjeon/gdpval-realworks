@@ -1,54 +1,61 @@
 # Latest task result
 
-## Accepted readout and one directed Task3 result read
+## Accepted V2 failure preservation and one directed Task4 observation
 
-Source `f1f79f27b8ffd3e67cf7af60810be5abde86333b`, tree
-`affa4bc859a48482656327b85ef3786268f125c0`, passed all eleven applicable
-checks. Review `5435184139` accepted the integrated immutable-result reader
-and transport correction. Only completion and direct usage records change
-after validation; helper, workflow, tests and all other runtime bytes remain
-those reviewed.
+Source `d9ef0f44536750c96013f2ad53f42aecda83d1b7`, tree
+`fb85cc978d279ae5c21938c241a82147ae89260d`, passed all twelve applicable
+checks; the deployment check was skipped. Review `5436580957` accepted the
+failure-code preservation, exact duplicate guards, prospective compiler
+bindings and historical-R readout checks. Only completion records change
+after validation; runtime, workflow, tests and usage bytes stay reviewed.
 
-The leader authorizes one separately digest-bound read of Task3's retained
-canonical result, not a new inference or grading attempt. The request must
-name the actual accepted controller C/tree and the real readout run number,
-attempt 1, and include the independently verified completion envelope.
-Original result source R remains
-`f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, tree
-`72a9d2fa2c22b1409a8b19e01d6a24ac5f29f9cf`; it is not replaced by C.
+The correction keeps an original V2 failure code only when its complete
+receipt verifies, terminal reason is `failed` and cleanup is complete.
+Timeout, unconfirmed cleanup, invalid receipts and native results retain
+their existing treatment. No error becomes success. The two complete
+typed-voice cases passed in 10.64s with an 11.238067s wrapper. The [prior
+record][prior] preserves the separate five earlier passing checks, their
+failed combined invocation, base reproduction and preparation refusal.
+No passing selector was repeated for this acceptance.
 
-The selected observation is `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` /
-repeat 1 / `2ea2e5b5-257f-42e6-a7dc-93763f28b19d`, actual run `37524773961`,
-attempt 1. Its immutable output is
-`2460c45c3896371b011624f13fc7817d5f670969`, result size 6632 bytes,
-SHA256 `a2f21666eb53542ead8b780404fd241056d3cc129167f6e7b1be36c6b64160f7`,
-fingerprint `0374270431f6352211715da432d886f8557514324c89d60c230f81f65a2a5b61`.
-The original execution request SHA256 is
-`6748374c1b4ad0bbcbafb47117c6c641976d85ece836486eb8ce553c65719c1a`.
-The claim/request association is supplied by the verified completion, not
-independently rediscovered by the reader.
+Only the two prospective compiler hashes changed to
+`f4e41540a089e4ed164063bec60ce124a901eb5195065e456502e902814cd3a2`.
+The new full registration seal is
+`3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f`.
+Historical results keep
+`f3337bd80a168cf42b37314b425f5f5b221049fa87c1c15e2338de3441e0ae05`;
+readout validates their original R commit/tree/registration blob rather than
+substituting the current controller's registration. Frozen F and study facts
+are unchanged.
 
-At most two GETs share 60 seconds: private identity at that immutable
-revision, then the exact canonical object. Both request identity encoding.
-Only the bounded step receives the existing HF secret; permissions are
-`contents: read`, with no OIDC or Azure login. Exact bytes, canonical
-schema/fingerprint, source and cell are checked before safe-field projection.
-Private prose, filenames, raw errors, headers, tokens and the full body
-must not be published. There is no retry, HEAD lookup, storage write,
-input acquisition, model operation, grader or consumed-state adoption.
+The leader authorizes exactly one subsequent immutable request for
+`gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 /
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3`. It must name actual accepted runtime
+source/tree, new registration seal, next workflow run number and attempt 1,
+finite admission window and independently recorded exact request digest.
+Original inputs, preparation, actual host support and private claim/CAS
+checks remain mandatory.
 
-The [reviewed evidence record][prior] preserves the separate **21 passed
-in 7.95s** and **3 passed in 2.55s** synthetic proofs. They were not rerun
-or aggregated for this authorization. The actual Task3 outcome is a
-canonical error with terminal `failed`, confirmed cleanup/host reuse and
-reported usage of 2913 input and 326 output tokens. That is not an invoice,
-model-call count or grade.
+Last acknowledged private output
+`2460c45c3896371b011624f13fc7817d5f670969` is an independently known expected
+parent, not assumed fresh. The executor must verify it and refuse any occupied
+Task4 prefix. No mismatch permits an automatic retry.
 
-This record stops before the real read: the private error/model-binding
-classification is not yet known. Remaining work is the bounded read and
-interpretation of its verified safe projection. Task1 and Task2 remain
-consumed/uncertain; Task3 remains consumed/error. No Task1-Task3 replay,
-Task4, native execution or grading is authorized. The existing study,
-frozen F and 1200+20 execution limits remain unchanged.
+Task1/Task2 remain consumed/uncertain; Task3 remains consumed with its
+unchanged canonical error, reported 2913 input and 326 output tokens and
+confirmed cleanup. Its original tool error is not recovered by the synthetic
+failure-code demonstration. No historical score, cost or model-attempt count
+is invented, and none of those observations may be replayed or relabeled.
 
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/f1f79f27b8ffd3e67cf7af60810be5abde86333b/tasks/LATEST_TASK_RESULT/README.md
+The fixed twenty-observation study, GPT-5.4/direct-v1/xhigh, V2 nine-turn/8192
+settings, concurrency 1, one external attempt, 1200 seconds from first
+generation and shared 20-second cleanup remain unchanged. The execution
+job retains its 45-minute ceiling. This is not a money cap or a remote
+cancellation guarantee.
+
+This record stops before Task4 execution; no Task4 result is claimed.
+Remaining work is that directed attempt and verified retention of its
+returned result or uncertainty. Any grading or native execution needs its
+separate source/input/host/direction gates; neither is authorized here.
+
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/d9ef0f44536750c96013f2ad53f42aecda83d1b7/tasks/LATEST_TASK_RESULT/README.md

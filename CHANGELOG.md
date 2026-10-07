@@ -13,6 +13,132 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Accept reviewed V2 failure-code preservation and historical-readout source
+  `d9ef0f44536750c96013f2ad53f42aecda83d1b7`, tree
+  `fb85cc978d279ae5c21938c241a82147ae89260d`, review `5436580957`,
+  after all twelve applicable checks succeeded; deployment was skipped.
+  Update completion records only after validation, retaining every reviewed
+  runtime/workflow/test byte. Authorize one separately digest-bound V2 r1
+  Task4 request for `3baa0009-5a60-4ae8-ae99-4955cb328ff3` under the new
+  prospective registration seal. Historical Task1-Task3 bytes and seals
+  remain unchanged and cannot be replayed. No Task4 result or grading
+  outcome is claimed by this pre-dispatch record.
+
+- Add a candidate correction for V2 failure-code loss at the returned-result
+  boundary. On accepted main `d7aad7abc1e1626e72178f9e8d85090a63825cd2`, tree
+  `749155e1f967699036f887bbf58a6bddbde2aa0c`, one bounded synthetic reproduction
+  used real typed `AzureFoundryVoice` responses, consumer, runner, backend and
+  capture. A declared `workspace_apply` followed by valid `finalize` succeeded
+  with exact faithful replay. A controlled finalize refusal returned a
+  verifiable `artifact_not_openable` receipt, but the consumer replaced its
+  code with control reason `failed`; capture then rejected the receipt and
+  emitted `time_budget_observation_non_success`. The reproduction's
+  **2 passed in 14.34s**, exit 0, wrapper **14.933481s**, confirm those
+  observations, not a corrected-source pass. Artifacts are in
+  `/tmp/v2-real-voice-boundary-repro.nWLuBtNR/`.
+
+  The proposed correction preserves the original code only for a verified V2
+  failure with terminal `failed` and complete cleanup. Timeout, unconfirmed
+  cleanup, invalid receipts and native results keep the existing control
+  override. No validator is loosened or error promoted to success. Tested
+  implementation `7e6e441fa64dcca804b23383b43bd90830844247`, tree
+  `12117a30c37d53a38c7cf407f1fc60b8e27f4b4b`, adds one focused typed-response
+  regression. Its single offline selector **failed: 2 failed in 6.35s**,
+  exit 1, wrapper **6.956347s**. Both cases stopped in preparation at
+  `_dual_root_sources` / `runtime_source_roles`, before Responses or the new
+  correction ran. At that tested source, the registration still pinned
+  compiler SHA256
+  `2766e58f769e2bf617c26c15cc124329c8c9bd5f17bf03fb88a3066f78140f96`;
+  the changed compiler hashes to
+  `f4e41540a089e4ed164063bec60ce124a901eb5195065e456502e902814cd3a2`.
+  No pin, assertion or bound was changed in that invocation and no retry
+  followed. Its failed-proof artifacts remain in
+  `/tmp/v2-real-voice-boundary-proof.TnBlJliY/`; log SHA256 is
+  `32482584c0b156772222d8c7e0f74a29fb916a8250b7ccc7a4619a17ea86eeb2`.
+
+  The leader then inspected `93c5cbb931ea0a3db1cb63f9bd0e89bea72132a1`, tree
+  `ee85d1c5771012fec362823da61268997df2f53e`, and authorized only the two
+  prospective compiler bindings to advance to the independently verified
+  candidate hash above. Compiler blob
+  `f6fe26b40310f3ca72347a6133abe43316de97f2` and the consumer correction are
+  unchanged. Parsed YAML confirms no other registration change. The full
+  registration seal advances from
+  `f3337bd80a168cf42b37314b425f5f5b221049fa87c1c15e2338de3441e0ae05` to
+  `3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f`;
+  existing observations keep their original seal.
+
+  Historical readout now validates the trusted completion's exact R commit
+  and tree through the existing local read-only Git guards, reads only its
+  constant registration blob, and compares the request's seal to that R plan.
+  Selection and result validation use R's plan; C's source/workflow/bootstrap
+  checks remain intact. No old code executes and no missing-R fallback to C
+  exists. The sole workflow change is checkout `fetch-depth: 1` to `0` for
+  those local objects; permissions, secret scope, steps and two-GET/60-second
+  transport limits remain unchanged.
+
+  Continuation `e3ad928bf02b99e080a6a5924a4ebda75b156adf`, tree
+  `fe3d097ca4d6632478494e67d57f0f9be48e52b8`, ran one combined offline
+  invocation: **2 failed, 5 passed in 13.79s**, exit 1, wrapper **14.574513s**.
+  The four new historical-R compatibility cases and affected workflow check
+  passed. Both real-voice cases cleared their primary replay/capture checks
+  and reached the duplicate call, which refused with `result_destination_exists`
+  instead of the test's expected `direction_observation_already_consumed`.
+  The existing destination guard runs first. Post-refusal effects/byte checks
+  and the final safe test receipt were not reached; neither boundary test is
+  a pass. No assertion, production code or bound changed after this failure
+  in that continuation.
+  Artifacts: `/tmp/pr765-registration-readout-proof.HFBa6hyS/`; log SHA256
+  `374b5eb1eb80b05a2cc9745164e5c3ec3e320e3c22f54978bb35e5b9e3fe8da6`.
+
+  After reviewing `67602c50fd1add61956bd767d0f568ae072df0bd`, tree
+  `5bb1a3f3191d15ec42c7a6eb3e6ef50402a6d0f4`, the leader authorized only
+  the duplicate test correction. The same destination now expects exactly
+  `result_destination_exists`; a separate call changing only the destination
+  to an unused sibling must raise `direction_observation_already_consumed`.
+  Each refusal checks unchanged effects, the single permanent claim, consumed
+  bytes and original result/deliverable bytes, with no alternate destination
+  or reservation created. Independent direction, preparation, store and
+  production guard order are unchanged, as are all preceding assertions.
+
+  Test-only commit `be92f1f399934ece7ba4aee3887d4d7fe052139a`, tree
+  `94124a3a8a42af45e3c8f3a6be0ade3944378581`, ran only the two full voice
+  nodes once: **2 passed in 10.64s**, exit 0, wrapper **11.238067s**.
+  The real typed voice/consumer/runner/backend/capture path retains canonical
+  success and verified `artifact_not_openable` failure, rejects forged
+  receipts and completes both duplicate-preservation checks. Inputs,
+  transport and kernel state are synthetic; this is not a real-host or
+  historical Task3 proof. The five historical/readout/workflow passes were
+  not repeated; the earlier 2-failed/5-passed invocation remains failed.
+  Compiler, registration seals, readout helper and workflows are unchanged.
+  Artifacts: `/tmp/pr765-duplicate-guards-proof.sHfFVypx/`; log SHA256
+  `e1b3e62c650976c4fe0a4f4b6fc7720fbfd9b1ef2a0653fc4e9e3b256ba93eba`.
+  Exact final HEAD/tree and PR identity are retained in that directory's
+  `handoff.json`; the post-proof delta contains only these three records.
+
+  Separately, leader-verified Task3 readout run `37546159098`, attempt 1,
+  artifact `11450457583`, retained a 2597-byte safe projection with SHA256
+  `53570348019f1fcfcdccbfb11beb63470b495223b6e23366db60ca54fe666331`.
+  It reports canonical error, no verified runner result or deliverables,
+  successful cleanup, one completed model-matched Responses invocation and
+  complete reported usage of 2913 input / 326 output tokens. Cached input 0
+  and reasoning output 302 are subsets, not additional tokens. This excludes
+  missing response/model-binding mismatch in that retained invocation; it
+  does not recover the original tool error or establish price, score or native
+  model-attempt count. The synthetic refusal is not Task3's diagnosis.
+
+  Only CHANGELOG, LATEST and the direct README evidence paragraph change
+  after the latest proof.
+  Python 3.10.12, 300s+5s/no-`-x`, 30s fixture Git bounds, the twenty-cell
+  study scope, 9-turn/8192 settings, 1200+20 and one attempt remain fixed.
+  Frozen F/TEMPLATE, the old source profile and its 37 pins, study settings,
+  HF upload and core runtime bytes are unchanged. The leader supplied the
+  prospective source-binding decision. The required reviewer invocation had
+  failed before execution on the unavailable legacy Opus preference; it was
+  not retried or claimed successful. Final review/CI and separately directed
+  readout/live requests remain gates. Task1-Task3 stay consumed; PR764 is
+  untouched. The four invocations are separate, not an aggregate pass.
+  See the [separate evidence and immutable identities](tasks/LATEST_TASK_RESULT/README.md).
+
 - Set `Accept-Encoding: identity` on the readout's scoped HTTP session before
   the private-identity metadata GET. The exact-result GET keeps its explicit
   identity header. The existing response guard still refuses any encoding
