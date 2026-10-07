@@ -54,6 +54,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add one manual hosted route for the retained native-r1 Task3 grade. A thin
+  controller keeps the accepted `prepare_native_task3_grading_execution`
+  context open through original-input intake, four-GET retained hydration,
+  F preparation, distinct grading-only input, direction checks, permanent
+  private grading-claim acknowledgement and `execute_native_task3_grading`.
+  The existing intake, preparer, executor, original R/F/input/registration
+  pins and twenty-cell study are unchanged. The grading-only CAS namespace
+  keys the original observation and F, not C or an Actions run. Occupied or
+  unconfirmed claims are not adopted or retried. HF credentials are scoped
+  to storage; the grading child remains offline and token-free for HF/GitHub.
+  Actual available grade/ledger/checkpoint/partial evidence is retained
+  privately. The accepted executor discards child stdout/stderr; this route
+  does not claim to retain them. Only a validated nonsecret completion is
+  public, and success requires a valid F grade plus confirmed retention.
+  Preserve the 14400-second F and 14520-second child envelopes, with a
+  270-minute job cap and bounded setup/retention steps; no new monetary cap
+  or live authority is claimed. The single new seven-case offline selector
+  reported **7 passed in 294.01s**, exit 0, wrapper **298.027932s**, at
+  `86d628b4d227b40787b1b958b54b6acb3a6aac51`, tree
+  `ded2db9655c5ec581a9b64317ce35957348e1f45`, from accepted
+  `a24c6dc9e9370362ce2adc886878b547b80cdc4c`, tree
+  `3f94b28df6337ccd92f91b605f1c26bcf51f70a3`. It used real validators with
+  synthetic HTTP/RPC, originals, child-grade and kernel facts under Python
+  3.10.12 / 300s+5s/no-`-x` and named 30-second Git fixtures. Seven JUnit
+  `record_property` warnings remain; no earlier selector was rerun or pooled.
+  Artifacts are in `/tmp/native-task3-hosted-grade.b5J2SO/`, log SHA256
+  `df7116976e51f3b11690740d5e12efde7c2b5295cd10e8138dd4966c49941f34`;
+  `handoff.json` records final HEAD/tree after the evidence-only commit.
+  Actual Task3's two declared files/408601 bytes remain unhydrated for
+  grading and ungraded. Usage/cost/served identity/native counters stay
+  unknown. Prior specialist-model invocations failed before execution and
+  are not endorsements. Fixed-HEAD independent review/CI and one exact
+  leader request still gate credentialed use; no live claim, model, grade,
+  replay or next observation occurred. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  records the per-case results, unchanged source identities and remaining gates.
+
 - Draft an explicit native-r1 Task3 entry in the shared frozen-F grading
   executor. The existing V2-first API/CLI stays unchanged. The leader corrected
   the earlier executor-unchanged constraint after the accepted source finding:

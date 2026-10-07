@@ -839,7 +839,8 @@ intake. The leader corrected the earlier executor-unchanged constraint:
 remain so. The new opt-in `execute_native_task3_grading` shares its internal
 executor but admits only native r1 Task3, with explicit full Step0 and the
 existing independent observation/input/preparation/source/direction bindings.
-Its old V2 API/CLI still forbids Step0. No hosted workflow/controller is added.
+Its old V2 API/CLI still forbids Step0. That compatibility unit added no hosted
+workflow/controller.
 
 For a future authorized caller, the context manager
 `prepare_native_task3_grading_execution(request_json=...,
@@ -927,6 +928,78 @@ is unchanged, as are intake/preparation, original-versus-derived provenance,
 F, registration, workflows and 14400/14520-second controls. This local proof
 is not actual hydration, a host/kernel verdict or a grade. Full fixed-HEAD
 review/CI remain required; the hosted route and live grading remain deferred.
+
+The subsequent fixed native Task3 hosted route is a separate draft:
+[`gpt54_time_budget_native_grading_ci.py`](gpt54_time_budget_native_grading_ci.py)
+and the manual
+[`gpt54-time-budget-native-task3-grade.yml`](../.github/workflows/gpt54-time-budget-native-task3-grade.yml).
+It keeps `prepare_native_task3_grading_execution` open in one Python process
+through authenticated intake/F preparation, grading-only staging,
+direction checks, permanent private grade-claim acknowledgement,
+`execute_native_task3_grading` and retention. It neither serializes the handle
+nor uses the old V2 entry. Original result/preparation bytes and their
+identities stay distinct from the derived grading input. Accepted intake,
+preparer, executor, F/Step8/core/scoring and registration pins are unchanged.
+
+Its CLI operations are `validate-request`, `run` and `verify-completion`.
+Each requires `--controller-sha`, `--controller-tree` and
+`--expected-request-sha256`; request bytes come from
+`TIME_BUDGET_GRADE_REQUEST_JSON`, with format
+`gpt54-time-budget-native-task3-grade-request-v1` and purpose
+`grade_retained_native_r1_task3_once`. The independent request binds fixed
+Task3, C/original R/F/input/result/output identities, declared two files/408601
+bytes, the actual all-event Actions run number/attempt 1, immutable paths,
+finite admission, grading permission/budget and expected private parent.
+Do not treat a validation message or saved completion as execution authority.
+The current exact leader request remains a future gate, not a supplied example.
+
+Public owner/repository/main/workflow/source/digest gates precede credentials.
+The ordinary bootstrap is separate from linked C/R/F and private working
+directories; the workflow never spoofs `GITHUB_WORKSPACE`. Existing OIDC login
+precedes the single live context. Original parquet/references/full 218405-byte
+Step0, the accepted four-GET/60-second retained intake, F preparation and
+direction validation finish before the grading-only CAS. Its namespace keys
+the original observation plus F, not C or an Actions run. Occupied/wrong-parent/
+uncertain claims stop without adoption or retry. Only confirmed remote claim
+readback permits the existing local once-claim and child. HF credentials are
+scoped to storage calls, not the F child or retained files.
+
+The F/child envelopes stay 14400/14520 seconds. A 270-minute job cap contains
+bounded setup, a 252-minute controller step and post-grade retention reserve;
+it is not a monetary ceiling or proof of host readiness. Available grade,
+ledger, checkpoint and partial evidence stays private. The executor discards
+child stdout/stderr, so those streams are not claimed retained. Only a
+validated safe completion is public, and success requires a valid F grade
+and acknowledged retention. Lost retention stays uncertain/nonrenewable.
+
+The new selector
+`tests/test_time_budget_native_grading_ci.py::test_native_task3_hosted_grading_route`
+ran once: **7 passed in 294.01s**, exit 0, wrapper **298.027932s**. Its `guards`,
+`original`, `file`, `preparation`, `success`, `partial` and `timeout` cases
+used real validators, synthetic HTTP/auth/CAS RPC and three synthetic child
+roundtrips. Namespace/ownership facts were synthetic, not a kernel verdict.
+No successful preparer/executor verdict was mocked. Python 3.10.12,
+300s+5s/no-`-x` and named 30-second Git/Bash fixtures were used. Seven JUnit
+`record_property` warnings remain; immediate phase reports and final JUnit
+were retained. No old selector was rerun or pooled with this result.
+
+Tested source is `86d628b4d227b40787b1b958b54b6acb3a6aac51`, tree
+`ded2db9655c5ec581a9b64317ce35957348e1f45`, from accepted
+`a24c6dc9e9370362ce2adc886878b547b80cdc4c`, tree
+`3f94b28df6337ccd92f91b605f1c26bcf51f70a3`. Artifacts are in
+`/tmp/native-task3-hosted-grade.b5J2SO/`, log SHA256
+`df7116976e51f3b11690740d5e12efde7c2b5295cd10e8138dd4966c49941f34`;
+`handoff.json` records final HEAD/tree after the three evidence docs, with
+tested code/workflow/test blobs unchanged. [LATEST](../tasks/LATEST_TASK_RESULT/README.md)
+records each case, exact source identities and remaining gates. Actual Task3
+still has only declaration-level evidence for its two files/408601 bytes;
+they were not privately hydrated or graded here. Usage/cost/served identity/
+native counters remain unknown, and `items_seen=56` is not a model-call count.
+No quality score is established. Prior unavailable specialist invocations
+failed before execution, not as endorsements. Independent final review/CI,
+actual host/auth/input readiness and one exact leader request still gate
+credentialed use. This fixed-cell route adds no study condition, replay,
+scheduler or next-cell authority.
 
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
