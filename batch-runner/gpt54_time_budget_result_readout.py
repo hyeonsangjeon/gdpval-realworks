@@ -32,6 +32,7 @@ import gpt54_time_budget_v2_ci as execution
 from codex_ci_input_intake import _hf_environment
 from core.agentic_v2_contract import ERROR_TYPES
 from core.agentic_v2_preregistration import seal
+from core.codex_runner import RATE_LIMIT_KINDS
 from core.inference_manifest import (
     STEP2_PROGRESS_SCHEMA, canonicalize_inference_payload, validate_step2_progress_results,
 )
@@ -53,6 +54,9 @@ BASENAME = "time-budget-result-readout.json"
 FORMAT = "gpt54-time-budget-result-readout-v1"
 REQUEST_FORMAT = "gpt54-time-budget-result-readout-request-v1"
 PURPOSE = "read_one_retained_canonical_result"
+NATIVE_FORMAT = "gpt54-time-budget-native-canonical-readout-v1"
+NATIVE_REQUEST_FORMAT = "gpt54-time-budget-native-canonical-readout-request-v1"
+NATIVE_PURPOSE = "read_one_retained_native_canonical_result"
 UNCERTAINTY_FORMAT = "gpt54-time-budget-native-uncertainty-readout-v1"
 UNCERTAINTY_REQUEST_FORMAT = "gpt54-time-budget-native-uncertainty-readout-request-v1"
 UNCERTAINTY_PURPOSE = "read_one_retained_native_uncertainty_manifest"
@@ -131,10 +135,12 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
              and _identity(data)["sha256"] == expected_request_sha256, "independent_request_digest_required")
     request = json.loads(data, object_pairs_hook=_object)
     uncertainty = type(request) is dict and request.get("purpose") == UNCERTAINTY_PURPOSE
+    native = type(request) is dict and request.get("purpose") == NATIVE_PURPOSE
     _keys(request, {"format", "purpose", "controller", "ci", "registration_sha256", "cell", "completion"}
           | ({"execution_request_identity"} if uncertainty else set()))
     _require((request["format"], request["purpose"]) == (
-        (UNCERTAINTY_REQUEST_FORMAT, UNCERTAINTY_PURPOSE) if uncertainty else (REQUEST_FORMAT, PURPOSE)),
+        (UNCERTAINTY_REQUEST_FORMAT, UNCERTAINTY_PURPOSE) if uncertainty else
+        (NATIVE_REQUEST_FORMAT, NATIVE_PURPOSE) if native else (REQUEST_FORMAT, PURPOSE)),
              "readout_request_required")
     _require(storage._hash(reviewed_source_sha, 40) and storage._hash(reviewed_source_tree, 40),
              "independent_controller_identity_required")
@@ -198,20 +204,22 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
             _require(0 < identity["size"] <= execution.MAX_REQUEST_BYTES, "execution_request_size_refused")
             _same("independent execution request hash", identity["sha256"], completion["request_sha256"])
         else:
-            execution.validate_envelope(completion, expected_cell=cell)
+            (native_execution if native else execution).validate_envelope(completion, expected_cell=cell)
             _require(completion["retention"] == "acknowledged" and completion["status"] in ("success", "error"),
                      "retained_canonical_result_required")
         plan = _result_registration(root, completion["source"])
         _same("source-bound registration", request["registration_sha256"], seal(plan))
-        # Canonical rows remain V2-only. The native branch reads no result row.
         _require(cell["study_id"] == registration.STUDY_ID
-                 and cell["condition"] == ("codex" if uncertainty else "sandbox_v2")
+                 and cell["condition"] == ("codex" if uncertainty or native else "sandbox_v2")
                  and type(cell["repeat"]) is int and any(
                      all(cell[key] == run[key] for key in ("run_id", "condition", "repeat")) for run in plan["runs"])
                  and cell["task_id"] in [row["task_id"] for row in plan["shared"]["dataset"]["tasks"]],
                  "registered_observation_required")
         if uncertainty:
             _same("registered first native task", cell["task_id"], plan["shared"]["dataset"]["tasks"][0]["task_id"])
+        if native:
+            _same("native canonical r1", {name: cell[name] for name in CELL_KEYS - {"task_id"}},
+                  {name: native_execution.CELL[name] for name in CELL_KEYS - {"task_id"}})
         yield {"request": request, "request_sha256": expected_request_sha256, "plan": plan,
                "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
     check_bootstrap()
@@ -286,9 +294,115 @@ def _summary(value: dict, completion: dict) -> None:
         _same("completion " + name, control[name], completion[name])
 
 
+NATIVE_MEASUREMENTS = {
+    "model_attempt_count", "repeated_request_count", "input_tokens", "output_tokens",
+    "written_tokens", "native_retries", "cost_usd",
+}
+NATIVE_AVAILABILITY = {"usage_complete": False, "reason": "consumer_does_not_export_native_usage"}
+NATIVE_DELIVERABLE_BASIS = {
+    "basis": "declared_from_verified_result_metadata", "contents_fetched": False, "contents_verified": False,
+}
+
+
+def _native_summary(value: dict, completion: dict) -> None:
+    """The native capture's finite metadata, never V2 runner/usage aliases."""
+    _keys(value, {"status", "error", "runner_success", "required_deliverable_missing", "control", "usage",
+                  "usage_availability", "native_measurements", "codex_diagnostics", "served_model_identity", "deliverables"})
+    _require(value["status"] in ("success", "error") and (
+        value["error"] is None if value["status"] == "success" else
+        value["error"] in {TIMEOUT, CLEANUP_UNCONFIRMED, "time_budget_observation_non_success"}),
+             "native_result_error_refused")
+    _require(type(value["runner_success"]) is bool and type(value["required_deliverable_missing"]) is bool,
+             "native_runner_flags_refused")
+    _require(value["usage"] is None and value["served_model_identity"] is None, "native_unavailable_identity_required")
+    _keys(value["usage_availability"], set(NATIVE_AVAILABILITY))
+    _require(value["usage_availability"]["usage_complete"] is False, "native_usage_incomplete_required")
+    _same("native usage availability", value["usage_availability"], NATIVE_AVAILABILITY)
+    _keys(value["native_measurements"], NATIVE_MEASUREMENTS)
+    _require(all(item is None for item in value["native_measurements"].values()), "native_measurements_unavailable")
+    diagnostics = value["codex_diagnostics"]
+    if diagnostics is not None:
+        _keys(diagnostics, {"items_seen", "http_status_code", "rate_limit_kind"})
+        _require(type(diagnostics["items_seen"]) is int and diagnostics["items_seen"] >= 0
+                 and (diagnostics["http_status_code"] is None or type(diagnostics["http_status_code"]) is int
+                      and 100 <= diagnostics["http_status_code"] <= 599)
+                 and (diagnostics["rate_limit_kind"] is None or diagnostics["rate_limit_kind"] in RATE_LIMIT_KINDS),
+                 "native_diagnostics_refused")
+    control = value["control"]
+    _keys(control, CONTROL_FLAGS | set(CONTROL_STATIC) | {"terminal_reason"})
+    _same("native control constants", {name: control[name] for name in CONTROL_STATIC}, CONTROL_STATIC)
+    _require(all(type(control[name]) is bool for name in CONTROL_FLAGS) and control["admitted"]
+             and control["terminal_reason"] in {"completed", "failed", "cancelled", "abandoned", TIMEOUT}
+             and not control["remote_cancellation_confirmed"] and not control["remote_billing_bound"],
+             "native_terminal_control_refused")
+    totals = value["deliverables"]
+    _keys(totals, {"declared_count", "declared_bytes"} | set(NATIVE_DELIVERABLE_BASIS))
+    _same("native declared deliverable basis", {name: totals[name] for name in NATIVE_DELIVERABLE_BASIS},
+          NATIVE_DELIVERABLE_BASIS)
+    _require(totals["contents_fetched"] is False and totals["contents_verified"] is False,
+             "native_deliverable_contents_unread")
+    _require(type(totals["declared_count"]) is int and 0 <= totals["declared_count"] <= 120
+             and type(totals["declared_bytes"]) is int and 0 <= totals["declared_bytes"] <= storage.MAX_TOTAL_BYTES,
+             "native_deliverable_totals_refused")
+    if value["status"] == "success":
+        _require(value["runner_success"] and not value["required_deliverable_missing"]
+                 and control["terminal_reason"] == "completed" and control["cleanup_complete"]
+                 and control["host_reusable"], "native_success_requires_cleanup")
+    for name in ("status", "usage"):
+        _same("completion " + name, value[name], completion[name])
+    for name in ("terminal_reason", "cleanup_complete", "host_reusable"):
+        _same("completion " + name, control[name], completion[name])
+
+
+def _project_native(row: dict, control: dict, captured: dict, completion: dict, plan: dict) -> dict:
+    _keys(captured["provider_binding"], {"settings_sha256", "config_overrides_sha256", "sdk_version", "cli_version"})
+    provider = captured["provider_binding"]
+    _require(all(storage._hash(provider[name]) for name in ("settings_sha256", "config_overrides_sha256")),
+             "native_provider_binding_refused")
+    for name in ("sdk_version", "cli_version"):
+        _same("native " + name, provider[name], plan["conditions"]["codex"][name])
+    template = captured["condition_template"]
+    _keys(template, {"path", "sha256", "size"})
+    _same("native template", template["path"], plan["conditions"]["codex"]["template"])
+    validate_reference_record({name: template[name] for name in ("sha256", "size")})
+    _same("native template source", template["sha256"], plan["source_pins"][template["path"]])
+    inputs = captured["inputs"]
+    _require(type(inputs["needs_files"]) is bool, "native_required_files_flag_refused")
+    _keys(inputs["step0_manifest"], {"sha256", "size"})
+    validate_reference_record(inputs["step0_manifest"])
+    _require(inputs["step0_manifest"]["size"] > 0, "native_step0_identity_required")
+    observability = row["observability"]
+    _keys(observability, {"runner_success", "codex_diagnostics", "runner_error_sha256",
+                         "required_deliverable_missing", "usage_availability", "native_measurements"})
+    _require(observability["runner_error_sha256"] is None or storage._hash(observability["runner_error_sha256"]),
+             "native_error_digest_refused")
+    records = row["deliverable_file_records"]
+    _require(type(records) is list and len(records) <= 120, "native_deliverable_records_refused")
+    for record in records:
+        _keys(record, {"path", "sha256", "size"})
+        validate_reference_record({name: record[name] for name in ("sha256", "size")})
+    _same("native deliverable declarations", [item["path"] for item in records], row["deliverable_files"])
+    _same("native required deliverable", observability["required_deliverable_missing"], inputs["needs_files"] and not bool(records))
+    _require(type(row["content"]) is str and row["content"] == row["deliverable_text"], "native_text_shape_refused")
+    success = (observability["runner_success"] and control["terminal_reason"] == "completed"
+               and control["cleanup_complete"] is True and control["host_reusable"] is True
+               and bool(records or row["content"]) and (not inputs["needs_files"] or bool(records)))
+    _same("native capture status", row["status"], "success" if success else "error")
+    summary = {"status": row["status"], "error": row["error"], "usage": row["usage"],
+               **{name: observability[name] for name in ("runner_success", "required_deliverable_missing",
+                    "usage_availability", "native_measurements", "codex_diagnostics")},
+               "served_model_identity": None,
+               "control": {name: control[name] for name in CONTROL_FLAGS | set(CONTROL_STATIC) | {"terminal_reason"}},
+               "deliverables": {"declared_count": len(records), "declared_bytes": sum(item["size"] for item in records),
+                                **NATIVE_DELIVERABLE_BASIS}}
+    _native_summary(summary, completion)
+    return summary
+
+
 def project_result(data: bytes, context: dict) -> dict:
     """Validate authenticated canonical bytes, then return only typed fields."""
     request, plan = context["request"], context["plan"]
+    native = request["purpose"] == NATIVE_PURPOSE
     completion, cell = request["completion"], request["cell"]
     _same("independent result bytes", _identity(data), completion["result_identity"])
     payload = json.loads(data, object_pairs_hook=_object)
@@ -301,7 +415,8 @@ def project_result(data: bytes, context: dict) -> dict:
     _require(len(payload["results"]) == 1, "single_result_required")
     row, control, captured = payload["results"][0], payload["time_budget_observation"], payload["observation_execution"]
     for name, expected in {"experiment_id": cell["run_id"], "condition": cell["condition"],
-                           "execution_mode": "agentic_sandbox_v2", "model": plan["shared"]["model"]["deployment"],
+                           "execution_mode": "codex_foundry" if native else "agentic_sandbox_v2",
+                           "model": plan["shared"]["model"]["deployment"],
                            "source": plan["shared"]["dataset"]["repo_id"]}.items():
         _same("result " + name, payload[name], expected)
     _keys(row, {"task_id", "status", "error", "content", "deliverable_text", "deliverable_files",
@@ -318,8 +433,8 @@ def project_result(data: bytes, context: dict) -> dict:
     _same("result R", {"sha": identity["reviewed_source_sha"], "tree": identity["reviewed_source_tree"]}, completion["source"])
     _same("result registration", identity["registration_sha256"], request["registration_sha256"])
     _keys(captured, {"direction_sha256", "host", "preparation_identity", "runtime_source", "frozen_grader", "inputs",
-                     "condition_template", "configuration", "resolved_instructions", "entrypoint", "paths_sha256",
-                     "grading_performed", "upload_performed"})
+                     "condition_template", "configuration", "entrypoint", "paths_sha256",
+                     "grading_performed", "upload_performed"} | ({"provider_binding"} if native else {"resolved_instructions"}))
     _same("captured R", captured["runtime_source"], {
         "source_sha": identity["reviewed_source_sha"], "source_tree": identity["reviewed_source_tree"]})
     _same("captured input seal", seal(captured["inputs"]), identity["input_sha256"])
@@ -336,9 +451,11 @@ def project_result(data: bytes, context: dict) -> dict:
     _same("host evidence policy", captured["host"]["policy"], "linux-boot-namespace-user-ci-instance-v1")
     _same("host metadata is not ownership", captured["host"]["ownership_confirmed"], False)
     _same("captured host", captured["host"]["instance_sha256"], completion["host_sha256"])
-    _same("captured entrypoint", captured["entrypoint"], execution.observation.ENTRYPOINT)
+    _same("captured entrypoint", captured["entrypoint"], (native_execution if native else execution).observation.ENTRYPOINT)
     _same("no grading or upload by callable", [captured["grading_performed"], captured["upload_performed"]], [False, False])
     _require(all(storage._hash(captured[name]) for name in ("direction_sha256", "paths_sha256")), "capture_hash_refused")
+    if native:
+        return _project_native(row, control, captured, completion, plan)
     observability = row["observability"]
     _keys(observability, {"runner_success", "runner_result_verified", "runner_error", "runner_error_sha256",
                          "v2_audit_sha256", "usage_availability", "required_deliverable_missing"})
@@ -420,6 +537,9 @@ def _binding(context: dict) -> dict:
             "execution_request_sha256": completion["request_sha256"], "output_commit": completion["output_commit"],
             "result_identity": completion["result_identity"], "result_fingerprint": completion["result_fingerprint"],
             "retry_allowed": False, "grading_performed": False}
+    if request["purpose"] == NATIVE_PURPOSE:
+        binding.update(format=NATIVE_FORMAT, registration_sha256=request["registration_sha256"],
+                       claim_commit=completion["claim_commit"], host_sha256=completion["host_sha256"])
     if request["purpose"] == UNCERTAINTY_PURPOSE:
         binding.update(format=UNCERTAINTY_FORMAT, observation_source=binding.pop("result_source"),
                        execution_request_identity=request["execution_request_identity"],
@@ -441,6 +561,8 @@ def validate_envelope(value: dict, context: dict) -> None:
         _require(value["verified_private"] is True, "private_result_required")
         if context["request"]["purpose"] == UNCERTAINTY_PURPOSE:
             _uncertainty_summary(value["summary"])
+        elif context["request"]["purpose"] == NATIVE_PURPOSE:
+            _native_summary(value["summary"], context["request"]["completion"])
         else:
             _summary(value["summary"], context["request"]["completion"])
     else:
@@ -454,7 +576,8 @@ def _read_result(context: dict) -> dict:
     completion, cell = context["request"]["completion"], context["request"]["cell"]
     revision = completion["output_commit"]
     uncertainty = context["request"]["purpose"] == UNCERTAINTY_PURPOSE
-    member = native_execution.MANIFEST if uncertainty else execution._namespace(cell)[0] + "/result/" + execution.observation.RESULT
+    producer = native_execution if context["request"]["purpose"] == NATIVE_PURPOSE else execution
+    member = native_execution.MANIFEST if uncertainty else execution._namespace(cell)[0] + "/result/" + producer.observation.RESULT
     limit = storage.MAX_MANIFEST_BYTES if uncertainty else max(65536, completion["result_identity"]["size"])
     try:
         _require(_identity(metadata.TARGET.encode())["sha256"] == metadata.TARGET_SHA256, "fixed_target_identity")
