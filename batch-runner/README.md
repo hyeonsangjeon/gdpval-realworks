@@ -808,11 +808,41 @@ the accepted native callable above. `request.cell.task_id` explicitly selects
 one of the existing five registered tasks, only for
 `gpt54_time_budget_v1_codex_r1` / `codex` / integer repeat 1. Another run,
 condition, repeat or unregistered task refuses. There is no scheduler,
-selection loop or automatic next cell. The next intended task is Task2,
-`0112fc9b-c3b2-4084-8993-5a4abb1f54f1`, not another Task1 attempt. This exposes
-existing cells in the unchanged twenty-cell registration; it adds no live
-authority or permission to advance ABBA order. The closed pilot and retention
-studies remain closed.
+selection loop or automatic next cell. Native Task1 is consumed, as is Task2,
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1`. They must never be
+replayed. This exposes existing cells in the unchanged twenty-cell
+registration; it adds no live authority or permission to advance ABBA order.
+The closed pilot and retention studies remain closed.
+
+The leader verified Task2 run `37619469416`, run number 4, attempt 1,
+job `112785799708`: inputs/full Step0, claim, login and identity succeeded,
+execute failed, and retention/envelope/artifact succeeded. Exactly one safe
+event reported `observation_callable` / `observation_refused` /
+`independent_identity_size_bound`. Completion is uncertain, with null
+result/fingerprint/usage/terminal/cleanup/host-reuse fields and no retry or
+grade. The native callable had applied the 65536-byte metadata identity cap
+to the 218405-byte source-pinned original Step0 before provider/consumer
+construction. Step0 now uses `codex_ci_input_bundle.STEP0_PIN["size"]`;
+preparation and direction still use their unchanged 65536-byte limits.
+Exact whole-file size/hash, semantic, source and provenance checks remain.
+Neither the original Step0 pin nor registration/F/TEMPLATE is changed.
+
+At tested source `45350d204967553d96a9ed809320542733cb2994`, tree
+`bb45022865949ed7e871255254bbafc05bebc103`, only the new
+`tests/test_time_budget_codex_step0_identity.py::test_time_budget_native_step0_identity_bound`
+selector ran once: **7 passed in 68.90s**, exit 0; wrapper **69.565234s**.
+An actual valid 218405-byte synthetic Step0 with its computed digest reached
+the real controller/callable/capture and synthetic retention without byte
+changes. Byte/digest/size tampering, Step0 over-bound, preparation 65537 and
+direction 65537 cases refused. Auth/RPC/kernel/storage seams were synthetic;
+this is not private-original verification or a real-host positive. Artifacts
+are at `/tmp/native-step0-identity-bound.Kuhetw/`; its `handoff.json` records
+final HEAD/tree with unchanged tested code. The
+[current evidence record](../tasks/LATEST_TASK_RESULT/README.md) preserves
+all source/proof/Task2 artifact hashes and the unchanged registration seal.
+Fixed-HEAD review/CI and separately authorized next-cell checks remain.
+Task1's historical generic uncertainty is not relabeled. Task2's usage is
+null and its billing unknown, not zero. No native Task3 or replay is authorized.
 
 The selection draft's one new offline selector originally collected 13 cases and
 reported **5 failed, 8 passed in 99.94s**, exit 1; wrapper **100.917453s**,
@@ -839,17 +869,18 @@ host readiness or combine the two invocations into a thirteen-case pass.
 
 The selector is
 `tests/test_time_budget_first_codex_ci.py::test_time_budget_native_registered_task_selection`;
-the [current record](../tasks/LATEST_TASK_RESULT/README.md) lists the five
+the [selection proof record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/d9196c84f85fa3a6c27e61cddcb19c038b0cf562/tasks/LATEST_TASK_RESULT/README.md) lists the five
 full node IDs, exact commands, outcomes and hashes. The original failure is
 retained at `/tmp/native-r1-task-selection-proof.tGICRM/`; continuation
 artifacts are at `/tmp/native-r1-selection-continuation.yJxqnl/`. Its
 `handoff.json` records final documentation-bearing HEAD/tree after the
-docs-only commit, not another test run. Implementation acceptance remains
-HOLD pending fixed-HEAD review/CI, leader-owned integration of main's newer
-taxonomy, and the actual host/input/authorization gates. No live Task2 or
-ABBA advance is authorized. Task1 constants/readout and consumed claims,
-PR771 and all earlier worktrees remain untouched. No prior passing case was
-rerun; the proofs below remain separate.
+docs-only commit, not another test run. That proof's HOLD preceded the
+accepted selection/taxonomy union recorded at
+[`f081f470a03b205bfdaf567050bbc1d123b6d7b3`](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f081f470a03b205bfdaf567050bbc1d123b6d7b3/tasks/LATEST_TASK_RESULT/README.md).
+The earlier eight passes and separate five-node continuation remain distinct;
+none was rerun for the Step0 correction. Task1 constants/readout and consumed
+claims remain fixed. These proofs and the proofs below grant no replay or
+ABBA advance.
 
 Native r1/Task1, `02aa1805-c658-4069-8a6a-02dec146063a`, remains consumed.
 The leader verified run `37574558224`,

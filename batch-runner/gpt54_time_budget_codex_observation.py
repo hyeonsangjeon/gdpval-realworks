@@ -21,6 +21,7 @@ from typing import Any
 
 import gpt54_time_budget_comparison as registration
 import gpt54_time_budget_v2_observation as host_identity
+from codex_ci_input_bundle import STEP0_PIN
 from core.agentic_v2_contract import canonical_relative_path
 from core.agentic_v2_preregistration import seal
 from core.agentic_v2_route_check import check_route_is_the_one_the_plan_fixed
@@ -70,10 +71,10 @@ def _sha256(value: str) -> str:
     return value
 
 
-def _expected_identity(value: dict) -> dict:
+def _expected_identity(value: dict, *, maximum_size: int = registration.MAX_MANIFEST_BYTES) -> dict:
     _require(type(value) is dict and set(value) == {"sha256", "size"}, "independent_identity_required")
     _sha256(value["sha256"])
-    _require(type(value["size"]) is int and 0 < value["size"] <= registration.MAX_MANIFEST_BYTES,
+    _require(type(value["size"]) is int and 0 < value["size"] <= maximum_size,
              "independent_identity_size_bound")
     return dict(value)
 
@@ -239,7 +240,7 @@ def run_codex_observation(
     _same("independent runtime source", observation.reviewed_source_sha, expected_reviewed_source_sha)
     _same("independent frozen source", expected_grader_source_sha, registration.ACCEPTED_BASE_SHA)
     expected = _expected_identity(expected_preparation_identity)
-    step0_expected = _expected_identity(expected_step0_identity)
+    step0_expected = _expected_identity(expected_step0_identity, maximum_size=STEP0_PIN["size"])
     paths = {name: registration._handoff_path(value) for name, value in {
         "direction": direction_path, "preparation": preparation_directory,
         "runtime_root": runtime_root, "frozen_grader_root": frozen_grader_root,

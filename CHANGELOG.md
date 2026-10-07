@@ -13,6 +13,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept the native Step0 role-size correction at
+  `62788d94e6505ed7462f8da8a9ee292bbdcb66f0`, tree
+  `944866c0fd94241cdcd4d5a3e6408c4d707faf8c`, review `5442935576`,
+  after all eleven checks succeeded. Preserve tested code and the original
+  Step0 pin; preparation/direction limits remain 65536 bytes.
+  Authorize one independently bound native r1 Task3 request for
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` under the unchanged 1200+20 policy.
+  Task1/Task2 remain consumed and unreplayed. This pre-dispatch record makes
+  no Task3 outcome, model-usage or grading claim.
+
+### Fixed
+
+- Give the native callable's Step0 identity its own limit from the existing
+  source-pinned original contract: 218405 bytes. Preparation metadata and
+  direction remain capped at 65536 bytes. The previous shared identity check
+  could not accept the full original Step0 and refused before provider/consumer
+  construction. Leader-verified native r1 Task2 run `37619469416`, run number 4,
+  attempt 1, job `112785799708`, emitted exactly `observation_callable` /
+  `observation_refused` / `independent_identity_size_bound`; retention was
+  acknowledged with an uncertain completion and null result, fingerprint,
+  usage, terminal, cleanup and host-reuse fields. Task2 remains consumed; this
+  does not establish historical zero model calls or Task1's unknown cause.
+  Tested source `45350d204967553d96a9ed809320542733cb2994`, tree
+  `bb45022865949ed7e871255254bbafc05bebc103`, reported **7 passed in 68.90s**,
+  exit 0; wrapper **69.565234s**, in one new offline selector. A valid synthetic
+  218405-byte Step0 reached real native capture and synthetic retention without
+  byte changes; byte/digest/size tampering and the unchanged metadata/direction
+  caps refused. Auth/RPC/kernel/storage fixtures are not real-host or private
+  original evidence. No workflow, controller, registration, original Step0 pin,
+  frozen F/TEMPLATE, model or 1200+20 control changed. The callable is bound to
+  the reviewed runtime commit, so no registration pin update is required.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the source identities,
+  exact Task2 evidence, proof hashes and final-identity handoff. Fixed-HEAD
+  review/CI and separately directed next-cell gates remain; no replay or live
+  authority follows.
+
+### Changed
+
 - Accept selected native-r1 source
   `9de920c31b9ad95d932240cf2600d8254210d516`, tree
   `14ce89ec88f55cf44ab6cc060f74f89de0ecb1ab`, review `5441433625`,
