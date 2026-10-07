@@ -13,6 +13,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Align the prospective time-budget grading preparer with the accepted native
+  capture contract: condition `codex` requires execution mode `codex_foundry`,
+  not `codex`. V2 still requires `agentic_sandbox_v2`. The only production
+  change is that exact expected value; the existing synthetic grading fixture
+  receives the same one-line correction. Captured headers, bytes and
+  fingerprints are not rewritten, and no alias set is accepted. Source/input/
+  Step0, result identity, admission/cleanup, deliverable and publication
+  checks remain unchanged, as do frozen F, rubrics and scoring.
+
+  The leader identified the mismatch at accepted main
+  `4c5a32f7a0347081867fb95f94fc712bc0032ff6`, tree
+  `6800b87747919ea571c7908ae2b951d15a30fe20`, preparer blob
+  `65ebe789033e1400ad3d5d265de7434529be9117`. One new selector at
+  `f6967c07888208de8b2ad8cc1c2ea84612acbf29`, tree
+  `fe47d236845882433dc6cb6309f8b8f0beeff849`, reported **9 passed in 28.73s**,
+  exit 0; wrapper **29.206231s**. Synthetic runner-return data passed through
+  the real accepted native capture and grading preparer without changing the
+  valid captured header. Success/error retention, exact wrong-mode/source/
+  observation/digest/fingerprint refusals and unchanged V2 mode handling passed.
+  This used offline Python 3.10.12, one 300s+5s/no-`-x` invocation and the
+  existing 30s fixture Git setup bounds. No native runtime, kernel admission,
+  provider or grader ran; this is compatibility evidence, not a live result
+  or a host-readiness proof. The older selectors were not rerun.
+
+  Artifacts are in `/tmp/time-budget-native-grading-mode-proof.1emXK7PW/`;
+  log SHA256 is
+  `8d91527cbe607599669b27047a4990c1c2857a804dc7b9b9c47cb6b30d093b27`.
+  Only CHANGELOG, LATEST and direct README usage change after the proof;
+  final HEAD/tree are recorded in that directory's `handoff.json`. Final
+  review/CI, actual result/input intake, F-derived materialization and a
+  separately authorized once-only grade remain gates. The twenty-cell study
+  and 1200+20/45-minute limits are unchanged. No observation is relabeled,
+  consumed Task1-Task4 remain untouched, and PR764/766 are not changed or
+  queried. See the [source and proof record](tasks/LATEST_TASK_RESULT/README.md).
+
 - Accept reviewed V2 failure-code preservation and historical-readout source
   `d9ef0f44536750c96013f2ad53f42aecda83d1b7`, tree
   `fb85cc978d279ae5c21938c241a82147ae89260d`, review `5436580957`,

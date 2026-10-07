@@ -686,6 +686,38 @@ exit is 0 for captured success, 1 for a captured error and 2 for refusal or
 incomplete capture; none of those states permits another attempt. No upload,
 inference-publication locator, grader or real execution controller is added.
 
+For subsequent model-free grading preparation, pass those exact retained
+result bytes, their independently expected digest/size and the unchanged
+fingerprint to
+`gpt54_time_budget_grading_preparation.prepare_observation_grading`, together
+with the independent observation, R/F/input and Step0 bindings. Native capture
+uses `condition="codex"` and `execution_mode="codex_foundry"`; the preparer now
+requires that exact pair. Do not rename the mode to `codex` or regenerate the
+result fingerprint to make intake pass. V2 continues to require
+`condition="sandbox_v2"` with `execution_mode="agentic_sandbox_v2"`. Canonical
+error and missing-output rows remain errors, not successful or discarded cells.
+
+The mode correction was tested at
+`f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
+`fe47d236845882433dc6cb6309f8b8f0beeff849`, from accepted main
+`4c5a32f7a0347081867fb95f94fc712bc0032ff6` / tree
+`6800b87747919ea571c7908ae2b951d15a30fe20`. One new offline selector reported
+**9 passed in 28.73s**, exit 0, wrapper **29.206231s**, under Python 3.10.12,
+300s+5s/no-`-x` and 30s fixture Git setup bounds. It fed synthetic runner-return
+data through the accepted native capture and real grading preparation, checking
+unchanged success/error bytes, refusal identities and V2 mode behavior. It did
+not execute a native runtime, kernel admission or judge. The existing grading
+fixture's producer-mode literal was corrected too; its older test nodes were
+not rerun. Artifacts and final HEAD/tree are in
+`/tmp/time-budget-native-grading-mode-proof.1emXK7PW/` and its `handoff.json`;
+log SHA256 is
+`8d91527cbe607599669b27047a4990c1c2857a804dc7b9b9c47cb6b30d093b27`.
+Only the three evidence/usage records change after this proof. Final review/CI,
+independently validated actual result intake, frozen-F materialization and
+separate once-only grading authority remain required. Scoring, rubrics, study
+conditions and consumed Task1-Task4 state are unchanged. This proof is separate
+from the original native callable proof below; it grants no live authority.
+
 The [pinned implementation](https://github.com/hyeonsangjeon/gdpval-realworks/commit/c6c8b2135f7e363d6c3371f023187641dbc0802f),
 tree `4f14c866b6b05def538e05ca9296b75837e78e73`, passed the one new offline
 Python 3.10.12 selector: **9 passed in 22.91s**, exit 0, under 300 seconds plus
