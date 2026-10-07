@@ -22,7 +22,7 @@ from core.agentic_v2_runner import AgenticV2ScriptedRunner
     "empty_then_written", "file_as_directory", "missing_directory",
     "traversal", "symlink",
 ])
-def test_time_budget_v2_directory_root(tmp_path, monkeypatch, record_property):
+def test_time_budget_v2_directory_root(case, tmp_path, monkeypatch, record_property):
     """Exercise the real dispatcher, descriptor-backed workspace and replay."""
     effects = []
 
