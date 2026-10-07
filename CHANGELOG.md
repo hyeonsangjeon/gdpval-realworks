@@ -11,6 +11,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct only PR776's native-grading test fixture for the unsupported
+  `condition` case. Its replacement now sets both
+  `run_id="gpt54_time_budget_v1_v2_r1"` and `condition="sandbox_v2"`, retaining
+  Task3/repeat1. The previous mapping violated `ObservationIdentity`'s
+  run/condition invariant during `dataclasses.replace`; this is the leader's
+  source-derived diagnosis, not a recovered historical traceback or evidence
+  of incorrect native admission. The expected `native_r1_task3_only` refusal,
+  no-child/no-claim assertions and every other test/production byte are unchanged.
+  At `5c7fa1911fdf6f85cd0dbc2ae856363622385f27`, tree
+  `fbef4ebb12144063cf27851d7aed28b9e9179724`, exactly `condition`, `partial`,
+  `timeout`, `grade_task` and `sidecar` ran together once: **5 passed in 143.09s**,
+  exit 0; wrapper **143.690645s**, under Python 3.10.12 / 300s+5s/no-`-x` and
+  the existing 30-second Git fixtures. Five JUnit `record_property` warnings
+  remain in the log. A task-local hook retained immediate node/phase reports;
+  no repository plugin or dependency was added. Artifacts are in
+  `/tmp/native-task3-grading-five-node.xEIbmA/`, log SHA256
+  `d473930c3e57ea0ef29baf95af192bc394a88e110f6252638d55417386c2838d`.
+  The original exit-124 / 299.978913s invocation remains failed and incomplete:
+  13 progress passes, `condition` failed, `partial` interrupted, three cases
+  not started, no final traceback/JUnit. Those thirteen passes were not rerun
+  or pooled with this result; no full eighteen-case pass is claimed. Unchanged
+  executor blob `10d8e56c5569cc3dea484e4bb9d875712a0d5b4c`, F, provenance,
+  registration and workflow contracts remain fixed. Full fixed-HEAD review/CI
+  still gate implementation acceptance; the hosted route and genuine live
+  grading remain deferred. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records
+  per-case outcomes, source identities, artifacts and the final-identity handoff.
+
 ### Added
 
 - Draft an explicit native-r1 Task3 entry in the shared frozen-F grading

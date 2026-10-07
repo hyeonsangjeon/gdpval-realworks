@@ -1,6 +1,99 @@
 # Latest task result
 
-## Native Task3 grading compatibility draft; bounded proof incomplete
+## PR776 five-node fixture continuation
+
+Exactly `condition`, `partial`, `timeout`, `grade_task` and `sidecar` passed
+in one bounded continuation: **5 passed in 143.09s**, exit **0**, wrapper
+**143.690645s**. This does not relabel the original incomplete invocation or
+combine its thirteen progress passes into a full eighteen-case pass claim.
+Native implementation still awaits full fixed-HEAD review and CI. The hosted
+workflow/controller remains deferred.
+
+### Source-derived fixture diagnosis and one-line correction
+
+The leader independently read the immutable test and
+`ObservationIdentity.__post_init__` at the prior PR776 HEAD. The original
+`dataclasses.replace` changed `condition` to `sandbox_v2` while keeping the
+codex run ID. The dataclass requires
+`run_id == f"gpt54_time_budget_v1_{suffix}_r{repeat}"`, so that inconsistent
+object is rejected during construction, before the intended native-entry
+assertion. This is a source-determined fixture-input mismatch. It is not a
+recovered traceback from the earlier invocation and does not show that native
+admission accepted an unsupported cell.
+
+The only code edit changes the test's `condition` replacement to
+`{"run_id":"gpt54_time_budget_v1_v2_r1","condition":"sandbox_v2"}`,
+retaining Task3/repeat1. `native_r1_task3_only`, all no-child/no-claim
+assertions and every other test byte remain unchanged. No production,
+dataclass, executor, intake/preparer, source pin, registration or workflow
+changed. Original-versus-derived input identities and all frozen-F contracts
+below remain intact.
+
+### Separate five-case proof
+
+All five full nodes use
+`tests/test_time_budget_native_grading_execution.py::test_native_task3_frozen_grading_compatibility`.
+AST checks verified the exact one-line delta, parameter/import dependencies
+and five-node command before launch. The thirteen prior passing nodes and
+all older selectors were excluded. Python 3.10.12 ran once under
+300s+5s/no-`-x`, existing named 30-second Git fixtures and Python timing.
+
+| Node suffix | Outcome | JUnit case seconds |
+| --- | --- | --- |
+| `[condition]` | Passed; structurally valid unsupported cell refused, no child/claim | 27.914 |
+| `[partial]` | Passed; synthetic partial grade/checkpoint/ledger retained with one local claim | 25.092 |
+| `[timeout]` | Passed; synthetic child timeout preserved partial state and once-only guard | 24.208 |
+| `[grade_task]` | Passed; wrong grade task refused with `grade_scope_mismatch` | 36.558 |
+| `[sidecar]` | Passed; altered ledger refused, claim remained consumed | 23.108 |
+
+Setup, call and teardown reports completed for every node. The task-local
+`pytest_runtest_logreport` hook flushes an actual failure longrepr and exact
+node ID immediately if a new failure occurs; this invocation had none. It
+does not change fixture behavior or verdicts and adds no repository plugin
+or dependency. Final JUnit, immediate JSONL reports and per-case summaries
+were retained. Five warnings concern `record_property` with JUnit `xunit2`;
+they are recorded, not suppressed. All data, HTTP, namespace facts, child
+outputs and local once-stores remain explicitly synthetic. This is not a real
+kernel, provider, judge, private-input intake or grading result. The configured
+14400/14520-second controls were not extended or measured as real grading time.
+
+Continuation base was `5c8bfdc967ad7e8c0773ec491de6177696fd72ab`, tree
+`fb68e1050414d375abd675f59c7fcf62279d23b7`. Clean tested HEAD is
+`5c7fa1911fdf6f85cd0dbc2ae856363622385f27`, tree
+`fbef4ebb12144063cf27851d7aed28b9e9179724`. The corrected test blob is
+`27cae04d72066ea28519b259bb1f7bf1143f554b`, SHA256
+`caf2a7315ed66b332bae326a85aa88ecc068e37fd55c4e7b7c4c66e172fcaa99`.
+Unchanged production identities include:
+
+| Role | Git blob | SHA256 |
+| --- | --- | --- |
+| Executor | `10d8e56c5569cc3dea484e4bb9d875712a0d5b4c` | `b7c6ff1182838a7e6c93b666aebafaea7c6d2caf4efd9d6b0a13cf7b6207a80b` |
+| Observation identity/dataclass | `256a24461c5b2e3eec44281760fbd0d5bae25ddd` | `4ce90fd05e4c8f0c32d3a0267f089bbaf0a279ef704852c994af6debb12a6c26` |
+| Retained intake | `69982bebbe202d516eab101509635e037a7b8efd` | `b33cb6d55ee1b72ce751a7d7f4ec340c94a1dce290e5428683dbcb6b732f0916` |
+| F preparation | `24a430137fb47bced1e5a450b5b5568d477a5b2e` | `4067abb781faa7bfb18adab54e641fdbeea85eac8174a4210c047cda703b4ffc` |
+
+The new proof directory is `/tmp/native-task3-grading-five-node.xEIbmA/`.
+`source.json` includes the other unchanged production/tree identities and
+the verified, unchanged hashes of the prior proof. Only CHANGELOG, this record
+and the direct README change after this five-node proof. New `handoff.json`
+records exact final HEAD/tree after that documentation-only commit; it does
+not claim another behavioral run or alter the old handoff.
+
+| New artifact | SHA256 |
+| --- | --- |
+| `run-proof.py` | `0b532184e976ae898f15194c827a9394ca53aefc95269ab32519a92a3b074450` |
+| `pytest-driver.py` | `f0138fb7a691caf68b99ae994808b1e13b32c614886d62e5795061fd46a11a22` |
+| `command.json` | `31f36d3f577ee8cebb172b362c64fe151045c5f038875e69e48b4b4ad5af890b` |
+| `selection.json` | `f85a0e77150b4858d0bd508dc06eadc66fe5d56a15dc1df8814cbd6d1b820eed` |
+| `source.json` | `95bada92fa7ff2cf9f3e1fae3779480b36eee23b27a7f311b02ddfde0d7631ce` |
+| `pytest.log` | `d473930c3e57ea0ef29baf95af192bc394a88e110f6252638d55417386c2838d` |
+| `reports.jsonl` | `a36621fa4c1de9667df5ad1a263e19df99589f868ed1e3e19156d6c768d87c0d` |
+| `cases.json` | `fa4f5ca9041cad90fa924c6f0d87f02aca56d3b4ec5080c86f2334bffcd42f6c` |
+| `junit.xml` | `85e947f3940dc16c9658416872ffa6447332f8fc43ff98de0cef02eac8fcbd3d` |
+| `junit-cases.json` | `1fd45bc87d99719b4bcf1ae6235d409fdbfc2e2adffa876070d40e4b8c0b0f0e` |
+| `outcome.json` | `eb7e7ec3dfd0c88ddd0a2a55e4dd2fd85528b0c9425de3454e7bdb2cea82e7be` |
+
+## Original compatibility draft and incomplete invocation, retained separately
 
 The one new offline selector reached native and legacy V2 positives, but the
 invocation did not pass. Its 300-second bound expired with exit **124** after
@@ -158,8 +251,10 @@ only. The specialist grading/workflow review invocations failed before
 execution on unavailable configured model labels, including Opus 4.7;
 they were not endorsements and were not retried.
 
-The failed/incomplete cases, independent fixed-HEAD review and final CI remain
-open. The hosted route and its durable private grade-attempt CAS are deferred;
+The original invocation remains failed and incomplete. The five-node
+continuation above is separate; no full eighteen-case pass is claimed.
+Independent fixed-HEAD review and final CI remain open. The hosted route and
+its durable private grade-attempt CAS are deferred;
 local once-only protection is not distributed admission. Genuine originals,
 credentialed file intake, exact source/direction/permissions and actual runtime
 checks remain required before any later grading. The existing owner budget

@@ -863,7 +863,7 @@ Caller-only origin strings, arbitrary revisions and saved ready markers do
 not issue the scoped handle. Full 218405-byte Step0 rereads, source/path
 protection, frozen rubric/scoring and the 14400/14520-second controls remain.
 
-The one new selector
+The original selector
 `tests/test_time_budget_native_grading_execution.py::test_native_task3_frozen_grading_compatibility`
 ran at `9c51dde2e626faad535b739838d936501ecb9e8e`, tree
 `161e8fc14c963e2c60fd24f04d6fec2dc970a85f`, from accepted
@@ -892,6 +892,41 @@ Fixed-HEAD review/CI, the deferred hosted route/distributed claim, genuine
 intake and exact live direction remain gates. The prior specialist-model
 invocations failed before execution, not as successful reviews; no retry or
 live authority follows from this draft.
+
+PR776's separate five-node continuation passed **5 cases in 143.09s**, exit 0;
+wrapper **143.690645s**. Only the test's `condition` replacement changed:
+`run_id="gpt54_time_budget_v1_v2_r1"` now accompanies
+`condition="sandbox_v2"`, retaining Task3/repeat1. The old mapping violated
+`ObservationIdentity`'s run/condition invariant inside `dataclasses.replace`,
+before native admission. This is a source-derived fixture diagnosis, not a
+recovered historical traceback or evidence of incorrect native admission.
+The expected `native_r1_task3_only` guard, no-child/no-claim assertions and
+all other test/production bytes remain unchanged.
+
+Exactly `[condition]`, `[partial]`, `[timeout]`, `[grade_task]` and `[sidecar]`
+of that selector ran together once at
+`5c7fa1911fdf6f85cd0dbc2ae856363622385f27`, tree
+`fbef4ebb12144063cf27851d7aed28b9e9179724`, from PR776
+`5c8bfdc967ad7e8c0773ec491de6177696fd72ab`, tree
+`fb68e1050414d375abd675f59c7fcf62279d23b7`. Python 3.10.12,
+300s+5s/no-`-x`, named 30-second Git fixtures and existing synthetic
+HTTP/originals/namespace/child seams were retained. The original thirteen
+progress passes were excluded, not rerun or pooled into a full eighteen-case
+pass. Its exit 124 / 299.978913s outcome and missing final traceback/JUnit
+remain unchanged.
+
+The continuation retained immediate node/phase reports through a task-local
+hook and produced final JUnit; no new failure occurred. Five warnings concern
+`record_property` with JUnit `xunit2`. New artifacts are in
+`/tmp/native-task3-grading-five-node.xEIbmA/`, log SHA256
+`d473930c3e57ea0ef29baf95af192bc394a88e110f6252638d55417386c2838d`;
+its `handoff.json` records final HEAD/tree after the three evidence docs.
+Executor blob `10d8e56c5569cc3dea484e4bb9d875712a0d5b4c`, SHA256
+`b7c6ff1182838a7e6c93b666aebafaea7c6d2caf4efd9d6b0a13cf7b6207a80b`,
+is unchanged, as are intake/preparation, original-versus-derived provenance,
+F, registration, workflows and 14400/14520-second controls. This local proof
+is not actual hydration, a host/kernel verdict or a grade. Full fixed-HEAD
+review/CI remain required; the hosted route and live grading remain deferred.
 
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
