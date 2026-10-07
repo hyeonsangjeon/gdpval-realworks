@@ -54,6 +54,51 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Initialize `GDPVAL_CODEX_RUN_ROOT` and `AZURE_CONFIG_DIR` in the existing
+  credential-free native bootstrap step, before `mkdir -m 700`, and persist
+  their exact `RUNNER_TEMP/time-budget-codex-native` and
+  `RUNNER_TEMP/time-budget-codex-azure-login` values through `GITHUB_ENV`.
+  Remove only their unsupported job-env `runner.temp` expressions. Fresh-path,
+  symlink and source checks remain intact; the empty private login directory
+  exists before provider-direction hashing and is the same directory used
+  after approved login. No controller, core, input, claim or retention code
+  changes.
+
+  The leader reviewed the 221-line workflow and relevant contract at
+  `787ed5cfed40b8c7bd6d90e6760ba0ab8f912c97`, tree
+  `2baf472047cb48003480bb0af3149e4a7c76ae5a`, and authorized this correction.
+  Leader-read CI run `37545677945`, job `112548984780`, completed **1 failed,
+  13393 passed, 64 skipped, 46 deselected in 1251.76s**. The job-context
+  contract flagged only those two job-env entries; it did not report a model
+  or runtime failure. Log SHA256:
+  `ea7973d5f389d992d3f8002ebcfcbcec9e78fc1a86cde502e066e5515b5985e5`.
+  The required new reviewer invocation failed before execution on unavailable
+  legacy Opus, not as an endorsement; no harness retry or CI query followed.
+
+  Tested correction `ba2b622ed9814225be3e9e6c20cc574c8d0cb5bf`, tree
+  `0e1eace4aad6cd768a339a777cdf3c7af5e08871`, changes only that workflow and
+  its coupled layout/contract fixture. One bounded invocation of the context
+  check and native `[roundtrip]` reported **2 passed in 20.69s**, exit 0;
+  wrapper **21.357568s**. It runs the edited Bash with both keys unset,
+  verifies exports, exact `GITHUB_ENV` persistence and private empty directory
+  creation, then uses those emitted values in the real-validator synthetic
+  controller/callable/retention roundtrip. The stateful kernel fixture remains
+  synthetic, not host readiness. Python 3.10.12, 300s+5s/no-`-x`, named Git/Bash
+  allowances and 30s Git bounds are unchanged. Artifacts are in
+  `/tmp/pr764-native-env-proof.z6pqTT2t/`; log SHA256 is
+  `04bec5b74a666dc273a257351b100cdf92698328d9ea87543c0d9762614a6ad7`.
+  Exact final HEAD/tree and PR identity are in that directory's `handoff.json`.
+
+  The original **8 passed in 94.87s**, wrapper **95.498829s**, remains a
+  separate proof and was not rerun as a selector. Only CHANGELOG, LATEST and
+  direct native README usage/evidence change after this two-node proof.
+  Full source review, leader-owned main integration, final new-HEAD CI and
+  genuine input/Step0/auth/host/controller/live-request gates remain. Model,
+  registration, frozen F, one attempt, concurrency 1, 1200+20 and the 45-minute
+  ceiling are unchanged. PR765 and preserved worktrees remain untouched;
+  no ABBA advancement, Task4, native live run or consumed Task1-Task3 replay
+  is authorized. See [the exact evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
 - Update the native retry fixture to snapshot descendants before runtime
   startup, close the SDK, reuse the existing `sweep_orphans` lifecycle, then
   delete its workspace. Teardown errors propagate. Preserve stream

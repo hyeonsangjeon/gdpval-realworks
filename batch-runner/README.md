@@ -675,9 +675,14 @@ R/F must share the bootstrap's common Git identity; source and path bindings
 are reread. Setup refuses existing paths. The existing
 `GDPVAL_CODEX_RUN_ROOT` resolver must validate the native root outside the
 system temporary directory. Native/login directories are owner-only. The
-empty login directory exists before provider-direction hashing, so approved
-login later populates the same auth-helper location without changing its
-bound argv. Isolated native auth and the direct-v1 route are unchanged.
+credential-free bootstrap step exports `GDPVAL_CODEX_RUN_ROOT` as
+`$RUNNER_TEMP/time-budget-codex-native` and `AZURE_CONFIG_DIR` as
+`$RUNNER_TEMP/time-budget-codex-azure-login` before `mkdir -m 700`, then
+persists both exact values through `GITHUB_ENV` for later steps. Neither
+reads `runner` from job-level `env`. The empty login directory exists before
+provider-direction hashing, so approved login later populates the same
+auth-helper location without changing its bound argv. Isolated native auth
+and the direct-v1 route are unchanged.
 
 `step0` contains the independently expected repository-name hash, immutable
 revision, member and byte identity from the accepted input contract. Intake
@@ -709,7 +714,7 @@ context override, request/stream retries 0, one external attempt,
 concurrency 1, nonrenewable 1200-second generation, shared 20-second cleanup
 and the 45-minute job ceiling are unchanged; none is a money hard cap.
 
-The tested controller source is
+The original controller proof used
 `546498510996573f5855d449593df0b4a60ec414`, tree
 `ca7b7e75ad29d9fd1b91994b12886c55a1b07742`, based on accepted main
 `1e4519d71a6cead3a2dd8de7e60d884a21ba954d` / tree
@@ -720,9 +725,27 @@ consumer and callable at synthetic HTTP/private-CAS/native SDK and stateful
 kernel seams, not a real NAS/Actions kernel positive. Artifacts are in
 `/tmp/time-budget-first-codex-ci.yqfbZJ7y/`; log SHA256 is
 `ceed24bfdfa739ca9b9fb801fbb8ea15486a325697bbc6799d59a7b1c88d42fc`.
-Only the three evidence/usage records change after that proof. Final
-review/CI, accepted controller source, genuine input/Step0/auth/host/path
-checks and an independently issued live request remain gates. Prior proofs
+That eight-case proof remains separate and was not rerun as a selector.
+
+Leader-read CI run `37545677945` / job `112548984780` at
+`787ed5cfed40b8c7bd6d90e6760ba0ab8f912c97` / tree
+`2baf472047cb48003480bb0af3149e4a7c76ae5a` reported **1 failed, 13393
+passed, 64 skipped, 46 deselected in 1251.76s**. Only the two job-env
+`runner` references above violated the context contract. The leader approved
+moving those assignments into the existing bootstrap step; this is not a
+provider/runtime diagnosis. Tested correction
+`ba2b622ed9814225be3e9e6c20cc574c8d0cb5bf` / tree
+`0e1eace4aad6cd768a339a777cdf3c7af5e08871` passed the context check and
+native `[roundtrip]` together once: **2 passed in 20.69s**, exit 0; wrapper
+**21.357568s**. The fixture starts with both keys unset, verifies exports
+and exact persistence, then uses the emitted values for subsequent contexts
+and the unchanged real-validator synthetic roundtrip. Bounds, sentinels and
+synthetic-host limitations are unchanged. Artifacts, including final
+HEAD/tree in `handoff.json`, are at `/tmp/pr764-native-env-proof.z6pqTT2t/`;
+log SHA256 is `04bec5b74a666dc273a257351b100cdf92698328d9ea87543c0d9762614a6ad7`.
+Only the three evidence records change after this proof. Full source review,
+leader-owned main integration, final new-HEAD CI, genuine input/Step0/auth/
+host/path checks and an independently issued live request remain gates. Prior proofs
 and consumed V2 Task1-Task3 outcomes are separate; no replay or further live
 cell is authorized. See [the full evidence record](../tasks/LATEST_TASK_RESULT/README.md).
 
