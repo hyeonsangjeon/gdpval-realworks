@@ -13,6 +13,78 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept native Task3 grading compatibility at
+  `c8ee6ae03d7238c98f9e01f40733f94c1b717f54`, tree
+  `8e1ecaaa309bbd9c8a5bfcf66fa14d530da8fa95`, review `5448348919`,
+  after all eleven checks succeeded. Preserve the legacy V2 entry, tested
+  native code, immutable original result/preparation and distinct derived
+  grading input. The earlier incomplete invocation and five-node continuation
+  remain separate. Resume implementation of one fixed-Task3 hosted route
+  with the live intake context kept open through durable admission and
+  execution; no actual private intake, grading or replay is authorized here.
+
+### Fixed
+
+- Correct only PR776's native-grading test fixture for the unsupported
+  `condition` case. Its replacement now sets both
+  `run_id="gpt54_time_budget_v1_v2_r1"` and `condition="sandbox_v2"`, retaining
+  Task3/repeat1. The previous mapping violated `ObservationIdentity`'s
+  run/condition invariant during `dataclasses.replace`; this is the leader's
+  source-derived diagnosis, not a recovered historical traceback or evidence
+  of incorrect native admission. The expected `native_r1_task3_only` refusal,
+  no-child/no-claim assertions and every other test/production byte are unchanged.
+  At `5c7fa1911fdf6f85cd0dbc2ae856363622385f27`, tree
+  `fbef4ebb12144063cf27851d7aed28b9e9179724`, exactly `condition`, `partial`,
+  `timeout`, `grade_task` and `sidecar` ran together once: **5 passed in 143.09s**,
+  exit 0; wrapper **143.690645s**, under Python 3.10.12 / 300s+5s/no-`-x` and
+  the existing 30-second Git fixtures. Five JUnit `record_property` warnings
+  remain in the log. A task-local hook retained immediate node/phase reports;
+  no repository plugin or dependency was added. Artifacts are in
+  `/tmp/native-task3-grading-five-node.xEIbmA/`, log SHA256
+  `d473930c3e57ea0ef29baf95af192bc394a88e110f6252638d55417386c2838d`.
+  The original exit-124 / 299.978913s invocation remains failed and incomplete:
+  13 progress passes, `condition` failed, `partial` interrupted, three cases
+  not started, no final traceback/JUnit. Those thirteen passes were not rerun
+  or pooled with this result; no full eighteen-case pass is claimed. Unchanged
+  executor blob `10d8e56c5569cc3dea484e4bb9d875712a0d5b4c`, F, provenance,
+  registration and workflow contracts remain fixed. Full fixed-HEAD review/CI
+  still gate implementation acceptance; the hosted route and genuine live
+  grading remain deferred. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records
+  per-case outcomes, source identities, artifacts and the final-identity handoff.
+
+### Added
+
+- Draft an explicit native-r1 Task3 entry in the shared frozen-F grading
+  executor. The existing V2-first API/CLI stays unchanged. The leader corrected
+  the earlier executor-unchanged constraint after the accepted source finding:
+  V2-only task/configuration paths, absent native Step0 and F's inference-origin
+  gate required a compatibility unit before a hosted route. The unchanged
+  retained intake now supplies a scoped in-memory handle to a separate
+  grading-only input; original result bytes, fingerprint and preparation stay
+  immutable. The derived input records only the authenticated private target,
+  immutable output revision and intake identity, with its own fingerprint.
+  Both identities remain distinct in the execution binding. Full native Step0,
+  source/input/direction checks, local once-only protection and 14400/14520-second
+  controls remain; F, scoring, registration, model and workflows are unchanged.
+  At tested HEAD `9c51dde2e626faad535b739838d936501ecb9e8e`, tree
+  `161e8fc14c963e2c60fd24f04d6fec2dc970a85f`, the single new 18-case offline
+  selector hit its 300-second bound: exit 124, wrapper 299.978913s. The progress
+  log records 13 passes, one `condition` failure, `partial` interrupted and
+  three cases not started. Pytest wrote no final traceback or JUnit file before
+  timeout, so the exact failing operation is unavailable. This is a failed,
+  incomplete proof, not eighteen passes. No body was rerun or guard relaxed.
+  Evidence is retained in
+  `/tmp/native-task3-grading-compatibility.s2Ef7S/`; log SHA256
+  `8028943ae71eed4a16a57a15269ab3d604a04f5166a4ac44b47a0072db94280b`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records individual outcomes,
+  original-versus-derived provenance, exact source/artifact identities and
+  the final-identity handoff. Actual Task3 remains unhydrated here and ungraded.
+  The earlier unavailable-model specialist invocations were not endorsements.
+  Implementation acceptance remains on hold; fixed-HEAD review/CI, the deferred
+  hosted route, genuine intake and an exact live direction remain gates.
+
+### Changed
+
 - Accept retained Task3 grading-intake source
   `4b2a4cd7284aa113835ff6fa6f7954a7799e52aa`, tree
   `cf2c187d9aa34206edd53f3b6671af53c4bc030a`, review `5446592128`,
