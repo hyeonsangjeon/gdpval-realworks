@@ -753,6 +753,86 @@ result fingerprint to make intake pass. V2 continues to require
 `condition="sandbox_v2"` with `execution_mode="agentic_sandbox_v2"`. Canonical
 error and missing-output rows remain errors, not successful or discarded cells.
 
+The fixed native-r1 Task3 retained bundle has a separate model-free caller,
+`gpt54_time_budget_native_grading_intake.prepare_retained_native_task3_grading`.
+It is draft intake code, not permission to read private storage or grade.
+For a separately authorized intake, its only arguments are `request_json`
+and `expected_request_sha256`, supplied independently by the caller. Do not
+derive that trusted expected digest from a received request. There is no
+`inference_sha` argument or inferred inference-publication association.
+
+The exact request format is `gpt54-time-budget-native-grading-intake-request-v1`
+with purpose `prepare_retained_native_task3_for_frozen_grading`. Its fields are
+`format`, `purpose`, `controller`, `completion`, `cell`, `registration_sha256`,
+`frozen_source`, `input_registration`, `dataset_sha256`, `step0`, `deliverables`
+and `paths`. `controller` binds the new caller C's commit/tree; `completion`
+is the independently verified native envelope binding original R's
+commit/tree, execution request digest, claim, immutable output and exact
+result size/hash/fingerprint. The cell is only
+`gpt54_time_budget_v1_codex_r1` / `codex` / repeat 1 /
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d`. `deliverables` must independently
+specify `{"count":2,"bytes":408601}`. No task, revision or repository discovery
+is performed.
+
+`registration_sha256` and `dataset_sha256` seal the original R registration
+and its dataset, respectively. `frozen_source` is F882's exact commit/tree.
+`input_registration` binds that F source and the constant
+`batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison_local_source.yaml`.
+`step0` binds the existing original repository-name hash, revision, member
+and full digest/size contract. The whole Step0 file is 218405 bytes; neither
+its bytes nor its pin is replaced by preparation metadata. `paths` contains
+canonical absolute `controller_root`, `runtime_root`, `frozen_root`,
+`input_registration_root`, `dataset_parquet`, `reference_root`, `step0_manifest`,
+`hydration_root` and `destination`. The last two must be fresh, disjoint
+private outputs with existing parents; all source/input paths are rechecked.
+
+The caller reconstructs observation/input identities from genuine local
+parquet, references and full Step0 with the existing validators. At the
+trusted immutable output it permits at most four GETs in 60 cumulative
+seconds: private repository metadata, the independently bound result, then
+its two authenticated declared members under the same cell prefix. Only
+after the complete native result passes canonical/source/control checks can
+its member paths and file hashes authorize those last two reads. Each file's
+full digest and size must match. There are no redirects, decompression,
+retries, HEAD fallback, claim/request downloads, archive intake or HF writes.
+
+`HF_TOKEN` is used only in the scoped reader; other credential environments
+refuse, telemetry must be disabled, and credentials are absent while the
+unchanged preparer runs. Hydration and grading preparation use separate
+0700 directories and 0600 files. Reservations and partial bytes are never
+adopted or removed. The returned `gpt54-time-budget-native-grading-intake-v1`
+summary contains safe binding identities and counts, with deliverable basis
+`full_contents_verified_against_authenticated_result`; private prose,
+filenames/paths, headers/tokens and raw errors are not returned. Preparation
+does not acquire a grading attempt or call `execute_first_observation_grading`.
+
+The leader's actual Task3 readout `37651509527`, artifact `11497400004`,
+verified 2570 projection bytes with SHA256
+`4dfc3e896b7f57de1c97e1aca2b37feb10031f6b04aa3afe43d1f63c9e189553`.
+It reported success and **declared** two files totaling 408601 bytes, whose
+contents were not fetched or verified. `items_seen=56` is not a model/request
+count; native usage, counters, served identity and cost remain null, and
+Task3 is ungraded. This implementation did not fetch its actual bundle.
+
+The new selector
+`tests/test_time_budget_native_grading_intake.py::test_time_budget_native_retained_grading_intake`
+reported **21 passed in 40.03s**, exit 0, wrapper **40.587362s**, once at
+`8faa9c1c3adf9cc6cc8debd6335a72c6bd7e379f`, tree
+`f217eda6e2d0dace34c07aa591397ab31c83c9df`, from accepted main
+`f997b5e005bb1c49421e8e32cfa3040fa4266ae9`, tree
+`ea1ba7b15863ec5f3b2a21accd9859568a561ee2`. Python 3.10.12, 300s+5s/no-`-x`
+and named 30s fixture Git bounds were used. Real capture/source/file/preparer
+validators processed synthetic originals, a full 218405-byte synthetic Step0
+with its own hash, and two synthetic files totaling 408601 bytes. No native
+runtime, kernel admission, provider or grader ran. Command, selection,
+per-case results and source identities are in
+`/tmp/native-task3-grading-bridge.zWCjyI/`; log SHA256 is
+`6b754d8427856b30c2628162a798e8473a5db00b3091abf64eb87cc8e4f458c4`.
+Only the three records change after this proof; `handoff.json` records final
+HEAD/tree. Fixed-HEAD review/CI, separately authorized credentialed intake
+with genuine originals and later once-only grading authority remain gates.
+The prior mode-validation proof below is separate and was not rerun.
+
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
 `fe47d236845882433dc6cb6309f8b8f0beeff849`, from accepted main

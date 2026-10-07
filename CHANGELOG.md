@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept retained Task3 grading-intake source
+  `4b2a4cd7284aa113835ff6fa6f7954a7799e52aa`, tree
+  `cf2c187d9aa34206edd53f3b6671af53c4bc030a`, review `5446592128`,
+  after all eleven checks succeeded. Preserve tested caller/test bytes and
+  the unchanged frozen-F preparer. This closes the model-free implementation
+  gate, not actual file intake or grading. The next implementation is one
+  fixed-Task3 hosted route reusing this caller and the accepted once-only
+  grading executor, with no new scoring, replay or live authority.
+
+### Changed
+
 - Accept native canonical readout source
   `45b068100dece9ec4abef47fec89eb98c0e3694f`, tree
   `083e1aa6a0bb8f00423697799b958b26219a7b71`, review `5444818723`,
@@ -24,6 +35,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   is authorized, and no new readout or Task4 outcome is claimed here.
 
 ### Added
+
+- Add a model-free caller for the fixed native-r1 Task3 retained bundle. It
+  binds independent C/R/F, request/completion and original-input identities,
+  authenticates the canonical result, verifies exactly two declared files
+  totaling 408601 bytes at one immutable revision, then calls the unchanged
+  frozen-F grading preparer. Four GETs share 60 seconds; private no-clobber
+  state survives failure. There is no workflow, grading admission, executor
+  or invented inference-publication association. At
+  `8faa9c1c3adf9cc6cc8debd6335a72c6bd7e379f`, tree
+  `f217eda6e2d0dace34c07aa591397ab31c83c9df`, the one new synthetic selector
+  passed all 21 cases in 40.03s, exit 0; wrapper 40.587362s. Evidence is in
+  `/tmp/native-task3-grading-bridge.zWCjyI/` and the latest task record.
+  Actual Task3 remains ungraded; the prior readout verified only declarations,
+  not its two file contents. Review/CI and separately authorized genuine
+  credentialed intake and once-only grading remain gates. F, scoring, the
+  twenty-cell registration, workflows and consumed observations are unchanged.
 
 - Add a draft native canonical-result purpose to the existing bounded readout
   helper for one independently bound native-r1 cell. It validates the native
