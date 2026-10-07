@@ -325,7 +325,7 @@ def test_native_task3_frozen_grading_compatibility(case, offline, monkeypatch, t
         expected_error = "grading_execution_refused_retain_any_claim_or_partial_state"
         if scenario in {"task", "r2", "condition"}:
             replacements = {"task": {"task_id": case.seed.task_ids[1]}, "r2": {"run_id": "gpt54_time_budget_v1_codex_r2", "repeat": 2},
-                            "condition": {"condition": "sandbox_v2"}}
+                            "condition": {"run_id": "gpt54_time_budget_v1_v2_r1", "condition": "sandbox_v2"}}
             arguments["observation"] = replace(arguments["observation"], **replacements[scenario])
             expected_error = "native_r1_task3_only"
         elif scenario == "step0_missing":
