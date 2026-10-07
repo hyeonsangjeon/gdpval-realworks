@@ -1,49 +1,62 @@
 # Latest task result
 
-## Directory semantics accepted; one directed Task5 observation
+## Accepted native Actions route; first V2 repeat retained
 
-Reviewed source `bc001275c6c4800b1121a41b28f69081a9c6deeb`, tree
-`0872f16896263cd43b13f694eae67b51e29f3e0e`, passed all eleven applicable
-checks. Review `5437297820` accepted the test-only regression and evidence.
-Only completion records change after validation. Production, workflow,
-model/prompt, registration and frozen-grader bytes remain unchanged.
+Native source `e25e357856d89edd98d84af27c83adbbf7fe9338`, tree
+`44325fe04750d6410a2e51cf39caf9e66d662db6`, passed all eleven checks.
+Review `5437145456`, following complete controller/workflow/test review
+`5437127925`, accepted the fixed Codex r1/Task1 route subject to these checks.
+The subsequent main change contains only the independently reviewed and
+passing directory regression plus documentation, not a runtime change.
+The exact merge union preserves both sets of tested non-document blobs.
+Only the three completion/usage records are reconciled after validation.
 
-The real descriptor-backed backend, dispatcher and provenance verifiers
-passed all five cases in 0.99s. Empty `.` lists no entries; after a write it
-lists the real file and finalizes verified bytes. File-as-directory and
-missing-directory requests refuse with `path_not_directory`; traversal and
-unsafe symlink cases retain their exact refusals and confinement.
-The five xunit2 warnings and original collection error remain separate in
-the [prior record][prior]. No deterministic empty-root defect was demonstrated.
-This neither reveals Task4's hidden path nor establishes its historical cause.
+The route binds reviewed source, original inputs and full Step0, canonical
+linked roots, fixed cell, approved auth location, permanent private claim
+and canonical/uncertain retention. Source and path guards, credential
+isolation and the shared V2/native concurrency group remain in force.
+The eight-case synthetic controller proof and separate two-node bootstrap
+proof are retained in the [native record][native], not aggregated or rerun.
+Synthetic kernel fixtures do not establish actual execution-host readiness.
+No native live request, grading operation or replay is granted here.
 
-The leader authorizes exactly one subsequent immutable request for
-`gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 /
-`0818571f-5ff7-4d39-9d2c-ced5ae44299e`. It must name actual accepted runtime
-source/tree, the next workflow run number and attempt 1, a finite admission
-window and independent exact-byte digest. The registration seal remains
-`3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f`.
-Original input, preparation, actual host and task-specific permanent CAS
-checks remain mandatory.
+All five V2 r1 cells have now consumed their directed attempts and retained
+outcomes: Task1/Task2 are uncertain; Task3/Task4/Task5 are canonical errors.
+These are not five successful tasks or zero quality scores. None is removed
+from the planned denominator or replayed.
 
-Last acknowledged private output
-`380e08e7422b47fad5e1e33c97504d58c4e87f8b` is the independently expected
-parent, not assumed fresh. The executor must verify it and refuse an occupied
-Task5 prefix. No mismatch grants an automatic retry.
+Task5 run `37569248343`, attempt 1, job `112623925382`, at runtime source
+`bfab0c72df6f4a51d8627160c78cda9011c40fe2`, tree
+`a538c96e87aeca6aff4aae50243384a7bb270799`, returned an error with terminal
+`failed`, reported 2508 input / 244 output tokens and confirmed cleanup/host
+reuse. Private claim `c61083b7e0a265d3794cb8a8f059f6d28039515d` and output
+`4a92c2af42b639eea589db6bb60fe32bcdf49c5d` were acknowledged.
 
-Task4 run `37559598835` remains consumed with a verified canonical
-`path_not_directory` error, zero deliverables, model-binding match and
-confirmed cleanup. Reported usage is 2462 input and 570 output tokens;
-reasoning output 546 is a subset. Its exact requested path is unavailable,
-and no bill, native-attempt count or score is inferred. Task1/Task2 remain
-consumed/uncertain and Task3 remains consumed/error; none is replayed,
-rewritten or removed from the planned denominator.
+The result is 6627 bytes, SHA256
+`149eca5529ce62c8cbd732772e12d9c110c117a7d638dcfced1b11a525232dbd`,
+fingerprint `6ca38073318a1fdfac60fb08054c0b5bc7179bdae412fad57b3d93135402d8ea`.
+Completion artifact `11459503748` has envelope SHA256
+`a665836f0b887273a7ba7c1851330f68604bd93bd97312f5ecca490f553bd89e`.
+The exact source/request/cell/run bindings were independently checked.
+Its private runner error has not yet been read, and reported tokens are
+not an invoice or a native-attempt count.
 
-The fixed twenty-observation study, model settings, concurrency 1, one
-external attempt, 1200 seconds from first generation and shared 20-second
-cleanup stay unchanged. The execution job retains its 45-minute ceiling.
-This pre-dispatch record claims no Task5 result. Remaining work is that
-directed attempt and verified retention, followed by separately gated native
-and grading decisions. No native run, grading or ABBA advancement is granted.
+One bounded read-only request has been issued against the existing accepted
+controller `bfab0c72df6f4a51d8627160c78cda9011c40fe2` for this immutable
+Task5 result. Its exact 1911-byte request SHA256 is
+`4fe204b74ae0f7bb988d3b257a5230559127d098069d06d50478596e15e51c14`.
+Only private identity and the exact canonical object may be read, with
+two GETs/60 seconds, no retry/write/model/grade and a safe projection only.
+This record makes no claim about that read's eventual result.
 
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/bc001275c6c4800b1121a41b28f69081a9c6deeb/tasks/LATEST_TASK_RESULT/README.md
+Task4's verified `path_not_directory` and the passing empty-root regression
+remain distinct: the actual requested path is unknown and no deterministic
+empty-root defect was demonstrated. Frozen F, all historical observations,
+the twenty-cell ABBA study and 1200+20 limits remain unchanged.
+
+Remaining work is the Task5 safe readout, final native grading-mode delivery,
+and genuine input/Step0/auth/host/source/direction gates before the first
+native observation. No source marker or implementation acceptance substitutes
+for those gates or authorizes a new model call.
+
+[native]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e25e357856d89edd98d84af27c83adbbf7fe9338/tasks/LATEST_TASK_RESULT/README.md

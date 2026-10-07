@@ -737,8 +737,10 @@ The consumer does not export native token totals, so `usage`, native counters
 and cost remain null with an explicit availability reason. Safe returned
 item/status/rate-limit fields are retained without raw provider errors. CLI
 exit is 0 for captured success, 1 for a captured error and 2 for refusal or
-incomplete capture; none of those states permits another attempt. No upload,
-inference-publication locator, grader or real execution controller is added.
+incomplete capture; none of those states permits another attempt. The callable
+itself adds no upload, inference-publication locator, grader or real execution
+controller. The fixed Actions controller below supplies its private claim
+and retention wiring.
 
 The [pinned implementation](https://github.com/hyeonsangjeon/gdpval-realworks/commit/c6c8b2135f7e363d6c3371f023187641dbc0802f),
 tree `4f14c866b6b05def538e05ca9296b75837e78e73`, passed the one new offline
@@ -763,6 +765,120 @@ is granted by this proof. The retry fixture subsequently passed its sixteen
 tests in CI at `d71bae686020ee465a487f25dbb4675954ec849c`; its earlier local
 wrapper exit 127 remains an unstarted proof. The current evidence record
 separates those observations and the pending combined-source CI.
+
+##### Fixed native r1/Task1 observation on GitHub Actions
+
+[`gpt54-time-budget-first-codex.yml`](../.github/workflows/gpt54-time-budget-first-codex.yml)
+uses [`gpt54_time_budget_codex_ci.py`](gpt54_time_budget_codex_ci.py) to call
+the accepted native callable above. It permits only
+`gpt54_time_budget_v1_codex_r1` / `codex` / repeat 1 /
+`02aa1805-c658-4069-8a6a-02dec146063a`; another run, task, condition or repeat
+refuses. This implementation adds no live authority or permission to advance
+ABBA order. The closed pilot and retention studies remain closed.
+
+The manual workflow takes `reviewed_source_sha`, `reviewed_source_tree`,
+`request_sha256` and `request_json`. The leader must supply the exact accepted
+main/workflow source and independent digest of the request bytes. The strict
+request format is `gpt54-time-budget-first-codex-ci-request-v1`, with purpose
+`execute_and_privately_retain_first_codex_observation`. Its other fields are
+`source`, `frozen_source`, `input_registration`, `cell`, `ci`,
+`registration_sha256`, `dataset_sha256`, `step0`, `paths`, `storage`,
+`not_before_unix` and `expires_unix`. Do not use a local marker, example hash
+or approval boolean as caller authority.
+
+The source fields bind reviewed R/tree and unchanged frozen F
+`882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`. The CI fields bind this workflow,
+owner `hyeonsangjeon`, `refs/heads/main`, the exact next workflow run number,
+job `observation`, attempt 1 and `ubuntu-22.04` / Linux / X64. The finite
+admission window lasts at most 2700 seconds; it cannot reset the observation
+deadline. Actual paths must match the following layout:
+
+| Request path | Actual location |
+| --- | --- |
+| `bootstrap_root` | Ordinary checkout at the real `GITHUB_WORKSPACE` |
+| `runtime_root` | Detached registered R at `RUNNER_TEMP/time-budget-codex-runtime` |
+| `frozen_root` | Distinct detached registered F at `RUNNER_TEMP/time-budget-codex-frozen` |
+| `state_root` | `RUNNER_TEMP/time-budget-first-codex` |
+| `native_root` | `RUNNER_TEMP/time-budget-codex-native` |
+| `login_root` | `RUNNER_TEMP/time-budget-codex-azure-login` |
+
+R/F must share the bootstrap's common Git identity; source and path bindings
+are reread. Setup refuses existing paths. The existing
+`GDPVAL_CODEX_RUN_ROOT` resolver must validate the native root outside the
+system temporary directory. Native/login directories are owner-only. The
+credential-free bootstrap step exports `GDPVAL_CODEX_RUN_ROOT` as
+`$RUNNER_TEMP/time-budget-codex-native` and `AZURE_CONFIG_DIR` as
+`$RUNNER_TEMP/time-budget-codex-azure-login` before `mkdir -m 700`, then
+persists both exact values through `GITHUB_ENV` for later steps. Neither
+reads `runner` from job-level `env`. The empty login directory exists before
+provider-direction hashing, so approved login later populates the same
+auth-helper location without changing its bound argv. Isolated native auth
+and the direct-v1 route are unchanged.
+
+`step0` contains the independently expected repository-name hash, immutable
+revision, member and byte identity from the accepted input contract. Intake
+uses the existing original parquet/reference and full canonical Step0 read
+primitives, then the real preparation/consumer. It does not manufacture a
+manifest or replace original inputs with result/preparation bytes. `storage`
+binds the fixed private target hash, `main`, expected immutable parent and
+this prefix:
+
+```text
+time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_codex_r1/02aa1805-c658-4069-8a6a-02dec146063a
+```
+
+The controller's stages are `validate-request`, `prepare-and-claim`,
+`execute`, `retain` and `verify-envelope`. A permanent add-only claim and
+private readback precede execution. Occupied claims, duplicate reservations
+and partial outputs cannot be adopted or retried. Canonical row/deliverable
+bytes or explicit uncertainty remain private under that prefix. Public
+artifact `time-budget-first-codex-completion` contains only the validated
+`gpt54-time-budget-first-codex-ci-completion-v1` envelope. Unavailable native
+usage/counters/cost stay unavailable, not zero; no grade is produced.
+
+HF_TOKEN is scoped only to bounded input/claim and retention steps and is
+removed before inference. The job reuses approved Azure Login and OIDC
+identity checks, nonpersistent checkout credentials, existing thread limits
+and `JE_ARROW_MALLOC_CONF=background_thread:false` before imports. Its shared
+V2/native concurrency group prevents overlap. GPT-5.4/direct-v1/xhigh, null
+context override, request/stream retries 0, one external attempt,
+concurrency 1, nonrenewable 1200-second generation, shared 20-second cleanup
+and the 45-minute job ceiling are unchanged; none is a money hard cap.
+
+The original controller proof used
+`546498510996573f5855d449593df0b4a60ec414`, tree
+`ca7b7e75ad29d9fd1b91994b12886c55a1b07742`, based on accepted main
+`1e4519d71a6cead3a2dd8de7e60d884a21ba954d` / tree
+`9464969952af79c359e5c4236692f0dc4ca844e3`. Its one new offline Python
+3.10.12 selector passed **8 cases in 94.87s**, exit 0, with a **95.498829s**
+wrapper under 300s+5s/no-`-x` and 30s Git bounds. It exercises real validators,
+consumer and callable at synthetic HTTP/private-CAS/native SDK and stateful
+kernel seams, not a real NAS/Actions kernel positive. Artifacts are in
+`/tmp/time-budget-first-codex-ci.yqfbZJ7y/`; log SHA256 is
+`ceed24bfdfa739ca9b9fb801fbb8ea15486a325697bbc6799d59a7b1c88d42fc`.
+That eight-case proof remains separate and was not rerun as a selector.
+
+Leader-read CI run `37545677945` / job `112548984780` at
+`787ed5cfed40b8c7bd6d90e6760ba0ab8f912c97` / tree
+`2baf472047cb48003480bb0af3149e4a7c76ae5a` reported **1 failed, 13393
+passed, 64 skipped, 46 deselected in 1251.76s**. Only the two job-env
+`runner` references above violated the context contract. The leader approved
+moving those assignments into the existing bootstrap step; this is not a
+provider/runtime diagnosis. Tested correction
+`ba2b622ed9814225be3e9e6c20cc574c8d0cb5bf` / tree
+`0e1eace4aad6cd768a339a777cdf3c7af5e08871` passed the context check and
+native `[roundtrip]` together once: **2 passed in 20.69s**, exit 0; wrapper
+**21.357568s**. The fixture starts with both keys unset, verifies exports
+and exact persistence, then uses the emitted values for subsequent contexts
+and the unchanged real-validator synthetic roundtrip. Bounds, sentinels and
+synthetic-host limitations are unchanged. Artifacts, including final
+HEAD/tree in `handoff.json`, are at `/tmp/pr764-native-env-proof.z6pqTT2t/`;
+log SHA256 is `04bec5b74a666dc273a257351b100cdf92698328d9ea87543c0d9762614a6ad7`.
+Only the three evidence records change after this proof. Full source review,
+leader-owned main integration, final new-HEAD CI, genuine input/Step0/auth/
+host/path checks and an independently issued live request remain gates. Prior proofs
+and consumed V2 Task1-Task3 outcomes are separate; no replay or further live
+cell is authorized. See [the full evidence record](../tasks/LATEST_TASK_RESULT/README.md).
 
 <a id="first-v2-observation-on-github-actions"></a>
 

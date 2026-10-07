@@ -13,6 +13,68 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept reviewed native Actions source
+  `e25e357856d89edd98d84af27c83adbbf7fe9338`, tree
+  `44325fe04750d6410a2e51cf39caf9e66d662db6`, review `5437145456`,
+  after all eleven checks succeeded. The later main change adds only the
+  independently reviewed/passing directory regression and documents.
+  Preserve all tested source/workflow/test blobs in the exact merge union;
+  reconcile only completion and usage records. No native execution is
+  authorized by delivery. Task5's canonical error and acknowledged retention
+  are recorded without claiming its yet-unread private error classification.
+
+- Integrate reviewed native Actions source
+  `6fc1992e6e4e5348a820a1f32ad32e2338004886`, review `5437127925`, with
+  accepted main `4c5a32f7a0347081867fb95f94fc712bc0032ff6`.
+  Preserve every non-document source/workflow/test blob and reconcile only
+  the three completion/usage records. The separate eight-case and two-node
+  proofs remain separate; combined-HEAD CI and a real-host/live decision are
+  still required. Task4's verified `path_not_directory` outcome is retained
+  without inferring its undisclosed requested path or replaying it.
+
+### Added
+
+- Add one manual native Actions route through
+  `gpt54_time_budget_codex_ci.py` to the accepted `run_codex_observation`
+  callable. It permits only `gpt54_time_budget_v1_codex_r1` / `codex` /
+  repeat 1 / task `02aa1805-c658-4069-8a6a-02dec146063a`. The independent
+  request binds reviewed source/workflow, ordinary bootstrap and linked R/F,
+  genuine original-input and full Step0 provenance, canonical native/login
+  paths, host, finite admission window and expected private parent. Reuse
+  existing preparation, consumer, permanent CAS claim and retention helpers;
+  refuse occupied state without adoption. HF credentials are confined to
+  bounded intake/claim and retention steps, never inference. Public output
+  is only the strict completion envelope. Existing V2, readout, core, callable,
+  registration and frozen F bytes remain unchanged.
+
+  The leader's pre-edit CI/storage decision authorized this implementation,
+  not live execution. The required reviewer invocation failed before execution
+  on its unavailable legacy Opus preference; it was not a spawned review and
+  was not retried. The base is accepted main
+  `1e4519d71a6cead3a2dd8de7e60d884a21ba954d`, tree
+  `9464969952af79c359e5c4236692f0dc4ca844e3`. Tested implementation
+  `546498510996573f5855d449593df0b4a60ec414`, tree
+  `ca7b7e75ad29d9fd1b91994b12886c55a1b07742`, passed its one new offline
+  selector: **8 passed in 94.87s**, exit 0; wrapper **95.498829s**. Python
+  3.10.12, 300s+5s, no `-x`, and 30s temporary Git bounds were preserved.
+  Real source/input/Step0/direction validators, consumer and native callable
+  ran at synthetic storage/native SDK and stateful kernel seams. This is
+  not a real-host admission or live-input proof. Artifacts are in
+  `/tmp/time-budget-first-codex-ci.yqfbZJ7y/`; log SHA256 is
+  `ceed24bfdfa739ca9b9fb801fbb8ea15486a325697bbc6799d59a7b1c88d42fc`.
+
+  Only this changelog, LATEST and direct native README usage change after
+  the proof. GPT-5.4/direct-v1/xhigh, null context override, zero provider
+  request/stream retries, one external attempt, shared concurrency 1,
+  1200+20 and the 45-minute job ceiling remain fixed. Final review/CI,
+  accepted controller source, actual input/Step0/auth/host/path bindings
+  and a new independent leader request remain gates. No ABBA advancement,
+  native live run, V2 replay, grading or money cap is authorized. Prior
+  proofs and consumed V2 outcomes remain separate in the
+  [evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
+### Changed
+
 - Accept directory regression source
   `bc001275c6c4800b1121a41b28f69081a9c6deeb`, tree
   `0872f16896263cd43b13f694eae67b51e29f3e0e`, review `5437297820`,
@@ -25,6 +87,51 @@ entries land under a fresh dated heading the day they merge to `main`.
   grading or Task5 result is claimed by this pre-dispatch record.
 
 ### Fixed
+
+- Initialize `GDPVAL_CODEX_RUN_ROOT` and `AZURE_CONFIG_DIR` in the existing
+  credential-free native bootstrap step, before `mkdir -m 700`, and persist
+  their exact `RUNNER_TEMP/time-budget-codex-native` and
+  `RUNNER_TEMP/time-budget-codex-azure-login` values through `GITHUB_ENV`.
+  Remove only their unsupported job-env `runner.temp` expressions. Fresh-path,
+  symlink and source checks remain intact; the empty private login directory
+  exists before provider-direction hashing and is the same directory used
+  after approved login. No controller, core, input, claim or retention code
+  changes.
+
+  The leader reviewed the 221-line workflow and relevant contract at
+  `787ed5cfed40b8c7bd6d90e6760ba0ab8f912c97`, tree
+  `2baf472047cb48003480bb0af3149e4a7c76ae5a`, and authorized this correction.
+  Leader-read CI run `37545677945`, job `112548984780`, completed **1 failed,
+  13393 passed, 64 skipped, 46 deselected in 1251.76s**. The job-context
+  contract flagged only those two job-env entries; it did not report a model
+  or runtime failure. Log SHA256:
+  `ea7973d5f389d992d3f8002ebcfcbcec9e78fc1a86cde502e066e5515b5985e5`.
+  The required new reviewer invocation failed before execution on unavailable
+  legacy Opus, not as an endorsement; no harness retry or CI query followed.
+
+  Tested correction `ba2b622ed9814225be3e9e6c20cc574c8d0cb5bf`, tree
+  `0e1eace4aad6cd768a339a777cdf3c7af5e08871`, changes only that workflow and
+  its coupled layout/contract fixture. One bounded invocation of the context
+  check and native `[roundtrip]` reported **2 passed in 20.69s**, exit 0;
+  wrapper **21.357568s**. It runs the edited Bash with both keys unset,
+  verifies exports, exact `GITHUB_ENV` persistence and private empty directory
+  creation, then uses those emitted values in the real-validator synthetic
+  controller/callable/retention roundtrip. The stateful kernel fixture remains
+  synthetic, not host readiness. Python 3.10.12, 300s+5s/no-`-x`, named Git/Bash
+  allowances and 30s Git bounds are unchanged. Artifacts are in
+  `/tmp/pr764-native-env-proof.z6pqTT2t/`; log SHA256 is
+  `04bec5b74a666dc273a257351b100cdf92698328d9ea87543c0d9762614a6ad7`.
+  Exact final HEAD/tree and PR identity are in that directory's `handoff.json`.
+
+  The original **8 passed in 94.87s**, wrapper **95.498829s**, remains a
+  separate proof and was not rerun as a selector. Only CHANGELOG, LATEST and
+  direct native README usage/evidence change after this two-node proof.
+  Full source review, leader-owned main integration, final new-HEAD CI and
+  genuine input/Step0/auth/host/controller/live-request gates remain. Model,
+  registration, frozen F, one attempt, concurrency 1, 1200+20 and the 45-minute
+  ceiling are unchanged. PR765 and preserved worktrees remain untouched;
+  no ABBA advancement, Task4, native live run or consumed Task1-Task3 replay
+  is authorized. See [the exact evidence record](tasks/LATEST_TASK_RESULT/README.md).
 
 - Accept reviewed V2 failure-code preservation and historical-readout source
   `d9ef0f44536750c96013f2ad53f42aecda83d1b7`, tree
