@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Integrate reviewed native-r1 selection source
+  `d9196c84f85fa3a6c27e61cddcb19c038b0cf562`, review `5441405673`, with
+  accepted main `9ee0d0d75a6df1b91260060632de60989ed5583c`.
+  Preserve the exact tested selection workflow/controller/test bytes and
+  main's native refusal taxonomy/safe emitter. Only completion/usage documents
+  overlap; the complete source-tree union is checked before publication.
+  Separate prior and continuation proofs remain separate. Combined-HEAD CI
+  and a separately bound next-cell direction remain required.
+
 - Bind one explicitly requested task from the existing five-task native r1
   registration throughout the controller, private namespace and independently
   checked completion. Keep Task1's legacy constants/readout, consumed state,
@@ -39,6 +48,58 @@ entries land under a fresh dated heading the day they merge to `main`.
   [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains both invocations,
   exact tested/final source and artifact identities, historical uncertainty
   and the remaining host/input/authorization gates.
+
+- Accept combined native taxonomy and safe-event source
+  `b66a2a5f8329a362ccf48ea25469764e8a9325c5`, tree
+  `d57f416fb2c608f227c8c1867e6ad4b3d7e069f8`, review `5440134625`,
+  after all eleven combined checks succeeded. Preserve the later main's
+  already reviewed boundary regression and every tested production blob;
+  reconcile only the three documentation records. Known native static
+  refusals retain their finite codes, while unknown errors remain generic.
+  No historical cause, runtime fix, replay or new execution is claimed.
+
+- Integrate reviewed native taxonomy source
+  `ded5249ca6d3364af83ae19ab5609043142dba70`, review `5439787461`, with
+  accepted main `84004faf99862606473dda939ceffb2ad149dc44`.
+  The complete shared-controller AST is the exact union of nonoverlapping
+  changes: current two-format emitter plus the reviewed native classifier
+  and finite reason vocabulary. This structural proof is not a behavioral
+  pass; combined-HEAD CI remains required. Preserve all other code and
+  historical evidence, with no new execution or replay authority.
+
+### Fixed
+
+- Preserve the native callable's 30 explicitly enumerated static refusal
+  codes in the shared execution-failure receipt taxonomy. A known
+  `CodexObservationRefused` code uses the existing `observation_refused`
+  category; unknown or malformed native exceptions remain
+  `validation_refused / execution_refused_or_uncertain` without formatting
+  exception text. Imported equality-check messages remain generic. Legacy
+  V2 classifications, receipt shape, validator/emitter bodies and readout
+  code are unchanged; no workflow, registration, model or execution control
+  changes are included.
+
+  Accepted base `9fbdc37fb0ec0e4eb79d32b22f37641235a24186`, tree
+  `2e72a30ccf0cf7aeea6be5c2e842a023dfd0b4bc`; tested source
+  `e0ae6d8ccc20e14dc3c7f7686c035873582001e1`, tree
+  `26a3bbb312731202d8e85bc4651651b6d26af565`. One new offline selector
+  reported **10 passed in 1.24s**, exit 0; wrapper **1.715750s**, with
+  Python 3.10.12/300s+5s/no-`-x` and 30s Git bounds. Real classifiers and
+  receipt/readout validators used synthetic exception/manifest data only.
+  Artifact directory: `/tmp/native-refusal-taxonomy-proof.a5VL6x/`; log
+  SHA256 `f2742d65aecc107aeb794418769cb2446d97bf411d112cdd6f03b1534f892db5`.
+
+  This is prospective diagnostic preservation, not a native execution fix.
+  The leader's historical readout `37585054563` retained only
+  `observation_callable / validation_refused / execution_refused_or_uncertain`.
+  Its more specific historical reason cannot be recovered by this change;
+  native Task1 remains consumed/uncertain, with calls, cost and cleanup
+  unknown, not zero. PR769/770 and their separate evidence remain untouched.
+  Only the three evidence documents change after the proof; final identities
+  and remaining source-review/CI/readout/live gates are recorded in
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) and the external final handoff.
+
+### Changed
 
 - Accept test-only native boundary source
   `ab0662ec687369bb41a1d62bd43c6b38a4c4f273`, tree
