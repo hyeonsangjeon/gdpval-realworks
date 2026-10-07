@@ -11,6 +11,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve the native callable's 30 explicitly enumerated static refusal
+  codes in the shared execution-failure receipt taxonomy. A known
+  `CodexObservationRefused` code uses the existing `observation_refused`
+  category; unknown or malformed native exceptions remain
+  `validation_refused / execution_refused_or_uncertain` without formatting
+  exception text. Imported equality-check messages remain generic. Legacy
+  V2 classifications, receipt shape, validator/emitter bodies and readout
+  code are unchanged; no workflow, registration, model or execution control
+  changes are included.
+
+  Accepted base `9fbdc37fb0ec0e4eb79d32b22f37641235a24186`, tree
+  `2e72a30ccf0cf7aeea6be5c2e842a023dfd0b4bc`; tested source
+  `e0ae6d8ccc20e14dc3c7f7686c035873582001e1`, tree
+  `26a3bbb312731202d8e85bc4651651b6d26af565`. One new offline selector
+  reported **10 passed in 1.24s**, exit 0; wrapper **1.715750s**, with
+  Python 3.10.12/300s+5s/no-`-x` and 30s Git bounds. Real classifiers and
+  receipt/readout validators used synthetic exception/manifest data only.
+  Artifact directory: `/tmp/native-refusal-taxonomy-proof.a5VL6x/`; log
+  SHA256 `f2742d65aecc107aeb794418769cb2446d97bf411d112cdd6f03b1534f892db5`.
+
+  This is prospective diagnostic preservation, not a native execution fix.
+  The leader's historical readout `37585054563` retained only
+  `observation_callable / validation_refused / execution_refused_or_uncertain`.
+  Its more specific historical reason cannot be recovered by this change;
+  native Task1 remains consumed/uncertain, with calls, cost and cleanup
+  unknown, not zero. PR769/770 and their separate evidence remain untouched.
+  Only the three evidence documents change after the proof; final identities
+  and remaining source-review/CI/readout/live gates are recorded in
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) and the external final handoff.
+
 ### Changed
 
 - Accept native uncertainty readout source

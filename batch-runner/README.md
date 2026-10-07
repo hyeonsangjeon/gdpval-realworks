@@ -1513,6 +1513,39 @@ and one separately directed real read remain gates. This implementation did
 not read the actual native receipt or establish its cause, model-call count,
 cost or host readiness. It grants no replay, next cell or grading authority.
 
+The leader subsequently verified historical readout `37585054563`, run
+number 4, attempt 1, artifact `11466485746`. It retained only
+`observation_callable / validation_refused / execution_refused_or_uncertain`.
+The 1096-byte manifest identity was observed, not independently expected;
+its exact hash and trusted C/R/request/claim/output bindings are preserved
+in the [current evidence record](../tasks/LATEST_TASK_RESULT/README.md).
+No specific historical native guard, model-call count, cost or cleanup
+outcome follows. The consumed first native cell cannot be replayed.
+
+Prospectively, the shared classifier now preserves 30 explicitly listed
+static `CodexObservationRefused` codes from the accepted callable/parser,
+using the existing `observation_refused` category. Unknown or malformed
+native errors stay generic without formatting exception text; imported
+equality-check messages also stay generic. Legacy V2 classifications and
+default event bytes are unchanged. The existing receipt validator and
+readout projection share this finite vocabulary; neither a raw-error field
+nor a workflow/input change is introduced. This cannot recover the lost
+historical reason and is not a native execution fix.
+
+At tested source `e0ae6d8ccc20e14dc3c7f7686c035873582001e1`, tree
+`26a3bbb312731202d8e85bc4651651b6d26af565`, the single new selector
+`tests/test_time_budget_native_failure_taxonomy.py::test_time_budget_native_failure_taxonomy`
+reported **10 passed in 1.24s**, exit 0; wrapper **1.715750s**, under
+Python 3.10.12/300s+5s/no-`-x` and 30s Git bounds. Real classifiers and
+receipt/readout validators used synthetic exceptions/manifest data only;
+no native/provider execution, kernel-ownership probe or private read ran.
+Artifacts and final commit/tree are recorded in
+`/tmp/native-refusal-taxonomy-proof.a5VL6x/handoff.json`. Earlier proofs,
+including PR770's full synthetic path without a reproduced production
+defect, remain separate and were not rerun. Source review/final CI,
+accepted controller and separately directed readout/live gates remain;
+the fixed study and 1200+20/one-attempt limits are unchanged.
+
 #### Direct comparison runtime launch refusal
 
 `verify_codex_input_capture` and `capture_v2_pre_execution_input` share the
