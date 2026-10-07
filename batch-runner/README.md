@@ -798,17 +798,48 @@ tests in CI at `d71bae686020ee465a487f25dbb4675954ec849c`; its earlier local
 wrapper exit 127 remains an unstarted proof. The current evidence record
 separates those observations and the pending combined-source CI.
 
-##### Fixed native r1/Task1 observation on GitHub Actions
+<a id="fixed-native-r1task1-observation-on-github-actions"></a>
+
+##### One selected native r1 observation on GitHub Actions
 
 [`gpt54-time-budget-first-codex.yml`](../.github/workflows/gpt54-time-budget-first-codex.yml)
 uses [`gpt54_time_budget_codex_ci.py`](gpt54_time_budget_codex_ci.py) to call
-the accepted native callable above. It permits only
-`gpt54_time_budget_v1_codex_r1` / `codex` / repeat 1 /
-`02aa1805-c658-4069-8a6a-02dec146063a`; another run, task, condition or repeat
-refuses. This implementation adds no live authority or permission to advance
-ABBA order. The closed pilot and retention studies remain closed.
+the accepted native callable above. `request.cell.task_id` explicitly selects
+one of the existing five registered tasks, only for
+`gpt54_time_budget_v1_codex_r1` / `codex` / integer repeat 1. Another run,
+condition, repeat or unregistered task refuses. There is no scheduler,
+selection loop or automatic next cell. The next intended task is Task2,
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1`, not another Task1 attempt. This exposes
+existing cells in the unchanged twenty-cell registration; it adds no live
+authority or permission to advance ABBA order. The closed pilot and retention
+studies remain closed.
 
-This fixed cell is now consumed. The leader verified run `37574558224`,
+The selection draft's one new offline selector collected 13 cases and
+reported **5 failed, 8 passed in 99.94s**, exit 1; wrapper **100.917453s**,
+at `48bf0873d44b99c7364bbdcce43478826aa3466e`, tree
+`033eb0c97f11f15cde7a97a1b22f1e28fe8577c9`. All five failures were the new
+test's V2-only `configuration["task_ids"]` lookup after synthetic Task2
+preparation/claim. The native configuration uses `data.filter.task_ids` and
+`execution`; native execution, capture and retention assertions were not
+reached. The eight passes cover wrong selection/source/namespace, occupied
+synthetic Task1 state and fixed legacy readout bindings. They are not a
+successful Task2 roundtrip or an actual-host proof. No body was corrected or
+rerun. This draft is blocked pending a separately authorized test correction,
+fixed-HEAD review/CI and the actual host/input/authorization gates.
+
+The exact selector is
+`tests/test_time_budget_first_codex_ci.py::test_time_budget_native_registered_task_selection`.
+Artifacts are in `/tmp/native-r1-task-selection-proof.tGICRM/`; the
+[current record](../tasks/LATEST_TASK_RESULT/README.md) retains commands,
+case outcomes, hashes and unchanged registration/source boundaries. Final
+documentation-bearing HEAD/tree are recorded in that directory's
+`handoff.json`; only the three evidence records change after the failed proof.
+The source check confirmed that the existing test definitions and safe-event
+formatter were unchanged. Existing proofs below remain separate and were not
+rerun. PR771 and all earlier worktrees are untouched.
+
+Native r1/Task1, `02aa1805-c658-4069-8a6a-02dec146063a`, remains consumed.
+The leader verified run `37574558224`,
 attempt 1: execute returned 2, retention was acknowledged and the public
 completion remained uncertain with null result/usage/cleanup fields. No
 native cause, model-call count or cost is known from that envelope. Do not
@@ -889,11 +920,21 @@ uses the existing original parquet/reference and full canonical Step0 read
 primitives, then the real preparation/consumer. It does not manufacture a
 manifest or replace original inputs with result/preparation bytes. `storage`
 binds the fixed private target hash, `main`, expected immutable parent and
-this prefix:
+the selected task's prefix:
 
 ```text
-time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_codex_r1/02aa1805-c658-4069-8a6a-02dec146063a
+time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_codex_r1/<request.cell.task_id>
 ```
+
+The shared namespace function derives `admission.json` and
+`output-manifest.json` beneath that prefix. The legacy `CELL`, `PREFIX`,
+`CLAIM` and `MANIFEST` constants still bind Task1's exact UUID above; the
+accepted native uncertainty reader remains fixed to that path and format.
+No source revision can reset an occupied Task1 prefix, and no old claim or
+output is read or adopted to admit another observation. Retention and CLI
+envelope verification require the independently validated request cell,
+never a cell inferred from the received completion. The no-argument native
+envelope check still expects Task1 for the historical reader.
 
 The controller's stages are `validate-request`, `prepare-and-claim`,
 `execute`, `retain` and `verify-envelope`. A permanent add-only claim and

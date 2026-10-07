@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Bind one explicitly requested task from the existing five-task native r1
+  registration throughout the controller, private namespace and independently
+  checked completion. Keep Task1's legacy constants/readout, consumed state,
+  safe-event formatter, reviewed test definitions and all study controls
+  unchanged. The workflow delta is only the early five-UUID membership check.
+  Tested source `48bf0873d44b99c7364bbdcce43478826aa3466e`, tree
+  `033eb0c97f11f15cde7a97a1b22f1e28fe8577c9`, collected the one new selector's
+  13 cases: **5 failed, 8 passed in 99.94s**, exit 1; wrapper **100.917453s**.
+  All five failures are the new test's V2-only `configuration["task_ids"]`
+  lookup after synthetic Task2 preparation/claim. Native execution, capture
+  and retention assertions remain unreached. No test-body correction or
+  rerun follows this failed invocation. This draft is blocked, not a passing
+  roundtrip or live authorization. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  retains exact source/artifact identities, eight-pass scope, historical
+  uncertainty and remaining fixed-HEAD review/CI/host/input/authorization gates.
+
 - Accept test-only native boundary source
   `ab0662ec687369bb41a1d62bd43c6b38a4c4f273`, tree
   `89e49c81340ab948510fc526dc5253e4d2b4e616`, review `5439766309`,
