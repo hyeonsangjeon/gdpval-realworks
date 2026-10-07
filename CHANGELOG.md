@@ -13,6 +13,54 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept selected native-r1 source
+  `9de920c31b9ad95d932240cf2600d8254210d516`, tree
+  `14ce89ec88f55cf44ab6cc060f74f89de0ecb1ab`, review `5441433625`,
+  after all eleven combined checks succeeded. Preserve the tested controller,
+  workflow, taxonomy and emitter bytes; update completion records after
+  validation. Authorize one independently bound native r1 Task2 request,
+  `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`, under the unchanged study and
+  1200+20 limits. Old Task1 claims/readout stay fixed and consumed. This
+  pre-dispatch record claims no Task2 result, model usage, replay or grade.
+
+### Changed
+
+- Integrate reviewed native-r1 selection source
+  `d9196c84f85fa3a6c27e61cddcb19c038b0cf562`, review `5441405673`, with
+  accepted main `9ee0d0d75a6df1b91260060632de60989ed5583c`.
+  Preserve the exact tested selection workflow/controller/test bytes and
+  main's native refusal taxonomy/safe emitter. Only completion/usage documents
+  overlap; the complete source-tree union is checked before publication.
+  Separate prior and continuation proofs remain separate. Combined-HEAD CI
+  and a separately bound next-cell direction remain required.
+
+- Bind one explicitly requested task from the existing five-task native r1
+  registration throughout the controller, private namespace and independently
+  checked completion. Keep Task1's legacy constants/readout, consumed state,
+  safe-event formatter, reviewed test definitions and all study controls
+  unchanged. The workflow delta is only the early five-UUID membership check.
+  The original proof at `48bf0873d44b99c7364bbdcce43478826aa3466e`, tree
+  `033eb0c97f11f15cde7a97a1b22f1e28fe8577c9`, remains **5 failed, 8 passed
+  in 99.94s**, exit 1; wrapper **100.917453s**. All five failures were the
+  test's V2-only `configuration["task_ids"]` lookup after synthetic Task2
+  preparation/claim, before native execution, capture and retention assertions.
+  The eight prior passes were not repeated. The authorized continuation changes
+  only that test's assertions to native `data.filter.task_ids`,
+  `execution.max_retries=0`, `execution.resume_max_rounds=0` and
+  `execution.timeout=1200`; one external attempt is not a native retry alias.
+  Tested correction `242f7a2a55e2c1ed73214a56425b8c51e1bb243d`, tree
+  `a66a44cb4474143d905780569c26a9091129b838`, reported **5 passed in 98.69s**,
+  exit 0; wrapper **99.353259s**, for only `task2`, `direction_task`,
+  `result_task`, `result_source` and `result_file`. Real validators/callable
+  completed over synthetic auth/RPC/kernel/private-CAS fixtures. This is not
+  an aggregate thirteen-case pass, actual-host proof or live authorization.
+  No production/workflow/registration changes accompany the continuation.
+  Implementation acceptance remains HOLD for fixed-HEAD review/CI and
+  leader-owned integration, including preservation of main's newer taxonomy.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) retains both invocations,
+  exact tested/final source and artifact identities, historical uncertainty
+  and the remaining host/input/authorization gates.
+
 - Accept combined native taxonomy and safe-event source
   `b66a2a5f8329a362ccf48ea25469764e8a9325c5`, tree
   `d57f416fb2c608f227c8c1867e6ad4b3d7e069f8`, review `5440134625`,

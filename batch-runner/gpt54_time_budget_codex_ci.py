@@ -1,8 +1,8 @@
-"""One independently directed native r1/Task1 Actions observation, never a scheduler.
+"""One independently directed registered native r1 observation, never a scheduler.
 
-Only this controller's fixed registered cell can acquire its permanent private
-claim. Originals and the full canonical Step0 come from the accepted input-only
-primitives; neither a local marker nor the closed pilot supplies authority.
+Only one selected task in the fixed native r1 run can acquire its permanent
+private claim. Originals and the full canonical Step0 come from the accepted
+input-only primitives; neither a local marker nor the closed pilot supplies authority.
 """
 
 from __future__ import annotations
@@ -49,6 +49,7 @@ TARGET, TARGET_SHA256, BRANCH = shared.TARGET, shared.TARGET_SHA256, "main"
 REQUEST_VERSION = "gpt54-time-budget-first-codex-ci-request-v1"
 ENVELOPE_VERSION = "gpt54-time-budget-first-codex-ci-completion-v1"
 PURPOSE = "execute_and_privately_retain_first_codex_observation"
+# Legacy Task1 identities also serve the fixed historical uncertainty reader.
 CELL = {"study_id": registration.STUDY_ID, "run_id": "gpt54_time_budget_v1_codex_r1",
         "condition": "codex", "repeat": 1, "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"}
 PREFIX, CLAIM, MANIFEST = shared._namespace(CELL)
@@ -75,6 +76,20 @@ def _require(condition: bool, reason: str) -> None:
 
 def _bytes(value) -> bytes:
     return _canonical_json(value).encode("utf-8")
+
+
+def _selected_cell(compiled: registration.CompiledTimeBudgetRegistration, requested: dict) -> dict:
+    """Bind one requested task to the already source-verified native r1 run."""
+    runs = [run for run in compiled.runs if run.run_id == CELL["run_id"]
+            and run.condition == "codex" and run.repeat == 1]
+    _require(compiled.runtime_bound and len(runs) == 1 and type(requested) is dict
+             and type(requested.get("task_id")) is str and requested["task_id"] in runs[0].task_ids,
+             "registered_first_codex_task_required")
+    run = runs[0]
+    cell = {"study_id": registration.STUDY_ID, "run_id": run.run_id, "condition": run.condition,
+            "repeat": run.repeat, "task_id": requested["task_id"]}
+    _same("request cell", requested, cell)
+    return cell
 
 
 def _input_contract(plan: dict, frozen: Path) -> tuple[dict, list[tuple]]:
@@ -121,7 +136,6 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
     _same("request purpose", request["purpose"], PURPOSE)
     _require(type(request["cell"]) is dict and type(request["cell"].get("repeat")) is int,
              "fixed_cell_schema")
-    _same("fixed registered cell", request["cell"], CELL)
     _require(storage._hash(reviewed_source_sha, 40) and storage._hash(reviewed_source_tree, 40),
              "independent_reviewed_commit_and_tree_required")
     _same("request source", request["source"], {"sha": reviewed_source_sha, "tree": reviewed_source_tree})
@@ -192,8 +206,6 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
     _require(type(target) is dict and storage._hash(target.get("expected_parent"), 40),
              "independent_private_parent_required")
     _same("fixed private target", _identity(TARGET.encode())["sha256"], TARGET_SHA256)
-    _same("private study storage", target, {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH,
-                                         "prefix": PREFIX, "expected_parent": target["expected_parent"]})
     with ExitStack() as sources:
         parents = [
             sources.enter_context(_held_parents(bootstrap, (".git/HEAD",))),
@@ -215,10 +227,9 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         plan = registration.load_registration(roots["runtime_root"] / registration.REGISTRATION_PATH)
         compiled = registration._compile_registration(plan, (
             roots["runtime_root"], reviewed_source_sha, roots["frozen_root"], registration.ACCEPTED_BASE_SHA), True, sources)
-        matches = [run for run in compiled.runs if run.run_id == CELL["run_id"]
-                   and run.condition == CELL["condition"] and run.repeat == CELL["repeat"]]
-        _require(compiled.runtime_bound and len(matches) == 1 and matches[0].task_ids[0] == CELL["task_id"],
-                 "registered_first_codex_cell_required")
+        cell = _selected_cell(compiled, request["cell"])
+        _same("private study storage", target, {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH,
+              "prefix": shared._namespace(cell)[0], "expected_parent": target["expected_parent"]})
         _same("request registration", request["registration_sha256"], compiled.manifest_sha256)
         _same("request dataset facts", request["dataset_sha256"], seal(plan["shared"]["dataset"]))
         sources.enter_context(registration._observation_input_registration(
@@ -227,7 +238,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         _same("independent full Step0 provenance", request["step0"], step0)
         host = observation.host_identity.execution_host_identity(reviewed_source_sha)
         context = {"request": request, "request_identity": _identity(data), "plan": plan, "roots": roots,
-                   "cell": dict(CELL), "host": host, "input_specs": input_specs,
+                   "cell": cell, "host": host, "input_specs": input_specs,
                    "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
         for check in parents:
             check()
@@ -260,12 +271,13 @@ def _common(context: dict) -> dict:
 def _reconstruct(context: dict, sources: ExitStack):
     _read_bytes(_paths(context)["step0"], **context["request"]["step0"]["identity"])
     return registration._observation_handoff_data(context["plan"], sources=sources,
-        run_id=CELL["run_id"], task_id=CELL["task_id"], destination=_paths(context)["preparation"], **_common(context))
+        run_id=context["cell"]["run_id"], task_id=context["cell"]["task_id"],
+        destination=_paths(context)["preparation"], **_common(context))
 
 
 def _direction(context: dict, marker: dict) -> tuple[dict, dict]:
     paths, common = _paths(context), _common(context)
-    _same("fixed observation cell", {key: marker["observation"][key] for key in CELL}, CELL)
+    _same("selected observation cell", {key: marker["observation"][key] for key in context["cell"]}, context["cell"])
     expected = _identity(_bytes(marker))
     binding = registration.ObservationExecutionBinding(
         expected["sha256"], expected["size"], _canonical_json(marker["observation"]),
@@ -295,14 +307,16 @@ def _claim(context: dict, marker: dict) -> dict:
         "step0_provenance": context["request"]["step0"], "host": context["host"], "ci": context["ci"],
         "direction_identity": _identity(_bytes(direction)), "paths": direction["paths"],
         "expected_parent": context["request"]["storage"]["expected_parent"],
-        "storage": {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH, "prefix": PREFIX},
+        "storage": {"repository_name_sha256": TARGET_SHA256, "branch": BRANCH,
+                    "prefix": shared._namespace(context["cell"])[0]},
         "state": "permanently_consumed_not_completion"}
 
 
-def _commit(api, token, deadline, *, parent, files, control_path, control, cache):
-    """Same add-only CAS/readback contract, restricted to this one namespace."""
-    _same("private control cell", {key: control["observation"][key] for key in CELL}, CELL)
-    _require(files.get(control_path) == _encoded(control) and all(name.startswith(PREFIX + "/") for name in files),
+def _commit(api, token, deadline, *, cell, parent, files, control_path, control, cache):
+    """Same add-only CAS/readback contract, restricted to the selected namespace."""
+    prefix, _, _ = shared._namespace(cell)
+    _same("private control cell", {key: control["observation"][key] for key in cell}, cell)
+    _require(files.get(control_path) == _encoded(control) and all(name.startswith(prefix + "/") for name in files),
              "private_namespace_required")
     staged = [_PublicationFile(name, io.BytesIO(data), len(data), _identity(data)["sha256"])
               for name, data in sorted(files.items())]
@@ -330,6 +344,7 @@ def _commit(api, token, deadline, *, parent, files, control_path, control, cache
 def prepare_and_claim(context: dict) -> dict:
     """Fetch the four pinned originals, validate one handoff, then claim once."""
     paths, root = _paths(context), _paths(context)["root"]
+    prefix, claim_path, _ = shared._namespace(context["cell"])
     _require(not os.path.lexists(root), "partial_or_consumed_state_refused")
     _require(all(not any(context["roots"][name].iterdir()) for name in ("native_root", "login_root")),
              "fresh_native_login_roots_required")
@@ -360,7 +375,7 @@ def prepare_and_claim(context: dict) -> dict:
                 remaining -= len(data)
         token = None
         marker = registration.prepare_observation_handoff(context["plan"], **_common(context),
-            run_id=CELL["run_id"], task_id=CELL["task_id"], destination=paths["preparation"])
+            run_id=context["cell"]["run_id"], task_id=context["cell"]["task_id"], destination=paths["preparation"])
         with ExitStack() as sources:
             rebuilt, _, reread = _reconstruct(context, sources)
             _same("independently reconstructed preparation", marker, rebuilt)
@@ -380,9 +395,9 @@ def prepare_and_claim(context: dict) -> dict:
                 parent = context["request"]["storage"]["expected_parent"]
                 _same("independent private parent", storage._metadata(api, TARGET, BRANCH, token, deadline)["sha"], parent)
                 _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
-                         paths=[PREFIX], token=token) == [], "observation_already_claimed_or_retained")
-                receipt["returned_commit"] = _commit(api, token, deadline, parent=parent,
-                    files={CLAIM: _encoded(claim)}, control_path=CLAIM, control=claim, cache=cache)
+                         paths=[prefix], token=token) == [], "observation_already_claimed_or_retained")
+                receipt["returned_commit"] = _commit(api, token, deadline, cell=context["cell"], parent=parent,
+                    files={claim_path: _encoded(claim)}, control_path=claim_path, control=claim, cache=cache)
                 receipt["outcome"] = "acknowledged"
         except (Exception, KeyboardInterrupt):
             _write(root / "claim-receipt.json", receipt)
@@ -473,13 +488,13 @@ def _result_snapshot(context: dict, marker: dict):
     _same("canonical result semantics", canonicalize_inference_payload(payload), payload)
     fingerprint = validate_inference_result_fingerprint(payload)
     _same("returned result fingerprint", fingerprint, returned["result_fingerprint"])
-    for name, expected in {"experiment_id": CELL["run_id"], "condition": "codex", "execution_mode": "codex_foundry",
+    for name, expected in {"experiment_id": context["cell"]["run_id"], "condition": "codex", "execution_mode": "codex_foundry",
                            "model": context["plan"]["shared"]["model"]["deployment"],
                            "source": context["plan"]["shared"]["dataset"]["repo_id"]}.items():
         _same("result " + name, payload[name], expected)
     rows, control = payload["results"], payload["time_budget_observation"]
     validate_step2_progress_results(rows, schema_version=STEP2_PROGRESS_SCHEMA)
-    _same("single selected result", [row["task_id"] for row in rows], [CELL["task_id"]])
+    _same("single selected result", [row["task_id"] for row in rows], [context["cell"]["task_id"]])
     row = rows[0]
     _require(row["status"] in ("success", "error"), "terminal_result_required")
     _same("returned status", row["status"], returned["status"])
@@ -508,15 +523,17 @@ def _result_snapshot(context: dict, marker: dict):
                       **{"result/upload/" + name: value for name, value in files.items()}}, receipt, payload
 
 
-def validate_envelope(value: dict) -> None:
-    """Reuse the cell-parameterized metadata allowlist, with an explicit native version."""
+def validate_envelope(value: dict, *, expected_cell: dict | None = None) -> None:
+    """Bind an independently expected cell; default only to the legacy Task1 reader."""
     _same("native completion version", value["format"], ENVELOPE_VERSION)
-    shared.validate_envelope({**value, "format": shared.ENVELOPE_VERSION}, expected_cell=CELL)
+    shared.validate_envelope({**value, "format": shared.ENVELOPE_VERSION},
+                             expected_cell=CELL if expected_cell is None else expected_cell)
     _same("native completion unavailable usage", value["usage"], None)
 
 
 def retain(context: dict) -> dict:
     paths = _paths(context)
+    prefix, claim_path, manifest_path = shared._namespace(context["cell"])
     with ExitStack() as sources:
         marker, admission = _admission(context, sources)
         snapshot, files, execution_receipt, payload = _result_snapshot(context, marker)
@@ -538,19 +555,19 @@ def retain(context: dict) -> dict:
         with _session(None) as (api, token, deadline):
             parent = admission["returned_commit"]
             _same("retention parent", storage._metadata(api, TARGET, BRANCH, token, deadline)["sha"], parent)
-            _objects(api, TARGET, parent, [_object(CLAIM, _encoded(admission["claim"]))], token, deadline, written_at=parent)
+            _objects(api, TARGET, parent, [_object(claim_path, _encoded(admission["claim"]))], token, deadline, written_at=parent)
             _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
-                     paths=[MANIFEST, PREFIX + "/result"], token=token) == [], "output_already_retained")
-            revision = _commit(api, token, deadline, parent=parent,
-                files={MANIFEST: _encoded(manifest), **{PREFIX + "/" + name: data for name, data in files.items()}},
-                control_path=MANIFEST, control=manifest, cache=cache)
-            _objects(api, TARGET, revision, [_object(CLAIM, _encoded(admission["claim"]))], token, deadline, written_at=parent)
+                     paths=[manifest_path, prefix + "/result"], token=token) == [], "output_already_retained")
+            revision = _commit(api, token, deadline, cell=context["cell"], parent=parent,
+                files={manifest_path: _encoded(manifest), **{prefix + "/" + name: data for name, data in files.items()}},
+                control_path=manifest_path, control=manifest, cache=cache)
+            _objects(api, TARGET, revision, [_object(claim_path, _encoded(admission["claim"]))], token, deadline, written_at=parent)
             outcome = "acknowledged"
     except (Exception, KeyboardInterrupt):
         revision = None  # No lost-response adoption, repeated CAS or new attempt.
     envelope = shared._envelope(context, admission, payload, commit=revision, outcome=outcome)
     envelope["format"] = ENVELOPE_VERSION
-    validate_envelope(envelope)
+    validate_envelope(envelope, expected_cell=context["cell"])
     _write(paths["root"] / "completion.json", envelope)
     _require(outcome == "acknowledged", "private_retention_unconfirmed")
     return envelope
@@ -577,7 +594,7 @@ def main(argv=None) -> int:
                              admission=operation not in ("retain", "verify-envelope"), **arguments) as context:
             if operation == "verify-envelope":
                 value = _read(_paths(context)["root"] / "completion.json")
-                validate_envelope(value)
+                validate_envelope(value, expected_cell=context["cell"])
                 for name, expected in {"source": context["request"]["source"], "ci": context["ci"],
                                        "request_sha256": context["request_identity"]["sha256"],
                                        "host_sha256": context["host"]["instance_sha256"]}.items():

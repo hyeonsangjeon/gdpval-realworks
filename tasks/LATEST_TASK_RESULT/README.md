@@ -1,55 +1,60 @@
 # Latest task result
 
-## Combined native refusal taxonomy and safe events accepted
+## Native task selection accepted; one directed native r1 Task2 observation
 
-Source `b66a2a5f8329a362ccf48ea25469764e8a9325c5`, tree
-`d57f416fb2c608f227c8c1867e6ad4b3d7e069f8`, passed all eleven combined
-checks. Review `5440134625` inspected the exact shared-controller union.
-The later main change adds only the independently reviewed/passing native
-boundary regression and documentation. Every tested production/workflow/test
-blob is retained in the merge; only three documentation records are
-reconciled after validation.
+Reviewed source `9de920c31b9ad95d932240cf2600d8254210d516`, tree
+`14ce89ec88f55cf44ab6cc060f74f89de0ecb1ab`, passed all eleven combined
+checks. Review `5441433625` accepted the exact selection/diagnostic union.
+Only completion records change after validation; controller, workflow,
+tests, finite taxonomy and safe-event formatter bytes remain reviewed.
 
-Known native `CodexObservationRefused` instances preserve one of 30 explicit
-static codes under `observation_refused`. A code must be one exact built-in
-string in the finite native list. Unknown/malformed/native equality errors
-stay generic without formatting exception text. Legacy classes retain their
-original vocabulary rather than gaining access to native-only reasons.
+The [prior record][prior] retains the failed original 5/8 invocation and
+the separate five-node continuation, 5 passed in 98.69s. The earlier eight
+passes were not repeated or aggregated. Synthetic auth/RPC/kernel/private
+storage are not actual host or input evidence.
 
-The accepted formatter emits only format/stage/category/reason after a fresh
-reservation and acknowledged current failure-receipt write. Native and V2
-formats are fixed; V2 default bytes are unchanged. Old receipts, earlier
-failures and unacknowledged I/O do not emit. I/O uncertainty never grants a
-retry, success result or deadline extension. Readout shares the finite
-receipt schema and keeps observed manifest identity separate from trusted
-bindings.
+The leader authorizes exactly one subsequent immutable request for
+`gpt54_time_budget_v1_codex_r1` / `codex` / repeat 1 /
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1`. It must bind actual accepted runtime
+source/tree, the next all-event workflow run number, attempt 1, a finite
+admission window and an independently recorded exact-byte request digest.
+No implicit iteration, native r2 selection or additional cell is authorized.
 
-The [candidate record][candidate] retains the separate 10-case taxonomy and
-11-case safe-event proofs, as well as the complete AST/tree union. The eleven
-successful combined CI checks now close that integration gate; no earlier
-local selector was repeated. This is diagnostic preservation, not a correction
-to native model behavior or evidence about the historical first guard.
+Original parquet/reference bytes and full canonical Step0 must be verified
+by the executor. The source-known Step0 expectation remains 218405 bytes,
+SHA256 `463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512`,
+at revision `6c7e07ee7365f145dfcf898263365b5c8c97b224`.
+The current registration seal remains
+`3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f`.
+No original input, frozen F or historical registration is rewritten.
 
-The actual consumed native r1/Task1 record still contains only
-`observation_callable` / `validation_refused` /
-`execution_refused_or_uncertain`. The independently checked historical
-readout did not recover a more specific reason, calls, cost, terminal result
-or cleanup. Those unavailable values are not zero.
+Last acknowledged private output
+`d443e8045f58b6f7b4b35ed7f1888182b62296e0` is the independent expected
+parent, not assumed fresh. The executor must check actual private metadata
+and the exact Task2 prefix before permanent CAS/readback. A mismatch grants
+no automatic retry. Actual source, approved authentication, host ownership,
+provider/direction and path checks remain mandatory.
 
-The separate native boundary regression completed under synthetic auth/RPC/
-kernel state without a deterministic mismatch. It is not actual-host or
-historical-cause evidence. Production input, Step0, provider, source,
-ownership, sandbox and deadline guards remain unchanged.
+Task1's legacy CELL/PREFIX/CLAIM/MANIFEST and fixed historical reader are
+unchanged. Its native attempt is consumed/uncertain. The verified historical
+classification remains `observation_callable` / `validation_refused` /
+`execution_refused_or_uncertain`; the original specific guard, model calls,
+cost, terminal result and cleanup remain unavailable. The passing synthetic
+boundary test did not establish the actual cause or host readiness.
 
-The browser worker is implementing explicit selection within the already
-registered native r1 cohort, without live authority or implicit iteration.
-It must preserve Task1's original fixed diagnostic path and permanent claim.
-That implementation and its outcomes are not accepted by this record.
+All five V2 r1 cells remain consumed and retained, as two uncertain and
+three canonical errors, not successes or zero quality scores. This next
+native Task2 is a different registered cell, never a replay of Task1.
 
-Remaining work is its exact-source review, targeted evidence and ordinary CI
-before a separately authorized next unconsumed-cell request. Five V2 cells
-and native r1/Task1 remain consumed. No replay, private read, model call,
-next observation or grading is authorized here. Frozen F and the fixed
-twenty-cell study remain unchanged.
+The twenty-cell study, GPT-5.4/direct-v1/xhigh, native null context override,
+zero configured provider request/stream retries, shared concurrency 1,
+one external attempt, 1200-second generation and shared 20-second cleanup
+remain unchanged. The job ceiling stays 45 minutes. These are not a monetary
+cap or a remote-cancellation guarantee.
 
-[candidate]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/b66a2a5f8329a362ccf48ea25469764e8a9325c5/tasks/LATEST_TASK_RESULT/README.md
+This record stops before Task2 execution and claims no outcome. Remaining
+work is its directed attempt and verified canonical/uncertain retention,
+followed by a separate grading decision. No further cell, replay or grade
+is authorized.
+
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/9de920c31b9ad95d932240cf2600d8254210d516/tasks/LATEST_TASK_RESULT/README.md
