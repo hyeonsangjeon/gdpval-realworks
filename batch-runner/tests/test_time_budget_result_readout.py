@@ -45,7 +45,7 @@ def _git(root, *arguments, deadline):
 @pytest.fixture(scope="module")
 def source_repository(tmp_path_factory, request):
     workspace = tmp_path_factory.mktemp("readout-ordinary-bootstrap")
-    roles = subject.SOURCE_ROLES | {
+    roles = subject.SOURCE_ROLES | {subject.registration.CODEX_TEMPLATE} | {
         path.relative_to(ROOT).as_posix() for path in (ROOT / "batch-runner/core").rglob("*.py")
     }
     for role in sorted(roles):
