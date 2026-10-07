@@ -1391,8 +1391,23 @@ def consume_observation_handoff(
             control.finish_cleanup(True)
     record = control.as_record()
     if record["terminal_reason"] != "completed" or not record["cleanup_complete"]:
+        error = record["terminal_reason"] if record["cleanup_complete"] else CLEANUP_UNCONFIRMED
+        if (identity.condition == "sandbox_v2" and record["terminal_reason"] == "failed"
+                and record["cleanup_complete"]):
+            # "failed" is a control ending, not a V2 tool/runner error. Keep a
+            # verified failure's original code so its audit still verifies at
+            # capture. Timeout, cleanup failure and invalid receipts retain
+            # the control override; no outcome is promoted to success.
+            from core.agentic_v2_provenance import verify_agentic_v2_failure_result
+
+            try:
+                verify_agentic_v2_failure_result(result)
+            except (KeyError, TypeError, ValueError):
+                pass
+            else:
+                error = result["error"]
         result = {**result, "success": False,
-                  "error": record["terminal_reason"] if record["cleanup_complete"] else CLEANUP_UNCONFIRMED}
+                  "error": error}
     return {**result, "time_budget_observation": record, "handoff_preparation_identity": expected}
 
 
