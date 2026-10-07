@@ -167,7 +167,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           AZURE_AI_ROUTE_PROFILE: direct-v1
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
-          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: "1"
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
         run: |
           umask 077
