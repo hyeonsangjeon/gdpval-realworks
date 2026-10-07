@@ -525,23 +525,43 @@ to reject the receipt. Its **2 passed in 14.34s**, wrapper **14.933481s**,
 are reproduction assertions, not a fix proof or an explanation of Task3's
 original error. Artifacts: `/tmp/v2-real-voice-boundary-repro.nWLuBtNR/`.
 
-The proposed verified-failure preservation and new regression are pinned at
+The original verified-failure correction and regression were pinned at
 `7e6e441fa64dcca804b23383b43bd90830844247` / tree
 `12117a30c37d53a38c7cf407f1fc60b8e27f4b4b`. The one correction selector
 reported **2 failed in 6.35s**, exit 1, wrapper **6.956347s**: both cases
-stopped at preparation's `runtime_source_roles` guard because the unchanged
-registration still pins the prior compiler bytes. Neither reached the new
-correction. The source-pin guard was not weakened or repinned; no retry
-followed. This candidate is blocked and must not be used as an accepted
-runtime. Artifacts: `/tmp/v2-real-voice-boundary-proof.TnBlJliY/`.
+stopped at preparation's `runtime_source_roles` guard because that registration
+still pinned the prior compiler bytes. Neither reached the correction. No
+pin bypass or retry followed that failure. Its artifacts remain at
+`/tmp/v2-real-voice-boundary-proof.TnBlJliY/`.
 
-Both invocations used offline Python 3.10.12, 300s+5s/no-`-x`, 30s Git
-bounds, synthetic inputs/transports and an explicitly synthetic kernel
-fixture. Neither is a real-host positive. Only the three evidence/usage
-records change after the failed selector. Source-pin reconciliation,
-corrected-source proof, final review/CI and independently directed live
-execution remain gates. The registered model, prompt, 9-turn/8192 settings,
-1200+20, one attempt and consumed observations are unchanged. See the
+After inspecting `93c5cbb931ea0a3db1cb63f9bd0e89bea72132a1` / tree
+`ee85d1c5771012fec362823da61268997df2f53e`, the leader authorized the two
+prospective compiler bindings to advance to the verified corrected bytes.
+All other parsed registration fields remain identical. The full seal changes
+from `f3337bd80a168cf42b37314b425f5f5b221049fa87c1c15e2338de3441e0ae05` to
+`3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f`.
+Historical observations retain the old seal; this is runtime provenance, not
+a new study condition. The consumer correction itself is unchanged.
+
+Continuation `e3ad928bf02b99e080a6a5924a4ebda75b156adf` / tree
+`fe3d097ca4d6632478494e67d57f0f9be48e52b8` reported **2 failed, 5 passed in
+13.79s**, exit 1, wrapper **14.574513s**. The four historical-readout cases
+and affected workflow check passed. Both real-voice cases cleared the primary
+replay/capture assertions and then failed at duplicate refusal: actual
+`result_destination_exists`, expected `direction_observation_already_consumed`.
+The existing destination guard precedes the consumed-state guard. The later
+effects/byte-preservation assertions were not reached, so neither boundary
+test is a pass. No code/assertion change or retry followed. Artifacts:
+`/tmp/pr765-registration-readout-proof.HFBa6hyS/`.
+
+These are separate invocations, all using offline Python 3.10.12,
+300s+5s/no-`-x`, 30s Git bounds and synthetic inputs/transports. The voice
+kernel fixture is not a real-host positive. Only the three evidence/usage
+records change after the latest failed invocation. The duplicate-assertion
+mismatch, complete boundary proof, final review/CI and independently directed
+live execution remain gates. Frozen F/TEMPLATE, the old profile and its 37
+pins, the registered model/prompt, 9-turn/8192 settings, 1200+20, one attempt
+and twenty planned observations are unchanged. Task1-Task3 stay consumed. See the
 [full evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact source,
 readout and artifact identities.
 
@@ -1088,8 +1108,11 @@ SHA256. Its exact top-level fields are:
   this repository/workflow, `refs/heads/main`, `hyeonsangjeon`, `readout`,
   attempt 1, the actual next readout run number, `ubuntu-22.04`, `Linux`
   and `X64`.
-- `registration_sha256`: the seal of the unchanged registered manifest,
-  `f3337bd80a168cf42b37314b425f5f5b221049fa87c1c15e2338de3441e0ae05`.
+- `registration_sha256`: the full registration seal at the independently
+  verified completion's R commit, not C's current registration. For the
+  historical Task3 result it remains
+  `f3337bd80a168cf42b37314b425f5f5b221049fa87c1c15e2338de3441e0ae05`;
+  do not replace it with the prospective runtime seal above.
 - `cell`: the registered `study_id`, `run_id`, `condition`, `repeat` and
   `task_id` for the selected result.
 - `completion`: the full, independently verified existing completion
@@ -1128,6 +1151,15 @@ and full request validation precede the only credentialed step, and source
 checks run again before publication. Permissions remain `contents: read`,
 checkout credentials are nonpersistent and SDK telemetry is disabled.
 
+Checkout now uses `fetch-depth: 0` so the exact historical R objects are
+available locally. Before the credentialed step, the reader verifies R's
+commit/tree through the existing read-only Git guards and reads only the
+constant registration blob from that tree. The trusted request seal must
+match that R plan, which also governs selected-cell and result validation.
+Missing R or a mismatched tree/blob/registration refuses without falling back
+to C. No historical code is checked out or executed, and no extra HF lookup
+is added. The controller C guards and final source reread remain unchanged.
+
 At most two requests share 60 cumulative seconds: private-identity metadata
 at the exact output commit, then one exact raw Git-object GET. The scoped
 session requests `Accept-Encoding: identity` before the metadata call; the
@@ -1165,15 +1197,27 @@ and no retry/private-body output. Both proofs used offline Python
 3.10.12/300s+5s/no-`-x`, genuine linked source fixtures, real validators and
 synthetic HTTP responses; neither is a private read or kernel-positive proof.
 New artifacts are at `/tmp/time-budget-result-readout-encoding.gECJqpwU/`.
-Only the three evidence/usage records change after the new proof; the [latest
-record](../tasks/LATEST_TASK_RESULT/README.md) identifies the final handoff.
+Only the three evidence/usage records changed after that transport proof; the
+[latest record](../tasks/LATEST_TASK_RESULT/README.md) identifies the current handoff.
 Source `f1f79f27b8ffd3e67cf7af60810be5abde86333b` has passed review
 `5435184139` and all eleven applicable checks. A real read still requires the
 separately recorded request naming actual accepted controller C, its exact
 tree/run number and the immutable retained-result identities. This command
-example grants no authority by itself. No reviewer harness was retried. The study,
-existing workflows, 1200+20 observation budget and 45-minute execution ceiling
-are unchanged.
+example grants no authority by itself. No reviewer harness was retried.
+
+The new historical-R/current-C compatibility check and wrong-R-tree,
+wrong-registration and missing-R refusals, plus the affected workflow check,
+passed within the single continuation at
+`e3ad928bf02b99e080a6a5924a4ebda75b156adf`, tree
+`fe3d097ca4d6632478494e67d57f0f9be48e52b8`. That invocation still failed
+overall: **2 failed, 5 passed in 13.79s**, wrapper **14.574513s**, because
+the two real-voice cases reached a mismatched duplicate-refusal expectation.
+The old 21/3-case readout proofs were not rerun or pooled with it. The full
+registration and workflow YAML deltas were also checked: exactly two runtime
+pins and checkout depth, respectively. Apart from that depth change, the
+workflow is unchanged. Final review/CI, accepted C and a separately directed
+real read remain required; the study, 1200+20 observation budget and 45-minute
+execution ceiling are unchanged.
 
 #### Direct comparison runtime launch refusal
 

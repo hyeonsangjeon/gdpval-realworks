@@ -1,30 +1,131 @@
 # Latest task result
 
-## V2 failure-code loss reproduced; correction blocked by its source pin
+## Runtime pins advanced; historical readout checks pass; boundary tests still fail
 
-The base-source reproduction confirmed a deterministic loss of a valid V2
-failure code in the consumer. It also confirmed typed write/finalize success
-and faithful second-request construction. The proposed correction has **no
-behavioral pass**: its one selector reported **2 failed in 6.35s**, stopping
-at the unchanged registration's compiler pin before either response path ran.
-No retry or source-pin bypass followed. This candidate is not ready to run.
+The authorized source-pin update removed the preparation blocker without
+changing the consumer correction. The single continuation reported **2 failed,
+5 passed in 13.79s**, exit 1, wrapper **14.574513s**. All four new historical-R
+compatibility cases and the affected workflow check passed. Both real-voice
+cases cleared their primary replay/capture assertions, then failed at the
+duplicate-refusal assertion: actual `result_destination_exists`, expected
+`direction_observation_already_consumed`. Neither boundary test is a pass.
+No code, assertion or bound was changed after the outcome; no repeat followed.
 
 ### Exact source and authority
 
-Accepted main `d7aad7abc1e1626e72178f9e8d85090a63825cd2`, tree
-`749155e1f967699036f887bbf58a6bddbde2aa0c`, was checked against origin/main
-once before creating the independent worktree. The leader directed this
-narrow returned-result investigation and conditional correction. That is not
-acceptance of the new source or live authority. No unavailable reviewer
-harness was invoked or claimed successful.
+This continuation began in the clean existing PR765 worktree at leader-inspected
+`93c5cbb931ea0a3db1cb63f9bd0e89bea72132a1`, tree
+`ee85d1c5771012fec362823da61268997df2f53e`. Its accepted-main basis remains
+`d7aad7abc1e1626e72178f9e8d85090a63825cd2`, tree
+`749155e1f967699036f887bbf58a6bddbde2aa0c`; no new origin/main check or branch
+integration was performed. The leader independently verified compiler blob
+`f6fe26b40310f3ca72347a6133abe43316de97f2` and authorized the two prospective
+runtime bindings plus historical-readout compatibility. This is runtime
+provenance, not a new study condition or live authority. The required reviewer
+invocation failed before execution on the unavailable legacy Opus preference;
+no successful spawned review is claimed and the harness was not retried.
 
-Tested correction `7e6e441fa64dcca804b23383b43bd90830844247`, tree
-`12117a30c37d53a38c7cf407f1fc60b8e27f4b4b`, changes only
-`batch-runner/gpt54_time_budget_comparison.py` and adds
-`batch-runner/tests/test_time_budget_v2_returned_result_boundary.py`.
-Only CHANGELOG, this record and direct V2 README usage change after the
-failed selector. Exact final HEAD/tree and draft PR identity are in local
-`/tmp/v2-real-voice-boundary-proof.TnBlJliY/handoff.json`.
+Tested continuation `e3ad928bf02b99e080a6a5924a4ebda75b156adf`, tree
+`fe3d097ca4d6632478494e67d57f0f9be48e52b8`, changes only the prospective
+registration, readout helper, readout checkout depth and coupled readout tests.
+The consumer correction and 188-line real-voice test remain byte-identical to
+the inspected source. Only CHANGELOG, this record and direct README usage
+change after the new proof. Exact final HEAD/tree and PR identity are recorded
+in `/tmp/pr765-registration-readout-proof.HFBa6hyS/handoff.json`.
+
+### Prospective registration and historical R
+
+Only `source_basis.registration_compiler.sha256` and
+`source_pins["batch-runner/gpt54_time_budget_comparison.py"]` advance from
+`2766e58f769e2bf617c26c15cc124329c8c9bd5f17bf03fb88a3066f78140f96` to
+`f4e41540a089e4ed164063bec60ce124a901eb5195065e456502e902814cd3a2`.
+The bounded wrapper verified exact byte replacement and parsed-YAML identity
+for every other field. The resulting full seals are:
+
+| Registration | Full seal |
+| --- | --- |
+| Historical observations, unchanged | `f3337bd80a168cf42b37314b425f5f5b221049fa87c1c15e2338de3441e0ae05` |
+| New prospective registration | `3dde5f2f62e8ada29c883e1ef0eb555c969987f710b437af50c513ac9b52d22f` |
+
+The new registration file SHA256 is
+`e1d16d350aeb21af34104cede0d3acc0f6dc8db134338708e70168fbd9642699`.
+Frozen F `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
+`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`, TEMPLATE
+`37e1791da757a247eaf513352425128eb5c1772f3f6c814d1432b5eb665d48ce`, and
+the old local-source profile and its 37 pins remain unchanged. No observation
+or consumed receipt is relabeled with the new seal.
+
+Readout first validates C's existing source/workflow/bootstrap context and the
+independently supplied completion envelope. It verifies the envelope's exact
+R commit/tree with the existing local read-only Git guards, reads only the
+constant `REGISTRATION_PATH` blob within the existing manifest-size bound,
+applies the existing duplicate-key rejecting YAML loader, and compares the
+trusted request seal to that R plan.
+Selection and result validation use R's plan. Missing R or a mismatched
+tree/blob/seal refuses before the credentialed read step; there is no fallback
+to C, legacy-seal allowlist, historical checkout or old-code execution.
+
+The workflow's only change is checkout `fetch-depth: 1` to `0`, making the
+historical objects available while keeping the reviewed C checkout and linked
+source layout. Parsed YAML and exact bytes confirm that single workflow delta.
+Permissions, credentials, steps, timeouts, canonical-result/fingerprint checks
+and the two-GET/60-second private projection contract are unchanged.
+
+### One continuation invocation
+
+From `batch-runner`, the bounded wrapper ran exactly:
+
+```bash
+/ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p pytest_timeout \
+  'tests/test_time_budget_v2_returned_result_boundary.py::test_time_budget_v2_real_voice_returned_result[finalize]' \
+  'tests/test_time_budget_v2_returned_result_boundary.py::test_time_budget_v2_real_voice_returned_result[refused_finalize]' \
+  tests/test_time_budget_result_readout.py::test_time_budget_result_readout_historical_registration \
+  tests/test_time_budget_result_readout.py::test_time_budget_result_readout_workflow_binding \
+  -m 'not integration' --tb=short -ra \
+  --basetemp=/tmp/pr765-registration-readout-proof.HFBa6hyS/pytest-tmp \
+  --junitxml=/tmp/pr765-registration-readout-proof.HFBa6hyS/junit.xml
+```
+
+The four compatibility cases cover a historical R whose registration differs
+from C only in legitimate compiler/runtime bindings, wrong R tree, a trusted
+request incorrectly supplying C's seal, and missing R. They use real
+source/request/canonical-result validators and the existing synthetic HTTP
+transport. The positive read keeps the exact result identity/fingerprint and
+safe projection; the three refusals occur before `_read_result`, with zero
+credential-step entries, HTTP calls or public artifact writes. The workflow
+case parses the real command and reaches request validation and Bash guards.
+
+Both real-voice cases reached line 175 of the unchanged test. Before that
+point, their real typed `workspace_apply`/`finalize`, faithful replay,
+canonical success or verified `artifact_not_openable` capture, provenance,
+cleanup and one-claim assertions had completed. The duplicate call then
+raised `FirstV2ObservationRefused("result_destination_exists")`, not the
+expected `direction_observation_already_consumed`. The first actual refusing
+operation is `run_first_v2_observation` → `absent(before_generation=True)` →
+the existing destination/reservation existence guard at
+`gpt54_time_budget_v2_observation.py:384`, before its consumed-state guard.
+The post-refusal effects/byte assertions at test lines 177–179 and the final
+`safe-boundary.json` write were not reached. No complete duplicate-preservation
+proof is claimed. The full invocation remains failed; there was no retry,
+assertion relaxation or speculative production edit.
+
+Python was 3.10.12, pytest 9.1.1, pytest-timeout 2.4.0, OpenAI SDK 2.46.0 and
+PyYAML 6.0.3. One 300-second outer bound plus 5-second grace, no `-x`, Python
+timing and the existing 30-second fixture Git bounds were preserved. Kernel
+state in the voice cases is explicitly synthetic, not a NAS/Actions host proof.
+No base reproduction, old 21/3 selector, full suite or real kernel probe ran.
+
+Artifacts are in `/tmp/pr765-registration-readout-proof.HFBa6hyS/`:
+
+| Artifact | SHA256 |
+| --- | --- |
+| `run-proof.py` | `9624bd41bf168d09782450cdf0d06e442f8dcdd3c60f650ad3b8008209766966` |
+| `command.json` | `91b512c1bf2488daacd88d34b5a6014a2c49e48f7b4e6bddb4df817f0a2dc66c` |
+| `source.json` | `7c90c17814dd0205af27fe22b5a011e29b45a5b4f25ae007fd248633a6ca0756` |
+| `pytest.log` | `374b5eb1eb80b05a2cc9745164e5c3ec3e320e3c22f54978bb35e5b9e3fe8da6` |
+| `junit.xml` | `bd6ab8d4b74e529ddc864d454c18c7ca3b3e961074eeffe555972d92d0174550` |
+| `outcome.json` | `3e0f4d826660471af5f601995c27cbde14947eb59284d6f6ed5b5fe8c14db44e` |
+| `first-failure.json` | `350d87f2fea3f440af8a18b07df62a2cd29fe8a03fa10b145bc5d0d3fbdb8cfa` |
 
 ### Leader-verified actual Task3 readout
 
@@ -35,7 +136,8 @@ ZIP SHA256 is
 `c989af75b4588d38f519ea35c1c2b1b5a4208eab7b7077c2745989fd29cc19a1`.
 These are leader-supplied verified facts, not a read repeated in this task.
 
-Controller C is the accepted main above. Original result R remains
+For that real readout, controller C was the accepted main above. Original
+result R remains
 `f2eaccf1b3973a6fc683f169b38f6caddb5a1953`, tree
 `72a9d2fa2c22b1409a8b19e01d6a24ac5f29f9cf`, for
 `gpt54_time_budget_v1_v2_r1` / `sandbox_v2` / repeat 1 /
@@ -66,7 +168,7 @@ retained invocation. It does not establish price, score, native model-call
 count or every possible historical cause. No raw model/tool reply or raw
 exception survives in the projection, so Task3's first error is not recovered.
 
-### What the reproduction established
+### Separate prior base-source reproduction
 
 One bounded temporary reproduction ran against clean accepted main, using
 real `AzureFoundryVoice`, typed SDK `Response` / `ResponseFunctionToolCall`,
@@ -106,17 +208,20 @@ they are not a corrected-source pass. Artifacts are under
 | `finalize.json` | `cde5a33bcfe70a1ee0e710ca59479d98593fb7e8b38d3ef9878ce3a3455e5774` |
 | `refused_finalize.json` | `a3e0c4842906af50b701e9d9d3d4801415f92ced407f1873496ae6649f20069c` |
 
-### Candidate correction and failed selector
+### Separate prior source-pin failure
 
-The proposed consumer change keeps the original code only when the existing
+The unchanged consumer correction keeps the original code only when the
+existing
 `verify_agentic_v2_failure_result` accepts the complete V2 receipt, terminal
 reason is `failed` and cleanup is complete. It never sets success true.
 Timeout, unconfirmed cleanup, invalid receipts and native results keep the
 previous control override. Core provenance/capture validators are unchanged.
-The new test also asserts malformed-audit/success-flag rejection and permanent
-duplicate refusal, but those assertions were not reached in this invocation.
+That earlier invocation did not reach the malformed-audit/success-flag or
+duplicate-refusal assertions. Its tested source was
+`7e6e441fa64dcca804b23383b43bd90830844247`, tree
+`12117a30c37d53a38c7cf407f1fc60b8e27f4b4b`.
 
-From `batch-runner`, the only correction selector was:
+From `batch-runner`, that earlier correction selector was:
 
 ```bash
 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p pytest_timeout \
@@ -130,16 +235,16 @@ It reported **2 failed in 6.35s**, exit 1; wrapper **6.956347s**. The first
 failure arose during `_case` → `prepare_observation_handoff` → `_compile_registration`
 → `_dual_root_sources` → `_expect("runtime_source_roles", ...)`. Both cases
 refused before admission, Responses, the proposed correction or capture.
-The unchanged runtime registration pins compiler SHA256
+At that tested source the registration still pinned compiler SHA256
 `2766e58f769e2bf617c26c15cc124329c8c9bd5f17bf03fb88a3066f78140f96`,
 while the tested compiler bytes hash to
 `f4e41540a089e4ed164063bec60ce124a901eb5195065e456502e902814cd3a2`.
 This is a source-binding failure, not a behavioral pass, provider failure or
-supported-host refusal. The guard, registration, assertions and bounds were
-left intact; no repeat or untested follow-up code edit was made.
+supported-host refusal. At that stage the guard, registration, assertions and
+bounds were left intact; no repeat or untested follow-up code edit was made.
 
-Both invocations used Python 3.10.12, OpenAI SDK 2.46.0, pytest 9.1.1 and
-pytest-timeout 2.4.0. Each had one 300-second outer bound plus 5 seconds grace,
+Those two prior invocations used Python 3.10.12, OpenAI SDK 2.46.0, pytest
+9.1.1 and pytest-timeout 2.4.0. Each had one 300-second outer bound plus 5 seconds grace,
 no `-x`, Python timing and unchanged 30-second fixture Git bounds. No old
 selector, whole suite, kernel probe or CI query was run. Failed-proof
 artifacts are under `/tmp/v2-real-voice-boundary-proof.TnBlJliY/`:
@@ -155,19 +260,23 @@ artifacts are under `/tmp/v2-real-voice-boundary-proof.TnBlJliY/`:
 
 ### Remaining gates and preserved state
 
-Source-pin reconciliation is required before a corrected-source behavioral
-proof, final review/CI and accepted-source delivery. No runtime source may be
-treated as accepted merely because this change has a plausible local fix.
-Genuine input/host/controller checks and any future live request remain
-leader-owned; no live authority is issued here.
+The source-pin blocker is resolved under the explicit prospective-binding
+decision. The duplicate-refusal expectation now needs a separate decision;
+the complete boundary selector, final review/CI and accepted-source delivery
+remain gates. Partial assertions are not a passing test or permission to run.
+Genuine input/host/controller checks, a real readout request and any future
+live request remain leader-owned; no live authority is issued here.
 
-The twenty-cell registration, model/prompt, V2 9-turn/8192 settings, 1200+20,
-one attempt, frozen F and history are unchanged. No workflow, HF upload,
-provider/runner core or readout code changed. Task1/Task2 remain consumed and
-uncertain; Task3 remains consumed with its immutable canonical error. No
+The twenty-cell study scope, model/prompt, V2 9-turn/8192 settings, 1200+20,
+one attempt, frozen F and history are unchanged. Only the two prospective
+compiler bindings and the described readout source/depth/tests changed before
+the proof; no HF upload or provider/runner core code changed. Task1/Task2 remain
+consumed and uncertain; Task3 remains consumed with its immutable canonical error. No
 result was adopted, mutated, replayed or relabeled as a zero score. PR764 at
 `787ed5cfed40b8c7bd6d90e6760ba0ab8f912c97` and all preserved worktrees are
-untouched. [The prior accepted-main record][prior] retains earlier proofs
-separately; no aggregate pass claim is made.
+untouched. [The preceding PR765 record][previous] and
+[prior accepted-main record][prior] retain earlier evidence separately; no
+aggregate pass claim or historical-error diagnosis is made.
 
+[previous]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/93c5cbb931ea0a3db1cb63f9bd0e89bea72132a1/tasks/LATEST_TASK_RESULT/README.md
 [prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/d7aad7abc1e1626e72178f9e8d85090a63825cd2/tasks/LATEST_TASK_RESULT/README.md
