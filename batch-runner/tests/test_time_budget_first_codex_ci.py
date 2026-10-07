@@ -70,11 +70,13 @@ def actions_layout(handoff_source_seed, tmp_path, monkeypatch):
     bootstrap = tmp_path / "ordinary-bootstrap"
     with tempfile.TemporaryDirectory(prefix="time-budget-native-ci-", dir="/var/tmp") as owned:
         runner_temp = Path(owned)
+        github_env = tmp_path / "github-env"
+        github_env.touch(mode=0o600)
         environment = {**_FIXTURE_ENV, "GIT_ALLOW_PROTOCOL": "file", "GITHUB_WORKSPACE": str(bootstrap),
                        "RUNNER_TEMP": str(runner_temp), "REVIEWED_SOURCE_SHA": seed.runtime_sha,
-                       "REVIEWED_SOURCE_TREE": seed.runtime_tree,
-                       "GDPVAL_CODEX_RUN_ROOT": str(runner_temp / ci.ROOT_NAMES["native_root"]),
-                       "AZURE_CONFIG_DIR": str(runner_temp / ci.ROOT_NAMES["login_root"])}
+                       "REVIEWED_SOURCE_TREE": seed.runtime_tree, "GITHUB_ENV": str(github_env)}
+        for key in ("GDPVAL_CODEX_RUN_ROOT", "AZURE_CONFIG_DIR"):
+            environment.pop(key, None)
 
         def local(command, *, check=True, cwd=None):
             with monkeypatch.context() as process:
@@ -93,13 +95,23 @@ def actions_layout(handoff_source_seed, tmp_path, monkeypatch):
         block = block.replace("45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca", seed.frozen_tree)
 
         def create_sources():
-            return local(["/bin/bash", "--noprofile", "--norc", "-c", block], cwd=bootstrap, check=False)
+            assert "GDPVAL_CODEX_RUN_ROOT" not in environment and "AZURE_CONFIG_DIR" not in environment
+            # A child sees only exported values, not unexported shell variables.
+            exports = '\n/bin/bash --noprofile --norc -c \'set -eu; printf "%s\\n" "$GDPVAL_CODEX_RUN_ROOT" "$AZURE_CONFIG_DIR"\''
+            return local(["/bin/bash", "--noprofile", "--norc", "-c", block + exports], cwd=bootstrap, check=False)
 
         created = create_sources()
         assert created.returncode == 0, created.stderr.decode()
         roots = {name: runner_temp / basename for name, basename in ci.ROOT_NAMES.items()}
+        propagated = {"GDPVAL_CODEX_RUN_ROOT": str(roots["native_root"]), "AZURE_CONFIG_DIR": str(roots["login_root"])}
+        assert github_env.read_text() == "".join(f"{key}={value}\n" for key, value in propagated.items())
+        assert created.stdout.decode().splitlines()[-2:] == list(propagated.values())
+        for path in (roots["native_root"], roots["login_root"]):
+            assert path.is_dir() and not path.is_symlink() and path.stat().st_mode & 0o777 == 0o700
+            assert list(path.iterdir()) == []
         yield SimpleNamespace(bootstrap=bootstrap, runner_temp=runner_temp, roots=roots, workflow=workflow,
-                              create_sources=create_sources, git_roots={bootstrap, roots["runtime_root"], roots["frozen_root"]})
+                              github_env=github_env, create_sources=create_sources,
+                              git_roots={bootstrap, roots["runtime_root"], roots["frozen_root"]})
 
 
 @pytest.fixture(autouse=True)
@@ -272,8 +284,17 @@ def _workflow_contract(case, layout, monkeypatch):
     assert workflow["concurrency"] == {"group": "gpt54-time-budget-first-v2-observation", "cancel-in-progress": False}
     assert job["runs-on"] == "ubuntu-22.04" and job["timeout-minutes"] == 45
     assert job["env"]["JE_ARROW_MALLOC_CONF"] == "background_thread:false"
-    assert job["env"]["GDPVAL_CODEX_RUN_ROOT"] == "${{ runner.temp }}/" + ci.ROOT_NAMES["native_root"]
-    assert job["env"]["AZURE_CONFIG_DIR"] == "${{ runner.temp }}/" + ci.ROOT_NAMES["login_root"]
+    assert "GDPVAL_CODEX_RUN_ROOT" not in job["env"] and "AZURE_CONFIG_DIR" not in job["env"]
+    env_bytes = layout.github_env.read_bytes()
+    propagated = dict(line.split("=", 1) for line in env_bytes.decode().splitlines())
+    assert propagated == {"GDPVAL_CODEX_RUN_ROOT": str(layout.roots["native_root"]),
+                          "AZURE_CONFIG_DIR": str(layout.roots["login_root"])}
+    # Discard the case fixture's values; later commands inherit only what the
+    # actual bootstrap wrote to GITHUB_ENV, as a later Actions step would.
+    for key in propagated:
+        monkeypatch.delenv(key, raising=False)
+    for key, value in propagated.items():
+        monkeypatch.setenv(key, value)
     assert "HF_TOKEN" not in job["env"] and "permissions" not in job
     steps = job["steps"]
     credentialed = [step for step in steps if "HF_TOKEN" in step.get("env", {})]
@@ -289,7 +310,11 @@ def _workflow_contract(case, layout, monkeypatch):
     checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["persist-credentials"] is False and checkout["with"]["ref"] == "${{ inputs.reviewed_source_sha }}"
     arguments = _arguments(case, monkeypatch)
-    command = next(step["run"] for step in steps if step.get("id") == "source")
+    source = next(step for step in steps if step.get("id") == "source")
+    for step in (source, credentialed[0], login, execute):
+        assert all(key not in step.get("env", {}) and os.environ[key] == value for key, value in propagated.items())
+    assert list(layout.roots["login_root"].iterdir()) == []
+    command = source["run"]
     argv = [os.path.expandvars(part) for part in shlex.split(command[command.index("python3 "):].replace("\\\n", ""))]
     assert argv == ["python3", str(layout.roots["runtime_root"] / ci.HELPER), "validate-request",
         "--reviewed-source-sha", arguments["reviewed_source_sha"], "--reviewed-source-tree", arguments["reviewed_source_tree"],
@@ -302,6 +327,7 @@ def _workflow_contract(case, layout, monkeypatch):
     assert subprocess.run(command, env=environment, capture_output=True, timeout=5).returncode == 0
     assert subprocess.run(command, env={**environment, "GITHUB_RUN_ATTEMPT": "2"}, capture_output=True, timeout=5).returncode != 0
     assert layout.create_sources().returncode != 0
+    assert layout.github_env.read_bytes() == env_bytes
     assert steps[-1]["with"] == {"name": "time-budget-first-codex-completion",
         "path": "${{ runner.temp }}/time-budget-first-codex/completion.json", "if-no-files-found": "error", "retention-days": 7}
 

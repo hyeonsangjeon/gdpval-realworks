@@ -47,11 +47,6 @@ jobs:
       MKL_NUM_THREADS: "1"
       NUMEXPR_NUM_THREADS: "1"
       JE_ARROW_MALLOC_CONF: "background_thread:false"
-      GDPVAL_CODEX_RUN_ROOT: ${{ runner.temp }}/time-budget-codex-native
-      # Create this empty, private directory before deriving the provider hash.
-      # The approved login populates it later; the isolated native auth argv
-      # therefore names the same location before and after the login step.
-      AZURE_CONFIG_DIR: ${{ runner.temp }}/time-budget-codex-azure-login
       AZURE_AI_ROUTE_PROFILE: direct-v1
       TIME_BUDGET_CODEX_WORKFLOW_SHA: ${{ github.workflow_sha }}
       REVIEWED_SOURCE_SHA: ${{ inputs.reviewed_source_sha }}
@@ -105,7 +100,14 @@ jobs:
           [[ ! -e "$RUNNER_TEMP/time-budget-first-codex" && ! -L "$RUNNER_TEMP/time-budget-first-codex" ]]
           git worktree add --detach "$RUNNER_TEMP/time-budget-codex-runtime" "$REVIEWED_SOURCE_SHA"
           git worktree add --detach "$RUNNER_TEMP/time-budget-codex-frozen" 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2
+          export GDPVAL_CODEX_RUN_ROOT="$RUNNER_TEMP/time-budget-codex-native"
+          # Create this empty, private directory before deriving the provider hash.
+          # The approved login populates it later; the isolated native auth argv
+          # therefore names the same location before and after the login step.
+          export AZURE_CONFIG_DIR="$RUNNER_TEMP/time-budget-codex-azure-login"
           mkdir -m 700 "$GDPVAL_CODEX_RUN_ROOT" "$AZURE_CONFIG_DIR"
+          printf 'GDPVAL_CODEX_RUN_ROOT=%s\nAZURE_CONFIG_DIR=%s\n' \
+            "$GDPVAL_CODEX_RUN_ROOT" "$AZURE_CONFIG_DIR" >> "$GITHUB_ENV"
 
       - name: Setup pinned Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
