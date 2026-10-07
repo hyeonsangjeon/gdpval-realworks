@@ -13,6 +13,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add a prospective native stderr diagnostic after a fresh execution
+  reservation and successful failure-receipt write. Reuse
+  `gpt54_time_budget_v2_ci._emit_execution_failure` with the fixed
+  `gpt54-time-budget-first-codex-ci-failure-v1` format. The shared formatter
+  accepts only that format and its existing V2 default; V2 bytes are
+  unchanged. Events contain only validated `format`/`stage`/`category`/`reason`.
+  Old state, pre-reservation failures, failed reservation/receipt writes
+  and missing/malformed metadata do not emit. Stderr failure remains a
+  refusal without retry. No receipt reread, schema/vocabulary expansion,
+  execution/claim/retention change or live authority is added.
+
+  Base `b0bba8c71369605fd4261c59259e3cc3924de981`, tree
+  `f9bb914a717d3fc1326ac8e1e925119cfaee307f`; tested source
+  `42506c920de9e09bcdbcb4e28f50007e3f595450`, tree
+  `e4922d258e03cb9ee71443bddb6dd038ed9fd05d`. One new offline selector
+  reported **11 passed in 89.78s**, exit 0; wrapper **90.404412s** under
+  Python 3.10.12/300s+5s/no-`-x` and existing 30s Git bounds. The real
+  controller/source/receipt validators ran with synthetic inputs/storage
+  and local I/O faults, stopping before kernel/native/provider effects.
+  Artifacts: `/tmp/native-safe-failure-event-proof.zo6agw/`; log SHA256
+  `edeb1fe365b184ccb7d862dbec7ae9b29309c245bbda31c5c3de3bc27ff33dfa`.
+  Only the three evidence/usage records change after the proof; final
+  identities are retained in its `handoff.json` and the
+  [evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
+  The leader approved this narrow privacy/CI decision after reading both
+  execute paths and the emitter. The required reviewer invocation failed
+  before execution on unavailable legacy Opus; it was not an endorsement
+  and was not retried. Historical native job `112640438630` printed only
+  `refused_or_uncertain`; this change cannot backfill its log or diagnose
+  its cause. That cell remains consumed/uncertain. PR768 and its separate
+  retained-manifest read remain independent and untouched. Workflows,
+  registration/F/history, twenty planned observations and 1200+20 stay
+  fixed. Final review/CI remain gates; no replay, next cell, grade or
+  inference about historical model calls, cleanup or cost is authorized.
+
 - Accept native grading-preparation compatibility source
   `1594feeb82da140cc9549a80fb41a644fd8a929f`, tree
   `8662d28dc91d334854907157eb71807c0ab44a6f`, review `5437514089`,

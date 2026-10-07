@@ -868,6 +868,44 @@ artifact `time-budget-first-codex-completion` contains only the validated
 `gpt54-time-budget-first-codex-ci-completion-v1` envelope. Unavailable native
 usage/counters/cost stay unavailable, not zero; no grade is produced.
 
+Future native controller failures can also emit one safe stderr event with
+format `gpt54-time-budget-first-codex-ci-failure-v1`. The controller reuses
+the existing V2 validator/formatter, whose default V2 output remains
+byte-for-byte unchanged. Its internal format argument permits only those
+two fixed protocols, not request text. The native event contains only
+`format`, `stage`, `category` and `reason` from the current validated failure,
+after a fresh reservation and successful failure-receipt write. Nothing is
+emitted for pre-reservation refusal, old state, reservation/receipt I/O
+failure or missing/malformed metadata. Stderr failure remains refusal with
+no retry. It never rereads a receipt for emission or prints raw exceptions,
+class names, paths, filenames, tokens, headers or private prose. Completion,
+canonical results, private receipts and failure vocabularies are unchanged.
+
+This is prospective visibility only. Leader-verified native job
+`112640438630` / run `37574558224`, attempt 1, printed only
+`refused_or_uncertain` and retained uncertainty. That cell remains consumed;
+this change cannot backfill its log, establish its cause/model-call count/
+cleanup/cost, or permit replay. The separate retained-manifest read in PR768
+remains independently directed after its final gate; this change does not
+perform or integrate that readout.
+
+Tested source `42506c920de9e09bcdbcb4e28f50007e3f595450`, tree
+`e4922d258e03cb9ee71443bddb6dd038ed9fd05d`, reported **11 passed in 89.78s**,
+exit 0; wrapper **90.404412s**, from only
+`tests/test_time_budget_first_codex_ci.py::test_time_budget_native_failure_event`.
+It reused real source/controller/receipt validators with synthetic inputs,
+private-CAS and local I/O faults, explicitly refusing any kernel/native
+admission. Cases cover fresh secret-bearing failure, old/pre-reservation
+state, reservation/receipt/stderr failures, absent/malformed metadata,
+unknown protocol refusal and exact V2-format compatibility. Python
+3.10.12/300s+5s/no-`-x` and the existing 30s Git bounds were preserved.
+Artifacts are in `/tmp/native-safe-failure-event-proof.zo6agw/`; the
+[evidence record](../tasks/LATEST_TASK_RESULT/README.md) retains exact hashes,
+review provenance and final handoff identities. Only the three records
+change after the proof. Earlier proofs remain separate and were not rerun.
+Final source review/CI remain pending; no live operation, replay or next
+cell is authorized.
+
 HF_TOKEN is scoped only to bounded input/claim and retention steps and is
 removed before inference. The job reuses approved Azure Login and OIDC
 identity checks, nonpersistent checkout credentials, existing thread limits
