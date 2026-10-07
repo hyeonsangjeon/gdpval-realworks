@@ -43,7 +43,7 @@ def _git(root, *arguments, deadline):
 
 
 @pytest.fixture(scope="module")
-def source_repository(tmp_path_factory):
+def source_repository(tmp_path_factory, request):
     workspace = tmp_path_factory.mktemp("readout-ordinary-bootstrap")
     roles = subject.SOURCE_ROLES | {
         path.relative_to(ROOT).as_posix() for path in (ROOT / "batch-runner/core").rglob("*.py")
@@ -52,18 +52,33 @@ def source_repository(tmp_path_factory):
         destination = workspace / role
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / role, destination)
+    registration_path = workspace / subject.registration.REGISTRATION_PATH
+    compiler_path = workspace / "batch-runner/gpt54_time_budget_comparison.py"
+    current_registration, current_compiler = registration_path.read_bytes(), compiler_path.read_bytes()
+    result_plan = subject.registration.load_registration(registration_path)
+    if getattr(request, "param", None) == "historical_runtime":
+        # R differs from C only in its legitimate runtime/compiler bindings.
+        # This historical compiler blob is never imported or executed.
+        compiler_path.write_bytes(current_compiler + b"\n# Synthetic historical runtime binding.\n")
+        historical_hash = subject._identity(compiler_path.read_bytes())["sha256"]
+        result_plan["source_basis"]["registration_compiler"]["sha256"] = historical_hash
+        result_plan["source_pins"]["batch-runner/gpt54_time_budget_comparison.py"] = historical_hash
+        registration_path.write_text(yaml.safe_dump(result_plan, sort_keys=False))
     deadline = time.monotonic() + 30
     _git(workspace, "init", "--quiet", deadline=deadline)
     _git(workspace, "add", ".", deadline=deadline)
     _git(workspace, "commit", "--quiet", "-m", "Synthetic retained runtime R", deadline=deadline)
     result_source = {"sha": _git(workspace, "rev-parse", "HEAD", deadline=deadline),
                      "tree": _git(workspace, "rev-parse", "HEAD^{tree}", deadline=deadline)}
+    registration_path.write_bytes(current_registration)
+    compiler_path.write_bytes(current_compiler)
     (workspace / "synthetic-controller-only.txt").write_text("C is distinct from retained R.\n")
     _git(workspace, "add", ".", deadline=deadline)
     _git(workspace, "commit", "--quiet", "-m", "Synthetic reviewed readout controller C", deadline=deadline)
     sha, tree = (_git(workspace, "rev-parse", revision, deadline=deadline) for revision in ("HEAD", "HEAD^{tree}"))
     _git(workspace, "switch", "--quiet", "--detach", sha, deadline=deadline)
-    return SimpleNamespace(workspace=workspace, sha=sha, tree=tree, result_source=result_source)
+    return SimpleNamespace(workspace=workspace, sha=sha, tree=tree,
+                           result_source=result_source, result_plan=result_plan)
 
 
 @pytest.fixture
@@ -216,7 +231,7 @@ def _payload(source, plan, cell, *, available):
 
 @pytest.fixture
 def case(source):
-    plan = subject.registration.load_registration(source.root / subject.registration.REGISTRATION_PATH)
+    plan = copy.deepcopy(source.result_plan)
     cell = {"study_id": subject.registration.STUDY_ID, "run_id": "gpt54_time_budget_v1_v2_r1",
             "condition": "sandbox_v2", "repeat": 1, "task_id": plan["shared"]["dataset"]["tasks"][2]["task_id"]}
     payload = _payload(source, plan, cell, available=True)
@@ -288,6 +303,56 @@ def transport(case, monkeypatch):
     monkeypatch.setattr(httpx, "HTTPTransport", Transport)
     yield state
     assert state.formatted == []
+
+
+@pytest.mark.parametrize("source_repository", ["historical_runtime"], indirect=True)
+@pytest.mark.parametrize("failure", [None, "tree", "registration", "missing_R"],
+                         ids=["historical_R_new_C", "wrong_R_tree", "wrong_registration", "missing_R"])
+def test_time_budget_result_readout_historical_registration(case, transport, monkeypatch, capsys, failure):
+    current = subject.registration.load_registration(case.source.root / subject.registration.REGISTRATION_PATH)
+    expected = copy.deepcopy(case.plan)
+    compiler = "batch-runner/gpt54_time_budget_comparison.py"
+    current_hash = current["source_basis"]["registration_compiler"]["sha256"]
+    expected["source_basis"]["registration_compiler"]["sha256"] = current_hash
+    expected["source_pins"][compiler] = current_hash
+    assert expected == current and subject.seal(case.plan) != subject.seal(current)
+    assert current_hash == subject._identity((case.source.root / compiler).read_bytes())["sha256"]
+    assert case.request["registration_sha256"] == subject.seal(case.plan)
+    assert case.payload["time_budget_observation"]["identity"]["registration_sha256"] == subject.seal(case.plan)
+    if failure == "tree":
+        case.request["completion"]["source"] = {**case.source.result_source, "tree": "0" * 40}
+    elif failure == "registration":
+        case.request["registration_sha256"] = subject.seal(current)
+    elif failure == "missing_R":
+        case.request["completion"]["source"] = {**case.source.result_source, "sha": "0" * 40}
+    credential_steps = []
+    if failure is not None:
+        def forbidden(*args, **kwargs):
+            credential_steps.append(True)
+            raise AssertionError("invalid historical R reached the credentialed read step")
+        monkeypatch.setattr(subject, "_read_result", forbidden)
+    assert _invoke(case) == (0 if failure is None else 2)
+    assert credential_steps == []
+    output = capsys.readouterr()
+    assert output.err == "" and TOKEN not in output.out and PRIVATE not in output.out
+    if failure is not None:
+        assert output.out == "result_readout_refused\n"
+        assert transport.calls == [] and not case.source.destination.exists()
+        return
+    assert len(transport.calls) == 2 and subject.SECONDS == 60
+    assert all(request.method == "GET" and request.headers["accept-encoding"] == "identity"
+               and 0 < request.extensions["timeout"]["read"] <= 30 for request in transport.calls)
+    value = json.loads(case.source.destination.read_bytes())
+    subject.validate_envelope(value, _context(case))
+    assert json.loads(output.out) == value and value["outcome"] == "read"
+    assert value["controller"] == {"sha": case.source.sha, "tree": case.source.tree}
+    assert value["result_source"] == case.source.result_source != value["controller"]
+    assert value["result_identity"] == case.request["completion"]["result_identity"]
+    assert value["result_fingerprint"] == case.payload["result_fingerprint"]
+    assert value["summary"]["status"] == "error" and value["summary"]["runner_error"] == "finalize_not_called"
+    assert value["summary"]["usage"] == case.request["completion"]["usage"]
+    assert value["retry_allowed"] is False and value["grading_performed"] is False
+    assert all(secret not in output.out for secret in ("PRIVATE_FILENAME", "deliverable_text", subject.metadata.TARGET))
 
 
 @pytest.mark.parametrize("gzip_at", [None, 1, 2], ids=["uncompressed", "gzip_metadata", "gzip_result"])
@@ -481,7 +546,7 @@ def test_time_budget_result_readout_workflow_binding(case, monkeypatch):
     assert secrets[0]["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert "timeout --signal=TERM --kill-after=5s 60s" in secrets[0]["run"]
     checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
-    assert checkout["with"] == {"ref": "${{ inputs.reviewed_source_sha }}", "fetch-depth": 1, "persist-credentials": False}
+    assert checkout["with"] == {"ref": "${{ inputs.reviewed_source_sha }}", "fetch-depth": 0, "persist-credentials": False}
     linked = next(step for step in steps if "git worktree add --detach" in step.get("run", ""))
     assert '[[ ! -e "$RUNNER_TEMP/time-budget-readout-source" && ! -L "$RUNNER_TEMP/time-budget-readout-source" ]]' in linked["run"]
     assert (case.source.workspace / ".git").is_dir() and (case.source.root / ".git").is_file()

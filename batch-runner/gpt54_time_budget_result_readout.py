@@ -22,6 +22,8 @@ import sys
 from types import SimpleNamespace
 from urllib.parse import parse_qs
 
+import yaml
+
 import codex_budget_pilot_output as storage
 import gpt54_time_budget_comparison as registration
 import gpt54_time_budget_storage_metadata as metadata
@@ -90,6 +92,30 @@ def _bytes(value: object) -> bytes:
     return _canonical_json(value).encode("utf-8")
 
 
+def _result_registration(root: Path, source: dict) -> dict:
+    """Read only the constant registration blob at independently bound R.
+
+    C supplies the validators, not a replacement seal for historical results.
+    The existing Git guard forbids transport, replacements and caller hooks;
+    no historical code is checked out or executed.
+    """
+    for suffix, expected in (("^{commit}", source["sha"]), ("^{tree}", source["tree"])):
+        _require(_git(root, "rev-parse", "--verify", "--end-of-options", source["sha"] + suffix).stdout
+                 == (expected + "\n").encode("ascii"), "result_source_identity_refused")
+    entry = _git(root, "ls-tree", "-z", "--full-tree", source["sha"], "--", registration.REGISTRATION_PATH).stdout
+    match = re.fullmatch(rb"100644 blob ([0-9a-f]{40})\t"
+                         + re.escape(registration.REGISTRATION_PATH.encode("utf-8")) + b"\0", entry)
+    _require(match is not None, "result_registration_blob_required")
+    blob = match.group(1).decode("ascii")
+    size = int(_git(root, "cat-file", "-s", blob).stdout)
+    _require(0 < size <= registration.MAX_MANIFEST_BYTES, "result_registration_size_refused")
+    data = _git(root, "cat-file", "blob", blob).stdout
+    _require(len(data) == size, "result_registration_size_refused")
+    plan = yaml.load(data.decode("utf-8"), Loader=registration._RegistrationLoader)
+    _require(type(plan) is dict, "result_registration_schema_refused")
+    return plan
+
+
 @contextmanager
 def checked_request(*, request_json: str, expected_request_sha256: str,
                     reviewed_source_sha: str, reviewed_source_tree: str, runtime_root: Path):
@@ -149,10 +175,14 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
             module = sys.modules[__name__] if name == HELPER else sys.modules.get(module_name)
             if name.endswith(".py") and module is not None:
                 _read_bytes(Path(module.__file__), **identity)
-        plan = registration.load_registration(root / registration.REGISTRATION_PATH)
-        _same("source-bound registration", request["registration_sha256"], seal(plan))
         cell = request["cell"]
         _keys(cell, CELL_KEYS)
+        completion = request["completion"]
+        execution.validate_envelope(completion, expected_cell=cell)
+        _require(completion["retention"] == "acknowledged" and completion["status"] in ("success", "error"),
+                 "retained_canonical_result_required")
+        plan = _result_registration(root, completion["source"])
+        _same("source-bound registration", request["registration_sha256"], seal(plan))
         # The current retained schema is the existing V2 producer, not a new
         # Codex capture format. Select only a row of the unchanged registration.
         _require(cell["study_id"] == registration.STUDY_ID and cell["condition"] == "sandbox_v2"
@@ -160,10 +190,6 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
                      all(cell[key] == run[key] for key in ("run_id", "condition", "repeat")) for run in plan["runs"])
                  and cell["task_id"] in [row["task_id"] for row in plan["shared"]["dataset"]["tasks"]],
                  "registered_observation_required")
-        completion = request["completion"]
-        execution.validate_envelope(completion, expected_cell=cell)
-        _require(completion["retention"] == "acknowledged" and completion["status"] in ("success", "error"),
-                 "retained_canonical_result_required")
         yield {"request": request, "request_sha256": expected_request_sha256, "plan": plan,
                "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
     check_bootstrap()
