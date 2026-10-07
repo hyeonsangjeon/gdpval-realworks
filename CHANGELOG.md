@@ -11,6 +11,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add one test-only native callable validation regression from accepted main
+  `9fbdc37fb0ec0e4eb79d32b22f37641235a24186`. At tested source
+  `35ba64b8145ca5ff9401020a94f2f4aaec807662`, tree
+  `98707a1b6a02372f72e9c7630b61ab70d882f6a5`, the single new selector
+  reported **1 passed, 1 warning in 21.97s**, exit 0; wrapper **22.641730s**.
+  Real direction/source/input validators, consumer, native constructor,
+  pinned-runtime check and canonical capture completed with synthetic
+  auth/RPC and kernel fixtures. No deterministic mismatch was reproduced;
+  no production fix or runtime-pin change is made. The leader's actual
+  readout retains only `observation_callable` / `validation_refused` /
+  `execution_refused_or_uncertain`, not the first historical guard. Native
+  Task1 remains consumed/uncertain; model calls, cost and cleanup remain
+  unknown, not zero. Artifacts and exact source/hash identities are in
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md). Final source review and CI
+  remain pending; PR769, workflows, registration/F and all consumed cells
+  are unchanged. No new observation or replay is authorized.
+
 ### Changed
 
 - Accept native uncertainty readout source
