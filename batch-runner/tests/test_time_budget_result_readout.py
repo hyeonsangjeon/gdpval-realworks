@@ -45,7 +45,7 @@ def _git(root, *arguments, deadline):
 @pytest.fixture(scope="module")
 def source_repository(tmp_path_factory, request):
     workspace = tmp_path_factory.mktemp("readout-ordinary-bootstrap")
-    roles = subject.SOURCE_ROLES | {
+    roles = subject.SOURCE_ROLES | {subject.registration.CODEX_TEMPLATE} | {
         path.relative_to(ROOT).as_posix() for path in (ROOT / "batch-runner/core").rglob("*.py")
     }
     for role in sorted(roles):
@@ -437,6 +437,187 @@ def test_time_budget_result_readout_roundtrip(case, transport, capsys, available
     bad["summary"]["usage_availability"]["response_records"][0]["served_model"] = PRIVATE
     with pytest.raises(ValueError):
         subject.validate_envelope(bad, _context(case))
+
+
+def _native_capture_payload(case, *, success):
+    """Real capture of synthetic returned data; no native run/admission occurs."""
+    native = subject.native_execution.observation
+    basis = _payload(case.source, case.plan, case.cell, available=False)
+    captured, control = basis["observation_execution"], basis["time_budget_observation"]
+    inputs = {**captured["inputs"], "needs_files": True,
+              "step0_manifest": subject._identity(b"synthetic unread Step0 declaration")}
+    control["identity"]["input_sha256"] = subject.seal(inputs)
+    control["terminal_reason"] = "completed" if success else "failed"
+    preparation = captured["preparation_identity"]
+    template = case.plan["conditions"]["codex"]["template"]
+    marker = {"observation": control["identity"], "inputs": inputs,
+              "runtime_source": captured["runtime_source"], "frozen_grader": captured["frozen_grader"],
+              "condition_template": {"path": template, **subject._identity((case.source.root / template).read_bytes())},
+              "files": {subject.registration.HANDOFF_CONFIG: captured["configuration"]}}
+    direction = SimpleNamespace(expected=captured["direction_sha256"], host=captured["host"],
+        paths={"synthetic_unread_path": PRIVATE}, binding=SimpleNamespace(
+            preparation_sha256=preparation["sha256"], preparation_size=preparation["size"]))
+    raw = {"success": success, "text": PRIVATE, "error": None if success else PRIVATE + TOKEN,
+           "files": [{"filename": "PRIVATE_FILENAME.txt", "content": b"synthetic deliverable"}] if success else [],
+           "time_budget_observation": control, "handoff_preparation_identity": preparation,
+           "codex_diagnostics": {"items_seen": 2, "http_status_code": None, "rate_limit_kind": None}}
+    payload, files = native._capture(raw, marker, direction, provider_binding={
+        "settings_sha256": "4" * 64, "config_overrides_sha256": "5" * 64,
+        "sdk_version": native.PINNED_CODEX_SDK_VERSION, "cli_version": native.PINNED_CODEX_CLI_VERSION})
+    assert payload["condition"] == "codex" and payload["execution_mode"] == "codex_foundry"
+    assert payload["results"][0]["usage"] is None
+    assert len(files) == (1 if success else 0)
+    return payload
+
+
+@pytest.mark.parametrize("scenario", [
+    "native_success", "native_error", "cell", "R", "digest", "fingerprint", "mode",
+    "unsafe_field", "unsafe_error", "unsafe_diagnostics", "counter", "wrong_R_tree",
+    "registration", "r2", "unregistered_task", "cumulative_bound", "gzip_metadata", "gzip_result",
+    "canonical_v2", "fixed_uncertainty",
+])
+def test_time_budget_native_canonical_readout(case, transport, monkeypatch, capsys, scenario):
+    """One selected native result object, never claim/inputs/files or a runtime."""
+    native = subject.native_execution
+    compatible = scenario in {"canonical_v2", "fixed_uncertainty"}
+    if not compatible:
+        case.cell = {**native.CELL, "task_id": case.plan["shared"]["dataset"]["tasks"][2]["task_id"]}
+        assert case.cell["task_id"] == "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+        case.request.update(format=subject.NATIVE_REQUEST_FORMAT, purpose=subject.NATIVE_PURPOSE, cell=case.cell)
+        case.payload = _native_capture_payload(case, success=scenario not in {"native_error", "unsafe_error"})
+        row = case.payload["results"][0]
+        case.request["completion"].update(**case.cell, format=native.ENVELOPE_VERSION, usage=None,
+            status=row["status"], terminal_reason=case.payload["time_budget_observation"]["terminal_reason"])
+        if scenario == "cell":
+            case.payload["time_budget_observation"]["identity"]["task_id"] = case.plan["shared"]["dataset"]["tasks"][1]["task_id"]
+        elif scenario == "R":
+            case.payload["observation_execution"]["runtime_source"]["source_sha"] = "0" * 40
+        elif scenario == "mode":
+            case.payload["execution_mode"] = "codex"  # Not a native producer alias.
+        elif scenario == "unsafe_field":
+            row["observability"]["runner_error"] = PRIVATE + TOKEN
+        elif scenario == "unsafe_error":
+            row["error"] = PRIVATE + TOKEN
+        elif scenario == "unsafe_diagnostics":
+            row["observability"]["codex_diagnostics"]["rate_limit_kind"] = PRIVATE
+        elif scenario == "counter":
+            row["observability"]["native_measurements"]["model_attempt_count"] = 0
+        # Coherent negative byte identities expose the semantic checks, not
+        # merely the outer hash guard. Positive capture bytes stay untouched.
+        if scenario in {"cell", "R", "mode", "unsafe_field", "unsafe_error", "unsafe_diagnostics", "counter"}:
+            case.payload["result_fingerprint"] = inference_result_fingerprint(case.payload)
+        elif scenario == "fingerprint":
+            case.payload["result_fingerprint"] = "0" * 64
+        transport.data = subject._bytes(case.payload)
+        case.request["completion"].update(result_identity=subject._identity(transport.data),
+                                         result_fingerprint=case.payload["result_fingerprint"])
+        if scenario == "digest":
+            transport.data += b" "
+        elif scenario == "wrong_R_tree":
+            case.request["completion"]["source"] = {**case.source.result_source, "tree": "0" * 40}
+        elif scenario == "registration":
+            case.request["registration_sha256"] = "0" * 64
+        elif scenario in {"r2", "unregistered_task"}:
+            selection = ({"run_id": "gpt54_time_budget_v1_codex_r2", "repeat": 2} if scenario == "r2"
+                         else {"task_id": "00000000-0000-4000-8000-000000000000"})
+            case.cell.update(selection)
+            case.request["completion"].update(selection)
+        elif scenario == "cumulative_bound":
+            now = [time.monotonic()]
+            monkeypatch.setattr(time, "monotonic", lambda: now[0])
+            transport.hook = lambda number: now.__setitem__(0, now[0] + 35)
+        elif scenario in {"gzip_metadata", "gzip_result"}:
+            transport.gzip_at = 1 if scenario == "gzip_metadata" else 2
+    elif scenario == "fixed_uncertainty":
+        case.cell = dict(native.CELL)
+        request_identity = subject._identity(b"synthetic unread execution request")
+        case.request.update(format=subject.UNCERTAINTY_REQUEST_FORMAT, purpose=subject.UNCERTAINTY_PURPOSE,
+                            cell=case.cell, execution_request_identity=request_identity)
+        case.request["completion"].update(**case.cell, format=native.ENVELOPE_VERSION,
+            request_sha256=request_identity["sha256"], status="uncertain", result_identity=None,
+            result_fingerprint=None, terminal_reason=None, usage=None, cleanup_complete=None, host_reusable=None)
+        manifest = {"format": subject.UNCERTAINTY_MANIFEST_FORMAT,
+            "observation": subject.asdict(subject.ObservationIdentity(**case.cell,
+                reviewed_source_sha=case.source.result_source["sha"], reviewed_source_tree=case.source.result_source["tree"],
+                registration_sha256=subject.seal(case.plan), input_sha256="1" * 64)),
+            "request_identity": request_identity, "claim_commit": case.request["completion"]["claim_commit"],
+            "claim_identity": subject._identity(b"synthetic unread claim"),
+            "execution_receipt": subject.execution._execution_failure("observation_callable", ValueError(PRIVATE + TOKEN)),
+            "result": "unavailable_no_fabricated_study_row", "files": {}, "grading_performed": False}
+        transport.data = native._encoded(manifest)
+
+    before_credentials = scenario in {"wrong_R_tree", "registration", "r2", "unregistered_task"}
+    success = scenario in {"native_success", "native_error", "canonical_v2", "fixed_uncertainty"}
+    assert _invoke(case) == (0 if success else 2)
+    output = capsys.readouterr()
+    assert output.err == "" and all(secret not in output.out for secret in (PRIVATE, TOKEN, "PRIVATE_FILENAME"))
+    if before_credentials:
+        assert transport.calls == [] and not case.source.destination.exists()
+        assert output.out == "result_readout_refused\n"
+        return
+    assert subject.SECONDS == 60 and len(transport.calls) == (1 if scenario == "gzip_metadata" else 2)
+    first = transport.calls[0]
+    assert first.url.path == f"/api/datasets/{subject.metadata.TARGET}/revision/{OUTPUT_COMMIT}"
+    assert parse_qs(first.url.query.decode()) == {"expand": ["private", "sha"]}
+    if len(transport.calls) == 2:
+        second = transport.calls[1]
+        member = (native.MANIFEST if scenario == "fixed_uncertainty" else
+                  subject.execution._namespace(case.cell)[0] + "/result/" + native.observation.RESULT)
+        assert second.url.path == f"/datasets/{subject.metadata.TARGET}/raw/{OUTPUT_COMMIT}/{member}"
+        assert not second.url.query
+        if scenario == "cumulative_bound":
+            assert second.extensions["timeout"]["read"] == 25
+    assert all(call.method == "GET" and call.headers["accept-encoding"] == "identity"
+               and 0 < call.extensions["timeout"]["read"] <= 30 for call in transport.calls)
+    value = json.loads(case.source.destination.read_bytes())
+    subject.validate_envelope(value, _context(case))
+    assert json.loads(output.out) == value and value["outcome"] == ("read" if success else "refused")
+    assert value["verified_private"] is (None if scenario == "gzip_metadata" else True)
+    assert value["retry_allowed"] is value["grading_performed"] is False
+    if scenario in {"native_success", "native_error"}:
+        row, control = case.payload["results"][0], case.payload["time_budget_observation"]
+        assert value["format"] == subject.NATIVE_FORMAT
+        assert value["result_source"] == case.source.result_source != value["controller"]
+        assert value["registration_sha256"] == subject.seal(case.plan)
+        assert value["claim_commit"] == case.request["completion"]["claim_commit"]
+        assert value["result_identity"] == subject._identity(transport.data) == case.request["completion"]["result_identity"]
+        assert value["result_fingerprint"] == case.payload["result_fingerprint"]
+        assert value["summary"] == {
+            "status": row["status"], "error": None if scenario == "native_success" else "time_budget_observation_non_success",
+            "runner_success": scenario == "native_success", "required_deliverable_missing": scenario == "native_error",
+            "control": {name: control[name] for name in subject.CONTROL_FLAGS | set(subject.CONTROL_STATIC) | {"terminal_reason"}},
+            "usage": None, "served_model_identity": None,
+            "usage_availability": {"usage_complete": False, "reason": "consumer_does_not_export_native_usage"},
+            "native_measurements": {name: None for name in (
+                "model_attempt_count", "repeated_request_count", "input_tokens", "output_tokens", "written_tokens", "native_retries", "cost_usd")},
+            "codex_diagnostics": {"items_seen": 2, "http_status_code": None, "rate_limit_kind": None},
+            "deliverables": {"declared_count": 1 if scenario == "native_success" else 0,
+                "declared_bytes": len(b"synthetic deliverable") if scenario == "native_success" else 0,
+                "basis": "declared_from_verified_result_metadata", "contents_fetched": False, "contents_verified": False},
+        }
+        for extra in ({"runner_error": PRIVATE}, {"served_model_identity": PRIVATE}):
+            with pytest.raises(ValueError):
+                subject.validate_envelope({**value, "summary": {**value["summary"], **extra}}, _context(case))
+    elif scenario == "canonical_v2":
+        assert value["format"] == subject.FORMAT and value["summary"]["runner_result_verified"] is True
+        assert value["summary"]["runner_error"] == "finalize_not_called"
+        assert "native_measurements" not in value["summary"]
+    elif scenario == "fixed_uncertainty":
+        assert value["format"] == subject.UNCERTAINTY_FORMAT and value["cell"] == native.CELL
+        assert value["result_identity"] is value["result_fingerprint"] is None
+        assert value["summary"] == {**subject.UNCERTAINTY_SUMMARY,
+            "failure": {"stage": "observation_callable", "category": "validation_refused", "reason": "execution_refused_or_uncertain"},
+            "observed_manifest_identity": subject._identity(transport.data)}
+    else:
+        assert value["summary"] is None
+    if success:
+        monkeypatch.delenv("HF_TOKEN")
+        assert _invoke(case, "verify-envelope") == 0 and len(transport.calls) == 2
+    public = case.source.destination.read_text() + output.out + output.err + capsys.readouterr().out
+    assert all(secret not in public for secret in (TOKEN, PRIVATE, "PRIVATE_FILENAME", "deliverable_text",
+        "runner_error_sha256", "provider_binding", "execution_receipt", "source_repo_id", subject.metadata.TARGET))
+    assert set(case.source.runner_temp.iterdir()) == {case.source.root, case.source.destination}
+    assert case.source.destination.stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.parametrize("failure", ["request_digest", "actor", "source", "task", "attempt"])

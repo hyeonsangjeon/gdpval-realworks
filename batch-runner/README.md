@@ -1457,8 +1457,10 @@ claim, source/direction checks and actual kernel admission remain unchanged.
 [`gpt54-time-budget-result-readout.yml`](../.github/workflows/gpt54-time-budget-result-readout.yml)
 uses [`gpt54_time_budget_result_readout.py`](gpt54_time_budget_result_readout.py)
 to project safe structured fields from one existing private V2 result or the
-fixed native uncertainty manifest described below. Neither purpose executes,
-adopts, retries or grades an observation. The canonical V2 route's initial
+fixed native uncertainty manifest described below. A separate native canonical
+purpose is implemented below, with the fixture-corrected local proof recorded;
+fixed-HEAD review and final CI remain pending.
+No purpose executes, adopts, retries or grades an observation. The canonical V2 route's initial
 target is the retained Task3 result at immutable output commit
 `2460c45c3896371b011624f13fc7817d5f670969`, with this registered path:
 
@@ -1467,7 +1469,7 @@ time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/2ea2
 ```
 
 The target remains `HyeonSang/gdpval-codex-budget-pilot-ci-20260923`. No
-repository, path or branch is an input. The canonical purpose supports only
+repository, path or branch is an input. The original canonical purpose supports only
 the current V2 capture schema and one V2 row of the source-verified
 registration. Controller C must be the accepted readout workflow/helper
 source selected for the later
@@ -1551,7 +1553,7 @@ refusal. The safe artifact may retain the requested expected identities and
 verified privacy on refusal, but its `summary` is null and `outcome` is
 `refused`. It grants no retry permission.
 
-Only `time-budget-result-readout.json` is published. The canonical projection
+Only `time-budget-result-readout.json` is published. The V2 canonical projection
 contains status/error enums, runner/admission/terminal/cleanup flags, reported
 usage and availability counters, model-binding categories and route fingerprint
 where present, plus aggregate deliverable count/bytes from authenticated
@@ -1597,6 +1599,91 @@ pins and checkout depth, respectively. Apart from that depth change, the
 workflow is unchanged. Final review/CI, accepted C and a separately directed
 real read remain required; the study, 1200+20 observation budget and 45-minute
 execution ceiling are unchanged.
+
+##### Native canonical result readout (pending review/CI)
+
+The new request format is `gpt54-time-budget-native-canonical-readout-request-v1`
+with purpose `read_one_retained_native_canonical_result`. It uses the same
+seven top-level fields as the V2 canonical request, with a native completion
+format of `gpt54-time-budget-first-codex-ci-completion-v1`. It accepts one of
+the unchanged five registered tasks in `gpt54_time_budget_v1_codex_r1` /
+`codex` / repeat 1, not r2 or another study. The workflow and its inputs,
+permissions, credentialed step and timeout are unchanged. This is a schema
+description, not permission to dispatch or read private storage.
+
+The independently supplied completion must bind acknowledged canonical
+success/error, the exact result size/SHA256/fingerprint, original R commit/tree,
+cell, execution request hash and immutable output commit. The registration
+seal must match R's verified constant registration blob, not current C.
+Native results keep their actual `execution_mode=codex_foundry`, provider
+binding, native capture observability and unavailable usage; they are not
+reinterpreted as V2 runner records. At the trusted output commit, the helper
+derives the selected cell's `result/step2_inference_results.json` member with
+the existing namespace function. It reads no claim, original request,
+deliverables, grading input bundle or latest HEAD. The same identity encoding,
+two GETs and 60 cumulative seconds apply, with no retries or redirects.
+
+The separate public format is `gpt54-time-budget-native-canonical-readout-v1`.
+Only allowlisted binding/status/control flags and native metadata are projected.
+Usage, native counters, served-model identity and cost remain null where the
+capture does not export them; null is not zero or a served-model claim.
+Deliverable totals are `declared_count` and `declared_bytes`, with basis
+`declared_from_verified_result_metadata` and both `contents_fetched=false`
+and `contents_verified=false`. These totals describe verified result metadata,
+not downloaded or verified deliverable contents. Unknown error text or unsafe
+projected fields refuse. No private prose, filename/path, raw exception,
+response/tool trace, credential/header or full result is published.
+
+The leader separately verified native Task3
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d`, run `37631184801`, run number 5,
+attempt 1, job `112825568457`, at R `33e24e9c1402ec0b7c92a71222998d1407646a92`
+/ tree `6e67da4e12169b41a837d92eaf946db15e71010e`. All steps succeeded and
+retention was acknowledged: status success, terminal completed, cleanup and
+host reuse true, usage null, no retry/grade/other cells. Execute
+13:49:12–13:54:09Z is 297 seconds for the workflow step, not pure generation
+or model time. Native counters, cost and quality score are not established.
+Its output is `d5aeecec1394fb44d4b1da33b1be38a39acdb89a`; the result is
+8518 bytes, SHA256 `4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`,
+fingerprint `4a62be1df3e21eae52bd7814359887c5f774200948ba67fc15ca62bf2f4b2967`.
+The [current record](../tasks/LATEST_TASK_RESULT/README.md) retains the full
+claim, request, artifact, completion and log identities supplied by the leader.
+This implementation did not fetch those private bytes or regenerate their identity.
+
+The original offline selector
+`tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout`
+at `974f5f33713a17b7e9fa0de90f646cd59814139c`, tree
+`b42b31e39599b4b81261aa2df56dab4c53a57baa`, reported **18 failed, 2 passed in
+4.52s**, exit 1; wrapper **5.107217s**, under Python 3.10.12/300s+5s/no-`-x`
+and existing 30s Git fixture bounds. Each native case failed while reading
+the template absent from the synthetic linked source, before native capture
+or readout validation. Only `canonical_v2` and `fixed_uncertainty` passed.
+The original failed invocation and its artifacts in
+`/tmp/native-canonical-readout.YqBcYa/` remain unchanged.
+
+Separately, the leader-read CI run `37639736598`, job `112855194221`, failed
+with the same 18 `FileNotFoundError` cases. Its log is 143123 bytes, SHA256
+`5fbbef1ed8c1fede56d41fd7c23344c4be036f7d181e5da246f88222d77030fb`.
+No CI query or retry was made for this continuation.
+
+The one-line fixture correction adds the real `registration.CODEX_TEMPLATE`
+to the copied dependencies before synthetic R/C commits are sealed. Production
+source roles, workflows, validators and all assertions are unchanged. At
+`102dee649002366b3fa95b4ddccd81354f2e881c`, tree
+`696f5c745a98663dfbd2c4fa7fcc9958dfdc617f`, exactly the 18 previously failed
+nodes reported **18 passed in 7.20s**, exit 0; wrapper **7.740273s**, together
+once under the same Python 3.10.12/300s+5s/no-`-x`/30s Git bounds. The two
+prior compatibility passes were excluded, not repeated or combined into an
+aggregate pass claim. Exact selection, per-node outcomes and proof hashes
+are in `/tmp/native-canonical-readout-fixture.5nJnSc/`; `handoff.json` records
+the tested/final HEAD/tree and unchanged source identities after the evidence
+commit. Only the test and three evidence records change in this continuation.
+
+The fixtures forbid native, kernel, provider, HF-write and grader operations;
+this synthetic readout proof is not a private read or host positive.
+Fixed-HEAD review/CI, accepted controller C and one
+separately directed read remain gates. Future grading requires genuine retained
+bytes and frozen F, not an invented publication/intake association. The unchanged
+20-cell study and consumed native Task1/Task2/Task3 permit no replay or Task4 advance.
 
 ##### Native uncertainty manifest readout
 

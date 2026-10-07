@@ -1,56 +1,56 @@
 # Latest task result
 
-## Step0 role-size correction accepted; one directed native r1 Task3 observation
+## Native result reader accepted; directed Task3 read and first Task4 observation
 
-Reviewed source `62788d94e6505ed7462f8da8a9ee292bbdcb66f0`, tree
-`944866c0fd94241cdcd4d5a3e6408c4d707faf8c`, passed all eleven checks.
-Review `5442935576` accepted the four-added/three-replaced-line correction.
-Only completion records change after validation; tested runtime, regression
-and workflow bytes remain unchanged.
+Reviewed source `45b068100dece9ec4abef47fec89eb98c0e3694f`, tree
+`083e1aa6a0bb8f00423697799b958b26219a7b71`, passed all eleven checks.
+Review `5444818723` accepted its finite native metadata projection.
+Only completion records change after validation; tested runtime, workflow
+and test blobs remain unchanged. The [prior record][prior] preserves the
+failed original local/CI fixture evidence and separate 18-node continuation.
+No earlier compatibility pass was repeated or aggregated.
 
-Step0 identity uses the existing source-pinned 218405-byte original limit.
-Preparation metadata and direction keep their 65536-byte limits. Exact
-byte/digest/type/size, full Step0 semantic, source, host, direction, provenance,
-no-clobber and permanent-claim checks remain mandatory. The original Step0
-pin and revision, registration, frozen F and execution policy are unchanged.
+The leader verified native r1 Task3 at source
+`33e24e9c1402ec0b7c92a71222998d1407646a92`, tree
+`6e67da4e12169b41a837d92eaf946db15e71010e`, run `37631184801`, attempt 1.
+Execution and private retention succeeded; terminal completed, cleanup and
+host reuse were true. Usage remained null. Its 297-second workflow step is
+not measured pure model time, and no quality score or bill is established.
 
-The [prior record][prior] preserves the seven-case proof: 7 passed in
-68.90s, wrapper 69.565234s, at `45350d204967553d96a9ed809320542733cb2994`.
-An actual valid 218405-byte synthetic file reached capture and synthetic
-retention unchanged; byte/digest/size tampering and preserved metadata/
-direction bounds refused. These fixtures are not actual hosted execution
-or private-original evidence. No earlier selector was repeated.
+One independently bound read may target Task3's immutable output
+`d5aeecec1394fb44d4b1da33b1be38a39acdb89a`, result size 8518 and SHA256
+`4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`,
+fingerprint `4a62be1df3e21eae52bd7814359887c5f774200948ba67fc15ca62bf2f4b2967`.
+It must bind accepted controller C separately from original R, actual
+all-event readout run number, attempt 1 and exact request bytes/digest.
+Only private-identity metadata and the exact canonical result are read,
+with two GETs sharing 60 seconds. No claim, input or deliverable content is
+fetched. Declared file totals are not verified content or grading evidence.
+Unknown native usage/counters, served identity and cost remain null.
 
-Native r1 Task2 remains consumed and privately retained as uncertain, with
-the verified event `observation_callable` / `observation_refused` /
-`independent_identity_size_bound`. Its original Step0 identity exceeded the
-wrong metadata limit before native construction. Historical null usage,
-cleanup and billing evidence is not rewritten, and Task1's earlier specific
-cause is not inferred from this finding.
-
-The leader authorizes exactly one subsequent immutable request for
+The leader separately authorizes one first observation for
 `gpt54_time_budget_v1_codex_r1` / `codex` / repeat 1 /
-`2ea2e5b5-257f-42e6-a7dc-93763f28b19d`. It must independently bind accepted
-runtime source/tree, the actual next all-event workflow run number, attempt
-1, a finite admission window and exact request digest.
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3` (Task4). It must bind accepted runtime
+source/tree, actual next all-event native workflow number, attempt 1, a
+finite admission window and exact independent request digest.
+Task3's acknowledged output above is only the expected private parent.
+Actual metadata, the exact unused Task4 prefix and permanent CAS/readback
+must agree. The concurrent read's immutable revision is independent of
+later private branch advancement.
 
-The last acknowledged private output
-`0a718b45b96bf340cb2e4a71206d81cebe0f7abc` is the independently expected
-parent, not assumed fresh. Actual private metadata, Task3 prefix absence
-and permanent CAS/readback must agree. Original parquet, references and
-whole Step0, approved auth, provider route, real host ownership, source/
-direction and canonical path checks must pass. A mismatch grants no retry.
+Original inputs/full Step0, approved authentication/provider, source,
+direction, canonical paths and real host ownership remain mandatory.
+The whole Step0 limit is 218405 bytes; preparation/direction stay 65536.
+No original pin, frozen F, registration, prompt or model control changes.
+The twenty-cell study keeps GPT-5.4/direct-v1/xhigh, null context override,
+zero configured provider retries, concurrency 1, one external attempt,
+1200-second generation/shared 20-second cleanup and 45-minute job ceiling.
+None is a money cap or remote-cancellation guarantee.
 
-Task1/Task2 and all five consumed V2 r1 cells remain immutable. Task3 is a
-different existing registered cell, not a replay. The study still has twenty
-planned observations with the same cohort/model/prompt and frozen grader.
-GPT-5.4/direct-v1/xhigh, null native context override, zero configured
-provider request/stream retries, concurrency 1, one external attempt,
-1200-second generation, shared 20-second cleanup and 45-minute job ceiling
-remain fixed. None is a money cap or remote cancellation guarantee.
+Task1/Task2 remain consumed uncertain; Task3 remains consumed canonical
+success and ungraded. The five prior V2 cells remain consumed. No replay,
+further cell or grade is authorized. This record stops before the directed
+read and Task4 attempt; their outcomes and genuine grading intake remain
+pending, with no invented inference-publication association.
 
-This record stops before the directed attempt and claims no Task3 result.
-Remaining work is its verified canonical/uncertain retention and a separate
-grading decision. No further cell, replay or grade is authorized.
-
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/62788d94e6505ed7462f8da8a9ee292bbdcb66f0/tasks/LATEST_TASK_RESULT/README.md
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/45b068100dece9ec4abef47fec89eb98c0e3694f/tasks/LATEST_TASK_RESULT/README.md
