@@ -99,7 +99,7 @@ def _case(seed, tmp_path, *, condition="sandbox_v2", status="success", task_inde
         records.append({"path": role, **_identity(path.read_bytes())})
     payload = {
         "experiment_id": observation.run_id, "condition": observation.condition,
-        "execution_mode": "codex" if condition == "codex" else "agentic_sandbox_v2",
+        "execution_mode": "codex_foundry" if condition == "codex" else "agentic_sandbox_v2",
         "model": seed.plan["shared"]["model"]["deployment"], "source": seed.plan["shared"]["dataset"]["repo_id"],
         "time_budget_observation": {
             "policy": "time_budget_observation_deadline_v1", "identity": asdict(observation),
