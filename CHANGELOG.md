@@ -11,6 +11,29 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a draft native canonical-result purpose to the existing bounded readout
+  helper for one independently bound native-r1 cell. It validates the native
+  capture shape and projects only binding/status/control metadata, unavailable
+  native measurements and explicitly declared deliverable totals. V2 canonical
+  and fixed-Task1 uncertainty modes remain; workflow bytes, two-GET/60-second
+  transport, identity encoding, source checks, registration and frozen F are
+  unchanged. This extension is **HOLD**, not ready for a real read. The one new
+  offline selector at `974f5f33713a17b7e9fa0de90f646cd59814139c`, tree
+  `b42b31e39599b4b81261aa2df56dab4c53a57baa`, reported **18 failed, 2 passed in
+  4.52s**, exit 1; wrapper **5.107217s**. All native cases stopped at the fixture's
+  template-file read before capture or readout validation. Only the new V2 and
+  fixed-Task1 uncertainty compatibility cases passed; no case was rerun.
+  Separately, the leader verified native Task3 run `37631184801`, attempt 1,
+  as a retained canonical success with completed terminal/cleanup/reuse flags
+  and null usage. Its 297 seconds measures the execute step, not pure generation
+  or model time, and establishes no quality score, native call count or cost.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) preserves the exact leader evidence,
+  failed-proof artifacts and tested/final identity handoff. Source review/CI,
+  native-path proof, one separately directed read and genuine retained-byte
+  grading intake under frozen F remain gates. No replay or next cell is authorized.
+
 ### Changed
 
 - Accept the native Step0 role-size correction at
