@@ -74,9 +74,35 @@ entries land under a fresh dated heading the day they merge to `main`.
   instead of the test's expected `direction_observation_already_consumed`.
   The existing destination guard runs first. Post-refusal effects/byte checks
   and the final safe test receipt were not reached; neither boundary test is
-  a pass. No assertion, production code or bound changed after this failure.
+  a pass. No assertion, production code or bound changed after this failure
+  in that continuation.
   Artifacts: `/tmp/pr765-registration-readout-proof.HFBa6hyS/`; log SHA256
   `374b5eb1eb80b05a2cc9745164e5c3ec3e320e3c22f54978bb35e5b9e3fe8da6`.
+
+  After reviewing `67602c50fd1add61956bd767d0f568ae072df0bd`, tree
+  `5bb1a3f3191d15ec42c7a6eb3e6ef50402a6d0f4`, the leader authorized only
+  the duplicate test correction. The same destination now expects exactly
+  `result_destination_exists`; a separate call changing only the destination
+  to an unused sibling must raise `direction_observation_already_consumed`.
+  Each refusal checks unchanged effects, the single permanent claim, consumed
+  bytes and original result/deliverable bytes, with no alternate destination
+  or reservation created. Independent direction, preparation, store and
+  production guard order are unchanged, as are all preceding assertions.
+
+  Test-only commit `be92f1f399934ece7ba4aee3887d4d7fe052139a`, tree
+  `94124a3a8a42af45e3c8f3a6be0ade3944378581`, ran only the two full voice
+  nodes once: **2 passed in 10.64s**, exit 0, wrapper **11.238067s**.
+  The real typed voice/consumer/runner/backend/capture path retains canonical
+  success and verified `artifact_not_openable` failure, rejects forged
+  receipts and completes both duplicate-preservation checks. Inputs,
+  transport and kernel state are synthetic; this is not a real-host or
+  historical Task3 proof. The five historical/readout/workflow passes were
+  not repeated; the earlier 2-failed/5-passed invocation remains failed.
+  Compiler, registration seals, readout helper and workflows are unchanged.
+  Artifacts: `/tmp/pr765-duplicate-guards-proof.sHfFVypx/`; log SHA256
+  `e1b3e62c650976c4fe0a4f4b6fc7720fbfd9b1ef2a0653fc4e9e3b256ba93eba`.
+  Exact final HEAD/tree and PR identity are retained in that directory's
+  `handoff.json`; the post-proof delta contains only these three records.
 
   Separately, leader-verified Task3 readout run `37546159098`, attempt 1,
   artifact `11450457583`, retained a 2597-byte safe projection with SHA256
@@ -89,17 +115,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   does not recover the original tool error or establish price, score or native
   model-attempt count. The synthetic refusal is not Task3's diagnosis.
 
-  Only CHANGELOG, LATEST and direct V2/readout usage change after this proof.
+  Only CHANGELOG, LATEST and the direct README evidence paragraph change
+  after the latest proof.
   Python 3.10.12, 300s+5s/no-`-x`, 30s fixture Git bounds, the twenty-cell
   study scope, 9-turn/8192 settings, 1200+20 and one attempt remain fixed.
   Frozen F/TEMPLATE, the old source profile and its 37 pins, study settings,
   HF upload and core runtime bytes are unchanged. The leader supplied the
   prospective source-binding decision. The required reviewer invocation had
   failed before execution on the unavailable legacy Opus preference; it was
-  not retried or claimed successful. The duplicate-assertion mismatch,
-  complete behavioral proof, final review/CI and separately directed
+  not retried or claimed successful. Final review/CI and separately directed
   readout/live requests remain gates. Task1-Task3 stay consumed; PR764 is
-  untouched. The three invocations are separate, not an aggregate pass.
+  untouched. The four invocations are separate, not an aggregate pass.
   See the [separate evidence and immutable identities](tasks/LATEST_TASK_RESULT/README.md).
 
 - Set `Accept-Encoding: identity` on the readout's scoped HTTP session before

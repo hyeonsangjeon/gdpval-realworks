@@ -554,14 +554,30 @@ effects/byte-preservation assertions were not reached, so neither boundary
 test is a pass. No code/assertion change or retry followed. Artifacts:
 `/tmp/pr765-registration-readout-proof.HFBa6hyS/`.
 
-These are separate invocations, all using offline Python 3.10.12,
-300s+5s/no-`-x`, 30s Git bounds and synthetic inputs/transports. The voice
-kernel fixture is not a real-host positive. Only the three evidence/usage
-records change after the latest failed invocation. The duplicate-assertion
-mismatch, complete boundary proof, final review/CI and independently directed
-live execution remain gates. Frozen F/TEMPLATE, the old profile and its 37
-pins, the registered model/prompt, 9-turn/8192 settings, 1200+20, one attempt
-and twenty planned observations are unchanged. Task1-Task3 stay consumed. See the
+After reviewing `67602c50fd1add61956bd767d0f568ae072df0bd` / tree
+`5bb1a3f3191d15ec42c7a6eb3e6ef50402a6d0f4`, the leader authorized only
+the duplicate test correction. At test-only commit
+`be92f1f399934ece7ba4aee3887d4d7fe052139a` / tree
+`94124a3a8a42af45e3c8f3a6be0ade3944378581`, the selector reported **2 passed in
+10.64s**, exit 0, wrapper **11.238067s**, running only the two full voice
+nodes once. Each case checks exact `result_destination_exists` for the
+original destination, then exact `direction_observation_already_consumed`
+with only the destination changed to an unused sibling. After each refusal,
+effects, permanent consumed/claimed bytes and original result/deliverable
+bytes stay unchanged; the alternate destination and reservation stay absent.
+All preceding assertions and all production/registration/workflow bytes are
+unchanged. Artifacts and final HEAD/tree are at
+`/tmp/pr765-duplicate-guards-proof.sHfFVypx/` and its `handoff.json`.
+The earlier 2-failed/5-passed invocation remains failed; its five passes were
+not repeated or aggregated with this proof. All four invocations retain
+their separate scope under offline Python 3.10.12, 300s+5s/no-`-x`, 30s Git
+bounds and synthetic inputs/transports. The voice kernel fixture is not a
+real-host positive. Only the three evidence records change after the latest
+proof. Final review/CI and independently directed live execution remain
+gates; no historical Task3 cause, price or score is inferred. Frozen
+F/TEMPLATE, the old profile and its 37 pins, the registered model/prompt,
+9-turn/8192 settings, 1200+20, one attempt and twenty planned observations
+are unchanged. Task1-Task3 stay consumed. See the
 [full evidence record](../tasks/LATEST_TASK_RESULT/README.md) for exact source,
 readout and artifact identities.
 

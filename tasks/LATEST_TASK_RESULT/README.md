@@ -1,45 +1,114 @@
 # Latest task result
 
-## Runtime pins advanced; historical readout checks pass; boundary tests still fail
+## Two voice cases pass after the duplicate-guard test correction
 
-The authorized source-pin update removed the preparation blocker without
-changing the consumer correction. The single continuation reported **2 failed,
-5 passed in 13.79s**, exit 1, wrapper **14.574513s**. All four new historical-R
-compatibility cases and the affected workflow check passed. Both real-voice
-cases cleared their primary replay/capture assertions, then failed at the
-duplicate-refusal assertion: actual `result_destination_exists`, expected
-`direction_observation_already_consumed`. Neither boundary test is a pass.
-No code, assertion or bound was changed after the outcome; no repeat followed.
+The test-only continuation reported **2 passed in 10.64s**, exit 0, wrapper
+**11.238067s**. Each case now verifies two separate refusals: the original
+destination raises `result_destination_exists`; changing only the destination
+to an unused sibling reaches `direction_observation_already_consumed`.
+After each refusal, effects, permanent consumed/claimed bytes and original
+result/deliverable bytes are unchanged. The alternate destination and its
+reservation remain absent. No production guard or independently issued
+direction was changed.
+
+The preceding combined invocation remains **2 failed, 5 passed in 13.79s**,
+exit 1, wrapper **14.574513s**, not seven passes. Its four historical-R cases
+and workflow check were not repeated. The base reproduction and preparation
+failure also remain separate observations below; none establishes Task3's
+historical first error.
 
 ### Exact source and authority
 
-This continuation began in the clean existing PR765 worktree at leader-inspected
-`93c5cbb931ea0a3db1cb63f9bd0e89bea72132a1`, tree
-`ee85d1c5771012fec362823da61268997df2f53e`. Its accepted-main basis remains
+This continuation began in the clean existing PR765 worktree at leader-reviewed
+`67602c50fd1add61956bd767d0f568ae072df0bd`, tree
+`5bb1a3f3191d15ec42c7a6eb3e6ef50402a6d0f4`. The leader inspected the two-pin
+delta, historical-R loader and bounds, coupled tests and record, and identified
+no additional blocking source issue in that scope. The authorization here was
+only to correct the duplicate test and rerun its two voice cases once.
+The accepted-main basis remains
 `d7aad7abc1e1626e72178f9e8d85090a63825cd2`, tree
 `749155e1f967699036f887bbf58a6bddbde2aa0c`; no new origin/main check or branch
-integration was performed. The leader independently verified compiler blob
+integration was performed.
+
+The earlier source-binding decision followed inspection of
+`93c5cbb931ea0a3db1cb63f9bd0e89bea72132a1`, tree
+`ee85d1c5771012fec362823da61268997df2f53e`. The leader verified compiler blob
 `f6fe26b40310f3ca72347a6133abe43316de97f2` and authorized the two prospective
 runtime bindings plus historical-readout compatibility. This is runtime
 provenance, not a new study condition or live authority. The required reviewer
 invocation failed before execution on the unavailable legacy Opus preference;
-no successful spawned review is claimed and the harness was not retried.
+no successful spawned review is claimed and no new harness invocation occurred.
 
-Tested continuation `e3ad928bf02b99e080a6a5924a4ebda75b156adf`, tree
-`fe3d097ca4d6632478494e67d57f0f9be48e52b8`, changes only the prospective
-registration, readout helper, readout checkout depth and coupled readout tests.
-The consumer correction and 188-line real-voice test remain byte-identical to
-the inspected source. Only CHANGELOG, this record and direct README usage
-change after the new proof. Exact final HEAD/tree and PR identity are recorded
-in `/tmp/pr765-registration-readout-proof.HFBa6hyS/handoff.json`.
+Tested correction `be92f1f399934ece7ba4aee3887d4d7fe052139a`, tree
+`94124a3a8a42af45e3c8f3a6be0ade3944378581`, changes only the duplicate
+section of `tests/test_time_budget_v2_returned_result_boundary.py`: 24 added
+lines and 3 removed lines. All preceding typed-replay, success/failure,
+forged-receipt, cleanup and one-claim assertions remain byte-identical, as
+does the final safe receipt writer. Production, compiler, registration,
+readout helper and workflow bytes are unchanged from the reviewed source.
+Only CHANGELOG, this record and the direct README evidence paragraph change
+after this proof. Exact final HEAD/tree and PR identity are recorded in
+`/tmp/pr765-duplicate-guards-proof.sHfFVypx/handoff.json`.
+
+### One two-node continuation
+
+From `batch-runner`, the wrapper ran exactly:
+
+```bash
+/ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p pytest_timeout \
+  'tests/test_time_budget_v2_returned_result_boundary.py::test_time_budget_v2_real_voice_returned_result[finalize]' \
+  'tests/test_time_budget_v2_returned_result_boundary.py::test_time_budget_v2_real_voice_returned_result[refused_finalize]' \
+  -m 'not integration' --tb=short -ra \
+  --basetemp=/tmp/pr765-duplicate-guards-proof.sHfFVypx/pytest-tmp \
+  --junitxml=/tmp/pr765-duplicate-guards-proof.sHfFVypx/junit.xml
+```
+
+The two cases use the real typed `AzureFoundryVoice`, consumer, runner,
+backend, source/input/direction validators and canonical capture, with the
+existing synthetic transport and kernel fixtures. The valid `workspace_apply`
+and `finalize` sequence produces canonical success. The controlled finalize
+refusal preserves its verified `artifact_not_openable` code through capture;
+it remains an error with no deliverables. Forged-audit and forged-success
+receipts remain rejected. Neither outcome is a historical Task3 diagnosis.
+
+Each duplicate call checks an exact, separately anchored refusal code. The
+second call changes only `destination`; it keeps the same direction,
+preparation, observation identity and store. After each refusal the test
+compares provider/admission/runner/typed-response/capture effects, requires
+the original single claim, compares permanent consumed/claimed bytes and
+the complete original result/deliverable file inventory and bytes, and
+checks absence of the alternate destination and reservation. The existing
+network/credential/native/grading sentinels remain active. Both final
+`safe-boundary.json` receipts were reached.
+
+Python 3.10.12, pytest 9.1.1, pytest-timeout 2.4.0 and OpenAI SDK 2.46.0 were
+used under one 300-second outer bound plus 5-second grace, no `-x`, Python
+timing and the unchanged 30-second fixture Git bounds. The existing named
+Git/Bash fixture allowances were reused without a new audit hook. No real-host
+kernel probe, model/provider call, private read, old selector or full suite ran; the
+synthetic kernel is not evidence of NAS or Actions host readiness. There
+was no repeat or post-outcome test/code change.
+
+Artifacts are in `/tmp/pr765-duplicate-guards-proof.sHfFVypx/`:
+
+| Artifact | SHA256 |
+| --- | --- |
+| `run-proof.py` | `2c59a49ded9852cd5b00136f7f10a86f0791c7a79ca0b27497e7de125c3cdbc3` |
+| `command.json` | `c1703355b9a5ae662a10606195138dd16f2d406aae6ef446e7f1a6b2524940e9` |
+| `source.json` | `81afb6076f401585e71c6f44f06b075d398d2b7cb2ad2e7631339eb95fb4d39b` |
+| `pytest.log` | `e1b3e62c650976c4fe0a4f4b6fc7720fbfd9b1ef2a0653fc4e9e3b256ba93eba` |
+| `junit.xml` | `29d45d3b7120e3882f16a73623a8136497bca4f99d42d093dd2ed3ce9e17fe79` |
+| `outcome.json` | `564b8236216540dd726d40233a31a06525bf4ca482c3624159c12dde7dfbc4d6` |
+| `pytest-tmp/test_time_budget_v2_real_voice0/safe-boundary.json` (`finalize`) | `674128fb465bfe094c655c9090b6ff5d62379dafc7ec1690ede40c8eb8c6e81c` |
+| `pytest-tmp/test_time_budget_v2_real_voice1/safe-boundary.json` (`refused_finalize`) | `15a5216a089db571bbf2965bac0d35a8c7829902c19029bdce2c0852302acd2a` |
 
 ### Prospective registration and historical R
 
-Only `source_basis.registration_compiler.sha256` and
-`source_pins["batch-runner/gpt54_time_budget_comparison.py"]` advance from
+The earlier continuation advanced only `source_basis.registration_compiler.sha256`
+and `source_pins["batch-runner/gpt54_time_budget_comparison.py"]` from
 `2766e58f769e2bf617c26c15cc124329c8c9bd5f17bf03fb88a3066f78140f96` to
 `f4e41540a089e4ed164063bec60ce124a901eb5195065e456502e902814cd3a2`.
-The bounded wrapper verified exact byte replacement and parsed-YAML identity
+Its bounded wrapper verified exact byte replacement and parsed-YAML identity
 for every other field. The resulting full seals are:
 
 | Registration | Full seal |
@@ -71,9 +140,16 @@ source layout. Parsed YAML and exact bytes confirm that single workflow delta.
 Permissions, credentials, steps, timeouts, canonical-result/fingerprint checks
 and the two-GET/60-second private projection contract are unchanged.
 
-### One continuation invocation
+### Prior combined continuation (failed, not repeated)
 
-From `batch-runner`, the bounded wrapper ran exactly:
+Tested continuation `e3ad928bf02b99e080a6a5924a4ebda75b156adf`, tree
+`fe3d097ca4d6632478494e67d57f0f9be48e52b8`, changed only the prospective
+registration, readout helper, readout checkout depth and coupled readout tests.
+The consumer correction and then-188-line voice test were unchanged. Its
+record-only completion was `67602c50fd1add61956bd767d0f568ae072df0bd`, tree
+`5bb1a3f3191d15ec42c7a6eb3e6ef50402a6d0f4`, with final identities retained
+in `/tmp/pr765-registration-readout-proof.HFBa6hyS/handoff.json`.
+From `batch-runner`, that bounded wrapper ran exactly:
 
 ```bash
 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -p pytest_timeout \
@@ -260,23 +336,28 @@ artifacts are under `/tmp/v2-real-voice-boundary-proof.TnBlJliY/`:
 
 ### Remaining gates and preserved state
 
-The source-pin blocker is resolved under the explicit prospective-binding
-decision. The duplicate-refusal expectation now needs a separate decision;
-the complete boundary selector, final review/CI and accepted-source delivery
-remain gates. Partial assertions are not a passing test or permission to run.
-Genuine input/host/controller checks, a real readout request and any future
-live request remain leader-owned; no live authority is issued here.
+The source-pin blocker was resolved under the explicit prospective-binding
+decision. This authorized test-only continuation completes the two voice
+cases, including both duplicate guards and byte-preservation assertions.
+The prior combined invocation remains failed; its five passing cases are
+not aggregated with this proof. Final review/CI and accepted-source delivery
+remain gates. Genuine input/host/controller checks, a real readout request
+and any future live request remain leader-owned; no live authority is issued
+here. No CI query, dispatch, retry or poll was performed.
 
 The twenty-cell study scope, model/prompt, V2 9-turn/8192 settings, 1200+20,
-one attempt, frozen F and history are unchanged. Only the two prospective
-compiler bindings and the described readout source/depth/tests changed before
-the proof; no HF upload or provider/runner core code changed. Task1/Task2 remain
+one attempt, frozen F and history are unchanged. The two prospective compiler
+bindings and readout source/depth changes belong to the earlier continuation;
+only the duplicate test section changed before this proof. No HF upload or
+provider/runner core code changed. Task1/Task2 remain
 consumed and uncertain; Task3 remains consumed with its immutable canonical error. No
 result was adopted, mutated, replayed or relabeled as a zero score. PR764 at
 `787ed5cfed40b8c7bd6d90e6760ba0ab8f912c97` and all preserved worktrees are
-untouched. [The preceding PR765 record][previous] and
+untouched. [The preceding failed-continuation record][continuation],
+[earlier PR765 record][previous] and
 [prior accepted-main record][prior] retain earlier evidence separately; no
 aggregate pass claim or historical-error diagnosis is made.
 
+[continuation]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/67602c50fd1add61956bd767d0f568ae072df0bd/tasks/LATEST_TASK_RESULT/README.md
 [previous]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/93c5cbb931ea0a3db1cb63f9bd0e89bea72132a1/tasks/LATEST_TASK_RESULT/README.md
 [prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/d7aad7abc1e1626e72178f9e8d85090a63825cd2/tasks/LATEST_TASK_RESULT/README.md
