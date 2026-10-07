@@ -11,6 +11,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Integrate reviewed native taxonomy source
+  `ded5249ca6d3364af83ae19ab5609043142dba70`, review `5439787461`, with
+  accepted main `84004faf99862606473dda939ceffb2ad149dc44`.
+  The complete shared-controller AST is the exact union of nonoverlapping
+  changes: current two-format emitter plus the reviewed native classifier
+  and finite reason vocabulary. This structural proof is not a behavioral
+  pass; combined-HEAD CI remains required. Preserve all other code and
+  historical evidence, with no new execution or replay authority.
+
 ### Fixed
 
 - Preserve the native callable's 30 explicitly enumerated static refusal
@@ -44,6 +55,52 @@ entries land under a fresh dated heading the day they merge to `main`.
   [LATEST](tasks/LATEST_TASK_RESULT/README.md) and the external final handoff.
 
 ### Changed
+
+- Accept prospective safe-event source
+  `2a8f6c754a160c50c4a13589132d09c99828b28b`, tree
+  `6996b650258e86fdf52643819458eb825eba5ef1`, review `5438792501`,
+  after all eleven checks succeeded. Preserve the exact tested event and
+  current readout code in the disjoint merge union; reconcile only the
+  three completion/usage records. The actual retained native classification
+  remains `observation_callable` / `validation_refused` /
+  `execution_refused_or_uncertain`; this prospective logging change does not
+  recover the lost guard or authorize a replay, next cell or grade.
+
+- Add a prospective native stderr diagnostic after a fresh execution
+  reservation and successful failure-receipt write. Reuse
+  `gpt54_time_budget_v2_ci._emit_execution_failure` with the fixed
+  `gpt54-time-budget-first-codex-ci-failure-v1` format. The shared formatter
+  accepts only that format and its existing V2 default; V2 bytes are
+  unchanged. Events contain only validated `format`/`stage`/`category`/`reason`.
+  Old state, pre-reservation failures, failed reservation/receipt writes
+  and missing/malformed metadata do not emit. Stderr failure remains a
+  refusal without retry. No receipt reread, schema/vocabulary expansion,
+  execution/claim/retention change or live authority is added.
+
+  Base `b0bba8c71369605fd4261c59259e3cc3924de981`, tree
+  `f9bb914a717d3fc1326ac8e1e925119cfaee307f`; tested source
+  `42506c920de9e09bcdbcb4e28f50007e3f595450`, tree
+  `e4922d258e03cb9ee71443bddb6dd038ed9fd05d`. One new offline selector
+  reported **11 passed in 89.78s**, exit 0; wrapper **90.404412s** under
+  Python 3.10.12/300s+5s/no-`-x` and existing 30s Git bounds. The real
+  controller/source/receipt validators ran with synthetic inputs/storage
+  and local I/O faults, stopping before kernel/native/provider effects.
+  Artifacts: `/tmp/native-safe-failure-event-proof.zo6agw/`; log SHA256
+  `edeb1fe365b184ccb7d862dbec7ae9b29309c245bbda31c5c3de3bc27ff33dfa`.
+  Only the three evidence/usage records change after the proof; final
+  identities are retained in its `handoff.json` and the
+  [evidence record](tasks/LATEST_TASK_RESULT/README.md).
+
+  The leader approved this narrow privacy/CI decision after reading both
+  execute paths and the emitter. The required reviewer invocation failed
+  before execution on unavailable legacy Opus; it was not an endorsement
+  and was not retried. Historical native job `112640438630` printed only
+  `refused_or_uncertain`; this change cannot backfill its log or diagnose
+  its cause. That cell remains consumed/uncertain. PR768 and its separate
+  retained-manifest read remain independent and untouched. Workflows,
+  registration/F/history, twenty planned observations and 1200+20 stay
+  fixed. Final review/CI remain gates; no replay, next cell, grade or
+  inference about historical model calls, cleanup or cost is authorized.
 
 - Accept native uncertainty readout source
   `4b5088a9f338adee58fe89436836ccc6c9f3363c`, tree

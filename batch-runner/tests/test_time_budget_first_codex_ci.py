@@ -435,3 +435,174 @@ def test_time_budget_first_codex_ci(case, actions_layout, offline, local_kernel,
     assert all(secret not in public for secret in (TOKEN, _SECRET, "Synthetic final answer.", "deliverable.txt", "reference_files"))
     with pytest.raises(ValueError):
         ci.validate_envelope({**envelope, "raw_exception": _SECRET})
+
+
+@pytest.mark.parametrize("mode", [
+    "fresh_secret", "pre_reservation", "old_state", "reservation_io", "receipt_io", "receipt_ack_io",
+    "missing_metadata", "malformed_metadata", "invalid_protocol", "stderr_io", "v2_compatibility",
+])
+def test_time_budget_native_failure_event(case, offline, monkeypatch, capsys, mode):
+    """Current synthetic failure only; no native process or kernel admission."""
+    shared = ci.shared
+    secret = "synthetic-token Authorization: Bearer hidden /private/input.json provider-body"
+    base = {"outcome": "refused_or_uncertain", "returned": None}
+    failure = {"stage": "observation_callable", "category": "type_error",
+               "reason": "execution_refused_or_uncertain"}
+    receipt = {**base, "failure": failure}
+    native_format = "gpt54-time-budget-first-codex-ci-failure-v1"
+    line = ('{"category":"type_error","format":"gpt54-time-budget-first-codex-ci-failure-v1",'
+            '"reason":"execution_refused_or_uncertain","stage":"observation_callable"}\n')
+    if mode in {"missing_metadata", "malformed_metadata", "invalid_protocol", "v2_compatibility"}:
+        before = ci._bytes(receipt)
+        if mode == "missing_metadata":
+            shared._emit_execution_failure(base, format_version=native_format)
+            with pytest.raises(TypeError):
+                shared._emit_execution_failure(None, format_version=native_format)
+        elif mode == "malformed_metadata":
+            invalid = [{**failure, key: secret} for key in failure]
+            invalid += [None, {**failure, "detail": secret}, {**failure, "reason": [failure["reason"]]}]
+            for value in invalid:
+                with pytest.raises(shared.FirstV2CIRefused) as refused:
+                    shared._emit_execution_failure({**base, "failure": value}, format_version=native_format)
+                assert refused.value.args == ("execution_failure_schema",)
+            with pytest.raises(shared.FirstV2CIRefused) as refused:
+                shared._emit_execution_failure({**receipt, "private": secret}, format_version=native_format)
+            assert refused.value.args == ("execution_receipt_schema",)
+        elif mode == "invalid_protocol":
+            for value in (secret, "", None, {}, [native_format]):
+                with pytest.raises(shared.FirstV2CIRefused) as refused:
+                    shared._emit_execution_failure(receipt, format_version=value)
+                assert refused.value.args == ("execution_failure_schema",)
+        else:
+            shared._emit_execution_failure(receipt)
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == (line.replace("first-codex-ci", "first-v2-ci") if mode == "v2_compatibility" else "")
+        assert ci._bytes(receipt) == before
+        assert case.downloads == case.api.calls == case.api.commits == offline.auth_calls == []
+        assert not case.root.exists()
+        return
+
+    formatted, admissions, read_failures, writes, emissions = [], [], [], [], []
+
+    class SecretReadError(TypeError):
+        def __str__(self):
+            formatted.append(True)
+            pytest.fail("secret exception text must never be formatted")
+
+    class SecretIOError(OSError):
+        def __str__(self):
+            formatted.append(True)
+            pytest.fail("secret I/O exception text must never be formatted")
+
+    def no_admission(*args, **kwargs):
+        admissions.append(True)
+        pytest.fail("diagnostic selector must stop before kernel/native admission")
+
+    monkeypatch.setattr(deadline.TimeBudgetObservation, "__init__", no_admission)
+    previous_mask, previous_logging = os.umask(0o077), ci.logging.root.manager.disable
+    try:
+        assert _invoke(case, monkeypatch, "prepare-and-claim") == 0
+        assert len(case.downloads) == 4 and case.api.commits == ["claim"]
+        prepared = capsys.readouterr()
+        assert prepared.out == '{"operation":"prepare-and-claim","outcome":"completed"}\n' and prepared.err == ""
+        reservation, receipt_path = case.root / "execution-reserved.json", case.root / "execution-receipt.json"
+        direction = case.root / "direction.json"
+        expected_receipt = ci._bytes(receipt)
+        if mode == "pre_reservation":
+            direction.write_bytes(direction.read_bytes() + b" ")
+            expected_receipt = None
+        elif mode == "old_state":
+            claim = ci._read(case.root / "claim-receipt.json")
+            ci._write(reservation, {"claim_commit": claim["returned_commit"],
+                "observation": claim["claim"]["observation"], "outcome": "uncertain_until_returned"})
+            old = {**base, "failure": {**failure, "stage": "execution_source_reread", "category": "io_error"}}
+            shared._check_execution_failure(old)
+            ci._write(receipt_path, old)
+            expected_receipt = ci._bytes(old)
+        elif mode in {"reservation_io", "receipt_io"}:
+            expected_receipt = None
+        protected = {path: path.read_bytes() for path in (
+            case.root / "claim-reserved.json", case.root / "claim-receipt.json", direction,
+            case.root / "preparation" / ci.registration.HANDOFF_READY)}
+        private_tree = dict(case.api.trees[case.api.head])
+        calls, downloads = list(case.api.calls), list(case.downloads)
+        real_open, real_write, real_read = os.open, shared._write_no_clobber, ci._read
+        armed = mode in {"fresh_secret", "receipt_io", "receipt_ack_io", "stderr_io"}
+
+        def open_file(path, *args, **kwargs):
+            nonlocal armed
+            if armed and isinstance(path, (str, os.PathLike)) and Path(path) == direction and reservation.exists():
+                armed = False
+                read_failures.append("direction_open_after_reservation")
+                assert not any(os.environ.get(key) for key in shared.TOKEN_KEYS)
+                raise SecretReadError(secret)
+            return real_open(path, *args, **kwargs)
+
+        def write(path, data, **kwargs):
+            if path in {reservation, receipt_path}:
+                writes.append(path.name)
+                if mode == "receipt_io" and path == receipt_path:
+                    raise SecretIOError(secret)
+                real_write(path, data, **kwargs)
+                if (mode == "reservation_io" and path == reservation
+                        or mode == "receipt_ack_io" and path == receipt_path):
+                    raise SecretIOError(secret)  # Persisted bytes do not imply an acknowledged write.
+                return
+            return real_write(path, data, **kwargs)
+
+        def read(path):
+            assert path != receipt_path, "execution must never read an old receipt to emit a diagnostic"
+            return real_read(path)
+
+        stderr = shared.sys.stderr
+
+        def emit(text):
+            emissions.append(text)
+            assert reservation.is_file() and receipt_path.read_bytes() == ci._bytes(receipt)
+            assert writes == [reservation.name, receipt_path.name]
+            assert json.loads(text) == {"format": native_format, **failure}
+            if mode == "stderr_io":
+                raise SecretIOError(secret)
+            return stderr.write(text)
+
+        monkeypatch.delenv("HF_TOKEN", raising=False)
+        with monkeypatch.context() as executing:
+            executing.setattr(os, "open", open_file)
+            executing.setattr(shared, "_write_no_clobber", write)
+            executing.setattr(ci, "_read", read)
+            executing.setattr(shared.sys, "stderr", SimpleNamespace(write=emit))
+            assert _invoke(case, monkeypatch, "execute") == 2
+            captured = capsys.readouterr()
+            assert captured.out == '{"outcome":"refused_or_uncertain"}\n'
+            assert captured.err == (line if mode == "fresh_secret" else "")
+            assert emissions == ([line] if mode in {"fresh_secret", "stderr_io"} else [])
+            reserved_bytes = reservation.read_bytes() if reservation.exists() else None
+            assert (receipt_path.read_bytes() if receipt_path.exists() else None) == expected_receipt
+            assert (reserved_bytes is None) == (mode == "pre_reservation")
+            assert {path: path.read_bytes() for path in protected} == protected
+            assert case.api.trees[case.api.head] == private_tree
+            # A duplicate synthetic invocation must not format or emit a retained failure.
+            assert _invoke(case, monkeypatch, "execute") == 2
+            captured = capsys.readouterr()
+            assert captured.out == '{"outcome":"refused_or_uncertain"}\n' and captured.err == ""
+            assert emissions == ([line] if mode in {"fresh_secret", "stderr_io"} else [])
+            assert (reservation.read_bytes() if reservation.exists() else None) == reserved_bytes
+            assert (receipt_path.read_bytes() if receipt_path.exists() else None) == expected_receipt
+        assert writes == ([] if mode in {"pre_reservation", "old_state"} else [reservation.name]
+                          if mode == "reservation_io" else [reservation.name, receipt_path.name])
+        assert read_failures == ([] if mode in {"pre_reservation", "old_state", "reservation_io"}
+                                 else ["direction_open_after_reservation"])
+        assert formatted == admissions == offline.auth_calls == []
+        assert case.api.calls == calls and case.downloads == downloads and case.api.commits == ["claim"]
+        assert case.api.trees[case.api.head] == private_tree
+        assert case.api.trees[case.api.head][case.prior] == case.prior_bytes
+        assert {path: path.read_bytes() for path in protected} == protected
+        assert not (case.root / "result").exists() and list((case.root / "observation").iterdir()) == []
+        assert not (case.root / ("preparation" + ci.registration.HANDOFF_CONSUMED_SUFFIX)).exists()
+        for data in [b"".join(text.encode() for text in emissions), expected_receipt or b""]:
+            assert all(part.encode() not in data for part in (
+                "synthetic-token", "Authorization", "/private/input.json", "provider-body", "SecretReadError", "SecretIOError"))
+    finally:
+        os.umask(previous_mask)
+        ci.logging.disable(previous_logging)

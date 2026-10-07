@@ -51,6 +51,7 @@ FROZEN_BASENAME = "time-budget-v2-frozen"
 REQUEST_VERSION = "gpt54-time-budget-first-v2-ci-request-v1"
 ENVELOPE_VERSION = "gpt54-time-budget-first-v2-ci-completion-v1"
 FAILURE_EVENT_VERSION = "gpt54-time-budget-first-v2-ci-failure-v1"
+CODEX_FAILURE_EVENT_VERSION = "gpt54-time-budget-first-codex-ci-failure-v1"
 # Existing verified private target, not its closed pilot's admission authority.
 TARGET = "HyeonSang/gdpval-codex-budget-pilot-ci-20260923"
 TARGET_SHA256 = "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44"
@@ -204,11 +205,13 @@ def _check_execution_failure(receipt: dict) -> None:
                  and failure["reason"] in FAILURE_REASONS, "execution_failure_schema")
 
 
-def _emit_execution_failure(receipt: dict) -> None:
+def _emit_execution_failure(receipt: dict, *, format_version: str = FAILURE_EVENT_VERSION) -> None:
     """Emit only the validated current failure, never a receipt read from disk."""
+    _require(type(format_version) is str and format_version in (FAILURE_EVENT_VERSION, CODEX_FAILURE_EVENT_VERSION),
+             "execution_failure_schema")
     _check_execution_failure(receipt)
     if "failure" in receipt:
-        sys.stderr.write(_canonical_json({"format": FAILURE_EVENT_VERSION, **receipt["failure"]}) + "\n")
+        sys.stderr.write(_canonical_json({"format": format_version, **receipt["failure"]}) + "\n")
 
 
 @contextmanager
