@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record the actual pre-grading outcome of run `37726733625`, attempt 1:
+  the pinned container initialized, but its first public guard failed with
+  `python3: command not found`, exit 127, before checkout or Python setup.
+  Identity-login, private intake, claim, grader and retention steps were
+  skipped, so this run did not admit a grading attempt or produce a score.
+  Fix the workflow's bootstrap order without removing source/caller/request
+  guards; keep this dispatch failure separate from model performance and
+  require a newly reviewed source/request before any later submission.
+
+### Changed
+
 - Submit one retained native r1 Task3 frozen-F grading request through
   workflow `378041151`: run `37726733625`, run number 1, attempt 1, source
   `ef9eeb1157a0725d063dae5b3bd61dd46247feec`. The exact 4603-byte request

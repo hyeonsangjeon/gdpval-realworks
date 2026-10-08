@@ -1,58 +1,53 @@
 # Latest task result
 
-## One retained native Task3 grade submitted
+## Native Task3 grading stopped before admission
 
-The owner-account dispatch created [run 37726733625][run], workflow
-`378041151`, run number 1, attempt 1. Its source readback is
-`ef9eeb1157a0725d063dae5b3bd61dd46247feec`, tree
-`a6a608dd7270560b7259d6b7b5f20ea6c4888099`. At the admission readback it was
-queued, with no conclusion. This is dispatch evidence, not a model call,
-successful input hydration, grading claim, retained grade or score.
+[Run 37726733625][run], workflow `378041151`, run number 1, attempt 1,
+completed with failure. Job `113146502043` initialized its pinned container
+successfully, then failed step 3, the first public guard:
+`line 8: python3: command not found`, exit **127**.
 
-The request grades only retained `gpt54_time_budget_v1_codex_r1` / codex /
-repeat 1 / `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` in the existing
-twenty-observation study. It does not repeat generation.
+The failure is a workflow bootstrap-order defect. The first guard invoked
+`python3` before the later pinned Python setup step. Its logged controller
+and workflow SHA both match `ef9eeb1157a0725d063dae5b3bd61dd46247feec`;
+this is not evidence of source drift, Azure rejection or poor model quality.
 
-The final canonical request is 4603 UTF-8 bytes, SHA256
-`3a813fa01ce9c18df9a4ca483e89212d445ac51f39f9a5577398775487fd263e`.
-Its admission window is Unix `1791432932` through `1791435332`
-(2400 seconds). The preparation packet's expired 0..1 window was replaced
-only after the leader independently compared its bytes and bindings.
+Checkout, linked C/R/F creation, pinned Python setup, dependencies, full
+request validation, renderer checks, OIDC/login and the controller's
+intake/claim/grading/retention step were all skipped. Public completion
+verification/upload were also skipped. No grading controller, private
+grading claim or model/grade call was reached by this run. Task3 remains
+ungraded; no quality score, private grade or usage/cost result exists here.
+No invoice or zero-cost claim is inferred from those skipped steps.
 
-The original public completion is 1102 bytes, SHA256
-`0f2f8fec804785518c236d334d501cb8a7f9e567814bda58cdf97678b152c702`,
-independently downloaded from artifact `11486512100`. It binds original R
-`33e24e9c1402ec0b7c92a71222998d1407646a92`, generation `37631184801`,
-and private output `d5aeecec1394fb44d4b1da33b1be38a39acdb89a`.
-The original-R registration and dataset seals and frozen profile hash were
-independently derived from immutable GitHub source and matched the request.
-F remains `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`.
+The job log SHA256 is
+`6d10c8a29fac1cdad0546373bab65adbb62877f4d72b3dc8c832d6b26da0853c`.
+The submitted request remains 4603 bytes / SHA256
+`3a813fa01ce9c18df9a4ca483e89212d445ac51f39f9a5577398775487fd263e`,
+with the original 2400-second admission window and fixed original
+R/result/F bindings documented in the [admission record][admission].
+That dispatch is spent and must not be rerun or relabeled as a grade.
 
-Reviewed source `e2e22f45ef06fc2ef4a71b09788d149cc928db4c`, review
-`5450750372`, passed all eleven checks. Its delivery changed only completion
-records. This admission record also changes no production, workflow, test,
-study, original-input or frozen-grader byte. [Earlier evidence][prior]
-preserves the distinct synthetic proofs and runner incidents.
+The smallest next implementation keeps interpreter-free Bash owner/repo/ref/
+source/workflow/attempt checks first, then establishes the existing pinned
+Python 3.10.12, then runs the unchanged Python request/digest/cell/run-number
+checks before any private credential-bearing stage. It must not replace
+the image, interpreter pin, model, credentials or admission policy.
+A focused regression must cover the observed Python-absent initial PATH,
+wrong-caller refusal and request-check ordering. Actual image/runtime
+success is not established by an offline ordering test.
 
-The existing finite controls remain one external grading attempt,
-14400-second F budget, 14520-second child envelope, 270-minute job,
-300-second preclaim ceiling and bounded 120-second storage sessions.
-The owner already delegated this budget and execution decision; no renewed
-owner approval is required.
+Original generation and its private output remain untouched. The existing
+14400/14520-second F/child controls, 270-minute job, one admitted grading
+attempt, fixed study and scoring remain unchanged. The new required
+specialist invocation failed before execution on its unavailable configured
+model, producing no review; no retry or account change was attempted.
 
-The live workflow must still verify its actual paths, host/renderer,
-approved identity/connection, original inputs, retained result/files, F
-preparation and concrete direction before acknowledging the permanent private
-grading claim. Expected parent
-`82ed160109e40dcf74029f2be34a973350374fc6` is last-known independent evidence,
-not a fresh storage read; actual parent and namespace absence must match at
-CAS. No concurrent private writer or automatic next cell is authorized.
-
-No retry, claim adoption, score-driven regrading, generation replay, Task5,
-Azure management or account change is allowed. Unknown cost/usage is not
-zero, and no monetary hard cap is claimed. The supervisor does not wait for
-this bounded execution. The next decision reads its terminal evidence once;
-any uncertain admission/output remains explicit and nonrenewable.
+The owner has already delegated budget/execution decisions. After a focused
+fix, immutable review and CI, the leader may issue a new exact request for
+the still-ungraded result. This record grants no new dispatch authority.
+No generation replay, score-driven regrade, Task5, concurrent private writer
+or automatic next cell is authorized.
 
 [run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37726733625
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/ef9eeb1157a0725d063dae5b3bd61dd46247feec/tasks/LATEST_TASK_RESULT/README.md
+[admission]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/d830027a4fb197ebbdfc9972f580c1a37cb1223c/tasks/LATEST_TASK_RESULT/README.md
