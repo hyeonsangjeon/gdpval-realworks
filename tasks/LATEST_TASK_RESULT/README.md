@@ -1,231 +1,149 @@
 # Latest task result
 
-## Native Task3 run 3 returned uncertainty; no retry authorized
+## Native Task3 safe diagnostics passed the new offline selector
 
-Run `37756891578`/r3a1, job `113243545133`, completed with failure. Python,
-Git linked-source creation, dependencies, full source-bound request validation,
-renderer, OIDC/login and session-identity checks succeeded. Controller step
-**14** ran from **2026-10-08 09:31:57 UTC** to **09:32:03 UTC** and exited **2**.
-The independent completion check and public upload then succeeded.
+The native controller now reports bounded failure diagnostics in its existing
+public completion. One new selector passed all six deliberate failure cases.
+This is prospective diagnostics only: run `37756891578`/r3a1 remains uncertain,
+its discarded exception is still unknown, and no replay is authorized.
 
-Artifact `11541001301` contains a **1605-byte** `completion.json`, SHA256
-`c0b100d1b3cfc6cbdb66338b25497e361be4023e3afbe174d28b92c4d1815e0b`.
-Its run/source/request/original-result/F bindings matched the exact direction.
-It reports `status=uncertain`, `retention=uncertain`, `retry_allowed=false`,
-with null binding, claim, entry, grade, retention and usage/cost fields.
-Null fields are not proof that no remote side effect occurred. No score,
-retained grade, successful grading admission or zero-cost claim is established.
+The controller records `unknown`, `started` or `completed` for environment,
+originals, intake/preparation, direction, claim, executor, retention and normal
+context exit. A caught exception supplies only a closed, type-based category.
+The completion validator rejects unknown fields, invalid enum values and
+inconsistent stage order or acknowledgement claims. No exception message,
+traceback, URL, token, filename, path or private payload is published.
 
-The actual **256634-byte / 1731-line** job log, SHA256
+These states describe local observations, not remote authority or proof of
+absent effects. A claim or retention write with a lost acknowledgement stays
+`started`; a null commit cannot establish that nothing was written. Executor
+`completed` means a receipt returned, not that grading succeeded. Diagnostics
+never grant retry, and any caught failure prevents a success completion.
+Available partial outputs still reach retention after an executor exception.
+
+### One bounded offline proof
+
+Only
+`tests/test_time_budget_native_grading_ci.py::test_native_task3_grading_safe_diagnostics`
+ran, with the six parameters below. Imports, fixture dependencies, parameter
+shape and exact collection were checked before bodies. No earlier passing
+selector or full suite ran again.
+
+| Injected boundary | Outcome | JUnit case seconds | Observed synthetic boundary |
+|---|---|---:|---|
+| `originals` | Passed | 10.405 | `validation_refused`; no claim or child |
+| `intake_preparation` | Passed | 12.800 | `validation_refused`; no claim or child |
+| `direction` | Passed | 32.397 | `io_error`; no claim or child |
+| `claim_lost` | Passed | 23.855 | Claim written, acknowledgement lost; no child or adoption |
+| `executor` | Passed | 62.577 | Real executor produced synthetic partial files, then a deliberate exception; retention acknowledged |
+| `retention_lost` | Passed | 23.429 | Synthetic partial executor returned; output written, acknowledgement lost |
+
+Pytest reported **6 passed, 6 warnings in 171.27s**, exit **0**. The pytest
+process took **171.712457 seconds**; the wrapper, including source and
+collection checks, took **175.989852 seconds**, from
+**2026-10-08 10:28:25.722015 UTC** through **10:31:21.711852 UTC**.
+The warnings concern `record_property` with JUnit `xunit2`, not failed checks.
+Python **3.10.12**, pytest **9.1.1**, the **300s+5s** outer bound, no `-x`
+and existing **30-second** named Git/archive/Bash bounds were retained.
+
+The proof exercised the actual CLI, catches, serialization and strict
+completion validator. Where reached, it used the accepted intake, F preparer,
+native executor and real F source/task/grade/sidecar checks. Source identities,
+originals, HTTP/auth/private-store transport, kernel facts and child outputs
+were explicitly synthetic. There was no mocked successful intake or executor
+verdict, no provider/model/judge call and no live storage operation. Both
+post-executor cases preserved grade, ledger and checkpoint/partial files in
+the synthetic private store. Child stdout/stderr remains unavailable because
+the accepted executor discards it.
+
+All six cases kept the original source/request/result binding fields,
+`retry_allowed=false` and unknown usage/cost/quality. Secret-looking exception
+sentinels were never formatted or present in public JSON/stdout/stderr. Invalid
+diagnostics and altered source/result/retry/success assertions were refused.
+No separate controller defect or historical cause was established by this proof.
+
+### Exact sources and retained artifacts
+
+- Base: `e21c2896e25950b6bc0a09187cab0abd4d038c1e`, tree
+  `8670a8ba55a6a54396a8945ff8636589f5d429fe`.
+- Tested HEAD: `3bd7a16005957cf3e3b98c1ed355d4244808e425`, tree
+  `339198fbce638b19378416d0caefcd17609e5587`.
+- Controller blob: `c62495b656afc8f395d476845bbd475a2a2e2134`, SHA256
+  `6d92172838c47e819df0e3af2c81943d6de3802dac98cddf19cc09e2ab6e95ef`.
+  Test blob: `93b2092b1c6a6aec2b0025289defe892e9d59bf9`.
+- Artifacts: `/tmp/native-task3-safe-diagnostics.4VxdJ2/`. `command.json`,
+  `source.json`, `selection.json`, `collection.log`, immediate `reports.jsonl`,
+  `junit-cases.json` and `outcome.json` preserve exact selection and outcomes.
+- `pytest.log`: **2273 bytes**, SHA256
+  `1a723596a7b8204b9a29a7391fbd66a113009da526f69214df202b0b38709512`.
+  `junit.xml`: **11960 bytes**, SHA256
+  `62b259ebe62f15771e3ca2a03d19dc0c88b26d58cb8d5c4034401e9dae337cec`.
+  `outcome.json` SHA256:
+  `187419fcf321797c280b404e8aee95766fce8fb55c5b9f82fe993b0c3eb745dd`.
+- Only CHANGELOG, this LATEST and the direct README change after proof.
+  Task-local `final-source.json` and `handoff.json` seal the exact final
+  HEAD/tree after that records commit and verify tested-code equality.
+  No carrying-PR merge facts or new CI outcome are claimed.
+
+### Run 3 remains uncertain
+
+The leader-read run `37756891578`/r3a1, job `113243545133`, used controller
+`0a2ef287751da62d888839ef3b92c250ecabf5fc`, tree
+`c0a6634bcd969d2218312e1ad8929b4ee4dd5443`. Steps **2..13** succeeded,
+including linked sources, full request validation, renderer and approved
+identity/login. Step **14** ran **2026-10-08 09:31:57..09:32:03 UTC**, exit
+**2**; completion validation and upload succeeded. The **4603-byte** request
+SHA256 is `549195f4e5dbfde9ee71702da247d8a43ad84c862180893e45dc496bf7687349`,
+with window `1791451612..1791454012` (**2400 seconds**).
+
+Artifact `11541001301` holds a **1605-byte** completion, SHA256
+`c0b100d1b3cfc6cbdb66338b25497e361be4023e3afbe174d28b92c4d1815e0b`,
+with matching run/C/R/F/request bindings. Status and retention are uncertain,
+retry is false, and binding/claim/entry/grade/retention-commit/usage/cost fields
+are null. The **256634-byte / 1731-line** job log, SHA256
 `352adb8b17f834bcf630bbb229247211b9a82ff6dca90d3ea8b63c7d7914a8bb`,
-shows the step exit but no original exception. The controller catches private
-exceptions without emitting a safe failure stage. Its source order narrows
-where bindings can be assigned, but does not recover the original exception
-or grant another execution. Preserve this spent submission as uncertain,
-separate from the two earlier proven pre-admission bootstrap failures.
-The next implementation is bounded, secret-safe failure-stage diagnostics
-in the native controller only. No new live request, replay or private writer
-is authorized while this outcome remains unresolved.
+contains exit 2 but no original exception. Neither source order nor nulls prove
+absent side effects, a known unadmitted attempt, a score or zero cost.
 
-### Original submission evidence
+Runs `37726733625`/r1a1 and `37737075149`/r2a1 remain separate proven
+pre-admission failures: missing Python and Git ownership refusal respectively.
+All three submissions are spent; none was rerun or adopted here. Detailed
+submission, source-review, earlier proof and CI records remain in the
+[immutable base record][prior-record], rather than appended to this result.
+No logs were fetched again and no private state was inspected.
 
-The leader submitted [run 37756891578][new-run] through workflow `378041151`,
-run number **3**, attempt **1**, under the existing owner budget delegation
-and a new concrete direction. Exact readback at **2026-10-08 09:28:29 UTC**
-was `queued`, with controller `0a2ef287751da62d888839ef3b92c250ecabf5fc`,
-tree `c0a6634bcd969d2218312e1ad8929b4ee4dd5443`. This confirms submission,
-not successful setup, private admission, a grader call, retention or a score.
-
-The new canonical request is **4603 bytes**, SHA256
-`549195f4e5dbfde9ee71702da247d8a43ad84c862180893e45dc496bf7687349`.
-Admission window `1791451612..1791454012` is **2400 seconds**. Only current
-controller source/tree, the actual next workflow run number and window changed
-from the retained candidate. Original completion bytes and all R/result/F/
-input bindings still match the independently captured evidence.
-
-This permits one frozen-F grade of the retained native Task3 result below,
-not regeneration or a retry of either spent submission. Keep the existing
-time ceilings and permanent observation/F-keyed private claim. The live
-controller must verify actual private parent and absent grading prefix;
-the supplied parent remains last-known evidence. No concurrent private writer
-or next cell is authorized before retention. The terminal record above
-supersedes queued-only status; no grading result, model quality or usage/cost
-is established.
-
-### Accepted source and validation
-
-The leader accepted HEAD `a41d42b38d2019d64239120782a1673746661c4a`,
-tree `6fe807e19924063881ca0cb0a14d9c0e4b8f9d0c`, in source review
-`5454436958`. All **11** applicable checks in CI run `37748755436`
-succeeded, observed at **2026-10-08 09:21:17 UTC**. The previously failed
-registered-source jobs now pass without changing their pin expectations.
-This establishes the source/CI gate, not a live grade or execution authority.
-
-PR779 now restores `gpt54_disposable_checkout.py` to the exact base bytes,
-SHA256 `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
-Only the native grading controller adds the bootstrap allowance. Its local
-helper uses the unchanged sanitized `_git`, `_repository` and
-`_registered_gitdir` primitives. Before four fixed Git reads receive
-`-c safe.directory=<verified bootstrap>`, it checks the physical ordinary
-bootstrap, derives its common `.git` from the code-defined linked controller
-and verifies reciprocal registration. The two workflow trust lines remain
-after physical-path/ordinary-`.git` checks and are unchanged by this follow-up.
-No wildcard, persistent configuration, global-helper mutation, copied Git
-implementation or repinned dependency manifest is introduced. Real linked
-C/R/F source and tree checks remain intact.
-
-### One bounded four-node proof
-
-The following exact nodes ran together once, after import/fixture/parameter
-and collection checks. All four started, completed and passed; no retry ran.
-
-| Node under `batch-runner/tests/` | Outcome | JUnit case seconds |
-|---|---|---:|
-| `test_time_budget_native_grading_git_ownership.py::test_native_task3_grading_git_ownership` | Passed | 0.441 |
-| `test_time_budget_native_grading_ci.py::test_native_task3_hosted_grading_route[guards]` | Passed | 7.294 |
-| `test_codex_retention_observer_source.py::test_anchored_prospective_verification_current_binding_remains_unpaid` | Passed | 1.030 |
-| `test_gpt54_runtime_checkout.py::test_anchored_prospective_verification[valid]` | Passed | 2.283 |
-
-Pytest reported **4 passed, 2 warnings in 15.18s**, exit **0**. Its process
-took **15.616563 seconds**; the wrapper, including source and collection
-checks, took **20.362449 seconds**, from **2026-10-08 08:01:24.348544 UTC**
-to **08:01:44.710977 UTC**. Python **3.10.12**, pytest **9.1.1**, the
-**300s+5s** outer bound, no `-x`, and existing Git bounds were retained.
-Wrapper/direct/named hosted/ownership Git and Bash calls keep their
-**30-second** bounds; legacy runtime fixture bounds are unchanged. The two
-warnings concern `record_property` with JUnit `xunit2`, not failed checks.
-
-The ownership case uses tiny synthetic C/R/F commits and the scoped
-`GIT_TEST_ASSUME_DIFFERENT_OWNER` seam. It preserves Git's actual exit **128**
-and stderr, then exercises the extracted workflow and real controller-local
-bootstrap path. Wrong paths/source/trees, an unrelated repository and tampered
-reciprocal registration refuse; config bytes and refs remain unchanged. The
-restored shared helper still refuses the foreign bootstrap on its own.
-Test-only code-root mappings identify the synthetic linked controller; they
-do not inject trust or stand for historical source identities. The hosted
-guard fixture now uses that same linked-controller location and permits only
-the exact new bootstrap read in its named local Git wrapper. Its assertions
-are unchanged. The other two nodes cover representative registered-source
-boundaries that failed in CI. This is offline evidence, not a live ownership,
-full-CI, intake, model or grading result. No old success/partial/timeout path
-or full suite was rerun.
-
-### Source identities and artifacts
-
-- Base: `3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
-  `8bcad24257dfe0b22ca6a0d17e34f035eba33454`.
-- Previous PR/failed-CI HEAD: `f2d8183088b8cc4c345c704e14c83f88f6e889f8`,
-  tree `aede5a2518f22ecfdc6bbfa42f63fde1e086e8cd`.
-- Tested HEAD: `f34291d7fd33b33ad4f20a4778f646f7ceeedf46`, tree
-  `af0754deed16975822adb79b47fd7abcfb871381`.
-- Restored helper blob: `cefd15482377a98ceeb66d811c6beb837195ddc7`;
-  controller blob: `6c0d9f0ab8bb31940def49010232052b63aa55c3`.
-  Workflow blob `84e8c614f4cddf093bfad64f94a6fffb439391cb` and executor
-  blob `10d8e56c5569cc3dea484e4bb9d875712a0d5b4c` are unchanged.
-- Artifacts: `/tmp/native-task3-pin-compatibility.MpeuVa/`. `command.json`,
-  `source.json`, `selection.json` and `collection.log` bind the invocation;
-  immediate reports, `junit.xml`, `junit-cases.json` and `outcome.json`
-  preserve outcomes. The source receipt also pins unchanged production code.
-- `pytest.log`: **1841 bytes**, SHA256
-  `c64feeac1030903c2f3d39adb2de70604dc5f69bbbac3ba9b10bc222d90945bb`.
-  `junit.xml`: **1506 bytes**, SHA256
-  `c2054e44d00f7649cc1fa8815361cd87b9ea483fa1a8f4050d1463da9b5069f6`.
-- `outcome.json` SHA256:
-  `ce77d22920a97b85a74d5c5a05f58ef8672a05c5b98ca802e73d680bda627adf`.
-  The per-case `ownership-receipt.json` SHA256 is
-  `5b780167cc478e0255c2ac79e29b71345ce11a80dd28154c29e263f3f6d512dc`.
-- Only CHANGELOG, this LATEST record and the direct README change after
-  proof. Task-local `final-source.json` and `handoff.json` seal the exact
-  final HEAD/tree after that records commit and confirm tested code equality.
-  No carrying-PR merge or new CI outcome is claimed.
-
-### Earlier local proof and failed CI remain separate
-
-The earlier ownership-only proof at `0630f45535d563027cd7ee0f816c89a6e9745ade`,
-tree `11ecae2d8b2cf56082e934bd50fd8d8898496422`, remains **1 passed,
-1 warning in 2.16s**, exit **0**, wrapper **4.977293s**. Its artifacts are
-`/tmp/native-task3-git-ownership.mJCbh9/`; log SHA256
-`18dd492facf59edf8ac23a55e8fa1ff06ee4e755ebbdb526f940a8091b882aa1`,
-JUnit SHA256 `870d403e2db2d1bd2743f97100661999446f3ed2330e756ab7f359ff272bae25`.
-It did not cover the registered-source boundaries and is not passing CI
-evidence. The prior conditional source acceptance was superseded by the
-integration blocker, not extended to this correction.
-
-The leader read these actual summaries from CI run `37742051694` at
-`f2d8183088b8cc4c345c704e14c83f88f6e889f8`; they were not fetched again:
-
-| Job | Separate pytest summary | Pytest seconds |
-|---|---|---:|
-| pytest `113194779961` | 18 failed / 13378 passed / 64 skipped / 46 deselected / 1 warning | 1445.26 |
-| time-budget-contracts `113194779964` | 199 failed / 186 passed / 46 errors | 378.71 |
-| comparison-contracts `113194780036` | 101 failed / 1245 passed / 117 errors | 814.33 |
-
-These are not full job durations or independent model outcomes. At that
-snapshot seven checks had succeeded and pilot-contracts was still running;
-no poll followed. The previous helper SHA256
-`802113dcb4f648a595c4e295e7326e9dae0394b069e55cf5a1523118f8ea17e2`
-violated registered/current dependency bindings. Those bindings and their
-refusal assertions were not changed to accommodate it. The new four-node
-pass does not establish that full CI now passes.
-
-### Spent submissions and fixed live bindings
-
-Run `37737075149`/r2a1, job `113178950435`, used source
-`e0eeed56c27387d7341e61a2a4cebf02b964411a`, tree
-`35a8007abbc38344794ed11b7de0801888eca64a`. Container, Bash guard, Python
-**3.10.12**, JSON guard and checkout succeeded. At **2026-10-08 06:21:25 UTC**,
-step **7** failed on its first bounded `git rev-parse HEAD` with `detected
-dubious ownership` at `/__w/gdpval-realworks/gdpval-realworks`, exit **1**.
-Linked sources and all later credential/intake/claim/grade stages were skipped.
-The **60737-byte / 439-line** log SHA256 is
-`666006053c465c026c47a48117626844a06c42f3255dbf08a6688f526fea72f0`.
-Its **4603-byte** request SHA256 is
-`68b82d9878ad1df9a502ce1ebb9d4b0ede6427fdad5e7471db439a1c92710df7`,
-with window `1791440372..1791442772` (**2400 seconds**). Exact UID mismatch
-and a global outage are not established.
-
-Run `37726733625`/r1a1, job `113146502043`, separately failed earlier at
-**2026-10-08 04:17:20 UTC** with `python3: command not found`, exit **127**,
-at source `ef9eeb1157a0725d063dae5b3bd61dd46247feec`. Its log SHA256 is
-`6d10c8a29fac1cdad0546373bab65adbb62877f4d72b3dc8c832d6b26da0853c`;
-request SHA256 is
-`3a813fa01ce9c18df9a4ca483e89212d445ac51f39f9a5577398775487fd263e`.
-Both workflow `378041151` submissions are spent and neither admitted grading.
-Detailed prior source, submission and bootstrap-proof evidence remains in the
-[immutable record at 3bea3bf][prior-record], rather than appended here.
+### Fixed bindings and remaining gates
 
 The subject remains native/Codex r1/repeat1 Task3
 `2ea2e5b5-257f-42e6-a7dc-93763f28b19d`, generated in run `37631184801`.
 Original R is `33e24e9c1402ec0b7c92a71222998d1407646a92`, tree
 `6e67da4e12169b41a837d92eaf946db15e71010e`; frozen F is
 `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. Private output remains
-`d5aeecec1394fb44d4b1da33b1be38a39acdb89a`. Its **8518-byte** result SHA256 is
-`4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`;
-**2 files / 408601 bytes** remain declarations, not content hydrated or graded
-here. Expected private parent `82ed160109e40dcf74029f2be34a973350374fc6`
-remains last-known, not fresh metadata.
+`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. Output remains
+`d5aeecec1394fb44d4b1da33b1be38a39acdb89a`; its **8518-byte** result SHA256
+is `4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`,
+fingerprint `4a62be1df3e21eae52bd7814359887c5f774200948ba67fc15ca62bf2f4b2967`.
+**2 files / 408601 bytes** remain declarations, not contents fetched or graded
+by this task. Parent `82ed160109e40dcf74029f2be34a973350374fc6` remains
+last-known metadata, not a fresh private read.
 
-### Remaining authority and review gates
+The shared Git helper remains byte-identical at SHA256
+`77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
+Workflow, registries, input/result pins, one-process native context, permanent
+CAS/local once-store, F/executor/scoring and the twenty-cell study are unchanged.
+Step ceilings still total **269 minutes** within the **270-minute** job;
+F/child envelopes remain **14400/14520 seconds**.
 
-Interpreter/token ordering, action/image pins, permissions, original
-R/result/F/input bindings, native executor/scoring and the twenty-cell study
-are unchanged. Step ceilings still total **269 minutes** within the
-**270-minute** job; F/child envelopes remain **14400/14520 seconds**. The
-ownership specialist failed before execution on unavailable configured
-Opus 4.7, supplied no review or endorsement and was not retried.
+This diagnostics HEAD still requires fixed-HEAD review and CI. Prior source
+review `5454436958` and its successful CI apply to the earlier ownership
+correction, not this change. The ownership specialist failed before execution
+on unavailable configured Opus 4.7, supplied no endorsement and was not retried.
+No new live request, private access, claim, model call, grade, replay, Task5 or
+next cell was authorized or performed. Uncertainty grants no retry.
 
-Fixed-HEAD review and applicable CI passed before the exact new direction
-and single submission above. The earlier two submissions were not retried.
-No private fetch/write, live claim, model call or grade is established by
-the queued readback. No Azure management, generation replay, Task5 or next
-cell was authorized. A future success still requires a valid frozen-F
-grade and acknowledged retention; refusal or uncertainty grants no retry.
-There is no new score, measured usage/cost or zero-invoice conclusion.
+The complete skill catalog was consulted once. `experiment-report-en` preserved
+measurement units, timing scopes and actual-versus-synthetic evidence;
+`im-not-ai-en` checked English without strengthening claims. No new study/design
+exercise or UI skill applied.
 
-The complete skill catalog was consulted once. `experiment-report-en` kept
-the separate observations and units intact; `im-not-ai-en` checked English
-without strengthening claims. No new design exercise or UI skill was needed.
-
-[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/3bea3bf816a516fd0238fe11cdc9d696eefeed10/tasks/LATEST_TASK_RESULT/README.md
-[new-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37756891578
+[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e21c2896e25950b6bc0a09187cab0abd4d038c1e/tasks/LATEST_TASK_RESULT/README.md

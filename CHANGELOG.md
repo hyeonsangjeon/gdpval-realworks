@@ -20,9 +20,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   `c0b100d1b3cfc6cbdb66338b25497e361be4023e3afbe174d28b92c4d1815e0b`,
   with matching source/request bindings, uncertain status and retention, and
   no retry. Null claim/entry/grade fields do not establish absence of effects
-  or zero cost. Preserve the original exception as unknown and add only
-  bounded, secret-safe native-controller diagnostics before any further
-  decision; no replay, new grading request or private writer is authorized.
+  or zero cost. The prospective diagnostics correction below does not recover
+  the original exception; it remains unknown. No replay, new grading request
+  or private writer is authorized.
 
 - Submit one new retained native Task3 frozen-F request as run `37756891578`,
   workflow `378041151`, run number 3, attempt 1, source
@@ -63,6 +63,37 @@ entries land under a fresh dated heading the day they merge to `main`.
   refusal or uncertainty without retry, adoption or generation replay.
 
 ### Fixed
+
+- Add native-controller-only safe failure diagnostics at originals,
+  intake/preparation, direction, claim, executor and retention boundaries,
+  with local environment/context-exit observations. Strict public validation
+  admits only closed stage/state/type-category values; no raw exception,
+  traceback, URL, token, filename, path or private content is published.
+  Lost claim/retention acknowledgements remain uncertain and nonrenewable;
+  available partial output still reaches the retention attempt after an
+  executor exception.
+  The shared Git helper remains exactly `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`;
+  workflow, source registries, original R/result/F/input pins, native context,
+  once-only guards, scoring and all time limits are unchanged.
+  From base `e21c2896e25950b6bc0a09187cab0abd4d038c1e`, tree
+  `8670a8ba55a6a54396a8945ff8636589f5d429fe`, tested HEAD
+  `3bd7a16005957cf3e3b98c1ed355d4244808e425`, tree
+  `339198fbce638b19378416d0caefcd17609e5587`, ran only the new diagnostics
+  selector once: **6 passed, 6 warnings in 171.27s**, exit **0**, pytest
+  process **171.712457s**, wrapper **175.989852s**, under Python **3.10.12**
+  and **300s+5s/no-`-x`**. Real CLI/intake/preparer/executor/F validators use
+  synthetic originals/source identities/HTTP/auth/private-store/child/kernel
+  seams; secret-looking exceptions stay out of public JSON/stdout/stderr.
+  No successful verdict is mocked, and no live claim, model or grade occurs.
+  Artifacts are in `/tmp/native-task3-safe-diagnostics.4VxdJ2/`; log SHA256
+  `1a723596a7b8204b9a29a7391fbd66a113009da526f69214df202b0b38709512`,
+  JUnit SHA256 `62b259ebe62f15771e3ca2a03d19dc0c88b26d58cb8d5c4034401e9dae337cec`.
+  External `final-source.json` and `handoff.json` seal final HEAD/tree after
+  the three records. Fixed-HEAD review/CI remain required. The unavailable
+  ownership specialist supplied no endorsement and was not retried. Run 3
+  stays uncertain, distinct from runs 1/2's proven bootstrap failures; no
+  historical cause, zero cost, grading score, replay or new live authority
+  is established.
 
 - Keep native Task3 bootstrap trust local to its controller, restoring the
   shared `gpt54_disposable_checkout.py` to exact base SHA256
