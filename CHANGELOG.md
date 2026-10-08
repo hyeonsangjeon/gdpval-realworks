@@ -13,6 +13,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Submit one new retained native Task3 frozen-F request as run `37756891578`,
+  workflow `378041151`, run number 3, attempt 1, source
+  `0a2ef287751da62d888839ef3b92c250ecabf5fc`. The exact 4603-byte request
+  SHA256 is `549195f4e5dbfde9ee71702da247d8a43ad84c862180893e45dc496bf7687349`,
+  with a 2400-second admission window `1791451612..1791454012`.
+  Original generation/result/input/F bindings remain unchanged. Exact readback
+  was queued, not evidence of a private claim, grader call, retained grade,
+  score or usage. Both earlier submissions remain spent pre-admission failures;
+  neither was rerun. Keep one admitted grade, existing time ceilings and no
+  concurrent private writer; stop on refusal or uncertainty without retry,
+  adoption, generation replay or automatic next cell.
+
 - Record run `37737075149`, run number 2, attempt 1, as a pre-grading
   ownership refusal. Its container, pinned Python 3.10.12, request guards
   and checkout succeeded; job `113178950435` step 7 then failed at

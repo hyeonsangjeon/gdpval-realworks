@@ -1,6 +1,30 @@
 # Latest task result
 
-## Native Task3 controller-local bootstrap trust accepted
+## Native Task3 third grading submission queued; no grade observed
+
+The leader submitted [run 37756891578][new-run] through workflow `378041151`,
+run number **3**, attempt **1**, under the existing owner budget delegation
+and a new concrete direction. Exact readback at **2026-10-08 09:28:29 UTC**
+was `queued`, with controller `0a2ef287751da62d888839ef3b92c250ecabf5fc`,
+tree `c0a6634bcd969d2218312e1ad8929b4ee4dd5443`. This confirms submission,
+not successful setup, private admission, a grader call, retention or a score.
+
+The new canonical request is **4603 bytes**, SHA256
+`549195f4e5dbfde9ee71702da247d8a43ad84c862180893e45dc496bf7687349`.
+Admission window `1791451612..1791454012` is **2400 seconds**. Only current
+controller source/tree, the actual next workflow run number and window changed
+from the retained candidate. Original completion bytes and all R/result/F/
+input bindings still match the independently captured evidence.
+
+This permits one frozen-F grade of the retained native Task3 result below,
+not regeneration or a retry of either spent submission. Keep the existing
+time ceilings and permanent observation/F-keyed private claim. The live
+controller must verify actual private parent and absent grading prefix;
+the supplied parent remains last-known evidence. No concurrent private writer
+or next cell is authorized before retention. Read terminal evidence in a later
+bounded cycle; no grading result, model quality or usage/cost is established.
+
+### Accepted source and validation
 
 The leader accepted HEAD `a41d42b38d2019d64239120782a1673746661c4a`,
 tree `6fe807e19924063881ca0cb0a14d9c0e4b8f9d0c`, in source review
@@ -163,12 +187,11 @@ are unchanged. Step ceilings still total **269 minutes** within the
 ownership specialist failed before execution on unavailable configured
 Opus 4.7, supplied no review or endorsement and was not retried.
 
-Fixed-HEAD review and applicable CI have passed. The leader must still issue
-a new exact source/run-number/window/hash before another submission.
-Existing owner budget delegation is not that concrete direction.
-No workflow retry/dispatch, private fetch or
-write, live claim, Azure management, model, grade, replay, Task5 or next cell
-occurred in this follow-up. A future success still requires a valid frozen-F
+Fixed-HEAD review and applicable CI passed before the exact new direction
+and single submission above. The earlier two submissions were not retried.
+No private fetch/write, live claim, model call or grade is established by
+the queued readback. No Azure management, generation replay, Task5 or next
+cell was authorized. A future success still requires a valid frozen-F
 grade and acknowledged retention; refusal or uncertainty grants no retry.
 There is no new score, measured usage/cost or zero-invoice conclusion.
 
@@ -177,3 +200,4 @@ the separate observations and units intact; `im-not-ai-en` checked English
 without strengthening claims. No new design exercise or UI skill was needed.
 
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/3bea3bf816a516fd0238fe11cdc9d696eefeed10/tasks/LATEST_TASK_RESULT/README.md
+[new-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37756891578
