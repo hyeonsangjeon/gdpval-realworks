@@ -13,6 +13,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record run `37737075149`, run number 2, attempt 1, as a pre-grading
+  ownership refusal. Its container, pinned Python 3.10.12, request guards
+  and checkout succeeded; job `113178950435` step 7 then failed at
+  **2026-10-08 06:21:25 UTC** with Git's `detected dubious ownership`
+  error for `/__w/gdpval-realworks/gdpval-realworks`, step exit 1.
+  Linked sources, dependencies, identity login, private intake/claim, grader
+  and retention were not reached. Preserve the spent submission and original
+  R/result/F bindings; do not infer a score or zero cost. The next correction
+  must retain source checks and narrowly scope Git trust to verified exact
+  paths, with one real-Git regression and fixed-HEAD review before a new
+  leader-issued request. No fix, rerun or new grading admission is claimed.
+
 - Submit one new retained native r1 Task3 frozen-F grading request after
   bootstrap source review `5451806465` and all 11 applicable CI checks.
   Workflow `378041151` produced run `37737075149`, run number 2, attempt 1,

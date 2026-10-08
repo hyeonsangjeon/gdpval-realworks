@@ -1,6 +1,30 @@
 # Latest task result
 
-## New native Task3 grading submission queued; grade not yet observed
+## Native Task3 run 2 stopped at Git ownership; no grade admitted
+
+The leader read the terminal outcome of run `37737075149`, run number **2**,
+attempt **1**, job `113178950435`. The container, Bash guard, pinned Python
+**3.10.12**, JSON request guard and exact checkout succeeded. Step **7** then
+failed at **2026-10-08 06:21:25 UTC** on its first `git rev-parse HEAD`:
+
+```text
+fatal: detected dubious ownership in repository at '/__w/gdpval-realworks/gdpval-realworks'
+```
+
+The step exited **1**. It did not reach linked C/R/F creation. Dependencies,
+full source validation, renderer, OIDC/login, authenticated intake, private
+grading claim, grader, retention and public completion upload were skipped.
+This establishes live success of the Python bootstrap correction, not a
+successful grade. The log does not establish the ownership mismatch's user
+IDs or justify disabling Git ownership protection for arbitrary paths.
+
+The actual job log is **60737 bytes / 439 lines**, SHA256
+`666006053c465c026c47a48117626844a06c42f3255dbf08a6688f526fea72f0`.
+The failed submission is spent. Task3 remains ungraded; there is no new private
+claim, score, retained grade or measured usage/cost result. A skipped grader
+does not establish a zero invoice. No rerun or new submission was issued.
+
+### Original submission evidence
 
 The leader submitted [run 37737075149][new-run] through workflow `378041151`,
 run number **2**, attempt **1**, under the owner's existing budget delegation.
@@ -162,9 +186,26 @@ run 2 is a new submission, not its retry. One admitted grade is allowed, with
 the unchanged F/child/job ceilings and no resume or score-driven regrade.
 No concurrent private writer or next cell is authorized before retention.
 
-Read terminal evidence in a later bounded cycle. Success requires a valid
-frozen-F grade and acknowledged private retention; queued status and child
-exit alone are insufficient. Preserve partial grade/ledger/checkpoint evidence.
+The next correction must address only the demonstrated Git trust failure.
+Keep exact source, caller, request, tree, path and linked-worktree validation.
+Any trust allowance must name only a verified exact checkout, not a wildcard
+or parent subtree, and must not alter host-wide configuration or ownership.
+A new bounded real-Git regression must reproduce the refusal and prove the
+correction without trusting an unrelated repository. No such fix or passing
+regression is claimed in this terminal record.
+
+The mandatory specialist invocation for this new ownership decision failed
+before execution on its unavailable configured Opus 4.7 label. It supplied
+no review or endorsement and was not retried. The leader's instruction is
+grounded in the actual failed command and log, not that failed invocation.
+Final fixed-HEAD review and applicable CI must precede any new exact
+source/run-number/window/hash direction. Existing budget delegation is not
+another pending owner approval, but it does not waive source or claim checks.
+
+Success still requires a valid frozen-F grade and acknowledged private
+retention; queued status and child exit alone are insufficient. Preserve
+partial grade/ledger/checkpoint evidence if a later authorized attempt reaches
+those stages.
 Occupied claims, lost responses, uncertain acknowledgements, source refusal
 or retention failure stop execution without adoption or retry. Usage and
 cost remain unknown until evidence exists; no zero-invoice claim is made.
