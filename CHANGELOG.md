@@ -13,6 +13,16 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Submit one directed `native_task3_grade` metadata read as run `37789923398`,
+  workflow `376247700`, run number 2, attempt 1, source
+  `ef6b11115b9749ea1ed622b1c16df88cad6725cc`. The 185-byte dispatch payload
+  SHA256 is `820c7174622325d29b6dab2444a2678b88de71cda9f46328f8ddb8594e45f60d`.
+  Exact readback was queued. Only the fixed claim/output-manifest metadata
+  paths are authorized, within two operations, 60 seconds and 64 KiB per
+  response; no content download, write, claim, model or grading operation.
+  No private result or presence/absence is established yet. Preserve run 3's
+  uncertainty and no-retry boundary; do not poll or resubmit this read.
+
 - Stabilize only the two authorized cumulative-bound test clocks on PR781
   by seeding them with exactly representable `1000.0` instead of live
   `time.monotonic()`. Preserve the **+35-second** advances, **60-second**

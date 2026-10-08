@@ -1,6 +1,22 @@
 # Latest task result
 
-## PR781 metadata scope accepted; private read not yet submitted
+## PR781 metadata scope accepted; one read-only submission recorded
+
+The leader submitted [metadata run 37789923398][metadata-run], workflow
+`376247700`, run number **2**, attempt **1**, selecting `native_task3_grade`.
+Exact readback at **2026-10-08 14:07:44 UTC** was `queued`, with source
+`ef6b11115b9749ea1ed622b1c16df88cad6725cc`, tree
+`6c403d8d28d9e4e28f99549f2af586600741febe`. The canonical **185-byte**
+dispatch payload SHA256 is
+`820c7174622325d29b6dab2444a2678b88de71cda9f46328f8ddb8594e45f60d`.
+
+The separate direction permits one private/head GET and one immutable-parent
+paths-info metadata POST for only the fixed Task3/F `admission.json` and
+`output-manifest.json`, under the existing 60-second/64-KiB-per-response bounds.
+No body download, write, claim, model call or grade is authorized. Results
+have not been read; submission proves neither presence nor absence.
+Run 3's uncertainty and no-retry status remain unchanged. Inspect terminal
+metadata in a later bounded cycle without polling or resubmission.
 
 The leader accepted HEAD `d85af0df7fc876eba11ae9e878475552408016a2`,
 tree `bab908ded1681e7793b6b1daa911680376ec9091`, in review `5457795334`.
@@ -127,8 +143,9 @@ The **2 files / 408601 bytes** remain declarations, not contents verified here.
 Even an authorized later metadata read cannot grant readout eligibility,
 claim adoption, grading replay, Task5 or a next cell.
 
-Independent fixed-HEAD review and CI have passed. A future read-only
-Actions submission still needs a separate exact leader direction. The prior
+Independent fixed-HEAD review and CI passed before the exact read-only
+direction and submission above. Any additional submission needs another
+separate exact leader direction. The prior
 mandatory metadata-scope review attempt failed before execution on the
 unavailable configured Opus4.7 label; it supplied no endorsement and was not
 retried. The complete skill catalog was consulted once. `experiment-report-en`
@@ -137,3 +154,4 @@ English without strengthening claims. No new study or UI exercise applied.
 
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/fc9796f048fded13416bde1804e9046608e49652/tasks/LATEST_TASK_RESULT/README.md
 [metadata-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/2b23b94a1b2637cd12041e7659d0c8ae252d423c/tasks/LATEST_TASK_RESULT/README.md
+[metadata-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37789923398
