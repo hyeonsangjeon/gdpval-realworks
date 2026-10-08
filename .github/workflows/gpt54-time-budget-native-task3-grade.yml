@@ -62,7 +62,7 @@ jobs:
       REQUEST_SHA256: ${{ inputs.request_sha256 }}
       TIME_BUDGET_GRADE_REQUEST_JSON: ${{ inputs.request_json }}
     steps:
-      - name: Refuse wrong source, caller, fixed cell and reruns before credentials
+      - name: Refuse wrong source, caller and reruns before Python setup
         timeout-minutes: 1
         run: |
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
@@ -72,6 +72,17 @@ jobs:
           [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROLLER_TREE" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_SHA" == "$CONTROLLER_SHA" && "$TIME_BUDGET_GRADE_WORKFLOW_SHA" == "$CONTROLLER_SHA" ]]
           [[ "$GITHUB_WORKFLOW_REF" == hyeonsangjeon/gdpval-realworks/.github/workflows/gpt54-time-budget-native-task3-grade.yml@refs/heads/main ]]
+
+      - name: Set up pinned Python
+        timeout-minutes: 1
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          token: ""
+
+      - name: Refuse wrong request, controller, fixed cell and run number before checkout
+        timeout-minutes: 1
+        run: |
           python3 - <<'PY'
           import hashlib, json, os
           data = os.environ["TIME_BUDGET_GRADE_REQUEST_JSON"].encode()
@@ -109,12 +120,6 @@ jobs:
           export AZURE_CONFIG_DIR="$RUNNER_TEMP/time-budget-task3-grade-azure-login"
           mkdir -m 700 "$AZURE_CONFIG_DIR"
           printf 'AZURE_CONFIG_DIR=%s\n' "$AZURE_CONFIG_DIR" >> "$GITHUB_ENV"
-
-      - name: Set up pinned Python
-        timeout-minutes: 1
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.10.12"
 
       - name: Install existing declared dependencies
         timeout-minutes: 5
