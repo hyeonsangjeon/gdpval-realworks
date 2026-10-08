@@ -1057,6 +1057,23 @@ deadline checks and a 6-minute step. Mutually exclusive step ceilings total
 19 minutes for preparation or 269 minutes for grading, within the unchanged
 270-minute job. The F/child grading limits remain 14400/14520 seconds.
 
+The existing probe completion now carries a closed `refusal_point`, or null,
+through native intake/execution wrappers. Its strict validator accepts only
+program-selected enum values at a started, failed intake/preparation stage;
+raw exception text, paths and payloads remain private. No transport permission,
+workflow, input/F pin, deadline or grading authority changed. At tested HEAD
+`d886cf64fbb84aa1a0e2a8a47254ed2535ffa980`, tree
+`128a7cc7799981e2367369256f95686e5d24a717`, the new selector reported **7 passed,
+7 warnings in 173.09s**, exit **0**, process **173.522586s**, wrapper
+**177.872408s** under 300s+5s. These are synthetic refusal scenarios using real
+adapters/F validators, not live readiness. A synthetic raw Git-LFS pointer
+failed the declared payload identity after 3 retained GETs; historical LFS use
+is unknown, and resolver/redirect/call expansion was not implemented. Probe
+run `37818721507` remains refused at an unknown inner predicate; grading run 3
+remains uncertain and nonretryable. New fixed-HEAD review/CI and a separate
+exact live direction remain required. Artifacts, the receipt-label correction,
+source seals and hashes are in [the current record](../tasks/LATEST_TASK_RESULT/README.md).
+
 The ownership test's stale all-steps sum failed in leader-read CI run
 `37804015222`/job `113403603647`: **276 versus 269**, with **1 failed,
 475 passed in 1718.79s** of pytest elapsed time. It incorrectly included
@@ -1070,8 +1087,8 @@ wrapper **6.003377s**, within 300s+5s/no-`-x`/bounded-Git limits. Real Git used
 synthetic ownership and tiny source anchors, not a live container. No workflow,
 budget, permission, production or source binding changed. This proof is separate
 from both earlier probe results below; no earlier passing node ran again.
-Current artifacts, exact command, source seals and outstanding review/CI gates
-are in [the current record](../tasks/LATEST_TASK_RESULT/README.md).
+That proof's artifacts, exact command and source seals remain in the
+[immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0e08102039d733349428599383034ec0f2073ed/tasks/LATEST_TASK_RESULT/README.md).
 
 At tested HEAD `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
 `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`, one Python 3.10.12 offline

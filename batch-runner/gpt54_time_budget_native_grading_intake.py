@@ -7,7 +7,8 @@ grading admission, inference publication association or execution operation.
 
 from __future__ import annotations
 
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
+from enum import Enum
 from functools import partial
 import json
 import os
@@ -52,8 +53,47 @@ OTHER_CREDENTIALS = (set(CREDENTIAL_ENV_NAMES) | set(native.shared.TOKEN_KEYS) |
 }) - {"HF_TOKEN"}
 
 
+class NativePreparationRefusalPoint(Enum):
+    """Closed program locations, never exception text or execution authority."""
+
+    INTAKE_REQUEST = "intake_request"
+    NATIVE_INPUT_PATH = "native_input_path"
+    NATIVE_CONTEXT = "native_context"
+    INTAKE_ENVIRONMENT = "intake_environment"
+    INTAKE_REQUEST_VALIDATION = "intake_request_validation"
+    INTAKE_HYDRATION = "intake_hydration"
+    RETAINED_METADATA = "retained_metadata"
+    RETAINED_RESULT_DOWNLOAD = "retained_result_download"
+    RETAINED_RESULT_IDENTITY = "retained_result_identity"
+    RETAINED_RESULT_BINDING = "retained_result_binding"
+    RETAINED_DELIVERABLE_DOWNLOAD = "retained_deliverable_download"
+    RETAINED_DELIVERABLE_IDENTITY = "retained_deliverable_identity"
+    FROZEN_PREPARATION = "frozen_preparation"
+    INTAKE_FINAL_REREAD = "intake_final_reread"
+    NATIVE_ARGUMENTS = "native_arguments"
+    NATIVE_CHECKED_PREPARATION = "native_checked_preparation"
+    MATERIALIZED_NATIVE_REREAD = "materialized_native_reread"
+
+
 class NativeGradingIntakeRefused(ValueError):
     """Static refusal; keep every reservation/partial file, never adopt or retry."""
+
+    def __init__(self, reason, *, refusal_point=None):
+        super().__init__(reason)
+        self.refusal_point = refusal_point if type(refusal_point) is NativePreparationRefusalPoint else None
+
+
+@contextmanager
+def _refusal_at(point: NativePreparationRefusalPoint):
+    """Preserve an inner typed location without inspecting a private message."""
+    try:
+        yield
+    except (Exception, KeyboardInterrupt) as error:
+        if type(error) is NativeGradingIntakeRefused:
+            if type(error.refusal_point) is not NativePreparationRefusalPoint:
+                error.refusal_point = point
+            raise
+        raise NativeGradingIntakeRefused("native_grading_intake_refused", refusal_point=point) from None
 
 
 def _require(condition: bool, reason: str) -> None:
@@ -197,24 +237,30 @@ def _hydrate(request: dict, plan: dict, marker: dict, token: str, publish):
                 response.stream = LimitedStream(response.stream, limits[attempts - 1])
 
             session.event_hooks = {"request": [request_guard], "response": [response_guard]}
-            found = storage._metadata(SimpleNamespace(repo_info=partial(api.repo_info, expand=["private", "sha"])),
-                                      target, revision, token, deadline)
-            _same("immutable private output", found["sha"], revision)
+            with _refusal_at(NativePreparationRefusalPoint.RETAINED_METADATA):
+                found = storage._metadata(SimpleNamespace(repo_info=partial(api.repo_info, expand=["private", "sha"])),
+                                          target, revision, token, deadline)
+                _same("immutable private output", found["sha"], revision)
 
-            def read(member, identity):
-                with session.stream("GET", storage.HF_ENDPOINT + base + quote(member, safe="/"),
-                                    headers={"authorization": "Bearer " + token, "Accept-Encoding": "identity"}) as response:
-                    data = response.read()
-                storage._remaining(deadline)
-                _same("retained member identity", _identity(data), identity)
-                _require(token.encode() not in data, "credential_in_retained_bytes")
+            def read(member, identity, download_point, identity_point):
+                with _refusal_at(download_point):
+                    with session.stream("GET", storage.HF_ENDPOINT + base + quote(member, safe="/"),
+                                        headers={"authorization": "Bearer " + token, "Accept-Encoding": "identity"}) as response:
+                        data = response.read()
+                    storage._remaining(deadline)
+                with _refusal_at(identity_point):
+                    _same("retained member identity", _identity(data), identity)
+                    _require(token.encode() not in data, "credential_in_retained_bytes")
                 return data
 
-            data = read(result_member, completion["result_identity"])
-            reader.project_result(data, context)
-            payload = json.loads(data, object_pairs_hook=_object)
-            _same("independent reconstructed observation", payload["time_budget_observation"]["identity"], marker["observation"])
-            _same("independent reconstructed inputs", payload["observation_execution"]["inputs"], marker["inputs"])
+            data = read(result_member, completion["result_identity"],
+                        NativePreparationRefusalPoint.RETAINED_RESULT_DOWNLOAD,
+                        NativePreparationRefusalPoint.RETAINED_RESULT_IDENTITY)
+            with _refusal_at(NativePreparationRefusalPoint.RETAINED_RESULT_BINDING):
+                reader.project_result(data, context)
+                payload = json.loads(data, object_pairs_hook=_object)
+                _same("independent reconstructed observation", payload["time_budget_observation"]["identity"], marker["observation"])
+                _same("independent reconstructed inputs", payload["observation_execution"]["inputs"], marker["inputs"])
             records = payload["results"][0]["deliverable_file_records"]
             _same("independently expected content totals", {"count": len(records), "bytes": sum(r["size"] for r in records)},
                   request["deliverables"])
@@ -228,7 +274,9 @@ def _hydrate(request: dict, plan: dict, marker: dict, token: str, publish):
             limits.extend(r["size"] for r in records)
             publish(native.observation.RESULT, data)
             for member, record in zip(members, records, strict=True):
-                data = read(member, {key: record[key] for key in ("sha256", "size")})
+                data = read(member, {key: record[key] for key in ("sha256", "size")},
+                            NativePreparationRefusalPoint.RETAINED_DELIVERABLE_DOWNLOAD,
+                            NativePreparationRefusalPoint.RETAINED_DELIVERABLE_IDENTITY)
                 publish("upload/" + record["path"], data)
             storage._remaining(deadline)
             _require(attempts == 4, "four_read_operations_required")
@@ -243,6 +291,7 @@ def prepare_retained_native_task3_grading(*, request_json: str, expected_request
     hydration and F preparation remain separate fresh directories; failures
     retain partial state and cannot be retried into either directory.
     """
+    point = NativePreparationRefusalPoint.INTAKE_ENVIRONMENT
     try:
         _require(not any(os.environ.get(key) for key in OTHER_CREDENTIALS), "unexpected_credential_environment")
         token = os.environ.get("HF_TOKEN", "")
@@ -250,12 +299,14 @@ def prepare_retained_native_task3_grading(*, request_json: str, expected_request
                  "explicit_hf_token_required")
         _require(token not in request_json, "credential_in_request")
         with intake._hf_environment(online=False), ExitStack() as sources:
+            point = NativePreparationRefusalPoint.INTAKE_REQUEST_VALIDATION
             request, paths, plan, marker, arguments, request_identity = _checked_request(
                 request_json, expected_request_sha256, sources)
             output = paths["hydration_root"]
             reservation = output.with_name(output.name + RESERVATION_SUFFIX)
             reserved = reader._bytes({"format": FORMAT, "request_identity": request_identity,
                                       "output_commit": request["completion"]["output_commit"], "cell": CELL})
+            point = NativePreparationRefusalPoint.INTAKE_HYDRATION
             with _publication_parents(output.parent) as (check, mkdir, descriptor):
                 _fresh(paths)
                 _write_no_clobber(reservation, reserved, parent_fd=descriptor(output.parent))
@@ -273,11 +324,13 @@ def prepare_retained_native_task3_grading(*, request_json: str, expected_request
 
                 _hydrate(request, plan, marker, token, publish)
                 token = None  # Neither argument nor environment supplies credentials to the preparer.
+                point = NativePreparationRefusalPoint.FROZEN_PREPARATION
                 prepared = preparation.prepare_observation_grading(plan, **arguments,
                     observation=ObservationIdentity(**marker["observation"]), expected_input_binding=marker["inputs"],
                     result_path=output / native.observation.RESULT,
                     expected_result_identity=request["completion"]["result_identity"], deliverables_root=output / "upload",
                     destination=paths["destination"])
+                point = NativePreparationRefusalPoint.INTAKE_FINAL_REREAD
                 prepared_identity = _identity(reader._bytes(prepared))
                 _read_bytes(paths["destination"] / preparation.READY, **prepared_identity)
                 _read_bytes(reservation, **_identity(reserved))
@@ -301,7 +354,9 @@ def prepare_retained_native_task3_grading(*, request_json: str, expected_request
                 check()
                 _write_no_clobber(output / READY, reader._bytes(summary), parent_fd=descriptor(output))
                 return summary
-    except NativeGradingIntakeRefused:
+    except NativeGradingIntakeRefused as error:
+        if type(error.refusal_point) is not NativePreparationRefusalPoint:
+            error.refusal_point = point
         raise
     except (Exception, KeyboardInterrupt):
-        raise NativeGradingIntakeRefused("native_grading_intake_refused") from None
+        raise NativeGradingIntakeRefused("native_grading_intake_refused", refusal_point=point) from None

@@ -13,6 +13,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Preserve closed native intake/preparation refusal points through the existing
+  adapters and preparation-probe completion validator. Exception text and
+  private data remain suppressed; no mode, workflow, transport permission,
+  source/input/F pin, grading authority or deadline changed. The new seven-case
+  selector used real adapters/F validators with synthetic IO: **7 passed,
+  7 warnings in 173.09s**, exit **0**, pytest-process **173.522586s**, wrapper
+  **177.872408s**, under Python **3.10.12** / **300s+5s** / no `-x` / bounded Git.
+  Tested HEAD `d886cf64fbb84aa1a0e2a8a47254ed2535ffa980`, tree
+  `128a7cc7799981e2367369256f95686e5d24a717`. A synthetic raw Git-LFS pointer was
+  refused at the payload-identity gate after **3 retained GETs**; this does not
+  establish historical LFS use. Resolver/redirect/call expansion remains outside
+  scope. Artifacts and the explicit correction of three copied wrapper-receipt
+  labels are in `/tmp/native-task3-intake-refusal.IP1QeX/`; final HEAD/tree and
+  log/JUnit hashes are sealed by the current result and final-source receipt.
+  Run `37818721507` remains refused at an unknown inner predicate; run
+  `37756891578` remains uncertain/nonretryable. No old selector or live/private
+  operation ran. Corrected HEAD `f34d0f4ef841913271cfbba82840827ed71998cc`,
+  tree `63e9bbccf33e46eb2419d1244ac1bda7c4ec9694`, is accepted in review
+  `5462314957`; all 11 applicable checks succeeded, observed at
+  **2026-10-08 20:12:08 UTC**. A separate exact leader direction remains
+  required; the unavailable specialist supplied no endorsement and was not retried.
+
 - Record model-free probe `37818721507`/r4a1 as refused after successful
   originals acquisition. Artifact `11568232298`, 1486 bytes, SHA256
   `753c468fef11533cd55accb0c089290b4362200e15d501347862d3304e8f35e2`,

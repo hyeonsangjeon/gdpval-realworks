@@ -637,7 +637,7 @@ def _probe_bound():
         signal.signal(signal.SIGTERM, previous)
 
 
-def _probe_completion(context, *, verified=None, diagnostics=None):
+def _probe_completion(context, *, verified=None, diagnostics=None, refusal_point=None):
     request = context["request"]
     diagnostics = ({stage: {"state": "unknown", "category": None} for stage in PROBE_STAGES}
                    if diagnostics is None else diagnostics)
@@ -649,6 +649,7 @@ def _probe_completion(context, *, verified=None, diagnostics=None):
         "expected_result_identity": request["completion"]["result_identity"],
         "expected_result_fingerprint": request["completion"]["result_fingerprint"],
         "verified_preparation": verified, "status": "ready" if ready else "refused", "diagnostics": diagnostics,
+        "refusal_point": refusal_point,
         "grading_authority": False, "handle_reusable": False, "retry_allowed": False}
 
 
@@ -657,7 +658,7 @@ def validate_probe_completion(value, context):
           [PROBE_REQUEST_FORMAT, PROBE_PURPOSE, PROBE_POLICY])
     baseline = _probe_completion(context)
     _require(type(value) is dict and set(value) == set(baseline), "public_probe_schema_refused")
-    mutable = {"verified_preparation", "status", "diagnostics"}
+    mutable = {"verified_preparation", "status", "diagnostics", "refusal_point"}
     _same("public independent probe bindings", {key: value[key] for key in value.keys() - mutable},
           {key: baseline[key] for key in baseline.keys() - mutable})
     diagnostics = value["diagnostics"]
@@ -671,6 +672,11 @@ def validate_probe_completion(value, context):
     for previous, current in zip(PROBE_STAGES, PROBE_STAGES[1:]):
         _require(diagnostics[current]["state"] == "unknown" or diagnostics[previous]["state"] == "completed",
                  "public_probe_stage_order_refused")
+    point = value["refusal_point"]
+    _require(point is None or (type(point) is str
+             and point in {item.value for item in bridge.NativePreparationRefusalPoint}
+             and diagnostics["intake_preparation"]["state"] == "started"
+             and diagnostics["intake_preparation"]["category"] is not None), "public_probe_refusal_point_refused")
     verified = value["verified_preparation"]
     _require((verified is not None) == (diagnostics["intake_preparation"]["state"] == "completed"),
              "public_probe_preparation_required")
@@ -705,7 +711,7 @@ def prepare_probe(context):
     with _publication_parents(paths["state_root"].parent) as (_, mkdir, _):
         mkdir(paths["state_root"])
     diagnostics = {stage: {"state": "unknown", "category": None} for stage in PROBE_STAGES}
-    verified, stage = None, "environment"
+    verified, stage, refusal_point = None, "environment", None
     diagnostics[stage]["state"] = "started"
     try:
         with _probe_bound() as deadline, intake._hf_environment(online=False), ExitStack() as live:
@@ -717,17 +723,21 @@ def prepare_probe(context):
             diagnostics[stage]["state"] = "completed"
             stage = "intake_preparation"
             diagnostics[stage]["state"] = "started"
+            refusal_point = bridge.NativePreparationRefusalPoint.INTAKE_REQUEST
             request = _intake_request(context)
+            refusal_point = bridge.NativePreparationRefusalPoint.NATIVE_CONTEXT
             with _storage_credential(token):
                 handle = live.enter_context(execution.prepare_native_task3_grading_execution(request_json=request.decode(),
                     expected_request_sha256=_identity(request)["sha256"], execution_input_directory=paths["execution_input_directory"]))
             # Reuse the real source/input/origin/derived-byte rereads, without
             # constructing an execution binding or consulting a grading route.
+            refusal_point = bridge.NativePreparationRefusalPoint.MATERIALIZED_NATIVE_REREAD
             with execution._checked_preparation(context["plan"], execution._native_arguments(handle)) as checked:
                 origin = checked["origin"]
                 observed = {"result_identity": origin["original_result_identity"],
                     **{key: origin[key] for key in ("preparation_identity", "derived_result_identity", "derived_result_fingerprint")}}
                 checked["reread"](initial=True)
+            refusal_point = None
             _require(time.monotonic() < deadline, "preparation_probe_budget_exhausted")
             verified = observed
             diagnostics[stage]["state"] = "completed"
@@ -737,9 +747,14 @@ def prepare_probe(context):
         diagnostics[stage]["state"] = "completed"
     except (Exception, KeyboardInterrupt) as error:
         _failure(diagnostics, stage, error)
+        if (stage == "intake_preparation"
+                and type(error) in (execution.GradingExecutionRefused, bridge.NativeGradingIntakeRefused)
+                and type(error.refusal_point) is bridge.NativePreparationRefusalPoint):
+            refusal_point = error.refusal_point
     finally:
         os.environ.pop("HF_TOKEN", None)
-    completion = _probe_completion(context, verified=verified, diagnostics=diagnostics)
+    completion = _probe_completion(context, verified=verified, diagnostics=diagnostics,
+        refusal_point=refusal_point.value if type(refusal_point) is bridge.NativePreparationRefusalPoint else None)
     validate_probe_completion(completion, context)
     return completion
 
