@@ -1,6 +1,25 @@
 # Latest task result
 
-## Closed native refusal points accepted; live direction remains separate
+## Updated refusal-point probe submitted; terminal evidence pending
+
+The leader submitted [run 37838315533][probe-run], workflow `378041151`,
+run number **5**, attempt **1**, operation `prepare-probe`. Exact readback
+at **2026-10-08 20:17:22 UTC** was `queued`, with source
+`af31e3fa400e2b0bcd49d4949464c8bba948eb49`, tree
+`78551dadcd9592172ec12c414016939d1b9b3034`.
+The canonical **4194-byte** request SHA256 is
+`79a7fb62a2ce9de6c2ab3cd1bcb8fc2f9bbb92146130cc52f59f2540308becfe`,
+with a **2400-second** window `1791490602..1791493002`.
+
+Only controller source/tree, actual next run number and window changed from
+the previous preparation-only request. Original bindings and false grading,
+private-write, handle-reuse and retry permissions are unchanged. The separate
+direction permits one model-free preparation diagnosis under existing bounds,
+not a workflow rerun or grading replay. No terminal refusal point or readiness
+has been observed. Inspect the validated envelope in a later bounded cycle
+without polling or resubmission; prior outcomes remain unchanged.
+
+### Accepted source and offline proof
 
 The leader accepted HEAD `f34d0f4ef841913271cfbba82840827ed71998cc`,
 tree `63e9bbccf33e46eb2419d1244ac1bda7c4ec9694`, in review `5462314957`.
@@ -17,8 +36,8 @@ mode, transport permission, source pin or grading authority changed.
 The historical model-free probe still refused inside intake/preparation. Its
 exact inner predicate remains unknown, and this change does not recover the
 discarded exception from uncertain grading run 3. Fixed-HEAD review and CI
-have passed; a separate exact leader direction remains required before
-another live operation.
+have passed. The separate direction above authorizes only the new bounded
+model-free probe, not historical reinterpretation or another grading attempt.
 
 ### Narrow trace and implementation
 
@@ -158,9 +177,10 @@ No passing selector was rerun or pooled with this proof. The unavailable
 specialist attempt supplied no endorsement and was not retried. The complete
 catalog was consulted once; `experiment-report-en` preserved numerical evidence
 and uncertainty, and `im-not-ai-en` checked English. No study redesign or UI
-skill applied. Final fixed-HEAD review and CI have passed. A separate exact
-leader source/run-number/window/hash direction remains required. No live probe, claim,
-model/grade, Azure management, replay, Task5, next cell, merge or Project edit
-was performed.
+skill applied. Final fixed-HEAD review and CI passed before the separate exact
+source/run-number/window/hash direction above. That direction is consumed by
+one submission. No claim, model/grade, private-storage write, Azure management,
+replay, Task5 or next cell is authorized.
 
 [prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0e08102039d733349428599383034ec0f2073ed/tasks/LATEST_TASK_RESULT/README.md
+[probe-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37838315533

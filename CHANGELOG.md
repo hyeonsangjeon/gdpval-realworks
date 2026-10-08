@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Submit one separately directed `prepare-probe` diagnosis at accepted source
+  `af31e3fa400e2b0bcd49d4949464c8bba948eb49`: workflow `378041151`,
+  run `37838315533`, run number 5, attempt 1. The 4194-byte request SHA256 is
+  `79a7fb62a2ce9de6c2ab3cd1bcb8fc2f9bbb92146130cc52f59f2540308becfe`;
+  admission window `1791490602..1791493002` is 2400 seconds.
+  Exact readback was queued. Original bindings and preparation-only bounds
+  remain unchanged; no terminal refusal point, readiness or historical cause
+  is established yet. No claim, grading, private write or replay is authorized.
+
 - Preserve closed native intake/preparation refusal points through the existing
   adapters and preparation-probe completion validator. Exception text and
   private data remain suppressed; no mode, workflow, transport permission,
