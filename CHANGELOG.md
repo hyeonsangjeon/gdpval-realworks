@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record successful read-only metadata run `37789923398`/r2a1 at
+  **2026-10-08 14:10:27 UTC**: the fixed Task3/F admission and output-manifest
+  objects were absent at verified private parent
+  `82ed160109e40dcf74029f2be34a973350374fc6`.
+  Artifact `11555488682` holds the 1204-byte bound envelope, SHA256
+  `3963bab2da01c66512165198bdc5072f944df3d2352bec63bd3a355d51f890c4`.
+  This is metadata at one parent, not historical nonexecution, validated
+  contents or replay permission. Keep run 3 uncertain and nonretryable.
+  Next prepare a separate model-free input/preparation probe; no claim,
+  executor, retention write, live probe or grading is authorized here.
+
 - Submit one directed `native_task3_grade` metadata read as run `37789923398`,
   workflow `376247700`, run number 2, attempt 1, source
   `ef6b11115b9749ea1ed622b1c16df88cad6725cc`. The 185-byte dispatch payload

@@ -1,6 +1,30 @@
 # Latest task result
 
-## PR781 metadata scope accepted; one read-only submission recorded
+## PR781 metadata verified; two fixed grading objects absent at inspected parent
+
+Metadata run `37789923398`/r2a1 succeeded. Its independently bound envelope
+verified the private target at **2026-10-08 14:10:27 UTC**, parent commit
+`82ed160109e40dcf74029f2be34a973350374fc6`. Both fixed Task3/F objects,
+`admission.json` and `output-manifest.json`, were absent at that parent.
+Their metadata OIDs and sizes are null. This does not establish an empty
+namespace, historical nonexecution, verified contents, a grade or zero cost.
+`contents_verified=false` and `retry_allowed=false` remain explicit.
+
+Artifact `11555488682` contains the **1204-byte** metadata envelope, SHA256
+`3963bab2da01c66512165198bdc5072f944df3d2352bec63bd3a355d51f890c4`.
+Its source/run/scope/target/cell/F/prefix bindings match the directed read.
+The **784-byte** ZIP SHA256 is
+`fabcf757904c420c740c501f3ffc4beed9084dc526b5b44d0aee59c3bcf2c538`.
+No file contents were downloaded by the metadata operation.
+
+Run 3 remains uncertain and nonretryable. The next bounded implementation
+will reuse the existing native controller for a separately selected,
+model-free preparation probe that stops before claim/executor/retention.
+This is not a new grading attempt or authority to access private inputs now.
+Source review, targeted proof, CI and a separate exact direction remain
+required before any live probe.
+
+### Directed submission and accepted source
 
 The leader submitted [metadata run 37789923398][metadata-run], workflow
 `376247700`, run number **2**, attempt **1**, selecting `native_task3_grade`.
@@ -13,10 +37,10 @@ dispatch payload SHA256 is
 The separate direction permits one private/head GET and one immutable-parent
 paths-info metadata POST for only the fixed Task3/F `admission.json` and
 `output-manifest.json`, under the existing 60-second/64-KiB-per-response bounds.
-No body download, write, claim, model call or grade is authorized. Results
-have not been read; submission proves neither presence nor absence.
-Run 3's uncertainty and no-retry status remain unchanged. Inspect terminal
-metadata in a later bounded cycle without polling or resubmission.
+No body download, write, claim, model call or grade was authorized. The
+terminal metadata above establishes only the two objects' absence at the
+inspected parent. Run 3's uncertainty and no-retry status remain unchanged.
+The read permission is spent; no polling or resubmission was performed.
 
 The leader accepted HEAD `d85af0df7fc876eba11ae9e878475552408016a2`,
 tree `bab908ded1681e7793b6b1daa911680376ec9091`, in review `5457795334`.
