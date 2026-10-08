@@ -1,6 +1,31 @@
 # Latest task result
 
-## Updated refusal-point probe submitted; terminal evidence pending
+## Preparation probe refused at retained deliverable identity
+
+Run `37838315533`/r5a1, job `113520972985`, completed with failure. Its
+model-free probe step ran **2026-10-08 20:20:09..20:20:13 UTC**; source/request
+checks and independent completion validation/upload succeeded. Artifact
+`11576133610` contains the **1534-byte** completion, SHA256
+`7f50e87a95798a2ee0a35aacb0ce37457c6eaf4c27af8b3e5996b860310d1f23`.
+
+The exact run/C/R/F/cell/request/result bindings matched the directed probe.
+Environment and originals completed; intake/preparation started with
+`validation_refused` and `refusal_point=retained_deliverable_identity`.
+Verified preparation is null. Grading authority, handle reuse and retry
+remain false. This locates the refusal in retained deliverable byte checks;
+it does not identify the exact returned bytes or establish historical LFS use.
+No grading, claim or private-storage write belongs to this probe's path.
+
+The existing originals reader already resolves immutable HF payload URLs
+with bounded manual redirects, no retries, and no bearer token on CDN hops.
+The next narrow implementation may reuse that reader for the two retained
+deliverables while preserving their expected payload size/hash. This is an
+explicit prospective transport change: keep the two metadata/result reads,
+allow at most four requests per deliverable, and retain one shared 60-second
+deadline. It is not a live-read direction or permission to weaken integrity
+checks, widen the existing host policy, or replay grading.
+
+### Directed submission and accepted source
 
 The leader submitted [run 37838315533][probe-run], workflow `378041151`,
 run number **5**, attempt **1**, operation `prepare-probe`. Exact readback
@@ -16,8 +41,8 @@ the previous preparation-only request. Original bindings and false grading,
 private-write, handle-reuse and retry permissions are unchanged. The separate
 direction permits one model-free preparation diagnosis under existing bounds,
 not a workflow rerun or grading replay. No terminal refusal point or readiness
-has been observed. Inspect the validated envelope in a later bounded cycle
-without polling or resubmission; prior outcomes remain unchanged.
+was established by that queued readback. The terminal refusal above now
+supersedes submission-only status; prior outcomes remain unchanged.
 
 ### Accepted source and offline proof
 

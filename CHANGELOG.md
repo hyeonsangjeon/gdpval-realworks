@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record model-free probe `37838315533`/r5a1 as refused at
+  `retained_deliverable_identity`, after originals completed. Artifact
+  `11576133610` contains the 1534-byte exact-bound completion, SHA256
+  `7f50e87a95798a2ee0a35aacb0ce37457c6eaf4c27af8b3e5996b860310d1f23`.
+  Returned payload bytes and historical LFS use remain unknown; grading,
+  handle-reuse and retry authority remain false. Next implement bounded
+  immutable-payload resolution for retained deliverables using existing
+  download safeguards, not a hash bypass or a new live-read permission.
+
 - Submit one separately directed `prepare-probe` diagnosis at accepted source
   `af31e3fa400e2b0bcd49d4949464c8bba948eb49`: workflow `378041151`,
   run `37838315533`, run number 5, attempt 1. The 4194-byte request SHA256 is
