@@ -165,7 +165,7 @@ def prepare_native_task3_grading_execution(*, request_json: str, expected_reques
             point = native_intake.NativePreparationRefusalPoint.NATIVE_CONTEXT
             summary = native_intake.prepare_retained_native_task3_grading(
                 request_json=request_json, expected_request_sha256=expected_request_sha256)
-            # The only origin issuer is the completed, authenticated four-GET intake.
+            # The only origin issuer is the completed, authenticated bounded intake.
             # Drop its storage credential before any staging or caller grading code.
             scope.enter_context(native_intake.intake._hf_environment(online=False))
             _NATIVE_INTAKES[native] = (request_json, _encoded(summary).decode(), output)

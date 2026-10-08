@@ -276,15 +276,23 @@ def hosted(case, offline, dual_roots, tmp_path, monkeypatch, record_property):
         request["step0"]["member"]: case.seed.step0.read_bytes()}
     step0_repo = subject.registration.load_plan(case.seed.frozen / subject.registration.CODEX_TEMPLATE)["data"]["source"]
 
+    from huggingface_hub.utils import http_stream_backoff as retained_http_stream
+
     @contextmanager
     def originals_http(method, url, **options):
+        prefixes = ["/datasets/openai/gdpval/resolve/" + case.seed.plan["shared"]["dataset"]["revision"] + "/",
+                    "/datasets/" + step0_repo + "/resolve/" + request["step0"]["revision"] + "/"]
+        path = unquote(urlsplit(url).path)
+        if not (urlsplit(url).netloc == "huggingface.co" and any(path.startswith(prefix) for prefix in prefixes)):
+            # Retained outputs use the actual SDK/client/HTTPTransport below;
+            # only the four original-input responses use this synthetic seam.
+            with retained_http_stream(method, url, **options) as response:
+                yield response
+            return
         assert method == "GET" and options["max_retries"] == 0 and options["follow_redirects"] is False
         assert options["retry_on_exceptions"] == options["retry_on_status_codes"] == ()
         assert options["headers"]["authorization"] == "Bearer " + TOKEN and options["headers"]["Accept-Encoding"] == "identity"
         assert "HF_TOKEN" not in os.environ and urlsplit(url).netloc == "huggingface.co"
-        prefixes = ["/datasets/openai/gdpval/resolve/" + case.seed.plan["shared"]["dataset"]["revision"] + "/",
-                    "/datasets/" + step0_repo + "/resolve/" + request["step0"]["revision"] + "/"]
-        path = unquote(urlsplit(url).path)
         matches = [prefix for prefix in prefixes if path.startswith(prefix)]
         assert len(matches) == 1
         member = path[len(matches[0]):]
@@ -298,7 +306,7 @@ def hosted(case, offline, dual_roots, tmp_path, monkeypatch, record_property):
     revision, target = completion["output_commit"], subject.shared.TARGET
     native_prefix, _, _ = subject.shared._namespace(subject.CELL)
     bodies = {f"/datasets/{target}/raw/{revision}/{native_prefix}/result/{subject.native.observation.RESULT}": data,
-              **{f"/datasets/{target}/raw/{revision}/{native_prefix}/result/upload/{name}": value for name, value in case.files.items()}}
+              **{f"/datasets/{target}/resolve/{revision}/{native_prefix}/result/upload/{name}": value for name, value in case.files.items()}}
 
     class Transport(httpx.BaseTransport):
         def __init__(self, **kwargs):

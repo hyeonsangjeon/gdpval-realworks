@@ -528,7 +528,7 @@ def test_time_budget_native_canonical_readout(case, transport, monkeypatch, caps
             case.cell.update(selection)
             case.request["completion"].update(selection)
         elif scenario == "cumulative_bound":
-            now = [time.monotonic()]
+            now = [1000.0]
             monkeypatch.setattr(time, "monotonic", lambda: now[0])
             transport.hook = lambda number: now.__setitem__(0, now[0] + 35)
         elif scenario in {"gzip_metadata", "gzip_result"}:

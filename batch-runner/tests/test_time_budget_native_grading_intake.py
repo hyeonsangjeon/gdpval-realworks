@@ -230,7 +230,7 @@ def test_time_budget_native_retained_grading_intake(case, offline, monkeypatch, 
     immutable = completion["output_commit"]
     target = subject.reader.metadata.TARGET
     bodies = {f"/datasets/{target}/raw/{immutable}/{member}": data,
-              **{f"/datasets/{target}/raw/{immutable}/{prefix}/result/upload/{name}": body
+              **{f"/datasets/{target}/resolve/{immutable}/{prefix}/result/upload/{name}": body
                  for name, body in case.files.items()}}
     calls, formatted = [], []
     offset, monotonic = [0.0], time.monotonic

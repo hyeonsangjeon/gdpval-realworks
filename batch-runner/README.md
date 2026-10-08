@@ -788,13 +788,20 @@ private outputs with existing parents; all source/input paths are rechecked.
 
 The caller reconstructs observation/input identities from genuine local
 parquet, references and full Step0 with the existing validators. At the
-trusted immutable output it permits at most four GETs in 60 cumulative
-seconds: private repository metadata, the independently bound result, then
-its two authenticated declared members under the same cell prefix. Only
+trusted immutable output it first reads private repository metadata and the
+independently bound canonical result JSON through two fixed, nonredirecting
+GETs. The two declared deliverables use the existing immutable HF payload
+reader and approved Hub/cache/HF-owned-CDN redirect policy. Each permits at
+most four streamed GETs, including the final payload response, for at most
+10 hydration requests under one cumulative 60-second deadline. The existing
+30-second per-request cap also remains. Only
 after the complete native result passes canonical/source/control checks can
-its member paths and file hashes authorize those last two reads. Each file's
-full digest and size must match. There are no redirects, decompression,
-retries, HEAD fallback, claim/request downloads, archive intake or HF writes.
+its member paths and file hashes authorize those two payload reads. Each hop
+is checked before transmission; automatic redirects remain disabled. CDN
+requests carry no bearer token or cookie. Each file's full digest and size
+must match, so a Git-LFS pointer is not accepted as its declared payload.
+There is no decompression, retry, HEAD fallback, extra metadata operation,
+claim/request download, archive intake or HF write.
 
 `HF_TOKEN` is used only in the scoped reader; other credential environments
 refuse, telemetry must be disabled, and credentials are absent while the
@@ -1014,7 +1021,7 @@ There is no later duplicate setup, alternative interpreter or fallback.
 The ordinary bootstrap is separate from linked C/R/F and private working
 directories; the workflow never spoofs `GITHUB_WORKSPACE`. Existing OIDC login
 precedes the single live context. Original parquet/references/full 218405-byte
-Step0, the accepted four-GET/60-second retained intake, F preparation and
+Step0, the bounded two-plus-four-plus-four-GET/60-second retained intake, F preparation and
 direction validation finish before the grading-only CAS. Its namespace keys
 the original observation plus F, not C or an Actions run. Occupied/wrong-parent/
 uncertain claims stop without adoption or retry. Only confirmed remote claim
@@ -1051,17 +1058,39 @@ and readiness/refusal, with `grading_authority=false`, `handle_reusable=false`
 and `retry_allowed=false`. It exposes no payload, paths, filenames, tokens
 or raw errors. The probe skips grading renderer/OIDC/login stages; only its
 intake step receives the existing HF secret. Public source checks still run
-first. Existing originals and retained-intake transfer/byte limits remain
-unchanged. The hosted command has a cumulative TERM300s/KILL5s bound, phase
+first. Original-input limits and retained-intake time/byte bounds remain
+unchanged; only the two retained deliverable routes and their request cap
+change as described above. The hosted command has a cumulative TERM300s/KILL5s bound, phase
 deadline checks and a 6-minute step. Mutually exclusive step ceilings total
 19 minutes for preparation or 269 minutes for grading, within the unchanged
 270-minute job. The F/child grading limits remain 14400/14520 seconds.
 
-The existing probe completion now carries a closed `refusal_point`, or null,
+The retained-payload transport proof used Python 3.10.12 and the actual SDK,
+adapters and F validators with synthetic inputs/HTTP. At tested HEAD
+`83ae63a52d3d299571df60c3afb1f6474bcac433`, tree
+`1140e4d069487dfe600d67fb1a3d84fe080d9c88`, one targeted invocation reported
+**1 failed, 11 passed, 12 warnings in 44.47s**, exit **1**, process **44.912487s**,
+wrapper **49.386871s**. Plain and four-hop payload paths completed real F
+preparation using 4 and 10 retained GETs. The sole failure was the new deadline
+test's expected timeout list: actual `[30, 30]`, expected `[60, 30]`. The
+production reader already capped each request at 30 seconds. Only that test
+expectation changed at `c62a7efbcf6922badaa70ae0b38a88041aec3b39`, tree
+`e4e44f211612f59ac74bd16de9da8d5f41548330`. Its isolated follow-up reported
+**1 passed, 1 warning in 5.74s**, exit **0**, process **6.168239s**, wrapper
+**9.704131s**. No successful node was rerun; both proofs stayed within 300s+5s.
+Their commands, log/JUnit hashes and final source seal are in
+[the current record](../tasks/LATEST_TASK_RESULT/README.md). This is prospective
+transport evidence, not proof of historical LFS use or live recovery. Run
+`37838315533` remains a deliverable-identity refusal with unknown returned
+bytes, and grading run 3 stays uncertain/nonretryable. New fixed-HEAD review/CI
+and separate exact leader live direction remain required.
+
+The earlier diagnostics-only change added a closed `refusal_point`, or null,
 through native intake/execution wrappers. Its strict validator accepts only
 program-selected enum values at a started, failed intake/preparation stage;
-raw exception text, paths and payloads remain private. No transport permission,
-workflow, input/F pin, deadline or grading authority changed. At tested HEAD
+raw exception text, paths and payloads remain private. That change left
+transport permissions, workflow, input/F pins, deadlines and grading authority
+unchanged. At tested HEAD
 `d886cf64fbb84aa1a0e2a8a47254ed2535ffa980`, tree
 `128a7cc7799981e2367369256f95686e5d24a717`, the new selector reported **7 passed,
 7 warnings in 173.09s**, exit **0**, process **173.522586s**, wrapper
@@ -1071,8 +1100,9 @@ failed the declared payload identity after 3 retained GETs; historical LFS use
 is unknown, and resolver/redirect/call expansion was not implemented. Probe
 run `37818721507` remains refused at an unknown inner predicate; grading run 3
 remains uncertain and nonretryable. New fixed-HEAD review/CI and a separate
-exact live direction remain required. Artifacts, the receipt-label correction,
-source seals and hashes are in [the current record](../tasks/LATEST_TASK_RESULT/README.md).
+exact live direction remained required for that source. Its artifacts,
+receipt-label correction, source seals and hashes remain in the
+[immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/2d99265ac79001506f7421485fed037bcad09a2a/tasks/LATEST_TASK_RESULT/README.md).
 
 The ownership test's stale all-steps sum failed in leader-read CI run
 `37804015222`/job `113403603647`: **276 versus 269**, with **1 failed,
