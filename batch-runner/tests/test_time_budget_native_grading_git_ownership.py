@@ -33,6 +33,10 @@ def test_native_task3_grading_git_ownership(tmp_path, monkeypatch, record_proper
     assert step["timeout-minutes"] == 1 and job["timeout-minutes"] == 270
     assert sum(item["timeout-minutes"] for item in job["steps"]) == 269
     assert controller._git is checkout._git and controller._repository is checkout._repository
+    assert controller._registered_gitdir is checkout._registered_gitdir
+    assert hashlib.sha256((ROOT / "batch-runner/gpt54_disposable_checkout.py").read_bytes()).hexdigest() == (
+        "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62"
+    )
 
     bootstrap, unrelated = tmp_path / "ordinary-bootstrap", tmp_path / "unrelated-repository"
     temporary, github_env = tmp_path / "runner-temp", tmp_path / "github-env"
@@ -127,6 +131,8 @@ def test_native_task3_grading_git_ownership(tmp_path, monkeypatch, record_proper
     # The imported production helper normally discovers the linked C from its
     # own __file__. Bind that same role to this explicitly synthetic tiny C.
     monkeypatch.setattr(checkout, "TRUSTED_ROOT", roots["controller_root"])
+    monkeypatch.setattr(controller, "__file__", str(roots["controller_root"] / controller.HELPER))
+    evidence["controller_source_substitution"] = "Imported controller __file__ and shared code-root role name the tiny synthetic linked C"
 
     def real_source_git(command, **kwargs):
         assert command[:2] == ["/usr/bin/git", "--no-replace-objects"]
@@ -135,8 +141,11 @@ def test_native_task3_grading_git_ownership(tmp_path, monkeypatch, record_proper
         assert repository in {bootstrap, unrelated, *(roots[key] for key in anchors)}
         assert kwargs["timeout"] == 60 and kwargs["env"] == _GIT_ENV
         allowances = [item for item in command if item.startswith("safe.directory=")]
+        local_bootstrap_read = repository == bootstrap and command[position + 2] == "-c"
+        if local_bootstrap_read:
+            assert command[position + 2:position + 5] == ["-c", "safe.directory=" + str(bootstrap), "rev-parse"]
         assert allowances == (["safe.directory=" + str(repository)]
-                              if repository in {bootstrap, roots["controller_root"]} else [])
+                              if local_bootstrap_read or repository == roots["controller_root"] else [])
         # Only the ordinary bootstrap and unrelated refusal probe are foreign
         # in this seam. Newly created linked C/R/F remain owned, as real Git
         # created them; a global seam must not justify trusting all linked roots.
@@ -150,8 +159,15 @@ def test_native_task3_grading_git_ownership(tmp_path, monkeypatch, record_proper
         return result
 
     monkeypatch.setattr(subprocess, "run", real_source_git)
-    assert controller._repository(bootstrap) == (bootstrap, bootstrap / ".git")
-    assert controller._git(bootstrap, "rev-parse", "HEAD").stdout.decode().strip() == anchors["controller_root"][0]
+    with pytest.raises(checkout.DisposableCheckoutRefused, match="local Git rev-parse refused \\(128\\)"):
+        checkout._repository(bootstrap)
+    evidence["shared_helper_foreign_bootstrap"] = "still refuses without controller-local trust"
+    assert controller._checked_bootstrap(bootstrap, *anchors["controller_root"]) == (bootstrap, bootstrap / ".git")
+    for sha, tree in (("0" * 40, anchors["controller_root"][1]), (anchors["controller_root"][0], "0" * 40)):
+        with pytest.raises(controller.NativeGradingCIRefused, match="bootstrap_identity_mismatch"):
+            controller._checked_bootstrap(bootstrap, sha, tree)
+    with pytest.raises(controller.NativeGradingCIRefused, match="bootstrap_not_controller_common"):
+        controller._checked_bootstrap(unrelated, *anchors["controller_root"])
     evidence["validated_sources"] = {}
     for key, (sha, tree) in anchors.items():
         root = roots[key]
@@ -179,7 +195,7 @@ def test_native_task3_grading_git_ownership(tmp_path, monkeypatch, record_proper
     try:
         backlink.write_text(str(unrelated / ".git") + "\n")
         with pytest.raises(checkout.DisposableCheckoutRefused, match="detached checkout registration mismatch"):
-            checkout._repository(bootstrap)
+            controller._checked_bootstrap(bootstrap, *anchors["controller_root"])
         evidence["reciprocal_registration_tamper"] = "refused before granting bootstrap trust"
     finally:
         backlink.write_bytes(original_backlink)
@@ -187,7 +203,7 @@ def test_native_task3_grading_git_ownership(tmp_path, monkeypatch, record_proper
         assert (repository / ".git/config").read_bytes() == configs[repository]
         assert git(repository, "show-ref") == branches[repository]
     assert "GIT_CONFIG" not in github_env.read_text()
-    evidence["outcome"] = "real Git refusal; exact process-local bootstrap trust; linked C/R/F source checks; unrelated refusal; unchanged config/refs"
+    evidence["outcome"] = "real Git refusal; controller-local bootstrap trust; pinned shared helper unchanged; linked C/R/F source checks; unrelated refusal; unchanged config/refs"
     save()
     record_property("ownership_receipt", str(receipt))
     record_property("ownership_receipt_sha256", hashlib.sha256(receipt.read_bytes()).hexdigest())

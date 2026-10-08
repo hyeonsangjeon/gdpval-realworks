@@ -89,21 +89,11 @@ def _git(repository: Path, *args: str, ok: tuple[int, ...] = (0,)) -> subprocess
     ):
         command.extend(("-c", setting))
     # Container checkouts can have a different owner. Global safe.directory is
-    # intentionally ignored above. Trust the code-defined, validated checkout
-    # and its verified ordinary bootstrap, never a caller-selected peer.
+    # intentionally ignored above; only the code-defined, validated checkout
+    # receives this exact command-local allowance, never a caller-selected peer.
     if repository == trusted:
         trusted = _root(trusted)
         command.extend(("-c", "safe.directory=" + os.fspath(trusted)))
-    elif ((trusted / ".git").is_file() and not (trusted / ".git").is_symlink()
-          and (repository / ".git").is_dir() and not (repository / ".git").is_symlink()):
-        # The hosted controller runs from a linked checkout, then validates its
-        # ordinary bootstrap. Caller/global Git settings remain discarded: bind
-        # this one additional exact path through the code-defined checkout's
-        # real common directory and reciprocal worktree registration instead.
-        linked, common = _repository(trusted)
-        if common == repository / ".git":
-            _registered_gitdir(linked, common)
-            command.extend(("-c", "safe.directory=" + os.fspath(repository)))
     command.extend(("-C", str(repository), *args))
     try:
         result = subprocess.run(
