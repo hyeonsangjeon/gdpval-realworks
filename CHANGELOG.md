@@ -13,6 +13,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Match only the new PR777 registration-lifetime regression's pre-add parent
+  state to the actual readout fixture. From
+  `62d02b71a634986a344131fbc3485700cae0072c`, tree
+  `2168a7e9962de2be75f22a0240dd6fcd941b590c`, three added test lines create
+  the exact synthetic `runner-temp` parent, check it is empty after the strict
+  Git refusal, and remove only that empty parent with `Path.rmdir()` before
+  the unchanged fixture recreates it. All other assertions and code are
+  unchanged. At `5d523d131d97e5255430b15acefb2bf68c7fc407`, tree
+  `9936c322e3dfc3b2392d032ad77218e6d6a829e5`, only that regression ran once:
+  **1 passed, 1 warning in 1.92s**, exit 0, wrapper **2.243325s**. The new
+  synthetic child reported **1 failed, 2 passed in 1.42s**, preserving the
+  intentional exit 1. Direct Git addition returned 128 with actual stderr
+  saying `is a missing but already registered worktree`; prune/add then
+  reused the same path and all failed-worktree, shared/sibling-content and
+  commit/branch preservation checks passed. This is new local evidence, not
+  recovered CI stderr or proof that all 61 setup errors are fixed. The prior
+  **1 failed, 3 passed, 1 warning in 28.81s**, exit 1, wrapper **29.946711s**,
+  remains unchanged; its three passing outer nodes were not rerun or pooled.
+  Correct the directly related duration label to pytest summary **1513.84s**
+  (display **25m13s**), not measured full GitHub job duration. Artifacts are in
+  `/tmp/pr777-readout-parent-parity.aJjVl4/`, log SHA256
+  `9c53b595d8f432fc64aafeee7cd5e9431cd7b57ba3dd026d9e4dfea905e4e842`;
+  `registration-receipt.json` retains actual stderr and preservation outcomes,
+  and `handoff.json` records final HEAD/tree after these three records. No
+  workflow, CI policy, production guard, source pin or budget changed. Prior
+  proofs and disk-full/timeout/NAS evidence remain separate. The unavailable
+  specialist supplied no review or endorsement and was not retried. Final
+  source review/CI and exact hosted admission remain gates; no full-CI success
+  or live authority is claimed. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  distinguishes the source parity finding from this observed synthetic result.
+
 - Correct two directly coupled PR777 test contracts from
   `103667992af71826ddbabf3853ecd406cbefab58`, tree
   `6ede045510cb40558fa7b96592a42d218f2c34e6`: require the exact retention option,
@@ -24,7 +55,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   policy, 45-minute cap, parser, coverage checks and production/F bindings
   are unchanged. Leader-read run `37710408405` reported **1 failed, 13395 passed,
   64 skipped, 46 deselected, 1 warning in 1945.04s** in job `113094770549`;
-  the raw assertion failed at line 680. Job `113094770711` finished in **25m13s**
+  the raw assertion failed at line 680. Job `113094770711` had a pytest summary
+  duration of **1513.84s** (display **25m13s**), not a measured full job duration,
   with **367 passed, 61 setup errors** at readout worktree addition, exit 128.
   CI Git stderr is unavailable; the stale-registration account is a source
   diagnosis, not an observed fatal message. At `98f9471220f22d339b8d42aae642c4437322fc7d`,

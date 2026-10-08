@@ -1113,7 +1113,8 @@ The leader read run `37710408405`: pytest job `113094770549` reported
 **1 failed, 13395 passed, 64 skipped, 46 deselected, 1 warning in 1945.04s**,
 with the obsolete raw assertion failing at line 680 of
 `test_backend_jobs_partition_the_comparison_contracts`. Time-budget job
-`113094770711` finished in **25m13s** with **367 passed, 61 setup errors** at
+`113094770711` had a pytest summary duration of **1513.84s** (display **25m13s**),
+not a measured full job duration, with **367 passed, 61 setup errors** at
 the readout fixture's `git worktree add`, exit 128. Its CI short trace contains
 no Git stderr. Stale registrations after passed-directory cleanup are the
 source-derived diagnosis, not an observed CI fatal message; this incident is
@@ -1151,6 +1152,52 @@ not rerun or pooled, and their directories remain preserved. The unavailable
 specialist produced no review or endorsement and was not retried. The new
 regression remains unresolved; final source review/CI and exact hosted
 admission still gate use. No full-CI pass or live grading authority is claimed.
+
+In the separately authorized parent-parity continuation, only three lines in
+the new registration-lifetime regression changed. From
+`62d02b71a634986a344131fbc3485700cae0072c`, tree
+`2168a7e9962de2be75f22a0240dd6fcd941b590c`, the child now creates the exact
+synthetic `runner-temp` parent before its direct Git refusal probe, matching
+the actual fixture's pre-add state. The root stays absent and its stale
+registration remains observable. After the strict refusal, an empty-parent
+assertion permits only `Path.rmdir()` on that newly created parent before the
+unchanged real fixture recreates it. All other assertions and code are unchanged.
+This source-parity finding alone does not explain the earlier Git behavior.
+
+The correction was pinned at `5d523d131d97e5255430b15acefb2bf68c7fc407`, tree
+`9936c322e3dfc3b2392d032ad77218e6d6a829e5`. Only
+`test_time_budget_readout_worktree_registration_lifetime` ran once under
+Python 3.10.12 / 300s+5s/no-`-x` and unchanged child/Git bounds:
+**1 passed, 1 warning in 1.92s**, exit **0**, wrapper **2.243325s**. The new
+synthetic child reported **1 failed, 2 passed in 1.42s**, preserving its
+intentional failure/exit **1**. Direct Git addition returned **128** with
+actual stderr containing `is a missing but already registered worktree`.
+The real fixture then pruned missing registrations and reused exactly the
+same path. Every failed-worktree, shared/sibling-content, HEAD/tree/branch and
+new-worktree identity check passed. After teardown, failed data survived and
+the reused passing directory was absent; only the verified empty new parent
+and ordinary synthetic pytest data were removed.
+
+Artifacts are in `/tmp/pr777-readout-parent-parity.aJjVl4/`, log SHA256
+`9c53b595d8f432fc64aafeee7cd5e9431cd7b57ba3dd026d9e4dfea905e4e842`;
+`registration-receipt.json`, SHA256
+`dd3b2ce33b51545ea82cb282ca43c5249b8032f441c78a7370cac572cff3658a`,
+retains the real refusal, exact paths and preservation outcomes. `handoff.json`
+records final HEAD/tree after these three records, with tested code unchanged.
+The previous **1 failed, 3 passed, 1 warning in 28.81s**, exit **1**, wrapper
+**29.946711s**, remains a failed invocation. Its three successful outer nodes
+were not rerun or pooled; their proof directory remains unchanged.
+
+The **1513.84s** (display **25m13s**) CI value above is the pytest summary
+duration, not full job duration; the older immutable receipt's label is
+superseded without editing it. Newly observed synthetic stderr is not the
+missing historical CI stderr or proof that all 61 setup errors are fixed.
+Older hosted/quote/lifecycle proofs, disk-full/timeout annotations and NAS
+storage evidence remain separate. No backend workflow, retention policy,
+45-minute cap, selected workload, production/F guard, source pin or study
+changed. The unavailable specialist supplied no review or endorsement and
+was not retried. Final source review/CI and exact hosted admission remain
+required; no full-CI success or live grading authority is claimed.
 
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree

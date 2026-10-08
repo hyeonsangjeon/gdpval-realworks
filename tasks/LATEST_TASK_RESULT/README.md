@@ -1,5 +1,105 @@
 # Latest task result
 
+## PR777 parent-parity continuation: the single regression passed
+
+Only the newly authorized registration-lifetime regression ran, once:
+**1 passed, 1 warning in 1.92s**, exit **0**, wrapper **2.243325s**. It observed
+the real synthetic Git refusal and reached every subsequent preservation
+check. The earlier four-node invocation remains **1 failed, 3 passed,
+1 warning in 28.81s**, exit **1**, wrapper **29.946711s**. Its partition and
+two historical readout passes were not repeated, and results are not pooled.
+The section below records that earlier turn's stop boundary.
+
+### Test-only parity and the observed result
+
+Starting source was `62d02b71a634986a344131fbc3485700cae0072c`, tree
+`2168a7e9962de2be75f22a0240dd6fcd941b590c`. The leader's source comparison
+established a setup-parity omission: the actual fixture creates `runner-temp`
+before Git registration, while the original generated reuse probe did not.
+This finding alone does not explain why Git behaved differently and does not
+recover missing historical CI stderr.
+
+Three added lines now create exactly that synthetic parent before the direct
+probe, check that it is empty after the expected refusal, and remove only
+that newly created empty parent with `Path.rmdir()`. The root stays absent
+before the probe and its stale registration remains observable. The existing
+exit-128/stderr assertions, subsequent absence assertion, real fixture call
+and all later preservation assertions are unchanged. No recursive deletion,
+force, Git configuration change, alternative path or pre-existing proof cleanup
+was used. The actual source fixture and production code did not change.
+
+Tested HEAD was `5d523d131d97e5255430b15acefb2bf68c7fc407`, tree
+`9936c322e3dfc3b2392d032ad77218e6d6a829e5`; regression blob
+`a1b34c1ebc5ffc39b5fba96d5d20d7af39d41f70`. The only outer node was
+`tests/test_time_budget_readout_worktree_lifetime.py::test_time_budget_readout_worktree_registration_lifetime`.
+It ran under Python 3.10.12 / pytest 9.1.1, 300s+5s/no-`-x`, with the unchanged
+30-second child and Git bounds and `tmp_path_retention_policy=failed`.
+AST checks verified the exact node, outer fixtures and generated child
+parameters before launch. The wrapper ran from `2026-10-08T02:18:32.221625Z`
+through `2026-10-08T02:18:34.464951Z`. Final JUnit and immediate reports are
+retained; the warning is the existing `record_property`/JUnit `xunit2` warning.
+
+The newly constructed child cases reported **1 failed, 2 passed in 1.42s**,
+exit **1**. The failure was deliberate and preserved the failed worktree.
+With the parent present and the root absent, direct uncorrected Git addition
+returned **128**. Its actual stderr includes
+`is a missing but already registered worktree`; full stderr and the exact
+synthetic path are retained in `registration-receipt.json`. This is newly
+observed reproducer stderr, not the unavailable stderr from GitHub CI.
+
+After asserting that the parent was empty and removing it with `rmdir()`,
+the unchanged real fixture pruned missing registrations and registered the
+same path. Both calls used one unchanged setup deadline. All ten recorded
+checks passed: same-path registration, failed-worktree contents and registration,
+shared source and sibling contents, repository HEAD/tree/branches, failed
+worktree HEAD and new worktree HEAD. After child teardown, the failed directory
+still existed and the reused passing directory was absent. Only the new
+synthetic pytest lifecycle and its verified empty-parent removal affected data.
+
+### Evidence identities, label correction and gates
+
+Artifacts are in `/tmp/pr777-readout-parent-parity.aJjVl4/`: `command.json`,
+`selection.json`, `source.json`, `pytest.log`, `reports.jsonl`, `junit.xml`,
+`junit-cases.json`, `cases.json`, `outcome.json`, `registration-receipt.json`,
+the bounded wrapper/hook and reporting checks. Log SHA256 is
+`9c53b595d8f432fc64aafeee7cd5e9431cd7b57ba3dd026d9e4dfea905e4e842`;
+registration-receipt SHA256 is
+`dd3b2ce33b51545ea82cb282ca43c5249b8032f441c78a7370cac572cff3658a`.
+`handoff.json` records exact final HEAD/tree after the three-record commit,
+unchanged tested code, publication outcome and artifact identities;
+`SHA256SUMS` binds the retained files. Final Git identity is external to its
+own tree to avoid a circular reference.
+
+The readout fixture remains blob `450bbdf768fbb6331047d7bcb91ec5056f9be224`,
+the partition test `f4e6cdc5a0cf905765209525fc71619a9c618763`, and the backend
+workflow `cd2c6d0f186807a0e879cdd442376f070cf48620`, SHA256
+`01fe1494460ae36a6ded2caf3955b27ff9d922374b1ffbe3e91c4077d344d094`.
+The approved retention option, 45-minute ceiling, selected workload, all
+production/native/grading/source guards, frozen F/scoring, input pins, models,
+budgets and twenty-cell study are unchanged. `source.json` records exact
+unchanged identities.
+
+The leader clarified that run `37710408405`, time-budget job `113094770711`,
+reported **367 passed, 61 setup errors** with a **pytest summary duration of
+1513.84s** (display **25m13s**), not a measured full GitHub job duration.
+The directly related labels below and in CHANGELOG/direct README are corrected.
+The prior immutable task-local receipt's job-duration label is superseded,
+not rewritten. CI Git stderr remains unavailable. This single synthetic
+success does not establish that all 61 setup errors are fixed or full CI passes.
+
+The failed four-node artifacts in `/tmp/pr777-readout-worktree-lifetime.rvay35/`
+remain unchanged, including its original negative result and unreached checks.
+The seven-case hosted, quote and earlier lifecycle proofs were not rerun.
+Older disk-full and timeout annotations and the **10673136 allocated KiB**
+NAS measurement remain separate; this is not a GitHub-runner storage measurement.
+The unavailable specialist failed before execution, supplied no review or
+endorsement and was not retried. Reporting/English checks preserve these
+units and uncertainties. Final fixed-source review, normal synchronization
+CI, real host/auth/input checks and exact hosted admission still gate use.
+No CI query/retry/dispatch/wait, Project edit, merge, Azure/private fetch,
+live claim/model/grade/readout, replay or Task5 occurred. This change grants
+no live authority.
+
 ## PR777 test continuation: three nodes passed; new regression failed
 
 The single authorized four-node invocation reported **1 failed, 3 passed,
@@ -36,7 +136,8 @@ The leader read run `37710408405`; no CI endpoint was queried here:
   `tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts`,
   line 680. The obsolete second assertion required only the glob despite the
   raw arguments also containing the approved option and value.
-- Time-budget job `113094770711`: job duration **25m13s**, **367 passed,
+- Time-budget job `113094770711`: pytest summary **1513.84s** (display **25m13s**),
+  not a measured full job duration; **367 passed,
   61 setup errors**. Reported errors shared the `source` fixture's
   `git worktree add`, exit 128, at `tests/test_time_budget_result_readout.py:90`.
   The examples reused the same function-scoped path against a module-owned
