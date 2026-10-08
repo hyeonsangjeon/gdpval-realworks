@@ -11,6 +11,30 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Resolve only the two retained native Task3 deliverable payloads through the
+  existing immutable HF reader and redirect policy. Private metadata and
+  canonical result JSON keep their two fixed, nonredirecting GETs. Each payload
+  permits at most four streamed GETs, including its final response: at most
+  **10 hydration requests** under the same **60-second** deadline and existing
+  **30-second** request cap. Exact size/hash/path checks, approved hosts,
+  credential exclusion from CDN requests, source pins and no-retry authority
+  remain intact. No shared reader, workflow, registry, preparer or scoring change.
+  The first targeted proof at `83ae63a52d3d299571df60c3afb1f6474bcac433`, tree
+  `1140e4d069487dfe600d67fb1a3d84fe080d9c88`, reported **1 failed, 11 passed,
+  12 warnings in 44.47s**, exit **1**, wrapper **49.386871s**. Only the new
+  deadline test expected 60 rather than the existing 30-second per-request cap.
+  A test-only correction at `c62a7efbcf6922badaa70ae0b38a88041aec3b39`, tree
+  `e4e44f211612f59ac74bd16de9da8d5f41548330`, reran only that unresolved node:
+  **1 passed, 1 warning in 5.74s**, exit **0**, wrapper **9.704131s**. No successful
+  node was rerun. Real SDK/adapter/F checks used synthetic bytes; plain and
+  four-hop payload preparation succeeded, but historical LFS use and the exact
+  live response remain unknown. Run 3 stays uncertain/nonretryable. Commands,
+  process timings, log/JUnit hashes, tested/final source seals and separate
+  outcomes are in the [current result](tasks/LATEST_TASK_RESULT/README.md).
+  Fixed-HEAD review/CI and a separate exact leader live direction remain required.
+
 ### Changed
 
 - Record model-free probe `37838315533`/r5a1 as refused at
@@ -18,18 +42,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   `11576133610` contains the 1534-byte exact-bound completion, SHA256
   `7f50e87a95798a2ee0a35aacb0ce37457c6eaf4c27af8b3e5996b860310d1f23`.
   Returned payload bytes and historical LFS use remain unknown; grading,
-  handle-reuse and retry authority remain false. Next implement bounded
-  immutable-payload resolution for retained deliverables using existing
-  download safeguards, not a hash bypass or a new live-read permission.
+  handle-reuse and retry authority remain false. The prospective transport
+  correction above preserves these evidence limits; it is not a hash bypass
+  or a new live-read permission.
 
 - Submit one separately directed `prepare-probe` diagnosis at accepted source
   `af31e3fa400e2b0bcd49d4949464c8bba948eb49`: workflow `378041151`,
   run `37838315533`, run number 5, attempt 1. The 4194-byte request SHA256 is
   `79a7fb62a2ce9de6c2ab3cd1bcb8fc2f9bbb92146130cc52f59f2540308becfe`;
   admission window `1791490602..1791493002` is 2400 seconds.
-  Exact readback was queued. Original bindings and preparation-only bounds
-  remain unchanged; no terminal refusal point, readiness or historical cause
-  is established yet. No claim, grading, private write or replay is authorized.
+  Initial readback was queued; the terminal deliverable-identity refusal is
+  recorded above. Original bindings and preparation-only bounds remain unchanged.
+  Neither historical cause nor live readiness is established. No claim,
+  grading, private write or replay is authorized.
 
 - Preserve closed native intake/preparation refusal points through the existing
   adapters and preparation-probe completion validator. Exception text and
@@ -41,8 +66,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   Tested HEAD `d886cf64fbb84aa1a0e2a8a47254ed2535ffa980`, tree
   `128a7cc7799981e2367369256f95686e5d24a717`. A synthetic raw Git-LFS pointer was
   refused at the payload-identity gate after **3 retained GETs**; this does not
-  establish historical LFS use. Resolver/redirect/call expansion remains outside
-  scope. Artifacts and the explicit correction of three copied wrapper-receipt
+  establish historical LFS use. That diagnostics-only task did not expand
+  resolver/redirect/call permissions. Artifacts and the explicit correction of three copied wrapper-receipt
   labels are in `/tmp/native-task3-intake-refusal.IP1QeX/`; final HEAD/tree and
   log/JUnit hashes are sealed by the current result and final-source receipt.
   Run `37818721507` remains refused at an unknown inner predicate; run
