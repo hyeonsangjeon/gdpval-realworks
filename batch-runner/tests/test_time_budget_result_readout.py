@@ -87,8 +87,13 @@ def source(source_repository, tmp_path, monkeypatch):
     runner_temp = tmp_path / "runner-temp"
     runner_temp.mkdir()
     root = runner_temp / subject.SOURCE_BASENAME
+    deadline = time.monotonic() + 30
+    # Only the fixture's ordinary temporary repo; retain existing failed worktrees.
+    assert repository.workspace.resolve().parent == tmp_path.parent.resolve()
+    assert (repository.workspace / ".git").is_dir() and not (repository.workspace / ".git").is_symlink()
+    _git(repository.workspace, "worktree", "prune", "--expire", "now", deadline=deadline)
     _git(repository.workspace, "worktree", "add", "--quiet", "--detach", str(root), repository.sha,
-         deadline=time.monotonic() + 30)
+         deadline=deadline)
     for name in tuple(os.environ):
         if name.startswith(("AZURE_", "FOUNDRY_", "OPENAI_", "HF_", "HUGGING_FACE_", "GITHUB_", "ACTIONS_")):
             monkeypatch.delenv(name)
