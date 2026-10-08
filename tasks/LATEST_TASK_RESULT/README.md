@@ -1,24 +1,59 @@
 # Latest task result
 
-## Preparation probe: three remaining nodes passed on unchanged code
+## Branch-aware ownership ceiling assertion passes; CI remains gated
 
-The existing native Task3 controller/workflow now has a separately selected
-model-free `prepare-probe` operation. It reuses originals intake and the real
-native context/F preparer, closes the handle, and stops before direction,
-claim, local grading once-store, executor, model, retention or private-storage
-write. This is an implementation-only draft, not a live probe or grading retry.
+Only the stale step-ceiling assertion in
+`test_native_task3_grading_git_ownership` changed. Following the existing
+hosted guard pattern, it checks grade **269 minutes** and prepare-probe
+**19 minutes** separately, excluding the opposite branch. The **270-minute**
+job cap, **1-minute** Git step, **30-second** local Git-call bound and every ownership,
+source, unrelated-repository and reciprocal-registration assertion remain
+unchanged. No production, workflow, permission, pin, schema or deadline changed.
 
-The authorized follow-up ran only `derived_drift` and the two previously
-unstarted guard nodes: **3 passed, 3 warnings in 53.27 seconds**, exit **0**.
-Pytest-process elapsed was **53.700716 seconds**; wrapper elapsed, including
-source/collection checks, was **59.201955 seconds**. No production, workflow
-or test change was needed. The eight previously completed cases did not run.
+The exact ownership node passed in one fresh invocation: **1 passed, 1 warning
+in 2.60 seconds**, exit **0**. Pytest-process elapsed was **3.030908 seconds**;
+wrapper elapsed, including source/collection checks, was **6.003377 seconds**.
+No additional correction or retry was needed. No earlier passing node ran.
 
-The original invocation remains an incomplete **300-second** timeout, exit
-**124**, wrapper **301.135259 seconds**, with eight passing setup/body/teardown
-reports, only setup completed for `derived_drift`, neither guard started and
-no final pytest summary or JUnit. These are separate observations, not a
-pooled eleven-node pass or a claim that the original invocation finished.
+### Reported CI failure, separate from this proof
+
+The leader read CI run `37804015222`, time-budget-contracts job
+`113403603647`: **1 failed, 475 passed in 1718.79 seconds**. That is pytest
+elapsed time, not job duration. The other **10 checks** succeeded. At line 34,
+`tests/test_time_budget_native_grading_git_ownership.py::test_native_task3_grading_git_ownership`
+still summed every workflow step and observed **276 versus 269**. The sum
+included **7 preparation-only minutes** from a mutually exclusive branch;
+it is not evidence of an increased grading timeout. The log was **122916 bytes /
+1147 lines**, SHA256
+`a20549e3f2420ea857f789fca25d5be2f9ffd42bf0f7558180fc2fe16d10ed3c`.
+These are leader-supplied facts; no CI/log query, refetch, retry or polling
+occurred in this task. The new local result does not establish that CI passes.
+
+### One ownership-node invocation
+
+```bash
+timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-probe-ceilings.YCXV7y/run-proof.py
+```
+
+The copied task-local wrapper verified the exact test-only byte replacement,
+unchanged production/source identities, imports, fixture closure and exact
+single-node collection before bodies. It used Python **3.10.12**, pytest
+**9.1.1**, TERM**300s**/KILL**5s**, no `-x`, the existing Git bounds and immediate
+phase/failure flushing. Wrapper UTC interval:
+**2026-10-08 16:41:31.232708** through **16:41:37.236071**. Setup/body/teardown
+passed; the JUnit case time is **0.793 seconds**, not the complete pytest or
+wrapper duration. The **1 warning** is the retained `record_property`/`xunit2`
+warning. The exact sole node is the CI-failed ownership node named above.
+
+This proof used real Git and the actual extracted workflow/controller source
+checks. `GIT_TEST_ASSUME_DIFFERENT_OWNER=1` simulated foreign ownership, and
+three tiny fixture commits/trees replaced C/R/F anchors only inside the proof.
+The original local Git call returned **128** with a dubious-ownership refusal;
+exact scoped bootstrap trust then succeeded. Wrong physical path, C HEAD/tree,
+R/F trees, occupied destination, unrelated repository and tampered reciprocal
+registration were refused. Linked sources remained detached, and config/refs
+were unchanged. This is synthetic ownership evidence, not a live UID or
+container claim. No intake, F preparation, grader, model or private access ran.
 
 ### Scope and authority boundary
 
@@ -48,13 +83,18 @@ The grade request/schema, one-process context, permanent/local once guards,
 retention and F/child **14400/14520-second** limits remain unchanged apart
 from the explicit refusal of a probe request at the grading entry.
 
-### Remaining-node invocation
+### Earlier three-node probe proof, not rerun
+
+That separate invocation reported **3 passed, 3 warnings in 53.27 seconds**,
+exit **0**, pytest-process **53.700716 seconds**, wrapper **59.201955 seconds**.
+It ran only `derived_drift` and the two previously unstarted guard nodes; the
+eight previously completed cases did not run.
 
 ```bash
 timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-probe-remaining.z0hJou/run-proof.py
 ```
 
-The existing task-local wrapper was copied and restricted to exactly these
+In that earlier proof, the task-local wrapper was restricted to exactly these
 nodes. Imports, fixture closure and exact collection passed before bodies
 started. Python **3.10.12**, pytest **9.1.1**, no `-x`, the existing Git bounds
 and task-local **30-second** Git cap were retained. There was one invocation,
@@ -84,6 +124,11 @@ operation and step-ceiling assertions. They did not run setup-python on an
 Actions host or establish live-container/private-input readiness.
 
 ### Original timeout remains separate
+
+The original invocation reached the **300-second** outer bound, exit **124**,
+wrapper **301.135259 seconds**. Eight cases completed setup/body/teardown;
+`derived_drift` completed setup only and neither guard started. No final
+pytest summary or JUnit was produced. That invocation remains incomplete.
 
 ```bash
 timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-preparation-probe.7JqRjH/run-proof.py
@@ -121,14 +166,33 @@ old passing suite or unrelated test body ran. The original
 
 - Base HEAD `a35b4fe58c555ad7abfce423379e99a761a8f1ef`, tree
   `bda73d9de85093ee9a3fca303cf48d336b993931`.
-- Follow-up tested HEAD `a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
+- Correction starts from PR782 HEAD `bc7a8d53ed83f8d52af35dc2f7639ae492fc28bb`,
+  tree `c2c928da9535d28f66502d0583fdc781092637b6`.
+- Current tested HEAD `a91a36b343481b9fd8af24887d933b4ffecb5472`, tree
+  `7ee4102b867caf522f69b736f96eef852d4211b2`. Only the branch-aware ceiling
+  assertion changed; all other test bytes and production/workflow/source
+  identities match the correction base.
+- Current artifacts: `/tmp/native-task3-probe-ceilings.YCXV7y/`. The exact
+  command, source, collection, immediate phase reports and outcome are retained.
+  `pytest.log`: **1143 bytes**, SHA256
+  `3a9caea80dc68f7d410ba2a8c54df8872843c4eee67138451eacd2d451bd29d5`.
+  `junit.xml`: **886 bytes**, SHA256
+  `c619326a19e8ae5035137a5034ebcf337f7c8bf1c66b18c4f220c0332691f35b`.
+  `reports.jsonl`: **1339 bytes**, SHA256
+  `d14ff0a308504436a0828d055058b0737e0cd6d63161508d9a928b13e3f77b88`.
+  `outcome.json`: **557 bytes**, SHA256
+  `610fede891c8a2bc75325be08100e887f6cf1c32d58da472375314110dceab09`.
+  The fixture's `pytest-tmp/test_native_task3_grading_git_0/ownership-receipt.json`
+  is **54583 bytes**, SHA256
+  `8d99d9888e08cd7c681d45b734124e02f2b9a36b93b7f8131bd1cdc30a2d7827`.
+- Earlier three-node tested HEAD `a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
   `e85f99787605b45ae0eddfc03546f7508898cea7`. Its four implementation/test
   blobs match the original tested HEAD
   `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
   `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`; only three records had changed.
-- New artifacts: `/tmp/native-task3-probe-remaining.z0hJou/`. `source.json`,
+- Earlier three-node artifacts: `/tmp/native-task3-probe-remaining.z0hJou/`. `source.json`,
   `command.json`, `selection.json`, collection/immediate-report logs,
-  `junit-cases.json` and `outcome.json` preserve this three-node invocation.
+  `junit-cases.json` and `outcome.json` preserve that three-node invocation.
   `pytest.log`: **2025 bytes**, SHA256
   `591545ea4b1dbb16470e5e4ca19b3523963df35c34b917c32d3d6b3666189f5a`.
   `junit.xml`: **3844 bytes**, SHA256
@@ -149,10 +213,13 @@ old passing suite or unrelated test body ran. The original
   JUnit is absent; it has no byte count or hash. Injected-clock hook timestamps
   are not used as wall-time measurements.
 - Only CHANGELOG, this current LATEST and the direct README change after the
-  follow-up proof. `final-source.json` and `handoff.json` in the new artifact
+  current one-node proof. `final-source.json` and `handoff.json` in the current artifact
   directory seal the exact final HEAD/tree after records and verify all tested
   code bytes unchanged; the same final identities accompany PR782's body.
-  No merge fact or new CI result is claimed. The prior proof directory is untouched.
+  No merge fact or new CI result is claimed. Both prior proof directories are
+  untouched. The original timeout, earlier three-node result and current
+  ownership proof remain separate, without a pooled pass claim. Detailed prior
+  results also remain in the [immutable pre-correction record][prior-probe].
 - The shared helper remains SHA256
   `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
   Intake, preparer, executor, frozen/core/scoring/registration, metadata route,
@@ -205,3 +272,4 @@ strengthening claims. No study redesign or UI skill applied.
 
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a35b4fe58c555ad7abfce423379e99a761a8f1ef/tasks/LATEST_TASK_RESULT/README.md
 [original-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e/tasks/LATEST_TASK_RESULT/README.md
+[prior-probe]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/bc7a8d53ed83f8d52af35dc2f7639ae492fc28bb/tasks/LATEST_TASK_RESULT/README.md

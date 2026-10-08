@@ -1057,6 +1057,22 @@ deadline checks and a 6-minute step. Mutually exclusive step ceilings total
 19 minutes for preparation or 269 minutes for grading, within the unchanged
 270-minute job. The F/child grading limits remain 14400/14520 seconds.
 
+The ownership test's stale all-steps sum failed in leader-read CI run
+`37804015222`/job `113403603647`: **276 versus 269**, with **1 failed,
+475 passed in 1718.79s** of pytest elapsed time. It incorrectly included
+7 preparation-only minutes; this was not a grading-timeout increase. Only
+that test assertion now follows the existing per-operation pattern, checking
+grade 269 and prepare-probe 19 with the opposite branch excluded. At tested
+HEAD `a91a36b343481b9fd8af24887d933b4ffecb5472`, tree
+`7ee4102b867caf522f69b736f96eef852d4211b2`, the exact ownership node ran once:
+**1 passed, 1 warning in 2.60s**, exit **0**, pytest-process **3.030908s**,
+wrapper **6.003377s**, within 300s+5s/no-`-x`/bounded-Git limits. Real Git used
+synthetic ownership and tiny source anchors, not a live container. No workflow,
+budget, permission, production or source binding changed. This proof is separate
+from both earlier probe results below; no earlier passing node ran again.
+Current artifacts, exact command, source seals and outstanding review/CI gates
+are in [the current record](../tasks/LATEST_TASK_RESULT/README.md).
+
 At tested HEAD `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
 `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`, one Python 3.10.12 offline
 invocation selected nine new probe cases and two changed guard nodes.

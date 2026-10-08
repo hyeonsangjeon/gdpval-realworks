@@ -13,6 +13,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Correct only the native Git ownership test's stale combined step-ceiling
+  assertion on PR782. It now checks the mutually exclusive operations exactly:
+  grade **269 minutes**, prepare-probe **19 minutes**, excluding the opposite
+  branch. The **270-minute** job cap, Git-step limit, ownership/source checks
+  and all production/workflow bytes are unchanged. Leader-read CI run
+  `37804015222`, time-budget-contracts job `113403603647`, reported **1 failed,
+  475 passed in 1718.79s** of pytest elapsed time, not job duration; its stale
+  assertion observed **276 versus 269**, not an increased grading timeout.
+  The other **10 checks** succeeded. Log **122916 bytes / 1147 lines**, SHA256
+  `a20549e3f2420ea857f789fca25d5be2f9ffd42bf0f7558180fc2fe16d10ed3c`,
+  was not fetched again. At tested HEAD
+  `a91a36b343481b9fd8af24887d933b4ffecb5472`, tree
+  `7ee4102b867caf522f69b736f96eef852d4211b2`, the exact ownership node ran
+  once after collection: **1 passed, 1 warning in 2.60s**, exit **0**,
+  pytest-process **3.030908s**, wrapper **6.003377s** under **300s+5s**,
+  Python **3.10.12**, no `-x` and bounded Git. Real Git exercised synthetic
+  ownership/tiny source anchors; this is not a live-host or grading result.
+  Artifacts: `/tmp/native-task3-probe-ceilings.YCXV7y/`; log SHA256
+  `3a9caea80dc68f7d410ba2a8c54df8872843c4eee67138451eacd2d451bd29d5`,
+  JUnit SHA256
+  `c619326a19e8ae5035137a5034ebcf337f7c8bf1c66b18c4f220c0332691f35b`.
+  Exact final HEAD/tree are sealed after the three records in external
+  final-source/handoff receipts. The original timeout/eight completed phases,
+  later three-node proof and this result stay separate; none was pooled or
+  rerun here. Fixed-HEAD review/CI and a separate exact live direction remain
+  required. Run 3 stays uncertain and nonretryable; no specialist was retried.
+
 - Complete only PR782's three unresolved preparation-probe nodes on unchanged
   tested HEAD `a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
   `e85f99787605b45ae0eddfc03546f7508898cea7`: **3 passed, 3 warnings in
