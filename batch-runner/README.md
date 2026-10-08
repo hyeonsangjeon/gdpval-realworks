@@ -1030,8 +1030,8 @@ validated safe completion is public, and success requires a valid F grade
 and acknowledged retention. Lost retention stays uncertain/nonrenewable.
 
 The same workflow now has an explicit `operation=prepare-probe` choice.
-This preparation-only implementation is not yet fully validated or admitted
-for live use. Its CLI operations are `validate-probe-request`, `prepare-probe`
+This preparation-only implementation still requires fixed-HEAD review/CI and
+a separate live direction. Its CLI operations are `validate-probe-request`, `prepare-probe`
 and `verify-probe-completion`, with the same independent source/digest flags.
 The request format is `gpt54-time-budget-native-task3-preparation-request-v1`,
 purpose `prepare_retained_native_r1_task3_without_grading`, and permission
@@ -1064,12 +1064,28 @@ The outer 300-second bound expired with exit 124; wrapper elapsed was
 301.135259 seconds. Eight probe cases have passing setup/body/teardown
 reports. `derived_drift` completed setup but has no body/teardown result;
 the two guard nodes did not start. No final pytest summary or JUnit file was
-produced. This is incomplete validation, not an eleven-case pass. Artifacts
+produced. That invocation remains incomplete, not an eleven-case pass. Artifacts
 remain in `/tmp/native-task3-preparation-probe.7JqRjH/`, log SHA256
 `ab442be3cb66da708146a12c3178137125c20e36576d6eebb4f2541d74826354`.
 The real CLI/context/F validators used synthetic inputs, source/Actions
 identities, HTTP/auth and kernel facts. No live intake, model, claim or grade
-ran, and no test was rerun. Final source seals and remaining gates are in
+ran in that proof.
+
+The authorized follow-up at unchanged tested HEAD
+`a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
+`e85f99787605b45ae0eddfc03546f7508898cea7`, ran only `derived_drift`,
+`test_native_task3_grading_bootstrap_without_python` and hosted `[guards]`.
+It reported **3 passed, 3 warnings in 53.27s**, exit **0**, pytest-process
+**53.700716s**, wrapper **59.201955s**, within the same 300s+5s/no-`-x`/bounded-Git
+limits. No code/test correction or completed-case rerun was needed. The derived
+drift was refused after real F preparation; the handle closed and all forbidden
+grading/write traps stayed uncalled. This remains synthetic offline evidence,
+separate from the original eight completed-phase observations and timeout;
+there is no pooled eleven-node pass claim. Artifacts are in
+`/tmp/native-task3-probe-remaining.z0hJou/`, log SHA256
+`591545ea4b1dbb16470e5e4ca19b3523963df35c34b917c32d3d6b3666189f5a`,
+JUnit SHA256 `2a7f74c8ff3e577231c636464f938951df664e089b9c3e2754018bd04847b23a`.
+Final source seals, the exact command and remaining gates are in
 [the current record](../tasks/LATEST_TASK_RESULT/README.md).
 
 Metadata run `37789923398`/r2a1 established absence of two fixed Task3/F
@@ -1078,7 +1094,7 @@ objects at parent `82ed160109e40dcf74029f2be34a973350374fc6` at
 `37756891578`/r3a1 stays uncertain and nonretryable; this probe cannot recover
 its discarded exception or supply replay permission. The required
 preparation specialist failed before execution on unavailable Opus4.7 and
-provided no endorsement. Complete validation, fixed-HEAD review/CI and a
+provided no endorsement. Fixed-HEAD review/CI and a
 separate exact leader direction are still required before any live probe.
 
 The bootstrap-order correction follows the leader-verified failure of run

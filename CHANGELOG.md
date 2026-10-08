@@ -13,6 +13,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Complete only PR782's three unresolved preparation-probe nodes on unchanged
+  tested HEAD `a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
+  `e85f99787605b45ae0eddfc03546f7508898cea7`: **3 passed, 3 warnings in
+  53.27s**, exit **0**, pytest-process **53.700716s**, wrapper **59.201955s**.
+  The one fresh Python **3.10.12** invocation used the existing wrapper,
+  **300s+5s**, no `-x`, **30-second** Git cap, exact collection and immediate
+  phase reports. Only `derived_drift`, `test_native_task3_grading_bootstrap_without_python`
+  and hosted `[guards]` ran; no production, workflow or test bytes changed.
+  The original eight completed-phase observations and exit-124 timeout below
+  remain separate, without a pooled eleven-node pass claim. New artifacts are
+  in `/tmp/native-task3-probe-remaining.z0hJou/`; log SHA256
+  `591545ea4b1dbb16470e5e4ca19b3523963df35c34b917c32d3d6b3666189f5a`,
+  JUnit SHA256
+  `2a7f74c8ff3e577231c636464f938951df664e089b9c3e2754018bd04847b23a`,
+  immediate-report SHA256
+  `e7b9b11bca9d0ac649b89c73752ed837a2238ee913654ec02ff0362a9548ba1c`.
+  The actual CLI/context/F validators refused synthetic derived-input drift,
+  closed the handle and made no trapped direction/claim/executor/model/private-write
+  calls. This is offline evidence, not live readiness or grading authority.
+  Only CHANGELOG, current LATEST and the direct README change afterward;
+  external final-source/handoff receipts seal the exact final HEAD/tree.
+  Fixed-HEAD review/CI and a separate exact leader direction still gate a live
+  probe. Run 3 stays uncertain and nonretryable; metadata absence remains
+  limited to the two objects at its inspected parent. No specialist was retried.
+
 - Add a separately selected `prepare-probe` operation to the existing native
   Task3 controller and workflow. Its independent request has a distinct
   preparation-only format, purpose and permission, with no grading-storage
@@ -32,7 +57,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   passing setup/body/teardown reports, `derived_drift` is incomplete after
   setup, and both guard nodes did not start. There is no final pytest
   summary or JUnit file and no aggregate pass claim. Python **3.10.12**,
-  no `-x` and bounded Git were retained; no code correction or rerun followed.
+  no `-x` and bounded Git were retained; no code correction or rerun occurred
+  in that original task.
   Artifacts are in `/tmp/native-task3-preparation-probe.7JqRjH/`; log SHA256
   `ab442be3cb66da708146a12c3178137125c20e36576d6eebb4f2541d74826354`,
   immediate-report SHA256
@@ -43,7 +69,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   remains evidence about two objects at one parent, not historical effects.
   Run `37756891578`/r3a1 remains uncertain and nonretryable. The preparation
   specialist failed before execution on unavailable Opus4.7, supplied no
-  endorsement and was not retried. Validation remains incomplete; fixed-HEAD
+  endorsement and was not retried. That invocation remained incomplete; fixed-HEAD
   review/CI and a separate exact leader direction gate any live probe.
 
 - Record successful read-only metadata run `37789923398`/r2a1 at

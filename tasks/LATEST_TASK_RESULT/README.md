@@ -1,6 +1,6 @@
 # Latest task result
 
-## Preparation probe implemented; bounded offline proof incomplete
+## Preparation probe: three remaining nodes passed on unchanged code
 
 The existing native Task3 controller/workflow now has a separately selected
 model-free `prepare-probe` operation. It reuses originals intake and the real
@@ -8,12 +8,17 @@ native context/F preparer, closes the handle, and stops before direction,
 claim, local grading once-store, executor, model, retention or private-storage
 write. This is an implementation-only draft, not a live probe or grading retry.
 
-The single offline invocation reached its **300-second outer bound**, exit
-**124**, wrapper **301.135259 seconds**. Eight new cases have passing
-setup/body/teardown reports. `derived_drift` passed setup but has no body or
-teardown result; neither changed guard node started. No final pytest summary
-or JUnit file was produced. Validation remains incomplete. No code change or
-test rerun followed the timeout.
+The authorized follow-up ran only `derived_drift` and the two previously
+unstarted guard nodes: **3 passed, 3 warnings in 53.27 seconds**, exit **0**.
+Pytest-process elapsed was **53.700716 seconds**; wrapper elapsed, including
+source/collection checks, was **59.201955 seconds**. No production, workflow
+or test change was needed. The eight previously completed cases did not run.
+
+The original invocation remains an incomplete **300-second** timeout, exit
+**124**, wrapper **301.135259 seconds**, with eight passing setup/body/teardown
+reports, only setup completed for `derived_drift`, neither guard started and
+no final pytest summary or JUnit. These are separate observations, not a
+pooled eleven-node pass or a claim that the original invocation finished.
 
 ### Scope and authority boundary
 
@@ -43,7 +48,42 @@ The grade request/schema, one-process context, permanent/local once guards,
 retention and F/child **14400/14520-second** limits remain unchanged apart
 from the explicit refusal of a probe request at the grading entry.
 
-### One offline invocation, no aggregate pass claim
+### Remaining-node invocation
+
+```bash
+timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-probe-remaining.z0hJou/run-proof.py
+```
+
+The existing task-local wrapper was copied and restricted to exactly these
+nodes. Imports, fixture closure and exact collection passed before bodies
+started. Python **3.10.12**, pytest **9.1.1**, no `-x`, the existing Git bounds
+and task-local **30-second** Git cap were retained. There was one invocation,
+no retry and no timeout increase. Its wrapper ran from
+**2026-10-08 15:40:42.298266 UTC** through **15:41:41.500206 UTC**.
+
+| Exact node | Result | JUnit case elapsed |
+|---|---|---|
+| `tests/test_time_budget_native_preparation_probe.py::test_native_task3_preparation_probe[derived_drift]` | Passed | 36.677s |
+| `tests/test_time_budget_native_grading_ci.py::test_native_task3_grading_bootstrap_without_python` | Passed | 0.665s |
+| `tests/test_time_budget_native_grading_ci.py::test_native_task3_hosted_grading_route[guards]` | Passed | 10.030s |
+
+All three have passing setup/body/teardown reports and a final JUnit result.
+The **3 warnings** report `record_property` incompatibility with the configured
+`xunit2` family; they are retained in the log, not hidden or fixed in this task.
+JUnit case times are not the full pytest-process or wrapper duration.
+
+The derived-drift case exercised the actual controller CLI, native context
+and F preparation. It recorded **4 original GETs**, **4 retained-intake GETs**,
+**1 real F preparer call**, a refused result, closed handles and **0 trapped
+direction/claim/executor/model/private-write calls**. Its **218405-byte** Step0,
+source/Actions identities, HTTP/auth and kernel facts were synthetic. The
+existing assertions also retain the no-retention boundary and secret-canary
+exclusion. The two guard cases exercised extracted Bash/JSON and actual source
+CLI refusals with synthetic identities, including the mutually exclusive
+operation and step-ceiling assertions. They did not run setup-python on an
+Actions host or establish live-container/private-input readiness.
+
+### Original timeout remains separate
 
 ```bash
 timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-preparation-probe.7JqRjH/run-proof.py
@@ -71,17 +111,33 @@ real F preparer call, a closed handle and no trapped direction/claim/executor/
 model/retention/private-write calls. The synthetic Step0 had **218405 bytes**
 but a synthetic identity. Other completed cases exercised real byte refusals,
 injected clock bounds and safe exception handling. Secret canaries were absent
-from public JSON/stdout/stderr. The unfinished case proves no final derived-
-drift outcome. This is not live host/private-input evidence, a model result or
-a grade. No old passing suite or unrelated test body ran.
+from public JSON/stdout/stderr. The original incomplete case proves no final
+derived-drift outcome in that invocation; the new result above is separate.
+This is not live host/private-input evidence, a model result or a grade. No
+old passing suite or unrelated test body ran. The original
+[immutable record][original-proof] remains available.
 
 ### Exact sources and retained artifacts
 
 - Base HEAD `a35b4fe58c555ad7abfce423379e99a761a8f1ef`, tree
   `bda73d9de85093ee9a3fca303cf48d336b993931`.
-- Tested HEAD `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
-  `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`.
-- Artifacts: `/tmp/native-task3-preparation-probe.7JqRjH/`. `source.json`,
+- Follow-up tested HEAD `a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
+  `e85f99787605b45ae0eddfc03546f7508898cea7`. Its four implementation/test
+  blobs match the original tested HEAD
+  `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
+  `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`; only three records had changed.
+- New artifacts: `/tmp/native-task3-probe-remaining.z0hJou/`. `source.json`,
+  `command.json`, `selection.json`, collection/immediate-report logs,
+  `junit-cases.json` and `outcome.json` preserve this three-node invocation.
+  `pytest.log`: **2025 bytes**, SHA256
+  `591545ea4b1dbb16470e5e4ca19b3523963df35c34b917c32d3d6b3666189f5a`.
+  `junit.xml`: **3844 bytes**, SHA256
+  `2a7f74c8ff3e577231c636464f938951df664e089b9c3e2754018bd04847b23a`.
+  `reports.jsonl`: **3877 bytes**, SHA256
+  `e7b9b11bca9d0ac649b89c73752ed837a2238ee913654ec02ff0362a9548ba1c`.
+  `outcome.json`: **788 bytes**, SHA256
+  `262f0cfda754d3509469e917341921914acf6a6f24618f2b887289f8acf288f3`.
+- Original artifacts: `/tmp/native-task3-preparation-probe.7JqRjH/`. `source.json`,
   `command.json`, `selection.json`, collection/immediate-report logs,
   `wrapper-error.json` and `outcome.json` preserve the exact incomplete run.
   `pytest.log`: **1397 bytes**, SHA256
@@ -92,10 +148,11 @@ a grade. No old passing suite or unrelated test body ran.
   `99a60407c0c22fbca03a6746d7ffac06520be8922212cd9a1538d2e3170f2386`.
   JUnit is absent; it has no byte count or hash. Injected-clock hook timestamps
   are not used as wall-time measurements.
-- Only CHANGELOG, this current LATEST and the direct README change after
-  testing. External `final-source.json` and `handoff.json` seal the exact
-  final HEAD/tree after records and verify all tested code bytes unchanged.
-  No merge fact or new CI result is claimed.
+- Only CHANGELOG, this current LATEST and the direct README change after the
+  follow-up proof. `final-source.json` and `handoff.json` in the new artifact
+  directory seal the exact final HEAD/tree after records and verify all tested
+  code bytes unchanged; the same final identities accompany PR782's body.
+  No merge fact or new CI result is claimed. The prior proof directory is untouched.
 - The shared helper remains SHA256
   `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
   Intake, preparer, executor, frozen/core/scoring/registration, metadata route,
@@ -136,8 +193,8 @@ The only cell remains `gpt54_sandboxv2_codex_time_budget_v1` /
 The **2 files / 408601 bytes** remain declarations, not genuine contents
 fetched or verified by this implementation task. Usage/cost/score remain unknown.
 
-Complete targeted validation, independent fixed-HEAD review/CI and a separate
-exact leader source/run-number/window/hash direction remain required before
+Independent fixed-HEAD review/CI and a separate exact leader
+source/run-number/window/hash direction remain required before
 any live read-only preparation probe. No private access, dispatch, grading
 retry, adoption, replay, Task5, Project edit, merge or next cell occurred or is
 authorized. The required preparation-boundary specialist failed before
@@ -147,3 +204,4 @@ preserved units and evidence boundaries; `im-not-ai-en` checked English without
 strengthening claims. No study redesign or UI skill applied.
 
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a35b4fe58c555ad7abfce423379e99a761a8f1ef/tasks/LATEST_TASK_RESULT/README.md
+[original-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e/tasks/LATEST_TASK_RESULT/README.md
