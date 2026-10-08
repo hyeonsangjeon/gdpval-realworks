@@ -1,5 +1,34 @@
 # Latest task result
 
+## Native Task3 retained-payload preparation probe submitted
+
+One separately directed `prepare-probe` submission is bound to workflow
+`378041151`, run `37859270679`, run number **6**, attempt **1**, owner
+`hyeonsangjeon`. Its source is
+`a37a84a579bb91ddabd650b2a2e6e5bcb9fd00b4`, tree
+`cc8b5ed635c9daed348f975f00013b03927b828d`. The exact **4194-byte** request
+SHA256 is `a4108a655f0b543576e7f3ab34848a8a0191d32722c27e30b868d3061ae9e61d`.
+The admission window is `1791501833..1791504233`, **2400 seconds**.
+The exact run readback was queued at **2026-10-08 23:24:39 UTC**. No terminal
+preparation result or live payload recovery is established yet.
+
+Only the controller identity, next run number and admission window changed
+from the prior preparation request. Original R/result/F, Task3, input and
+Step0 seals, declared file identities and preparation-only policy remain
+fixed. The accepted transport below permits two fixed reads and at most four
+GETs per deliverable, **10 requests** under the same **60-second** retained
+intake deadline. Original-input acquisition remains bounded at **120 seconds**;
+the hosted preparation command remains **TERM300s/KILL5s**.
+
+This authorizes original acquisition, authenticated retained intake, F
+preparation and handle closure only. It stops before grading direction,
+private or local grading claim, model/judge/executor, retention and private
+writes. There is one submission and no implicit retry or workflow rerun.
+Earlier submissions remain spent; grading run 3 remains uncertain and
+nonretryable. The next decision uses the validated safe terminal envelope in
+a later cycle, without waiting or polling. Readiness or refusal alone grants
+no grading authority and does not identify historical server-returned bytes.
+
 ## Retained-payload source accepted for delivery
 
 The leader directly reviewed HEAD
@@ -16,9 +45,9 @@ ceiling, shared **60-second** deadline and exact size/hash checks remain.
 The separate local proof outcomes below are unchanged; no successful test
 was rerun by the leader.
 
-These are pre-delivery review and validation facts. The remaining step is one
-separately directed model-free preparation probe with its own exact source,
-run number, window and request hash. No live readiness, historical LFS cause,
+These are pre-delivery review and validation facts. The separately directed
+model-free preparation probe above has its own exact source, run number,
+window and request hash; its terminal result remains pending. No live readiness, historical LFS cause,
 recovered grading result, replay authority or private write follows from this
 acceptance. Project completion still requires the actual experiment evidence.
 

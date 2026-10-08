@@ -68,6 +68,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Submit one source-bound, model-free retained-payload preparation probe:
+  workflow `378041151`, run `37859270679`, run number **6**, attempt **1**,
+  source `a37a84a579bb91ddabd650b2a2e6e5bcb9fd00b4`, tree
+  `cc8b5ed635c9daed348f975f00013b03927b828d`. The **4194-byte** request SHA256
+  is `a4108a655f0b543576e7f3ab34848a8a0191d32722c27e30b868d3061ae9e61d`;
+  window `1791501833..1791504233` is **2400 seconds**. Initial readback was
+  queued. Original bindings and preparation-only controls remain fixed.
+  The reviewed two-plus-four-plus-four transport retains **10 requests** and
+  one **60-second** deadline; the hosted bound is **TERM300s/KILL5s**.
+  No terminal readiness, live recovery or historical cause is claimed.
+  No grading claim, model/judge, private write, replay or retry is authorized.
+
 - Record model-free probe `37838315533`/r5a1 as refused at
   `retained_deliverable_identity`, after originals completed. Artifact
   `11576133610` contains the 1534-byte exact-bound completion, SHA256
