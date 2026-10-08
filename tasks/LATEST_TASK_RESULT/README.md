@@ -1,5 +1,139 @@
 # Latest task result
 
+## PR777 continuation: scoped temporary retention; new lifecycle proof passed
+
+The `time-budget-contracts` command in `.github/workflows/backend-tests.yml`
+now includes pytest's built-in `-o tmp_path_retention_policy=failed`. This is
+the only workflow change. Passed per-case `tmp_path` data becomes eligible
+for pytest's standard teardown cleanup; failed cases and factory-scoped
+shared data are retained. Cleanup is best effort, not a guarantee after
+interruption or an assertion that the CI resource incidents are solved.
+
+The 45-minute job ceiling, selected files/markers, permissions, dispatch
+checks and other jobs are unchanged. So are `pytest.ini`, dependencies,
+the native hosted route, production code, frozen F, scoring, inputs, source
+bindings, model, budgets and the twenty-cell study. The two existing test
+expectations for the literal command and current workflow checksum changed
+mechanically; historical/frozen pins did not. Those older tests were not run.
+No shard, extra cleanup script, retry or automatic performance change was added.
+
+### Separate CI and storage observations
+
+The starting source was `2ec4d44b8963dec16195c2b44b42c754c212a7d4`, tree
+`418e43a93623fa65c68e52676513c19bab75a7f7`, reviewed in `5449683506`, conditional
+on CI. The following CI facts were supplied by the leader, not queried here:
+
+- Run `37701493624` had ten successful checks. Only `time-budget-contracts`
+  job `113065745498` was **CANCELLED**. Its actual annotation was
+  `The job has exceeded the maximum execution time of 45m0s`. The job started
+  `2026-10-07T23:18:20Z`, run-tests started `2026-10-07T23:20:33Z`, and the job
+  completed `2026-10-08T00:13:21Z`. Run-tests/post-cleanup conclusions were
+  null and the log endpoint returned 404. This is not a test assertion;
+  the reached or slow test is not established. No test duration is inferred
+  from these timestamps or reconciled into the timeout annotation.
+- In the earlier run `37695792367`, time-budget job `113047068253` failed at
+  `2026-10-07T22:44:22Z` with `System.IO.IOException: No space left on device`
+  in `_diag/Worker_20261007-222248-utc.log`. Its log was unavailable and
+  run-tests/post-cleanup conclusions were null. This separate disk-exhaustion
+  incident does not identify the consuming files or reached test.
+- A completed NAS read-only measurement of the proven owned basetemp
+  `/tmp/native-task3-hosted-grade.b5J2SO/pytest-tmp` returned **10673136 allocated
+  KiB**, exit 0, elapsed **0.189219s**, under a 20-second bound. Measurement
+  ran from `2026-10-08T00:06:10.108505Z` through
+  `2026-10-08T00:06:10.297683Z`. Receipt
+  `/tmp/pr777-basetemp-size.sW0PcL/receipt.json`, SHA256
+  `fba3a352c98e37a689cda139250edaabeff5b6309d312a565e9115b302093a8b`, records
+  the exact `du -skP` result. This is retained NAS synthetic-test storage,
+  not a GitHub-runner measurement or evidence of either CI failure's cause.
+  That measurement was not repeated; all earlier proof directories remain.
+
+### One new bounded lifecycle proof
+
+Only
+`tests/test_time_budget_tmp_path_retention.py::test_time_budget_failed_tmp_path_retention`
+ran, once, at `9c2a9c3e68c2153a60bef481fb60ce411dbd8e24`, tree
+`8fdeda28c08c49d929d3e30841249bbefb44876e`. It reported **1 passed, 1 warning
+in 0.37s**, exit 0; wrapper **0.684349s**, from
+`2026-10-08T00:51:25.773835Z` through `2026-10-08T00:51:26.458188Z`.
+Python 3.10.12, existing pytest 9.1.1, 300s+5s/no-`-x` and 30-second Git bounds
+were retained. AST checks verified the fixture arguments, generated child
+syntax and exact selection before launch, without a separate collection run.
+The one warning is `record_property` with JUnit `xunit2`; immediate reports,
+the path receipt and final JUnit were all produced.
+
+The test checks the actual workflow command and verifies that removing only
+the new option restores the complete previous workflow hash. It launches
+one isolated child pytest with that command's marker/options, only two new
+synthetic cases, a fresh explicit basetemp and no repository fixture imports.
+The child reports **1 failed, 1 passed in 0.02s**, exit **1**. Its failure at
+`assert False, "intentional retention probe"` is deliberate and preserved in
+the receipt/JUnit, not hidden as a successful child execution. No intake,
+child grader, provider, network or historical test body ran.
+
+All paths below are relative to the exact newly owned root
+`/tmp/pr777-tmp-retention.lDChVS/pytest-tmp/test_time_budget_failed_tmp_pa0/lifecycle/`:
+
+| Recorded directory | Directly observed lifecycle outcome |
+| --- | --- |
+| `child-basetemp/test_passed0` | Removed by standard pytest teardown, already absent before the next child case. |
+| `child-basetemp/test_failed0` | Retained after child exit; synthetic payload bytes unchanged. |
+| `child-basetemp/shared-source0` | Session/factory-scoped directory retained; sentinel bytes unchanged. |
+| `sibling-source` | Outside the child basetemp; directory and sentinel bytes unchanged. |
+
+No manual removal occurred. This small synthetic proof checks directory
+lifetime, not peak disk use, full-job runtime or actual runner readiness.
+The original hosted-route proof remains **7 passed in 294.01s**, exit 0,
+wrapper **298.027932s**, at `86d628b4d227b40787b1b958b54b6acb3a6aac51`, tree
+`ded2db9655c5ec581a9b64317ce35957348e1f45`. The quote-only proof remains
+**1 passed in 0.19s**, exit 0, wrapper **0.521549s**, at
+`980ea0f028a79b1b9ca14308673ec941b9ab5782`, tree
+`de000e4ef734be1dd1a51b3e29b6ec880b8bcd6a`. Neither ran again or was pooled
+with this result. Their full records, CI quote-failure evidence and synthetic
+limits remain below unchanged; equal YAML parses never established disabled
+identity enforcement. No actual retained Task3 files were hydrated or graded.
+
+### Source identities, artifacts and remaining gates
+
+The backend workflow blob is `cd2c6d0f186807a0e879cdd442376f070cf48620`, SHA256
+`01fe1494460ae36a6ded2caf3955b27ff9d922374b1ffbe3e91c4077d344d094`; the new
+test blob is `cb4189e2c190e5badb6e41e6df14ab249f670f98`.
+The hosted workflow remains `34a4b782232118aced1496dade3a767c43d80a99`,
+controller `f12ec5f4a812d53e0105bee1fc01df10d34d3b74`, original seven-case test
+`89367c669766f0351f431e5a36c7a3e71e94fea6`, executor
+`10d8e56c5569cc3dea484e4bb9d875712a0d5b4c`, intake
+`69982bebbe202d516eab101509635e037a7b8efd` and preparer
+`24a430137fb47bced1e5a450b5b5568d477a5b2e`. `source.json` also records unchanged
+registration/study/core, dependency and pytest-configuration identities.
+
+Artifacts are in `/tmp/pr777-tmp-retention.lDChVS/`: `run-proof.py`,
+`pytest-driver.py`, `command.json`, `selection.json`, `source.json`,
+`pytest.log`, `reports.jsonl`, `junit.xml`, `junit-cases.json`, `cases.json`,
+`outcome.json` and the standalone `lifecycle-receipt.json`. The latter retains
+exact directory associations, child command/exit/output and all five direct
+lifetime checks. Log SHA256 is
+`901e26201865e7d0fc566f101d8013d96d9befdd5fe5f0bafa89888d0a51fdaf`;
+receipt SHA256 is
+`dca6c9bd9a3525b674351dade916cabd4291deb42cbe1ffe79b8985397cbc817`.
+After this three-record commit, `handoff.json` records exact final HEAD/tree
+and verifies unchanged tested code; `SHA256SUMS` binds the retained artifacts.
+Final identity is recorded there rather than embedded circularly in its own
+Git tree. The previous document bytes are retained in `records-original/`.
+
+For this specific CI-resource decision, the leader's new mandatory
+extreme-reasoner invocation failed **before execution** because the configured
+Claude Opus 4.7 preview label was unavailable. It produced **no review or
+endorsement**. No harness retry or model/account change occurred. The leader's
+explicit narrow decision authorized this implementation, not runtime use.
+Retained design/reporting guidance preserves the twenty-cell study and keeps
+CI observations, NAS units and synthetic outcomes distinct.
+
+Final fixed-source review and fresh normal synchronization CI remain required;
+no CI query, monitoring, dispatch or retry was performed. The mitigation does
+not establish that either earlier incident is fixed or the full job now fits
+45 minutes. Exact hosted admission, real host/auth/input checks and a leader's
+live request still gate any paid execution. There was no Project edit, merge,
+private fetch, live claim/model/grade/readout, replay, Task5 or new cell.
+
 ## PR777 continuation: quote contract corrected; one node passed
 
 Only the new hosted workflow's line changed from

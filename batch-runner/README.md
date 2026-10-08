@@ -1044,6 +1044,60 @@ outstanding. Source acceptance does not permit merge or grade; no manual CI
 retry/monitoring, actual private hydration, live claim/model/grade or replay
 occurred. A normal PR synchronization can supply new CI evidence later.
 
+PR777's subsequent resource continuation scopes
+`-o tmp_path_retention_policy=failed` to the existing `time-budget-contracts`
+pytest invocation in `.github/workflows/backend-tests.yml`. It leaves the
+45-minute ceiling, selected glob/markers, permissions, other jobs, `pytest.ini`,
+dependencies, hosted grading route and all production/F/study bindings intact.
+Only two coupled test expectations also change: the current workflow checksum
+and literal command. Passed per-case `tmp_path` data is eligible for standard,
+best-effort pytest teardown; failed cases and shared factory-scoped data stay.
+No manual cleanup, shard, retry, longer timeout or new study is introduced.
+
+The starting source `2ec4d44b8963dec16195c2b44b42c754c212a7d4`, tree
+`418e43a93623fa65c68e52676513c19bab75a7f7`, had review `5449683506`, conditional
+on CI. The leader reported ten successful checks in run `37701493624`; only
+time-budget job `113065745498` was cancelled, with annotation
+`The job has exceeded the maximum execution time of 45m0s`. Run-tests and
+post-cleanup conclusions were null and its log endpoint returned 404; no
+specific test assertion or slow test is established. This is separate from
+the preceding disk-full incident. Also separately, the authorized NAS inventory
+measured **10673136 allocated KiB** at `2026-10-08T00:06:10Z` for
+`/tmp/native-task3-hosted-grade.b5J2SO/pytest-tmp`, exit 0, **0.189219s**.
+It did not measure the GitHub runner or establish the cause of either incident.
+That inventory and the old proof directories were preserved, not repeated or
+cleaned up.
+
+Only the new selector
+`tests/test_time_budget_tmp_path_retention.py::test_time_budget_failed_tmp_path_retention`
+ran once: **1 passed, 1 warning in 0.37s**, exit 0, wrapper **0.684349s**, at
+`9c2a9c3e68c2153a60bef481fb60ce411dbd8e24`, tree
+`8fdeda28c08c49d929d3e30841249bbefb44876e`, under Python 3.10.12 /
+300s+5s/no-`-x`/30-second Git bounds. The warning concerns JUnit
+`record_property`/`xunit2`. In its one isolated synthetic child invocation,
+**1 failed, 1 passed in 0.02s**, exit **1**, was the intended result: the passing
+case's actual directory was gone before the next case, the failing case's
+payload survived, and both factory-scoped/shared and sibling source sentinels
+were unchanged. Exact paths, child exit/output and after-teardown checks are
+in `/tmp/pr777-tmp-retention.lDChVS/lifecycle-receipt.json`, SHA256
+`dca6c9bd9a3525b674351dade916cabd4291deb42cbe1ffe79b8985397cbc817`.
+The proof log SHA256 is
+`901e26201865e7d0fc566f101d8013d96d9befdd5fe5f0bafa89888d0a51fdaf`;
+the same directory's `handoff.json` records final HEAD/tree after the three
+records, with tested code unchanged. The original seven-case proof and
+one-node quote proof above remain separate and were not rerun or pooled.
+No actual intake, child grader, provider or network was used by this test.
+
+The new mandatory extreme-reasoner invocation for this resource decision
+failed before execution on the unavailable Claude Opus 4.7 preview label;
+it produced no review or endorsement and was not retried. The leader approved
+only this narrow implementation. [LATEST](../tasks/LATEST_TASK_RESULT/README.md)
+preserves exact timestamps, identities, observations and limits. This proof
+does not establish that either CI incident is fixed or that the full job fits
+45 minutes. Final fixed-source review, normal synchronization CI and exact
+hosted admission remain gates; no CI query/retry/monitoring or live grading
+authority follows from this change.
+
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
 `fe47d236845882433dc6cb6309f8b8f0beeff849`, from accepted main

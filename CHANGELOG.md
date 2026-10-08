@@ -13,6 +13,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Scope pytest's built-in `-o tmp_path_retention_policy=failed` to the existing
+  `time-budget-contracts` invocation only. Its 45-minute ceiling, file glob,
+  markers, permissions and other jobs are unchanged, as are `pytest.ini`,
+  dependencies, the hosted grading route and all production/study/F bindings.
+  Two directly coupled test expectations track the new literal command and
+  current workflow checksum; no historical or frozen source pin changes.
+  From reviewed `2ec4d44b8963dec16195c2b44b42c754c212a7d4`, tree
+  `418e43a93623fa65c68e52676513c19bab75a7f7`, review `5449683506`, the single new
+  lifecycle selector at `9c2a9c3e68c2153a60bef481fb60ce411dbd8e24`, tree
+  `8fdeda28c08c49d929d3e30841249bbefb44876e`, reported **1 passed, 1 warning in
+  0.37s**, exit 0, wrapper **0.684349s**. Its two new synthetic child cases
+  reported **1 failed, 1 passed in 0.02s**, preserving the intentional exit 1:
+  passed per-case data was removed before the next case, failed data survived,
+  and factory-scoped/shared and sibling source sentinels stayed unchanged.
+  Only ordinary pytest teardown removed new synthetic data. Artifacts are in
+  `/tmp/pr777-tmp-retention.lDChVS/`, log SHA256
+  `901e26201865e7d0fc566f101d8013d96d9befdd5fe5f0bafa89888d0a51fdaf`;
+  `lifecycle-receipt.json` records exact paths and outcomes, and `handoff.json`
+  records final HEAD/tree after the three-record commit. The old seven-case
+  and quote-only proofs were not rerun or pooled. Separately, leader-reported
+  run `37701493624` had ten successful checks and time-budget job
+  `113065745498` cancelled with the annotation that its maximum execution time
+  of `45m0s` was exceeded; the reached test is unknown. The prior disk-full
+  annotation is a different incident. The measured **10673136 allocated KiB**
+  at `2026-10-08T00:06:10Z` belongs to the old NAS synthetic basetemp, not the
+  GitHub runner. This scoped mitigation proves neither CI cause nor resolution
+  within 45 minutes. The new extreme-reasoner invocation failed before execution
+  on the unavailable Claude Opus 4.7 preview label and supplied no review;
+  the leader authorized only this narrow decision. Final fixed-source review,
+  normal synchronization CI and exact hosted admission remain required.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) keeps all evidence separate.
+
 - Accept native Task3 grading compatibility at
   `c8ee6ae03d7238c98f9e01f40733f94c1b717f54`, tree
   `8e1ecaaa309bbd9c8a5bfcf66fa14d530da8fa95`, review `5448348919`,
