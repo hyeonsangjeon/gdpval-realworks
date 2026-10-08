@@ -13,6 +13,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Extend the existing read-only storage-metadata route with the closed
+  `native_task3_grade` scope for only the fixed Task3/F `admission.json` and
+  `output-manifest.json` metadata paths. Keep the default first-V2 Task1
+  generation scope and envelope unchanged. The same private/head GET and
+  immutable-parent paths-info POST share **2 operations / 60 seconds** and
+  **64 KiB per response**; no downloads, writes, redirects, pagination or
+  retries are added. The strict new envelope binds source/run/scope/target/
+  cell/F and labels OID/size as metadata, with contents unverified and retry
+  forbidden. Refusal remains unknown, never success-shaped absence.
+  From base `fc9796f048fded13416bde1804e9046608e49652`, tree
+  `76385434d312cd6b01c077acbc4af2344e127216`, tested HEAD
+  `83ea4a90f14b8cba93c4609a48ea4d332d9e48c0`, tree
+  `42d070882d36ee077344fcc2285c41306e6bb0d3`, ran the new 30-case metadata
+  selector and directly changed workflow contract once: **31 passed in
+  19.64s**, exit **0**, process **20.036112s**, wrapper **22.192873s**, under
+  Python **3.10.12**, **300s+5s**, no `-x` and bounded local Git.
+  Real source/CLI/SDK/transport/schema checks used synthetic Actions and HTTP
+  metadata; no private state or historical grade was read. Artifacts are in
+  `/tmp/native-task3-grade-metadata.AQ3jgv/`; log SHA256
+  `8763a3c947fab19026d046bd4d5ce5a399abd72861362b4497132c391bb88602`,
+  JUnit SHA256 `d525e67f8996ba61ae84b560cd68da227b2849530ae0dfa8338080fefe05b2cb`.
+  External final-source/handoff receipts seal final HEAD/tree after records.
+  Shared Git helper, registries, original R/result/input/F pins, native
+  executor/scoring and budgets remain unchanged. Run `37756891578`/r3a1
+  stays uncertain and nonretryable; nulls or future metadata absence cannot
+  establish historical nonexecution, adoption or replay permission. Runs 1/2
+  remain separate proven bootstrap failures. The unavailable Opus4.7 metadata
+  review attempt failed before execution and supplied no endorsement.
+  Fixed-HEAD review/CI and a separate exact leader read-only direction remain
+  required. This change authorizes no live request, private access or grade.
+
 - Record run `37756891578`/r3a1 as uncertain after successful Python, linked
   Git sources, full request validation, renderer and approved identity setup.
   Controller job `113243545133` step 14 exited 2 at **09:32:03 UTC**.

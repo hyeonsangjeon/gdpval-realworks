@@ -1938,15 +1938,15 @@ dispatcher/capture path that binds this control and the two independently anchor
 sources to verified inputs. That path must preserve the separate launch refusals;
 this API and a compiled registration grant no execution authority.
 
-#### Read-only first-cell storage metadata in Actions
+#### Read-only fixed storage metadata in Actions
 
 The dedicated `gpt54-time-budget-storage-metadata.yml` workflow uses the existing
-Actions `HF_TOKEN` to inspect only the fixed private target's main commit and
-the prefix
+Actions `HF_TOKEN` to inspect the fixed private target's main commit and one
+closed metadata scope. The default `generation_task1` scope retains the prefix
 `time-budget/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_v2_r1/02aa1805-c658-4069-8a6a-02dec146063a`.
-The target identity is
+The target identity remains
 `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
-No repository, branch or prefix is caller-selectable. It performs no original
+No repository, branch or path is caller-selectable. It performs no original
 intake, claim, HF write, Azure login, inference or grading.
 
 The original local selector at
@@ -1960,11 +1960,26 @@ cases in CI run `37438423265`, job `112185883536`.
 Read-only run `37446326232` then succeeded and verified the fixed private
 target and absent first-cell prefix at `2026-10-06T09:58:18Z`. These later
 observations do not relabel the original failure. The
-[current task record](../tasks/LATEST_TASK_RESULT/README.md) preserves their
-separate source identities, evidence and remaining live-observation gates.
+[immutable pre-extension README](https://github.com/hyeonsangjeon/gdpval-realworks/blob/fc9796f048fded13416bde1804e9046608e49652/batch-runner/README.md#read-only-first-cell-storage-metadata-in-actions)
+preserves that scope's separate historical evidence. Those first-cell
+observations say nothing about the native Task3 grading namespace.
 
-For each authorized metadata read, the leader supplies the accepted-main workflow/helper commit
-and independently reviewed tree. This command is a usage example, not an
+The explicit `native_task3_grade` choice selects only `admission.json` and
+`output-manifest.json` beneath this fixed prefix:
+
+```text
+time-budget-grading/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_codex_r1/2ea2e5b5-257f-42e6-a7dc-93763f28b19d/882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2
+```
+
+The CLI accepts `--scope native_task3_grade`; the workflow choice is `scope`.
+Both scopes use the same first private/head GET and one paths-info metadata
+POST at its immutable parent. The new POST lists exactly the two fixed files,
+not the directory or siblings. No claim or file contents are downloaded.
+The workflow passes the independent choice to source validation, inspection
+and envelope validation; the envelope cannot select its own scope.
+
+For each authorized metadata read, the leader supplies the accepted-main workflow/helper commit,
+independently reviewed tree and scope. This legacy/default usage example is not an
 instruction to dispatch during implementation:
 
 ```bash
@@ -1979,14 +1994,14 @@ before credentials, then runs from a genuine linked checkout of that exact
 source. Only the metadata step receives `HF_TOKEN`; setup and envelope checks
 do not. GitHub permission is only `contents: read`, checkout credentials are
 nonpersistent, and SDK telemetry is disabled. At most two metadata requests
-share 60 seconds without retry or redirects. The first asks only for private/head
-fields; the second uses the returned immutable commit and exact prefix.
+share 60 seconds with 64 KiB per response, without retry or redirects. The first asks only for private/head
+fields; the second uses the returned immutable commit and the selected fixed path or paths.
 HTTP 401/403/404, missing credentials, timeout and malformed metadata mean
 refusal or unknown state, never an absent prefix. The metadata job's setup and
 retention ceiling is 10 minutes; it does not change the observation's limits.
 
 The only artifact is `time-budget-storage-metadata.json`. Its allowlisted
-fields are `format`, `source`, `ci`, `timestamp_utc`, `target_identity_sha256`,
+legacy/default fields are `format`, `source`, `ci`, `timestamp_utc`, `target_identity_sha256`,
 `verified_private`, `parent_commit`, `prefix` and `prefix_outcome`.
 It contains no token, headers, raw exception, original prompt or private object.
 A verified first response can remain in a `refused` second-operation envelope;
@@ -1994,6 +2009,31 @@ that is not a complete prefix check. Even an `absent` result supplies only a
 candidate expected parent. It verifies neither inputs nor host support and
 does not authorize a paid observation. The later V2 parent CAS, permanent
 claim, source/direction checks and actual kernel admission remain unchanged.
+
+The native grading scope uses a distinct strict envelope bound to source/run,
+scope, target, native r1 Task3 cell and frozen F. `objects.admission` and
+`objects.output_manifest` report `presence`, `metadata_oid` and
+`metadata_size_bytes`. These are metadata, not verified contents;
+`contents_verified=false` and `retry_allowed=false` are mandatory. Only an
+exact HTTP 200 metadata list may establish a fixed object's absence at the
+inspected parent. Refused responses leave object states unknown, even if the
+private parent was verified. Unknown scope, duplicate/unrelated paths or keys,
+wrong type, oversized/encoded responses and exhausted deadlines are refused.
+
+The new selector plus the changed workflow contract passed **31 tests in
+19.64s** once at `83ea4a90f14b8cba93c4609a48ea4d332d9e48c0`, tree
+`42d070882d36ee077344fcc2285c41306e6bb0d3`; process **20.036112s**, wrapper
+**22.192873s**. This used real source/CLI/SDK/schema checks with synthetic
+Actions identities and HTTP metadata, not a live private read. Artifacts and
+exact final-source receipts are in `/tmp/native-task3-grade-metadata.AQ3jgv/`
+and the [current task record](../tasks/LATEST_TASK_RESULT/README.md).
+Fixed-HEAD review/CI and a separate exact leader direction remain required
+before any read-only Actions submission. The unavailable Opus4.7 review
+attempt supplied no endorsement. Run `37756891578`/r3a1 remains uncertain;
+neither null fields nor future metadata absence prove historical nonexecution,
+readout eligibility, claim adoption or grading retry permission. All three
+grading submissions remain spent. No model, grade, replay or new cell is
+authorized by this metadata scope.
 
 #### Read-only view of a retained result or native uncertainty
 
