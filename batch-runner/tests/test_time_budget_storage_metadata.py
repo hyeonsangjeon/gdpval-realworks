@@ -102,7 +102,7 @@ def source(tmp_path, monkeypatch):
 @pytest.fixture
 def transport(monkeypatch):
     state = SimpleNamespace(calls=[], head={"id": subject.TARGET, "private": True, "sha": PARENT},
-                            paths=[], failure=None, hook=None)
+                            paths=[], failure=None, hook=None, raw={}, headers={})
 
     class Transport(httpx.BaseTransport):
         def __init__(self, **kwargs):
@@ -122,8 +122,10 @@ def transport(monkeypatch):
                 if failure == "timeout":
                     raise httpx.ReadTimeout("PRIVATE_EXCEPTION_" + TOKEN, request=request)
                 status, payload = failure, {"error": "PRIVATE_BODY_" + TOKEN}
-            return httpx.Response(status, headers={"content-type": "application/json", "location": "/unrelated"},
-                                  stream=httpx.ByteStream(json.dumps(payload).encode()), request=request)
+            return httpx.Response(status, headers={"content-type": "application/json", "location": "/unrelated",
+                                                   **state.headers.get(number, {})},
+                                  stream=httpx.ByteStream(state.raw.get(number, json.dumps(payload).encode())),
+                                  request=request)
 
     monkeypatch.setattr(httpx, "HTTPTransport", Transport)
     return state
@@ -257,18 +259,25 @@ def test_time_budget_storage_metadata_workflow_contract():
     workflow = yaml.safe_load(raw)
     assert set(workflow.get("on", workflow.get(True))) == {"workflow_dispatch"}
     inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
-    assert set(inputs) == {"reviewed_source_sha", "reviewed_source_tree"}
+    assert set(inputs) == {"reviewed_source_sha", "reviewed_source_tree", "scope"}
+    assert inputs["scope"] == {
+        "description": "Fixed metadata scope only; no contents, admission or retry authority",
+        "required": True, "type": "choice", "default": "generation_task1",
+        "options": ["generation_task1", "native_task3_grade"],
+    }
     assert workflow["permissions"] == {"contents": "read"}
     assert set(workflow["jobs"]) == {"metadata"}
     job = workflow["jobs"]["metadata"]
     assert job["runs-on"] == "ubuntu-22.04" and job["timeout-minutes"] == 10
     assert "permissions" not in job and "HF_TOKEN" not in job["env"]
     assert job["env"]["HF_HUB_DISABLE_TELEMETRY"] == job["env"]["DO_NOT_TRACK"] == "1"
+    assert job["env"]["METADATA_SCOPE"] == "${{ inputs.scope }}"
     steps = job["steps"]
     secrets = [step for step in steps if "secrets." in json.dumps(step)]
     assert len(secrets) == 1 and secrets[0]["id"] == "metadata"
     assert secrets[0]["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     guard = steps[0]["run"]
+    assert '[[ "$METADATA_SCOPE" == generation_task1 || "$METADATA_SCOPE" == native_task3_grade ]]' in guard
     for literal in ("GITHUB_EVENT_NAME", "GITHUB_REPOSITORY", "GITHUB_REF", "GITHUB_ACTOR",
                     "GITHUB_TRIGGERING_ACTOR", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "METADATA_WORKFLOW_SHA",
                     "GITHUB_WORKFLOW_REF", "REVIEWED_SOURCE_TREE"):
@@ -284,8 +293,176 @@ def test_time_budget_storage_metadata_workflow_contract():
     assert "timeout --signal=TERM --kill-after=5s 60s" in secrets[0]["run"]
     verify = next(step for step in steps if step.get("id") == "envelope")
     assert "always()" in verify["if"] and "verify-envelope" in verify["run"]
+    assert all('--scope "$METADATA_SCOPE"' in step["run"] for step in (source, secrets[0], verify))
     artifact = steps[-1]
     assert artifact["with"]["path"] == "${{ runner.temp }}/" + subject.BASENAME
     assert artifact["if"] == "always() && steps.envelope.outputs.validated == 'true'"
     assert all(term not in raw for term in ("id-token:", "azure/login", "prepare-and-claim", "step2_run_inference",
                                            "gpt54_time_budget_v2_observation", "create_commit", "continue-on-error"))
+
+
+@pytest.mark.parametrize("case", [
+    "present", "absent", "admission_only", "output_only", "legacy_default", "legacy_explicit", "unknown_scope",
+    "nonprivate", "wrong_target", "bad_parent", "head_404", "paths_404", "redirect", "timeout",
+    "malformed", "duplicate_path", "duplicate_key", "head_duplicate_key", "unrelated_path", "directory",
+    "oid", "size", "oversized", "head_oversized", "encoding", "cumulative_bound", "revision_drift",
+    "path_drift", "third_operation", "source_drift",
+])
+def test_native_task3_grade_metadata_scope(source, transport, monkeypatch, capsys, case):
+    """Real source/CLI/SDK/bounds; synthetic Actions identities and metadata, no contents."""
+    canary = "hf_SECRET_CANARY_private_exception_payload_not_a_credential"
+    prefix = ("time-budget-grading/gpt54_sandboxv2_codex_time_budget_v1/gpt54_time_budget_v1_codex_r1/"
+              "2ea2e5b5-257f-42e6-a7dc-93763f28b19d/882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2")
+    paths = [prefix + "/admission.json", prefix + "/output-manifest.json"]
+    assert list(subject.NATIVE_PATHS.values()) == paths and subject.SECONDS == 60
+    rows = [{"type": "file", "path": path, "oid": digit * 40, "size": size, "private_extra": canary}
+            for path, digit, size in zip(paths, ("9", "a"), (123, 456))]
+    transport.head["private_extra"] = canary
+    transport.paths = copy.deepcopy(rows)
+    scope = subject.DEFAULT_SCOPE if case.startswith("legacy_") else subject.NATIVE_SCOPE
+    selected = [] if case == "legacy_default" else ["--scope", scope]
+    successful = case in {"present", "absent", "admission_only", "output_only", "legacy_default", "legacy_explicit"}
+    expected_calls = 2
+    if case == "absent":
+        transport.paths = []
+    elif case == "admission_only":
+        transport.paths = rows[:1]
+    elif case == "output_only":
+        transport.paths = rows[1:]
+    elif case.startswith("legacy_"):
+        transport.paths = [{"type": "directory", "path": subject.PREFIX, "oid": "b" * 40}]
+    elif case == "unknown_scope":
+        selected, expected_calls = ["--scope", canary], 0
+    elif case in ("nonprivate", "wrong_target", "bad_parent"):
+        key, value = {"nonprivate": ("private", False), "wrong_target": ("id", canary),
+                      "bad_parent": ("sha", "main")}[case]
+        transport.head[key], expected_calls = value, 1
+    elif case in ("head_404", "paths_404", "redirect", "timeout"):
+        transport.failure = {"head_404": (1, 404), "paths_404": (2, 404),
+                             "redirect": (2, 302), "timeout": (2, "timeout")}[case]
+        expected_calls = transport.failure[0]
+    elif case == "malformed":
+        transport.paths = {"error": canary}
+    elif case == "duplicate_path":
+        transport.paths = [rows[0], rows[0]]
+    elif case in ("duplicate_key", "head_duplicate_key"):
+        number = 1 if case == "head_duplicate_key" else 2
+        raw = json.dumps(transport.head if number == 1 else rows)
+        key = "sha" if number == 1 else "oid"
+        transport.raw[number] = raw.replace('"' + key + '":', '"' + key + '": "' + canary + '", "' + key + '":', 1).encode()
+        expected_calls = number
+    elif case in ("unrelated_path", "directory", "oid", "size"):
+        key, value = {"unrelated_path": ("path", prefix + "/" + canary), "directory": ("type", "directory"),
+                      "oid": ("oid", canary), "size": ("size", True)}[case]
+        transport.paths[0][key] = value
+    elif case in ("oversized", "head_oversized"):
+        number = 1 if case == "head_oversized" else 2
+        transport.raw[number] = b" " * (64 * 1024) + json.dumps(transport.head if number == 1 else []).encode()
+        expected_calls = number
+    elif case == "encoding":
+        transport.headers[2] = {"content-encoding": "gzip"}
+    elif case == "cumulative_bound":
+        now = [time.monotonic()]
+        monkeypatch.setattr(time, "monotonic", lambda: now[0])
+        transport.hook = lambda number: now.__setitem__(0, now[0] + 35)
+    elif case in ("revision_drift", "path_drift", "third_operation"):
+        original = HfApi.get_paths_info
+
+        def unexpected_operation(self, *args, **kwargs):
+            if case == "revision_drift":
+                kwargs["revision"] = "c" * 40
+            elif case == "path_drift":
+                kwargs["paths"] = [*paths, prefix + "/" + canary]
+            result = original(self, *args, **kwargs)
+            if case == "third_operation":
+                from huggingface_hub.utils import _http
+                _http.get_session().get("https://huggingface.co/api/datasets/" + subject.TARGET + "/revision/main",
+                                        headers={"authorization": "Bearer " + TOKEN})
+            return result
+
+        monkeypatch.setattr(HfApi, "get_paths_info", unexpected_operation)
+        expected_calls = 2 if case == "third_operation" else 1
+    elif case == "source_drift":
+        def changed_source(number):
+            if number == 2:
+                with (source.root / subject.WORKFLOW).open("a") as stream:
+                    stream.write("\n# Synthetic unreviewed source drift\n")
+        transport.hook = changed_source
+
+    def run(operation):
+        return subject.main([operation, "--reviewed-source-sha", source.sha,
+                             "--reviewed-source-tree", source.tree, "--runtime-root", str(source.root), *selected])
+
+    assert run("validate-source") == (2 if case == "unknown_scope" else 0)
+    assert transport.calls == []
+    assert run("inspect") == (0 if successful else 2)
+    assert len(transport.calls) == expected_calls
+    if case in ("unknown_scope", "source_drift"):
+        assert not source.destination.exists()
+    else:
+        raw = source.destination.read_bytes()
+        value = json.loads(raw)
+        assert len(raw) <= 4096
+        subject.validate_envelope(value, source.identity, scope=scope)
+        assert value["source"] == source.identity["source"] and value["ci"] == source.identity["ci"]
+        assert value["target_identity_sha256"] == subject.TARGET_SHA256
+        assert run("verify-envelope") == 0 and len(transport.calls) == expected_calls
+        if scope == subject.DEFAULT_SCOPE:
+            assert value == {"format": subject.FORMAT, **source.identity, "timestamp_utc": value["timestamp_utc"],
+                             "target_identity_sha256": subject.TARGET_SHA256, "verified_private": True,
+                             "parent_commit": PARENT, "prefix": subject.PREFIX, "prefix_outcome": "present"}
+        else:
+            assert value["scope"] == scope and value["prefix"] == prefix
+            assert value["cell"] == subject.NATIVE_CELL and value["frozen_grader"] == subject.NATIVE_FROZEN
+            assert value["contents_verified"] is False and value["retry_allowed"] is False
+            assert value["metadata_outcome"] == ("verified" if successful else "refused")
+            for name, path in subject.NATIVE_PATHS.items():
+                row = next((row for row in transport.paths if type(row) is dict and row.get("path") == path), None)
+                assert value["objects"][name] == {
+                    "presence": "present" if successful and row else "absent" if successful else "unknown",
+                    "metadata_oid": row["oid"] if successful and row else None,
+                    "metadata_size_bytes": row["size"] if successful and row else None,
+                }
+            if successful:
+                assert value["verified_private"] is True and value["parent_commit"] == PARENT
+            if case == "present":
+                with pytest.raises(subject.MetadataRefused):
+                    subject.validate_envelope(value, source.identity)  # No scope autodetection from downloaded JSON.
+                mutations = [
+                    {"scope": subject.DEFAULT_SCOPE}, {"prefix": subject.PREFIX},
+                    {"cell": {**value["cell"], "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"}},
+                    {"cell": {**value["cell"], "repeat": True}},
+                    {"frozen_grader": {**value["frozen_grader"], "sha": "d" * 40}},
+                    {"source": {**value["source"], "tree": "d" * 40}},
+                    {"ci": {**value["ci"], "run_id": "2"}}, {"target_identity_sha256": "d" * 64},
+                    {"contents_verified": True}, {"retry_allowed": True}, {"parent_commit": None},
+                    {"metadata_outcome": "absent"}, {"objects": {}}, {"raw_exception": canary},
+                ]
+                for mutation in mutations:
+                    with pytest.raises((subject.MetadataRefused, ValueError)):
+                        subject.validate_envelope({**copy.deepcopy(value), **mutation}, source.identity, scope=scope)
+                for mutation in ({"presence": "present", "metadata_oid": None}, {"metadata_size_bytes": True},
+                                 {"presence": "unknown"}, {"private_body": canary}):
+                    bad = copy.deepcopy(value)
+                    bad["objects"]["admission"].update(mutation)
+                    with pytest.raises(subject.MetadataRefused):
+                        subject.validate_envelope(bad, source.identity, scope=scope)
+        assert run("inspect") == 2  # No clobber, extra HTTP or implicit retry.
+        assert source.destination.read_bytes() == raw and len(transport.calls) == expected_calls
+    if transport.calls:
+        first = transport.calls[0]
+        assert first.method == "GET" and first.url.path == f"/api/datasets/{subject.TARGET}/revision/main"
+        assert parse_qs(first.url.query.decode()) == {"expand": ["private", "sha"]} and not first.content
+        if len(transport.calls) == 2:
+            second = transport.calls[1]
+            assert second.method == "POST" and second.url.path == f"/api/datasets/{subject.TARGET}/paths-info/{PARENT}"
+            assert parse_qs(second.content.decode()) == {"paths": [subject.PREFIX] if scope == subject.DEFAULT_SCOPE else paths,
+                                                        "expand": ["false"]}
+        if scope == subject.NATIVE_SCOPE:
+            assert all(call.headers["accept-encoding"] == "identity" for call in transport.calls)
+        assert all(0 < call.extensions["timeout"]["read"] <= 30 for call in transport.calls)
+        if case == "cumulative_bound":
+            assert transport.calls[1].extensions["timeout"]["read"] == 25
+    captured = capsys.readouterr()
+    public = captured.out + captured.err + (source.destination.read_text() if source.destination.exists() else "")
+    assert all(secret not in public for secret in (TOKEN, canary, "PRIVATE_", "unrelated", "https://"))
