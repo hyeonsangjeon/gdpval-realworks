@@ -107,6 +107,8 @@ jobs:
         timeout-minutes: 1
         run: |
           [[ "$(pwd -P)" == "$GITHUB_WORKSPACE" && -d "$GITHUB_WORKSPACE/.git" && ! -L "$GITHUB_WORKSPACE/.git" ]]
+          # Process-local trust for this verified ordinary bootstrap only.
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$GITHUB_WORKSPACE"
           [[ "$(timeout --signal=TERM --kill-after=5s 30s git rev-parse HEAD)" == "$CONTROLLER_SHA" ]]
           [[ "$(timeout --signal=TERM --kill-after=5s 30s git rev-parse HEAD^{tree})" == "$CONTROLLER_TREE" ]]
           [[ "$(timeout --signal=TERM --kill-after=5s 30s git rev-parse 33e24e9c1402ec0b7c92a71222998d1407646a92^{tree})" == 6e67da4e12169b41a837d92eaf946db15e71010e ]]
