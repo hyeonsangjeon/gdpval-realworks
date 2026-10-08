@@ -1,6 +1,28 @@
 # Latest task result
 
-## Preparation-only probe submitted; readiness not yet observed
+## Preparation-only probe refused after originals; intake boundary isolated
+
+The directed probe run `37818721507`/r4a1, job `113453943352`, completed with
+failure. Public source/request checks passed. The model-free step ran
+**2026-10-08 17:45:07..17:45:11 UTC**; completion validation/upload succeeded.
+Artifact `11568232298` contains a **1486-byte** bound completion, SHA256
+`753c468fef11533cd55accb0c089290b4362200e15d501347862d3304e8f35e2`.
+
+The envelope reports `status=refused`: environment and originals completed;
+`intake_preparation` started and returned `validation_refused`; context exit
+is unknown and verified preparation is null. Source/run/request/R/F/result
+bindings match the exact directed probe. Grading authority, handle reuse and
+retry are false. This establishes a current intake/preparation refusal, not
+which inner predicate failed or the discarded cause of historical run 3.
+The preparation helper has identical Git blob
+`24a430137fb47bced1e5a450b5b5568d477a5b2e` in original R and deployed C;
+that particular source-drift hypothesis was ruled out without private reads.
+
+Next isolate that existing boundary and preserve only closed safe internal
+refusal codes. No new mode, workflow, private fetch, grading or replay is
+authorized by this record.
+
+### Original submission and accepted source
 
 The leader submitted [run 37818721507][probe-run], workflow `378041151`,
 run number **4**, attempt **1**, explicitly selecting `prepare-probe`.
@@ -18,9 +40,9 @@ preparation-only format, purpose and policy, with no grading storage authority.
 Authorize only originals acquisition, authenticated retained intake/F
 preparation and handle closure under the existing **300s+5s** hosted bound.
 No direction, claim, grading once-store, model/judge/executor, retention or
-private-storage write is authorized. Readiness/refusal has not been observed;
-queued status is not readiness. Inspect terminal evidence in a later bounded
-cycle without waiting, polling or resubmission. Prior run 3 remains uncertain
+private-storage write is authorized. At that queued readback, readiness/refusal
+had not been observed. The terminal refusal above supersedes that
+submission-only status. Prior run 3 remains uncertain
 and nonretryable; no grade or historical outcome is reclassified.
 
 ### Accepted source and validation

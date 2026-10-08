@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record model-free probe `37818721507`/r4a1 as refused after successful
+  originals acquisition. Artifact `11568232298`, 1486 bytes, SHA256
+  `753c468fef11533cd55accb0c089290b4362200e15d501347862d3304e8f35e2`,
+  binds the exact source/request and reports `intake_preparation` started
+  with `validation_refused`, no verified preparation, and false grading,
+  reuse and retry authority. The inner predicate and historical run 3 cause
+  remain unknown. Next isolate only this boundary; no new live action or replay.
+
 - Submit one separately directed model-free `prepare-probe` run `37818721507`,
   workflow `378041151`, run number 4, attempt 1, source
   `ff3eecd1de1322898c18ae192021de16a9d06ee0`. Its 4194-byte request SHA256 is
