@@ -117,7 +117,7 @@ def _retained_transport(case, monkeypatch, *, wrong_revision=False):
     revision, target = completion["output_commit"], intake.reader.metadata.TARGET
     prefix, _, _ = intake.native.shared._namespace(intake.CELL)
     bodies = {f"/datasets/{target}/raw/{revision}/{prefix}/result/{intake.native.observation.RESULT}": data,
-        **{f"/datasets/{target}/raw/{revision}/{prefix}/result/upload/{name}": value for name, value in case.files.items()}}
+        **{f"/datasets/{target}/resolve/{revision}/{prefix}/result/upload/{name}": value for name, value in case.files.items()}}
     calls = []
 
     class Transport(httpx.BaseTransport):

@@ -182,9 +182,9 @@ def _checked_request(request_json: str, expected_request_sha256: str, sources: E
 
 
 def _hydrate(request: dict, plan: dict, marker: dict, token: str, publish):
-    """Four ordered GETs at one immutable revision; file routes start sealed."""
+    """Two fixed GETs plus at most four hops per payload, under one deadline."""
     import httpx
-    from huggingface_hub import constants
+    from huggingface_hub import constants, hf_hub_url
     from huggingface_hub.utils import _http
 
     completion = request["completion"]
@@ -221,7 +221,7 @@ def _hydrate(request: dict, plan: dict, marker: dict, token: str, publish):
             def request_guard(outgoing):
                 nonlocal attempts
                 storage._remaining(deadline)
-                _require(attempts < len(routes) <= 4 and outgoing.method == "GET"
+                _require(attempts < len(routes) == 2 and outgoing.method == "GET"
                          and outgoing.url.scheme == "https" and outgoing.url.host == "huggingface.co"
                          and outgoing.url.port in (None, 443) and outgoing.url.userinfo == b""
                          and not outgoing.content and outgoing.url.path == routes[attempts]
@@ -270,16 +270,49 @@ def _hydrate(request: dict, plan: dict, marker: dict, token: str, publish):
             members = [prefix + "/result/upload/" + name for name in names]
             for member in members:
                 _require(intake._hf_path_bytes(quote(member, safe="/")) == member.encode(), "retained_member_encoding_refused")
-            routes.extend(base + member for member in members)
-            limits.extend(r["size"] for r in records)
             publish(native.observation.RESULT, data)
             for member, record in zip(members, records, strict=True):
-                data = read(member, {key: record[key] for key in ("sha256", "size")},
-                            NativePreparationRefusalPoint.RETAINED_DELIVERABLE_DOWNLOAD,
-                            NativePreparationRefusalPoint.RETAINED_DELIVERABLE_IDENTITY)
+                with _refusal_at(NativePreparationRefusalPoint.RETAINED_DELIVERABLE_DOWNLOAD):
+                    original = hf_hub_url(target, member, repo_type="dataset", revision=revision,
+                                          endpoint=storage.HF_ENDPOINT)
+                    expected_url, hops = original, 0
+
+                    def payload_request_guard(outgoing):
+                        nonlocal attempts, hops
+                        storage._remaining(deadline)
+                        _require(attempts < 10 and hops < 4 and outgoing.method == "GET"
+                                 and outgoing.url == httpx.URL(expected_url) and not outgoing.content
+                                 and outgoing.headers.get("accept-encoding") == "identity",
+                                 "bounded_payload_target_required")
+                        authorization = "Bearer " + token if outgoing.url.host == "huggingface.co" else None
+                        _require(outgoing.headers.get("authorization") == authorization
+                                 and "cookie" not in outgoing.headers and "proxy-authorization" not in outgoing.headers,
+                                 "payload_credentials_refused")
+                        attempts += 1
+                        hops += 1
+
+                    def payload_response_guard(response):
+                        nonlocal expected_url
+                        if response.status_code in (301, 302, 303, 307, 308):
+                            _require(hops < 4 and bool(response.headers.get("location")), "payload_hop_limit")
+                            expected_url = intake._hf_redirect(response.headers["location"], expected_url, original)
+
+                    # _hf_read uses this same scoped SDK session. Replace the raw-only
+                    # hooks, not the bounded transport; every next hop is checked before
+                    # transmission. Cookie-bearing requests refuse, including CDN hops.
+                    session.event_hooks = {"request": [payload_request_guard], "response": [payload_response_guard]}
+                    _require(_http.get_session() is session, "payload_session_changed")
+                    data = intake._hf_read(target, revision, member, role=None, token=token,
+                                           limit=record["size"], deadline=deadline)
+                    # No original-input role is claimed; the native wrapper labels failures.
+                    _require(1 <= hops <= 4, "payload_read_required")
+                    storage._remaining(deadline)
+                with _refusal_at(NativePreparationRefusalPoint.RETAINED_DELIVERABLE_IDENTITY):
+                    _same("retained member identity", _identity(data), {key: record[key] for key in ("sha256", "size")})
+                    _require(token.encode() not in data, "credential_in_retained_bytes")
                 publish("upload/" + record["path"], data)
             storage._remaining(deadline)
-            _require(attempts == 4, "four_read_operations_required")
+            _require(4 <= attempts <= 10, "bounded_read_operations_required")
 
 
 def prepare_retained_native_task3_grading(*, request_json: str, expected_request_sha256: str) -> dict:

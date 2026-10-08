@@ -106,7 +106,7 @@ def test_native_task3_intake_refusal_points(hosted, monkeypatch, capsys, record_
                 record = hosted.case.payload["results"][0]["deliverable_file_records"][0]
                 pointer = ("version https://git-lfs.github.com/spec/v1\n"
                            "oid sha256:" + record["sha256"] + "\nsize " + str(record["size"]) + "\n").encode()
-                assert "/raw/" in outgoing.url.path and _identity(pointer) != {
+                assert "/resolve/" in outgoing.url.path and _identity(pointer) != {
                     key: record[key] for key in ("size", "sha256")}
                 protocol.append({"representation": "synthetic_git_lfs_v1_pointer",
                     "pointer_identity": _identity(pointer), "declared_payload_size": record["size"],
