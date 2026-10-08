@@ -13,6 +13,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add a separately selected `prepare-probe` operation to the existing native
+  Task3 controller and workflow. Its independent request has a distinct
+  preparation-only format, purpose and permission, with no grading-storage
+  authority. It reuses originals intake and the real native context/F
+  preparation, then closes the handle before direction, claim, local grading
+  once-store, executor, model, retention or private-storage write. Only fixed
+  bindings, result/preparation identities and closed diagnostic codes can be
+  public; readiness never authorizes grading or handle reuse. The hosted
+  command has a cumulative **300s+5s** process bound and **6-minute** step;
+  existing transfer/byte limits and the grading branch remain unchanged.
+  From base `a35b4fe58c555ad7abfce423379e99a761a8f1ef`, tree
+  `bda73d9de85093ee9a3fca303cf48d336b993931`, tested HEAD
+  `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
+  `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`, selected nine new probe cases
+  and two directly changed guard nodes once. The **300-second outer bound
+  expired**, exit **124**, wrapper **301.135259s**: eight new cases have
+  passing setup/body/teardown reports, `derived_drift` is incomplete after
+  setup, and both guard nodes did not start. There is no final pytest
+  summary or JUnit file and no aggregate pass claim. Python **3.10.12**,
+  no `-x` and bounded Git were retained; no code correction or rerun followed.
+  Artifacts are in `/tmp/native-task3-preparation-probe.7JqRjH/`; log SHA256
+  `ab442be3cb66da708146a12c3178137125c20e36576d6eebb4f2541d74826354`,
+  immediate-report SHA256
+  `782aa630c64308d78760d354ebcd6630ab8a94a292e3138b595ba46f8708c24c`.
+  External final-source/handoff receipts seal final HEAD/tree after records.
+  Real preparation used synthetic sources, inputs, HTTP/auth and kernel facts;
+  no live/private intake or grading ran. The accepted metadata absence below
+  remains evidence about two objects at one parent, not historical effects.
+  Run `37756891578`/r3a1 remains uncertain and nonretryable. The preparation
+  specialist failed before execution on unavailable Opus4.7, supplied no
+  endorsement and was not retried. Validation remains incomplete; fixed-HEAD
+  review/CI and a separate exact leader direction gate any live probe.
+
 - Record successful read-only metadata run `37789923398`/r2a1 at
   **2026-10-08 14:10:27 UTC**: the fixed Task3/F admission and output-manifest
   objects were absent at verified private parent
