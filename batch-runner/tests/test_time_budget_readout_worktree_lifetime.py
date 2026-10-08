@@ -73,6 +73,7 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
             deadline = time.monotonic() + 30
             before = readout._git(repository.workspace, "worktree", "list", "--porcelain", deadline=deadline)
             assert "worktree " + str(root) + "\\n" in before
+            root.parent.mkdir()
             with pytest.raises(subprocess.CalledProcessError) as failure:
                 readout._git(repository.workspace, "worktree", "add", "--quiet", "--detach",
                              str(root), repository.sha, deadline=deadline)
@@ -80,6 +81,8 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
                                        "stdout": failure.value.output, "registrations_before": before})
             assert failure.value.returncode == 128
             assert "already registered worktree" in failure.value.stderr
+            assert not root.exists() and not list(root.parent.iterdir())
+            root.parent.rmdir()
             assert not root.exists() and not root.parent.exists()
 
             calls, original_git = [], readout._git
