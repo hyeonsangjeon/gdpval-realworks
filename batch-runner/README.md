@@ -954,6 +954,11 @@ Do not treat a validation message or saved completion as execution authority.
 The current exact leader request remains a future gate, not a supplied example.
 
 Public owner/repository/main/workflow/source/digest gates precede credentials.
+The interpreter-free Bash owner/repository/ref/source/workflow/attempt guards
+run first, followed immediately by the existing pinned Python 3.10.12 setup
+with `token: ""`. The unchanged Python request/digest/controller/cell/run-number
+guard then runs before checkout, dependencies and credential-bearing stages.
+There is no later duplicate setup, alternative interpreter or fallback.
 The ordinary bootstrap is separate from linked C/R/F and private working
 directories; the workflow never spoofs `GITHUB_WORKSPACE`. Existing OIDC login
 precedes the single live context. Original parquet/references/full 218405-byte
@@ -971,6 +976,46 @@ ledger, checkpoint and partial evidence stays private. The executor discards
 child stdout/stderr, so those streams are not claimed retained. Only a
 validated safe completion is public, and success requires a valid F grade
 and acknowledged retention. Lost retention stays uncertain/nonrenewable.
+
+The bootstrap-order correction follows the leader-verified failure of run
+`37726733625`, run number 1/attempt 1, job `113146502043`, source
+`ef9eeb1157a0725d063dae5b3bd61dd46247feec`. The pinned container initialized;
+at **2026-10-08 04:17:20 UTC**, the first public guard failed with
+`line 8: python3: command not found`, exit **127**. Both logged source SHAs
+matched, but checkout, Python setup, renderer, login, controller/intake/claim/
+grading/retention/completion were skipped. Actual log SHA256 is
+`6d10c8a29fac1cdad0546373bab65adbb62877f4d72b3dc8c832d6b26da0853c`.
+The grader never entered and no private grading claim was reached. That
+dispatch is spent; an unadmitted grading attempt is not permission for a new
+submission, a model-quality finding or a zero-cost conclusion.
+
+From base `4fd8f0d0a2888ae2f6b896fce4409519d35da9eb`, tree
+`67adf9d2d78e6774e73c0261b5d8545fd252e50d`, tested HEAD
+`8bf0a3828601392f5305add05afd2b628325c23a`, tree
+`67ad2ccb649ed5f80f955d0dac05057e81bdeea5`, ran only the new
+`test_native_task3_grading_bootstrap_without_python` and directly changed
+hosted `guards` node once: **2 passed, 2 warnings in 11.38s**, exit **0**,
+wrapper **12.110234s**. Extracted Bash ran with no Python in PATH and refused
+wrong callers. The unchanged JSON guard passed/refused synthetic bindings
+with the existing test Python supplied. This does not establish live
+setup-action, image or host success. The sum of step ceilings is now
+**269 minutes**, within the unchanged **270-minute** job; no existing step
+ceiling, F/child budget, controller/native/F code, image/action pin or guard
+assertion changed.
+
+The proof used Python **3.10.12**, **300s+5s**, no `-x`, and existing
+**30-second** Git/Bash bounds. JUnit's two `record_property` warnings remain.
+Artifacts are in `/tmp/native-task3-grade-bootstrap.SGY1wD/`; log SHA256 is
+`5aef05918761208f59e0a991b6032d89b172b44cbdff0e6b47b1aab083c5a921`.
+Its `handoff.json` records final HEAD/tree after the three records, with
+tested workflow/test and production bytes unchanged. [LATEST](../tasks/LATEST_TASK_RESULT/README.md)
+records exact per-node outcomes and identities. Unchanged success/partial/
+timeout and old quote/temporary/Git/lifetime proofs were not rerun. The new
+mandatory specialist invocation failed before execution on the unavailable
+configured Opus 4.7 label, producing no endorsement; it was not retried.
+Fixed-HEAD review/CI and a new leader-issued source/run-number/window/hash
+remain gates. No new request, dispatch, credentialed intake, claim or grade
+was performed by this correction; there is no automatic retry.
 
 The new selector
 `tests/test_time_budget_native_grading_ci.py::test_native_task3_hosted_grading_route`
