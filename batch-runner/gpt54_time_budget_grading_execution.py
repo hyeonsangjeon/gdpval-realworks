@@ -76,6 +76,11 @@ _NATIVE_INTAKES: dict[NativeGradingPreparation, tuple[str, str, Path]] = {}
 class GradingExecutionRefused(ValueError):
     """No new attempt is authorized; retain any claim or partial state."""
 
+    def __init__(self, reason, *, refusal_point=None):
+        super().__init__(reason)
+        self.refusal_point = (refusal_point
+            if type(refusal_point) is native_intake.NativePreparationRefusalPoint else None)
+
 
 def _require(condition: bool, reason: str) -> None:
     if not condition:
@@ -151,25 +156,35 @@ def prepare_native_task3_grading_execution(*, request_json: str, expected_reques
     native = NativeGradingPreparation()
     with ExitStack() as scope:
         scope.callback(_NATIVE_INTAKES.pop, native, None)
+        point = native_intake.NativePreparationRefusalPoint.NATIVE_INPUT_PATH
         try:
             output = _absolute(execution_input_directory)
             reservation = output.with_name(output.name + NATIVE_INPUT_RESERVATION)
             _require(output.parent.is_dir() and not os.path.lexists(output) and not os.path.lexists(reservation),
                      "new_native_grading_input_required")
+            point = native_intake.NativePreparationRefusalPoint.NATIVE_CONTEXT
             summary = native_intake.prepare_retained_native_task3_grading(
                 request_json=request_json, expected_request_sha256=expected_request_sha256)
             # The only origin issuer is the completed, authenticated four-GET intake.
             # Drop its storage credential before any staging or caller grading code.
             scope.enter_context(native_intake.intake._hf_environment(online=False))
             _NATIVE_INTAKES[native] = (request_json, _encoded(summary).decode(), output)
+            point = native_intake.NativePreparationRefusalPoint.NATIVE_ARGUMENTS
             arguments = _native_arguments(native)
             plan = registration.load_registration(arguments["runtime_root"] / registration.REGISTRATION_PATH)
+            point = native_intake.NativePreparationRefusalPoint.NATIVE_CHECKED_PREPARATION
             with _checked_preparation(plan, arguments, materialize_native=True):
                 pass  # Real source/input/result/F checks and final rereads precede the yield.
-        except GradingExecutionRefused:
+        except GradingExecutionRefused as error:
+            if type(error.refusal_point) is not native_intake.NativePreparationRefusalPoint:
+                error.refusal_point = point
             raise
-        except (Exception, KeyboardInterrupt):
-            raise GradingExecutionRefused("native_grading_input_refused_retain_partial_state") from None
+        except (Exception, KeyboardInterrupt) as error:
+            if (type(error) is native_intake.NativeGradingIntakeRefused
+                    and type(error.refusal_point) is native_intake.NativePreparationRefusalPoint):
+                point = error.refusal_point
+            raise GradingExecutionRefused("native_grading_input_refused_retain_partial_state",
+                                          refusal_point=point) from None
         yield native
 
 
