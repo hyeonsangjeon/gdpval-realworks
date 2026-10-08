@@ -68,17 +68,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Complete model-free retained-payload preparation probe
+  `37859270679` (workflow `378041151`, run 6, attempt 1) at source
+  `a37a84a579bb91ddabd650b2a2e6e5bcb9fd00b4`, tree
+  `cc8b5ed635c9daed348f975f00013b03927b828d`. The 4194-byte request SHA256
+  is `a4108a655f0b543576e7f3ab34848a8a0191d32722c27e30b868d3061ae9e61d`.
+  Job `113590870304` and the preparation, safe-completion validation and
+  upload steps succeeded. The 1924-byte safe `completion.json` SHA256 is
+  `7f7c5102e67d74229c4f3d7c097bbb8553aec1dd198bba250f00782a5237a190`;
+  it reports `ready`, no refusal point and all four preparation stages
+  complete. Verified preparation is 30607 bytes; its derived result is
+  8747 bytes. Grading authority, handle reuse and retry remain false. No
+  grading/model call or private write occurred. The uncertain grading run 3
+  remains spent and nonretryable. This is not a score, live grading result,
+  historical LFS finding or replay authorization. Project completion is
+  unchanged at **50/54**. Exact bindings and identities are in the latest
+  task result.
+
 - Submit one source-bound, model-free retained-payload preparation probe:
   workflow `378041151`, run `37859270679`, run number **6**, attempt **1**,
   source `a37a84a579bb91ddabd650b2a2e6e5bcb9fd00b4`, tree
   `cc8b5ed635c9daed348f975f00013b03927b828d`. The **4194-byte** request SHA256
   is `a4108a655f0b543576e7f3ab34848a8a0191d32722c27e30b868d3061ae9e61d`;
-  window `1791501833..1791504233` is **2400 seconds**. Initial readback was
-  queued. Original bindings and preparation-only controls remain fixed.
+  window `1791501833..1791504233` is **2400 seconds**. The initial readback
+  was queued; the run later completed `ready` with verified preparation.
+  Original bindings and preparation-only controls remained fixed.
   The reviewed two-plus-four-plus-four transport retains **10 requests** and
   one **60-second** deadline; the hosted bound is **TERM300s/KILL5s**.
-  No terminal readiness, live recovery or historical cause is claimed.
-  No grading claim, model/judge, private write, replay or retry is authorized.
+  The terminal envelope establishes preparation readiness only, not grading,
+  live recovery or historical cause. No grading claim, model/judge, private
+  write, replay or retry is authorized.
 
 - Record model-free probe `37838315533`/r5a1 as refused at
   `retained_deliverable_identity`, after originals completed. Artifact

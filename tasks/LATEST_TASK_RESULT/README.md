@@ -1,16 +1,37 @@
 # Latest task result
 
-## Native Task3 retained-payload preparation probe submitted
+## Native Task3 retained-payload preparation verified
 
-One separately directed `prepare-probe` submission is bound to workflow
+The separately directed `prepare-probe` is bound to workflow
 `378041151`, run `37859270679`, run number **6**, attempt **1**, owner
 `hyeonsangjeon`. Its source is
 `a37a84a579bb91ddabd650b2a2e6e5bcb9fd00b4`, tree
 `cc8b5ed635c9daed348f975f00013b03927b828d`. The exact **4194-byte** request
 SHA256 is `a4108a655f0b543576e7f3ab34848a8a0191d32722c27e30b868d3061ae9e61d`.
 The admission window is `1791501833..1791504233`, **2400 seconds**.
-The exact run readback was queued at **2026-10-08 23:24:39 UTC**. No terminal
-preparation result or live payload recovery is established yet.
+The exact run was read back queued at **2026-10-08 23:24:39 UTC** and later
+completed successfully. Job `113590870304` completed successfully; the
+model-free originals/intake/F-preparation step, safe-completion validation and
+artifact upload all succeeded. Artifact `11585222488` contains
+`completion.json` (**1924 bytes**, SHA256
+`7f7c5102e67d74229c4f3d7c097bbb8553aec1dd198bba250f00782a5237a190`).
+The bound completion reports `status=ready`, `refusal_point=null`, and all
+four safe stages (environment, originals, intake/preparation and context
+exit) completed. The verified preparation is **30607 bytes**, SHA256
+`730a00283027beceff5ba4faf2a43a1982da8b329da3181495eb2ebb7a30fa8c`;
+its derived result is **8747 bytes**, SHA256
+`8e0c401d8d18c9f16d9439159f0944aa5ceabee7d8b0ed8e2a10e3298679be10`.
+The original retained result identity remains **8518 bytes**, SHA256
+`4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`.
+
+This is a successful model-free preparation result, not a grade or model
+quality result. `grading_authority`, `handle_reusable` and `retry_allowed`
+are all **false**. No grade, executor/model call, retention or private write
+was performed. The previously uncertain grading run 3 remains uncertain,
+spent and nonretryable; this preparation does not authorize its replay or a
+new grading claim. No conclusion about historical LFS use or earlier returned
+bytes follows. Project #5 remains **50/54**; the remaining cards concern other
+work and were not changed by this preparation outcome.
 
 Only the controller identity, next run number and admission window changed
 from the prior preparation request. Original R/result/F, Task3, input and
@@ -20,14 +41,15 @@ GETs per deliverable, **10 requests** under the same **60-second** retained
 intake deadline. Original-input acquisition remains bounded at **120 seconds**;
 the hosted preparation command remains **TERM300s/KILL5s**.
 
-This authorizes original acquisition, authenticated retained intake, F
-preparation and handle closure only. It stops before grading direction,
+The one-shot scope was original acquisition, authenticated retained intake,
+F preparation and handle closure only. It stopped before grading direction,
 private or local grading claim, model/judge/executor, retention and private
 writes. There is one submission and no implicit retry or workflow rerun.
 Earlier submissions remain spent; grading run 3 remains uncertain and
-nonretryable. The next decision uses the validated safe terminal envelope in
-a later cycle, without waiting or polling. Readiness or refusal alone grants
-no grading authority and does not identify historical server-returned bytes.
+nonretryable. This terminal envelope supplies the safe preparation result;
+later grading remains blocked until its authority and once-only preconditions
+are resolved. Readiness or refusal alone grants no grading authority and does
+not identify historical server-returned bytes.
 
 ## Retained-payload source accepted for delivery
 
