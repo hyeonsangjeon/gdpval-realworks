@@ -13,6 +13,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Stabilize only the two authorized cumulative-bound test clocks on PR781
+  by seeding them with exactly representable `1000.0` instead of live
+  `time.monotonic()`. Preserve the **+35-second** advances, **60-second**
+  cumulative bound, **2 calls**, exact second timeout **25**, refusal and
+  null-summary assertions; do not change production rounding or deadlines.
+  The leader-read CI run `37776879316`, time-budget-contracts job
+  `113309863966`, reported **1 failed, 466 passed in 1635.07s** of pytest
+  elapsed time, not job duration. The readout assertion saw
+  `24.999999999999773` instead of `25`; fractional-origin cancellation noise
+  is not evidence of a production timeout violation. Its **123102-byte /
+  1138-line** log SHA256 is
+  `3c97713c3aad9465d5cbe72aa87d471cd071b945da6b9f4ae1c8a8633e6ab387`;
+  it was not fetched again. At tested HEAD
+  `cda79aa0f355de4975192a48becc06e9dbc555a9`, tree
+  `581cfc7486f65af21c65aaba4456daafadc38781`, only the readout cumulative-bound
+  node and new metadata `[cumulative_bound]` node ran once: **2 passed in
+  2.52s**, exit **0**, process **2.935624s**, wrapper **5.955130s**, under
+  Python **3.10.12**, **300s+5s**, no `-x` and bounded Git. Artifacts are in
+  `/tmp/native-task3-metadata-clock.uKhiQL/`; log SHA256
+  `1d558afa9c7b992675856aad4600349dec78da570d115550a4c9c66eb7444576`,
+  JUnit SHA256 `13994e41e396102c629b2337de36086bd6c5731aba21c1c4baa7328fc520331b`.
+  External final-source/handoff receipts seal the final HEAD/tree after records.
+  The original **31-pass** proof below remains separate and was not rerun.
+  Synthetic HTTP/source evidence does not inspect private state. Workflow,
+  runtime, helper, schema, pins and metadata **2-operation / 60-second /
+  64-KiB-per-response** limits are unchanged. Run `37756891578`/r3a1 remains
+  uncertain and nonretryable. Fixed-HEAD review/CI and a separate exact leader
+  read-only direction remain required; no new CI success or live authority is
+  claimed. No specialist invocation was retried.
+
 - Extend the existing read-only storage-metadata route with the closed
   `native_task3_grade` scope for only the fixed Task3/F `admission.json` and
   `output-manifest.json` metadata paths. Keep the default first-V2 Task1

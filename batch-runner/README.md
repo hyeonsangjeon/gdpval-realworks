@@ -2020,13 +2020,31 @@ inspected parent. Refused responses leave object states unknown, even if the
 private parent was verified. Unknown scope, duplicate/unrelated paths or keys,
 wrong type, oversized/encoded responses and exhausted deadlines are refused.
 
-The new selector plus the changed workflow contract passed **31 tests in
+The original selector plus the changed workflow contract passed **31 tests in
 19.64s** once at `83ea4a90f14b8cba93c4609a48ea4d332d9e48c0`, tree
 `42d070882d36ee077344fcc2285c41306e6bb0d3`; process **20.036112s**, wrapper
 **22.192873s**. This used real source/CLI/SDK/schema checks with synthetic
 Actions identities and HTTP metadata, not a live private read. Artifacts and
 exact final-source receipts are in `/tmp/native-task3-grade-metadata.AQ3jgv/`
-and the [current task record](../tasks/LATEST_TASK_RESULT/README.md).
+and the [immutable original record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/2b23b94a1b2637cd12041e7659d0c8ae252d423c/tasks/LATEST_TASK_RESULT/README.md).
+
+Separately, leader-read CI run `37776879316`, job `113309863966`, reported
+**1 failed, 466 passed in 1635.07s** of pytest elapsed time, not job duration.
+The readout cumulative-bound test observed `24.999999999999773` instead of
+exactly `25` after advancing an arbitrary fractional fake-clock origin.
+Only that test and the new metadata selector's cumulative-bound case now
+seed their clocks at `1000.0`. The **+35-second** increments, **60-second**
+bound, **2 calls**, exact `25`, refusal and null-summary checks remain intact;
+runtime rounding, deadlines and every production byte are unchanged.
+Those two nodes alone passed once in **2.52s**, exit **0**, process
+**2.935624s**, wrapper **5.955130s**, at tested HEAD
+`cda79aa0f355de4975192a48becc06e9dbc555a9`, tree
+`581cfc7486f65af21c65aaba4456daafadc38781`. Their synthetic proof and final
+source receipts are in `/tmp/native-task3-metadata-clock.uKhiQL/`; exact
+commands and hashes are in the [current task record](../tasks/LATEST_TASK_RESULT/README.md).
+The original 31-case proof was not rerun. This correction is not evidence of
+a production timeout violation or a passing delivery CI gate.
+
 Fixed-HEAD review/CI and a separate exact leader direction remain required
 before any read-only Actions submission. The unavailable Opus4.7 review
 attempt supplied no endorsement. Run `37756891578`/r3a1 remains uncertain;
