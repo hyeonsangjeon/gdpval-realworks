@@ -259,8 +259,9 @@ def test_native_task3_retained_payload(case, offline, monkeypatch, capsys, recor
         assert len(calls) == expected_calls
         if scenario == "deadline":
             elapsed_per_call = 30 if variant == "after_initial" else 15 if variant == "second_payload" else 10
+            assert subject.storage.REQUEST_SECONDS == 30
             assert [request.extensions["timeout"]["read"] for request in calls] == [
-                60 - elapsed_per_call * index for index in range(expected_calls)]
+                min(30, 60 - elapsed_per_call * index) for index in range(expected_calls)]
         if scenario == "resolved":
             assert [request.url.host for request in calls[2:]] == [
                 "huggingface.co", "huggingface.co", "cdn-lfs.huggingface.co", "synthetic-retained.hf.co"] * 2
