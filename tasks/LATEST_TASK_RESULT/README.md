@@ -1,64 +1,58 @@
 # Latest task result
 
-## Fixed native Task3 hosted grading route accepted
+## One retained native Task3 grade submitted
 
-Reviewed source `e2e22f45ef06fc2ef4a71b09788d149cc928db4c`, tree
-`7fd8891fef05f9489bdf76e58083522423beef67`, passed all eleven CI checks.
-Review `5450750372` accepts the final source. Only these completion records
-change after validation; reviewed workflow, production and test bytes stay
-unchanged.
+The owner-account dispatch created [run 37726733625][run], workflow
+`378041151`, run number 1, attempt 1. Its source readback is
+`ef9eeb1157a0725d063dae5b3bd61dd46247feec`, tree
+`a6a608dd7270560b7259d6b7b5f20ea6c4888099`. At the admission readback it was
+queued, with no conclusion. This is dispatch evidence, not a model call,
+successful input hydration, grading claim, retained grade or score.
 
-The route uses one controller process to keep the authenticated native intake
-context open through genuine original-input/result hydration, frozen F
-preparation, distinct derived grading input, concrete direction checks,
-permanent private observation/F-keyed claim acknowledgement, one local
-executor attempt and private retention. No serialized handle or occupied
-claim is adopted. The existing V2-only entry remains unchanged.
+The request grades only retained `gpt54_time_budget_v1_codex_r1` / codex /
+repeat 1 / `2ea2e5b5-257f-42e6-a7dc-93763f28b19d` in the existing
+twenty-observation study. It does not repeat generation.
 
-The [prior record][prior] retains the separate proofs and their artifacts:
-seven hosted-route cases passed in 294.01s; the quote-contract node passed
-in 0.19s; the temporary-directory lifecycle node passed in 0.37s. The subsequent
-four-node invocation remained one failed and three passed in 28.81s.
-Only its failed registration-lifetime node then ran at
-`5d523d131d97e5255430b15acefb2bf68c7fc407` and passed in 1.92s,
-wrapper 2.243325s. No combined four-pass invocation is claimed.
+The final canonical request is 4603 UTF-8 bytes, SHA256
+`3a813fa01ce9c18df9a4ca483e89212d445ac51f39f9a5577398775487fd263e`.
+Its admission window is Unix `1791432932` through `1791435332`
+(2400 seconds). The preparation packet's expired 0..1 window was replaced
+only after the leader independently compared its bytes and bindings.
 
-The final synthetic Git proof observed the real missing-but-registered
-worktree refusal after matching the fixture's parent-directory state.
-It then verified same-path reuse and all ten failed-worktree, shared/sibling,
-commit/tree/branch preservation checks. The CI-only retention policy cleans
-passed per-case temporary directories on a best-effort basis. Its fixture
-prune concerns missing registrations only in its own synthetic repository.
-No real repository cleanup, workload removal or timeout increase was used.
+The original public completion is 1102 bytes, SHA256
+`0f2f8fec804785518c236d334d501cb8a7f9e567814bda58cdf97678b152c702`,
+independently downloaded from artifact `11486512100`. It binds original R
+`33e24e9c1402ec0b7c92a71222998d1407646a92`, generation `37631184801`,
+and private output `d5aeecec1394fb44d4b1da33b1be38a39acdb89a`.
+The original-R registration and dataset seals and frozen profile hash were
+independently derived from immutable GitHub source and matched the request.
+F remains `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`.
 
-The older runner disk-full and 45-minute cancellation annotations remain
-historical failures. The 10673136 allocated KiB NAS measurement concerns
-retained synthetic test storage, not the failed GitHub runner. The old
-1513.84s value is pytest-summary elapsed time, not full-job duration.
-Final green CI establishes this source's checks, not a retroactive cause
-for those incidents or a general performance guarantee.
+Reviewed source `e2e22f45ef06fc2ef4a71b09788d149cc928db4c`, review
+`5450750372`, passed all eleven checks. Its delivery changed only completion
+records. This admission record also changes no production, workflow, test,
+study, original-input or frozen-grader byte. [Earlier evidence][prior]
+preserves the distinct synthetic proofs and runner incidents.
 
-Actual native r1 Task3 remains ungraded. Its original R is
-`33e24e9c1402ec0b7c92a71222998d1407646a92`; the retained output is
-`d5aeecec1394fb44d4b1da33b1be38a39acdb89a`. The verified canonical readout
-declares two files totaling 408601 bytes; their contents have not yet been
-hydrated for grading here. Native usage/cost/counters remain unknown, not zero.
-F stays `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`; the study, original
-inputs, model, rubrics, scoring and filename policy remain unchanged.
+The existing finite controls remain one external grading attempt,
+14400-second F budget, 14520-second child envelope, 270-minute job,
+300-second preclaim ceiling and bounded 120-second storage sessions.
+The owner already delegated this budget and execution decision; no renewed
+owner approval is required.
 
-The next unit prepares the exact nonsecret request for one Task3 grade:
-accepted C commit/tree, original R/F/result/input bindings, actual workflow
-run number and attempt 1, canonical container paths, finite admission window,
-and an independently expected private parent. No model-free marker is live
-authority. The existing 14400-second F, 14520-second child and 270-minute
-job limits remain. No concurrent private writer may advance the grading
-claim's expected retention parent during the attempt.
+The live workflow must still verify its actual paths, host/renderer,
+approved identity/connection, original inputs, retained result/files, F
+preparation and concrete direction before acknowledging the permanent private
+grading claim. Expected parent
+`82ed160109e40dcf74029f2be34a973350374fc6` is last-known independent evidence,
+not a fresh storage read; actual parent and namespace absence must match at
+CAS. No concurrent private writer or automatic next cell is authorized.
 
-The owner already delegated budget and execution decisions. One exact leader
-request and actual host/auth/input/CAS checks still precede the paid attempt.
-This record authorizes request preparation only, not workflow dispatch,
-private fetch/claim, grading, generation replay, Task5 or automatic next-cell
-advance. Unavailable specialist attempts supplied no endorsement; source
-acceptance came from the leader's recorded review.
+No retry, claim adoption, score-driven regrading, generation replay, Task5,
+Azure management or account change is allowed. Unknown cost/usage is not
+zero, and no monetary hard cap is claimed. The supervisor does not wait for
+this bounded execution. The next decision reads its terminal evidence once;
+any uncertain admission/output remains explicit and nonrenewable.
 
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e2e22f45ef06fc2ef4a71b09788d149cc928db4c/tasks/LATEST_TASK_RESULT/README.md
+[run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37726733625
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/ef9eeb1157a0725d063dae5b3bd61dd46247feec/tasks/LATEST_TASK_RESULT/README.md

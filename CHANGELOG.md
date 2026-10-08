@@ -13,6 +13,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Submit one retained native r1 Task3 frozen-F grading request through
+  workflow `378041151`: run `37726733625`, run number 1, attempt 1, source
+  `ef9eeb1157a0725d063dae5b3bd61dd46247feec`. The exact 4603-byte request
+  SHA256 is `3a813fa01ce9c18df9a4ca483e89212d445ac51f39f9a5577398775487fd263e`.
+  Original completion, registration/dataset seals and frozen profile bytes
+  matched independent evidence. The run was queued when admitted; no claim,
+  grader call, retained grade, score or usage is established by that status.
+  Keep the existing one-attempt/time limits and stop without retry or
+  generation replay if any live admission or retention check is uncertain.
+
+### Changed
+
 - Accept the fixed native Task3 hosted grading route at
   `e2e22f45ef06fc2ef4a71b09788d149cc928db4c`, tree
   `7fd8891fef05f9489bdf76e58083522423beef67`, review `5450750372`,
