@@ -11,6 +11,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Submit one new retained native r1 Task3 frozen-F grading request after
+  bootstrap source review `5451806465` and all 11 applicable CI checks.
+  Workflow `378041151` produced run `37737075149`, run number 2, attempt 1,
+  at controller source `e0eeed56c27387d7341e61a2a4cebf02b964411a`.
+  The exact 4603-byte request SHA256 is
+  `68b82d9878ad1df9a502ce1ebb9d4b0ede6427fdad5e7471db439a1c92710df7`,
+  with admission window `1791440372` through `1791442772` (2400 seconds).
+  Original generation/result/input/F bindings remain unchanged. The run was
+  queued at the exact readback; no private claim, grader call, retained grade,
+  score or usage is established by that status. Run `37726733625` remains a
+  spent pre-admission bootstrap failure and was not rerun. Keep one admitted
+  grade, existing time ceilings and no concurrent private writer; stop on
+  refusal or uncertainty without retry, adoption or generation replay.
+
 ### Fixed
 
 - Correct only the retained native Task3 grading workflow's public bootstrap
