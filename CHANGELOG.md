@@ -13,6 +13,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Seed only the native canonical readout test's `cumulative_bound` fake clock
+  with `1000.0` instead of `time.monotonic()`. Leader-read CI run `37845775719`,
+  job `113546154746`, reported **1 failed, 493 passed in 1850.64s** (pytest
+  elapsed, not total job duration): actual second read timeout
+  `24.999999999999773` failed the unchanged exact `== 25` assertion. The other
+  ten checks succeeded at that snapshot. Preserve `+35`, the **60-second**
+  cumulative bound, **30-second** request checks and refusal outcome; no
+  production, resolver, helper or pin changed. At tested HEAD
+  `fad2230aff020303fe609273422edc3dabf7535c`, tree
+  `66a488608045f01a7f940e337b625e98835c13fd`, only the exact failed node ran:
+  **1 passed in 1.85s**, exit **0**, command wall **2.238s**, under
+  **TERM120s/KILL5s**. Earlier payload proofs below remain separate and were
+  not rerun. The leader's review of `e11048810176178cacefb2110df590d58f4a5e40`
+  found no blocking source defect; it is not approval of the new HEAD.
+  [Current LATEST](tasks/LATEST_TASK_RESULT/README.md) records the command,
+  log/JUnit hashes and tested/final seals. Fixed-HEAD review/CI and separate
+  exact live authorization remain required; no live fix is claimed.
+
 - Resolve only the two retained native Task3 deliverable payloads through the
   existing immutable HF reader and redirect policy. Private metadata and
   canonical result JSON keep their two fixed, nonredirecting GETs. Each payload

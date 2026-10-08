@@ -1,14 +1,77 @@
 # Latest task result
 
-## Bounded retained-deliverable resolution implemented offline
+## PR #784 native readout fake-clock correction
+
+Only the `cumulative_bound` scenario in
+`tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout`
+now starts its fake clock at `1000.0`. The exact failed node passed once under
+TERM120s/KILL5s. No production, workflow, resolver, shared helper, pin, budget
+or other test site changed. The earlier payload proofs remain separate below.
+
+### Established CI failure and prior review
+
+The leader read CI run `37845775719`, time-budget-contracts job `113546154746`,
+at HEAD `e11048810176178cacefb2110df590d58f4a5e40`, tree
+`2e500a8c4f5267bf7659ade376e4dcffa3ab8c12`. Its pytest summary was **1 failed,
+493 passed in 1850.64s**; that duration is not the total GitHub job duration.
+The other **10 checks** succeeded at the leader's snapshot. No CI status or
+old log was fetched during this correction.
+
+Line 574's exact assertion expected `25`; the observed second request timeout
+was `24.999999999999773`. Line 531 seeded `now = [time.monotonic()]` before the
+two `+35` advances. That fractional origin made exact subtraction unstable.
+This file was unchanged by the earlier payload PR. The one-line correction
+uses `now = [1000.0]` and preserves `+35`, exact `== 25`, the **60-second**
+cumulative bound, **30-second** per-request checks and refusal outcome. No
+tolerance or production clock change was introduced.
+
+The leader found no blocking source defect in the prior ten-file change at
+`e11048810176178cacefb2110df590d58f4a5e40`. That review is evidence about that
+source, not approval of this new HEAD.
+
+### This targeted validation
+
+The existing isolated branch was clean at the prior HEAD before editing.
+The one-line correction was committed normally before testing as
+`fad2230aff020303fe609273422edc3dabf7535c`, tree
+`66a488608045f01a7f940e337b625e98835c13fd`. Existing Python **3.10.12** and
+pytest **9.1.1** were used; no dependency installation or new proof framework.
+Exact collection found **1 node**, exit **0**, in **1.38s** pytest elapsed
+and **1.785s** command wall time. From `batch-runner`, with the sanitized
+offline environment retained in `command.json`, the sole body invocation was:
+
+```bash
+timeout --signal=TERM --kill-after=5s 120s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -v --tb=short --capture=tee-sys --basetemp=/tmp/native-task3-pr784-clock.zA3VQy/pytest-tmp --junitxml=/tmp/native-task3-pr784-clock.zA3VQy/junit.xml 'tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout[cumulative_bound]'
+```
+
+Result: **1 passed in 1.85s**, exit **0**; Bash measured **2.238s** command
+wall time, including timeout/Python but excluding separate collection. The
+command ran **2026-10-08 22:22:34..22:22:36 UTC**. JUnit records **1 test,
+0 failures, 0 errors, 0 skipped**. No other test body or successful earlier
+selector ran. Synthetic transport and source fixtures exercised the real
+readout refusal/validator; this was not a private read or live execution.
+
+Artifacts are retained in `/tmp/native-task3-pr784-clock.zA3VQy/`:
+
+- `pytest.log`: **752 bytes**, SHA256
+  `a22867de68ee80adb8c1f548580910139ec96e8dfad0f794d1913b16636c2ffb`.
+- `junit.xml`: **394 bytes**, SHA256
+  `754354820aa1b43a88ea6fb3bdd36eade651ac78584709aa37733033ea3dc09e`.
+- `collection.log`: **540 bytes**, SHA256
+  `68e7bd56a9c0b287b18c268a371914c1d8ec4eafc28c775dc51342844d91ce1e`.
+- Exact command, source and outcome JSON receipts preserve the independent
+  collection/test timings and exit codes. Only CHANGELOG and this LATEST
+  change after the tested commit. `final-source.json` in this directory and
+  the updated PR body seal final HEAD/tree after that records-only commit.
+  No carrying-PR merge SHA, time or state is claimed.
+
+### Unchanged retained-payload implementation
 
 The native intake now resolves only its two retained deliverable payloads
 through the existing HF reader. Real SDK/adapter/F checks completed preparation
 with synthetic plain and redirected payloads. The first proof had one test
 expectation failure; its isolated, test-only correction passed. These are
 separate results, not a pooled passing suite or a live recovery claim.
-
-### Scope and transport boundary
 
 `gpt54_time_budget_native_grading_intake._hydrate` preserves its immutable
 private metadata GET and canonical result JSON raw GET, with no redirects.
@@ -36,11 +99,11 @@ Preparation still stops before direction, permanent/private or local grading
 claim, executor/model, retention and private-storage writes. F/child/job limits
 remain **14400 seconds / 14520 seconds / 270 minutes**.
 
-### Actual proof results
+### Earlier payload proof results (not rerun)
 
 Imports, fixture dependencies and exact collection were checked before each
 invocation. Python **3.10.12**, pytest **9.1.1**, huggingface-hub **1.24.0** and
-httpx **0.28.1** were already installed. Both invocations used **300s+5s**, no
+httpx **0.28.1** were already installed. Both earlier invocations used **300s+5s**, no
 `-x`, local Git capped at **30 seconds**, immediate phase/failure flushing and
 JUnit. Warnings are the existing `record_property`/`xunit2` compatibility warning.
 
@@ -104,7 +167,7 @@ preserved without a ready record or preparation. This proves synthetic protocol
 behavior, not historical LFS use, the bytes returned by a live server or a
 successful future hosted probe.
 
-### Sources and retained artifacts
+### Earlier payload sources and retained artifacts
 
 - Base HEAD `2d99265ac79001506f7421485fed037bcad09a2a`, tree
   `7971342e0743f570069f31d92241de43e85ac7f0`.
@@ -128,10 +191,13 @@ successful future hosted probe.
   `reports.jsonl` **3823 bytes**, SHA256
   `7eaa06f76844984c18eea9f880ad3e31babad009c191d4b6905d2d5ae38487a4`.
 - Both directories retain exact command/selection/source/outcome receipts and
-  JUnit case properties. Only these three evidence records change after the
-  corrected proof. The first directory's `final-source.json` and the draft PR
-  body seal the exact final HEAD/tree after the records commit and confirm
-  tested-code equality. No carrying-PR merge fact is recorded.
+  JUnit case properties. At the original PR publication, only CHANGELOG,
+  LATEST and the direct README changed after the corrected payload proof.
+  The first directory's `final-source.json` seals that prior final HEAD
+  `e11048810176178cacefb2110df590d58f4a5e40`, tree
+  `2e500a8c4f5267bf7659ade376e4dcffa3ab8c12`, and its tested-code equality.
+  That [immutable publication record][payload-prior] remains separate from
+  this clock correction. No carrying-PR merge fact is recorded.
 
 ### Historical refusal, fixed bindings and remaining gates
 
@@ -178,10 +244,13 @@ next cell, merge or Project edit was performed.
 
 The complete catalog was consulted once. `experiment-report-en` preserves
 numeric units, provenance and uncertainty; `im-not-ai-en` checks English.
-No study redesign/UI skill or unavailable specialist retry applies, and no
-specialist endorsement is claimed. A fresh read-only reporting reviewer could
-not start because its endpoint returned HTTP 400; it supplied no review and
-was not retried. Scoped literal checks and a direct condition audit are retained.
+Experiment-design does not apply because no study/configuration is changing;
+UI/animation skills do not apply because no interface work is involved. No
+unavailable specialist was retried and no endorsement is claimed. The earlier
+reporting reviewer failed before execution with HTTP 400 and supplied no review;
+it was not retried. Scoped literal checks and a direct condition audit cover
+this narrow records update.
 
+[payload-prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e11048810176178cacefb2110df590d58f4a5e40/tasks/LATEST_TASK_RESULT/README.md
 [prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/2d99265ac79001506f7421485fed037bcad09a2a/tasks/LATEST_TASK_RESULT/README.md
 [probe-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37838315533
