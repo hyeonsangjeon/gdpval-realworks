@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 import time
 from types import SimpleNamespace
 from urllib.parse import unquote, urlsplit
@@ -31,6 +32,111 @@ from .test_time_budget_first_v2_ci import PrivateStore, TOKEN as RPC_TOKEN
 
 ROOT = Path(__file__).resolve().parents[2]
 _REAL_RUN, _REAL_POPEN = subprocess.run, subprocess.Popen
+
+
+def test_native_task3_grading_bootstrap_without_python(tmp_path, record_property):
+    """Run the public guards locally, not setup-python or a hosted container."""
+    workflow = yaml.safe_load((ROOT / subject.WORKFLOW).read_text())
+    job = workflow["jobs"][subject.JOB]
+    steps = job["steps"]
+    bash_guard, setup, json_guard, checkout = steps[:4]
+    assert [index for index, step in enumerate(steps)
+            if step.get("uses", "").startswith("actions/setup-python@")] == [1]
+    assert setup == {
+        "name": "Set up pinned Python", "timeout-minutes": 1,
+        "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "with": {"python-version": "3.10.12", "token": ""},
+    }
+    assert all(line.startswith("[[ ") and line.endswith(" ]]")
+               for line in bash_guard["run"].splitlines())
+    assert "python" not in bash_guard["run"].lower()
+    assert json_guard["run"].startswith("python3 - <<'PY'\n")
+    assert checkout["uses"] == "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"
+    assert "secrets." not in json.dumps(job["env"])
+    for index, step in enumerate(steps):
+        if "secrets." in json.dumps(step) or "pip install" in step.get("run", ""):
+            assert index > 2
+    assert job["timeout-minutes"] == 270
+    assert sum(step["timeout-minutes"] for step in steps) == 269
+    assert bash_guard["timeout-minutes"] == json_guard["timeout-minutes"] == 1
+
+    absent_python = tmp_path / "path-without-python"
+    absent_python.mkdir()
+    # Synthetic public bindings exercise only the early guard, not admission.
+    request = {
+        "controller": {"sha": "a" * 40, "tree": "b" * 40},
+        "cell": {"study_id": "gpt54_sandboxv2_codex_time_budget_v1",
+                 "run_id": "gpt54_time_budget_v1_codex_r1", "condition": "codex",
+                 "repeat": 1, "task_id": "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"},
+        "ci": {"run_number": 2, "attempt": 1},
+    }
+    data = json.dumps(request, sort_keys=True, separators=(",", ":"))
+    environment = {
+        "PATH": str(absent_python), "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "GITHUB_REPOSITORY": subject.shared.REPOSITORY, "GITHUB_REF": "refs/heads/main",
+        "GITHUB_ACTOR": subject.shared.OWNER, "GITHUB_TRIGGERING_ACTOR": subject.shared.OWNER,
+        "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_NUMBER": "2",
+        "CONTROLLER_SHA": "a" * 40, "CONTROLLER_TREE": "b" * 40, "GITHUB_SHA": "a" * 40,
+        "TIME_BUDGET_GRADE_WORKFLOW_SHA": "a" * 40,
+        "GITHUB_WORKFLOW_REF": subject.shared.REPOSITORY + "/" + subject.WORKFLOW + "@refs/heads/main",
+        "TIME_BUDGET_GRADE_REQUEST_JSON": data, "REQUEST_SHA256": _identity(data.encode())["sha256"],
+    }
+
+    def run_guard(step, env):
+        return _REAL_RUN(
+            ["/bin/bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step["run"]],
+            env=env, check=False, capture_output=True, text=True, timeout=30,
+        )
+
+    assert list(absent_python.iterdir()) == []
+    result = run_guard(bash_guard, environment)
+    record_property("python_absent_bash_exit", result.returncode)
+    assert result.returncode == 0, result.stderr
+    for key, value in (
+        ("GITHUB_EVENT_NAME", "push"), ("GITHUB_REPOSITORY", "other/repository"),
+        ("GITHUB_REF", "refs/heads/other"), ("GITHUB_ACTOR", "wrong-caller"),
+        ("GITHUB_TRIGGERING_ACTOR", "wrong-caller"), ("GITHUB_RUN_ATTEMPT", "2"),
+        ("CONTROLLER_SHA", "invalid"), ("CONTROLLER_TREE", "invalid"),
+        ("GITHUB_SHA", "c" * 40), ("TIME_BUDGET_GRADE_WORKFLOW_SHA", "c" * 40),
+        ("GITHUB_WORKFLOW_REF", "other/workflow"),
+    ):
+        result = run_guard(bash_guard, {**environment, key: value})
+        record_property("python_absent_refusal_" + key, result.returncode)
+        assert result.returncode == 1, (key, result.stderr)
+
+    supplied_python = tmp_path / "path-with-test-python"
+    supplied_python.mkdir()
+    (supplied_python / "python3").symlink_to(sys.executable)
+    environment["PATH"] = str(supplied_python)
+    result = run_guard(json_guard, environment)
+    record_property("json_guard_valid_exit", result.returncode)
+    assert result.returncode == 0, result.stderr
+    for group, key, value in (
+        ("controller", "sha", "c" * 40), ("controller", "tree", "c" * 40),
+        ("cell", "study_id", "other"), ("cell", "run_id", "gpt54_time_budget_v1_codex_r2"),
+        ("cell", "condition", "sandbox_v2"), ("cell", "task_id", "unregistered"),
+        ("cell", "repeat", 2), ("cell", "repeat", True),
+        ("ci", "run_number", 3), ("ci", "run_number", True),
+        ("ci", "attempt", 2), ("ci", "attempt", True),
+    ):
+        mutated = deepcopy(request)
+        mutated[group][key] = value
+        encoded = json.dumps(mutated, sort_keys=True, separators=(",", ":"))
+        result = run_guard(json_guard, {**environment, "TIME_BUDGET_GRADE_REQUEST_JSON": encoded,
+                                       "REQUEST_SHA256": _identity(encoded.encode())["sha256"]})
+        record_property("json_guard_refusal_" + group + "_" + key + "_" + str(value), result.returncode)
+        assert result.returncode == 1, (group, key, value, result.stderr)
+    for label, encoded, digest in (
+        ("digest", data, "0" * 64),
+        ("empty", "", _identity(b"")["sha256"]),
+        ("oversize", " " * 16385, _identity(b" " * 16385)["sha256"]),
+    ):
+        result = run_guard(json_guard, {**environment, "TIME_BUDGET_GRADE_REQUEST_JSON": encoded,
+                                       "REQUEST_SHA256": digest})
+        record_property("json_guard_refusal_" + label, result.returncode)
+        assert result.returncode == 1, (label, result.stderr)
+    record_property("step_ceiling_minutes", 269)
+    record_property("bounded_outcome", "Bash guards with no Python; token-free setup ordering; unchanged JSON guards with supplied test Python; no live container or admission")
 
 
 @pytest.fixture
@@ -256,6 +362,11 @@ def _workflow(hosted, monkeypatch, capsys):
     assert "HF_TOKEN" not in environment
     assert hosted.local(command, env=environment).returncode == 0
     assert hosted.local(command, env={**environment, "GITHUB_RUN_ATTEMPT": "2"}, check=False).returncode != 0
+    assert steps[1]["with"] == {"python-version": "3.10.12", "token": ""}
+    assert steps[2]["run"].startswith("python3 - <<'PY'\n")
+    command[-1] = steps[2]["run"]
+    assert hosted.local(command, env=environment).returncode == 0
+    assert hosted.local(command, env={**environment, "REQUEST_SHA256": "0" * 64}, check=False).returncode != 0
     assert hosted.local(["/bin/bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", hosted.block],
                         cwd=hosted.bootstrap, check=False).returncode != 0
 

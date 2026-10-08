@@ -11,6 +11,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct only the retained native Task3 grading workflow's public bootstrap
+  order. Keep every interpreter-free Bash source/caller/workflow/attempt
+  assertion first, move the same pinned Python 3.10.12 setup immediately next
+  with `token: ""`, then run the unchanged Python request/digest/controller/
+  cell/run-number assertions before checkout, dependencies or credentials.
+  Remove the old setup position. All remaining stages, action/image pins,
+  controller/native/F code, permissions and individual ceilings are unchanged;
+  the split gives a 269-minute sum of step ceilings within the existing
+  270-minute job, with the same 14400/14520-second F/child envelopes.
+  From `4fd8f0d0a2888ae2f6b896fce4409519d35da9eb`, tree
+  `67adf9d2d78e6774e73c0261b5d8545fd252e50d`, tested source
+  `8bf0a3828601392f5305add05afd2b628325c23a`, tree
+  `67ad2ccb649ed5f80f955d0dac05057e81bdeea5`, ran only the new bootstrap
+  regression and directly changed hosted `guards` node once: **2 passed,
+  2 warnings in 11.38s**, exit 0, wrapper **12.110234s**. The warnings concern
+  JUnit `record_property`. Actual extracted Bash passes with no Python in PATH
+  and refuses wrong callers; the original JSON guard passes/refuses synthetic
+  bindings with the existing test Python supplied. This is not live container
+  evidence. Artifacts are in `/tmp/native-task3-grade-bootstrap.SGY1wD/`, log
+  SHA256 `5aef05918761208f59e0a991b6032d89b172b44cbdff0e6b47b1aab083c5a921`;
+  `handoff.json` records final HEAD/tree after the three evidence records.
+  Preserve run `37726733625`/job `113146502043` separately: its initialized
+  container failed the first public guard at **04:17:20 UTC** with
+  `line 8: python3: command not found`, exit **127**; the grader and private
+  grading claim were never reached. Run 1's dispatch is spent, and an
+  unadmitted grading attempt does not authorize a new submission or a
+  zero-cost/quality claim. The new specialist invocation failed before
+  execution on its unavailable configured Opus 4.7 label; it produced no
+  review and was not retried. The leader accepted fixed HEAD
+  `94e8c40fb0ea8f8c4685fe7346f54442609a1d7d`, tree
+  `4a144b7d60db7e17de2b2fd34b902b85327045a3`, in review `5451806465`.
+  All 11 applicable checks succeeded in CI run `37730617765`, observed at
+  **2026-10-08 06:14:51 UTC**. A new leader-issued
+  source/run-number/window/request hash remains required. No live operation or
+  unchanged success/partial/timeout selector was run. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  retains the exact failure, proof and admission boundaries.
+
 ### Changed
 
 - Record the actual pre-grading outcome of run `37726733625`, attempt 1:
