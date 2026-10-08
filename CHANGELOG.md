@@ -41,36 +41,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Scope the native Task3 grading workflow's Git trust to its verified ordinary
-  bootstrap. Keep the physical-path and ordinary `.git` checks first, then set
-  one process-local `safe.directory` entry for that exact path. The later
-  sanitized Git helper discards workflow/global configuration, so it also
-  needs one exact bootstrap allowance, derived from the code-defined linked
-  controller's real common directory and reciprocal worktree registration.
-  No wildcard, global configuration, ownership change or blanket linked-root
-  trust is added. All source checks, controller/native/F/scoring code, pins,
-  permissions, credentials, study and 14400/14520-second controls stay fixed;
-  the step ceilings still total 269 minutes within the 270-minute job.
-  From `3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
+- Keep native Task3 bootstrap trust local to its controller, restoring the
+  shared `gpt54_disposable_checkout.py` to exact base SHA256
+  `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
+  Preserve the workflow's two process-local trust lines after physical-path
+  and ordinary-`.git` checks. The controller verifies the code-defined linked
+  C's common directory and reciprocal registration before four fixed bootstrap
+  reads use command-local `-c safe.directory=<verified bootstrap>` through the
+  unchanged sanitized Git primitives. No shared-helper mutation, wildcard,
+  persistent configuration, copied Git implementation or pin-registry update
+  remains. C/R/F checks, native/F/scoring code, permissions, credentials, study
+  and 14400/14520-second controls stay fixed; step ceilings still total
+  269 minutes within the 270-minute job.
+  The old ownership proof at `0630f45535d563027cd7ee0f816c89a6e9745ade`,
+  tree `11ecae2d8b2cf56082e934bd50fd8d8898496422`, remains **1 passed,
+  1 warning in 2.16s**, exit **0**, wrapper **4.977293s**. It did not cover
+  registered-source compatibility. At prior HEAD
+  `f2d8183088b8cc4c345c704e14c83f88f6e889f8`, the leader-read CI run
+  `37742051694` separately reported: pytest job `113194779961`, **18 failed /
+  13378 passed / 64 skipped / 46 deselected / 1 warning in 1445.26s**;
+  time-budget-contracts `113194779964`, **199 failed / 186 passed / 46 errors
+  in 378.71s**; comparison-contracts `113194780036`, **101 failed / 1245 passed /
+  117 errors in 814.33s**. These are pytest summaries, not full job durations
+  or model outcomes; no CI re-fetch or poll followed.
+  From base `3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
   `8bcad24257dfe0b22ca6a0d17e34f035eba33454`, tested HEAD
-  `0630f45535d563027cd7ee0f816c89a6e9745ade`, tree
-  `11ecae2d8b2cf56082e934bd50fd8d8898496422`, ran only the new real-Git
-  ownership selector once: **1 passed, 1 warning in 2.16s**, exit **0**,
-  wrapper **4.977293s**. Tiny synthetic C/R/F commits and a scoped
-  `GIT_TEST_ASSUME_DIFFERENT_OWNER` seam reproduce exit 128, then verify the
-  extracted workflow, detached source trees, unrelated-repository refusal
-  and reciprocal-registration tamper refusal. This is not live host ownership
-  or grading evidence. Artifacts: `/tmp/native-task3-git-ownership.mJCbh9/`;
-  log SHA256 `18dd492facf59edf8ac23a55e8fa1ff06ee4e755ebbdb526f940a8091b882aa1`;
-  JUnit SHA256 `870d403e2db2d1bd2743f97100661999446f3ed2330e756ab7f359ff272bae25`.
-  `handoff.json` seals final HEAD/tree after the three records. Keep run 2
-  `37737075149`'s actual Git ownership refusal separate from run 1
-  `37726733625`'s missing-Python refusal. Both dispatches are spent; neither
-  admitted grading, and neither establishes a score or zero cost. The new
-  specialist attempt failed before execution on unavailable configured
-  Opus 4.7 and supplied no endorsement; it was not retried. Fixed-HEAD
-  review/CI and a new leader-issued source/run-number/window/hash remain
-  required. No live retry, intake, claim, model, grade or next cell occurred.
+  `f34291d7fd33b33ad4f20a4778f646f7ceeedf46`, tree
+  `af0754deed16975822adb79b47fd7abcfb871381`, ran the modified ownership
+  selector, hosted `guards`, current retention binding and valid runtime
+  checkout nodes together once: **4 passed, 2 warnings in 15.18s**, exit **0**;
+  pytest process **15.616563s**, wrapper **20.362449s**. Tiny synthetic sources,
+  scoped ownership refusal and real Git/source checks do not establish live
+  host readiness, full CI success or grading. Artifacts:
+  `/tmp/native-task3-pin-compatibility.MpeuVa/`; log SHA256
+  `c64feeac1030903c2f3d39adb2de70604dc5f69bbbac3ba9b10bc222d90945bb`;
+  JUnit SHA256 `c2054e44d00f7649cc1fa8815361cd87b9ea483fa1a8f4050d1463da9b5069f6`.
+  `final-source.json` and `handoff.json` seal final HEAD/tree after the three
+  records; LATEST retains the separate earlier proof and immutable history.
+  Run 2 `37737075149`'s actual ownership refusal and run 1 `37726733625`'s
+  missing-Python refusal remain spent, unadmitted submissions. Neither
+  establishes a score or zero cost. The ownership specialist failed before
+  execution on unavailable configured Opus 4.7, supplied no endorsement and
+  was not retried. Prior conditional source acceptance is superseded by the
+  integration blocker. Fixed-HEAD review/CI and a new leader-issued
+  source/run-number/window/hash remain required; no live operation occurred.
 
 - Correct only the retained native Task3 grading workflow's public bootstrap
   order. Keep every interpreter-free Bash source/caller/workflow/attempt
