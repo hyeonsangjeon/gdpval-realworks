@@ -41,6 +41,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Scope the native Task3 grading workflow's Git trust to its verified ordinary
+  bootstrap. Keep the physical-path and ordinary `.git` checks first, then set
+  one process-local `safe.directory` entry for that exact path. The later
+  sanitized Git helper discards workflow/global configuration, so it also
+  needs one exact bootstrap allowance, derived from the code-defined linked
+  controller's real common directory and reciprocal worktree registration.
+  No wildcard, global configuration, ownership change or blanket linked-root
+  trust is added. All source checks, controller/native/F/scoring code, pins,
+  permissions, credentials, study and 14400/14520-second controls stay fixed;
+  the step ceilings still total 269 minutes within the 270-minute job.
+  From `3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
+  `8bcad24257dfe0b22ca6a0d17e34f035eba33454`, tested HEAD
+  `0630f45535d563027cd7ee0f816c89a6e9745ade`, tree
+  `11ecae2d8b2cf56082e934bd50fd8d8898496422`, ran only the new real-Git
+  ownership selector once: **1 passed, 1 warning in 2.16s**, exit **0**,
+  wrapper **4.977293s**. Tiny synthetic C/R/F commits and a scoped
+  `GIT_TEST_ASSUME_DIFFERENT_OWNER` seam reproduce exit 128, then verify the
+  extracted workflow, detached source trees, unrelated-repository refusal
+  and reciprocal-registration tamper refusal. This is not live host ownership
+  or grading evidence. Artifacts: `/tmp/native-task3-git-ownership.mJCbh9/`;
+  log SHA256 `18dd492facf59edf8ac23a55e8fa1ff06ee4e755ebbdb526f940a8091b882aa1`;
+  JUnit SHA256 `870d403e2db2d1bd2743f97100661999446f3ed2330e756ab7f359ff272bae25`.
+  `handoff.json` seals final HEAD/tree after the three records. Keep run 2
+  `37737075149`'s actual Git ownership refusal separate from run 1
+  `37726733625`'s missing-Python refusal. Both dispatches are spent; neither
+  admitted grading, and neither establishes a score or zero cost. The new
+  specialist attempt failed before execution on unavailable configured
+  Opus 4.7 and supplied no endorsement; it was not retried. Fixed-HEAD
+  review/CI and a new leader-issued source/run-number/window/hash remain
+  required. No live retry, intake, claim, model, grade or next cell occurred.
+
 - Correct only the retained native Task3 grading workflow's public bootstrap
   order. Keep every interpreter-free Bash source/caller/workflow/attempt
   assertion first, move the same pinned Python 3.10.12 setup immediately next

@@ -929,6 +929,48 @@ F, registration, workflows and 14400/14520-second controls. This local proof
 is not actual hydration, a host/kernel verdict or a grade. Full fixed-HEAD
 review/CI remain required; the hosted route and live grading remain deferred.
 
+The native Task3 Git ownership correction adds exact process-local trust only
+after the ordinary bootstrap's physical-path and nonsymlink `.git` checks.
+The workflow's existing bounded Git calls use that one verified path. The
+later sanitized Git helper discards environment/global trust, so it derives
+one additional exact bootstrap allowance from the code-defined linked C's
+real common directory and reciprocal worktree registration. It does not trust
+all linked paths or `RUNNER_TEMP`, write global Git configuration, change
+ownership or relax C/R/F source checks. The controller/native/F/scoring code,
+interpreter/token ordering, pins, permissions and finite budgets stay fixed;
+the step ceilings still total **269 minutes** within the **270-minute** job.
+
+From base `3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
+`8bcad24257dfe0b22ca6a0d17e34f035eba33454`, tested HEAD
+`0630f45535d563027cd7ee0f816c89a6e9745ade`, tree
+`11ecae2d8b2cf56082e934bd50fd8d8898496422`, ran only the new
+`test_native_task3_grading_git_ownership` once: **1 passed, 1 warning in 2.16s**,
+exit **0**, wrapper **4.977293s**. Python **3.10.12**, **300s+5s**, no `-x`
+and **30-second** Git/Bash bounds were retained. Tiny synthetic C/R/F commits
+and scoped `GIT_TEST_ASSUME_DIFFERENT_OWNER` reproduce actual Git exit **128**,
+then exercise the corrected extracted workflow and real linked-source
+validators. Unrelated repositories and a tampered reciprocal registration
+refuse; config bytes and refs stay unchanged. This is not live UID/container,
+controller-admission or grading evidence. No earlier passing proof was rerun.
+
+Artifacts: `/tmp/native-task3-git-ownership.mJCbh9/`; log SHA256
+`18dd492facf59edf8ac23a55e8fa1ff06ee4e755ebbdb526f940a8091b882aa1`,
+JUnit SHA256 `870d403e2db2d1bd2743f97100661999446f3ed2330e756ab7f359ff272bae25`.
+`handoff.json` seals final HEAD/tree after the three records. Keep actual
+run `37737075149`/r2a1/job `113178950435` separate: its container, Bash/Python
+guards, Python setup and checkout succeeded, then step 7 failed at
+**2026-10-08 06:21:25 UTC** with `detected dubious ownership` at
+`/__w/gdpval-realworks/gdpval-realworks`, exit **1**. Its **60737-byte /
+439-line** log SHA256 is
+`666006053c465c026c47a48117626844a06c42f3255dbf08a6688f526fea72f0`.
+Linked sources and grading were not reached. Run 1's earlier missing-Python
+failure below remains separate; both dispatches are spent. Neither admitted
+grading, and neither establishes a score or zero cost. The ownership-review
+attempt failed before execution on unavailable configured Opus 4.7, without
+endorsement or retry. Final fixed-HEAD review/CI and a new leader-issued
+source/run-number/window/hash still gate any live submission. No live operation
+or next cell was authorized or performed by this correction.
+
 The subsequent fixed native Task3 hosted route is a separate draft:
 [`gpt54_time_budget_native_grading_ci.py`](gpt54_time_budget_native_grading_ci.py)
 and the manual

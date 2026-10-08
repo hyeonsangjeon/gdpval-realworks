@@ -1,5 +1,119 @@
 # Latest task result
 
+## Native Task3 exact-path Git trust correction: one offline selector passed
+
+The correction grants process-local Git trust only after the workflow's
+physical-working-directory and ordinary nonsymlink `.git` checks. The existing
+bounded Git calls receive one exact `safe.directory` entry for
+`GITHUB_WORKSPACE`; it is not written to global configuration or `GITHUB_ENV`.
+The C HEAD/tree, original R/F trees, absent destinations and detached linked
+source checks remain unchanged. No ownership change, wildcard, replacement
+checkout, alternative image or blanket trust of `RUNNER_TEMP` is added.
+
+The later `checked_request` path calls `_repository(bootstrap)` through
+`gpt54_disposable_checkout._git`, which deliberately discards caller/global
+Git configuration. Its old allowance covered only the code-defined linked C,
+so a shell-only change would not cover this second boundary. The helper now
+allows that C checkout's ordinary bootstrap only when real Git identifies the
+exact common `.git` directory and the reciprocal worktree registration checks
+pass. The proof exercises these actual helpers and `_reviewed_source`;
+unrelated repositories and a tampered reciprocal registration still refuse.
+It does not stub a successful Git/source validator.
+
+### New proof and limits
+
+Only
+`tests/test_time_budget_native_grading_git_ownership.py::test_native_task3_grading_git_ownership`
+ran once: **1 passed, 1 warning in 2.16s**, exit **0**. The pytest process took
+**2.576266 seconds**; the wrapper, including source/import/collection checks,
+took **4.977293 seconds**. JUnit records **0.392 seconds** for the one case.
+The warning is `record_property` with JUnit `xunit2`, not a failure.
+Python **3.10.12**, pytest **9.1.1**, **300s+5s**, no `-x`, and
+**30-second** local Git/Bash bounds were used. The wrapper ran from
+**2026-10-08 07:04:54.915246 UTC** to **07:04:59.892525 UTC**. Imports,
+fixture dependencies and exact one-node collection were checked before
+the body; immediate phase reports and final JUnit are retained.
+
+Two tiny owned synthetic repositories supply three distinct C/R/F commits,
+not copies of the full project. Their actual commit/tree values replace only
+the corresponding anchors in the extracted Bash. The imported helper's
+code-root binding is explicitly mapped to the fixture's linked C. These are
+synthetic source identities, not historical R/F or a live controller source.
+`GIT_TEST_ASSUME_DIFFERENT_OWNER=1` supplies the documented ownership seam:
+the untrusted bootstrap emits Git's actual `detected dubious ownership`
+stderr and exits **128**; the corrected extracted workflow exits **0**.
+The real source-helper calls mark only the bootstrap and unrelated refusal
+probe foreign, not the newly owned linked C/R/F paths. No broader production
+trust is added to accommodate the seam.
+
+The same selector observes refusals for wrong physical path, C HEAD/tree,
+R/F tree and occupied destinations, then verifies exact detached C/R/F
+commits/trees and tracked bytes. An unrelated repository refuses under both
+workflow-scoped trust and the sanitized helper, with actual Git exit **128**.
+A changed reciprocal registration refuses before bootstrap trust is granted.
+Repository config bytes and refs remain unchanged. The test does not run the
+full controller admission, private intake, native context or grader, and does
+not establish actual container UIDs or live Actions readiness. No old Python
+bootstrap, hosted success/partial/timeout/retention or other selector ran again.
+
+### Sources and artifacts for this correction
+
+- Clean base: `3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
+  `8bcad24257dfe0b22ca6a0d17e34f035eba33454`.
+- Tested HEAD: `0630f45535d563027cd7ee0f816c89a6e9745ade`, tree
+  `11ecae2d8b2cf56082e934bd50fd8d8898496422`.
+- Workflow blob: `84e8c614f4cddf093bfad64f94a6fffb439391cb`;
+  Git helper blob: `2dcf9bde0e8631487381b85f35fd4d40f2728666`;
+  new test blob: `b9b11db1fe0a2f28c580fd510e3250aecde0cd4a`.
+- Unchanged controller blob: `f12ec5f4a812d53e0105bee1fc01df10d34d3b74`;
+  executor blob: `10d8e56c5569cc3dea484e4bb9d875712a0d5b4c`.
+- Artifacts: `/tmp/native-task3-git-ownership.mJCbh9/`. `command.json`,
+  `selection.json`, `source.json` and `collection.log` bind the source and
+  selection; `reports.jsonl`, `cases.json`, `junit-cases.json`, `junit.xml`
+  and `outcome.json` preserve the actual outcome.
+- `pytest.log`: **1139 bytes**, SHA256
+  `18dd492facf59edf8ac23a55e8fa1ff06ee4e755ebbdb526f940a8091b882aa1`.
+  `junit.xml`: **856 bytes**, SHA256
+  `870d403e2db2d1bd2743f97100661999446f3ed2330e756ab7f359ff272bae25`.
+- Per-case `pytest-tmp/test_native_task3_grading_git_0/ownership-receipt.json`
+  retains exact synthetic paths, Git arguments, actual stderr/exit values,
+  source identities and outcomes. SHA256:
+  `428a130391dffb116413bacca50d8baccd7eb9e4a1fe76ed91c2d47e921235d3`.
+- Only CHANGELOG, this LATEST record and the direct README change after proof.
+  `final-source.json` and `handoff.json` seal final HEAD/tree after that
+  records commit, with the tested workflow/helper/test and unchanged code
+  identities preserved. No current-PR merge or CI outcome is claimed here.
+
+### Remaining gates and unchanged authority
+
+This is an implementation/offline-proof draft, not a grading admission.
+Interpreter order, token-empty pinned setup, action/image pins, permissions,
+credentials, controller/native/F/scoring code, original R/result/F/input
+bindings and the twenty-cell study are unchanged. The step ceilings still
+sum to **269 minutes** within the **270-minute** job; F/child envelopes remain
+**14400/14520 seconds**. Source identity C and the independently approved
+request must change before a future use; historical R/F pins must not.
+
+The new mandatory ownership-review attempt failed before execution because
+its configured Opus 4.7 label was unavailable. It produced no review or
+endorsement and was not retried. The leader's narrow source/log-grounded
+direction authorized this correction only. Final fixed-HEAD review and CI
+remain required before the leader supplies a new exact source, run number,
+window and request hash. Runs **1** and **2** are spent and cannot be rerun,
+adopted or relabeled. Neither admitted a grading attempt; that does not
+authorize another submission. There is no new usage, cost, invoice or quality
+score evidence. No workflow dispatch/rerun, private fetch/claim, Azure
+management, model, grade, readout, generation replay, Task5 or next-cell
+operation occurred in this correction.
+
+`experiment-report-en` kept the actual run logs, synthetic proof and timing
+units separate; `im-not-ai-en` checked the English without strengthening
+claims. The complete catalog was consulted once. The study is unchanged,
+so no new experiment-design exercise or unrelated UI skill was used.
+
+The prior leader-observed run/request and bootstrap-proof records follow
+unchanged. They are historical evidence, not a new request or this proof.
+
 ## Native Task3 run 2 stopped at Git ownership; no grade admitted
 
 The leader read the terminal outcome of run `37737075149`, run number **2**,
