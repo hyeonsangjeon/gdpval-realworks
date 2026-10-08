@@ -362,7 +362,7 @@ def test_native_task3_grade_metadata_scope(source, transport, monkeypatch, capsy
     elif case == "encoding":
         transport.headers[2] = {"content-encoding": "gzip"}
     elif case == "cumulative_bound":
-        now = [time.monotonic()]
+        now = [1000.0]
         monkeypatch.setattr(time, "monotonic", lambda: now[0])
         transport.hook = lambda number: now.__setitem__(0, now[0] + 35)
     elif case in ("revision_drift", "path_drift", "third_operation"):
