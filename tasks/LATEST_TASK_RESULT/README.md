@@ -1,6 +1,33 @@
 # Latest task result
 
-## Native Task3 third grading submission queued; no grade observed
+## Native Task3 run 3 returned uncertainty; no retry authorized
+
+Run `37756891578`/r3a1, job `113243545133`, completed with failure. Python,
+Git linked-source creation, dependencies, full source-bound request validation,
+renderer, OIDC/login and session-identity checks succeeded. Controller step
+**14** ran from **2026-10-08 09:31:57 UTC** to **09:32:03 UTC** and exited **2**.
+The independent completion check and public upload then succeeded.
+
+Artifact `11541001301` contains a **1605-byte** `completion.json`, SHA256
+`c0b100d1b3cfc6cbdb66338b25497e361be4023e3afbe174d28b92c4d1815e0b`.
+Its run/source/request/original-result/F bindings matched the exact direction.
+It reports `status=uncertain`, `retention=uncertain`, `retry_allowed=false`,
+with null binding, claim, entry, grade, retention and usage/cost fields.
+Null fields are not proof that no remote side effect occurred. No score,
+retained grade, successful grading admission or zero-cost claim is established.
+
+The actual **256634-byte / 1731-line** job log, SHA256
+`352adb8b17f834bcf630bbb229247211b9a82ff6dca90d3ea8b63c7d7914a8bb`,
+shows the step exit but no original exception. The controller catches private
+exceptions without emitting a safe failure stage. Its source order narrows
+where bindings can be assigned, but does not recover the original exception
+or grant another execution. Preserve this spent submission as uncertain,
+separate from the two earlier proven pre-admission bootstrap failures.
+The next implementation is bounded, secret-safe failure-stage diagnostics
+in the native controller only. No new live request, replay or private writer
+is authorized while this outcome remains unresolved.
+
+### Original submission evidence
 
 The leader submitted [run 37756891578][new-run] through workflow `378041151`,
 run number **3**, attempt **1**, under the existing owner budget delegation
@@ -21,8 +48,9 @@ not regeneration or a retry of either spent submission. Keep the existing
 time ceilings and permanent observation/F-keyed private claim. The live
 controller must verify actual private parent and absent grading prefix;
 the supplied parent remains last-known evidence. No concurrent private writer
-or next cell is authorized before retention. Read terminal evidence in a later
-bounded cycle; no grading result, model quality or usage/cost is established.
+or next cell is authorized before retention. The terminal record above
+supersedes queued-only status; no grading result, model quality or usage/cost
+is established.
 
 ### Accepted source and validation
 

@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record run `37756891578`/r3a1 as uncertain after successful Python, linked
+  Git sources, full request validation, renderer and approved identity setup.
+  Controller job `113243545133` step 14 exited 2 at **09:32:03 UTC**.
+  Validated artifact `11541001301` contains a 1605-byte completion, SHA256
+  `c0b100d1b3cfc6cbdb66338b25497e361be4023e3afbe174d28b92c4d1815e0b`,
+  with matching source/request bindings, uncertain status and retention, and
+  no retry. Null claim/entry/grade fields do not establish absence of effects
+  or zero cost. Preserve the original exception as unknown and add only
+  bounded, secret-safe native-controller diagnostics before any further
+  decision; no replay, new grading request or private writer is authorized.
+
 - Submit one new retained native Task3 frozen-F request as run `37756891578`,
   workflow `378041151`, run number 3, attempt 1, source
   `0a2ef287751da62d888839ef3b92c250ecabf5fc`. The exact 4603-byte request
