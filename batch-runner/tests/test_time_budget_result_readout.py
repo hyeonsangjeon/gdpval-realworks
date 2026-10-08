@@ -692,7 +692,7 @@ def test_time_budget_result_readout_transport_refusal(case, transport, monkeypat
 
 
 def test_time_budget_result_readout_cumulative_bound(case, transport, monkeypatch):
-    now = [time.monotonic()]
+    now = [1000.0]
     monkeypatch.setattr(time, "monotonic", lambda: now[0])
     transport.hook = lambda number: now.__setitem__(0, now[0] + 35)
     assert _invoke(case) == 2

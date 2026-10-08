@@ -1,4 +1,4 @@
-# Read-only metadata for one fixed private prefix. Never observation admission.
+# Read-only metadata for a closed fixed scope. Never observation or grading admission.
 name: GPT-5.4 time budget — private storage metadata
 
 on:
@@ -12,6 +12,14 @@ on:
         description: Independently reviewed tree of that exact commit
         required: true
         type: string
+      scope:
+        description: Fixed metadata scope only; no contents, admission or retry authority
+        required: true
+        type: choice
+        default: generation_task1
+        options:
+          - generation_task1
+          - native_task3_grade
 
 permissions:
   contents: read
@@ -30,6 +38,7 @@ jobs:
       METADATA_WORKFLOW_SHA: ${{ github.workflow_sha }}
       REVIEWED_SOURCE_SHA: ${{ inputs.reviewed_source_sha }}
       REVIEWED_SOURCE_TREE: ${{ inputs.reviewed_source_tree }}
+      METADATA_SCOPE: ${{ inputs.scope }}
     steps:
       - name: Refuse other callers, sources and reruns before credentials
         shell: bash
@@ -43,6 +52,7 @@ jobs:
           [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ && "$REVIEWED_SOURCE_TREE" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_SHA" == "$REVIEWED_SOURCE_SHA" && "$METADATA_WORKFLOW_SHA" == "$REVIEWED_SOURCE_SHA" ]]
           [[ "$GITHUB_WORKFLOW_REF" == hyeonsangjeon/gdpval-realworks/.github/workflows/gpt54-time-budget-storage-metadata.yml@refs/heads/main ]]
+          [[ "$METADATA_SCOPE" == generation_task1 || "$METADATA_SCOPE" == native_task3_grade ]]
 
       - name: Check out the exact reviewed workflow and helper
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -79,10 +89,10 @@ jobs:
           set -euo pipefail
           python3 "$RUNNER_TEMP/time-budget-metadata-source/batch-runner/gpt54_time_budget_storage_metadata.py" validate-source \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-            --runtime-root "$RUNNER_TEMP/time-budget-metadata-source"
+            --runtime-root "$RUNNER_TEMP/time-budget-metadata-source" --scope "$METADATA_SCOPE"
           echo 'validated=true' >> "$GITHUB_OUTPUT"
 
-      - name: Read only the fixed private head and exact prefix metadata
+      - name: Read only the fixed private head and selected fixed metadata paths
         id: metadata
         timeout-minutes: 2
         env:
@@ -94,7 +104,7 @@ jobs:
           timeout --signal=TERM --kill-after=5s 60s \
             python3 "$RUNNER_TEMP/time-budget-metadata-source/batch-runner/gpt54_time_budget_storage_metadata.py" inspect \
               --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-              --runtime-root "$RUNNER_TEMP/time-budget-metadata-source"
+              --runtime-root "$RUNNER_TEMP/time-budget-metadata-source" --scope "$METADATA_SCOPE"
 
       - name: Check the exact public envelope without credentials
         id: envelope
@@ -105,7 +115,7 @@ jobs:
           set -euo pipefail
           python3 "$RUNNER_TEMP/time-budget-metadata-source/batch-runner/gpt54_time_budget_storage_metadata.py" verify-envelope \
             --reviewed-source-sha "$REVIEWED_SOURCE_SHA" --reviewed-source-tree "$REVIEWED_SOURCE_TREE" \
-            --runtime-root "$RUNNER_TEMP/time-budget-metadata-source"
+            --runtime-root "$RUNNER_TEMP/time-budget-metadata-source" --scope "$METADATA_SCOPE"
           echo 'validated=true' >> "$GITHUB_OUTPUT"
 
       - name: Retain only the allowlisted metadata envelope

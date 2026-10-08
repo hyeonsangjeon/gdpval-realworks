@@ -13,6 +13,71 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Stabilize only the two authorized cumulative-bound test clocks on PR781
+  by seeding them with exactly representable `1000.0` instead of live
+  `time.monotonic()`. Preserve the **+35-second** advances, **60-second**
+  cumulative bound, **2 calls**, exact second timeout **25**, refusal and
+  null-summary assertions; do not change production rounding or deadlines.
+  The leader-read CI run `37776879316`, time-budget-contracts job
+  `113309863966`, reported **1 failed, 466 passed in 1635.07s** of pytest
+  elapsed time, not job duration. The readout assertion saw
+  `24.999999999999773` instead of `25`; fractional-origin cancellation noise
+  is not evidence of a production timeout violation. Its **123102-byte /
+  1138-line** log SHA256 is
+  `3c97713c3aad9465d5cbe72aa87d471cd071b945da6b9f4ae1c8a8633e6ab387`;
+  it was not fetched again. At tested HEAD
+  `cda79aa0f355de4975192a48becc06e9dbc555a9`, tree
+  `581cfc7486f65af21c65aaba4456daafadc38781`, only the readout cumulative-bound
+  node and new metadata `[cumulative_bound]` node ran once: **2 passed in
+  2.52s**, exit **0**, process **2.935624s**, wrapper **5.955130s**, under
+  Python **3.10.12**, **300s+5s**, no `-x` and bounded Git. Artifacts are in
+  `/tmp/native-task3-metadata-clock.uKhiQL/`; log SHA256
+  `1d558afa9c7b992675856aad4600349dec78da570d115550a4c9c66eb7444576`,
+  JUnit SHA256 `13994e41e396102c629b2337de36086bd6c5731aba21c1c4baa7328fc520331b`.
+  External final-source/handoff receipts seal the final HEAD/tree after records.
+  The original **31-pass** proof below remains separate and was not rerun.
+  Synthetic HTTP/source evidence does not inspect private state. Workflow,
+  runtime, helper, schema, pins and metadata **2-operation / 60-second /
+  64-KiB-per-response** limits are unchanged. Run `37756891578`/r3a1 remains
+  uncertain and nonretryable. Corrected HEAD
+  `d85af0df7fc876eba11ae9e878475552408016a2`, tree
+  `bab908ded1681e7793b6b1daa911680376ec9091`, is accepted in review
+  `5457795334`; all 11 applicable checks in CI run `37783204329` succeeded,
+  observed at **2026-10-08 14:00:11 UTC**. A separate exact leader read-only
+  direction remains required; no private evidence or replay authority is
+  claimed. No specialist invocation was retried.
+
+- Extend the existing read-only storage-metadata route with the closed
+  `native_task3_grade` scope for only the fixed Task3/F `admission.json` and
+  `output-manifest.json` metadata paths. Keep the default first-V2 Task1
+  generation scope and envelope unchanged. The same private/head GET and
+  immutable-parent paths-info POST share **2 operations / 60 seconds** and
+  **64 KiB per response**; no downloads, writes, redirects, pagination or
+  retries are added. The strict new envelope binds source/run/scope/target/
+  cell/F and labels OID/size as metadata, with contents unverified and retry
+  forbidden. Refusal remains unknown, never success-shaped absence.
+  From base `fc9796f048fded13416bde1804e9046608e49652`, tree
+  `76385434d312cd6b01c077acbc4af2344e127216`, tested HEAD
+  `83ea4a90f14b8cba93c4609a48ea4d332d9e48c0`, tree
+  `42d070882d36ee077344fcc2285c41306e6bb0d3`, ran the new 30-case metadata
+  selector and directly changed workflow contract once: **31 passed in
+  19.64s**, exit **0**, process **20.036112s**, wrapper **22.192873s**, under
+  Python **3.10.12**, **300s+5s**, no `-x` and bounded local Git.
+  Real source/CLI/SDK/transport/schema checks used synthetic Actions and HTTP
+  metadata; no private state or historical grade was read. Artifacts are in
+  `/tmp/native-task3-grade-metadata.AQ3jgv/`; log SHA256
+  `8763a3c947fab19026d046bd4d5ce5a399abd72861362b4497132c391bb88602`,
+  JUnit SHA256 `d525e67f8996ba61ae84b560cd68da227b2849530ae0dfa8338080fefe05b2cb`.
+  External final-source/handoff receipts seal final HEAD/tree after records.
+  Shared Git helper, registries, original R/result/input/F pins, native
+  executor/scoring and budgets remain unchanged. Run `37756891578`/r3a1
+  stays uncertain and nonretryable; nulls or future metadata absence cannot
+  establish historical nonexecution, adoption or replay permission. Runs 1/2
+  remain separate proven bootstrap failures. The unavailable Opus4.7 metadata
+  review attempt failed before execution and supplied no endorsement.
+  Fixed-HEAD review/CI and a separate exact leader read-only direction remain
+  required. This change authorizes no live request, private access or grade.
+
 - Record run `37756891578`/r3a1 as uncertain after successful Python, linked
   Git sources, full request validation, renderer and approved identity setup.
   Controller job `113243545133` step 14 exited 2 at **09:32:03 UTC**.
