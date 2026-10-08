@@ -44,7 +44,7 @@ BUDGET_READOUT_GLOB = "tests/test_codex_budget_pilot*readout*.py"
 TIME_BUDGET_GLOB = "tests/test_time_budget_*.py"
 TIME_BUDGET_RUN = (
     "cd batch-runner\n"
-    f'python -m pytest -m "not integration" --tb=short -q -rs {TIME_BUDGET_GLOB}\n'
+    f'python -m pytest -m "not integration" --tb=short -q -rs -o tmp_path_retention_policy=failed {TIME_BUDGET_GLOB}\n'
 )
 BUDGET_ORIGINAL_RUN = (
     "cd batch-runner\n"
@@ -677,7 +677,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     time_budget_files = sorted(path.relative_to(runner).as_posix()
                                for path in runner.glob(TIME_BUDGET_GLOB))
     assert time_budget_files and all((runner / path).is_file() for path in time_budget_files)
-    assert time_budget_selected == [TIME_BUDGET_GLOB]
+    assert time_budget_selected == ["-o", "tmp_path_retention_policy=failed", TIME_BUDGET_GLOB]
     comparison_files = sorted(
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt54_*.py")

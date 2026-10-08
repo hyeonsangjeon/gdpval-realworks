@@ -1,0 +1,195 @@
+# One retained native r1 Task3 grade. Implementation/review is not a live request.
+name: GPT-5.4 time budget — retained native Task3 frozen grade
+
+on:
+  workflow_dispatch:
+    inputs:
+      controller_sha:
+        description: Independently reviewed accepted main/workflow C commit
+        required: true
+        type: string
+      controller_tree:
+        description: Independently reviewed C tree
+        required: true
+        type: string
+      request_sha256:
+        description: Independent digest of the exact leader-issued nonsecret request
+        required: true
+        type: string
+      request_json:
+        description: Fixed Task3 source, originals, result, paths, window, grade permission and private-parent bindings
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: gpt54-time-budget-native-task3-frozen-grade
+  cancel-in-progress: false
+
+jobs:
+  grade:
+    if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 270
+    # Same existing public grading image/renderer, not an alternate environment.
+    container:
+      image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
+      volumes:
+        - /opt/hostedtoolcache:/opt/hostedtoolcache
+    defaults:
+      run:
+        shell: bash --noprofile --norc -e -o pipefail {0}
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      JE_ARROW_MALLOC_CONF: "background_thread:false"
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TIME_BUDGET_GRADE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CONTROLLER_SHA: ${{ inputs.controller_sha }}
+      CONTROLLER_TREE: ${{ inputs.controller_tree }}
+      REQUEST_SHA256: ${{ inputs.request_sha256 }}
+      TIME_BUDGET_GRADE_REQUEST_JSON: ${{ inputs.request_json }}
+    steps:
+      - name: Refuse wrong source, caller, fixed cell and reruns before credentials
+        timeout-minutes: 1
+        run: |
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks && "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_ACTOR" == hyeonsangjeon && "$GITHUB_TRIGGERING_ACTOR" == hyeonsangjeon ]]
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROLLER_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$CONTROLLER_SHA" && "$TIME_BUDGET_GRADE_WORKFLOW_SHA" == "$CONTROLLER_SHA" ]]
+          [[ "$GITHUB_WORKFLOW_REF" == hyeonsangjeon/gdpval-realworks/.github/workflows/gpt54-time-budget-native-task3-grade.yml@refs/heads/main ]]
+          python3 - <<'PY'
+          import hashlib, json, os
+          data = os.environ["TIME_BUDGET_GRADE_REQUEST_JSON"].encode()
+          assert 0 < len(data) <= 16384 and hashlib.sha256(data).hexdigest() == os.environ["REQUEST_SHA256"]
+          request = json.loads(data)
+          assert request["controller"] == {"sha": os.environ["CONTROLLER_SHA"], "tree": os.environ["CONTROLLER_TREE"]}
+          assert type(request["cell"]["repeat"]) is int
+          assert request["cell"] == {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": "gpt54_time_budget_v1_codex_r1", "condition": "codex", "repeat": 1, "task_id": "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"}
+          assert type(request["ci"]["run_number"]) is int and request["ci"]["run_number"] == int(os.environ["GITHUB_RUN_NUMBER"])
+          assert type(request["ci"]["attempt"]) is int and request["ci"]["attempt"] == 1
+          PY
+
+      - name: Check out exact reviewed C bootstrap and workflow
+        timeout-minutes: 1
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.controller_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify ordinary bootstrap and create separate linked C, original R and frozen F
+        timeout-minutes: 1
+        run: |
+          [[ "$(pwd -P)" == "$GITHUB_WORKSPACE" && -d "$GITHUB_WORKSPACE/.git" && ! -L "$GITHUB_WORKSPACE/.git" ]]
+          [[ "$(timeout --signal=TERM --kill-after=5s 30s git rev-parse HEAD)" == "$CONTROLLER_SHA" ]]
+          [[ "$(timeout --signal=TERM --kill-after=5s 30s git rev-parse HEAD^{tree})" == "$CONTROLLER_TREE" ]]
+          [[ "$(timeout --signal=TERM --kill-after=5s 30s git rev-parse 33e24e9c1402ec0b7c92a71222998d1407646a92^{tree})" == 6e67da4e12169b41a837d92eaf946db15e71010e ]]
+          [[ "$(timeout --signal=TERM --kill-after=5s 30s git rev-parse 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2^{tree})" == 45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca ]]
+          for name in time-budget-task3-grade time-budget-task3-grade-controller time-budget-task3-grade-runtime time-budget-task3-grade-frozen time-budget-task3-grade-azure-login; do
+            [[ ! -e "$RUNNER_TEMP/$name" && ! -L "$RUNNER_TEMP/$name" ]]
+          done
+          timeout --signal=TERM --kill-after=5s 30s git worktree add --detach "$RUNNER_TEMP/time-budget-task3-grade-controller" "$CONTROLLER_SHA"
+          timeout --signal=TERM --kill-after=5s 30s git worktree add --detach "$RUNNER_TEMP/time-budget-task3-grade-runtime" 33e24e9c1402ec0b7c92a71222998d1407646a92
+          timeout --signal=TERM --kill-after=5s 30s git worktree add --detach "$RUNNER_TEMP/time-budget-task3-grade-frozen" 882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2
+          export AZURE_CONFIG_DIR="$RUNNER_TEMP/time-budget-task3-grade-azure-login"
+          mkdir -m 700 "$AZURE_CONFIG_DIR"
+          printf 'AZURE_CONFIG_DIR=%s\n' "$AZURE_CONFIG_DIR" >> "$GITHUB_ENV"
+
+      - name: Set up pinned Python
+        timeout-minutes: 1
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+
+      - name: Install existing declared dependencies
+        timeout-minutes: 5
+        run: python3 -m pip install -r "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/requirements.txt"
+
+      - name: Validate complete source-bound request without credentials
+        timeout-minutes: 1
+        run: |
+          python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" validate-request \
+            --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
+
+      - name: Verify the existing pinned grading renderer before credentials
+        timeout-minutes: 1
+        run: python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/scripts/preflight_grading_renderer.py"
+
+      - name: Validate the existing grading OIDC identity
+        timeout-minutes: 1
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/scripts/azure_oidc_identity_preflight.py"
+
+      - name: Azure Login through the existing approved connection
+        timeout-minutes: 1
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify the approved session identity before opening the native context
+        timeout-minutes: 1
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/scripts/azure_oidc_identity_preflight.py" --verify-session
+
+      - name: Authenticated intake, live native context, permanent grade claim, one executor call and private retention
+        id: grade
+        # 300s preclaim ceiling + 14520s child + bounded 120s retention leaves
+        # 180s within this step for final source/file checks and publication.
+        # The 270-minute job leaves setup and public-artifact headroom as well.
+        timeout-minutes: 252
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+        run: |
+          umask 077
+          unset HUGGING_FACE_HUB_TOKEN GITHUB_TOKEN GH_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+          python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" run \
+            --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
+
+      - name: Independently check only the safe completion before public upload
+        id: completion
+        if: always() && steps.grade.outcome != 'skipped'
+        timeout-minutes: 1
+        run: |
+          python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" verify-completion \
+            --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
+          echo "validated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload only the validated nonsecret completion
+        if: always() && steps.completion.outputs.validated == 'true'
+        timeout-minutes: 1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: time-budget-native-task3-grade-completion
+          path: ${{ runner.temp }}/time-budget-task3-grade/completion.json
+          if-no-files-found: error
+          retention-days: 7

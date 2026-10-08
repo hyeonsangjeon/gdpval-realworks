@@ -1,55 +1,64 @@
 # Latest task result
 
-## Native Task3 grading compatibility accepted; hosted route resumes
+## Fixed native Task3 hosted grading route accepted
 
-Reviewed source `c8ee6ae03d7238c98f9e01f40733f94c1b717f54`, tree
-`8e1ecaaa309bbd9c8a5bfcf66fa14d530da8fa95`, passed all eleven checks.
-Review `5448348919` accepted the explicit native entry and source-origin
-bridge. Only completion records change after validation; tested production,
-workflow and test bytes remain unchanged.
+Reviewed source `e2e22f45ef06fc2ef4a71b09788d149cc928db4c`, tree
+`7fd8891fef05f9489bdf76e58083522423beef67`, passed all eleven CI checks.
+Review `5450750372` accepts the final source. Only these completion records
+change after validation; reviewed workflow, production and test bytes stay
+unchanged.
 
-The [prior record][prior] retains the original 300-second incomplete
-invocation, its thirteen progress passes, condition failure and missing
-final traceback/JUnit. The one-line coherent condition/run fixture correction
-then ran only the five unresolved nodes: 5 passed in 143.09s, wrapper
-143.690645s, at `5c7fa1911fdf6f85cd0dbc2ae856363622385f27`.
-No prior passing node was repeated or combined into an aggregate eighteen-case
-pass claim. Data, HTTP, namespace facts and child-grade outputs were synthetic.
+The route uses one controller process to keep the authenticated native intake
+context open through genuine original-input/result hydration, frozen F
+preparation, distinct derived grading input, concrete direction checks,
+permanent private observation/F-keyed claim acknowledgement, one local
+executor attempt and private retention. No serialized handle or occupied
+claim is adopted. The existing V2-only entry remains unchanged.
 
-The existing V2 API/CLI still accepts only first V2 Task1 and forbids Step0.
-The explicit native entry admits only native r1 Task3 with whole Step0.
-`prepare_native_task3_grading_execution` issues a live in-memory handle only
-after authenticated retained intake. `execute_native_task3_grading` requires
-that still-open scope plus the concrete independent direction. Persisted
-markers, caller origin strings and a closed handle cannot replace it.
+The [prior record][prior] retains the separate proofs and their artifacts:
+seven hosted-route cases passed in 294.01s; the quote-contract node passed
+in 0.19s; the temporary-directory lifecycle node passed in 0.37s. The subsequent
+four-node invocation remained one failed and three passed in 28.81s.
+Only its failed registration-lifetime node then ran at
+`5d523d131d97e5255430b15acefb2bf68c7fc407` and passed in 1.92s,
+wrapper 2.243325s. No combined four-pass invocation is claimed.
 
-Original canonical result bytes/fingerprint and F preparation remain
-immutable. A fresh grading-only copy carries the genuine private publication
-origin and a distinct result identity/fingerprint. Shared validation binds
-run/task/condition, source/input/Step0, command, rubric, task fingerprint,
-filename, grade and ledger/checkpoint consistently. F/Step8/core/scoring,
-original inputs/registration and 14400/14520-second controls are unchanged.
-The local once-store does not itself provide distributed admission.
+The final synthetic Git proof observed the real missing-but-registered
+worktree refusal after matching the fixture's parent-directory state.
+It then verified same-path reuse and all ten failed-worktree, shared/sibling,
+commit/tree/branch preservation checks. The CI-only retention policy cleans
+passed per-case temporary directories on a best-effort basis. Its fixture
+prune concerns missing registrations only in its own synthetic repository.
+No real repository cleanup, workload removal or timeout increase was used.
 
-Actual Task3 remains execution success, retained at
-`d5aeecec1394fb44d4b1da33b1be38a39acdb89a`, with a verified canonical
-readout that declared two files totaling 408601 bytes. Actual contents have
-not been hydrated for grading, and no quality score is established. Task4's
-separate canonical error remains retained with its inner cause unread.
-Earlier consumed observations are unchanged and may not be replayed.
+The older runner disk-full and 45-minute cancellation annotations remain
+historical failures. The 10673136 allocated KiB NAS measurement concerns
+retained synthetic test storage, not the failed GitHub runner. The old
+1513.84s value is pytest-summary elapsed time, not full-job duration.
+Final green CI establishes this source's checks, not a retroactive cause
+for those incidents or a general performance guarantee.
 
-The next implementation resumes the single fixed-Task3 hosted Actions route.
-It must use the accepted native context/entry, not the old V2-only entry.
-One controller process keeps that context open across genuine preparation,
-durable private observation-specific grading-claim acknowledgement, concrete
-direction construction and native execution. A serialized/reloaded handle
-or split-process continuation is not an alternative.
+Actual native r1 Task3 remains ungraded. Its original R is
+`33e24e9c1402ec0b7c92a71222998d1407646a92`; the retained output is
+`d5aeecec1394fb44d4b1da33b1be38a39acdb89a`. The verified canonical readout
+declares two files totaling 408601 bytes; their contents have not yet been
+hydrated for grading here. Native usage/cost/counters remain unknown, not zero.
+F stays `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`; the study, original
+inputs, model, rubrics, scoring and filename policy remain unchanged.
 
-Credentialed use remains gated by review/CI of that route and an exact leader
-request. The owner has already delegated finite budget and execution decisions;
-no renewed owner budget approval is needed. Source/owner/workflow/run-attempt
-bindings, genuine originals/results, permissions, private CAS and safe
-retention still apply. This record grants implementation/offline proof only:
-no private fetch, live claim, model/grade, Task5, replay or automatic next cell.
+The next unit prepares the exact nonsecret request for one Task3 grade:
+accepted C commit/tree, original R/F/result/input bindings, actual workflow
+run number and attempt 1, canonical container paths, finite admission window,
+and an independently expected private parent. No model-free marker is live
+authority. The existing 14400-second F, 14520-second child and 270-minute
+job limits remain. No concurrent private writer may advance the grading
+claim's expected retention parent during the attempt.
 
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/c8ee6ae03d7238c98f9e01f40733f94c1b717f54/tasks/LATEST_TASK_RESULT/README.md
+The owner already delegated budget and execution decisions. One exact leader
+request and actual host/auth/input/CAS checks still precede the paid attempt.
+This record authorizes request preparation only, not workflow dispatch,
+private fetch/claim, grading, generation replay, Task5 or automatic next-cell
+advance. Unavailable specialist attempts supplied no endorsement; source
+acceptance came from the leader's recorded review.
+
+[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e2e22f45ef06fc2ef4a71b09788d149cc928db4c/tasks/LATEST_TASK_RESULT/README.md

@@ -13,6 +13,116 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Accept the fixed native Task3 hosted grading route at
+  `e2e22f45ef06fc2ef4a71b09788d149cc928db4c`, tree
+  `7fd8891fef05f9489bdf76e58083522423beef67`, review `5450750372`,
+  after all eleven CI checks succeeded. Keep the one-process native intake,
+  independent source/input/direction bindings, permanent private grading claim,
+  frozen F execution and private partial-result retention unchanged. The
+  job-scoped temporary-retention policy and synthetic Git registration
+  correction retain the same test workload and 45-minute CI ceiling.
+  Earlier failed proofs and runner incidents remain distinct historical
+  evidence. The next step prepares one exact native Task3 grading request;
+  this acceptance is not a dispatch, grade, replay or next-cell authorization.
+
+### Changed
+
+- Match only the new PR777 registration-lifetime regression's pre-add parent
+  state to the actual readout fixture. From
+  `62d02b71a634986a344131fbc3485700cae0072c`, tree
+  `2168a7e9962de2be75f22a0240dd6fcd941b590c`, three added test lines create
+  the exact synthetic `runner-temp` parent, check it is empty after the strict
+  Git refusal, and remove only that empty parent with `Path.rmdir()` before
+  the unchanged fixture recreates it. All other assertions and code are
+  unchanged. At `5d523d131d97e5255430b15acefb2bf68c7fc407`, tree
+  `9936c322e3dfc3b2392d032ad77218e6d6a829e5`, only that regression ran once:
+  **1 passed, 1 warning in 1.92s**, exit 0, wrapper **2.243325s**. The new
+  synthetic child reported **1 failed, 2 passed in 1.42s**, preserving the
+  intentional exit 1. Direct Git addition returned 128 with actual stderr
+  saying `is a missing but already registered worktree`; prune/add then
+  reused the same path and all failed-worktree, shared/sibling-content and
+  commit/branch preservation checks passed. This is new local evidence, not
+  recovered CI stderr or proof that all 61 setup errors are fixed. The prior
+  **1 failed, 3 passed, 1 warning in 28.81s**, exit 1, wrapper **29.946711s**,
+  remains unchanged; its three passing outer nodes were not rerun or pooled.
+  Correct the directly related duration label to pytest summary **1513.84s**
+  (display **25m13s**), not measured full GitHub job duration. Artifacts are in
+  `/tmp/pr777-readout-parent-parity.aJjVl4/`, log SHA256
+  `9c53b595d8f432fc64aafeee7cd5e9431cd7b57ba3dd026d9e4dfea905e4e842`;
+  `registration-receipt.json` retains actual stderr and preservation outcomes,
+  and `handoff.json` records final HEAD/tree after these three records. No
+  workflow, CI policy, production guard, source pin or budget changed. Prior
+  proofs and disk-full/timeout/NAS evidence remain separate. The unavailable
+  specialist supplied no review or endorsement and was not retried. Final
+  source review/CI and exact hosted admission remain gates; no full-CI success
+  or live authority is claimed. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  distinguishes the source parity finding from this observed synthetic result.
+
+- Correct two directly coupled PR777 test contracts from
+  `103667992af71826ddbabf3853ecd406cbefab58`, tree
+  `6ede045510cb40558fa7b96592a42d218f2c34e6`: require the exact retention option,
+  value and unchanged glob in the partition test's raw-argument assertion,
+  and prune missing worktree registrations only in the readout fixture's
+  ordinary temporary repository immediately before adding a worktree. Prune
+  and add share the existing 30-second setup deadline; no force, branch removal
+  or real-worktree cleanup is used. Workflow bytes, the approved retention
+  policy, 45-minute cap, parser, coverage checks and production/F bindings
+  are unchanged. Leader-read run `37710408405` reported **1 failed, 13395 passed,
+  64 skipped, 46 deselected, 1 warning in 1945.04s** in job `113094770549`;
+  the raw assertion failed at line 680. Job `113094770711` had a pytest summary
+  duration of **1513.84s** (display **25m13s**), not a measured full job duration,
+  with **367 passed, 61 setup errors** at readout worktree addition, exit 128.
+  CI Git stderr is unavailable; the stale-registration account is a source
+  diagnosis, not an observed fatal message. At `98f9471220f22d339b8d42aae642c4437322fc7d`,
+  tree `64e720462523758eabe4efbcca53bbf839be4fa8`, exactly four nodes ran once:
+  **1 failed, 3 passed, 1 warning in 28.81s**, exit 1, wrapper **29.946711s**.
+  The partition and two specified historical readout cases passed, reusing
+  the same temporary path/repository under the retained policy. The new tiny
+  regression failed: its direct synthetic `git worktree add` did not raise
+  the expected `CalledProcessError`; no stale-registration fatal stderr was
+  captured, and its later preservation checks were not reached. No further
+  code change or rerun followed. Artifacts are in
+  `/tmp/pr777-readout-worktree-lifetime.rvay35/`, log SHA256
+  `ed53a7d6e8e74fdc21da8c0a78e611295aec69b95e6f46a6d5d9b7aac00a31fe`;
+  `handoff.json` records final HEAD/tree after the three records, retaining
+  the failed proof status. Earlier proofs, disk-full/timeout incidents and
+  NAS measurement remain separate. The unavailable specialist supplied no
+  review or endorsement and was not retried. Final source review/CI and
+  hosted admission remain gates; full CI success is not claimed.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records each outcome and limit.
+
+- Scope pytest's built-in `-o tmp_path_retention_policy=failed` to the existing
+  `time-budget-contracts` invocation only. Its 45-minute ceiling, file glob,
+  markers, permissions and other jobs are unchanged, as are `pytest.ini`,
+  dependencies, the hosted grading route and all production/study/F bindings.
+  Two directly coupled test expectations track the new literal command and
+  current workflow checksum; no historical or frozen source pin changes.
+  From reviewed `2ec4d44b8963dec16195c2b44b42c754c212a7d4`, tree
+  `418e43a93623fa65c68e52676513c19bab75a7f7`, review `5449683506`, the single new
+  lifecycle selector at `9c2a9c3e68c2153a60bef481fb60ce411dbd8e24`, tree
+  `8fdeda28c08c49d929d3e30841249bbefb44876e`, reported **1 passed, 1 warning in
+  0.37s**, exit 0, wrapper **0.684349s**. Its two new synthetic child cases
+  reported **1 failed, 1 passed in 0.02s**, preserving the intentional exit 1:
+  passed per-case data was removed before the next case, failed data survived,
+  and factory-scoped/shared and sibling source sentinels stayed unchanged.
+  Only ordinary pytest teardown removed new synthetic data. Artifacts are in
+  `/tmp/pr777-tmp-retention.lDChVS/`, log SHA256
+  `901e26201865e7d0fc566f101d8013d96d9befdd5fe5f0bafa89888d0a51fdaf`;
+  `lifecycle-receipt.json` records exact paths and outcomes, and `handoff.json`
+  records final HEAD/tree after the three-record commit. The old seven-case
+  and quote-only proofs were not rerun or pooled. Separately, leader-reported
+  run `37701493624` had ten successful checks and time-budget job
+  `113065745498` cancelled with the annotation that its maximum execution time
+  of `45m0s` was exceeded; the reached test is unknown. The prior disk-full
+  annotation is a different incident. The measured **10673136 allocated KiB**
+  at `2026-10-08T00:06:10Z` belongs to the old NAS synthetic basetemp, not the
+  GitHub runner. This scoped mitigation proves neither CI cause nor resolution
+  within 45 minutes. The new extreme-reasoner invocation failed before execution
+  on the unavailable Claude Opus 4.7 preview label and supplied no review;
+  the leader authorized only this narrow decision. Final fixed-source review,
+  normal synchronization CI and exact hosted admission remain required.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) keeps all evidence separate.
+
 - Accept native Task3 grading compatibility at
   `c8ee6ae03d7238c98f9e01f40733f94c1b717f54`, tree
   `8e1ecaaa309bbd9c8a5bfcf66fa14d530da8fa95`, review `5448348919`,
@@ -24,6 +134,40 @@ entries land under a fresh dated heading the day they merge to `main`.
   execution; no actual private intake, grading or replay is authorized here.
 
 ### Fixed
+
+- Correct only the new PR777 workflow's literal identity-guard spelling from
+  `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: "1"` to
+  `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'`. Complete old/new YAML parses are
+  equal and both values remain the string `1`; this is not evidence that the
+  earlier spelling disabled identity enforcement. The leader reviewed source
+  `59fe40cc1a1c693ad013ccb52186c74f093a2def`, tree
+  `c39120a33366bde6453b35f6564e506ca9a00372`, in review `5449259458`, conditional
+  on CI. Run `37695792367`, pytest job `113047068617`, reported **1 failed,
+  13395 passed, 64 skipped, 46 deselected, 1 warning in 1821.67s**; the failure
+  was the line-495 literal `assert "'1'" in value` in
+  `test_every_run_place_that_can_spend_turns_identity_pinning_on`.
+  At `980ea0f028a79b1b9ca14308673ec941b9ab5782`, tree
+  `de000e4ef734be1dd1a51b3e29b6ec880b8bcd6a`, only that full node ran once:
+  **1 passed in 0.19s**, exit 0, wrapper **0.521549s**, under Python 3.10.12 /
+  300s+5s/no-`-x` and 30-second Git bounds. Artifacts are in
+  `/tmp/pr777-quote-contract.859Mwc/`, log SHA256
+  `3b0357352e43af90dfd85efa2b51dfa854d132cccd90ee96c9893d76b054c17b`;
+  its `handoff.json` records final HEAD/tree after the three-record commit.
+  The original seven-case **7 passed in 294.01s** proof, wrapper
+  **298.027932s**, remains separate and was not rerun; its synthetic limits
+  still apply. Separately, time-budget job `113047068253` failed at
+  `2026-10-07T22:44:22Z` with the leader-read annotation
+  `System.IO.IOException: No space left on device` in
+  `_diag/Worker_20261007-222248-utc.log`. Its log endpoint was unavailable;
+  run-tests/post-cleanup conclusions were null. This establishes runner disk
+  exhaustion, not a proven assertion, timeout or transient GitHub-wide outage.
+  Consuming files and the reached test remain unknown; the quote correction
+  does not solve that failure. Controller/tests/executor, permissions, identity
+  values, source/study/input pins and budgets are unchanged. Final fixed-HEAD
+  review/CI and hosted admission remain gates; source acceptance authorizes
+  neither merge nor grading. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  keeps the CI failures, scoped retention-boundary observation and local
+  proofs separate. No manual CI retry or monitoring occurred.
 
 - Correct only PR776's native-grading test fixture for the unsupported
   `condition` case. Its replacement now sets both
@@ -53,6 +197,42 @@ entries land under a fresh dated heading the day they merge to `main`.
   per-case outcomes, source identities, artifacts and the final-identity handoff.
 
 ### Added
+
+- Add one manual hosted route for the retained native-r1 Task3 grade. A thin
+  controller keeps the accepted `prepare_native_task3_grading_execution`
+  context open through original-input intake, four-GET retained hydration,
+  F preparation, distinct grading-only input, direction checks, permanent
+  private grading-claim acknowledgement and `execute_native_task3_grading`.
+  The existing intake, preparer, executor, original R/F/input/registration
+  pins and twenty-cell study are unchanged. The grading-only CAS namespace
+  keys the original observation and F, not C or an Actions run. Occupied or
+  unconfirmed claims are not adopted or retried. HF credentials are scoped
+  to storage; the grading child remains offline and token-free for HF/GitHub.
+  Actual available grade/ledger/checkpoint/partial evidence is retained
+  privately. The accepted executor discards child stdout/stderr; this route
+  does not claim to retain them. Only a validated nonsecret completion is
+  public, and success requires a valid F grade plus confirmed retention.
+  Preserve the 14400-second F and 14520-second child envelopes, with a
+  270-minute job cap and bounded setup/retention steps; no new monetary cap
+  or live authority is claimed. The single new seven-case offline selector
+  reported **7 passed in 294.01s**, exit 0, wrapper **298.027932s**, at
+  `86d628b4d227b40787b1b958b54b6acb3a6aac51`, tree
+  `ded2db9655c5ec581a9b64317ce35957348e1f45`, from accepted
+  `a24c6dc9e9370362ce2adc886878b547b80cdc4c`, tree
+  `3f94b28df6337ccd92f91b605f1c26bcf51f70a3`. It used real validators with
+  synthetic HTTP/RPC, originals, child-grade and kernel facts under Python
+  3.10.12 / 300s+5s/no-`-x` and named 30-second Git fixtures. Seven JUnit
+  `record_property` warnings remain; no earlier selector was rerun or pooled.
+  Artifacts are in `/tmp/native-task3-hosted-grade.b5J2SO/`, log SHA256
+  `df7116976e51f3b11690740d5e12efde7c2b5295cd10e8138dd4966c49941f34`;
+  `handoff.json` records final HEAD/tree after the evidence-only commit.
+  Actual Task3's two declared files/408601 bytes remain unhydrated for
+  grading and ungraded. Usage/cost/served identity/native counters stay
+  unknown. Prior specialist-model invocations failed before execution and
+  are not endorsements. Fixed-HEAD independent review/CI and one exact
+  leader request still gate credentialed use; no live claim, model, grade,
+  replay or next observation occurred. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  records the per-case results, unchanged source identities and remaining gates.
 
 - Draft an explicit native-r1 Task3 entry in the shared frozen-F grading
   executor. The existing V2-first API/CLI stays unchanged. The leader corrected
