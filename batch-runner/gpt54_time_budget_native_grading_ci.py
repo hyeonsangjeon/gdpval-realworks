@@ -61,6 +61,13 @@ POLICY = {"permission": "one_frozen_F_grading_attempt", "external_attempts": 1,
 PRECLAIM_SECONDS = 300
 SOURCE_ROLES = bridge.SOURCE_ROLES | {HELPER, WORKFLOW, execution.HELPER, "batch-runner/codex_budget_pilot.py",
     "batch-runner/scripts/azure_oidc_identity_preflight.py", "batch-runner/scripts/preflight_grading_renderer.py"}
+DIAGNOSTIC_STAGES = ("environment", "originals", "intake_preparation", "direction", "claim", "executor",
+                     "retention", "context_exit")
+DIAGNOSTIC_STATES = frozenset({"unknown", "started", "completed"})
+# Closed, type-only categories reused from the observation controller.
+# No exception message, args, type name, traceback or provider body is public.
+FAILURE_CATEGORIES = frozenset({"controller_refused", "interrupted", "io_error", "validation_refused",
+                               "type_error", "attribute_error", "key_error", "unexpected_error"})
 _write, _read, _canonical_path = shared._write, shared._read, shared._canonical_path
 
 
@@ -71,6 +78,24 @@ class NativeGradingCIRefused(ValueError):
 def _require(condition, reason):
     if not condition:
         raise NativeGradingCIRefused(reason)
+
+
+def _diagnostics():
+    return {stage: {"state": "unknown", "category": None} for stage in DIAGNOSTIC_STAGES}
+
+
+def _failure(diagnostics, stage, error):
+    """Keep the first safe category at this boundary, never private error text."""
+    if diagnostics is None or diagnostics[stage]["category"] is not None:
+        return
+    category = "unexpected_error"
+    for kind, name in ((NativeGradingCIRefused, "controller_refused"), (KeyboardInterrupt, "interrupted"),
+                       (OSError, "io_error"), (ValueError, "validation_refused"), (TypeError, "type_error"),
+                       (AttributeError, "attribute_error"), (KeyError, "key_error")):
+        if isinstance(error, kind):
+            category = name
+            break
+    diagnostics[stage]["category"] = category
 
 
 def _namespace() -> tuple[str, str, str]:
@@ -316,7 +341,7 @@ def _commit(api, token, deadline, *, parent, files, control_path, control, cache
             item.stream.close()
 
 
-def _claim(context, binding, routes_sha256, token):
+def _claim(context, binding, routes_sha256, token, *, diagnostics=None):
     paths, request = context["paths"], context["request"]
     prefix, claim_path, _ = _namespace()
     claim = {"format": "gpt54-time-budget-native-task3-grade-admission-v1", "cell": CELL,
@@ -337,7 +362,8 @@ def _claim(context, binding, routes_sha256, token):
             receipt["returned_commit"] = _commit(api, credential, deadline, parent=parent, files={claim_path: _encoded(claim)},
                 control_path=claim_path, control=claim, cache=cache)
             receipt["outcome"] = "acknowledged"
-    except (Exception, KeyboardInterrupt):
+    except (Exception, KeyboardInterrupt) as error:
+        _failure(diagnostics, "claim", error)
         _write(paths["state_root"] / "claim-receipt.json", receipt)
         raise NativeGradingCIRefused("claim_unconfirmed_never_adopt_or_retry") from None
     _write(paths["state_root"] / "claim-receipt.json", receipt)
@@ -377,7 +403,7 @@ def _snapshot(context, token):
     return files
 
 
-def _retain(context, claim, receipt, outcome, token):
+def _retain(context, claim, receipt, outcome, token, *, diagnostics=None):
     root = context["paths"]["state_root"]
     prefix, claim_path, manifest_path = _namespace()
     files = _snapshot(context, token)
@@ -407,20 +433,24 @@ def _retain(context, claim, receipt, outcome, token):
                      credential, deadline, written_at=parent)
         _require(_snapshot(context, token) == files, "retained_local_bytes_changed")
         result["outcome"] = "acknowledged"
-    except (Exception, KeyboardInterrupt):
+    except (Exception, KeyboardInterrupt) as error:
+        _failure(diagnostics, "retention", error)
         result["returned_commit"] = None  # Never adopt a lost response or repeat a write.
     _write(root / "retention-receipt.json", result)
     return result
 
 
-def _completion(context, *, binding=None, receipt=None, outcome=None, retained=None):
+def _completion(context, *, binding=None, receipt=None, outcome=None, retained=None, diagnostics=None):
     request = context["request"]
+    diagnostics = _diagnostics() if diagnostics is None else diagnostics
     acknowledged = retained is not None and retained["outcome"] == "acknowledged"
     terminal = outcome["terminal_reason"] if outcome is not None else None
     status = "uncertain"
     if acknowledged and outcome is not None:
         status = "success" if terminal == "completed" and outcome["grade_file"] is not None and outcome["cleanup_confirmed"] else (
             "timeout" if terminal == "timeout" else "partial")
+    if status == "success" and any(item["category"] is not None for item in diagnostics.values()):
+        status = "uncertain"  # A later context-exit refusal cannot certify success.
     origin = binding.as_dict()["grading_input_origin"] if binding is not None else None
     return {"format": FORMAT, "cell": CELL, "controller": request["controller"], "observation_source": request["completion"]["source"],
         "frozen_source": request["frozen_source"], "request_identity": context["request_identity"], "ci": context["ci"],
@@ -437,7 +467,34 @@ def _completion(context, *, binding=None, receipt=None, outcome=None, retained=N
         "retained_manifest_identity": retained["manifest_identity"] if acknowledged else None,
         "retained_file_count": retained["file_count"] if acknowledged else None, "retained_file_bytes": retained["file_bytes"] if acknowledged else None,
         "stdout_stderr": "discarded_by_accepted_executor_not_available", "usage": None, "cost": None, "quality_score": None,
-        "retry_allowed": False, "other_cells_graded": 0}
+        "retry_allowed": False, "other_cells_graded": 0, "diagnostics": diagnostics}
+
+
+def _check_diagnostics(value):
+    diagnostics = value["diagnostics"]
+    _require(type(diagnostics) is dict and set(diagnostics) == set(DIAGNOSTIC_STAGES), "public_diagnostics_schema_refused")
+    for item in diagnostics.values():
+        _require(type(item) is dict and set(item) == {"state", "category"}
+                 and type(item["state"]) is str and item["state"] in DIAGNOSTIC_STATES
+                 and (item["category"] is None or type(item["category"]) is str
+                      and item["category"] in FAILURE_CATEGORIES)
+                 and (item["category"] is None or item["state"] == "started"), "public_diagnostics_value_refused")
+    states = {stage: item["state"] for stage, item in diagnostics.items()}
+    for previous, current in zip(DIAGNOSTIC_STAGES[:5], DIAGNOSTIC_STAGES[1:6]):
+        _require(states[current] == "unknown" or states[previous] == "completed", "public_diagnostics_order_refused")
+    if states["retention"] != "unknown":
+        _require(states["claim"] == "completed" and (states["executor"] == "completed"
+                 or states["executor"] == "started" and diagnostics["executor"]["category"] is not None),
+                 "public_diagnostics_order_refused")
+    _require(states["context_exit"] == "unknown" or states["retention"] != "unknown", "public_diagnostics_order_refused")
+    _require(states["claim"] != "completed" or value["claim_commit"] is not None, "public_diagnostics_claim_refused")
+    _require(value["claim_commit"] is None or states["claim"] in {"unknown", "completed"}, "public_diagnostics_claim_refused")
+    _require(states["executor"] != "completed" or value["terminal_reason"] is not None, "public_diagnostics_executor_refused")
+    _require(states["retention"] != "completed" or value["retention"] == "acknowledged", "public_diagnostics_retention_refused")
+    _require(value["retention"] != "acknowledged" or states["retention"] in {"unknown", "completed"},
+             "public_diagnostics_retention_refused")
+    _require(value["status"] != "success" or all(state == "completed" for state in states.values()),
+             "success_requires_completed_stages")
 
 
 def validate_completion(value, context):
@@ -446,7 +503,7 @@ def validate_completion(value, context):
     _require(type(value) is dict and set(value) == set(baseline), "public_completion_schema_refused")
     mutable = {"derived_result_identity", "derived_result_fingerprint", "preparation_identity", "execution_binding_sha256",
         "claim_commit", "retention_commit", "retention", "status", "terminal_reason", "entry_invoked", "cleanup_confirmed",
-        "grade_identity", "retained_manifest_identity", "retained_file_count", "retained_file_bytes"}
+        "grade_identity", "retained_manifest_identity", "retained_file_count", "retained_file_bytes", "diagnostics"}
     _same("public independent bindings", {key: value[key] for key in value.keys() - mutable},
           {key: baseline[key] for key in baseline.keys() - mutable})
     for key in ("derived_result_identity", "preparation_identity", "grade_identity", "retained_manifest_identity"):
@@ -474,6 +531,7 @@ def validate_completion(value, context):
         _require(retained and value["claim_commit"] is not None and value["grade_identity"] is not None
                  and value["terminal_reason"] == "completed" and value["entry_invoked"] is True
                  and value["cleanup_confirmed"] is True, "success_requires_valid_grade_and_retention")
+    _check_diagnostics(value)
 
 
 def run(context):
@@ -490,29 +548,58 @@ def run(context):
     _write(paths["state_root"] / "request.json", context["request"])
     paths["attempt_store"].mkdir(mode=0o700)
     binding = receipt = outcome = retained = None
+    # In-memory observations only; never request, claim or retry authority.
+    diagnostics = _diagnostics()
+    stage = "environment"
+    diagnostics[stage]["state"] = "started"
     try:
         with intake._hf_environment(online=False), ExitStack() as live:
+            diagnostics[stage]["state"] = "completed"
+            stage = "originals"
+            diagnostics[stage]["state"] = "started"
             _originals(context, token)
+            diagnostics[stage]["state"] = "completed"
+            stage = "intake_preparation"
+            diagnostics[stage]["state"] = "started"
             request = _intake_request(context)
             with _storage_credential(token):
                 handle = live.enter_context(execution.prepare_native_task3_grading_execution(request_json=request.decode(),
                     expected_request_sha256=_identity(request)["sha256"], execution_input_directory=paths["execution_input_directory"]))
+            diagnostics[stage]["state"] = "completed"
+            stage = "direction"
+            diagnostics[stage]["state"] = "started"
             arguments, binding, routes_sha256 = _direction(context, handle)
             _require(time.monotonic() - started < PRECLAIM_SECONDS, "setup_budget_exhausted_before_claim")
-            claim, receipt = _claim(context, binding, routes_sha256, token)
+            diagnostics[stage]["state"] = "completed"
+            stage = "claim"
+            diagnostics[stage]["state"] = "started"
+            claim, receipt = _claim(context, binding, routes_sha256, token, diagnostics=diagnostics)
+            diagnostics[stage]["state"] = "completed"
+            stage = "executor"
+            diagnostics[stage]["state"] = "started"
             try:
                 _require(time.monotonic() - started < PRECLAIM_SECONDS, "setup_budget_exhausted_after_claim")
                 # The actual executor rechecks direction, source, origin, bytes,
                 # local once-store and admission time before its own durable claim.
                 outcome = execution.execute_native_task3_grading(context["plan"], **arguments)
-            except (Exception, KeyboardInterrupt):
+                diagnostics[stage]["state"] = "completed"
+            except (Exception, KeyboardInterrupt) as error:
+                _failure(diagnostics, stage, error)
                 outcome = None  # Available private partial files still survive below.
-            retained = _retain(context, claim, receipt, outcome, token)
-    except (Exception, KeyboardInterrupt):
-        pass  # Never format raw private exceptions or infer absence of effects.
+            stage = "retention"
+            diagnostics[stage]["state"] = "started"
+            retained = _retain(context, claim, receipt, outcome, token, diagnostics=diagnostics)
+            if retained["outcome"] == "acknowledged":
+                diagnostics[stage]["state"] = "completed"
+            stage = "context_exit"
+            diagnostics[stage]["state"] = "started"
+        diagnostics[stage]["state"] = "completed"
+    except (Exception, KeyboardInterrupt) as error:
+        _failure(diagnostics, stage, error)  # Never format private errors or infer absent effects.
     finally:
         os.environ.pop("HF_TOKEN", None)
-    completion = _completion(context, binding=binding, receipt=receipt, outcome=outcome, retained=retained)
+    completion = _completion(context, binding=binding, receipt=receipt, outcome=outcome, retained=retained,
+                             diagnostics=diagnostics)
     validate_completion(completion, context)
     return completion
 

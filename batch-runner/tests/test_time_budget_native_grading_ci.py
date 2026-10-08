@@ -382,7 +382,7 @@ def _child_and_claim_observers(hosted, monkeypatch, record_property, scenario, t
     state, paths = hosted.state, hosted.paths
     real_claim, real_execute = subject._claim, subject.execution.execute_native_task3_grading
 
-    def claim(context, binding, routes, token):
+    def claim(context, binding, routes, token, *, diagnostics=None):
         assert len(state.original_gets) == len(state.retained_gets) == 4 and len(hosted.offline.prepared) == 1
         assert "HF_TOKEN" not in os.environ and len(subject.execution._NATIVE_INTAKES) == 1
         assert list(paths["attempt_store"].iterdir()) == [] and state.children == []
@@ -429,7 +429,7 @@ def _child_and_claim_observers(hosted, monkeypatch, record_property, scenario, t
                 state.claim_guards.append(mode)
             state.store = good_store
             assert subject.execution._NATIVE_INTAKES == original
-        return real_claim(context, binding, routes, token)
+        return real_claim(context, binding, routes, token, diagnostics=diagnostics)
 
     def execute(plan, **arguments):
         state.executor_arguments = arguments
@@ -568,3 +568,180 @@ def test_native_task3_hosted_grading_route(hosted, monkeypatch, capsys, record_p
         "child_calls": 1, "synthetic_step0_bytes": 218405, "kernel": "synthetic_not_host_support", "private_state": "synthetic_RPC",
         "remote_CAS_precedes_local_claim_and_child": True, "native_context_closed": True,
         "retention": result["retention"], "status": result["status"], "step8_seconds": 14400, "child_seconds": 14520}, sort_keys=True))
+
+
+@pytest.mark.parametrize("scenario", ["originals", "intake_preparation", "direction", "claim_lost", "executor", "retention_lost"])
+def test_native_task3_grading_safe_diagnostics(hosted, monkeypatch, capsys, record_property, scenario):
+    """Actual CLI/catches/serialization with synthetic faults, never a live retry."""
+    state, paths = hosted.state, hosted.paths
+    sentinel = "hf_DIAGNOSTIC_SECRET_SENTINEL/PRIVATE_PAYLOAD?token=NEVER_REAL"
+    contexts, injected = [], []
+
+    class SecretFailure(OSError):
+        def __str__(self):
+            state.formatted.append(True)
+            raise AssertionError("private exception must not be formatted")
+
+        __repr__ = __str__
+
+    def fail():
+        injected.append(scenario)
+        raise SecretFailure(sentinel)
+
+    real_run = subject.run
+
+    def observe_run(context):
+        contexts.append(context)
+        return real_run(context)
+
+    monkeypatch.setattr(subject, "run", observe_run)
+    if scenario == "originals":
+        from huggingface_hub import utils
+        original_http = utils.http_stream_backoff
+
+        @contextmanager
+        def failed_original(*args, **kwargs):
+            with original_http(*args, **kwargs) as response:
+                fail()
+                yield response
+
+        monkeypatch.setattr(utils, "http_stream_backoff", failed_original)
+    elif scenario == "intake_preparation":
+        original_request = httpx.HTTPTransport.handle_request
+
+        def failed_intake(transport, request):
+            response = original_request(transport, request)
+            response.close()
+            fail()
+
+        monkeypatch.setattr(httpx.HTTPTransport, "handle_request", failed_intake)
+    elif scenario == "direction":
+        monkeypatch.setattr(subject, "preflight_routes", lambda *args, **kwargs: fail())
+    elif scenario in {"claim_lost", "retention_lost"}:
+        real_commit = state.store.create_commit
+        lose = "claim" if scenario == "claim_lost" else "output"
+
+        def lost_acknowledgement(**kwargs):
+            returned = real_commit(**kwargs)
+            if state.store.commits[-1] == lose:
+                fail()  # The synthetic store really wrote; the caller has no ACK.
+            return returned
+
+        monkeypatch.setattr(state.store, "create_commit", lost_acknowledgement)
+
+    if scenario in {"executor", "retention_lost"}:
+        real_execute = subject.execution.execute_native_task3_grading
+
+        def partial_then_fail(plan, **arguments):
+            assert state.store.commits == ["claim"] and "immutable_control_readback" in state.store.calls
+            assert "HF_TOKEN" not in os.environ and len(subject.execution._NATIVE_INTAKES) == 1
+            subject.execution._native_intake(arguments["native_preparation"])
+            state.stages.append("real_native_executor")
+            state.children = _child(arguments, monkeypatch, mode="partial", record_property=record_property)
+            outcome = real_execute(plan, **arguments)
+            assert outcome["terminal_reason"] == "failed" and outcome["cleanup_confirmed"] is True
+            assert outcome["grade_file"] is not None and len(state.children) == 1
+            if scenario == "executor":
+                fail()  # Available actual partial files must still be retained.
+            return outcome
+
+        monkeypatch.setattr(subject.execution, "execute_native_task3_grading", partial_then_fail)
+
+    monkeypatch.setenv("HF_TOKEN", TOKEN)
+    record_property("operation", "actual_native_controller_CLI_with_synthetic_" + scenario + "_failure")
+    assert subject.main(["run", *hosted.cli]) == 2
+    captured = capsys.readouterr()
+    assert captured == ("", "")
+    assert injected == [scenario] and state.formatted == []
+    assert len(contexts) == 1 and "HF_TOKEN" not in os.environ and subject.execution._NATIVE_INTAKES == {}
+    data = (paths["state_root"] / "completion.json").read_bytes()
+    result, context = json.loads(data), contexts[0]
+    subject.validate_completion(result, context)
+    assert data == subject.shared._bytes(result)
+    for secret in (sentinel, TOKEN, RPC_TOKEN, PRIVATE, *NAMES, str(paths["state_root"])):
+        assert secret not in data.decode() + captured.out + captured.err
+    assert result["status"] == "uncertain" and result["retry_allowed"] is False
+    assert result["usage"] is result["cost"] is result["quality_score"] is None
+    assert result["other_cells_graded"] == 0
+    assert result["stdout_stderr"] == "discarded_by_accepted_executor_not_available"
+    assert result["cell"] == hosted.request["cell"] and result["controller"] == hosted.request["controller"]
+    assert result["observation_source"] == hosted.request["completion"]["source"]
+    assert result["frozen_source"] == hosted.request["frozen_source"] and result["ci"] == context["ci"]
+    assert result["request_identity"] == _identity(subject.bridge.reader._bytes(hosted.request))
+    for key in ("output_commit", "result_identity", "result_fingerprint"):
+        assert result["original_" + key] == hosted.request["completion"][key]
+
+    stage = {"claim_lost": "claim", "retention_lost": "retention"}.get(scenario, scenario)
+    category = "validation_refused" if scenario in {"originals", "intake_preparation"} else "io_error"
+    expected = subject._diagnostics()
+    for name in subject.DIAGNOSTIC_STAGES[:subject.DIAGNOSTIC_STAGES.index(stage)]:
+        expected[name]["state"] = "completed"
+    expected[stage] = {"state": "started", "category": category}
+    if scenario == "executor":
+        expected["retention"]["state"] = "completed"
+    if scenario in {"executor", "retention_lost"}:
+        expected["context_exit"]["state"] = "completed"
+    assert result["diagnostics"] == expected
+
+    # All-unknown is honest absence of observations, never execution authority.
+    baseline = subject._completion(context)
+    subject.validate_completion(baseline, context)
+    for change in (None, [], {**expected, "raw_error": sentinel},
+                   {**expected, stage: {"state": sentinel, "category": None}},
+                   {**expected, stage: {"state": "started", "category": sentinel}},
+                   {**expected, stage: {"state": "started", "category": []}},
+                   {**expected, stage: {"state": "started", "category": category, "filename": sentinel}},
+                   {**expected, stage: {"state": "completed", "category": category}},
+                   {**expected, "environment": {"state": "unknown", "category": None}}):
+        with pytest.raises(subject.NativeGradingCIRefused):
+            subject.validate_completion({**result, "diagnostics": change}, context)
+    for key, value in (("retry_allowed", True), ("controller", {"sha": "0" * 40, "tree": "0" * 40}),
+                       ("original_result_identity", {"size": 1, "sha256": "0" * 64}), ("status", "success")):
+        with pytest.raises(ValueError):
+            subject.validate_completion({**result, key: value}, context)
+    assert state.formatted == []
+
+    if scenario in {"originals", "intake_preparation", "direction"}:
+        assert state.store.calls == state.store.commits == state.children == []
+        assert result["claim_commit"] is result["entry_invoked"] is result["execution_binding_sha256"] is None
+        assert not (paths["state_root"] / "claim-reserved.json").exists()
+    else:
+        assert result["execution_binding_sha256"] is not None
+        assert result["preparation_identity"] and result["derived_result_identity"]
+        assert len(state.original_gets) == len(state.retained_gets) == 4 and len(hosted.offline.prepared) == 1
+    if scenario == "claim_lost":
+        assert state.store.commits == ["claim"] and state.store.claim in state.store.trees[state.store.head]
+        assert "immutable_control_readback" not in state.store.calls and state.children == []
+        assert result["claim_commit"] is result["entry_invoked"] is None and result["retention"] == "uncertain"
+        assert json.loads((paths["state_root"] / "claim-receipt.json").read_bytes())["outcome"] == "uncertain"
+    if scenario not in {"executor", "retention_lost"}:
+        assert list(paths["attempt_store"].iterdir()) == [] and not paths["destination"].exists()
+        assert "_retain" not in state.stages and result["retention_commit"] is None
+    else:
+        assert state.store.commits == ["claim", "output"] and len(state.children) == 1
+        assert state.stages.index("_claim") < state.stages.index("real_native_executor") < state.stages.index("_retain")
+        assert len(list(paths["attempt_store"].iterdir())) == 1
+        assert (paths["destination"] / "grade.json").is_file()
+        manifest = json.loads(state.store.trees[state.store.head][state.store.manifest])
+        assert any("/_progress/" in role for role in manifest["files"])
+        assert any(role.endswith(".cost_ledger.jsonl") for role in manifest["files"])
+        assert "execution/grade.json" in manifest["files"]
+        assert manifest["stdout_stderr"] == "discarded_by_accepted_executor_not_available"
+        assert result["claim_commit"] is not None
+        if scenario == "executor":
+            assert result["retention"] == "acknowledged" and result["retention_commit"] is not None
+            assert result["terminal_reason"] is result["entry_invoked"] is result["grade_identity"] is None
+            assert manifest["execution_receipt"] is None
+        else:
+            assert result["retention"] == "uncertain" and result["retention_commit"] is None
+            assert result["terminal_reason"] == "failed" and result["entry_invoked"] is True
+            assert json.loads((paths["state_root"] / "retention-receipt.json").read_bytes())["outcome"] == "uncertain"
+        assert all(TOKEN.encode() not in body and sentinel.encode() not in body
+                   for body in state.store.trees[state.store.head].values())
+    assert state.store.trees[state.store.head][hosted.prior] == b"synthetic generation claim must remain immutable"
+    assert state.store.writers[state.store.head][hosted.prior] == "1" * 40
+    record_property("bounded_outcome", json.dumps({"scenario": scenario, "diagnostics": result["diagnostics"],
+        "original_GETs": len(state.original_gets), "retained_GETs": len(state.retained_gets),
+        "synthetic_commits": state.store.commits, "child_calls": len(state.children),
+        "retention": result["retention"], "status": result["status"], "retry_allowed": result["retry_allowed"],
+        "private_exception_formatted": False, "public_secret_absent": True}, sort_keys=True))
