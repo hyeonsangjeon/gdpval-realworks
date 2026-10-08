@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Submit one separately directed model-free `prepare-probe` run `37818721507`,
+  workflow `378041151`, run number 4, attempt 1, source
+  `ff3eecd1de1322898c18ae192021de16a9d06ee0`. Its 4194-byte request SHA256 is
+  `a0f0c5afb84529d00253c0474f2741b2c268b55f417c8b946a34426051e9fbbd`,
+  with a 2400-second window `1791481273..1791483673`.
+  Original bindings are unchanged and grading storage authority is absent.
+  Exact readback was queued, not evidence of private-input readiness.
+  Permit only acquisition/preparation/handle closure under the existing
+  300s+5s bound; no claim, model, grader, retention write or replay.
+  Prior run 3 remains uncertain and nonretryable.
+
 - Correct only the native Git ownership test's stale combined step-ceiling
   assertion on PR782. It now checks the mutually exclusive operations exactly:
   grade **269 minutes**, prepare-probe **19 minutes**, excluding the opposite

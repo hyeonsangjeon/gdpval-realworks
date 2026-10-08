@@ -1,6 +1,29 @@
 # Latest task result
 
-## Preparation-only probe accepted; live direction remains separate
+## Preparation-only probe submitted; readiness not yet observed
+
+The leader submitted [run 37818721507][probe-run], workflow `378041151`,
+run number **4**, attempt **1**, explicitly selecting `prepare-probe`.
+Exact readback at **2026-10-08 17:43:07 UTC** was `queued`, with source
+`ff3eecd1de1322898c18ae192021de16a9d06ee0`, tree
+`30966a77bba3c4322b2b83faf3c0e93022be69c1`. This is the first directed
+model-free preparation probe, not a fourth grading attempt.
+
+The canonical **4194-byte** preparation-only request SHA256 is
+`a0f0c5afb84529d00253c0474f2741b2c268b55f417c8b946a34426051e9fbbd`.
+Its **2400-second** admission window is `1791481273..1791483673`.
+Original R/result/F/input bindings are unchanged. The request has distinct
+preparation-only format, purpose and policy, with no grading storage authority.
+
+Authorize only originals acquisition, authenticated retained intake/F
+preparation and handle closure under the existing **300s+5s** hosted bound.
+No direction, claim, grading once-store, model/judge/executor, retention or
+private-storage write is authorized. Readiness/refusal has not been observed;
+queued status is not readiness. Inspect terminal evidence in a later bounded
+cycle without waiting, polling or resubmission. Prior run 3 remains uncertain
+and nonretryable; no grade or historical outcome is reclassified.
+
+### Accepted source and validation
 
 The leader accepted HEAD `3738b48bb57e324daf1f4e75ff846d8b1aa59fc0`,
 tree `59b20c4444bd8ccb6984d3b93d6f84802d9febfe`, in review `5460622280`.
@@ -267,10 +290,10 @@ The only cell remains `gpt54_sandboxv2_codex_time_budget_v1` /
 The **2 files / 408601 bytes** remain declarations, not genuine contents
 fetched or verified by this implementation task. Usage/cost/score remain unknown.
 
-Independent fixed-HEAD review and CI have passed. A separate exact leader
-source/run-number/window/hash direction remains required before
-any live read-only preparation probe. These implementation proofs authorize
-no private access, dispatch, grading retry, adoption, replay, Task5 or next cell.
+Independent fixed-HEAD review and CI passed before the separate exact
+source/run-number/window/hash direction and preparation-only submission above.
+That one submission consumes this direction. It does not authorize a grading
+retry, adoption, replay, Task5 or next cell.
 The required preparation-boundary specialist failed before
 execution on unavailable configured Opus4.7, provided no endorsement and was
 not retried. The complete catalog was consulted once. `experiment-report-en`
@@ -280,3 +303,4 @@ strengthening claims. No study redesign or UI skill applied.
 [prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a35b4fe58c555ad7abfce423379e99a761a8f1ef/tasks/LATEST_TASK_RESULT/README.md
 [original-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e/tasks/LATEST_TASK_RESULT/README.md
 [prior-probe]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/bc7a8d53ed83f8d52af35dc2f7639ae492fc28bb/tasks/LATEST_TASK_RESULT/README.md
+[probe-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37818721507
