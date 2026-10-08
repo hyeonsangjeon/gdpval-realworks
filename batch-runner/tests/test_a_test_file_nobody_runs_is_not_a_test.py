@@ -44,7 +44,7 @@ BUDGET_READOUT_GLOB = "tests/test_codex_budget_pilot*readout*.py"
 TIME_BUDGET_GLOB = "tests/test_time_budget_*.py"
 TIME_BUDGET_RUN = (
     "cd batch-runner\n"
-    f'python -m pytest -m "not integration" --tb=short -q -rs {TIME_BUDGET_GLOB}\n'
+    f'python -m pytest -m "not integration" --tb=short -q -rs -o tmp_path_retention_policy=failed {TIME_BUDGET_GLOB}\n'
 )
 BUDGET_ORIGINAL_RUN = (
     "cd batch-runner\n"
