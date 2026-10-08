@@ -168,6 +168,8 @@ def hosted(case, offline, dual_roots, tmp_path, monkeypatch, record_property):
     created = local(["/bin/bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", block], cwd=bootstrap)
     assert created.returncode == 0
     roots = {key: temporary / basename for key, basename in subject.ROOT_NAMES.items()}
+    # The imported controller stands in for the actual CLI loaded from linked C.
+    monkeypatch.setattr(subject, "__file__", str(roots["controller_root"] / subject.HELPER))
     propagated = dict(line.split("=", 1) for line in Path(environment["GITHUB_ENV"]).read_text().splitlines())
     assert propagated == {"AZURE_CONFIG_DIR": str(roots["login_root"])}
     assert roots["login_root"].stat().st_mode & 0o777 == 0o700 and list(roots["login_root"].iterdir()) == []
@@ -177,7 +179,12 @@ def hosted(case, offline, dual_roots, tmp_path, monkeypatch, record_property):
         if command[:2] == ["/usr/bin/git", "--no-replace-objects"]:
             position = command.index("-C")
             if Path(command[position + 1]) in {bootstrap, roots["controller_root"], roots["runtime_root"], roots["frozen_root"]}:
-                assert command[position + 2] in {"rev-parse", "config", "ls-tree", "cat-file"}
+                arguments = command[position + 2:]
+                if arguments[0] == "-c":
+                    assert Path(command[position + 1]) == bootstrap
+                    assert arguments[:3] == ["-c", "safe.directory=" + str(bootstrap), "rev-parse"]
+                    arguments = arguments[2:]
+                assert arguments[0] in {"rev-parse", "config", "ls-tree", "cat-file"}
                 assert kwargs["timeout"] == 60 and kwargs["env"]["GIT_ALLOW_PROTOCOL"] == ""
                 assert kwargs["env"]["GIT_NO_LAZY_FETCH"] == "1" and "HF_TOKEN" not in kwargs["env"]
                 kwargs["timeout"] = 30

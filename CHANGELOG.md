@@ -41,6 +41,55 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Keep native Task3 bootstrap trust local to its controller, restoring the
+  shared `gpt54_disposable_checkout.py` to exact base SHA256
+  `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
+  Preserve the workflow's two process-local trust lines after physical-path
+  and ordinary-`.git` checks. The controller verifies the code-defined linked
+  C's common directory and reciprocal registration before four fixed bootstrap
+  reads use command-local `-c safe.directory=<verified bootstrap>` through the
+  unchanged sanitized Git primitives. No shared-helper mutation, wildcard,
+  persistent configuration, copied Git implementation or pin-registry update
+  remains. C/R/F checks, native/F/scoring code, permissions, credentials, study
+  and 14400/14520-second controls stay fixed; step ceilings still total
+  269 minutes within the 270-minute job.
+  The old ownership proof at `0630f45535d563027cd7ee0f816c89a6e9745ade`,
+  tree `11ecae2d8b2cf56082e934bd50fd8d8898496422`, remains **1 passed,
+  1 warning in 2.16s**, exit **0**, wrapper **4.977293s**. It did not cover
+  registered-source compatibility. At prior HEAD
+  `f2d8183088b8cc4c345c704e14c83f88f6e889f8`, the leader-read CI run
+  `37742051694` separately reported: pytest job `113194779961`, **18 failed /
+  13378 passed / 64 skipped / 46 deselected / 1 warning in 1445.26s**;
+  time-budget-contracts `113194779964`, **199 failed / 186 passed / 46 errors
+  in 378.71s**; comparison-contracts `113194780036`, **101 failed / 1245 passed /
+  117 errors in 814.33s**. These are pytest summaries, not full job durations
+  or model outcomes; no CI re-fetch or poll followed.
+  From base `3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
+  `8bcad24257dfe0b22ca6a0d17e34f035eba33454`, tested HEAD
+  `f34291d7fd33b33ad4f20a4778f646f7ceeedf46`, tree
+  `af0754deed16975822adb79b47fd7abcfb871381`, ran the modified ownership
+  selector, hosted `guards`, current retention binding and valid runtime
+  checkout nodes together once: **4 passed, 2 warnings in 15.18s**, exit **0**;
+  pytest process **15.616563s**, wrapper **20.362449s**. Tiny synthetic sources,
+  scoped ownership refusal and real Git/source checks do not establish live
+  host readiness, full CI success or grading. Artifacts:
+  `/tmp/native-task3-pin-compatibility.MpeuVa/`; log SHA256
+  `c64feeac1030903c2f3d39adb2de70604dc5f69bbbac3ba9b10bc222d90945bb`;
+  JUnit SHA256 `c2054e44d00f7649cc1fa8815361cd87b9ea483fa1a8f4050d1463da9b5069f6`.
+  `final-source.json` and `handoff.json` seal final HEAD/tree after the three
+  records; LATEST retains the separate earlier proof and immutable history.
+  Run 2 `37737075149`'s actual ownership refusal and run 1 `37726733625`'s
+  missing-Python refusal remain spent, unadmitted submissions. Neither
+  establishes a score or zero cost. The ownership specialist failed before
+  execution on unavailable configured Opus 4.7, supplied no endorsement and
+  was not retried. Prior conditional source acceptance is superseded by the
+  integration blocker. The corrected HEAD
+  `a41d42b38d2019d64239120782a1673746661c4a`, tree
+  `6fe807e19924063881ca0cb0a14d9c0e4b8f9d0c`, is accepted in review
+  `5454436958`; all 11 applicable checks in CI run `37748755436` succeeded,
+  observed at **2026-10-08 09:21:17 UTC**. A new leader-issued
+  source/run-number/window/hash remains required; no live operation occurred.
+
 - Correct only the retained native Task3 grading workflow's public bootstrap
   order. Keep every interpreter-free Bash source/caller/workflow/attempt
   assertion first, move the same pinned Python 3.10.12 setup immediately next

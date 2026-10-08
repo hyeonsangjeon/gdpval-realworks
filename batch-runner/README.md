@@ -929,6 +929,65 @@ F, registration, workflows and 14400/14520-second controls. This local proof
 is not actual hydration, a host/kernel verdict or a grade. Full fixed-HEAD
 review/CI remain required; the hosted route and live grading remain deferred.
 
+The native Task3 Git ownership correction adds exact process-local trust only
+after the ordinary bootstrap's physical-path and nonsymlink `.git` checks.
+The workflow's two trust lines remain unchanged in this follow-up. The shared
+`gpt54_disposable_checkout.py` is restored to exact base SHA256
+`77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
+Only the native grading controller grants the additional bootstrap allowance,
+using unchanged `_git`, `_repository` and `_registered_gitdir` primitives.
+Its helper binds the ordinary physical path to the code-defined linked C's
+real common directory and reciprocal registration before four fixed reads use
+command-local `-c safe.directory=<verified bootstrap>`. No unrelated shared
+caller gains trust. There is no wildcard, persistent configuration, ownership
+change or repinned dependency manifest. C/R/F source checks, native/F/scoring,
+interpreter/token ordering, pins, permissions and finite budgets stay fixed;
+step ceilings still total **269 minutes** within the **270-minute** job.
+
+The earlier ownership-only proof remains **1 passed, 1 warning in 2.16s**,
+exit **0**, wrapper **4.977293s**, at
+`0630f45535d563027cd7ee0f816c89a6e9745ade`, tree
+`11ecae2d8b2cf56082e934bd50fd8d8898496422`. It did not cover registered-source
+compatibility. The leader subsequently read three failed CI job summaries
+in run `37742051694` at `f2d8183088b8cc4c345c704e14c83f88f6e889f8`.
+Their exact counts and separate pytest durations are in
+[LATEST](../tasks/LATEST_TASK_RESULT/README.md); they are not full job durations
+or model outcomes. Prior conditional source acceptance is superseded by that
+integration blocker. No CI log was fetched again and no check was polled.
+
+The new tested HEAD is `f34291d7fd33b33ad4f20a4778f646f7ceeedf46`, tree
+`af0754deed16975822adb79b47fd7abcfb871381`, on base
+`3bea3bf816a516fd0238fe11cdc9d696eefeed10`, tree
+`8bcad24257dfe0b22ca6a0d17e34f035eba33454`. One invocation ran the modified
+ownership selector, hosted `guards`, current retention binding and valid
+runtime checkout nodes: **4 passed, 2 warnings in 15.18s**, exit **0**;
+pytest process **15.616563s**, wrapper **20.362449s**. Python **3.10.12**,
+**300s+5s**, no `-x`, and existing Git bounds were retained. The ownership
+case uses tiny synthetic C/R/F identities and scoped
+`GIT_TEST_ASSUME_DIFFERENT_OWNER`; actual Git exits **128** before the exact
+allowance, then the extracted workflow and controller-local path succeed.
+Wrong paths/source/trees, unrelated repositories and reciprocal-registration
+tampering still refuse, with config and refs unchanged. This does not prove
+live UID/container readiness, full CI success, private intake or grading.
+No old success/partial/timeout path or full suite ran again.
+
+Artifacts: `/tmp/native-task3-pin-compatibility.MpeuVa/`; log SHA256
+`c64feeac1030903c2f3d39adb2de70604dc5f69bbbac3ba9b10bc222d90945bb`,
+JUnit SHA256 `c2054e44d00f7649cc1fa8815361cd87b9ea483fa1a8f4050d1463da9b5069f6`.
+`final-source.json` and `handoff.json` seal final HEAD/tree after the three
+records. Actual run `37737075149`/r2a1/job `113178950435` failed at
+**2026-10-08 06:21:25 UTC** in step 7 on `detected dubious ownership`, exit **1**,
+after successful container/guards/Python/checkout. Its **60737-byte / 439-line**
+log SHA256 is `666006053c465c026c47a48117626844a06c42f3255dbf08a6688f526fea72f0`.
+Linked sources and grading were not reached. Run `37726733625`'s earlier
+missing-Python failure stays separate; both submissions are spent and neither
+admitted grading. Neither establishes a score or zero cost. The ownership
+specialist failed before execution on unavailable configured Opus 4.7, without
+endorsement or retry. Fixed-HEAD review/CI and a new leader-issued
+source/run-number/window/hash remain required. No live operation or next cell
+was authorized or performed by this correction. Detailed earlier evidence is
+in the [immutable 3bea3bf record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/3bea3bf816a516fd0238fe11cdc9d696eefeed10/tasks/LATEST_TASK_RESULT/README.md).
+
 The subsequent fixed native Task3 hosted route is a separate draft:
 [`gpt54_time_budget_native_grading_ci.py`](gpt54_time_budget_native_grading_ci.py)
 and the manual

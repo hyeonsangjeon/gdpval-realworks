@@ -25,7 +25,7 @@ from core.agentic_v2_preregistration import seal
 from core.azure_ai_clients import AzureAIRouteSettings, grader_route_workloads, preflight_routes
 from core.hf_publication import _PublicationFile, _publication_additions
 from ghcp_vm_input_bundle import _publication_parents, _write_no_clobber
-from gpt54_disposable_checkout import _git, _repository
+from gpt54_disposable_checkout import _git, _registered_gitdir, _repository
 from gpt54_prepared_input_attestation import _identity
 from gpt54_run_config_bundle import _held_parents, _path
 from gpt54_v2_grading_input import _object as _json_object, _read_bytes, _same
@@ -152,6 +152,28 @@ def _public_request(request_json, expected_request_sha256, controller_sha, contr
     return request, paths, _identity(data)
 
 
+def _checked_bootstrap(bootstrap: Path, controller_sha: str, controller_tree: str) -> tuple[Path, Path]:
+    """Read only this live linked controller's exact ordinary bootstrap."""
+    _require(_canonical_path(str(bootstrap)) == bootstrap and (bootstrap / ".git").is_dir()
+             and not (bootstrap / ".git").is_symlink(), "ordinary_Actions_bootstrap_required")
+    _require(not any(char == "*" or ord(char) < 32 or ord(char) == 127 for char in str(bootstrap)),
+             "bootstrap_path_refused")
+    linked, common = _repository(Path(__file__).resolve().parents[1])
+    _registered_gitdir(linked, common)
+    _require(common == bootstrap / ".git", "bootstrap_not_controller_common")
+    # Keep the shared pinned helper unchanged. Its closed environment and local
+    # Git protections still apply; only these fixed reads gain exact-path trust.
+    for arguments, value in (
+        (("--show-toplevel",), str(bootstrap)),
+        (("--path-format=absolute", "--git-common-dir"), str(common)),
+        (("--verify", "--end-of-options", "HEAD^{commit}"), controller_sha),
+        (("--verify", "--end-of-options", "HEAD^{tree}"), controller_tree),
+    ):
+        _require(_git(bootstrap, "-c", "safe.directory=" + str(bootstrap), "rev-parse", *arguments).stdout
+                 == (value + "\n").encode(), "bootstrap_identity_mismatch")
+    return bootstrap, common
+
+
 @contextmanager
 def checked_request(*, request_json: str, expected_request_sha256: str, controller_sha: str, controller_tree: str,
                     completion_only: bool = False):
@@ -160,11 +182,8 @@ def checked_request(*, request_json: str, expected_request_sha256: str, controll
     bootstrap, common = paths["bootstrap_root"], paths["bootstrap_root"] / ".git"
 
     def layout():
-        _require(common.is_dir() and not common.is_symlink() and _repository(bootstrap) == (bootstrap, common),
+        _require(_checked_bootstrap(bootstrap, controller_sha, controller_tree) == (bootstrap, common),
                  "ordinary_Actions_bootstrap_required")
-        for revision, value in (("HEAD^{commit}", controller_sha), ("HEAD^{tree}", controller_tree)):
-            _require(_git(bootstrap, "rev-parse", "--verify", "--end-of-options", revision).stdout == (value + "\n").encode(),
-                     "bootstrap_identity_mismatch")
         _require(all(_repository(paths[key])[1] == common for key in ("controller_root", "runtime_root", "frozen_root")),
                  "linked_C_R_F_required")
         _same("approved login path", os.environ.get("AZURE_CONFIG_DIR"), str(paths["login_root"]))
