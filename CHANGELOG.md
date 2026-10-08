@@ -13,6 +13,96 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Correct only the native Git ownership test's stale combined step-ceiling
+  assertion on PR782. It now checks the mutually exclusive operations exactly:
+  grade **269 minutes**, prepare-probe **19 minutes**, excluding the opposite
+  branch. The **270-minute** job cap, Git-step limit, ownership/source checks
+  and all production/workflow bytes are unchanged. Leader-read CI run
+  `37804015222`, time-budget-contracts job `113403603647`, reported **1 failed,
+  475 passed in 1718.79s** of pytest elapsed time, not job duration; its stale
+  assertion observed **276 versus 269**, not an increased grading timeout.
+  The other **10 checks** succeeded. Log **122916 bytes / 1147 lines**, SHA256
+  `a20549e3f2420ea857f789fca25d5be2f9ffd42bf0f7558180fc2fe16d10ed3c`,
+  was not fetched again. At tested HEAD
+  `a91a36b343481b9fd8af24887d933b4ffecb5472`, tree
+  `7ee4102b867caf522f69b736f96eef852d4211b2`, the exact ownership node ran
+  once after collection: **1 passed, 1 warning in 2.60s**, exit **0**,
+  pytest-process **3.030908s**, wrapper **6.003377s** under **300s+5s**,
+  Python **3.10.12**, no `-x` and bounded Git. Real Git exercised synthetic
+  ownership/tiny source anchors; this is not a live-host or grading result.
+  Artifacts: `/tmp/native-task3-probe-ceilings.YCXV7y/`; log SHA256
+  `3a9caea80dc68f7d410ba2a8c54df8872843c4eee67138451eacd2d451bd29d5`,
+  JUnit SHA256
+  `c619326a19e8ae5035137a5034ebcf337f7c8bf1c66b18c4f220c0332691f35b`.
+  Exact final HEAD/tree are sealed after the three records in external
+  final-source/handoff receipts. The original timeout/eight completed phases,
+  later three-node proof and this result stay separate; none was pooled or
+  rerun here. Corrected HEAD
+  `3738b48bb57e324daf1f4e75ff846d8b1aa59fc0`, tree
+  `59b20c4444bd8ccb6984d3b93d6f84802d9febfe`, is accepted in review
+  `5460622280`; all 11 applicable checks in CI run `37812242630` succeeded,
+  observed at **2026-10-08 17:37:09 UTC**. A separate exact live direction
+  remains required. Run 3 stays uncertain and nonretryable; no specialist was retried.
+
+- Complete only PR782's three unresolved preparation-probe nodes on unchanged
+  tested HEAD `a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
+  `e85f99787605b45ae0eddfc03546f7508898cea7`: **3 passed, 3 warnings in
+  53.27s**, exit **0**, pytest-process **53.700716s**, wrapper **59.201955s**.
+  The one fresh Python **3.10.12** invocation used the existing wrapper,
+  **300s+5s**, no `-x`, **30-second** Git cap, exact collection and immediate
+  phase reports. Only `derived_drift`, `test_native_task3_grading_bootstrap_without_python`
+  and hosted `[guards]` ran; no production, workflow or test bytes changed.
+  The original eight completed-phase observations and exit-124 timeout below
+  remain separate, without a pooled eleven-node pass claim. New artifacts are
+  in `/tmp/native-task3-probe-remaining.z0hJou/`; log SHA256
+  `591545ea4b1dbb16470e5e4ca19b3523963df35c34b917c32d3d6b3666189f5a`,
+  JUnit SHA256
+  `2a7f74c8ff3e577231c636464f938951df664e089b9c3e2754018bd04847b23a`,
+  immediate-report SHA256
+  `e7b9b11bca9d0ac649b89c73752ed837a2238ee913654ec02ff0362a9548ba1c`.
+  The actual CLI/context/F validators refused synthetic derived-input drift,
+  closed the handle and made no trapped direction/claim/executor/model/private-write
+  calls. This is offline evidence, not live readiness or grading authority.
+  Only CHANGELOG, current LATEST and the direct README change afterward;
+  external final-source/handoff receipts seal the exact final HEAD/tree.
+  Fixed-HEAD review/CI and a separate exact leader direction still gate a live
+  probe. Run 3 stays uncertain and nonretryable; metadata absence remains
+  limited to the two objects at its inspected parent. No specialist was retried.
+
+- Add a separately selected `prepare-probe` operation to the existing native
+  Task3 controller and workflow. Its independent request has a distinct
+  preparation-only format, purpose and permission, with no grading-storage
+  authority. It reuses originals intake and the real native context/F
+  preparation, then closes the handle before direction, claim, local grading
+  once-store, executor, model, retention or private-storage write. Only fixed
+  bindings, result/preparation identities and closed diagnostic codes can be
+  public; readiness never authorizes grading or handle reuse. The hosted
+  command has a cumulative **300s+5s** process bound and **6-minute** step;
+  existing transfer/byte limits and the grading branch remain unchanged.
+  From base `a35b4fe58c555ad7abfce423379e99a761a8f1ef`, tree
+  `bda73d9de85093ee9a3fca303cf48d336b993931`, tested HEAD
+  `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
+  `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`, selected nine new probe cases
+  and two directly changed guard nodes once. The **300-second outer bound
+  expired**, exit **124**, wrapper **301.135259s**: eight new cases have
+  passing setup/body/teardown reports, `derived_drift` is incomplete after
+  setup, and both guard nodes did not start. There is no final pytest
+  summary or JUnit file and no aggregate pass claim. Python **3.10.12**,
+  no `-x` and bounded Git were retained; no code correction or rerun occurred
+  in that original task.
+  Artifacts are in `/tmp/native-task3-preparation-probe.7JqRjH/`; log SHA256
+  `ab442be3cb66da708146a12c3178137125c20e36576d6eebb4f2541d74826354`,
+  immediate-report SHA256
+  `782aa630c64308d78760d354ebcd6630ab8a94a292e3138b595ba46f8708c24c`.
+  External final-source/handoff receipts seal final HEAD/tree after records.
+  Real preparation used synthetic sources, inputs, HTTP/auth and kernel facts;
+  no live/private intake or grading ran. The accepted metadata absence below
+  remains evidence about two objects at one parent, not historical effects.
+  Run `37756891578`/r3a1 remains uncertain and nonretryable. The preparation
+  specialist failed before execution on unavailable Opus4.7, supplied no
+  endorsement and was not retried. That invocation remained incomplete; fixed-HEAD
+  review/CI and a separate exact leader direction gate any live probe.
+
 - Record successful read-only metadata run `37789923398`/r2a1 at
   **2026-10-08 14:10:27 UTC**: the fixed Task3/F admission and output-manifest
   objects were absent at verified private parent

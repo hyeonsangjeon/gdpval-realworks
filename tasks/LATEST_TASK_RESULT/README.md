@@ -1,181 +1,282 @@
 # Latest task result
 
-## PR781 metadata verified; two fixed grading objects absent at inspected parent
+## Preparation-only probe accepted; live direction remains separate
 
-Metadata run `37789923398`/r2a1 succeeded. Its independently bound envelope
-verified the private target at **2026-10-08 14:10:27 UTC**, parent commit
-`82ed160109e40dcf74029f2be34a973350374fc6`. Both fixed Task3/F objects,
-`admission.json` and `output-manifest.json`, were absent at that parent.
-Their metadata OIDs and sizes are null. This does not establish an empty
-namespace, historical nonexecution, verified contents, a grade or zero cost.
-`contents_verified=false` and `retry_allowed=false` remain explicit.
+The leader accepted HEAD `3738b48bb57e324daf1f4e75ff846d8b1aa59fc0`,
+tree `59b20c4444bd8ccb6984d3b93d6f84802d9febfe`, in review `5460622280`.
+All **11** applicable checks in CI run `37812242630` succeeded, observed at
+**2026-10-08 17:37:09 UTC**. No passing test was repeated by the leader.
+This accepts the preparation-only source, not live readiness, a grade,
+recovered historical evidence or permission to replay run 3.
 
-Artifact `11555488682` contains the **1204-byte** metadata envelope, SHA256
-`3963bab2da01c66512165198bdc5072f944df3d2352bec63bd3a355d51f890c4`.
-Its source/run/scope/target/cell/F/prefix bindings match the directed read.
-The **784-byte** ZIP SHA256 is
-`fabcf757904c420c740c501f3ffc4beed9084dc526b5b44d0aee59c3bcf2c538`.
-No file contents were downloaded by the metadata operation.
+Only the stale step-ceiling assertion in
+`test_native_task3_grading_git_ownership` changed. Following the existing
+hosted guard pattern, it checks grade **269 minutes** and prepare-probe
+**19 minutes** separately, excluding the opposite branch. The **270-minute**
+job cap, **1-minute** Git step, **30-second** local Git-call bound and every ownership,
+source, unrelated-repository and reciprocal-registration assertion remain
+unchanged. No production, workflow, permission, pin, schema or deadline changed.
 
-Run 3 remains uncertain and nonretryable. The next bounded implementation
-will reuse the existing native controller for a separately selected,
-model-free preparation probe that stops before claim/executor/retention.
-This is not a new grading attempt or authority to access private inputs now.
-Source review, targeted proof, CI and a separate exact direction remain
-required before any live probe.
+The exact ownership node passed in one fresh invocation: **1 passed, 1 warning
+in 2.60 seconds**, exit **0**. Pytest-process elapsed was **3.030908 seconds**;
+wrapper elapsed, including source/collection checks, was **6.003377 seconds**.
+No additional correction or retry was needed. No earlier passing node ran.
 
-### Directed submission and accepted source
+### Reported CI failure, separate from this proof
 
-The leader submitted [metadata run 37789923398][metadata-run], workflow
-`376247700`, run number **2**, attempt **1**, selecting `native_task3_grade`.
-Exact readback at **2026-10-08 14:07:44 UTC** was `queued`, with source
-`ef6b11115b9749ea1ed622b1c16df88cad6725cc`, tree
-`6c403d8d28d9e4e28f99549f2af586600741febe`. The canonical **185-byte**
-dispatch payload SHA256 is
-`820c7174622325d29b6dab2444a2678b88de71cda9f46328f8ddb8594e45f60d`.
+The leader read CI run `37804015222`, time-budget-contracts job
+`113403603647`: **1 failed, 475 passed in 1718.79 seconds**. That is pytest
+elapsed time, not job duration. The other **10 checks** succeeded. At line 34,
+`tests/test_time_budget_native_grading_git_ownership.py::test_native_task3_grading_git_ownership`
+still summed every workflow step and observed **276 versus 269**. The sum
+included **7 preparation-only minutes** from a mutually exclusive branch;
+it is not evidence of an increased grading timeout. The log was **122916 bytes /
+1147 lines**, SHA256
+`a20549e3f2420ea857f789fca25d5be2f9ffd42bf0f7558180fc2fe16d10ed3c`.
+These are leader-supplied facts; no CI/log query, refetch, retry or polling
+occurred in this task. The new local result does not establish that CI passes.
 
-The separate direction permits one private/head GET and one immutable-parent
-paths-info metadata POST for only the fixed Task3/F `admission.json` and
-`output-manifest.json`, under the existing 60-second/64-KiB-per-response bounds.
-No body download, write, claim, model call or grade was authorized. The
-terminal metadata above establishes only the two objects' absence at the
-inspected parent. Run 3's uncertainty and no-retry status remain unchanged.
-The read permission is spent; no polling or resubmission was performed.
-
-The leader accepted HEAD `d85af0df7fc876eba11ae9e878475552408016a2`,
-tree `bab908ded1681e7793b6b1daa911680376ec9091`, in review `5457795334`.
-All **11** applicable checks in CI run `37783204329` succeeded, observed at
-**2026-10-08 14:00:11 UTC**. Source acceptance covers the fixed metadata
-scope and test-only clock correction, not private evidence or replay authority.
-
-Only the readout cumulative-bound test and the new metadata selector's
-`cumulative_bound` case now seed their fake clocks with exactly representable
-`1000.0` instead of live `time.monotonic()`. Their **+35-second** advances,
-**60-second** cumulative bound, **2 calls**, exact second timeout **25**,
-refusal and null-summary assertions are unchanged. The older metadata clock
-test is untouched. One bounded invocation passed the two authorized nodes:
-**2 passed in 2.52s**, exit **0**. No production rounding, deadline, workflow,
-helper, schema, source pin or grading code changed.
-
-### Reported CI failure, separate from the local proof
-
-The leader read run `37776879316`, time-budget-contracts job `113309863966`:
-**1 failed, 466 passed in 1635.07s**. That is pytest elapsed time, not full job
-duration. At readout test line **700**, the exact timeout assertion observed
-`24.999999999999773` instead of `25`. The fractional live-clock seed caused
-cancellation/representation noise; this is not a demonstrated production
-timeout violation. The inspected log was **123102 bytes / 1138 lines**,
-SHA256 `3c97713c3aad9465d5cbe72aa87d471cd071b945da6b9f4ae1c8a8633e6ab387`.
-These are leader-supplied facts; the log was not fetched again. At that
-snapshot, **7** other checks had succeeded and **3** were running. No status
-was polled. Metadata source review remains conditional, and the delivery CI
-gate is not satisfied by this local correction.
-
-### One two-node offline proof
-
-Only these body selectors ran, together once:
-
-```text
-tests/test_time_budget_result_readout.py::test_time_budget_result_readout_cumulative_bound
-tests/test_time_budget_storage_metadata.py::test_native_task3_grade_metadata_scope[cumulative_bound]
-```
+### One ownership-node invocation
 
 ```bash
-timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-metadata-clock.uKhiQL/run-proof.py
+timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-probe-ceilings.YCXV7y/run-proof.py
 ```
 
-Exact file-diff, import/fixture and collection checks preceded the bodies.
-Python **3.10.12**, pytest **9.1.1**, **300s+5s**, no `-x`, existing fixture
-Git bounds and the **30-second** task-local Git cap were retained. Pytest
-reported **2 passed in 2.52s**, with no warning summary. The process took
-**2.935624 seconds**; the wrapper, including source and collection checks,
-took **5.955130 seconds**, from **2026-10-08 13:10:31.439290 UTC** through
-**13:10:37.394407 UTC**. Both exact-timeout/refusal paths passed with real
-source, CLI and transport validators, synthetic Git/Actions identities and
-synthetic HTTP responses. No private read, intake, claim, model or grader
-ran. No other test body ran, and the full original 31-case selection was not
-rerun.
+The copied task-local wrapper verified the exact test-only byte replacement,
+unchanged production/source identities, imports, fixture closure and exact
+single-node collection before bodies. It used Python **3.10.12**, pytest
+**9.1.1**, TERM**300s**/KILL**5s**, no `-x`, the existing Git bounds and immediate
+phase/failure flushing. Wrapper UTC interval:
+**2026-10-08 16:41:31.232708** through **16:41:37.236071**. Setup/body/teardown
+passed; the JUnit case time is **0.793 seconds**, not the complete pytest or
+wrapper duration. The **1 warning** is the retained `record_property`/`xunit2`
+warning. The exact sole node is the CI-failed ownership node named above.
+
+This proof used real Git and the actual extracted workflow/controller source
+checks. `GIT_TEST_ASSUME_DIFFERENT_OWNER=1` simulated foreign ownership, and
+three tiny fixture commits/trees replaced C/R/F anchors only inside the proof.
+The original local Git call returned **128** with a dubious-ownership refusal;
+exact scoped bootstrap trust then succeeded. Wrong physical path, C HEAD/tree,
+R/F trees, occupied destination, unrelated repository and tampered reciprocal
+registration were refused. Linked sources remained detached, and config/refs
+were unchanged. This is synthetic ownership evidence, not a live UID or
+container claim. No intake, F preparation, grader, model or private access ran.
+
+### Scope and authority boundary
+
+The workflow choice defaults to `grade`; the opt-in `prepare-probe` request
+has a distinct format, purpose and preparation-only permission, without a
+grading `storage` field. Grade and probe operations reject each other's
+request. Both retain exact source/caller/Actions/cell/input/path/admission
+checks. The probe uses the same authenticated originals and four-GET/60-second
+retained intake, real F preparation, derived-input checks and final rereads.
+It never constructs an execution direction. A readiness receipt or closed
+handle cannot authorize another preparation or grading call.
+
+Public completion fields are restricted to fixed source/request/result and
+preparation identities, hashes/sizes, readiness/refusal and closed diagnostic
+states/categories. `grading_authority=false`, `handle_reusable=false` and
+`retry_allowed=false` are mandatory. No raw error, payload, private prose,
+filename, path, URL or token is public. Local private staging and partial
+inputs are preserved; there is no private-storage publication.
+
+The hosted preparation command has TERM**300s**/KILL**5s**, with phase deadline
+checks and a **6-minute** step. Existing originals/retained-intake transfer
+and byte limits are unchanged. Preparation skips renderer/OIDC/login; its
+intake step alone receives the existing HF secret after public source/request
+checks. Mutually exclusive step ceilings total **19 minutes** for preparation
+and **269 minutes** for grading within the unchanged **270-minute** job.
+The grade request/schema, one-process context, permanent/local once guards,
+retention and F/child **14400/14520-second** limits remain unchanged apart
+from the explicit refusal of a probe request at the grading entry.
+
+### Earlier three-node probe proof, not rerun
+
+That separate invocation reported **3 passed, 3 warnings in 53.27 seconds**,
+exit **0**, pytest-process **53.700716 seconds**, wrapper **59.201955 seconds**.
+It ran only `derived_drift` and the two previously unstarted guard nodes; the
+eight previously completed cases did not run.
+
+```bash
+timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-probe-remaining.z0hJou/run-proof.py
+```
+
+In that earlier proof, the task-local wrapper was restricted to exactly these
+nodes. Imports, fixture closure and exact collection passed before bodies
+started. Python **3.10.12**, pytest **9.1.1**, no `-x`, the existing Git bounds
+and task-local **30-second** Git cap were retained. There was one invocation,
+no retry and no timeout increase. Its wrapper ran from
+**2026-10-08 15:40:42.298266 UTC** through **15:41:41.500206 UTC**.
+
+| Exact node | Result | JUnit case elapsed |
+|---|---|---|
+| `tests/test_time_budget_native_preparation_probe.py::test_native_task3_preparation_probe[derived_drift]` | Passed | 36.677s |
+| `tests/test_time_budget_native_grading_ci.py::test_native_task3_grading_bootstrap_without_python` | Passed | 0.665s |
+| `tests/test_time_budget_native_grading_ci.py::test_native_task3_hosted_grading_route[guards]` | Passed | 10.030s |
+
+All three have passing setup/body/teardown reports and a final JUnit result.
+The **3 warnings** report `record_property` incompatibility with the configured
+`xunit2` family; they are retained in the log, not hidden or fixed in this task.
+JUnit case times are not the full pytest-process or wrapper duration.
+
+The derived-drift case exercised the actual controller CLI, native context
+and F preparation. It recorded **4 original GETs**, **4 retained-intake GETs**,
+**1 real F preparer call**, a refused result, closed handles and **0 trapped
+direction/claim/executor/model/private-write calls**. Its **218405-byte** Step0,
+source/Actions identities, HTTP/auth and kernel facts were synthetic. The
+existing assertions also retain the no-retention boundary and secret-canary
+exclusion. The two guard cases exercised extracted Bash/JSON and actual source
+CLI refusals with synthetic identities, including the mutually exclusive
+operation and step-ceiling assertions. They did not run setup-python on an
+Actions host or establish live-container/private-input readiness.
+
+### Original timeout remains separate
+
+The original invocation reached the **300-second** outer bound, exit **124**,
+wrapper **301.135259 seconds**. Eight cases completed setup/body/teardown;
+`derived_drift` completed setup only and neither guard started. No final
+pytest summary or JUnit was produced. That invocation remains incomplete.
+
+```bash
+timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-preparation-probe.7JqRjH/run-proof.py
+```
+
+Source, imports, fixture dependencies and exact collection were checked before
+bodies launched. Python **3.10.12**, pytest **9.1.1**, no `-x`, existing fixture
+Git bounds and the task-local **30-second** Git cap were used. The wrapper ran
+from **2026-10-08 15:02:34.389068 UTC** through **15:07:35.524309 UTC**,
+including source/collection checks and termination handling. Final pytest
+process elapsed/exit and warning count are unavailable, not zero. The retained
+wrapper traceback is `SystemExit: 124`, not a pytest assertion traceback.
+
+| Exact selected function | Recorded case outcomes |
+|---|---|
+| `tests/test_time_budget_native_preparation_probe.py::test_native_task3_preparation_probe` | `ready`, `original`, `file`, `preparation`, `deadline_originals`, `deadline_preparation`, `context_exit`, `private_error`: setup/body/teardown passed; `derived_drift`: setup passed, remaining phases incomplete |
+| `tests/test_time_budget_native_grading_ci.py::test_native_task3_grading_bootstrap_without_python` | Not started; its workflow-operation/budget assertions changed |
+| `tests/test_time_budget_native_grading_ci.py::test_native_task3_hosted_grading_route[guards]` | Not started; its two mutually exclusive credentialed-step assertions changed |
+
+The passing readiness case exercised the actual controller CLI, source checks,
+authenticated intake, native context, F preparer and original/derived byte
+validators. Source/Actions identities, inputs, HTTP/auth and kernel facts were
+synthetic. It observed four original GETs and four retained-intake GETs, one
+real F preparer call, a closed handle and no trapped direction/claim/executor/
+model/retention/private-write calls. The synthetic Step0 had **218405 bytes**
+but a synthetic identity. Other completed cases exercised real byte refusals,
+injected clock bounds and safe exception handling. Secret canaries were absent
+from public JSON/stdout/stderr. The original incomplete case proves no final
+derived-drift outcome in that invocation; the new result above is separate.
+This is not live host/private-input evidence, a model result or a grade. No
+old passing suite or unrelated test body ran. The original
+[immutable record][original-proof] remains available.
 
 ### Exact sources and retained artifacts
 
-- Starting PR781 HEAD: `2b23b94a1b2637cd12041e7659d0c8ae252d423c`, tree
-  `872a42c9210122a48118274f3e864122a31553d9`.
-- Main base remains `fc9796f048fded13416bde1804e9046608e49652`, tree
-  `76385434d312cd6b01c077acbc4af2344e127216`.
-- Tested HEAD: `cda79aa0f355de4975192a48becc06e9dbc555a9`, tree
-  `581cfc7486f65af21c65aaba4456daafadc38781`. Its only changes from the
-  starting HEAD are the two seed lines; all other test assertions and
-  production bytes were checked for equality.
-- Artifacts: `/tmp/native-task3-metadata-clock.uKhiQL/`. `command.json`,
-  `source.json`, `selection.json`, collection and immediate-report logs,
-  `junit-cases.json` and `outcome.json` retain the exact selection and result.
-  `pytest.log`: **750 bytes**, SHA256
-  `1d558afa9c7b992675856aad4600349dec78da570d115550a4c9c66eb7444576`.
-  `junit.xml`: **524 bytes**, SHA256
-  `13994e41e396102c629b2337de36086bd6c5731aba21c1c4baa7328fc520331b`.
-  `outcome.json`: **669 bytes**, SHA256
-  `4f2df675e19e5f7ac8d97d418026a7779274382d97ecf8044575bfd59623f00f`.
-- Only CHANGELOG, this current LATEST and the direct README change after
-  testing. External `final-source.json` and `handoff.json` seal the exact
-  final HEAD/tree after the records commit and verify tested-code equality.
-  No carrying-PR merge facts or new CI outcome are claimed.
+- Base HEAD `a35b4fe58c555ad7abfce423379e99a761a8f1ef`, tree
+  `bda73d9de85093ee9a3fca303cf48d336b993931`.
+- Correction starts from PR782 HEAD `bc7a8d53ed83f8d52af35dc2f7639ae492fc28bb`,
+  tree `c2c928da9535d28f66502d0583fdc781092637b6`.
+- Current tested HEAD `a91a36b343481b9fd8af24887d933b4ffecb5472`, tree
+  `7ee4102b867caf522f69b736f96eef852d4211b2`. Only the branch-aware ceiling
+  assertion changed; all other test bytes and production/workflow/source
+  identities match the correction base.
+- Current artifacts: `/tmp/native-task3-probe-ceilings.YCXV7y/`. The exact
+  command, source, collection, immediate phase reports and outcome are retained.
+  `pytest.log`: **1143 bytes**, SHA256
+  `3a9caea80dc68f7d410ba2a8c54df8872843c4eee67138451eacd2d451bd29d5`.
+  `junit.xml`: **886 bytes**, SHA256
+  `c619326a19e8ae5035137a5034ebcf337f7c8bf1c66b18c4f220c0332691f35b`.
+  `reports.jsonl`: **1339 bytes**, SHA256
+  `d14ff0a308504436a0828d055058b0737e0cd6d63161508d9a928b13e3f77b88`.
+  `outcome.json`: **557 bytes**, SHA256
+  `610fede891c8a2bc75325be08100e887f6cf1c32d58da472375314110dceab09`.
+  The fixture's `pytest-tmp/test_native_task3_grading_git_0/ownership-receipt.json`
+  is **54583 bytes**, SHA256
+  `8d99d9888e08cd7c681d45b734124e02f2b9a36b93b7f8131bd1cdc30a2d7827`.
+- Earlier three-node tested HEAD `a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
+  `e85f99787605b45ae0eddfc03546f7508898cea7`. Its four implementation/test
+  blobs match the original tested HEAD
+  `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
+  `ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`; only three records had changed.
+- Earlier three-node artifacts: `/tmp/native-task3-probe-remaining.z0hJou/`. `source.json`,
+  `command.json`, `selection.json`, collection/immediate-report logs,
+  `junit-cases.json` and `outcome.json` preserve that three-node invocation.
+  `pytest.log`: **2025 bytes**, SHA256
+  `591545ea4b1dbb16470e5e4ca19b3523963df35c34b917c32d3d6b3666189f5a`.
+  `junit.xml`: **3844 bytes**, SHA256
+  `2a7f74c8ff3e577231c636464f938951df664e089b9c3e2754018bd04847b23a`.
+  `reports.jsonl`: **3877 bytes**, SHA256
+  `e7b9b11bca9d0ac649b89c73752ed837a2238ee913654ec02ff0362a9548ba1c`.
+  `outcome.json`: **788 bytes**, SHA256
+  `262f0cfda754d3509469e917341921914acf6a6f24618f2b887289f8acf288f3`.
+- Original artifacts: `/tmp/native-task3-preparation-probe.7JqRjH/`. `source.json`,
+  `command.json`, `selection.json`, collection/immediate-report logs,
+  `wrapper-error.json` and `outcome.json` preserve the exact incomplete run.
+  `pytest.log`: **1397 bytes**, SHA256
+  `ab442be3cb66da708146a12c3178137125c20e36576d6eebb4f2541d74826354`.
+  `reports.jsonl`: **11936 bytes**, SHA256
+  `782aa630c64308d78760d354ebcd6630ab8a94a292e3138b595ba46f8708c24c`.
+  `outcome.json`: **1766 bytes**, SHA256
+  `99a60407c0c22fbca03a6746d7ffac06520be8922212cd9a1538d2e3170f2386`.
+  JUnit is absent; it has no byte count or hash. Injected-clock hook timestamps
+  are not used as wall-time measurements.
+- Only CHANGELOG, this current LATEST and the direct README change after the
+  current one-node proof. `final-source.json` and `handoff.json` in the current artifact
+  directory seal the exact final HEAD/tree after records and verify all tested
+  code bytes unchanged; the same final identities accompany PR782's body.
+  No merge fact or new CI result is claimed. Both prior proof directories are
+  untouched. The original timeout, earlier three-node result and current
+  ownership proof remain separate, without a pooled pass claim. Detailed prior
+  results also remain in the [immutable pre-correction record][prior-probe].
+- The shared helper remains SHA256
+  `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
+  Intake, preparer, executor, frozen/core/scoring/registration, metadata route,
+  backend workflow, dependencies and study/input/result pins are unchanged.
 
-### Original proof preserved, not rerun
+### Historical evidence remains separate
 
-At `83ea4a90f14b8cba93c4609a48ea4d332d9e48c0`, tree
-`42d070882d36ee077344fcc2285c41306e6bb0d3`, the original **30** metadata cases
-and changed workflow contract passed once: **31 passed in 19.64s**, exit
-**0**, process **20.036112s**, wrapper **22.192873s**. That synthetic proof
-remains separate from the later CI failure and this two-node correction.
-Artifacts remain in `/tmp/native-task3-grade-metadata.AQ3jgv/`; log SHA256
-`8763a3c947fab19026d046bd4d5ce5a399abd72861362b4497132c391bb88602`,
-JUnit SHA256 `d525e67f8996ba61ae84b560cd68da227b2849530ae0dfa8338080fefe05b2cb`.
-The [immutable original record][metadata-record] retains its full scope,
-timing and artifact details. The prior accepted diagnostics and submission
-evidence remains in the [immutable accepted record][prior-record].
+Metadata workflow `376247700`, run `37789923398`/r2a1, verified absence of
+the two fixed Task3/F `admission.json` and `output-manifest.json` objects at
+parent `82ed160109e40dcf74029f2be34a973350374fc6` at
+**2026-10-08 14:10:27 UTC**. Artifact `11555488682` is **1204 bytes**, SHA256
+`3963bab2da01c66512165198bdc5072f944df3d2352bec63bd3a355d51f890c4`.
+This is metadata at one parent, not an empty namespace, validated contents,
+historical nonexecution, a score, zero cost or replay permission. Logs and
+metadata were not fetched again. Detailed accepted metadata/clock proofs and
+earlier history remain in the [immutable base record][prior-record].
 
-The read-only route still permits only its default Task1 generation scope
-or the closed native r1 Task3/F `admission.json` and `output-manifest.json`
-metadata scope. Exactly one private/head GET and one immutable-parent
-paths-info POST share **2 operations / 60 seconds / 64 KiB per response**.
-All source/identity/transport checks remain intact; no third operation,
-redirect, retry, body download or storage write is added. OID/size remain
-metadata, not validated contents. `contents_verified=false` and
-`retry_allowed=false` stay mandatory. The shared Git helper remains SHA256
-`77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
+Grading run `37756891578`/r3a1 at C
+`0a2ef287751da62d888839ef3b92c250ecabf5fc` remains uncertain, spent and
+nonretryable. Request SHA256
+`549195f4e5dbfde9ee71702da247d8a43ad84c862180893e45dc496bf7687349`
+and artifact `11541001301` (**1605 bytes**, SHA256
+`c0b100d1b3cfc6cbdb66338b25497e361be4023e3afbe174d28b92c4d1815e0b`)
+stay bound. Null claim/entry/grade fields do not prove absent effects or known
+non-admission. The discarded exception remains unknown; this probe cannot
+recover it. Runs `37726733625`/r1a1 and `37737075149`/r2a1 remain separate
+proven bootstrap failures. All three grading submissions are spent.
 
-### Historical uncertainty and remaining gates
-
-Run `37756891578`/r3a1 at C `0a2ef287751da62d888839ef3b92c250ecabf5fc`
-remains uncertain and nonretryable. Its request SHA256 is
-`549195f4e5dbfde9ee71702da247d8a43ad84c862180893e45dc496bf7687349`;
-artifact `11541001301` holds the matching **1605-byte** public completion,
-SHA256 `c0b100d1b3cfc6cbdb66338b25497e361be4023e3afbe174d28b92c4d1815e0b`.
-Null claim/entry/grade fields do not prove absent effects, known non-admission,
-a score or zero cost. The lost exception remains unknown. Runs
-`37726733625`/r1a1 and `37737075149`/r2a1 remain separate proven bootstrap
-failures. All three submissions are spent; no rerun, adoption or reclassification
-is authorized. Old logs were not fetched again.
-
-Original R remains `33e24e9c1402ec0b7c92a71222998d1407646a92`, tree
+The only cell remains `gpt54_sandboxv2_codex_time_budget_v1` /
+`gpt54_time_budget_v1_codex_r1` / codex / repeat 1 /
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d`. Original R remains
+`33e24e9c1402ec0b7c92a71222998d1407646a92`, tree
 `6e67da4e12169b41a837d92eaf946db15e71010e`; F remains
 `882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. Generation output remains
+`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. Output remains
 `d5aeecec1394fb44d4b1da33b1be38a39acdb89a`, result **8518 bytes**, SHA256
 `4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`.
-The **2 files / 408601 bytes** remain declarations, not contents verified here.
-Even an authorized later metadata read cannot grant readout eligibility,
-claim adoption, grading replay, Task5 or a next cell.
+The **2 files / 408601 bytes** remain declarations, not genuine contents
+fetched or verified by this implementation task. Usage/cost/score remain unknown.
 
-Independent fixed-HEAD review and CI passed before the exact read-only
-direction and submission above. Any additional submission needs another
-separate exact leader direction. The prior
-mandatory metadata-scope review attempt failed before execution on the
-unavailable configured Opus4.7 label; it supplied no endorsement and was not
-retried. The complete skill catalog was consulted once. `experiment-report-en`
-preserved numerical evidence, units and uncertainty; `im-not-ai-en` checked
-English without strengthening claims. No new study or UI exercise applied.
+Independent fixed-HEAD review and CI have passed. A separate exact leader
+source/run-number/window/hash direction remains required before
+any live read-only preparation probe. These implementation proofs authorize
+no private access, dispatch, grading retry, adoption, replay, Task5 or next cell.
+The required preparation-boundary specialist failed before
+execution on unavailable configured Opus4.7, provided no endorsement and was
+not retried. The complete catalog was consulted once. `experiment-report-en`
+preserved units and evidence boundaries; `im-not-ai-en` checked English without
+strengthening claims. No study redesign or UI skill applied.
 
-[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/fc9796f048fded13416bde1804e9046608e49652/tasks/LATEST_TASK_RESULT/README.md
-[metadata-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/2b23b94a1b2637cd12041e7659d0c8ae252d423c/tasks/LATEST_TASK_RESULT/README.md
-[metadata-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37789923398
+[prior-record]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a35b4fe58c555ad7abfce423379e99a761a8f1ef/tasks/LATEST_TASK_RESULT/README.md
+[original-proof]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e/tasks/LATEST_TASK_RESULT/README.md
+[prior-probe]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/bc7a8d53ed83f8d52af35dc2f7639ae492fc28bb/tasks/LATEST_TASK_RESULT/README.md

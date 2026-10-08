@@ -31,7 +31,10 @@ def test_native_task3_grading_git_ownership(tmp_path, monkeypatch, record_proper
     assert block.splitlines()[2] == trust
     assert block.count("safe.directory") == 1 and "--global" not in block
     assert step["timeout-minutes"] == 1 and job["timeout-minutes"] == 270
-    assert sum(item["timeout-minutes"] for item in job["steps"]) == 269
+    for operation, minutes in (("grade", 269), ("prepare-probe", 19)):
+        other = "prepare-probe" if operation == "grade" else "grade"
+        assert sum(item["timeout-minutes"] for item in job["steps"]
+                   if item.get("if") != "inputs.operation == '" + other + "'") == minutes
     assert controller._git is checkout._git and controller._repository is checkout._repository
     assert controller._registered_gitdir is checkout._registered_gitdir
     assert hashlib.sha256((ROOT / "batch-runner/gpt54_disposable_checkout.py").read_bytes()).hexdigest() == (

@@ -992,7 +992,7 @@ nor uses the old V2 entry. Original result/preparation bytes and their
 identities stay distinct from the derived grading input. Accepted intake,
 preparer, executor, F/Step8/core/scoring and registration pins are unchanged.
 
-Its CLI operations are `validate-request`, `run` and `verify-completion`.
+Its default grading CLI operations are `validate-request`, `run` and `verify-completion`.
 Each requires `--controller-sha`, `--controller-tree` and
 `--expected-request-sha256`; request bytes come from
 `TIME_BUDGET_GRADE_REQUEST_JSON`, with format
@@ -1028,6 +1028,90 @@ ledger, checkpoint and partial evidence stays private. The executor discards
 child stdout/stderr, so those streams are not claimed retained. Only a
 validated safe completion is public, and success requires a valid F grade
 and acknowledged retention. Lost retention stays uncertain/nonrenewable.
+
+The same workflow now has an explicit `operation=prepare-probe` choice.
+This preparation-only implementation still requires fixed-HEAD review/CI and
+a separate live direction. Its CLI operations are `validate-probe-request`, `prepare-probe`
+and `verify-probe-completion`, with the same independent source/digest flags.
+The request format is `gpt54-time-budget-native-task3-preparation-request-v1`,
+purpose `prepare_retained_native_r1_task3_without_grading`, and permission
+`model_free_preparation_only`. It retains the exact cell/source/input/result,
+Actions/run/attempt, path and admission-window bindings but excludes `storage`.
+Grade and probe operations reject each other's request. A completion or
+closed native handle cannot authorize another preparation or a grade.
+
+The probe reuses `_originals` and the actual
+`prepare_native_task3_grading_execution` context, including the original
+218405-byte Step0 and separate derived-input validation. It stops before
+`_direction`, `_claim`, the local grading once-store, executor, model/judge,
+`_retain` or any private-storage write. Local staging/partial inputs remain
+private; no direction or attempt-store is created. Its allowlisted completion
+contains only source/request/result/preparation identities, safe stage facts
+and readiness/refusal, with `grading_authority=false`, `handle_reusable=false`
+and `retry_allowed=false`. It exposes no payload, paths, filenames, tokens
+or raw errors. The probe skips grading renderer/OIDC/login stages; only its
+intake step receives the existing HF secret. Public source checks still run
+first. Existing originals and retained-intake transfer/byte limits remain
+unchanged. The hosted command has a cumulative TERM300s/KILL5s bound, phase
+deadline checks and a 6-minute step. Mutually exclusive step ceilings total
+19 minutes for preparation or 269 minutes for grading, within the unchanged
+270-minute job. The F/child grading limits remain 14400/14520 seconds.
+
+The ownership test's stale all-steps sum failed in leader-read CI run
+`37804015222`/job `113403603647`: **276 versus 269**, with **1 failed,
+475 passed in 1718.79s** of pytest elapsed time. It incorrectly included
+7 preparation-only minutes; this was not a grading-timeout increase. Only
+that test assertion now follows the existing per-operation pattern, checking
+grade 269 and prepare-probe 19 with the opposite branch excluded. At tested
+HEAD `a91a36b343481b9fd8af24887d933b4ffecb5472`, tree
+`7ee4102b867caf522f69b736f96eef852d4211b2`, the exact ownership node ran once:
+**1 passed, 1 warning in 2.60s**, exit **0**, pytest-process **3.030908s**,
+wrapper **6.003377s**, within 300s+5s/no-`-x`/bounded-Git limits. Real Git used
+synthetic ownership and tiny source anchors, not a live container. No workflow,
+budget, permission, production or source binding changed. This proof is separate
+from both earlier probe results below; no earlier passing node ran again.
+Current artifacts, exact command, source seals and outstanding review/CI gates
+are in [the current record](../tasks/LATEST_TASK_RESULT/README.md).
+
+At tested HEAD `879f2c847b1db63c7780b8eb12da86ee894ff811`, tree
+`ddc122ea7cb2c9149c41df2a2f6bb79c0b8e1037`, one Python 3.10.12 offline
+invocation selected nine new probe cases and two changed guard nodes.
+The outer 300-second bound expired with exit 124; wrapper elapsed was
+301.135259 seconds. Eight probe cases have passing setup/body/teardown
+reports. `derived_drift` completed setup but has no body/teardown result;
+the two guard nodes did not start. No final pytest summary or JUnit file was
+produced. That invocation remains incomplete, not an eleven-case pass. Artifacts
+remain in `/tmp/native-task3-preparation-probe.7JqRjH/`, log SHA256
+`ab442be3cb66da708146a12c3178137125c20e36576d6eebb4f2541d74826354`.
+The real CLI/context/F validators used synthetic inputs, source/Actions
+identities, HTTP/auth and kernel facts. No live intake, model, claim or grade
+ran in that proof.
+
+The authorized follow-up at unchanged tested HEAD
+`a9263cfa8d94a9673a898b2ac498fcd2f1d9ef6e`, tree
+`e85f99787605b45ae0eddfc03546f7508898cea7`, ran only `derived_drift`,
+`test_native_task3_grading_bootstrap_without_python` and hosted `[guards]`.
+It reported **3 passed, 3 warnings in 53.27s**, exit **0**, pytest-process
+**53.700716s**, wrapper **59.201955s**, within the same 300s+5s/no-`-x`/bounded-Git
+limits. No code/test correction or completed-case rerun was needed. The derived
+drift was refused after real F preparation; the handle closed and all forbidden
+grading/write traps stayed uncalled. This remains synthetic offline evidence,
+separate from the original eight completed-phase observations and timeout;
+there is no pooled eleven-node pass claim. Artifacts are in
+`/tmp/native-task3-probe-remaining.z0hJou/`, log SHA256
+`591545ea4b1dbb16470e5e4ca19b3523963df35c34b917c32d3d6b3666189f5a`,
+JUnit SHA256 `2a7f74c8ff3e577231c636464f938951df664e089b9c3e2754018bd04847b23a`.
+Final source seals, the exact command and remaining gates are in
+[the current record](../tasks/LATEST_TASK_RESULT/README.md).
+
+Metadata run `37789923398`/r2a1 established absence of two fixed Task3/F
+objects at parent `82ed160109e40dcf74029f2be34a973350374fc6` at
+2026-10-08 14:10:27 UTC, not absence of historical effects. Run
+`37756891578`/r3a1 stays uncertain and nonretryable; this probe cannot recover
+its discarded exception or supply replay permission. The required
+preparation specialist failed before execution on unavailable Opus4.7 and
+provided no endorsement. Fixed-HEAD review/CI and a
+separate exact leader direction are still required before any live probe.
 
 The bootstrap-order correction follows the leader-verified failure of run
 `37726733625`, run number 1/attempt 1, job `113146502043`, source

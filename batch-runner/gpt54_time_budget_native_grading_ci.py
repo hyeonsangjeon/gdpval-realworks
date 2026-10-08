@@ -1,8 +1,9 @@
-"""One hosted, independently directed grade of the retained native r1 Task3.
+"""A directed retained native r1 Task3 grade, or a separate preparation probe.
 
 The authenticated native context stays open in this process. A permanent remote
 claim supplements (never replaces) the accepted executor's local once-store.
 There is no resume, claim adoption, observation execution or next-cell operation.
+The opt-in probe closes the authenticated context without grading authority.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import signal
 import stat
 import sys
 import time
@@ -39,6 +41,14 @@ JOB = "grade"
 REQUEST_FORMAT = "gpt54-time-budget-native-task3-grade-request-v1"
 PURPOSE = "grade_retained_native_r1_task3_once"
 FORMAT = "gpt54-time-budget-native-task3-grade-completion-v1"
+PROBE_REQUEST_FORMAT = "gpt54-time-budget-native-task3-preparation-request-v1"
+PROBE_PURPOSE = "prepare_retained_native_r1_task3_without_grading"
+PROBE_FORMAT = "gpt54-time-budget-native-task3-preparation-completion-v1"
+PROBE_SECONDS = 300
+PROBE_POLICY = {"permission": "model_free_preparation_only", "preparation_seconds": PROBE_SECONDS,
+                "grading_allowed": False, "private_writes_allowed": False, "handle_reuse_allowed": False,
+                "retry_allowed": False}
+PROBE_STAGES = ("environment", "originals", "intake_preparation", "context_exit")
 CELL = dict(bridge.CELL)
 GRADING_IMAGE = "ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04"
 ROOT_NAMES = {"controller_root": "time-budget-task3-grade-controller", "runtime_root": "time-budget-task3-grade-runtime",
@@ -119,16 +129,18 @@ def _paths() -> dict[str, Path]:
     return paths
 
 
-def _public_request(request_json, expected_request_sha256, controller_sha, controller_tree, *, admission=True):
+def _public_request(request_json, expected_request_sha256, controller_sha, controller_tree, *, admission=True,
+                    preparation_only=False):
     """The same exact public gates run again in the credentialed process."""
     data = request_json.encode("utf-8")
     _require(0 < len(data) <= shared.MAX_REQUEST_BYTES and storage._hash(expected_request_sha256)
              and _identity(data)["sha256"] == expected_request_sha256, "independent_request_digest_required")
     request = json.loads(data, object_pairs_hook=_json_object)
     bridge.reader._keys(request, {"format", "purpose", "controller", "completion", "cell", "ci", "frozen_source",
-        "input_registration", "registration_sha256", "dataset_sha256", "step0", "deliverables", "paths", "storage",
-        "policy", "not_before_unix", "expires_unix"})
-    _same("request format and purpose", [request["format"], request["purpose"]], [REQUEST_FORMAT, PURPOSE])
+        "input_registration", "registration_sha256", "dataset_sha256", "step0", "deliverables", "paths",
+        "policy", "not_before_unix", "expires_unix"} | (set() if preparation_only else {"storage"}))
+    _same("request format and purpose", [request["format"], request["purpose"]],
+          [PROBE_REQUEST_FORMAT, PROBE_PURPOSE] if preparation_only else [REQUEST_FORMAT, PURPOSE])
     _require(storage._hash(controller_sha, 40) and storage._hash(controller_tree, 40), "independent_controller_required")
     _same("controller", request["controller"], {"sha": controller_sha, "tree": controller_tree})
     _same("fixed native Task3", request["cell"], CELL)
@@ -140,7 +152,8 @@ def _public_request(request_json, expected_request_sha256, controller_sha, contr
     _same("input registration", request["input_registration"], {**request["frozen_source"],
         "path": registration.SOURCE_PROFILE, "sha256": registration.SOURCE_PROFILE_SHA256})
     _same("declared contents", request["deliverables"], bridge.DELIVERABLES)
-    _same("finite grading permission", request["policy"], POLICY)
+    _same("model-free preparation permission" if preparation_only else "finite grading permission",
+          request["policy"], PROBE_POLICY if preparation_only else POLICY)
     begin, end = request["not_before_unix"], request["expires_unix"]
     _require(type(begin) is int and type(end) is int and 0 <= begin < end and end - begin <= 2700,
              "finite_admission_required")
@@ -169,11 +182,12 @@ def _public_request(request_json, expected_request_sha256, controller_sha, contr
     roots = [paths["bootstrap_root"], *(paths[key] for key in ROOT_NAMES)]
     _require(all(not a.is_relative_to(b) and not b.is_relative_to(a)
                  for index, a in enumerate(roots) for b in roots[index + 1:]), "source_state_overlap")
-    prefix, _, _ = _namespace()
-    parent = request["storage"].get("expected_parent")
-    _require(storage._hash(parent, 40), "independent_private_parent_required")
-    _same("private grading target", request["storage"], {"repository_name_sha256": shared.TARGET_SHA256,
-        "branch": shared.BRANCH, "prefix": prefix, "expected_parent": parent})
+    if not preparation_only:
+        prefix, _, _ = _namespace()
+        parent = request["storage"].get("expected_parent")
+        _require(storage._hash(parent, 40), "independent_private_parent_required")
+        _same("private grading target", request["storage"], {"repository_name_sha256": shared.TARGET_SHA256,
+            "branch": shared.BRANCH, "prefix": prefix, "expected_parent": parent})
     return request, paths, _identity(data)
 
 
@@ -201,9 +215,9 @@ def _checked_bootstrap(bootstrap: Path, controller_sha: str, controller_tree: st
 
 @contextmanager
 def checked_request(*, request_json: str, expected_request_sha256: str, controller_sha: str, controller_tree: str,
-                    completion_only: bool = False):
+                    completion_only: bool = False, preparation_only: bool = False):
     request, paths, identity = _public_request(request_json, expected_request_sha256, controller_sha, controller_tree,
-                                              admission=not completion_only)
+                                              admission=not completion_only, preparation_only=preparation_only)
     bootstrap, common = paths["bootstrap_root"], paths["bootstrap_root"] / ".git"
 
     def layout():
@@ -538,6 +552,8 @@ def run(context):
     """All model-free checks, remote ACK and one native call share this scope."""
     started = time.monotonic()
     _require(context["completion_only"] is False, "completion_is_not_execution_authority")
+    _same("grading operation", [context["request"]["format"], context["request"]["purpose"], context["request"]["policy"]],
+          [REQUEST_FORMAT, PURPOSE, POLICY])
     token = os.environ.pop("HF_TOKEN", "")
     _require(bool(token) and len(token) <= 4096 and all(33 <= ord(c) <= 126 for c in token), "explicit_hf_token_required")
     _require(token not in bridge.reader._bytes(context["request"]).decode(), "credential_in_request")
@@ -604,6 +620,130 @@ def run(context):
     return completion
 
 
+@contextmanager
+def _probe_bound():
+    # The hosted command has one 300s TERM/5s KILL bound. Do not nest an
+    # ITIMER_REAL around the accepted 120s originals and 60s hydration timers.
+    # Their SIGTERM handlers restore this handler before model-free F staging.
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def stop(signum, frame):
+        raise NativeGradingCIRefused("preparation_probe_interrupted")
+
+    try:
+        signal.signal(signal.SIGTERM, stop)
+        yield time.monotonic() + PROBE_SECONDS
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def _probe_completion(context, *, verified=None, diagnostics=None):
+    request = context["request"]
+    diagnostics = ({stage: {"state": "unknown", "category": None} for stage in PROBE_STAGES}
+                   if diagnostics is None else diagnostics)
+    ready = all(item == {"state": "completed", "category": None} for item in diagnostics.values())
+    return {"format": PROBE_FORMAT, "purpose": PROBE_PURPOSE, "cell": CELL,
+        "controller": request["controller"], "observation_source": request["completion"]["source"],
+        "frozen_source": request["frozen_source"], "request_identity": context["request_identity"], "ci": context["ci"],
+        "original_output_commit": request["completion"]["output_commit"],
+        "expected_result_identity": request["completion"]["result_identity"],
+        "expected_result_fingerprint": request["completion"]["result_fingerprint"],
+        "verified_preparation": verified, "status": "ready" if ready else "refused", "diagnostics": diagnostics,
+        "grading_authority": False, "handle_reusable": False, "retry_allowed": False}
+
+
+def validate_probe_completion(value, context):
+    _same("preparation operation", [context["request"]["format"], context["request"]["purpose"], context["request"]["policy"]],
+          [PROBE_REQUEST_FORMAT, PROBE_PURPOSE, PROBE_POLICY])
+    baseline = _probe_completion(context)
+    _require(type(value) is dict and set(value) == set(baseline), "public_probe_schema_refused")
+    mutable = {"verified_preparation", "status", "diagnostics"}
+    _same("public independent probe bindings", {key: value[key] for key in value.keys() - mutable},
+          {key: baseline[key] for key in baseline.keys() - mutable})
+    diagnostics = value["diagnostics"]
+    _require(type(diagnostics) is dict and set(diagnostics) == set(PROBE_STAGES), "public_probe_diagnostics_refused")
+    for stage, item in diagnostics.items():
+        _require(type(item) is dict and set(item) == {"state", "category"}
+                 and type(item["state"]) is str and item["state"] in DIAGNOSTIC_STATES
+                 and (item["category"] is None or type(item["category"]) is str
+                      and item["category"] in FAILURE_CATEGORIES)
+                 and (item["category"] is None or item["state"] == "started"), "public_probe_diagnostics_refused")
+    for previous, current in zip(PROBE_STAGES, PROBE_STAGES[1:]):
+        _require(diagnostics[current]["state"] == "unknown" or diagnostics[previous]["state"] == "completed",
+                 "public_probe_stage_order_refused")
+    verified = value["verified_preparation"]
+    _require((verified is not None) == (diagnostics["intake_preparation"]["state"] == "completed"),
+             "public_probe_preparation_required")
+    if verified is not None:
+        _require(type(verified) is dict and set(verified) == {"result_identity", "preparation_identity",
+                 "derived_result_identity", "derived_result_fingerprint"}, "public_probe_preparation_schema_refused")
+        _same("verified original result", verified["result_identity"], value["expected_result_identity"])
+        for name in ("result_identity", "preparation_identity", "derived_result_identity"):
+            identity = verified[name]
+            _require(type(identity) is dict and set(identity) == {"size", "sha256"}
+                     and type(identity["size"]) is int and 0 < identity["size"] <= execution.MAX_METADATA_BYTES
+                     and storage._hash(identity["sha256"]), "public_probe_identity_refused")
+        _require(storage._hash(verified["derived_result_fingerprint"]), "public_probe_identity_refused")
+    ready = all(item == {"state": "completed", "category": None} for item in diagnostics.values())
+    _require(value["status"] == ("ready" if ready else "refused"), "public_probe_status_refused")
+
+
+def prepare_probe(context):
+    """Validate/hydrate/stage and close the native handle; never issue a direction.
+
+    Local partial input/preparation files are preserved. There is deliberately
+    no attempt-store, grading namespace read, claim, executor or retention path.
+    """
+    _require(context["completion_only"] is False, "completion_is_not_preparation_authority")
+    _same("preparation operation", [context["request"]["format"], context["request"]["purpose"], context["request"]["policy"]],
+          [PROBE_REQUEST_FORMAT, PROBE_PURPOSE, PROBE_POLICY])
+    token = os.environ.pop("HF_TOKEN", "")
+    _require(bool(token) and len(token) <= 4096 and all(33 <= ord(c) <= 126 for c in token), "explicit_hf_token_required")
+    _require(token not in bridge.reader._bytes(context["request"]).decode(), "credential_in_request")
+    _require(not any(os.environ.get(key) for key in bridge.OTHER_CREDENTIALS | {"HF_TOKEN_PATH"}), "unexpected_credentials")
+    paths = context["paths"]
+    with _publication_parents(paths["state_root"].parent) as (_, mkdir, _):
+        mkdir(paths["state_root"])
+    diagnostics = {stage: {"state": "unknown", "category": None} for stage in PROBE_STAGES}
+    verified, stage = None, "environment"
+    diagnostics[stage]["state"] = "started"
+    try:
+        with _probe_bound() as deadline, intake._hf_environment(online=False), ExitStack() as live:
+            diagnostics[stage]["state"] = "completed"
+            stage = "originals"
+            diagnostics[stage]["state"] = "started"
+            _originals(context, token)
+            _require(time.monotonic() < deadline, "preparation_probe_budget_exhausted")
+            diagnostics[stage]["state"] = "completed"
+            stage = "intake_preparation"
+            diagnostics[stage]["state"] = "started"
+            request = _intake_request(context)
+            with _storage_credential(token):
+                handle = live.enter_context(execution.prepare_native_task3_grading_execution(request_json=request.decode(),
+                    expected_request_sha256=_identity(request)["sha256"], execution_input_directory=paths["execution_input_directory"]))
+            # Reuse the real source/input/origin/derived-byte rereads, without
+            # constructing an execution binding or consulting a grading route.
+            with execution._checked_preparation(context["plan"], execution._native_arguments(handle)) as checked:
+                origin = checked["origin"]
+                observed = {"result_identity": origin["original_result_identity"],
+                    **{key: origin[key] for key in ("preparation_identity", "derived_result_identity", "derived_result_fingerprint")}}
+                checked["reread"](initial=True)
+            _require(time.monotonic() < deadline, "preparation_probe_budget_exhausted")
+            verified = observed
+            diagnostics[stage]["state"] = "completed"
+            stage = "context_exit"
+            diagnostics[stage]["state"] = "started"
+        _require(time.monotonic() < deadline, "preparation_probe_budget_exhausted")
+        diagnostics[stage]["state"] = "completed"
+    except (Exception, KeyboardInterrupt) as error:
+        _failure(diagnostics, stage, error)
+    finally:
+        os.environ.pop("HF_TOKEN", None)
+    completion = _probe_completion(context, verified=verified, diagnostics=diagnostics)
+    validate_probe_completion(completion, context)
+    return completion
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
         raise NativeGradingCIRefused("invalid_arguments")
@@ -611,25 +751,29 @@ class _Parser(argparse.ArgumentParser):
 
 def main(argv=None):
     parser = _Parser(description=__doc__)
-    parser.add_argument("operation", choices=("validate-request", "run", "verify-completion"))
+    parser.add_argument("operation", choices=("validate-request", "run", "verify-completion",
+        "validate-probe-request", "prepare-probe", "verify-probe-completion"))
     for name in ("controller-sha", "controller-tree", "expected-request-sha256"):
         parser.add_argument("--" + name, required=True)
     try:
         arguments = vars(parser.parse_args(argv))
         operation = arguments.pop("operation")
+        probe = operation in {"validate-probe-request", "prepare-probe", "verify-probe-completion"}
+        verifying = operation in {"verify-completion", "verify-probe-completion"}
+        validate = validate_probe_completion if probe else validate_completion
         logging.disable(logging.CRITICAL)
         os.umask(0o077)
         with checked_request(request_json=os.environ.get("TIME_BUDGET_GRADE_REQUEST_JSON", ""),
-                             completion_only=operation == "verify-completion", **arguments) as context:
-            if operation == "verify-completion":
-                validate_completion(_read(context["paths"]["state_root"] / "completion.json"), context)
+                             completion_only=verifying, preparation_only=probe, **arguments) as context:
+            if verifying:
+                validate(_read(context["paths"]["state_root"] / "completion.json"), context)
                 completion = None
             else:
-                completion = run(context) if operation == "run" else None
+                completion = prepare_probe(context) if operation == "prepare-probe" else run(context) if operation == "run" else None
         if completion is not None:
-            validate_completion(completion, context)
+            validate(completion, context)
             _write(context["paths"]["state_root"] / "completion.json", completion)
-            return 0 if completion["status"] == "success" else 2
+            return 0 if completion["status"] == ("ready" if probe else "success") else 2
         print('{"outcome":"validated_not_execution_authority"}')
         return 0
     except (Exception, KeyboardInterrupt):

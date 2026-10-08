@@ -57,7 +57,7 @@ def test_native_task3_grading_bootstrap_without_python(tmp_path, record_property
         if "secrets." in json.dumps(step) or "pip install" in step.get("run", ""):
             assert index > 2
     assert job["timeout-minutes"] == 270
-    assert sum(step["timeout-minutes"] for step in steps) == 269
+    assert sum(step["timeout-minutes"] for step in steps if step.get("if") != "inputs.operation == 'prepare-probe'") == 269
     assert bash_guard["timeout-minutes"] == json_guard["timeout-minutes"] == 1
 
     absent_python = tmp_path / "path-without-python"
@@ -80,6 +80,7 @@ def test_native_task3_grading_bootstrap_without_python(tmp_path, record_property
         "TIME_BUDGET_GRADE_WORKFLOW_SHA": "a" * 40,
         "GITHUB_WORKFLOW_REF": subject.shared.REPOSITORY + "/" + subject.WORKFLOW + "@refs/heads/main",
         "TIME_BUDGET_GRADE_REQUEST_JSON": data, "REQUEST_SHA256": _identity(data.encode())["sha256"],
+        "TIME_BUDGET_NATIVE_OPERATION": "grade",
     }
 
     def run_guard(step, env):
@@ -99,6 +100,7 @@ def test_native_task3_grading_bootstrap_without_python(tmp_path, record_property
         ("CONTROLLER_SHA", "invalid"), ("CONTROLLER_TREE", "invalid"),
         ("GITHUB_SHA", "c" * 40), ("TIME_BUDGET_GRADE_WORKFLOW_SHA", "c" * 40),
         ("GITHUB_WORKFLOW_REF", "other/workflow"),
+        ("TIME_BUDGET_NATIVE_OPERATION", "unknown"),
     ):
         result = run_guard(bash_guard, {**environment, key: value})
         record_property("python_absent_refusal_" + key, result.returncode)
@@ -207,6 +209,7 @@ def hosted(case, offline, dual_roots, tmp_path, monkeypatch, record_property):
         "AZURE_AI_REQUIRE_EXPECTED_IDENTITIES": "1", "AZURE_AI_EXPECTED_DIRECT_ACCOUNT": case.seed.plan["shared"]["model"]["account"],
         "FOUNDRY_PROJECT_ENDPOINT": "https://hjeon-fdpo-foundry-eus2.services.ai.azure.com/api/projects/gdpval-realworks",
         "CONTROLLER_SHA": dual_roots["runtime_sha"], "CONTROLLER_TREE": case.request["controller"]["tree"],
+        "TIME_BUDGET_NATIVE_OPERATION": "grade",
     }.items():
         monkeypatch.setenv(key, value)
 
@@ -349,9 +352,13 @@ def _workflow(hosted, monkeypatch, capsys):
     assert "HF_TOKEN" not in job["env"] and not any("runner." in str(value) for value in job["env"].values())
     steps = job["steps"]
     credentialed = [step for step in steps if "HF_TOKEN" in step.get("env", {})]
-    assert len(credentialed) == 1 and credentialed[0]["id"] == "grade" and credentialed[0]["timeout-minutes"] == 252
+    assert [step["id"] for step in credentialed] == ["grade", "probe"] and credentialed[0]["timeout-minutes"] == 252
     assert credentialed[0]["env"]["HF_TOKEN"] == "${{ secrets.HF_TOKEN }}"
-    assert sum(step["timeout-minutes"] for step in steps) < 270
+    assert credentialed[0]["if"] == "inputs.operation == 'grade'"
+    assert credentialed[1]["if"] == "inputs.operation == 'prepare-probe'" and credentialed[1]["timeout-minutes"] == 6
+    for operation, minutes in (("grade", 269), ("prepare-probe", 19)):
+        other = "prepare-probe" if operation == "grade" else "grade"
+        assert sum(step["timeout-minutes"] for step in steps if step.get("if") != "inputs.operation == '" + other + "'") == minutes
     source = next(step for step in steps if " validate-request " in step.get("run", ""))
     login = next(step for step in steps if step.get("uses", "").startswith("azure/login@"))
     assert steps.index(source) < steps.index(login) < steps.index(credentialed[0])
