@@ -4,6 +4,12 @@ name: GPT-5.4 time budget — retained native Task3 frozen grade
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Explicit operation; preparation cannot authorize a grade
+        required: true
+        type: choice
+        default: grade
+        options: [grade, prepare-probe]
       controller_sha:
         description: Independently reviewed accepted main/workflow C commit
         required: true
@@ -17,7 +23,7 @@ on:
         required: true
         type: string
       request_json:
-        description: Fixed Task3 source, originals, result, paths, window, grade permission and private-parent bindings
+        description: Fixed Task3 source, originals, result, paths, window and operation permission; grading also binds private parent
         required: true
         type: string
 
@@ -61,6 +67,7 @@ jobs:
       CONTROLLER_TREE: ${{ inputs.controller_tree }}
       REQUEST_SHA256: ${{ inputs.request_sha256 }}
       TIME_BUDGET_GRADE_REQUEST_JSON: ${{ inputs.request_json }}
+      TIME_BUDGET_NATIVE_OPERATION: ${{ inputs.operation }}
     steps:
       - name: Refuse wrong source, caller and reruns before Python setup
         timeout-minutes: 1
@@ -72,6 +79,7 @@ jobs:
           [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROLLER_TREE" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_SHA" == "$CONTROLLER_SHA" && "$TIME_BUDGET_GRADE_WORKFLOW_SHA" == "$CONTROLLER_SHA" ]]
           [[ "$GITHUB_WORKFLOW_REF" == hyeonsangjeon/gdpval-realworks/.github/workflows/gpt54-time-budget-native-task3-grade.yml@refs/heads/main ]]
+          [[ "$TIME_BUDGET_NATIVE_OPERATION" == grade || "$TIME_BUDGET_NATIVE_OPERATION" == prepare-probe ]]
 
       - name: Set up pinned Python
         timeout-minutes: 1
@@ -128,16 +136,27 @@ jobs:
         run: python3 -m pip install -r "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/requirements.txt"
 
       - name: Validate complete source-bound request without credentials
+        if: inputs.operation == 'grade'
         timeout-minutes: 1
         run: |
           python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" validate-request \
             --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
 
+      - name: Validate the distinct preparation-only request without credentials
+        id: probe_request
+        if: inputs.operation == 'prepare-probe'
+        timeout-minutes: 1
+        run: |
+          python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" validate-probe-request \
+            --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
+
       - name: Verify the existing pinned grading renderer before credentials
+        if: inputs.operation == 'grade'
         timeout-minutes: 1
         run: python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/scripts/preflight_grading_renderer.py"
 
       - name: Validate the existing grading OIDC identity
+        if: inputs.operation == 'grade'
         timeout-minutes: 1
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -149,6 +168,7 @@ jobs:
         run: python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/scripts/azure_oidc_identity_preflight.py"
 
       - name: Azure Login through the existing approved connection
+        if: inputs.operation == 'grade'
         timeout-minutes: 1
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
@@ -157,6 +177,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Verify the approved session identity before opening the native context
+        if: inputs.operation == 'grade'
         timeout-minutes: 1
         env:
           AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
@@ -166,6 +187,7 @@ jobs:
 
       - name: Authenticated intake, live native context, permanent grade claim, one executor call and private retention
         id: grade
+        if: inputs.operation == 'grade'
         # 300s preclaim ceiling + 14520s child + bounded 120s retention leaves
         # 180s within this step for final source/file checks and publication.
         # The 270-minute job leaves setup and public-artifact headroom as well.
@@ -182,12 +204,30 @@ jobs:
           python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" run \
             --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
 
+      - name: Model-free originals, retained Task3 intake and frozen preparation only
+        id: probe
+        if: inputs.operation == 'prepare-probe'
+        timeout-minutes: 6
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          umask 077
+          unset HUGGING_FACE_HUB_TOKEN GITHUB_TOKEN GH_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+          timeout --signal=TERM --kill-after=5s 300s python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" prepare-probe \
+            --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
+
       - name: Independently check only the safe completion before public upload
         id: completion
-        if: always() && steps.grade.outcome != 'skipped'
+        if: always() && ((inputs.operation == 'grade' && steps.grade.outcome != 'skipped') || (inputs.operation == 'prepare-probe' && steps.probe.outcome != 'skipped'))
         timeout-minutes: 1
         run: |
-          python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" verify-completion \
+          if [[ "$TIME_BUDGET_NATIVE_OPERATION" == prepare-probe ]]; then
+            operation=verify-probe-completion
+          else
+            [[ "$TIME_BUDGET_NATIVE_OPERATION" == grade ]]
+            operation=verify-completion
+          fi
+          python3 "$RUNNER_TEMP/time-budget-task3-grade-controller/batch-runner/gpt54_time_budget_native_grading_ci.py" "$operation" \
             --controller-sha "$CONTROLLER_SHA" --controller-tree "$CONTROLLER_TREE" --expected-request-sha256 "$REQUEST_SHA256"
           echo "validated=true" >> "$GITHUB_OUTPUT"
 
@@ -196,7 +236,7 @@ jobs:
         timeout-minutes: 1
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: time-budget-native-task3-grade-completion
+          name: ${{ inputs.operation == 'prepare-probe' && 'time-budget-native-task3-preparation-completion' || 'time-budget-native-task3-grade-completion' }}
           path: ${{ runner.temp }}/time-budget-task3-grade/completion.json
           if-no-files-found: error
           retention-days: 7
