@@ -13,6 +13,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Correct two directly coupled PR777 test contracts from
+  `103667992af71826ddbabf3853ecd406cbefab58`, tree
+  `6ede045510cb40558fa7b96592a42d218f2c34e6`: require the exact retention option,
+  value and unchanged glob in the partition test's raw-argument assertion,
+  and prune missing worktree registrations only in the readout fixture's
+  ordinary temporary repository immediately before adding a worktree. Prune
+  and add share the existing 30-second setup deadline; no force, branch removal
+  or real-worktree cleanup is used. Workflow bytes, the approved retention
+  policy, 45-minute cap, parser, coverage checks and production/F bindings
+  are unchanged. Leader-read run `37710408405` reported **1 failed, 13395 passed,
+  64 skipped, 46 deselected, 1 warning in 1945.04s** in job `113094770549`;
+  the raw assertion failed at line 680. Job `113094770711` finished in **25m13s**
+  with **367 passed, 61 setup errors** at readout worktree addition, exit 128.
+  CI Git stderr is unavailable; the stale-registration account is a source
+  diagnosis, not an observed fatal message. At `98f9471220f22d339b8d42aae642c4437322fc7d`,
+  tree `64e720462523758eabe4efbcca53bbf839be4fa8`, exactly four nodes ran once:
+  **1 failed, 3 passed, 1 warning in 28.81s**, exit 1, wrapper **29.946711s**.
+  The partition and two specified historical readout cases passed, reusing
+  the same temporary path/repository under the retained policy. The new tiny
+  regression failed: its direct synthetic `git worktree add` did not raise
+  the expected `CalledProcessError`; no stale-registration fatal stderr was
+  captured, and its later preservation checks were not reached. No further
+  code change or rerun followed. Artifacts are in
+  `/tmp/pr777-readout-worktree-lifetime.rvay35/`, log SHA256
+  `ed53a7d6e8e74fdc21da8c0a78e611295aec69b95e6f46a6d5d9b7aac00a31fe`;
+  `handoff.json` records final HEAD/tree after the three records, retaining
+  the failed proof status. Earlier proofs, disk-full/timeout incidents and
+  NAS measurement remain separate. The unavailable specialist supplied no
+  review or endorsement and was not retried. Final source review/CI and
+  hosted admission remain gates; full CI success is not claimed.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records each outcome and limit.
+
 - Scope pytest's built-in `-o tmp_path_retention_policy=failed` to the existing
   `time-budget-contracts` invocation only. Its 45-minute ceiling, file glob,
   markers, permissions and other jobs are unchanged, as are `pytest.ini`,

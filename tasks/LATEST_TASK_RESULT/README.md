@@ -1,5 +1,138 @@
 # Latest task result
 
+## PR777 test continuation: three nodes passed; new regression failed
+
+The single authorized four-node invocation reported **1 failed, 3 passed,
+1 warning in 28.81s**, exit **1**, wrapper **29.946711s**. The partition test
+and both selected readout tests passed. The new Git registration-lifetime
+regression failed because its direct `git worktree add` did not raise the
+expected `CalledProcessError`. This is a failed proof, not four passes or
+evidence that full CI now passes. No further code change, diagnostic run or
+test invocation followed the body failure; only these records were added.
+
+### Two test-only changes and the leader's CI evidence
+
+Starting source was `103667992af71826ddbabf3853ecd406cbefab58`, tree
+`6ede045510cb40558fa7b96592a42d218f2c34e6`. The partition test now requires
+`["-o", "tmp_path_retention_policy=failed", TIME_BUDGET_GLOB]` in its raw
+argument assertion. `_pytest_target_arguments` already accepted `-o` and its
+parsed-target assertion had passed; neither the parser nor exact-command or
+coverage checks changed.
+
+The readout `source` fixture now runs ordinary
+`git worktree prune --expire now` against `source_repository.workspace`
+immediately before `worktree add`. Both calls share one existing 30-second
+setup deadline and the same bounded Git helper. New test-only ownership
+assertions require the workspace to share the pytest temporary parent and
+contain an ordinary, non-symlink `.git` directory. Prune concerns missing
+worktree registrations in that synthetic repository, not branches or
+existing working directories; no real checkout or worktree is targeted.
+No force, global cleanup, larger timeout or Git configuration change was added.
+
+The leader read run `37710408405`; no CI endpoint was queried here:
+
+- Pytest job `113094770549`: **1 failed, 13395 passed, 64 skipped, 46 deselected,
+  1 warning in 1945.04s**. The exact failure was
+  `tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts`,
+  line 680. The obsolete second assertion required only the glob despite the
+  raw arguments also containing the approved option and value.
+- Time-budget job `113094770711`: job duration **25m13s**, **367 passed,
+  61 setup errors**. Reported errors shared the `source` fixture's
+  `git worktree add`, exit 128, at `tests/test_time_budget_result_readout.py:90`.
+  The examples reused the same function-scoped path against a module-owned
+  ordinary bootstrap; uncertainty cases used their separate module bootstrap.
+  These are setup errors, not a disk-full or timeout annotation. The CI short
+  trace does not include Git stderr, so its exact fatal message is unknown.
+
+The leader's source-derived diagnosis links passed-directory cleanup to stale
+worktree registrations retained by the longer-lived module repository. The
+new local reproducer did not establish the expected Git refusal. Keep that
+negative result separate from the source account and missing CI stderr; no
+Git-version or other environmental explanation was investigated or inferred.
+
+### Exact bounded outcomes
+
+Tested HEAD was `98f9471220f22d339b8d42aae642c4437322fc7d`, tree
+`64e720462523758eabe4efbcca53bbf839be4fa8`. One invocation ran under Python
+3.10.12 / pytest 9.1.1, 300s+5s/no-`-x`, existing Git bounds and
+`-o tmp_path_retention_policy=failed`, from `2026-10-08T01:53:04.211328Z` through
+`2026-10-08T01:53:34.158040Z`. AST checks verified node/fixture/parameter names
+and generated child syntax before launch. The immediate hook retained the
+actual failure trace; final JUnit and all four case outcomes are available.
+The warning concerns `record_property` with JUnit `xunit2`.
+
+| Selected node | Observed result |
+| --- | --- |
+| `test_time_budget_readout_worktree_registration_lifetime` | Failed at the child-outcome assertion in the new test, line 138. |
+| `test_backend_jobs_partition_the_comparison_contracts` | Passed, including the unchanged parser, command and coverage checks. |
+| `test_time_budget_result_readout_historical_registration[wrong_R_tree-historical_runtime]` | Passed with real source/refusal validators and synthetic data. |
+| `test_time_budget_result_readout_historical_registration[wrong_registration-historical_runtime]` | Passed with real source/refusal validators and synthetic data. |
+
+The tiny child pytest reported **2 failed, 1 passed in 1.42s**, exit **1**.
+The first failure was the deliberate failed-worktree retention case. The
+unexpected failure was at generated `test_registration_lifetime.py:58`:
+`with pytest.raises(subprocess.CalledProcessError)` ended with
+`DID NOT RAISE CalledProcessError` after direct `git worktree add`. The expected
+exit-128 refusal and its stderr were not observed; no fatal message is supplied
+as a substitute. The outer test correctly rejected the extra failed child.
+
+The child receipt confirms that pytest removed the first passed directory and
+allocated the same path again. Its deliberately failed worktree still existed
+after child exit. The unexpected reuse failure also retained its path. The
+new regression did **not** reach the later corrected-fixture reuse, shared/
+sibling-content, final commit/branch-identity or failed-registration checks.
+Initial identities in its receipt are not post-prune preservation evidence.
+
+Separately, the two existing readout cases used exactly the same root
+`/tmp/pr777-readout-worktree-lifetime.rvay35/pytest-tmp/test_time_budget_result_readou0/runner-temp/time-budget-readout-source`
+and module repository
+`/tmp/pr777-readout-worktree-lifetime.rvay35/pytest-tmp/readout-ordinary-bootstrap0`.
+The hook observed each root present after setup and absent, with its per-case
+parent, after passing teardown; the shared repository remained. This checks
+the corrected fixture on those two cases, not every one of the 61 CI errors.
+
+### Identities, preserved evidence and remaining gates
+
+Changed test blobs are partition `f4e6cdc5a0cf905765209525fc71619a9c618763`,
+readout fixture `450bbdf768fbb6331047d7bcb91ec5056f9be224` and new regression
+`04ac0c53f8c370172b78cc5c204117de45c18b41`. The backend workflow remains blob
+`cd2c6d0f186807a0e879cdd442376f070cf48620`, SHA256
+`01fe1494460ae36a6ded2caf3955b27ff9d922374b1ffbe3e91c4077d344d094`.
+Its retention option, 45-minute ceiling, markers, glob and permissions are
+unchanged. All production/native/readout/grading/source guards, F/scoring,
+registration, cohort/model/budgets, `pytest.ini` and dependencies are unchanged;
+`source.json` records their exact identities.
+
+Artifacts are in `/tmp/pr777-readout-worktree-lifetime.rvay35/`: the wrapper
+and hook, `command.json`, `selection.json`, `source.json`, `pytest.log`,
+`reports.jsonl`, `junit.xml`, `junit-cases.json`, `cases.json`, `outcome.json`,
+`registration-receipt.json` and `readout-fixture-lifecycle.json`. The receipts
+preserve exact paths, child stdout/stderr, initial identities and reached versus
+unreached checks. Log SHA256 is
+`ed53a7d6e8e74fdc21da8c0a78e611295aec69b95e6f46a6d5d9b7aac00a31fe`;
+registration-receipt SHA256 is
+`653d02bbd28939dab0635d72c6a8f4456808faf380d9e6938f462b0684fa73a7`.
+After this three-record commit, `handoff.json` records exact final HEAD/tree,
+unchanged tested code and the failed invocation. `SHA256SUMS` binds the
+artifacts; final Git identity is external to its own tree to avoid circularity.
+
+The original seven-case hosted proof, quote proof and previous lifecycle
+proof remain unchanged and were not rerun or pooled. Earlier GitHub disk-full
+and timeout annotations remain separate from this CI setup failure. The NAS
+measurement remains **10673136 allocated KiB** for its original owned proof
+basetemp, not a GitHub-runner measurement or causal explanation. Prior records
+and proof directories are preserved verbatim; only the new synthetic pytest
+lifecycle removes its passed temporary directories.
+
+The unavailable Claude Opus 4.7 preview specialist invocation failed before
+execution, produced no review or endorsement and was not retried. The failed
+new regression remains unresolved. Further test changes need a new bounded
+direction; final fixed-source review and fresh normal CI remain required.
+No full-CI success, hosted readiness or grading authority is claimed. Exact
+hosted admission and real host/auth/input gates remain. No CI query/retry/
+dispatch/wait, Project edit, merge, Azure/private fetch, live claim/model/grade/
+readout, replay or Task5 occurred.
+
 ## PR777 continuation: scoped temporary retention; new lifecycle proof passed
 
 The `time-budget-contracts` command in `.github/workflows/backend-tests.yml`

@@ -1098,6 +1098,60 @@ does not establish that either CI incident is fixed or that the full job fits
 hosted admission remain gates; no CI query/retry/monitoring or live grading
 authority follows from this change.
 
+The next PR777 continuation changes tests only. The partition test's second,
+raw argument assertion now requires the exact `-o`,
+`tmp_path_retention_policy=failed` and unchanged glob; its existing parser,
+parsed-target assertion and coverage checks remain. The readout fixture prunes
+missing linked-worktree registrations only in its own ordinary temporary Git
+repository immediately before `worktree add`, sharing the existing 30-second
+setup deadline. Ownership assertions exclude linked or external repositories.
+No force or removal of branches/existing worktree directories is used. The
+workflow retention option, 45-minute ceiling, selected workload and every
+production/native/grading/source/F binding remain unchanged.
+
+The leader read run `37710408405`: pytest job `113094770549` reported
+**1 failed, 13395 passed, 64 skipped, 46 deselected, 1 warning in 1945.04s**,
+with the obsolete raw assertion failing at line 680 of
+`test_backend_jobs_partition_the_comparison_contracts`. Time-budget job
+`113094770711` finished in **25m13s** with **367 passed, 61 setup errors** at
+the readout fixture's `git worktree add`, exit 128. Its CI short trace contains
+no Git stderr. Stale registrations after passed-directory cleanup are the
+source-derived diagnosis, not an observed CI fatal message; this incident is
+separate from the older disk-full/timeout annotations and NAS size inventory.
+
+From `103667992af71826ddbabf3853ecd406cbefab58`, tree
+`6ede045510cb40558fa7b96592a42d218f2c34e6`, the correction was pinned at
+`98f9471220f22d339b8d42aae642c4437322fc7d`, tree
+`64e720462523758eabe4efbcca53bbf839be4fa8`. Exactly the new regression, failed
+partition node and two specified historical readout nodes ran once under
+Python 3.10.12 / 300s+5s/no-`-x`/Git bounds with the retention option:
+**1 failed, 3 passed, 1 warning in 28.81s**, exit **1**, wrapper **29.946711s**.
+The partition and both readout nodes passed. The readout pair reused the same
+path and module repository; each passed path was removed after teardown and
+the shared repository remained.
+
+The new regression failed. Its synthetic child reported **2 failed, 1 passed
+in 1.42s**, exit **1**, including one deliberate retention failure and one
+unexpected `DID NOT RAISE CalledProcessError` at generated child line 58.
+Direct `git worktree add` did not produce the expected missing-worktree
+refusal, so no fatal stderr was captured. The outer test failed its child
+outcome assertion at line 138. The later corrected-fixture reuse and full
+content/commit/branch preservation checks were not reached. This is not a
+passing regression; no subsequent code change or test rerun was made.
+
+Artifacts are in `/tmp/pr777-readout-worktree-lifetime.rvay35/`, including
+`registration-receipt.json`, `readout-fixture-lifecycle.json`, immediate reports,
+final JUnit and `handoff.json` with final HEAD/tree and failed status. Log SHA256
+is `ed53a7d6e8e74fdc21da8c0a78e611295aec69b95e6f46a6d5d9b7aac00a31fe`;
+registration-receipt SHA256 is
+`653d02bbd28939dab0635d72c6a8f4456808faf380d9e6938f462b0684fa73a7`.
+[LATEST](../tasks/LATEST_TASK_RESULT/README.md) keeps per-node results and
+unreached checks explicit. The old seven-case, quote and lifecycle proofs were
+not rerun or pooled, and their directories remain preserved. The unavailable
+specialist produced no review or endorsement and was not retried. The new
+regression remains unresolved; final source review/CI and exact hosted
+admission still gate use. No full-CI pass or live grading authority is claimed.
+
 The mode correction was tested at
 `f6967c07888208de8b2ad8cc1c2ea84612acbf29` / tree
 `fe47d236845882433dc6cb6309f8b8f0beeff849`, from accepted main
