@@ -212,7 +212,14 @@ def _compile(root: Path, reviewed_source_sha: str, as_of: str, *, published: boo
             if record["valid_until"] is not None:
                 _require(evaluated <= _time(record["valid_until"]), "expired_evidence")
             for field in ("source_kind", "issued_at", "observed_at", "valid_until", "subject", "observed"):
-                missing.extend(_nulls(record[field], role + "." + field))
+                absent = _nulls(record[field], role + "." + field)
+                if not pilot._project_resource_required(plan) and (
+                    field == "subject" or (role == "identity" and field == "observed")
+                ):
+                    # Keep project:null in the record. Only this exact leaf is
+                    # inapplicable to direct-v1; all other nulls still block.
+                    absent = [name for name in absent if name != role + "." + field + ".project"]
+                missing.extend(absent)
             files[name] = data
             claims[role] = {"artifact": reference, "evidence": record}
         _check_observations(claims, evaluated, missing)
@@ -291,7 +298,9 @@ def _check_observations(claims: dict[str, Any], evaluated: datetime, missing: li
 
 
 def compile_foundry_evidence(*, source: Path, reviewed_source_sha: str, as_of: str) -> FoundryEvidenceBundle:
-    """Read all bytes without writes. Null evidence stays null and cannot be ready.
+    """Read without writes. Required null evidence stays null and cannot be ready.
+
+    A direct-v1 child project is inapplicable; its explicit null is preserved.
 
     The SHA and UTC evaluation time come from the caller, not Git, Azure or the
     clock. Exceptions carry static codes only; malformed exports are never echoed.

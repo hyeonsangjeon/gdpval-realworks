@@ -175,24 +175,33 @@ def _runtime(template: dict[str, Any], deployment: str) -> dict[str, Any]:
     return candidate
 
 
+def _resource_roles(plan: dict[str, Any], project_resource_id_file: Path | None) -> tuple[str, ...]:
+    if project_resource_id_file is None and not pilot._project_resource_required(plan):
+        return ("account", "deployment")
+    return RESOURCE_ROLES
+
+
 def compile_pilot_deployment_binding(
     plan: dict[str, Any], *, evidence_bundle: Path, identity_bundle: Path,
     config_bundle: Path, input_bundle: Path, reviewed_source_sha: str, as_of: str,
-    account_resource_id_file: Path, project_resource_id_file: Path, deployment_resource_id_file: Path,
+    account_resource_id_file: Path, deployment_resource_id_file: Path,
+    project_resource_id_file: Path | None = None,
 ) -> PilotDeploymentBinding:
     """Read all real verifiers and exact ID files; return private canonical bytes."""
     try:
         plan = json.loads(_canonical_json(plan))
-        paths = tuple(_resource_path(path) for path in (
-            account_resource_id_file, project_resource_id_file, deployment_resource_id_file,
-        ))
-        _require(len(set(paths)) == 3, "distinct_resource_files_required")
+        roles = _resource_roles(plan, project_resource_id_file)
+        resource_files = {"account": account_resource_id_file, "project": project_resource_id_file,
+                          "deployment": deployment_resource_id_file}
+        paths = tuple(_resource_path(resource_files[role]) for role in roles)
+        _require(len(set(paths)) == len(roles), "distinct_resource_files_required")
         with ExitStack() as held:
             checks = [held.enter_context(_held_parents(path.parent, (path.name,))) for path in paths]
             raw = tuple(_resource_bytes(path) for path in paths)
-            parts = tuple(_resource_parts(data, role) for role, data in zip(RESOURCE_ROLES, raw))
-            account, project, deployment = parts
-            _require(project[:8] == deployment[:8] == account, "resource_hierarchy_mismatch")
+            parts = {role: _resource_parts(data, role) for role, data in zip(roles, raw)}
+            account, deployment = parts["account"], parts["deployment"]
+            _require(deployment[:8] == account and ("project" not in parts or parts["project"][:8] == account),
+                     "resource_hierarchy_mismatch")
             options = {"evidence_bundle": evidence_bundle, "reviewed_source_sha": reviewed_source_sha, "as_of": as_of}
             ev = evidence.verify_foundry_evidence(bundle_root=evidence_bundle, reviewed_source_sha=reviewed_source_sha, as_of=as_of)
             ident = identity.verify_pilot_identity(plan, bundle_root=identity_bundle, **options)
@@ -210,8 +219,9 @@ def compile_pilot_deployment_binding(
                      and input_doc["config_bundle"] == {"path": configs.READY_PATH, **_digest(config.canonical_bytes())},
                      "upstream_bundle_linkage_mismatch")
             subject = ev_doc["claims"]["identity"]["evidence"]["subject"]
+            _require("project" in roles or subject["project"] is None, "project_evidence_requires_resource_file")
             resources = {}
-            for role, data in zip(RESOURCE_ROLES, raw):
+            for role, data in zip(roles, raw):
                 record = {"role": role + "_resource_id", "encoding": "utf-8", **_digest(data)}
                 _require(record["sha256"] == subject[role]["resource_id_sha256"], "resource_digest_mismatch")
                 resources[role] = record
@@ -223,7 +233,7 @@ def compile_pilot_deployment_binding(
             _require(all(_bytes(scope) == _bytes({key: doc[key] for key in scope_keys})
                          for doc in (manifest, config_doc, input_doc, ident_doc["grading"]))
                      and _bytes(template["dispatch"]) == _bytes(dispatch), "five_task_scope_mismatch")
-            runtime_data = _bytes(_runtime(template, parts[2][-1]))
+            runtime_data = _bytes(_runtime(template, deployment[-1]))
             upstream = {
                 "evidence": {"ready_sha256": ev.sha256, "reservation": _digest(evidence._reservation(ev))},
                 "identity": {"plan_sha256": ident.sha256, "ready": _digest(identity._ready(ident)),
@@ -290,7 +300,7 @@ def materialize_pilot_deployment_binding(
         for source in (pilot.ROOT, *(options[key] for key in ("evidence_bundle", "identity_bundle", "config_bundle", "input_bundle"))):
             source = _root(source)
             _require(not inputs._overlap(root, source), "source_destination_overlap")
-        for role in RESOURCE_ROLES:
+        for role in _resource_roles(plan, options.get("project_resource_id_file")):
             source = _resource_path(options[role + "_resource_id_file"])
             _require(not inputs._overlap(root, source) and source != reserved, "source_destination_overlap")
         with ExitStack() as held, _held_parents(root.parent, (root.name, reserved.name)) as check_parent:
@@ -354,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--plan", type=Path, default=pilot.PLAN)
     for name in ("evidence-bundle", "identity-bundle", "config-bundle", "input-bundle",
                  *(role + "-resource-id-file" for role in RESOURCE_ROLES)):
-        parser.add_argument("--" + name, type=Path, required=True)
+        parser.add_argument("--" + name, type=Path, required=name != "project-resource-id-file")
     parser.add_argument("--reviewed-source-sha", required=True)
     parser.add_argument("--as-of", required=True)
     output = parser.add_mutually_exclusive_group(required=True)

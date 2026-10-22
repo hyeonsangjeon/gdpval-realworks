@@ -51,7 +51,7 @@ class PilotCaptureSources:
     reviewed_source_sha: str
     as_of: str
     account_resource_id_file: Path
-    project_resource_id_file: Path
+    project_resource_id_file: Path | None
     deployment_resource_id_file: Path
 
     def _options(self) -> dict[str, Any]:
@@ -124,6 +124,9 @@ def _workspace(workspace: Path, sources: PilotCaptureSources) -> Path:
     _require(type(sources) is PilotCaptureSources, "pilot_capture_sources_required")
     root = _root(workspace)
     for name, value in vars(sources).items():
+        if name == "project_resource_id_file" and value is None:
+            # _sources verifies route applicability before any capture write.
+            continue
         if name not in ("reviewed_source_sha", "as_of"):
             _require(not inputs._overlap(root, inputs._absolute(value)), "pilot_capture_source_overlap")
     return root

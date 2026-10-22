@@ -651,6 +651,11 @@ def _deployment_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
+def _project_resource_required(plan: dict[str, Any]) -> bool:
+    """Only the validated direct-account route can omit a child project."""
+    return plan.get("foundry_route", {}).get("route_profile") != "direct-v1"
+
+
 def _inspect_plan_with_deployment(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
@@ -670,7 +675,10 @@ def _inspect_plan_with_deployment(
     result = None
     try:
         result = _inspect_plan_with_input(plan, **options)
-        if (deployment_binding is None or any(value is None for value in (*options.values(), *resource_files.values()))
+        required_files = [account_resource_id_file, deployment_resource_id_file]
+        if _project_resource_required(plan):
+            required_files.append(project_resource_id_file)
+        if (deployment_binding is None or any(value is None for value in (*options.values(), *required_files))
                 or not result["configuration_valid"]
                 or result.get("evidence_gate", {}).get("evidence_complete") is not True
                 or result.get("identity_plan_gate", {}).get("identity_complete") is not True
@@ -729,7 +737,9 @@ def inspect_plan(
     result = None
     try:
         result = _inspect_plan_with_deployment(plan, **options)
-        if (not result["configuration_valid"] or any(value is None for value in options.values())
+        required_options = [value for name, value in options.items()
+                            if name != "project_resource_id_file" or _project_resource_required(plan)]
+        if (not result["configuration_valid"] or any(value is None for value in required_options)
                 or result.get("deployment_binding_gate", {}).get("deployment_binding_complete") is not True):
             return _capture_refusal(result)
         from gpt56_pilot_input_capture import PilotCaptureSources, verify_pilot_input_capture
