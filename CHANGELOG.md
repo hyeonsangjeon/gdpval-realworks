@@ -28,8 +28,23 @@ entries land under a fresh dated heading the day they merge to `main`.
   guard variants ran: **2 passed in 3.04s**, exit **0**, outer wall **3.36s**,
   under **TERM120s/KILL5s**. The earlier launcher exit **127**, **1 failed in
   16.86s** and corrected **1 passed in 42.07s** remain separate; the completed
-  regression was not rerun. No core, schema, registration, plan, grader,
-  workflow, dependency, budget or model/host setting changed. Fixed-HEAD CI,
+  regression was not rerun. Final review at
+  `fbdac81a462e0328f3c015d8a89be0b689a4ea7d` found **9 successful and 2 failed
+  checks**, with no recorded owner review. CI `39772172623` reported
+  **1 failed, 13396 passed, 64 skipped, 46 deselected, 1 warning in 1753.62s**
+  in job `119802154544`, and **1 failed, 1462 passed in 1797.48s** in job
+  `119802154502`; these are separate pytest elapsed times, not job durations.
+  Preserve the fixed workflow and partition assertions by renaming the new
+  regression to `test_direct_account_pilot_binding.py` without byte changes;
+  add the four exact source refusals to the remaining comparison guard.
+  At correction HEAD `077b3e37cc9116503c143ad58b5f7427d1eeab03`, tree
+  `c73f32e97c762e1e4163d7d82bc882f517f23557`, one bounded two-node invocation
+  reported **1 failed, 1 passed in 28.69s**, exit **1**, outer wall **29.17s**.
+  The source-boundary node passed; the partition node reached nested collection
+  after the corrected boundary, then failed because local Python lacked
+  `openai_codex`. No dependency was installed, test retried or previously
+  passing selector rerun. No core, schema, registration, plan, grader, workflow,
+  dependency, budget or model/host setting changed. New final-HEAD CI is not claimed passed;
   owner review and a separate approved runtime source binding remain required.
   No live Sol experiment, private preparation, workflow dispatch, grading or
   finite-right reset follows. The prior connection diagnostic still has null
