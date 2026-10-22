@@ -13,6 +13,30 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Align the Foundry pilot's direct-account evidence, deployment binding and
+  capture gates with the existing `direct-v1` connection contract. An explicit
+  project null no longer requires a child-project ID file; non-null project
+  evidence still requires its exact ID file. Account/deployment identity,
+  hashes, source checks, upstream rereads and all launch restrictions remain.
+  The four production modules and new regression match the previously tested
+  **25287-byte** patch SHA256
+  `5d17c6916b25630bc124c657f2ddd2dc6f601f783e322b0c38fa4b999b49bf3e`.
+  Local integration review added four exact source-refusal assertions to the
+  existing guard; no historical pin was changed to admit the candidate.
+  At tested HEAD `6dab6b151b7b70127ab35a0e96b324bc6e005116`, tree
+  `229b128b871c084314a78a9da6d6e5095cdb7ccd`, only the two directly affected
+  guard variants ran: **2 passed in 3.04s**, exit **0**, outer wall **3.36s**,
+  under **TERM120s/KILL5s**. The earlier launcher exit **127**, **1 failed in
+  16.86s** and corrected **1 passed in 42.07s** remain separate; the completed
+  regression was not rerun. No core, schema, registration, plan, grader,
+  workflow, dependency, budget or model/host setting changed. Fixed-HEAD CI,
+  owner review and a separate approved runtime source binding remain required.
+  No live Sol experiment, private preparation, workflow dispatch, grading or
+  finite-right reset follows. The prior connection diagnostic still has null
+  served identity and unverified Max/Long1M, five-task performance and billing;
+  Task3 run 3 stays uncertain and nonretryable. The [current result](tasks/LATEST_TASK_RESULT/README.md)
+  records exact sources, separate proof limits, commands and log/JUnit hashes.
+
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
   `b6702c679134f90b15a3f58fdacfbccd38522074`, after direct owner review

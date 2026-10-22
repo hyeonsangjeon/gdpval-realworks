@@ -1,330 +1,163 @@
 # Latest task result
 
-## Native Task3 retained-payload preparation verified
+## Direct-account pilot correction prepared for review
 
-The separately directed `prepare-probe` is bound to workflow
-`378041151`, run `37859270679`, run number **6**, attempt **1**, owner
-`hyeonsangjeon`. Its source is
-`a37a84a579bb91ddabd650b2a2e6e5bcb9fd00b4`, tree
-`cc8b5ed635c9daed348f975f00013b03927b828d`. The exact **4194-byte** request
-SHA256 is `a4108a655f0b543576e7f3ab34848a8a0191d32722c27e30b868d3061ae9e61d`.
-The admission window is `1791501833..1791504233`, **2400 seconds**.
-The exact run was read back queued at **2026-10-08 23:24:39 UTC** and later
-completed successfully. Job `113590870304` completed successfully; the
-model-free originals/intake/F-preparation step, safe-completion validation and
-artifact upload all succeeded. Artifact `11585222488` contains
-`completion.json` (**1924 bytes**, SHA256
-`7f7c5102e67d74229c4f3d7c097bbb8553aec1dd198bba250f00782a5237a190`).
-The bound completion reports `status=ready`, `refusal_point=null`, and all
-four safe stages (environment, originals, intake/preparation and context
-exit) completed. The verified preparation is **30607 bytes**, SHA256
-`730a00283027beceff5ba4faf2a43a1982da8b329da3181495eb2ebb7a30fa8c`;
-its derived result is **8747 bytes**, SHA256
-`8e0c401d8d18c9f16d9439159f0944aa5ceabee7d8b0ed8e2a10e3298679be10`.
-The original retained result identity remains **8518 bytes**, SHA256
-`4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`.
+The direct-account correction has been placed on a dedicated review branch.
+Its four production modules and new regression are byte-identical to the
+previously tested isolated candidate. Local review found one coupled test
+expectation to update: the current-source refusal list must include those four
+changed modules. The exact-list assertion now does so, and both affected
+variants passed. No historical source pin was changed to admit the candidate.
 
-This is a successful model-free preparation result, not a grade or model
-quality result. `grading_authority`, `handle_reusable` and `retry_allowed`
-are all **false**. No grade, executor/model call, retention or private write
-was performed. The previously uncertain grading run 3 remains uncertain,
-spent and nonretryable; this preparation does not authorize its replay or a
-new grading claim. No conclusion about historical LFS use or earlier returned
-bytes follows. Project #5 remains **50/54**; the remaining cards concern other
-work and were not changed by this preparation outcome.
+This is code integration and offline verification, not permission to launch
+the Sol experiment. Fixed-HEAD CI and owner review remain required. No CI
+success, independent review endorsement, runtime admission or live result is
+claimed by this record.
 
-Only the controller identity, next run number and admission window changed
-from the prior preparation request. Original R/result/F, Task3, input and
-Step0 seals, declared file identities and preparation-only policy remain
-fixed. The accepted transport below permits two fixed reads and at most four
-GETs per deliverable, **10 requests** under the same **60-second** retained
-intake deadline. Original-input acquisition remains bounded at **120 seconds**;
-the hosted preparation command remains **TERM300s/KILL5s**.
+### Source and scope
 
-The one-shot scope was original acquisition, authenticated retained intake,
-F preparation and handle closure only. It stopped before grading direction,
-private or local grading claim, model/judge/executor, retention and private
-writes. There is one submission and no implicit retry or workflow rerun.
-Earlier submissions remain spent; grading run 3 remains uncertain and
-nonretryable. This terminal envelope supplies the safe preparation result;
-later grading remains blocked until its authority and once-only preconditions
-are resolved. Readiness or refusal alone grants no grading authority and does
-not identify historical server-returned bytes.
+- Base HEAD: `6efe99cbd40bb839037e7a20711a734e0a4ce002`.
+- Base tree: `4b80f235ab1627584e1a6c1f66849c3ead6b1a3d`.
+- Locally reviewed and tested code HEAD: `6dab6b151b7b70127ab35a0e96b324bc6e005116`.
+- Tested tree: `229b128b871c084314a78a9da6d6e5095cdb7ccd`.
+- Branch: `codex/gpt56-direct-account-contract-20261022`.
+- Worktree: `/ai-work/copilot/_tmp_worktrees/gdpval-realworks-direct-account-integration-20261022`.
 
-## Retained-payload source accepted for delivery
+The final delivery adds only these completion records to the tested code.
+Its full HEAD/tree are reported in the external handoff; the code identity
+above is not an approved runtime source binding. The preserved WIP checkout,
+accepted-source worktree and earlier isolated candidate were not edited.
+The existing Git author and committer identity is unchanged, with no trailers.
 
-The leader directly reviewed HEAD
-`2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
-`b6702c679134f90b15a3f58fdacfbccd38522074`. Owner comment review
-`5464000494` records no blocking source finding. All **11 checks** for that
-exact head succeeded in CI run `37853929691` and advance-check run
-`37853929689`. This is direct owner review, not a specialist endorsement.
+The original five-file candidate is sealed by a **25287-byte** patch, SHA256
+`5d17c6916b25630bc124c657f2ddd2dc6f601f783e322b0c38fa4b999b49bf3e`.
+Its source manifest SHA256 is
+`64180870e49a050ab1be649e8102d6e1485b10def3c26045998f01f77a6cb56e`.
+Both remain at `/tmp/p5-direct-account-contract.bhnYUP/evidence/`.
+The six-file integration patch is **28248 bytes**, SHA256
+`1119ab34ae2e3d77c1b283f5be1656676664667b8081caf2e6b790ee4aaed663`,
+at `/tmp/p5-direct-account-integration.XnuxcB/reviewed-code.patch`.
 
-The accepted scope is deliverable-only bounded payload resolution plus the
-one-line fake-clock correction below. The two fixed metadata/result reads,
-existing host policy, CDN credential exclusions, **10-request** hydration
-ceiling, shared **60-second** deadline and exact size/hash checks remain.
-The separate local proof outcomes below are unchanged; no successful test
-was rerun by the leader.
+Changed code paths are:
 
-These are pre-delivery review and validation facts. The separately directed
-model-free preparation probe above has its own exact source, run number,
-window and request hash; its terminal result remains pending. No live readiness, historical LFS cause,
-recovered grading result, replay authority or private write follows from this
-acceptance. Project completion still requires the actual experiment evidence.
+- `batch-runner/gpt56_foundry_evidence_intake.py`
+- `batch-runner/gpt56_pilot_deployment_binding.py`
+- `batch-runner/gpt56_pilot_input_capture.py`
+- `batch-runner/gpt56_sol_codex_pilot_preflight.py`
+- `batch-runner/tests/test_gpt56_direct_account_binding.py` (new)
+- `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py` (four assertions added)
 
-## PR #784 native readout fake-clock correction
+Only the validated `direct-v1` route can omit the child-project ID file.
+Explicit `project: null` remains in the evidence; only that exact inapplicable
+leaf stops blocking readiness. Non-null project evidence still requires its
+exact project-ID file. Account/deployment hierarchy, hashes, source checks,
+upstream rereads, capture path checks and launch restrictions remain intact.
+The connection does not require a child project. `allow_project_management`
+is a resource capability, not project-existence evidence or Azure management
+query permission.
 
-Only the `cumulative_bound` scenario in
-`tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout`
-now starts its fake clock at `1000.0`. The exact failed node passed once under
-TERM120s/KILL5s. No production, workflow, resolver, shared helper, pin, budget
-or other test site changed. The earlier payload proofs remain separate below.
-
-### Established CI failure and prior review
-
-The leader read CI run `37845775719`, time-budget-contracts job `113546154746`,
-at HEAD `e11048810176178cacefb2110df590d58f4a5e40`, tree
-`2e500a8c4f5267bf7659ade376e4dcffa3ab8c12`. Its pytest summary was **1 failed,
-493 passed in 1850.64s**; that duration is not the total GitHub job duration.
-The other **10 checks** succeeded at the leader's snapshot. No CI status or
-old log was fetched during this correction.
-
-Line 574's exact assertion expected `25`; the observed second request timeout
-was `24.999999999999773`. Line 531 seeded `now = [time.monotonic()]` before the
-two `+35` advances. That fractional origin made exact subtraction unstable.
-This file was unchanged by the earlier payload PR. The one-line correction
-uses `now = [1000.0]` and preserves `+35`, exact `== 25`, the **60-second**
-cumulative bound, **30-second** per-request checks and refusal outcome. No
-tolerance or production clock change was introduced.
-
-The leader found no blocking source defect in the prior ten-file change at
-`e11048810176178cacefb2110df590d58f4a5e40`. That review is evidence about that
-source, not approval of this new HEAD.
-
-### This targeted validation
-
-The existing isolated branch was clean at the prior HEAD before editing.
-The one-line correction was committed normally before testing as
-`fad2230aff020303fe609273422edc3dabf7535c`, tree
-`66a488608045f01a7f940e337b625e98835c13fd`. Existing Python **3.10.12** and
-pytest **9.1.1** were used; no dependency installation or new proof framework.
-Exact collection found **1 node**, exit **0**, in **1.38s** pytest elapsed
-and **1.785s** command wall time. From `batch-runner`, with the sanitized
-offline environment retained in `command.json`, the sole body invocation was:
-
-```bash
-timeout --signal=TERM --kill-after=5s 120s /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -v --tb=short --capture=tee-sys --basetemp=/tmp/native-task3-pr784-clock.zA3VQy/pytest-tmp --junitxml=/tmp/native-task3-pr784-clock.zA3VQy/junit.xml 'tests/test_time_budget_result_readout.py::test_time_budget_native_canonical_readout[cumulative_bound]'
-```
-
-Result: **1 passed in 1.85s**, exit **0**; Bash measured **2.238s** command
-wall time, including timeout/Python but excluding separate collection. The
-command ran **2026-10-08 22:22:34..22:22:36 UTC**. JUnit records **1 test,
-0 failures, 0 errors, 0 skipped**. No other test body or successful earlier
-selector ran. Synthetic transport and source fixtures exercised the real
-readout refusal/validator; this was not a private read or live execution.
-
-Artifacts are retained in `/tmp/native-task3-pr784-clock.zA3VQy/`:
-
-- `pytest.log`: **752 bytes**, SHA256
-  `a22867de68ee80adb8c1f548580910139ec96e8dfad0f794d1913b16636c2ffb`.
-- `junit.xml`: **394 bytes**, SHA256
-  `754354820aa1b43a88ea6fb3bdd36eade651ac78584709aa37733033ea3dc09e`.
-- `collection.log`: **540 bytes**, SHA256
-  `68e7bd56a9c0b287b18c268a371914c1d8ec4eafc28c775dc51342844d91ce1e`.
-- Exact command, source and outcome JSON receipts preserve the independent
-  collection/test timings and exit codes. Only CHANGELOG and this LATEST
-  change after the tested commit. `final-source.json` in this directory and
-  the updated PR body seal final HEAD/tree after that records-only commit.
-  No carrying-PR merge SHA, time or state is claimed.
-
-### Unchanged retained-payload implementation
-
-The native intake now resolves only its two retained deliverable payloads
-through the existing HF reader. Real SDK/adapter/F checks completed preparation
-with synthetic plain and redirected payloads. The first proof had one test
-expectation failure; its isolated, test-only correction passed. These are
-separate results, not a pooled passing suite or a live recovery claim.
-
-`gpt54_time_budget_native_grading_intake._hydrate` preserves its immutable
-private metadata GET and canonical result JSON raw GET, with no redirects.
-Only the two authenticated, canonical deliverable paths use `_hf_read` and
-`_hf_redirect`. Each permits at most **4 streamed GETs**, including the final
-payload response. The hydration cap changes prospectively from **4 to 10 HTTP
-requests**: **2 + 4 + 4**, under the same **60-second cumulative deadline** and
-existing **30-second per-request cap**. There is no extra HEAD/metadata/batch
-operation, retry, pagination, automatic redirect or background download.
-
-The adapter replaces the raw-only event hooks on the same scoped SDK session
-before payload reads. Every next URL is validated before transmission against
-the unchanged HTTPS Hub/cache/HF-owned-CDN policy. CDN authorization and cookie
-headers refuse before transmission. Encoded/oversized bodies, excess hops,
-unsafe paths/revisions and expired deadlines still refuse. Full declared
-payload SHA256, size and canonical path checks remain mandatory; pointer
-identity cannot substitute for payload identity. Partial state is not adopted.
-
-No workflow, CLI mode, shared reader, registry, original source/input/result/F
-pin, core/preparer/scoring code or grading budget changed. The execution file
-has only a directly coupled comment correction. The shared Git helper remains
+No core, schema, registration, historical pin, plan, model/host setting,
+budget, grader, workflow or dependency changed. The shared Git helper remains
 SHA256 `77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`.
-Grade/probe separation, context closure and no-retry authority remain intact.
-Preparation still stops before direction, permanent/private or local grading
-claim, executor/model, retention and private-storage writes. F/child/job limits
-remain **14400 seconds / 14520 seconds / 270 minutes**.
+The exact current-source guard now requires all eleven refusals: the seven
+already expected plus the four changed pilot modules. The frozen positive
+source and stale-grader-hash refusal are still checked independently.
 
-### Earlier payload proof results (not rerun)
+### Verification, with separate evidence scopes
 
-Imports, fixture dependencies and exact collection were checked before each
-invocation. Python **3.10.12**, pytest **9.1.1**, huggingface-hub **1.24.0** and
-httpx **0.28.1** were already installed. Both earlier invocations used **300s+5s**, no
-`-x`, local Git capped at **30 seconds**, immediate phase/failure flushing and
-JUnit. Warnings are the existing `record_property`/`xunit2` compatibility warning.
+The prior isolated regression was not rerun. Its observations remain:
 
-The first invocation selected only the **11 new cases** of
-`tests/test_time_budget_native_retained_payload.py::test_native_task3_retained_payload`
-and the directly changed existing
-`tests/test_time_budget_native_intake_refusal_points.py::test_native_task3_intake_refusal_points[raw_lfs_pointer]`.
+| Prior stage | Actual result | pytest elapsed | Outer wall time |
+| --- | --- | ---: | ---: |
+| Launcher | Exit 127; `/usr/bin/time` absent; no body or JUnit | Not run | Not measured |
+| First body | Exit 1; 1 failed at `pilot_step1_refused` | 16.86s | 17.39s |
+| Corrected unresolved selector | Exit 0; 1 passed | 42.07s | 42.61s |
+
+That failure identified the capture workspace treating the optional project
+path as a required path. The preserved correction skips only that absent
+path; real route and upstream verification still precede capture writes.
+The failed **24757-byte** patch remains SHA256
+`d45ae73cea2acde71d549152d7a8b6602c7dd16f8361a80624a93a8173457f24`.
+The prior passing log is SHA256
+`5e40beea08bf29d79ab3f8399c3b4762c8f7ead238f0e6e2713616aeec396c59`;
+its JUnit is SHA256
+`0f02127176942c1c8c73944764a9dd555cf90c2a5dee3c0388d32d6d28dc2086`.
+The [prior isolated record](/tmp/p5-direct-account-contract.bhnYUP/completion-records/tasks/LATEST_TASK_RESULT/README.md)
+preserves the original command, failure artifacts and detailed test limits.
+
+The new integration invocation selected only the two affected variants of
+`tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight`:
+`[current]` and `[stale_expected_hash]`. Collection found **2 tests in 1.69s**,
+exit **0**, outer wall **2.15s**. One body invocation reported **2 passed in
+3.04s**, exit **0**, outer wall **3.36s**; JUnit records **3.039 seconds**.
+Python **3.10.12** and pytest **9.1.1** used the existing environment with
+**TERM 120s / KILL 5s**, no installation and no old-suite replay.
+
+These results are separate observations, not a pooled three-test suite,
+GitHub job durations, model latency or a performance comparison. The new
+checks exercise real current-source refusals and immutable local frozen
+source/grader verification. The existing process, network and credential
+traps apply after the fixture's bounded local Git archive extraction.
+
+The earlier direct-account proof used real local evidence, identity, config,
+input, deployment, Step 1 and capture validators with synthetic IDs and tiny
+inputs. Test-owned source copies renewed four digests only for that fixture;
+no historical registration was edited. Existing reference, manifest,
+publication-generation and unrelated connection-flag seams remain synthetic.
+No successful validator verdict was stubbed. Provider, credential, process,
+network, executor and grader construction were trapped. These limitations
+are not removed by the new two-node source check.
+
+The exact new command and artifacts are retained under
+`/tmp/p5-direct-account-integration.XnuxcB/`:
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| `invocation.txt` | 1140 | `115d14487f9937ff4887ae1654ef57921e30224a60a4c3e0ba1731be43b75070` |
+| `collection.log` | 633 | `2ac40da4bbe3269dc40cec89de58c0ec0062f72e2d9035b8b014013dd193bae3` |
+| `test.log` | 1215 | `2914b195382d2a38c82a767a878fe0e061304262028a0668d667f078d7a7851e` |
+| `junit.xml` | 562 | `a8e4bc1b9a660a7785c889b04d8c8745f2afad420a4951f2a34ab623ae6c905f` |
+| `timing.txt` | 29 | `6160299f877231e24361e5de837a09c4c7a98b09548d86a48986ef76e1c45dc5` |
+
+The body command runs from the integration worktree's `batch-runner` directory:
 
 ```bash
-timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-retained-payload.KtsYUj/run-proof.py
+set -o pipefail
+test ! -e /tmp/p5-direct-account-integration.XnuxcB/pytest-coupled || exit 90
+{ time -p timeout -s TERM -k 5s 120s env -i PATH=/usr/bin:/bin:/usr/local/bin LANG=C.UTF-8 PYTHONPATH=/ai-work/copilot/_tmp_worktrees/gdpval-realworks-direct-account-integration-20261022/batch-runner PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python3.10 -B -u -m pytest -p no:cacheprovider -v -ra --tb=short --durations=3 --basetemp=/tmp/p5-direct-account-integration.XnuxcB/pytest-coupled --junitxml=/tmp/p5-direct-account-integration.XnuxcB/junit.xml 'tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight[current]' 'tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight[stale_expected_hash]' 2>&1 | tee /tmp/p5-direct-account-integration.XnuxcB/test.log; } 2> /tmp/p5-direct-account-integration.XnuxcB/timing.txt
+p5_proof_exit=$?
+printf 'proof_exit=%s\n' "$p5_proof_exit"
+exit "$p5_proof_exit"
 ```
 
-It reported **1 failed, 11 passed, 12 warnings in 44.47s**, exit **1**.
-Pytest-process elapsed was **44.912487s**; wrapper elapsed was **49.386871s**,
-from **2026-10-08 21:01:48.057847 UTC** to **21:02:37.444591 UTC**. All setup
-and teardown phases passed. The sole body failure was `[deadline]`, line 262:
-the actual timeout list was `[30, 30]`, while the new test expected `[60, 30]`.
-The existing shared reader already defined `REQUEST_SECONDS = 30`; this was
-a test expectation mismatch, not a production timeout violation.
+### Remaining conditions and retained history
 
-Only that expectation was corrected to `min(30, remaining)` with an explicit
-assertion that the existing request cap is 30. Production bytes did not change.
-After exact collection, only the unresolved `[deadline]` node ran:
+Owner review and fixed-HEAD CI must precede integration approval. A separately
+approved source binding and the applicable live evidence/rights gates are
+still needed before any Sol experiment. Historical pins deliberately refuse
+the new source. `launch_allowed` and `full_220_allowed` remain false. No
+five-task experiment, private-input preparation, workflow dispatch, Azure
+management, credential discovery, model/judge/grade call or Project edit
+occurred. This change does not reset any finite right or consumed attempt.
 
-```bash
-timeout --signal=TERM --kill-after=5s 300s /ai-work/venvs/gdpval-realworks-py310/bin/python /tmp/native-task3-retained-payload-deadline.UXqu06/run-proof.py
-```
+Retained diagnostic `39407062120`, number **16**, attempt **1**, remains
+`connected`, with SDK-reported **9444 input / 5 output tokens**. Served model
+identity and cleanup confirmation remain `null`. Context **258400** is
+reported metadata, not tested capacity. Max/Long1M, five-task performance and
+billing remain unverified. This is earlier evidence, not a new read or call;
+see the [corrected connection record](/tmp/p5-sol-native-20261020.PnrI5A/completion-records/tasks/LATEST_TASK_RESULT/README.md).
 
-It reported **1 passed, 1 warning in 5.74s**, exit **0**. Pytest-process elapsed
-was **6.168239s**; wrapper elapsed was **9.704131s**, from **2026-10-08
-21:03:59.813403 UTC** to **21:04:09.517519 UTC**. Setup/body/teardown passed.
-No successful node was rerun; the original failed invocation is unchanged.
-These are local pytest/process/wrapper measurements, not GitHub job durations.
+Native Task3 preparation run `37859270679`, number **6**, attempt **1**, remains
+the earlier model-free preparation success with no grading, handle-reuse or
+retry authority. Grading run `37756891578` remains uncertain, spent and
+nonretryable. Metadata absence remains limited to the two fixed objects at
+its inspected immutable parent. The complete earlier history remains in the
+[immutable prior LATEST](https://github.com/hyeonsangjeon/gdpval-realworks/blob/6efe99cbd40bb839037e7a20711a734e0a4ce002/tasks/LATEST_TASK_RESULT/README.md).
+No discarded historical exception, live fix, score or absent-effects claim
+is inferred from this code correction.
 
-### What the synthetic proof established
-
-| Exercised path | Observed retained GETs | Observed outcome |
-|---|---:|---|
-| Plain payloads | 4 | Actual hydration and one real F preparation completed |
-| Hub/cache/CDN payloads | 10 | Four GETs per deliverable, one real F preparation, real native materialization and closed-handle refusal |
-| Unsafe redirect variants | 1, 2 or 3 | Metadata/result redirects and unsafe payload hops refused before the next transmission |
-| Excess hops on first or second payload | 6 or 10 | A fifth request for that payload was not sent |
-| Wrong hash, pointer, encoding or size | 3 | Real download/identity checks refused; no successful F preparation |
-| SDK bearer/cookie contamination | 3 or 4 | No bearer/cookie CDN transmission; session closed |
-| Corrected cumulative-expiry variants | 2, 4 or 6 | Refused after initial reads, at the second payload or within redirected acquisition |
-
-HTTP/auth, source anchors and input declarations were synthetic, including
-the **218405-byte** Step0 and two files totaling **408601 bytes**. Successful
-preparation and integrity verdicts were not stubbed. Cheap refusal variants
-call the actual hydration adapter with a genuinely reconstructed synthetic
-marker; only the two positive cases run full F preparation. The changed
-pointer case also runs the real controller/probe validator with **4 separate
-synthetic original-input GETs** and **3 retained GETs**. Those original-input
-requests are not part of the hydration cap.
-
-Forbidden grading/private-write calls and private exception formatting stayed
-at **0** in the completed checks. Canary data stayed out of public JSON/stdout/
-stderr. SDK factories/environment were restored, scoped sessions closed and
-the issued native handle became unusable. Wrong-hash partial local input was
-preserved without a ready record or preparation. This proves synthetic protocol
-behavior, not historical LFS use, the bytes returned by a live server or a
-successful future hosted probe.
-
-### Earlier payload sources and retained artifacts
-
-- Base HEAD `2d99265ac79001506f7421485fed037bcad09a2a`, tree
-  `7971342e0743f570069f31d92241de43e85ac7f0`.
-- First tested HEAD `83ae63a52d3d299571df60c3afb1f6474bcac433`, tree
-  `1140e4d069487dfe600d67fb1a3d84fe080d9c88`.
-- Corrected tested HEAD `c62a7efbcf6922badaa70ae0b38a88041aec3b39`, tree
-  `e4e44f211612f59ac74bd16de9da8d5f41548330`. Only the new test's timeout
-  expectation differs from the first tested source.
-- First-proof directory `/tmp/native-task3-retained-payload.KtsYUj/`:
-  `pytest.log` **3970 bytes**, SHA256
-  `8480346cf6fc78e3869aa589e170d6ae6a8657a3a73510559aaaf313fb23f1df`;
-  `junit.xml` **16501 bytes**, SHA256
-  `8df569e7eb71487c4a381b03d8219799bc3584f9e6ad116cee726e333ee145e7`;
-  `reports.jsonl` **37173 bytes**, SHA256
-  `bbf0ffc7c5e700d75557b0c008f9947ff957879c7beed98e2288929fb42ef2a2`.
-- Follow-up directory `/tmp/native-task3-retained-payload-deadline.UXqu06/`:
-  `pytest.log` **1095 bytes**, SHA256
-  `da40fa580845fe55b7a469b16d063bac59a14eaf56fb7551ce8f350f2c3bdf3d`;
-  `junit.xml` **1963 bytes**, SHA256
-  `48beb9053dfe68340afb5f43cf1485b3363f4cc431e4bafcb3706e802f65148b`;
-  `reports.jsonl` **3823 bytes**, SHA256
-  `7eaa06f76844984c18eea9f880ad3e31babad009c191d4b6905d2d5ae38487a4`.
-- Both directories retain exact command/selection/source/outcome receipts and
-  JUnit case properties. At the original PR publication, only CHANGELOG,
-  LATEST and the direct README changed after the corrected payload proof.
-  The first directory's `final-source.json` seals that prior final HEAD
-  `e11048810176178cacefb2110df590d58f4a5e40`, tree
-  `2e500a8c4f5267bf7659ade376e4dcffa3ab8c12`, and its tested-code equality.
-  That [immutable publication record][payload-prior] remains separate from
-  this clock correction. No carrying-PR merge fact is recorded.
-
-### Historical refusal, fixed bindings and remaining gates
-
-Established [probe 37838315533][probe-run]/r5a1, job `113520972985`, used source
-`af31e3fa400e2b0bcd49d4949464c8bba948eb49`, tree
-`78551dadcd9592172ec12c414016939d1b9b3034`. Step 16 failed during **2026-10-08
-20:20:09..20:20:13 UTC**; source/request checks and completion validation/upload
-succeeded. Artifact `11576133610`, **1534 bytes**, SHA256
-`7f50e87a95798a2ee0a35aacb0ce37457c6eaf4c27af8b3e5996b860310d1f23`, binds request
-`79a7fb62a2ce9de6c2ab3cd1bcb8fc2f9bbb92146130cc52f59f2540308becfe` and exact
-C/R/F/result/cell. Environment/originals completed; intake/preparation started
-with `validation_refused` at `retained_deliverable_identity`; verified
-preparation is null. Grading, reuse and retry authority remain false. The
-returned bytes and historical LFS use remain unknown. Historical logs,
-artifacts and private bytes were not refetched.
-
-The fixed cell remains `gpt54_sandboxv2_codex_time_budget_v1` /
-`gpt54_time_budget_v1_codex_r1` / codex / repeat 1 /
-`2ea2e5b5-257f-42e6-a7dc-93763f28b19d`. Original R remains
-`33e24e9c1402ec0b7c92a71222998d1407646a92`, tree
-`6e67da4e12169b41a837d92eaf946db15e71010e`; F remains
-`882868ccf4e2ddeeab56cf7d02ba4ba9edba6fd2`, tree
-`45d024f15c8d4b90ec6c65a4dacdbaa16c41f9ca`. Output remains
-`d5aeecec1394fb44d4b1da33b1be38a39acdb89a`; result **8518 bytes**, SHA256
-`4ae3ea3d0dbe6ee540b86e3db17085e3a4d6f73afaf035c7f6f659f99b4601a4`.
-The **2 files / 408601 bytes** remain declarations, not genuine private contents
-verified here. Usage/cost/score remain unknown.
-
-Run **37756891578/r3a1** remains uncertain, spent and nonretryable; null public
-claim/entry/grade fields do not establish absent effects or known non-admission.
-Runs 1/2 remain separate proven bootstrap failures. All prior submissions stay
-spent. Metadata absence remains limited to two fixed objects at parent
-`82ed160109e40dcf74029f2be34a973350374fc6` at **2026-10-08 14:10:27 UTC**.
-No replay or historical reinterpretation follows from this implementation.
-
-The prior seven-case diagnostics proof, earlier incomplete probe proof and
-later targeted results remain separate in the [immutable prior record][prior].
-Prior review `5462314957` and its 11 successful checks accepted diagnostic HEAD
-`f34d0f4ef841913271cfbba82840827ed71998cc`, not this transport change. The
-current source review and CI gate are recorded above. Any later live probe
-needs a separate exact leader source/run-number/window/hash direction. The
-implementation and clock-correction worker did not query CI, dispatch, access
-private/live data, perform Azure management, model/grade, replay, Task5, next
-cell, merge or Project edits. The leader independently read the final checks.
-
-The complete catalog was consulted once. `experiment-report-en` preserves
-numeric units, provenance and uncertainty; `im-not-ai-en` checks English.
-Experiment-design does not apply because no study/configuration is changing;
-UI/animation skills do not apply because no interface work is involved. No
-unavailable specialist was retried and no endorsement is claimed. The earlier
-reporting reviewer failed before execution with HTTP 400 and supplied no review;
-it was not retried. Scoped literal checks and a direct condition audit cover
-this narrow records update.
-
-[payload-prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/e11048810176178cacefb2110df590d58f4a5e40/tasks/LATEST_TASK_RESULT/README.md
-[prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/2d99265ac79001506f7421485fed037bcad09a2a/tasks/LATEST_TASK_RESULT/README.md
-[probe-run]: https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/37838315533
+The complete skill catalog was consulted. `experiment-report-en` preserves
+measurement units, separate proof outcomes and synthetic limits;
+`im-not-ai-en` preserves those facts while copyediting the English record.
+No experiment redesign, UI work, specialist retry or model/account setting
+change was applicable or performed.
