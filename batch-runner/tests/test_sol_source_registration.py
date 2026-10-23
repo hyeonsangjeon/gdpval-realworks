@@ -23,6 +23,7 @@ import gpt56_foundry_evidence_intake as evidence
 import gpt56_pilot_identity_plan as identity
 import gpt56_pilot_input_capture as capture
 import gpt56_sol_codex_pilot_preflight as pilot
+import step8_grade as step8
 from core import azure_ai_clients, codex_azure_token
 
 
@@ -70,7 +71,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         monkeypatch.setattr(module, "DefaultAzureCredential", forbidden)
         monkeypatch.setattr(module, "get_bearer_token_provider", forbidden)
     for name in ("OpenAI", "AzureOpenAI", "AzureAIClientFactory"):
-        monkeypatch.setattr(azure_ai_clients, name, forbidden)
+        # Preserve classes used in evaluated annotations during imports.
+        monkeypatch.setattr(getattr(azure_ai_clients, name), "__init__", forbidden)
+    monkeypatch.setattr(step8.Grader, "__init__", forbidden)
     monkeypatch.setattr(codex_azure_token, "acquire_token", forbidden)
     for module, name in (
         (evidence, "publish_foundry_evidence"), (identity, "publish_pilot_identity"),
@@ -89,10 +92,23 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["run_id"] == original["pilot"]["run_id"]
     assert evidence._active_plan(plan_sha256=plan_sha, reviewed_source_sha=head)[0] == profile
 
-    # The actual identity compiler selects this source, but cannot invent the
-    # separate evidence bundle. It must refuse rather than emit a ready recipe.
-    with pytest.raises(identity.PilotIdentityRefused, match="^complete_evidence_arguments_required$"):
+    # The actual compiler selects this source, then preserves the frozen
+    # grader's refusal. A new execution source cannot silently re-pin its judge.
+    measured_hashes = []
+    compute_hash = step8.compute_grader_source_hash
+
+    def observed_hash(*args, **kwargs):
+        value = compute_hash(*args, **kwargs)
+        measured_hashes.append(value)
+        return value
+
+    monkeypatch.setattr(step8, "compute_grader_source_hash", observed_hash)
+    with pytest.raises(identity.PilotIdentityRefused, match="^grader_template_source_drift$"):
         identity.compile_pilot_identity(profile, reviewed_source_sha=head)
+    assert measured_hashes == ["b87877b47aab42d5b32f12222dfa515c8a94a08f316cbbe5e65cb13715c97cf4"]
+    assert profile["dispatch_grading_identity"]["grader_template_source_hash"] == (
+        "47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf"
+    )
 
     legacy, legacy_bytes, legacy_report = pilot.source_plan_snapshot()
     assert legacy == original and legacy_bytes == (root / pilot.ACTIVE_PLAN).read_bytes()
