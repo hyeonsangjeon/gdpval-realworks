@@ -1,0 +1,83 @@
+name: Agentic Sandbox V2 - GHCP Sol fixed-five dry-run
+
+# Local draft only. This route has no paid implementation or launch authority.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Must remain true; paid execution is not implemented or approved
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentic-v2-ghcp-sol-gate
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Refuse paid mode before checkout
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" != true ]]; then
+            echo "::error::Paid execution is not implemented or approved."
+            exit 2
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Derive the fixed public cohort without loading task inputs
+        id: plan
+        run: |
+          set -euo pipefail
+          matrix="$(python3 batch-runner/ghcp_sol_actions_gate.py --matrix)"
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+
+  task:
+    name: Dry capture - ${{ matrix.task_id }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Exercise the model-free capture path
+        env:
+          TASK_ID: ${{ matrix.task_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 60s \
+            python3 batch-runner/ghcp_sol_actions_gate.py \
+              --dry-run "$DRY_RUN" --task-id "$TASK_ID" \
+              --state-root "$RUNNER_TEMP/ghcp-sol-gate"
+      # Never upload the state directory, raw transcripts, inputs or outputs.
+      - name: Keep only the generated nonsecret capture envelope
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-sol-dry-capture-${{ matrix.task_id }}
+          path: ${{ runner.temp }}/ghcp-sol-gate/${{ matrix.task_id }}/capture.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false

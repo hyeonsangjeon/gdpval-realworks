@@ -11,6 +11,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a local-only GHCP GPT-5.6 Sol / Codex agent / Max / 1M Actions
+  gate draft under the existing Agentic Sandbox V2 workflow path: fixed
+  five-task matrix, one `ubuntu-24.04` job per task, and a model-free
+  plan/capture runner. Paid mode refuses before capture; no secrets, input
+  downloads or model/grader clients are wired. Only generated `capture.json`
+  metadata is artifact-eligible, never private inputs or raw streams.
+  Requested settings are not served evidence; dry-run served values are
+  `not available`. Local validation: **6 new contract tests passed**, **114
+  existing cohort/gate tests passed**, and **5 CLI dry-run captures** completed
+  with zero model/grader calls and no private input reads. See
+  [scope, survey and paid-run blockers](docs/ghcp-sol-actions-gate.md).
+  The specialist review could not start because its configured model was
+  unavailable; no reviewed-head approval is claimed. No push, workflow
+  dispatch, paid call or private handoff access was performed or authorized.
+
 ### Fixed
 
 - Accept retained-payload source HEAD
