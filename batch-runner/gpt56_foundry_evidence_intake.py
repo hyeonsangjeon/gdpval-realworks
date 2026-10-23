@@ -130,10 +130,14 @@ def _local_file(path: Path, **expected: Any) -> bytes:
     return _read_bytes(path, **expected)
 
 
-def _active_plan() -> tuple[dict[str, Any], dict[str, Any]]:
-    # The verifier is deliberately tied to its own source checkout. The caller's
-    # SHA is a separate externally reviewed binding, not Git discovery here.
-    plan = yaml.safe_load(_read_bytes(pilot.ROOT / pilot.ACTIVE_PLAN))
+def _active_plan(
+    *, plan_sha256: str | None = None, reviewed_source_sha: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    # Default callers retain the original contract. A different sealed plan
+    # must be the fixed prospective profile at the caller-reviewed Git source.
+    plan, _, _ = pilot.source_plan_snapshot(
+        expected_plan_sha256=plan_sha256, reviewed_source_sha=reviewed_source_sha,
+    )
     _require(type(plan) is dict and set(plan.get("source_pins", {})) == pilot.REQUIRED_SOURCES,
              "active_source_pin_set")
     for name, digest in plan["source_pins"].items():
@@ -156,7 +160,9 @@ def _inventory(root: Path, names: set[str], *, published: bool) -> None:
 
 def _compile(root: Path, reviewed_source_sha: str, as_of: str, *, published: bool = False) -> FoundryEvidenceBundle:
     root = _root(root)
-    plan, schema = _active_plan()
+    intake_data = _local_file(root / INTAKE_PATH)
+    intake = _json(intake_data)
+    plan, schema = _active_plan(plan_sha256=intake.get("plan_sha256"), reviewed_source_sha=reviewed_source_sha)
     _require(type(reviewed_source_sha) is str and re.fullmatch(r"[0-9a-f]{40}", reviewed_source_sha) is not None,
              "reviewed_full_sha_required")
     _require(reviewed_source_sha not in {
@@ -164,8 +170,6 @@ def _compile(root: Path, reviewed_source_sha: str, as_of: str, *, published: boo
         plan["dataset"]["revision"], plan["grading"]["source_sha"], "0" * 40,
     }, "historical_sha_is_not_reviewed_source")
     evaluated = _time(as_of)
-    intake_data = _local_file(root / INTAKE_PATH)
-    intake = _json(intake_data)
     _validate(schema, intake)
     _require(intake["reviewed_source_sha"] == reviewed_source_sha, "reviewed_sha_mismatch")
     _require(intake["plan_base_sha"] == plan["base_sha"] and intake["plan_sha256"] == pilot.seal(plan)
