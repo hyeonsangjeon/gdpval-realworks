@@ -11,6 +11,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a prospective source profile for the existing five-task Foundry Sol
+  pilot, without changing its study, run identity, historical registrations,
+  judge, limits or execution rights. The existing preflight checks an explicit
+  plan digest and caller-reviewed full Git commit, held paths, actual imported
+  source files and final rereads through the unchanged bounded Git helper.
+  Evidence, identity and capture readers select the same sealed profile.
+  All 58 source roles are retained; only the closed 12-role source delta is
+  allowed. No shared Git helper, core, grader, dependency or workflow file changes.
+  Prior HEAD `f3e0710a34b839b904aea2e2b1a16fded24546cf` has 11 successful CI
+  checks and no returned reviews; that does not approve this new source.
+  At `d02d8e08beab85d5c443baaf60f8036c2d7308d3` (tree
+  `f98cb5655170364854acdd0be32a8bffc1e76861`), the new selector reported
+  **1 failed in 3.45s**, exit **1**, outer **3.84s**. Its client-class trap
+  broke an evaluated import annotation. Preserve class types while trapping
+  construction, then retain the independently observed frozen-grader refusal.
+  Only the unresolved selector ran again at
+  `bf47d23a19a2285efac8381e1ac2a0d0361ade5d` (tree
+  `4eeeb3ded1d1c02e7e29a8703dd55eba7ef5c5fb`): **1 passed in 4.49s**, exit
+  **0**, outer **4.91s**, under **TERM120s/KILL5s**. The production code/profile
+  did not change between proofs. These are separate local pytest outcomes,
+  not a combined suite, CI durations or model results. The real source check
+  passes, but identity compilation still refuses `grader_template_source_drift`:
+  current full grader closure `b87877b47aab42d5b32f12222dfa515c8a94a08f316cbbe5e65cb13715c97cf4`
+  does not match frozen `47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf`.
+  Do not re-pin the judge to admit this runtime. A separate binding to the
+  unchanged frozen grader, new final-source review/CI and the remaining live
+  evidence/unused-right gates are still required. No live experiment was
+  started. The **47788-byte** code delta is SHA256
+  `161dc4929aaf07d77d8ec3cc03dba519d03d89809fce1c6fc9875feadac5789d`;
+  [current LATEST](tasks/LATEST_TASK_RESULT/README.md) records sources, commands,
+  separate log/JUnit hashes and synthetic limits. Task3 remains uncertain and
+  nonretryable; no prior receipt or finite right is reset.
+
 ### Fixed
 
 - Align the Foundry pilot's direct-account evidence, deployment binding and
@@ -44,13 +79,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   after the corrected boundary, then failed because local Python lacked
   `openai_codex`. No dependency was installed, test retried or previously
   passing selector rerun. No core, schema, registration, plan, grader, workflow,
-  dependency, budget or model/host setting changed. New final-HEAD CI is not claimed passed;
-  owner review and a separate approved runtime source binding remain required.
+  dependency, budget or model/host setting changed in that correction. Its
+  later HEAD `f3e0710a34b839b904aea2e2b1a16fded24546cf` has 11 successful checks
+  in backend `39815689425` and advance-check `39815689579`, with no returned
+  reviews. This does not relabel the local failure or approve the prospective
+  source profile added above. New final-source review/CI remain required.
   No live Sol experiment, private preparation, workflow dispatch, grading or
   finite-right reset follows. The prior connection diagnostic still has null
   served identity and unverified Max/Long1M, five-task performance and billing;
-  Task3 run 3 stays uncertain and nonretryable. The [current result](tasks/LATEST_TASK_RESULT/README.md)
-  records exact sources, separate proof limits, commands and log/JUnit hashes.
+  Task3 run 3 stays uncertain and nonretryable. The
+  [immutable prior result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f3e0710a34b839b904aea2e2b1a16fded24546cf/tasks/LATEST_TASK_RESULT/README.md)
+  retains exact sources, separate proof limits, commands and log/JUnit hashes.
 
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
