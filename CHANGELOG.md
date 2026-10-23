@@ -48,6 +48,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct PR #785's stale expected refusal message in
+  `test_active_grader_template_source_foundry_identity[stale_expected_hash]`.
+  The intentional sealed-plan selector rejects the changed plan earlier and
+  the compiler reports `pilot_identity_compile_refused`. The direct
+  `grader_template_source_drift` assertion, frozen hash and production guards
+  are unchanged. Reproduced the single failure from CI `39932101762` at
+  `dcf97b68663084b12472b8a8fd8d81799c47e938`; locally the test file passed
+  118 tests and the two workflow pilot-contracts selections passed 917 and
+  1537 tests separately. Missing pinned SDK dependencies were restored only
+  in session storage; the completed budget run used a token-free subprocess.
+  No push, new review approval, workflow dispatch or live execution occurred.
+  Final-source review/CI and the existing live-admission gates remain required.
+
 - Align the Foundry pilot's direct-account evidence, deployment binding and
   capture gates with the existing `direct-v1` connection contract. An explicit
   project null no longer requires a child-project ID file; non-null project
