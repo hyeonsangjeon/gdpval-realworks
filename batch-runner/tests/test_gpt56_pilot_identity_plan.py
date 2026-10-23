@@ -423,7 +423,7 @@ def test_active_grader_template_source_foundry_identity(
         assert document["launch_allowed"] is document["full_220_allowed"] is False
         assert document["evidence_linkage"] is None
     else:
-        code = ("active_contract_mismatch" if change == "stale_expected_hash"
+        code = ("pilot_identity_compile_refused" if change == "stale_expected_hash"
                 else "grader_template_source_drift")
         with pytest.raises(identity.PilotIdentityRefused, match=code):
             identity.compile_pilot_identity(plan)

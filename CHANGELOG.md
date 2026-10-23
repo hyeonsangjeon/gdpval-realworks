@@ -11,7 +11,102 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a prospective source profile for the existing five-task Foundry Sol
+  pilot, without changing its study, run identity, historical registrations,
+  judge, limits or execution rights. The existing preflight checks an explicit
+  plan digest and caller-reviewed full Git commit, held paths, actual imported
+  source files and final rereads through the unchanged bounded Git helper.
+  Evidence, identity and capture readers select the same sealed profile.
+  All 58 source roles are retained; only the closed 12-role source delta is
+  allowed. No shared Git helper, core, grader, dependency or workflow file changes.
+  Prior HEAD `f3e0710a34b839b904aea2e2b1a16fded24546cf` has 11 successful CI
+  checks and no returned reviews; that does not approve this new source.
+  At `d02d8e08beab85d5c443baaf60f8036c2d7308d3` (tree
+  `f98cb5655170364854acdd0be32a8bffc1e76861`), the new selector reported
+  **1 failed in 3.45s**, exit **1**, outer **3.84s**. Its client-class trap
+  broke an evaluated import annotation. Preserve class types while trapping
+  construction, then retain the independently observed frozen-grader refusal.
+  Only the unresolved selector ran again at
+  `bf47d23a19a2285efac8381e1ac2a0d0361ade5d` (tree
+  `4eeeb3ded1d1c02e7e29a8703dd55eba7ef5c5fb`): **1 passed in 4.49s**, exit
+  **0**, outer **4.91s**, under **TERM120s/KILL5s**. The production code/profile
+  did not change between proofs. These are separate local pytest outcomes,
+  not a combined suite, CI durations or model results. The real source check
+  passes, but identity compilation still refuses `grader_template_source_drift`:
+  current full grader closure `b87877b47aab42d5b32f12222dfa515c8a94a08f316cbbe5e65cb13715c97cf4`
+  does not match frozen `47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf`.
+  Do not re-pin the judge to admit this runtime. A separate binding to the
+  unchanged frozen grader, new final-source review/CI and the remaining live
+  evidence/unused-right gates are still required. No live experiment was
+  started. The **47788-byte** code delta is SHA256
+  `161dc4929aaf07d77d8ec3cc03dba519d03d89809fce1c6fc9875feadac5789d`;
+  [current LATEST](tasks/LATEST_TASK_RESULT/README.md) records sources, commands,
+  separate log/JUnit hashes and synthetic limits. Task3 remains uncertain and
+  nonretryable; no prior receipt or finite right is reset.
+
 ### Fixed
+
+- Correct PR #785's stale expected refusal message in
+  `test_active_grader_template_source_foundry_identity[stale_expected_hash]`.
+  The intentional sealed-plan selector rejects the changed plan earlier and
+  the compiler reports `pilot_identity_compile_refused`. The direct
+  `grader_template_source_drift` assertion, frozen hash and production guards
+  are unchanged. Reproduced the single failure from CI `39932101762` at
+  `dcf97b68663084b12472b8a8fd8d81799c47e938`. Fresh verification at fix commit
+  `cee9111d998f08015d767fb9fb2ad7be5326ee45`, its direct child, passed the
+  changed file's 118 tests and the two CI selections' 917 and 1537 tests
+  separately, with zero test failures. The initial budget attempt had
+  71 passes and one missing-SDK setup error; restoring the pinned SDK only
+  in session storage resolved it. All runs used credential-free, offline
+  subprocesses. The owner authorized fast-forward delivery on the existing
+  branch only, not merge or benchmark execution. Production guards remain
+  unchanged; new automatic CI, final-source review and the existing live
+  admission gates remain required.
+
+- Align the Foundry pilot's direct-account evidence, deployment binding and
+  capture gates with the existing `direct-v1` connection contract. An explicit
+  project null no longer requires a child-project ID file; non-null project
+  evidence still requires its exact ID file. Account/deployment identity,
+  hashes, source checks, upstream rereads and all launch restrictions remain.
+  The four production modules and new regression match the previously tested
+  **25287-byte** patch SHA256
+  `5d17c6916b25630bc124c657f2ddd2dc6f601f783e322b0c38fa4b999b49bf3e`.
+  Local integration review added four exact source-refusal assertions to the
+  existing guard; no historical pin was changed to admit the candidate.
+  At tested HEAD `6dab6b151b7b70127ab35a0e96b324bc6e005116`, tree
+  `229b128b871c084314a78a9da6d6e5095cdb7ccd`, only the two directly affected
+  guard variants ran: **2 passed in 3.04s**, exit **0**, outer wall **3.36s**,
+  under **TERM120s/KILL5s**. The earlier launcher exit **127**, **1 failed in
+  16.86s** and corrected **1 passed in 42.07s** remain separate; the completed
+  regression was not rerun. Final review at
+  `fbdac81a462e0328f3c015d8a89be0b689a4ea7d` found **9 successful and 2 failed
+  checks**, with no recorded owner review. CI `39772172623` reported
+  **1 failed, 13396 passed, 64 skipped, 46 deselected, 1 warning in 1753.62s**
+  in job `119802154544`, and **1 failed, 1462 passed in 1797.48s** in job
+  `119802154502`; these are separate pytest elapsed times, not job durations.
+  Preserve the fixed workflow and partition assertions by renaming the new
+  regression to `test_direct_account_pilot_binding.py` without byte changes;
+  add the four exact source refusals to the remaining comparison guard.
+  At correction HEAD `077b3e37cc9116503c143ad58b5f7427d1eeab03`, tree
+  `c73f32e97c762e1e4163d7d82bc882f517f23557`, one bounded two-node invocation
+  reported **1 failed, 1 passed in 28.69s**, exit **1**, outer wall **29.17s**.
+  The source-boundary node passed; the partition node reached nested collection
+  after the corrected boundary, then failed because local Python lacked
+  `openai_codex`. No dependency was installed, test retried or previously
+  passing selector rerun. No core, schema, registration, plan, grader, workflow,
+  dependency, budget or model/host setting changed in that correction. Its
+  later HEAD `f3e0710a34b839b904aea2e2b1a16fded24546cf` has 11 successful checks
+  in backend `39815689425` and advance-check `39815689579`, with no returned
+  reviews. This does not relabel the local failure or approve the prospective
+  source profile added above. New final-source review/CI remain required.
+  No live Sol experiment, private preparation, workflow dispatch, grading or
+  finite-right reset follows. The prior connection diagnostic still has null
+  served identity and unverified Max/Long1M, five-task performance and billing;
+  Task3 run 3 stays uncertain and nonretryable. The
+  [immutable prior result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f3e0710a34b839b904aea2e2b1a16fded24546cf/tasks/LATEST_TASK_RESULT/README.md)
+  retains exact sources, separate proof limits, commands and log/JUnit hashes.
 
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
