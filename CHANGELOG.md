@@ -26,6 +26,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Align the two remaining Task4 time-budget guards with the existing backend
+  workflow: require exactly 13 unique comparison test files and refresh the
+  retention guard's exact workflow digest without weakening any assertion.
+  The requested guards plus related workflow hash/partition contracts passed
+  locally: **172 passed in 42.21s**, after restoring repository-pinned Codex
+  dependencies for child collection. New PR CI and owner review remain pending;
+  no workflow or production code changed and no experiment or private Task4
+  read ran.
+
 - Assign Task4's new GPT-5.4 control-reader test file to the backend
   `comparison-contracts` job and exclude it from core `pytest`. Update the
   13-file inventory, workflow hash and exact historical reconstruction without

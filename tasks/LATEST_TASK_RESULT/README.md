@@ -1,32 +1,33 @@
 # Latest task result
 
-## Task4 backend comparison-contract partition fix
+## Task4 time-budget guard alignment
 
-Scope: fix PR #786's partition failure at baseline
-`907a252483b74b841bd6987f7b25efe929a57e10`, only in the designated publication
-worktree on `leader/task4-control-reader-20261023`.
+Scope: repair the two stale guards reported in PR #786's backend CI run
+`40015357524`, job `120625917401`, after baseline
+`88d757fd9ed3b3f23dac700246b13d64f901712c`. Work is confined to the designated
+`task4-control-reader-publish-20261023` worktree on
+`leader/task4-control-reader-20261023`.
 
-The new `test_gpt54_time_budget_v2_task4_control_readout.py` made the comparison
-inventory 13, but neither backend job list included it. Add it to
-`comparison-contracts` and exclude it from core `pytest`; update the exact
-inventory count, current workflow hash and historical reconstruction. The
-partition and historical-baseline guards remain enforced. No reader code changed.
+Update only the owned-host comparison inventory expectation from 12 to 13 and
+the retention guard's exact workflow hash (after removing its one retention
+option) to
+`58ecfccbacc6a887780b821692d07b8e03bf6eac120b703ffdf1d9bab600a3a4`.
+Uniqueness, exact reconstruction, retention behavior and all other assertions
+remain intact. No workflow or production code changed.
 
-Verification: reproduced the exact `13 == 12` failure. Ran
-`python3 -m pytest -m 'not integration' --tb=short -q -rs
+Verification: searched tests for the old hash, `== 12` and backend workflow
+hash references. In `batch-runner`, ran `python3 -m pytest -m "not integration"
+-q tests/test_time_budget_owned_host_ci.py
+tests/test_time_budget_tmp_path_retention.py
 tests/test_a_test_file_nobody_runs_is_not_a_test.py
-tests/test_ghcp_vm_gate_contract.py tests/test_gpt54_*.py` in `batch-runner`:
-**1592 passed, 1 failed, 74 errors** in 2011.31s. All unresolved nodes were
-blocked by missing `openai_codex`; after installing the repository-pinned
-`openai-codex==0.147.0` and CLI binary into a worktree-local test directory,
-the same selection with `--lf --lfnf=none` and that directory on `PYTHONPATH`
-reported **75 passed, 239 deselected** in 39.39s. Thus all **1667 selected
-nodes** passed across the runs. The exact originally failing node also passed
-separately after dependency restoration (**1 passed**, 31.70s).
+tests/test_ghcp_vm_gate_contract.py`: **172 passed in 42.21s**.
+The first run reported **171 passed, 1 failed** because the partition guard's
+child collection lacked `openai_codex`. The passing rerun used temporary
+worktree-local installations of repository-pinned `openai-codex==0.147.0`
+and `openai-codex-cli-bin==0.147.0` on `PYTHONPATH`.
 
-Reviewed head SHA: none supplied for this CI-only fix; baseline above is not
-claimed as review approval. The required workflow-review agent could not start
-because its configured model was unavailable; no agent approval is claimed.
-Remaining work: new PR CI and owner review. No merge, experiment run, workflow
-dispatch, model/grader call or private Task4 read was performed. Records stop
-at pre-merge facts.
+Reviewed head SHA: no review gate or reviewed head supplied for this test-only
+follow-up; the baseline is not review approval.
+Remaining work: new PR CI and owner review. No merge, manual workflow dispatch,
+experiment run, model/grader call or private Task4 read was performed. Records
+stop at pre-merge facts.
