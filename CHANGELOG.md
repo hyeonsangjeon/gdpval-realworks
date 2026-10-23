@@ -11,6 +11,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Publish the fixed native Task4 control-reader candidate for model-free
+  preparation only: its workflow, reader and tests. The code-only diff against
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002` is exactly **65085 bytes**,
+  SHA256 `c425815593f26e73190923aac699b70140a7251246d3edaf930a44488ed44baf`,
+  independently reproduced from the candidate and staged publication patch.
+  Earlier passing tests and reviews are leader-reported, not rerun here;
+  no reviewed candidate commit SHA was supplied because it was unpublished.
+  Publication still requires owner review and PR CI. This is not a benchmark
+  observation or canonical Task4 result. No workflow dispatch, private Task4
+  read, model/grader call or merge is authorized or performed by publication.
+
 ### Fixed
 
 - Accept retained-payload source HEAD
