@@ -26,6 +26,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Assign Task4's new GPT-5.4 control-reader test file to the backend
+  `comparison-contracts` job and exclude it from core `pytest`. Update the
+  13-file inventory, workflow hash and exact historical reconstruction without
+  weakening the partition guard. Reproduced `13 == 12`; all 1667 comparison
+  and related guard nodes passed across local runs (1592 initially, then 75
+  dependency-blocked nodes after restoring pinned Codex packages). New PR CI
+  and owner review remain pending; no experiment or private Task4 read ran.
+
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
   `b6702c679134f90b15a3f58fdacfbccd38522074`, after direct owner review

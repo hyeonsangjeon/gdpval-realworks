@@ -1,34 +1,32 @@
 # Latest task result
 
-## Native Task4 control-reader candidate publication
+## Task4 backend comparison-contract partition fix
 
-Scope: publish the fixed, model-free control-reader preparation candidate from
-a new isolated worktree on `leader/task4-control-reader-20261023`, based on
-`6efe99cbd40bb839037e7a20711a734e0a4ce002`, for a draft PR targeting `main`.
-The candidate worktree and user checkout remain unchanged.
+Scope: fix PR #786's partition failure at baseline
+`907a252483b74b841bd6987f7b25efe929a57e10`, only in the designated publication
+worktree on `leader/task4-control-reader-20261023`.
 
-The three code files are:
+The new `test_gpt54_time_budget_v2_task4_control_readout.py` made the comparison
+inventory 13, but neither backend job list included it. Add it to
+`comparison-contracts` and exclude it from core `pytest`; update the exact
+inventory count, current workflow hash and historical reconstruction. The
+partition and historical-baseline guards remain enforced. No reader code changed.
 
-- `.github/workflows/gpt54-time-budget-task4-control-readout.yml`
-- `batch-runner/gpt54_time_budget_v2_task4_control_readout.py`
-- `batch-runner/tests/test_gpt54_time_budget_v2_task4_control_readout.py`
+Verification: reproduced the exact `13 == 12` failure. Ran
+`python3 -m pytest -m 'not integration' --tb=short -q -rs
+tests/test_a_test_file_nobody_runs_is_not_a_test.py
+tests/test_ghcp_vm_gate_contract.py tests/test_gpt54_*.py` in `batch-runner`:
+**1592 passed, 1 failed, 74 errors** in 2011.31s. All unresolved nodes were
+blocked by missing `openai_codex`; after installing the repository-pinned
+`openai-codex==0.147.0` and CLI binary into a worktree-local test directory,
+the same selection with `--lf --lfnf=none` and that directory on `PYTHONPATH`
+reported **75 passed, 239 deselected** in 39.39s. Thus all **1667 selected
+nodes** passed across the runs. The exact originally failing node also passed
+separately after dependency restoration (**1 passed**, 31.70s).
 
-Verification: the candidate code-only patch and the independently staged
-publication diff both contain exactly **65085 bytes**, SHA256
-`c425815593f26e73190923aac699b70140a7251246d3edaf930a44488ed44baf`.
-The source candidate has five modified/untracked files; its two documentation
-changes were excluded from that patch. These completion records are separate
-publication updates, not part of the sealed three-file code patch.
-
-The leader reports earlier passing tests and reviews. They were not rerun.
-Reviewed head SHA: no candidate commit SHA was supplied; the reviewed candidate
-was an unpublished patch, identified above by its exact base and patch hash.
-The publication commit is not represented as owner-reviewed.
-
-This is preparation code, not an executed control read, benchmark observation,
-grade or canonical Task4 result. No private Task4 read, workflow dispatch,
-model/grader call, credential inspection or merge was performed.
-
-Remaining work: PR CI and owner review of the publication head. Merge is not
-authorized. Any later execution needs separate authorization. These records
-stop at pre-merge facts and do not record the carrying PR's merge state.
+Reviewed head SHA: none supplied for this CI-only fix; baseline above is not
+claimed as review approval. The required workflow-review agent could not start
+because its configured model was unavailable; no agent approval is claimed.
+Remaining work: new PR CI and owner review. No merge, experiment run, workflow
+dispatch, model/grader call or private Task4 read was performed. Records stop
+at pre-merge facts.
