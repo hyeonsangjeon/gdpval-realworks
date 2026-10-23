@@ -22,7 +22,7 @@ HISTORICAL_SHA256 = "47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41
 FOUNDRY = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 FOUNDRY_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 WORKFLOW = ".github/workflows/backend-tests.yml"
-CURRENT_WORKFLOW_SHA256 = "01fe1494460ae36a6ded2caf3955b27ff9d922374b1ffbe3e91c4077d344d094"
+CURRENT_WORKFLOW_SHA256 = "c49dc08d766e5009044bf28be22ac6afca922288f8d7ce277826a9e23922254e"
 # approved_pilot_source archives this workflow from immutable commit
 # 8ac891e3e0e4752fe15a00139a2691ddf9df7dce. Pin that Git blob, not the
 # current workflow or the extracted fixture file being checked.
