@@ -54,12 +54,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   the compiler reports `pilot_identity_compile_refused`. The direct
   `grader_template_source_drift` assertion, frozen hash and production guards
   are unchanged. Reproduced the single failure from CI `39932101762` at
-  `dcf97b68663084b12472b8a8fd8d81799c47e938`; locally the test file passed
-  118 tests and the two workflow pilot-contracts selections passed 917 and
-  1537 tests separately. Missing pinned SDK dependencies were restored only
-  in session storage; the completed budget run used a token-free subprocess.
-  No push, new review approval, workflow dispatch or live execution occurred.
-  Final-source review/CI and the existing live-admission gates remain required.
+  `dcf97b68663084b12472b8a8fd8d81799c47e938`. Fresh verification at fix commit
+  `cee9111d998f08015d767fb9fb2ad7be5326ee45`, its direct child, passed the
+  changed file's 118 tests and the two CI selections' 917 and 1537 tests
+  separately, with zero test failures. The initial budget attempt had
+  71 passes and one missing-SDK setup error; restoring the pinned SDK only
+  in session storage resolved it. All runs used credential-free, offline
+  subprocesses. The owner authorized fast-forward delivery on the existing
+  branch only, not merge or benchmark execution. Production guards remain
+  unchanged; new automatic CI, final-source review and the existing live
+  admission gates remain required.
 
 - Align the Foundry pilot's direct-account evidence, deployment binding and
   capture gates with the existing `direct-v1` connection contract. An explicit

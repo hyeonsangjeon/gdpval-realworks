@@ -1,11 +1,14 @@
 # Latest task result
 
-## PR #785 pilot-contracts refusal-message regression corrected locally
+## PR #785 CI correction verified for owner-approved fast-forward delivery
 
-Scope: diagnose CI run `39932101762` at
-`dcf97b68663084b12472b8a8fd8d81799c47e938` on
-`codex/gpt56-direct-account-contract-20261022`. Work was confined to the
-direct-account integration worktree. No push or remote mutation was performed.
+Scope: verify and deliver the existing CI correction on
+`codex/gpt56-direct-account-contract-20261022`, as explicitly authorized by
+the owner. The clean direct-account integration worktree has tested commit
+`cee9111d998f08015d767fb9fb2ad7be5326ee45` directly atop the inspected remote
+head `dcf97b68663084b12472b8a8fd8d81799c47e938`; delivery is fast-forward only.
+The user checkout is unchanged. Only these two completion records were updated
+after the new local verification.
 
 Cause: the intentional source-profile change in
 `d02d8e08beab85d5c443baaf60f8036c2d7308d3` passes the supplied plan's seal
@@ -20,51 +23,50 @@ to `pilot_identity_compile_refused`. The same test still directly requires
 frozen grader hash, source checks, launch restrictions and all other test
 assertions are unchanged; no skip or xfail was added.
 
-### Local verification
+### Fresh local verification
 
-Python 3.10.12, pytest 9.1.1; commands below run from `batch-runner/`.
+Python 3.10.12, pytest 9.1.1, at tested commit
+`cee9111d998f08015d767fb9fb2ad7be5326ee45`. Each subprocess used an empty
+inherited environment, explicit system PATH, offline Hub/dataset settings,
+disabled plugin autoload and no pytest cache. No credential values were read.
 
-```bash
-python3 -m pytest 'tests/test_gpt56_pilot_identity_plan.py::test_active_grader_template_source_foundry_identity[stale_expected_hash]' -q
-# Before the fix: 1 failed in 5.71s; same regex mismatch as CI.
-python3 -m pytest tests/test_gpt56_pilot_identity_plan.py -q
-# After the fix: 118 passed in 21.93s.
-python3 -m pytest -m "not integration" --tb=short -q -rs tests/test_gpt56_evidence_preflight_gate.py tests/test_gpt56_foundry_evidence_intake.py tests/test_gpt56_pilot_config_bundle.py tests/test_gpt56_pilot_deployment_binding.py tests/test_gpt56_pilot_identity_plan.py tests/test_gpt56_pilot_input_bundle.py tests/test_gpt56_pilot_input_capture.py
-# After the fix: 917 passed in 450.87s.
-budget_contract_files=()
-for budget_contract_file in tests/test_codex_budget_pilot*.py; do
-  case "$budget_contract_file" in
-    tests/test_codex_budget_pilot*readout*.py) ;;
-    *) budget_contract_files+=("$budget_contract_file") ;;
-  esac
-done
-(( ${#budget_contract_files[@]} > 0 ))
-python3 -m pytest -m "not integration" --tb=short -q -rs "${budget_contract_files[@]}"
-# After the fix: 1537 passed in 5294.29s.
-```
+| Selection | Result | pytest elapsed |
+| --- | --- | ---: |
+| Complete changed identity test file, including `stale_expected_hash` | 118 passed, 0 failed | 16.36s |
+| Exact seven-file CI "Run pilot contracts" selection | 917 passed, 0 failed | 485.21s |
+| Exact CI budget-pilot file selection, excluding readout files | 1537 passed, 0 failed, 3 warnings | 5129.92s |
 
-The initial `python` command was unavailable; `python3` was used instead.
-The first budget attempt was stopped after missing `openai_codex` setup errors;
-a narrow diagnostic reported **1 error**. The repository-pinned
+These are separate invocations, not unique-test totals or model measurements.
+Commands ran from `batch-runner/` using `python3 -m pytest -m "not integration"
+-o addopts= -p no:cacheprovider --tb=short -q`, with `-rs` for CI selections
+and `-x` for the budget selection. Both CI file selections match
+`.github/workflows/backend-tests.yml`; no workflow was changed.
+
+The initial budget attempt stopped at **71 passed, 1 setup error in 91.22s**
+because the local environment lacked `openai_codex`. The repository-pinned
 `openai-codex==0.147.0` and `openai-codex-cli-bin==0.147.0` dependencies were
-installed into session-local storage, not the repository or shared Python
-environment. A second budget attempt was stopped after inherited-token guard
-failures; a narrow diagnostic reported **1 failed** with
-`input_or_output_token_in_execution_environment`. For the completed budget
-run, the four named Hub/GitHub token variables were unset in the test subprocess
-without inspecting their values, and the session-local dependencies were made
-available through `PYTHONPATH`. Interrupted attempts have no complete-suite
-verdict and are not included in the passing counts.
+restored only under this session's `files/test-deps/`, then exposed through
+`PYTHONPATH` for the successful full rerun. No dependency manifest or shared
+environment changed. The three successful-run warnings concern pytest
+`record_property` with JUnit xunit2, not test failures.
+
+Logs and JUnit reports are retained under
+`/home/dev/.copilot/session-state/cc2a9ac6-2d8f-48e3-b68e-6a87c5d035e1/files/`
+as `identity-tests.*`, `pilot-contracts.*`, `budget-contracts.*` (initial
+dependency failure) and `budget-contracts-restored.*` (successful rerun).
 
 ### Evidence boundary and remaining work
 
-The inspected CI head is `dcf97b68663084b12472b8a8fd8d81799c47e938`;
-it is not final-source review approval. No new review was requested or claimed.
-The tested code delta is one expected-message line; the two required completion
-records were updated after validation. The local commit identity is
-`hyeonsangjeon <wingnut0310@gmail.com>`, with no trailers.
+The inspected failing CI head is
+`dcf97b68663084b12472b8a8fd8d81799c47e938` (run `39932101762`).
+The newly inspected and tested fix head is
+`cee9111d998f08015d767fb9fb2ad7be5326ee45`; neither inspection nor the
+owner's push authorization is final-source review approval. No new review
+approval is claimed. The code delta remains one expected-message line;
+all other delivery changes are completion documentation.
 
-No workflow was dispatched and no model, grader or credential acquisition was
-invoked. Push approval remains absent. Final-source review/CI and the existing
-frozen-grader binding and live-admission gates remain unresolved; these offline
-tests do not authorize benchmark execution or change any spent/uncertain right.
+Only the approved branch push is authorized; no merge, manual workflow
+dispatch, paid model/grader call or secret-value access is part of this task.
+New automatic CI and final-source review, plus the existing frozen-grader
+binding and live-admission gates, remain required. These offline tests do not
+authorize benchmark execution or change any spent/uncertain right.
