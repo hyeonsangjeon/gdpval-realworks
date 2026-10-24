@@ -360,3 +360,31 @@ def test_pinned_python_sdk_passes_the_observed_url_to_the_cli_not_python_http(mo
     assert args[-5:] == ["--config", override, "app-server", "--listen", "stdio://"]
     assert kwargs["encoding"] == "utf-8"
     assert len(observed) == 1  # Process creation was trapped, not executed.
+
+
+def test_close_interrupts_incomplete_local_headers(monkeypatch):
+    capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+    accepted = threading.Event()
+    original = capture.server.get_request
+
+    def get_request():
+        result = original()
+        accepted.set()
+        return result
+
+    monkeypatch.setattr(capture.server, "get_request", get_request)
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        client.settimeout(0.2)
+        client.connect(("127.0.0.1", capture.server.server_port))
+        assert accepted.wait(1)
+        client.sendall(b"POST /incomplete HTTP/1.1\r\nHost: fixture\r\n")
+        capture.close()
+        assert client.recv(1) == b""
+        assert capture.summary()["native_request_count"] == 0
+        closed = capture.summary()
+        capture._response_finished(MODEL, None)
+        assert capture.summary() == closed
+    finally:
+        client.close()
+        capture.close()

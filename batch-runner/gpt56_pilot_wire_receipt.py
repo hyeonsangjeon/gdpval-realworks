@@ -193,6 +193,7 @@ class _ProviderHTTPObservation:
         self.requests = self.finished = 0
         self.model = self.model_reason = self.count_reason = None
         self.connections = set()
+        self.inbound = set()
         self.route = "/" + uuid.uuid4().hex
         owner = self
 
@@ -208,6 +209,13 @@ class _ProviderHTTPObservation:
             def send_error(self, *_args, **_kwargs):
                 owner.unsupported(self)
 
+            def finish(self):
+                try:
+                    super().finish()
+                finally:
+                    with owner.lock:
+                        owner.inbound.discard(self.connection)
+
         class Server(ThreadingHTTPServer):
             daemon_threads = True
             block_on_close = False
@@ -215,7 +223,9 @@ class _ProviderHTTPObservation:
             def get_request(self):
                 connection, address = super().get_request()
                 try:
-                    connection.settimeout(owner.remaining())
+                    with owner.lock:
+                        connection.settimeout(owner.remaining())
+                        owner.inbound.add(connection)
                 except Exception:
                     connection.close()
                     raise OSError("observer_unavailable") from None
@@ -224,7 +234,8 @@ class _ProviderHTTPObservation:
             def handle_error(self, *_args):
                 # socketserver's default prints raw request exceptions.
                 with owner.lock:
-                    owner.count_reason = "unsupported_native_route"
+                    if not owner.closed:
+                        owner.count_reason = "unsupported_native_route"
 
         self.server = Server(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever,
@@ -260,7 +271,8 @@ class _ProviderHTTPObservation:
 
     def unsupported(self, handler):
         with self.lock:
-            self.count_reason = "unsupported_native_route"
+            if not self.closed:
+                self.count_reason = "unsupported_native_route"
         self._empty(handler, 400)
 
     def forward(self, handler):
@@ -309,6 +321,8 @@ class _ProviderHTTPObservation:
             response = connection.getresponse()
             if 300 <= response.status < 400:
                 reason = "redirect_refused"
+                self._response_finished(None, reason)
+                started = False
                 self._empty(handler)
                 return
             parser = _ResponseModel(response.getheader("Content-Type", ""),
@@ -342,6 +356,9 @@ class _ProviderHTTPObservation:
             handler.wfile.write(b"0\r\n\r\n")
         except Exception as error:
             reason = "deadline_exceeded" if isinstance(error, TimeoutError) else "transport_failed"
+            if started:
+                self._response_finished(None, reason)
+                started = False
             if response_started:
                 handler.close_connection = True
             else:
@@ -357,6 +374,8 @@ class _ProviderHTTPObservation:
 
     def _response_finished(self, model, reason):
         with self.lock:
+            if self.closed:
+                return  # A late worker cannot upgrade an already-closed report.
             self.finished += 1
             if reason is not None:
                 self.model_reason = reason
@@ -371,6 +390,13 @@ class _ProviderHTTPObservation:
                 return
             self.closed = True
             connections = tuple(self.connections)
+            inbound = tuple(self.inbound)
+        for stream in inbound:
+            try:
+                stream.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            stream.close()
         for connection, inbound, *upstream in connections:
             for stream in (connection.sock, inbound, *upstream):
                 if stream is not None:
