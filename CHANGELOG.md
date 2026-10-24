@@ -21,9 +21,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   native usage. Record the historical baseline's `gpt-5.4` deployment versus
   the requested `gpt-5.6-sol` label, null deployment bindings, and unavailable
   diagnostic archive; actual deployment-name agreement remains unverified.
-  Draft/deployment contracts passed 165 tests; the clean-base source contract
-  passed one test separately after correctly refusing the dirty proposal
-  worktree. Native enforcement, owner approval, archived deployment evidence,
+  Final draft/deployment/source contracts passed 166 tests together at clean
+  proposal head `73d2a71f31ad78fdf90fa9a5e433412a019ed45b`, after the
+  source guard correctly refused the earlier dirty proposal worktree.
+  Native enforcement, owner approval, archived deployment evidence,
   frozen-grader/live gates and independent final-source review remain required.
   No model calls, workflow dispatches, grading or push.
 

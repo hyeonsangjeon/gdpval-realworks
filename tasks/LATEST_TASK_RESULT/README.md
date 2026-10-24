@@ -91,6 +91,15 @@ explicit PYTHONPATH resolved that without installing any dependencies.
 An earlier narrow selection separately passed seven tests; counts are not
 cumulative unique-test totals.
 
+After the proposal was committed and the worktree was clean, the combined
+selection above plus `tests/test_sol_source_registration.py` passed
+**166 passed, 0 failed (117.81s)** at
+`73d2a71f31ad78fdf90fa9a5e433412a019ed45b`.
+The real source-profile preflight therefore also passes at the proposal head,
+while preserving launch refusal and the frozen-grader blocker. This tested
+head is not an independently reviewed execution head. The subsequent
+completion-record update changes only this README and the changelog.
+
 ### Remaining work and boundary
 
 Owner approval of these provisional noncurrency caps and a USD cap; archived
