@@ -11,6 +11,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Enforce the five-task Foundry Sol pilot's **32-request per-attempt** forward
+  cap from the unchanged, hash-bound caps draft. The registered source plan's
+  native cap remains null; no plan value or launch gate is changed. Reserve
+  requests under the recorder lock, refuse the 33rd before upstream connection
+  creation, and close the recorder and owned SDK process. A missing listener
+  now refuses instead of bypassing the guard. Preserve the count of forwarded
+  attempts separately from blocked requests and retain the closed
+  `native_request_cap_exceeded` reason through the receipt and existing Step 2
+  projection. A missing runtime terminal acknowledgement stays null; preserve
+  partial/absent usage and prevent a raced SDK success from accepting the task.
+  At clean code/test HEAD `582bc4a4b21b2a5c7882db2be2e478f14b4b438e`, tree
+  `622a38e5686355b7fbc16ecd83a632438e10cd35`, collection found **97 tests in
+  2.03s**, outer **2.415s**, exit **0**. One **TERM120s/KILL5s** invocation
+  passed **97 tests, 0 failed in 6.44s**, outer **7.000s**, exit **0**, with no
+  warnings. It includes the authorized prior 81-node selection with directly
+  coupled assertion updates, the existing close regression, and 15 new cap
+  cases. Code patch **35113 bytes**, SHA256
+  `d9a61aa2374973b08dbd944eef2d1af022e56d3ca51ac2609ff0c69c91948a09`;
+  log SHA256 `86fedcb3055ab329f068b3b4f6c1dbfb01dca10d946818044f92c2b91d71d35b`;
+  JUnit SHA256 `ac732814b8e0f7f293b631b1f1f7e1e28ae06d038d78e4441d2915435655f6ca`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the command, hashes,
+  separate prior 81-test/socket-failure/corrected proofs, and remaining gates.
+  Synthetic provider/turns and the installed SDK closing a harmless local child
+  do not prove live Rust/Foundry behavior, billed usage or headroom under 32.
+  Task/pilot totals, token/spend caps, identity/frozen-source gates and new-source
+  review/CI remain open. No push, dispatch, paid call or grading; Task3 run
+  `37756891578` remains uncertain, spent and nonretryable.
+
 ### Added
 
 - Add an attempt-owned loopback observer for the five-task Foundry Sol pilot.
@@ -35,7 +65,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   HEAD `f017607fb1ae0dbd334c9a2b6ae4ffaa847b45a3`, tree
   `04e6e9f8ab27af6cee5ab27f0097738072d682d4`: **1 passed in 1.93s**, outer
   **2.306s**, exit **0**, with the same finite wrapper. Keep these proofs
-  separate; the initial 81 nodes were not rerun. The final **44416-byte** code
+  separate; the initial 81 nodes were not rerun for that socket correction.
+  The final **44416-byte** code
   patch is SHA256 `f01ceaec550887cd77e8586e1b42933504e238cf923caf29de2256aca2a953a5`.
   [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the exact command, hashes,
   source rationale and limitations. The SDK subprocess and upstream TLS were
