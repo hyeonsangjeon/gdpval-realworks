@@ -689,7 +689,8 @@ class _ProviderHTTPObservation:
                           runtime_caps=self._runtime_caps())
             result["native_request_count"] = self.requests if self.count_reason is None or self.cap_exceeded else None
             result["native_request_count_reason"] = None if self.cap_exceeded else self.count_reason
-            reason = self.count_reason or ("response_capture_incomplete" if self.finished != self.requests else
+            reason = self.count_reason or ("deadline_exceeded" if self.stop_reason == NATIVE_DEADLINE_EXCEEDED else
+                      "response_capture_incomplete" if self.finished != self.requests else
                       "no_provider_requests" if not self.requests else self.model_reason)
             result["served_model"] = self.model if reason is None else None
             result["served_model_reason"] = reason or ("response_model_not_returned" if self.model is None else None)
