@@ -4,6 +4,50 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Offline capture limits, 2026-10-25 00:15 KST
+
+The collector now stops reading supplied events at the existing Actions draft's
+1200-second deadline or its 65th documented `assistant.turn_start` event. This
+is **offline collection enforcement, not live GHCP task enforcement**. The route
+still has no GHCP-to-Codex adapter, model launcher or owned child process.
+`paid_execution_allowed` and `live_enforcement_verified` remain false.
+
+| Item | Before this change | After this change |
+| --- | --- | --- |
+| Wall-clock time | 1200 seconds/task was recorded only. The workflow already bounded a dry-run process to 60 seconds plus 5 seconds for forced termination, and a job to 5 minutes. | A local monotonic deadline and Linux real-time signal stop event collection with `task_timeout_exceeded`. The shorter workflow bounds are unchanged. No live task timeout is verified. |
+| Tool calls | No value in this Actions draft or the inert GHCP VM execution block. | Still undefined: null plus `value_not_defined`. No tool-call cap or `tool_call_cap_exceeded` claim is invented. |
+| Turns | 64 turns/task was recorded only. | The collector accepts at most 64 supplied turn-start events, including sub-agents, and stops on the 65th with `turn_cap_exceeded`. This does not prevent a historical turn or prove pre-call enforcement in a live adapter. |
+
+The deadline begins when event collection starts, not when a historical task
+started; setup and receipt writing are covered only by the existing workflow
+process bound. Event timestamps cannot reset it. A timer interrupts a blocked
+local iterator; unsupported platforms, non-main-thread callers or an existing
+timer refuse with `task_timeout_guard_unavailable` before reading events.
+Missing, malformed or duplicate turn identities refuse with
+`turn_count_unverified`. Turn-start counts are not native-request or usage-event
+counts, and a supplied stream without turn markers does not prove zero live
+turns. No limit or approval is borrowed from the separate Foundry/native pilot.
+
+The collector closes its explicit input generator and restores the signal
+handler/timer on exit. Cleanup failure yields `session_event_cleanup_refused`.
+The receipt identifies subprocess cleanup as not applicable because this route
+starts no subprocess; termination of actual GHCP children remains unimplemented
+and unverified. Adding a hypothetical launcher here would not close that gap.
+
+Missing usage and cost keep their nullable numeric fields. New `usage_status`
+and `cost_status` fields say `not available`, with fixed not-collected reasons.
+No zero, tariff calculation or other estimate is substituted. Grade stays null.
+Per-call model/effort/context observations remain settings only.
+
+One combined offline invocation on clean local source
+`6ab43d4c7198e9e720fabeac5cb0d796b68cc5c7` reported **231 passed, 0 failed in
+10.66s**, wrapper **10.841s**, exit **0**: **25 new** capture-limit checks plus
+**206 existing** Actions/VM gate checks. Fixtures test the 64/65-turn boundary,
+cumulative deadline and EOF, an accelerated real OS alarm at a blocked read,
+file closure, missing usage, unsafe timer ownership and canary non-egress.
+No model or child-runtime process was used. Exact sources, commands and proof
+hashes are in the [current task result](../tasks/LATEST_TASK_RESULT/README.md).
+
 ## Offline per-call capture, 2026-10-24 21:30
 
 The model-free capture path now projects supplied GHCP JSON session events
@@ -35,7 +79,8 @@ Every receipt retains `evidence_level: settings_only`,
 `stream_completeness_verified: false`. Consistent metadata is not proof of
 the actual served model, applied Max or a granted 1M window. Supplied usage
 event counts are not a native-request counter. The dry-run runner itself
-makes zero model/grader calls; usage, cost and grade stay null. Paid execution
+makes zero model/grader calls; usage, cost and grade stay null. Usage and cost
+now also carry the explicit availability statuses described above. Paid execution
 and retry authority remain false even for `consistent_settings_only`.
 
 The default matrix/capture commands still perform an empty, model-free
@@ -65,8 +110,10 @@ Source review then found the missing-agent-ID sub-agent edge above. A separate
 follow-up on the corrected source reports **7 passed, 0 failed in 0.23s**,
 wrapper **0.390s**, exit **0**: two new origin cases and five directly coupled
 context cases. These are separate proofs, not a pooled full-suite pass on the
-final source. No full suite or live session was run. Exact source, command and
-evidence hashes are in the [current task result](../tasks/LATEST_TASK_RESULT/README.md).
+final source. No full suite or live session was run. The original source,
+command and evidence hashes remain in local Git record
+`fe863326f996fe8708cd4098b7ec6ad7dd61905b:tasks/LATEST_TASK_RESULT/README.md`;
+they are not added to the new 231-case result.
 
 ## Evidence and authentication audit, 2026-10-24
 
@@ -264,8 +311,10 @@ served values. Local execution does not prove the requested hosted image ran.
 
 Proposed paid caps are 1200 seconds/task (the V2 stage cap), 64 model turns/task
 (draft choice), zero retries; neither approval nor live enforcement is claimed.
+The offline collector now applies the time/turn values only as described above.
 The dry-run workflow enforces 60 seconds/process and five minutes/job with
-zero model turns. Unknown usage/cost/grade stay null, never inferred as zero.
+zero model turns. Unknown usage/cost/grade stay null, never inferred as zero;
+usage and cost have explicit `not available` statuses.
 Both planner and task jobs independently reject every `dry_run` value except
 the exact string `true` before checkout. The Python entrypoint separately
 rejects false or malformed values before catalogue reads or capture writes.

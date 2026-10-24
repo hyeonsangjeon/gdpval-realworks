@@ -30,6 +30,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Bound the GHCP Sol gate's offline event collector using the unchanged
+  Actions draft values of **1200 seconds** and **64 turn starts**. Stop at
+  the deadline or the 65th turn event with fixed reasons, close the explicit
+  input stream and restore the signal timer. Unsupported timer ownership,
+  unverified turn identities and cleanup failures refuse. Tool-call cap value
+  remains undefined; no value is invented. Missing usage/cost remain null
+  with explicit `not available` statuses, never zero or estimated charges.
+  **Live task limits and GHCP subprocess cleanup remain unverified**: this
+  route has no live adapter or child launcher, and paid authority stays false.
+  One combined offline invocation on clean source
+  `6ab43d4c7198e9e720fabeac5cb0d796b68cc5c7` (tree
+  `7ac1c0ff646ccbf78a8c9389c26425d4da98df4b`) reports **231 passed, 0 failed
+  in 10.66s**, wrapper **10.841s**, exit **0**: 25 new and 206 existing
+  checks. The prior 204-case and seven-case proofs below remain separate.
+  No workflow, plan, cap value, pin, dependency or permission changed.
+  See the [limit audit](docs/ghcp-sol-actions-gate.md#offline-capture-limits-2026-10-25-0015-kst)
+  and [source, log/JUnit hashes and remaining gates](tasks/LATEST_TASK_RESULT/README.md).
+  Delivery is local only; no push, dispatch, model call or grading occurred.
+
 - Add closed per-call session-event projection to the existing model-free
   GHCP Sol Actions capture path. Record allowlisted model/effort and explicitly
   labelled same-agent session context metadata; fail missing, mismatched or
