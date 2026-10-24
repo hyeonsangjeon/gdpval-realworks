@@ -1,110 +1,139 @@
 # Latest task result
 
-## Native pilot request cap, local implementation only (2026-10-24)
+## Native pilot remaining caps: local guards, incomplete hard-limit coverage (2026-10-24)
 
-The attempt-owned loopback recorder now refuses the 33rd native HTTP request
-before opening an upstream connection. The authorized offline selection passed
-**97 tests, 0 failed**, with no warnings. This verifies local synthetic behavior,
-not a live Foundry or five-task pilot result. No push or launch occurred.
+The pilot now shares native-request counters across attempts and tasks, stops
+on reported token overruns with a fixed reason, and closes its listener and
+bound SDK process on the attempt deadline. These changes do **not** establish
+hard provider-token ceilings or a timeout covering synchronous SDK startup.
+No paid experiment, push, workflow dispatch or grading occurred.
+
+The first offline invocation reported **114 passed, 11 failed**. After two
+demonstrated corrections, only those **11 failed cases** ran again and passed.
+A separate late-usage correction then passed **2 new cases**. These are
+separate results, not a full passing suite at the final source.
 
 Worktree: `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`;
 branch: `codex/gpt56-native-pilot-caps-20261024`.
 The nested path supplied in the direction did not exist; the existing registered
 worktree matched the requested branch and full starting HEAD and was clean.
-Base HEAD `b43f7576e75e506f9e35c8c2cbe48a18b383dba1`, tree
-`1378c920b973119f3ba1a29947057974a6c1643f`.
-Clean tested code/test HEAD `582bc4a4b21b2a5c7882db2be2e478f14b4b438e`, tree
-`622a38e5686355b7fbc16ecd83a632438e10cd35`.
+Base HEAD `3dea2d6d2ba9b6bb92596e691e3ad53a78fa82a4`, tree
+`0b06bb0e62173c8bc304ee8c53d3787f9e910fab`.
+Initial clean tested HEAD `eaeef4861a3d9ebad805c2ba5c8443f02a4324d4`, tree
+`5a479cf5765ff1a648fa2523cfb41c4b09aebfed`.
+Corrected clean tested HEAD `c3012107e170dd7b0ba076733568078634b810d3`, tree
+`8b0e491bfc6c61c4a5130763251610a2e47c1a97`.
+Final code/test HEAD `0a53ee81c27ec79bdef72ffbdbd2f9c4e7f51b4c`, tree
+`a0e7a6b4cef37fc3a0708199dc726d56bbc51869`. Only these two completion records
+were dirty during the last proof; code and tests matched that commit exactly.
 The final local child commits only this record and CHANGELOG; its full identity
 is returned in the handoff. No independent review or CI covers this new source.
 
-### Enforcement and receipt meaning
+### Audit and implementation
 
-- `batch-runner/gpt56_pilot_wire_receipt.py:74` reads the existing 7343-byte caps
-  snapshot with exact SHA256
-  `7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`.
-  The per-attempt value is **32**. The registered source plan still declares
-  its native cap as `null`; the 32 is in the separate caps draft. This leader
-  direction authorizes enforcing that unchanged snapshot, not changing either
-  plan, approving spend, or claiming measured headroom. The runtime also refuses
-  a mismatch with the held reviewed caps evidence when that owner is present.
-- The recorder's admission lock reserves each allowed forward before connection
-  creation. Requests beyond the limit do not reach upstream, including concurrent
-  requests and remote compaction. The listener must install successfully; failure
-  cannot restore the direct, uncapped URL. The existing deadline, HTTPS account,
-  no-redirect policy, auth command and zero retries are unchanged.
-- The denied request closes the recorder's inbound/upstream sockets and invokes
-  the owned SDK process's close method. Closure is serialized with runner cleanup.
-  `core/codex_runner.py:1884` returns a failure even if the SDK races the stop with
-  a completed turn. The existing infrastructure retry allowlist does not include
-  `native_request_cap_exceeded`.
-- On the tested 33-request boundary, `provider_observation` contains
-  `native_request_count=32`, `native_request_count_reason=null`,
-  `native_request_limit=32`, `native_request_blocked_count=1`,
-  `native_request_cap_reason=native_request_cap_exceeded`,
-  `native_request_limit_sha256` equal to the snapshot hash, and
-  `native_cap_enforced=true`. The true flag covers this per-attempt forward cap
-  only, not tokens, total pilot spend, confirmed provider arrivals or billing.
-  Counts still include failed upstream forward attempts, not logical SDK turns;
-  the denied request is counted separately and is not a 33rd upstream attempt.
-- The strict projection in the recorder and the existing Step 2 insertion at
-  `step2_run_inference.py:1339` preserve these closed fields without raw messages.
-  A cap stop may retain a missing SDK terminal acknowledgement as
-  `transport.correlation.status=null`. The usage owner preserves available
-  snapshots or an empty list, with
-  `native_request_cap_exceeded_usage_may_be_partial`; it does not invent usage
-  or a terminal response. Normal success/usage checks remain unchanged.
+All limits come from the unchanged **7343-byte** caps draft, SHA256
+`7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`, read by
+`batch-runner/gpt56_pilot_wire_receipt.py:94`. Its historical draft-status text
+and the registration's null native limits are unchanged. This is prospective
+local enforcement work, not plan approval, measured headroom or spend authority.
+
+| Draft item | Before this change | Current behavior and source |
+| --- | --- | --- |
+| 300,000 input tokens per attempt | Reported-threshold check only; generic refusal in `gpt56_pilot_runtime_caps_usage.py:127` at the base | Preserve the over-limit sample and stop the bound SDK; `gpt56_pilot_wire_receipt.py:480`, `gpt56_pilot_runtime_caps_usage.py:135`. Not a hard pre-request token cap. |
+| 10,000 output tokens per attempt | Same reported-threshold check | Same controlled stop; cached/reasoning subcounts are not added again. Not a hard provider-output cap. |
+| 1,800 seconds per attempt | Existing turn wait and HTTP deadline; no active listener/SDK watchdog during idle intervals | Clamp the observer timeout to the draft, share its remaining deadline with the turn wait, and stop the bound process; `gpt56_pilot_wire_receipt.py:446`, `core/codex_runner.py:2031`. SDK startup remains outside the confirmed cleanup coverage. |
+| 128 native requests per task | No explicit shared counter; implied by 32 per attempt and four allowed attempts | Reserve under one run-owned lock before upstream connection, across fresh attempts, including failures; `gpt56_pilot_wire_receipt.py:108`. |
+| 640 native requests per pilot | No explicit shared counter; implied by 32 × four attempts × five tasks | The same owner counts all five tasks. It blocks another forward at the ceiling and checks availability before another task is armed; `gpt56_pilot_wire_receipt.py:1089`. |
+
+The existing **32-request** attempt cap, reviewed-evidence/source checks, fixed
+HTTPS account, no redirects and zero transport retries remain. The actual
+observer must belong to the run's shared budget before auth at
+`core/codex_runner.py:1067`. No counter is restored from a receipt or refunded
+after a failed connection. The existing no-adoption reservation still applies.
+
+The closed `provider_observation.runtime_caps` projection records the draft
+digest, limits, reported input/output tokens, task/pilot forward counts, effective
+deadline and stop reason. Unobserved token counts remain null. It explicitly
+sets `token_hard_limit_enforced=false`. New fixed reasons are
+`native_input_token_cap_exceeded`, `native_output_token_cap_exceeded`,
+`native_attempt_deadline_exceeded`, `native_task_request_cap_exceeded`,
+`native_pilot_request_cap_exceeded` and `native_token_usage_unverified`.
+They are not added to the infrastructure retry allowlist. A stopped attempt
+cannot accept a raced SDK success; missing terminal acknowledgement stays null.
+No raw response, prompt, header, endpoint or exception enters this projection.
 
 ### Exact offline proof
 
-Evidence directory: `/ai-work/copilot/_tmp/p5-native-cap-enforcement.pgzqQd/`.
-`invocation.txt` contains the full collection and test commands. Python
+Evidence directory: `/ai-work/copilot/_tmp/p5-native-remaining-caps.rYMfbu/`.
+`invocation.txt` and `invocation-late-usage.txt` contain the exact commands. Python
 **3.10.12**, installed SDK **0.147.0**, `TERM120s/KILL5s`, `env -i`, an empty
 task-local HOME, offline Hub/dataset flags, and disabled plugin autoload,
 bytecode and pytest cache. No install, credential read or network provider call
 was needed.
 
-Collection: **97 tests in 2.03s**, outer **2.415s**, exit **0**.
-One body invocation at the tested HEAD: **97 passed, 0 failed in 6.44s**,
-outer **7.000s**, exit **0**. JUnit records **97 tests, 0 failures, 0 errors,
-0 skipped**; its suite duration is **6.408s**, not the wrapper wall time.
-There was no failed test invocation or rerun in this task.
+| Invocation | Source | Result | Pytest elapsed | Wrapper wall | Exit |
+| --- | --- | --- | ---: | ---: | ---: |
+| Initial collection | `eaeef4861` code, before its ordinary commit | 125 collected | 2.19s | 2.585s | 0 |
+| Existing 97 plus 28 new cases | `eaeef4861a3d9ebad805c2ba5c8443f02a4324d4` | 114 passed, 11 failed | 15.52s | 16.096s | 1 |
+| Unresolved collection | `c3012107e170dd7b0ba076733568078634b810d3` | 11 collected | 2.05s | 2.436s | 0 |
+| Only the 11 failed cases | `c3012107e170dd7b0ba076733568078634b810d3` | 11 passed, 0 failed | 4.54s | 5.074s | 0 |
+| Late-usage collection | `36d36ae6a2290717be7939dc49d2268b956488e0` | 2 collected | 2.05s | 2.440s | 0 |
+| Only the new late-usage cases | `0a53ee81c27ec79bdef72ffbdbd2f9c4e7f51b4c` | 2 passed, 0 failed | 2.31s | 2.707s | 0 |
 
-The selection reuses the prior 81-node bundle, updates three directly coupled
-test functions for enforcement, includes the existing socket-close regression,
-and adds 15 cap cases. These cover 1/31/32 allowed requests, refusal at 33,
-concurrent admission, missing/drifted caps, invalid public metadata, and four
-process/partial-receipt cases. The unchanged socket regression still requires
-EOF for incomplete local headers and stable metadata after closure.
+All three body invocations produced JUnit, with no warnings. Ten failures exposed
+a missing stdlib `time` import. One exposed watchdog closure replacing the
+existing `deadline_exceeded` reason with `response_capture_incomplete`. The
+correction added the import and preserved that known deadline provenance;
+no assertion or fixture was weakened. The other 114 cases were not replayed.
 
-Provider bodies and turn results are synthetic; all non-loopback socket
-destinations are trapped, and upstream TLS is replaced by local HTTP. The new
-cleanup fixture uses the installed SDK's actual close method on a harmless
-local Python child, plus the real runner, recorder, usage checks and receipt
-projection. It does not start the Rust CLI, authenticate, prepare original
-inputs, exercise host admission, or test a live Azure provider. Secret-looking
-canaries are excluded from the public receipt/projection and captured output.
+The final local source check found that a closed capture could ignore a late
+over-limit notification. The follow-up restores the prior threshold refusal
+under the capture lock, preserves the closed summary, and refuses non-scalar
+stop metadata.
+Only the two new input/output late-notification cases ran for that delta.
+The scalar check/assertion changed after collection, without changing imports,
+fixture dependencies or node identities. No earlier passing body ran again.
+
+New fixtures cover token limits minus one/exactly/plus one, actual 128/640
+synthetic HTTP forwards across attempts, refusal before the next upstream
+connection, concurrent final-slot admission, no refunds after connection
+failure, deadline clamping/idle expiry, partial receipts and secret-canary
+exclusion. The real runner/usage/receipt code and installed SDK close method
+operate on harmless local Python children. Provider bodies, turns, earlier
+reservations in the process fixtures and host admission are synthetic. All
+non-loopback socket destinations are trapped; upstream TLS is replaced by
+local HTTP. No Rust CLI, private input, live auth or provider was exercised.
 
 | Evidence file | Bytes | SHA256 |
 | --- | ---: | --- |
-| `invocation.txt` | 3907 | `5ccfbf93f00b6c5ff3513f28ff33bbcd14608668d4bae64c727fbfb6dde0fcd2` |
-| `collection.log` | 11536 | `4072d49f16266cb200a1938c898a308b042d097e40205c7a22ceaaf5169ac6e6` |
-| `collection-timing.txt` | 19 | `8ae63c826825671bb9cb26eb5ddc00e9618a11c1832b95d568b0b053582bedf1` |
-| `test.log` | 179 | `86fedcb3055ab329f068b3b4f6c1dbfb01dca10d946818044f92c2b91d71d35b` |
-| `junit.xml` | 15640 | `ac732814b8e0f7f293b631b1f1f7e1e28ae06d038d78e4441d2915435655f6ca` |
-| `timing.txt` | 19 | `cc3e53f1fd7319e87423ba2a3fab0b4f8a4f24c0e46202bbdaf4a19327a58404` |
-| `tested-code.patch` | 35113 | `d9a61aa2374973b08dbd944eef2d1af022e56d3ca51ac2609ff0c69c91948a09` |
+| `invocation.txt` | 7010 | `c1358c963937d1e8f2409a00862a14ef623bf8f61480f997dfa40b7306d07ee9` |
+| `test-initial.log` | 8243 | `a8aa6d2d38b3dc87a99cf0fb6d06636f08feba0115dfe335b99c031abbe9d147` |
+| `junit-initial.xml` | 26424 | `2d8a993114c238cacd014778b1017f901168b550cac4174d90ac8c80dcf4faca` |
+| `timing-initial.txt` | 20 | `bfafcae468edd83c5eebc1f37fa6a999ce7141ced485976a14758cd660756c3c` |
+| `test-unresolved.log` | 99 | `8aba684c8171815f9d71dbb90169dcf2ca07df9dd12982829c70e8602a57f1b6` |
+| `junit-unresolved.xml` | 2241 | `700d2b66bcb509a84093cf73e8655f9946fa6dc437ae6c586c6f7420f48d5ae1` |
+| `timing-unresolved.txt` | 19 | `0e3a5f1f23b711e00c5ede525633a88a45f3cea4c74c8fde823d6cb11f0741c8` |
+| `tested-initial-code.patch` | 49788 | `1bd1ee416e22d2a155e286bcca1bbaa4cb08db922ec3f93f3a1cb608f13ca9e8` |
+| `tested-code.patch` | 50502 | `78ae40c7905745aef60b661a919b9c10d26e117e6707b6530f764876a9e85ec6` |
+| `invocation-late-usage.txt` | 2625 | `22c65860f43793c4501c63db9d99efca2d86fe8bbde0b98c7a7987e9ae97fb15` |
+| `test-late-usage.log` | 98 | `65f313c081c0ef8ae25769e77cc41a6bb81f8365a1ced50c4c01aa68948c851c` |
+| `junit-late-usage.xml` | 563 | `bcfa7d947f7607c6dbe482a510dc3ca1cf40c6d3647297390191ad856f647e28` |
+| `timing-late-usage.txt` | 19 | `1c6f8d678fb00a875ae83eea1f2af00b07dd647a2cd01370cc6b785a3c60c4eb` |
+| `tested-final-code.patch` | 52028 | `fbc4b99eb1262d894d9511f49356a0843a075947e022f48707f1927346a373e7` |
 
-The initial observation proof remains **81 passed in 3.99s**, outer **4.518s**,
-at `ae4b37da23518a7b0d9b0af567a43c81806e75f3`. Its later socket regression
-first failed (**1 failed, 2.21s**, outer **2.594s**), then passed separately
-(**1 passed, 1.93s**, outer **2.306s**) at
-`f017607fb1ae0dbd334c9a2b6ae4ffaa847b45a3`. A subsequent one-node recheck at the
-current base passed (**1 passed, 1.92s**, outer **2.320s**, exit **0**);
-its files remain in `/ai-work/copilot/_tmp/p5-native-provider-close-recheck.r5v2oc/`.
-These prior outcomes are not pooled with today's 97-test invocation. Earlier
-hashes, failures and observation rationale remain in the
-[immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b43f7576e75e506f9e35c8c2cbe48a18b383dba1/tasks/LATEST_TASK_RESULT/README.md).
+Final source SHA256 values, unchanged by the final record-only commit:
+
+| File under `batch-runner/` | SHA256 |
+| --- | --- |
+| `gpt56_pilot_wire_receipt.py` | `06bad62111e9492e5bedf46ad3950193605d3d75f88c907fbad539e740c23741` |
+| `gpt56_pilot_runtime_caps_usage.py` | `38b74969671ed2f8ab68313ad82f512e65dfe19c87d2971e6049f67620752f98` |
+| `core/codex_runner.py` | `7973fbc93ec6b7ee8e8fd97467c86d2d4694b05c2735eed56011d705e41ea94c` |
+| `tests/test_gpt56_pilot_remaining_caps.py` | `e65a597ed8ea35e0bdad84417f31ba9b106db578eb98a0e4141aa158e95ac6f6` |
+
+The earlier **97 passed in 6.44s**, outer **7.000s**, and the separate 81-case
+observation/socket-failure/corrected proofs remain in the
+[immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/3dea2d6d2ba9b6bb92596e691e3ad53a78fa82a4/tasks/LATEST_TASK_RESULT/README.md).
+They are not pooled with these invocations.
 
 ### Preserved boundaries and remaining gates
 
@@ -116,14 +145,28 @@ Plans, cap values, registrations, dependencies, workflow, grader and other
 worktrees were not edited. Existing Git author/committer identity was retained
 without attribution trailers.
 
-The draft **32 per attempt / 128 per task** still has no measured native-call
-headroom evidence. Task/pilot cumulative enforcement, token/spend limits,
-served deployment/version, Max/Long application, actual CLI/provider behavior,
-tariff/billing evidence, frozen-source/judge admission and fixed-source
-review/CI remain separate gates. This local guard does not clear them or make
-the current source launchable. No push, dispatch, grading or live experiment
-occurred. Task3 run `37756891578` remains uncertain, spent and nonretryable;
-no prior right is reset.
+Two limits cannot be called hard provider-token ceilings: input is reported
+after processing, and output/reasoning usage is reported after generation.
+The installed SDK **0.147.0** supplies cumulative/last notifications
+(`openai_codex/generated/v2_all.py:8579`), not a token reservation mechanism.
+Its `TurnStartParams` at line 8638 does not provide an input/output token cap.
+This change neither estimates tokens from bytes nor adds an unverified request
+field. It can stop further work when overage is observed, but cannot retract
+that overage or prove its billing boundary. Missing usage stays unknown.
+
+The active clock covers the recorder and already-bound SDK. In
+`core/codex_runner.py:1091`, synchronous `Codex(config)` still initializes before
+the runtime close callback is attached at `gpt56_pilot_wire_receipt.py:786`.
+The installed SDK's `api.py:82` confirms that ordering. A constructor that
+never returns is not covered by the proven SDK cleanup path; no full
+startup-inclusive 1,800-second guarantee is claimed.
+
+Measured headroom under **32 per attempt / 128 per task**, hard token/spend
+limits, startup-inclusive cleanup, served deployment/version, Max/Long
+application, live CLI/provider behavior, tariff/billing evidence, frozen-source
+and judge admission, and final-source review/CI remain gates. This source is
+not declared launchable. Task3 run `37756891578` remains uncertain, spent and
+nonretryable; no prior right is reset.
 
 Reporting used `experiment-report-en` to keep counts, timings and synthetic/live
 limits distinct, followed by `im-not-ai-en` for technical English. `openai-docs`

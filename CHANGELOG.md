@@ -13,33 +13,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Enforce the five-task Foundry Sol pilot's **32-request per-attempt** forward
-  cap from the unchanged, hash-bound caps draft. The registered source plan's
-  native cap remains null; no plan value or launch gate is changed. Reserve
-  requests under the recorder lock, refuse the 33rd before upstream connection
-  creation, and close the recorder and owned SDK process. A missing listener
-  now refuses instead of bypassing the guard. Preserve the count of forwarded
-  attempts separately from blocked requests and retain the closed
-  `native_request_cap_exceeded` reason through the receipt and existing Step 2
-  projection. A missing runtime terminal acknowledgement stays null; preserve
-  partial/absent usage and prevent a raced SDK success from accepting the task.
-  At clean code/test HEAD `582bc4a4b21b2a5c7882db2be2e478f14b4b438e`, tree
-  `622a38e5686355b7fbc16ecd83a632438e10cd35`, collection found **97 tests in
-  2.03s**, outer **2.415s**, exit **0**. One **TERM120s/KILL5s** invocation
-  passed **97 tests, 0 failed in 6.44s**, outer **7.000s**, exit **0**, with no
-  warnings. It includes the authorized prior 81-node selection with directly
-  coupled assertion updates, the existing close regression, and 15 new cap
-  cases. Code patch **35113 bytes**, SHA256
-  `d9a61aa2374973b08dbd944eef2d1af022e56d3ca51ac2609ff0c69c91948a09`;
-  log SHA256 `86fedcb3055ab329f068b3b4f6c1dbfb01dca10d946818044f92c2b91d71d35b`;
-  JUnit SHA256 `ac732814b8e0f7f293b631b1f1f7e1e28ae06d038d78e4441d2915435655f6ca`.
-  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the command, hashes,
-  separate prior 81-test/socket-failure/corrected proofs, and remaining gates.
-  Synthetic provider/turns and the installed SDK closing a harmless local child
-  do not prove live Rust/Foundry behavior, billed usage or headroom under 32.
-  Task/pilot totals, token/spend caps, identity/frozen-source gates and new-source
-  review/CI remain open. No push, dispatch, paid call or grading; Task3 run
-  `37756891578` remains uncertain, spent and nonretryable.
+- Extend the local Foundry Sol pilot's existing **32-request per-attempt** guard
+  with run-owned **128-per-task / 640-per-pilot** forward counters, fixed-reason
+  stops for reported **300,000-input / 10,000-output-token** overruns, and an
+  active **1,800-second** observer/bound-SDK deadline. Read the same **7343-byte**
+  caps draft, SHA256 `7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`;
+  do not change its values, plan bytes, null registration limits or launch gates.
+  Keep failed forward attempts spent, preserve over-limit samples and unknown
+  usage, and reject a raced SDK success. The receipt explicitly reports
+  `token_hard_limit_enforced=false`: post-response usage cannot establish a
+  pre-request token or billing ceiling. Synchronous SDK startup also remains
+  outside the confirmed process-cleanup coverage; no startup-inclusive timeout
+  guarantee is claimed. At `eaeef4861a3d9ebad805c2ba5c8443f02a4324d4`, tree
+  `5a479cf5765ff1a648fa2523cfb41c4b09aebfed`, the authorized existing 97 plus 28
+  new cases reported **114 passed, 11 failed in 15.52s**, outer **16.096s**, exit
+  **1**. A missing `time` import caused ten failures; watchdog closure obscured
+  the existing deadline reason in one. The correction fixes only those issues,
+  leaving all assertions intact. At `c3012107e170dd7b0ba076733568078634b810d3`, tree
+  `8b0e491bfc6c61c4a5130763251610a2e47c1a97`, only the unresolved cases ran:
+  **11 passed, 0 failed in 4.54s**, outer **5.074s**, exit **0**. Both used
+  **TERM120s/KILL5s** and produced JUnit with no warnings. The initial log/JUnit
+  hashes are `a8aa6d2d38b3dc87a99cf0fb6d06636f08feba0115dfe335b99c031abbe9d147` /
+  `2d8a993114c238cacd014778b1017f901168b550cac4174d90ac8c80dcf4faca`; corrected
+  log/JUnit hashes are `8aba684c8171815f9d71dbb90169dcf2ca07df9dd12982829c70e8602a57f1b6` /
+  `700d2b66bcb509a84093cf73e8655f9946fa6dc437ae6c586c6f7420f48d5ae1`.
+  A further local correction retained the old threshold refusal for late over-limit
+  usage after capture closure and refused non-scalar reason metadata. Only
+  two new cases ran at `0a53ee81c27ec79bdef72ffbdbd2f9c4e7f51b4c`, tree
+  `a0e7a6b4cef37fc3a0708199dc726d56bbc51869`: **2 passed, 0 failed in 2.31s**,
+  outer **2.707s**, exit **0**, with the same bound and no warnings. Log/JUnit
+  hashes are `65f313c081c0ef8ae25769e77cc41a6bb81f8365a1ced50c4c01aa68948c851c` /
+  `bcfa7d947f7607c6dbe482a510dc3ca1cf40c6d3647297390191ad856f647e28`.
+  The **52028-byte** final code patch is SHA256
+  `fbc4b99eb1262d894d9511f49356a0843a075947e022f48707f1927346a373e7`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the audit, commands,
+  source/file hashes, separately retained prior 97-case proof, and limitations.
+  These synthetic results are not a pooled full-pass suite or live pilot proof.
+  Hard token/spend ceilings, startup-inclusive cleanup, measured native-call
+  headroom, identity/frozen-source gates and final-source review/CI remain open.
+  No push, dispatch, paid call or grading; Task3 run `37756891578` remains
+  uncertain, spent and nonretryable.
 
 ### Added
 
