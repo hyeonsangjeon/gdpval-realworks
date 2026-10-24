@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Document the pinned Codex SDK/CLI 0.147.0 served-identity boundary and exact
+  runner/receipt/persisted-result insertion points without fabricating a model
+  from runtime settings or adding an unpopulatable field. Deduplicate archived
+  exp033/exp034/exp035 lineages for the fixed five tasks: logical-turn max/median
+  is T1 4/4, T2 1/1, T3 1/1, T4 4/2 and T5 3/1.5. Separately retain longer
+  retention-cell T4 39/24.5 and T5 38/15.5; these are not per-attempt native
+  requests. Connection and earlier GPT-5.4 comparison evidence supplies no
+  native request count, so headroom under 32 remains unestablished. Preserve
+  the sealed plans and draft 32-per-attempt / 128-per-task caps. At inspected
+  head `75d6be526c971ab43332260b8d16d7befbadd2d7`, the completed focused offline
+  diagnostic/cost/transport selection passed **244 tests (15.06s)**; record
+  the separate interrupted broad run and corrected test-HOME failures in
+  LATEST, without counting them as a passing suite. No production changes,
+  independently reviewed execution head or launch approval; no Azure/model
+  calls, dispatch, grading or push.
+
 - Draft inert, evidence-cited native caps for the five-task Foundry Sol pilot
   from inspected base `2bc77ad14cf7205694d11aa5909a9ea67cbb2891`, without
   changing sealed plans, runtime enforcement or launch rights. Account for
