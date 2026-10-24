@@ -13,6 +13,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Close the Codex Foundry five-category distinction criterion with limitation
+  in the existing diagnostic report, following local parent
+  `d8b91893071ed06ccd711acce8d9c019d9b66ed6`. All eight cells have
+  **not recorded** evidence for rate limit, communication failure, timeout,
+  output-length limit and content filter, including recovered events in the
+  two successes. Name the missing per-category fields/logs rather than infer
+  causes from budget counters. Historical sibling-worktree access was denied;
+  conclusions cover accessible retained evidence only. The same guarded offline
+  report selector passed **1 test in 2.65s**; eight-row consistency,
+  byte-preservation and `git diff --check` checks passed. Earlier report bytes,
+  readout, original pilot, grades, costs and snapshots are preserved. No
+  new-head review/CI approval, model call, dispatch, grading, remote read, push
+  or Project update is claimed. Publication and leader review/acceptance of
+  the documented limitations remain; no additional execution is required.
+
 - Audit the Codex Foundry external-budget documents against committed source
   `6efe99cbd40bb839037e7a20711a734e0a4ce002`. The diagnostic already records
   all eight producer outcomes, two succeeded and six failed; no stale six-of-eight

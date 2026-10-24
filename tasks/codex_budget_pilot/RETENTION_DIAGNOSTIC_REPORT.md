@@ -143,6 +143,72 @@ Neither the zero-clamped remaining seconds nor recorded retry components fill
 these six missing causes. The two successful runs, 36696961231 and 36947454688,
 have no failed outcome to diagnose. No cell remains to be executed.
 
+### Five-category evidence audit, 2026-10-24
+
+**Criterion: closed with limitation, not an empirical five-way
+classification.** This local-only follow-up to
+`d8b91893071ed06ccd711acce8d9c019d9b66ed6` checks rate limit,
+communication failure, timeout, output-length limit and content filter for
+every cell, including possible recovered events in the two successes.
+No category is identifiable from the retained evidence for any cell.
+In the table, **not recorded applies separately to all five categories**;
+it does not mean that any category was absent.
+
+| Cell | Producer run | Outcome / exit | Five-category evidence |
+| --- | --- | --- | --- |
+| Task4 keep/r1 | 36696961231 | succeeded / 0 | not recorded; recovered events unknown |
+| Task4 fresh/r1 | 36845127347 | failed / 1 | not recorded |
+| Task4 fresh/r2 | 36907894862 | failed / 1 | not recorded |
+| Task4 keep/r2 | 36947454688 | succeeded / 0 | not recorded; recovered events unknown |
+| Task5 fresh/r1 | 37032230813 | failed / 1 | not recorded |
+| Task5 keep/r1 | 37066171719 | failed / 1 | not recorded |
+| Task5 keep/r2 | 37081963299 | failed / 1 | not recorded |
+| Task5 fresh/r2 | 37101934436 | failed / 1 | not recorded |
+
+Evidence inspected: all eight rows of the committed
+[readout](retention_diagnostic_readout.json), their producer/run/job bindings,
+terminal controls, intake/terminal receipts, RESULT-only budget receipts and
+snapshots, this report's provenance, and the historical source record named
+by the readout. Each failed row has
+`terminal_details.detailed_failure=null`; all eight budget receipts have
+`unavailable.detailed_failure={status: unavailable, value: null,
+reason: not_recorded_in_terminal_controls}`. The two successes have no
+`terminal_details` object. Cleanup and publication acknowledgment establish
+neither provider behavior nor the absence of a transient communication error.
+
+No matching raw producer job log, provider event stream or diagnostic payload
+was found in the inspected report worktree or repository workspace.
+Inspection of historical sibling worktrees outside this checkout was denied
+by the non-interactive access boundary; their contents are not claimed absent
+or inspected. No remote log/artifact download or new reader was attempted.
+The missing-data conclusion is bounded to accessible retained evidence, not
+an assertion that no fuller evidence ever existed.
+
+The following evidence would have been needed for **each** not-recorded row,
+bound to its producer run/job, cell and native turn/attempt:
+
+| Category | Missing discriminating field or log |
+| --- | --- |
+| Rate limit | Recorded `rate_limited` event with provider HTTP 429/error code or explicit rate-limit reason; retry/backoff counts alone are insufficient |
+| Communication failure | Recorded `transport_error` event or transport exception/stream-disconnect log; publication acknowledgment is a different boundary |
+| Timeout | Recorded timeout exception/category and timed operation, or an explicit deadline-exhaustion/kill event distinguishing native-turn, cumulative-budget and job timeout |
+| Output-length limit | Explicit provider finish/stop/incomplete reason identifying length/token exhaustion, or a complete bound reason supporting `output_limit_exceeded`; token totals alone are insufficient |
+| Content filter | Explicit provider `content_filter` finish/error reason or a bound `content_filtered` event; failed status alone is insufficient |
+
+For successes, an attempt/event history would also be needed to identify or
+exclude recovered occurrences. Zero-clamped budget remaining, positive
+remaining, waits, admissions and resumes cannot substitute for these fields.
+Source classifiers, synthetic fault-injection results and the separate
+exp035 observations show classification capability, not events in these eight
+cells. No grades, costs, outcomes or budget observations are changed.
+
+This closes the outstanding distinction criterion with its evidence limitation
+explicit, without claiming measured causes or a feedback benefit. There is no
+remaining execution or grading prerequisite and no additional paid work is
+authorized. Publishing and the leader's existing review/acceptance disposition,
+including acceptance of the inconclusive measurements and this limitation,
+remain outside this local task; no new-head review or CI approval is claimed.
+
 ## Eight recorded budget points
 
 These are stored inference-result snapshots, observed later through model-free

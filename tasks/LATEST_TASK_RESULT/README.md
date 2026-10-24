@@ -1,89 +1,74 @@
 # Latest task result
 
-## Codex Foundry external-budget document audit, 2026-10-24
+## Codex Foundry five-category evidence closeout, 2026-10-24
 
-Audited committed evidence at origin/main
-`6efe99cbd40bb839037e7a20711a734e0a4ce002` in the clean, separate
-`foundry-task5-remaining-20261024` worktree. The user checkout was not changed.
-The leader withdrew further paid execution. This task performs no model call,
-dispatch, push, remote readout, grading or Project update.
+### Scope and outcome
 
-### Outcome and document corrections
+Local-only, documentation-only follow-up to
+`d8b91893071ed06ccd711acce8d9c019d9b66ed6`, on the same branch
+`investigate/foundry-task5-remaining-20261024`, in
+`/ai-work/copilot/gdpval-realworks/_tmp_worktrees/foundry-task5-remaining-20261024`.
+No model call, dispatch, grading, remote read, push or Project update occurred.
 
-The [diagnostic report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md),
-[readout](../codex_budget_pilot/retention_diagnostic_readout.json),
-[original pilot report](../codex_budget_pilot/REPORT.md) and relevant changelog
-already agree on eight diagnostic outcomes: two succeeded and six failed.
-No obsolete `6/8`, `6 of 8` or `six of eight` status was found in the checked
-reports, readout, root English/Korean README or changelog. Historical changelog
-entries describe their earlier evidence scope, not outstanding executions.
+Added an eight-row audit to the same
+[diagnostic report](../codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md).
+For each of the six failures and two successes, rate limit, communication
+failure, timeout, output-length limit and content filter are **not recorded**:
+none is identifiable from accessible retained evidence. Successful completion
+does not rule out recovered events. All six failed terminal details and all
+eight budget receipts retain their missing-cause fields; no cause is guessed
+from exit code, waits, resumes, remaining time or source classifier capability.
+The report names the discriminating provider reason, transport/timeout log or
+attempt history needed for each category and each cell.
 
-| Cell | Producer run | Outcome / failure detail |
-| --- | --- | --- |
-| Task4 KEEP/r1 | 36696961231 | succeeded |
-| Task4 FRESH/r1 | 36845127347 | failed; detailed cause unavailable |
-| Task4 FRESH/r2 | 36907894862 | failed; detailed cause unavailable |
-| Task4 KEEP/r2 | 36947454688 | succeeded |
-| Task5 FRESH/r1 | 37032230813 | failed; detailed cause unavailable |
-| Task5 KEEP/r1 | 37066171719 | failed; detailed cause unavailable |
-| Task5 KEEP/r2 | 37081963299 | failed; detailed cause unavailable |
-| Task5 FRESH/r2 | 37101934436 | failed; detailed cause unavailable |
+Inspected the committed per-cell controls, receipts, snapshots, report provenance
+and historical source record, and checked this report worktree and repository
+workspace for matching raw job artifacts. Historical sibling-worktree inspection
+was denied by the non-interactive access boundary. Their contents are not claimed
+absent or inspected; the conclusion is bounded to accessible retained evidence.
 
-All six failures record exit code 1, confirmed cleanup, null grades and
-`not_recorded_in_terminal_controls` for the missing detailed cause. They are
-not diagnosed from remaining time or retry counts.
+**Criterion verdict: closed with limitation**, not a successful empirical
+five-way classification. The previous per-condition measurement and C/B
+feedback-effect conclusions remain inconclusive; no execution is pending and
+no further paid work is authorized.
 
-Added the missing root README result summary, an explicit failure-detail table
-and dispositions for the two remaining card criteria. Labeled the diagnostic
-report's older finalization account as historical so it does not imply this
-audit adds observations. Replaced this unrelated prior task record rather
-than accumulating another history. No result, snapshot, grade, cost, source
-binding, runtime, workflow or test file changed.
+### Verification
 
-### Remaining card criteria
+After the report edit, the same existing offline selector passed:
+**1 passed in 2.65s**, exit 0, under TERM120s/KILL5s:
 
-**(a) Per-condition measurement: inconclusive for the full criterion.**
-Retained fields are filled: 24 original epoch04 snapshots and eight diagnostic
-snapshots, with outcomes keyed by condition/task/repeat. The six frozen epoch03
-failures are not six more snapshots. Existing records cannot supply exact
-uncapped elapsed time, all recovery/downtime, recovery opportunities, realized
-state exposure, six detailed failure causes or complete costs.
+```sh
+env -i PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 \
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 \
+  GIT_NO_LAZY_FETCH=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+  HF_HUB_DISABLE_IMPLICIT_TOKEN=1 \
+  timeout --signal=TERM --kill-after=5s 120s python3 -m pytest \
+  -q -p no:cacheprovider batch-runner/tests/test_codex_retention_budget_report.py
+```
 
-**(b) C/B comparison report: filled descriptively; benefit inconclusive.**
-The report now places the original B/C full-denominator grades side by side,
-including frozen failures and null grades, without new scoring, averaging or
-estimation. KEEP/FRESH has no C feedback and is not a substitute for C/B.
-Two repeats, service/source variation, exclusions, unknown judge calibration
-and missing costs do not support a causal or cost-efficiency ranking.
+The selector's process/network/constructor guards and zero-effects assertion
+passed; no old lifecycle, inference, reader or grading selector ran.
+A standard-library evidence-preservation check passed all eight new table
+run/outcome/exit bindings and missing-cause fields. Removing only the new audit
+section restores the entire prior report byte for byte. The readout, original
+pilot and root README are byte-identical to the parent:
 
-An unqualified completion against all original measurement requirements is
-not supported. The leader may close the finite execution/reporting scope by
-explicitly accepting these limitations and the inconclusive disposition.
-No cell is pending execution; no further paid work is authorized.
+| Evidence | SHA256 |
+| --- | --- |
+| `retention_diagnostic_readout.json` | `cda3068a6f46ab8395aac0127e5f2252847e1f6d9af475d3d96068179bd12287` |
+| Original `REPORT.md` | `88a37d8cfdae6c3c05a79db78827bfe2d59fdcd944067e4f6fcd7f387dddae0e` |
+| Root `README.md` | `2e7573f75ddf36bf9577cddfc28adf903a0cb3f8d724017df6c129325be0b5bf` |
 
-### Verification and review boundary
+`git diff --check` passed. Only the diagnostic report and the two required
+completion records change; execution evidence and runtime/test files do not.
+The generic `python` command was unavailable, so validation used `python3`.
+No dependency installation was needed.
 
-The existing offline selector
-`batch-runner/tests/test_codex_retention_budget_report.py` passed on the final
-report: **1 passed in 1.62s** under TERM120s/KILL5s, with credentials removed,
-external pytest plugin autoload disabled and lazy Git fetch disabled.
-Its process/network guards and zero-effects assertion passed. The first
-invocation stopped at its environment guard because `GH_TOKEN` was present;
-the sanitized invocation passed, and the final report was checked again.
-No inference, reader, grading or historical lifecycle selector was run.
+### Review boundary and remaining work
 
-A separate standard-library consistency check passed all eight run/outcome
-bindings, six missing-cause rows, every copied C/B numeric/null grade, README
-links and the stale-fraction scan. Its first draft parser included an unrelated
-accounting table and stopped with IndexError; restricting it to the five-column
-outcome table resolved that check without changing evidence.
-Removing the three documented report additions restores every prior report
-byte. The JSON and original pilot remain byte-identical to the audit base.
-This same-session reverse comparison preserves all earlier conditions,
-denominators, source identities and non-causal qualifications.
-`git diff --check` passed.
-
-No new-head specialist/owner review or CI result is claimed. The audit-base
-SHA above is not a reviewed-head approval of these edits. This is a local-only
-documentation commit; publication, review and any card disposition remain
-with the leader. No carrying-PR state, merge SHA or merge time is recorded.
+No new-head review or CI approval is claimed; the parent SHA is an evidence
+comparison base, not a reviewed-head approval. Publishing and the leader's
+existing review/acceptance disposition remain, including acceptance of the
+inconclusive measurements and this explicit category-evidence limitation.
+There is no additional execution or grading prerequisite. The remote card was
+not changed. No carrying-PR state, merge SHA or merge time is recorded.
