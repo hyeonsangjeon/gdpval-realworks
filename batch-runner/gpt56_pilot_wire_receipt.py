@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import socket
 import threading
 import time
@@ -756,6 +757,61 @@ class _TransportObservation:
         self.provider_runtime = None
         self.provider_runtime_lock = threading.Lock()
         self.native_budget = self.native_budget_task = None
+        self.startup_attempted = self.startup_timed_out = False
+
+    def require_startup_supervision(self):
+        """Do not start an SDK we cannot interrupt, or borrow another alarm."""
+        with self.guard():
+            _require(not self.startup_attempted and not self.installed
+                     and threading.current_thread() is threading.main_thread()
+                     and hasattr(signal, "setitimer")
+                     and signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0))
+
+    @contextmanager
+    def supervise_provider_startup(self):
+        """Interrupt the synchronous SDK constructor on the SAME deadline.
+
+        Codex 0.147.0 catches Exception during start/initialize and closes its
+        client. A main-thread TimeoutError reaches that cleanup; timing out a
+        worker future would leave its constructor running. No SDK globals or
+        background constructor are installed. The existing listener watchdog
+        continues after this short-lived alarm is restored.
+        """
+        self.require_startup_supervision()
+        with self.guard():
+            _require(self.provider_capture is not None and self.provider_runtime is None)
+            self.startup_attempted = True
+        capture = self.provider_capture
+
+        def expired(_signum=None, _frame=None):
+            remaining = capture.deadline - time.monotonic()
+            if remaining > 0 and capture.stop_reason != NATIVE_DEADLINE_EXCEEDED:
+                signal.setitimer(signal.ITIMER_REAL, remaining)
+                return
+            self.startup_timed_out = True
+            capture.request_stop(NATIVE_DEADLINE_EXCEEDED)
+            # An Exception, deliberately: the pinned SDK's constructor owns
+            # its partially initialized client and closes it before rethrowing.
+            raise TimeoutError(NATIVE_DEADLINE_EXCEEDED)
+
+        previous = signal.signal(signal.SIGALRM, expired)
+        try:
+            expired()  # Arm remaining time, or refuse an already-expired attempt.
+            yield
+            if capture.deadline <= time.monotonic() or capture.stop_reason == NATIVE_DEADLINE_EXCEEDED:
+                expired()  # A raced constructor return cannot become success.
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0.0)
+            signal.signal(signal.SIGALRM, previous)
+
+    def require_startup_timeout(self):
+        """Only a local pre-thread timeout can have an empty wire receipt."""
+        _require(self.startup_attempted and self.startup_timed_out and not self.installed
+                 and self.cap_stop_reason == NATIVE_DEADLINE_EXCEEDED
+                 and self.provider_capture.closed and self.provider_capture.requests == 0
+                 and self.provider_runtime is None and not self.requests and not self.responses
+                 and self.thread is self.turn is self.settings is self.completion is None
+                 and not self.usage)
 
     def configure_provider_observer(self, provider, overrides, *, timeout):
         """Replace only this process's checked provider URL; never mutate settings."""
@@ -918,19 +974,25 @@ class _TransportObservation:
                     self.caps_usage_observer.observe(snapshot)
                 self.usage.append(snapshot)
 
-    def finish(self, *, success: bool, thread_id: str, turn_id: str) -> dict:
+    def finish(self, *, success: bool, thread_id: str | None, turn_id: str | None) -> dict:
         with self.guard():
             stopped = self.cap_stop_reason is not None
-            _require(self.installed and type(success) is bool and (self.completion is not None or stopped))
-            _require(self.thread == _correlation(thread_id) and self.turn == _correlation(turn_id)
-                     and {"thread/start", "turn/start"} <= set(self.requests)
-                     and self.responses == {entry["request_id_sha256"] for entry in self.requests.values()})
+            _require(type(success) is bool)
+            if self.startup_timed_out:
+                self.require_startup_timeout()
+                _require(not success and thread_id is turn_id is None)
+            else:
+                _require(self.installed and (self.completion is not None or stopped))
+                _require(self.thread == _correlation(thread_id) and self.turn == _correlation(turn_id)
+                         and {"thread/start", "turn/start"} <= set(self.requests)
+                         and self.responses == {entry["request_id_sha256"] for entry in self.requests.values()})
             _require(all(row["thread_id_sha256"] == self.thread and row["turn_id_sha256"] == self.turn
                          for row in [self.terminal_correlation(), *self.usage]))
             _require(not success if stopped else success == (self.completion["status"] == "completed"))
             if self.caps_usage_observer is not None:
                 self.caps_usage_observer.finish(self)
-            result = {"scope": "codex_app_server_stdio_utf8_after_initialize",
+            result = {"scope": ("codex_app_server_startup_deadline_before_thread" if self.startup_timed_out else
+                                "codex_app_server_stdio_utf8_after_initialize"),
                       "requests": self.requests, "correlation": self.terminal_correlation(),
                       "app_server_settings": self.settings,
                       "usage": {"state": "observed" if self.usage else "not_available", "unit": "tokens",
@@ -1158,7 +1220,7 @@ class PilotWireReceiptSession:
             index = self.armed[task_id]
             transport = observer.finish(success=success, thread_id=thread_id, turn_id=turn_id)
             thread_digest = transport["correlation"]["thread_id_sha256"]
-            _require(thread_digest not in self.thread_ids)
+            _require(thread_digest is None or thread_digest not in self.thread_ids)
             call_id = make_call_id(run_id=pilot.RUN_ID, task_id=task_id, stage="codex_app_server_turn",
                                    retry_kind="initial" if index == 0 else "infrastructure", attempt_index=index, sequence=0)
             name = call_id + ".json"
@@ -1179,7 +1241,8 @@ class PilotWireReceiptSession:
             linkage = {"path": DIRECTORY + "/" + name, **_digest(data), "attempt_index": index,
                        "evidence_boundary": BOUNDARY}
             self.attempts[task_id].append({"linkage": linkage, "success": success, "accepted": False})
-            self.thread_ids.add(thread_digest)
+            if thread_digest is not None:
+                self.thread_ids.add(thread_digest)
             del self.active[task_id], self.armed[task_id]
             return json.loads(_bytes(linkage))
 

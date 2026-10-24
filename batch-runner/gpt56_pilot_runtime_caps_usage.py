@@ -143,10 +143,14 @@ class _UsageObservation:
 
     def _document(self, observer: wire._TransportObservation) -> dict:
         stopped = observer.cap_stop_reason is not None
-        _require(observer is self.observer and observer.installed and (bool(self.snapshots) or stopped)
+        _require(observer is self.observer and (bool(self.snapshots) or stopped)
                  and self.snapshots == [_bytes(row) for row in observer.usage])
-        _require(set(observer.requests) in ({"thread/start", "turn/start"}, {"thread/start", "turn/start", "turn/interrupt"})
-                 and observer.responses == {row["request_id_sha256"] for row in observer.requests.values()})
+        if observer.startup_timed_out:
+            observer.require_startup_timeout()
+        else:
+            _require(observer.installed
+                     and set(observer.requests) in ({"thread/start", "turn/start"}, {"thread/start", "turn/start", "turn/interrupt"})
+                     and observer.responses == {row["request_id_sha256"] for row in observer.requests.values()})
         correlation = observer.terminal_correlation()
         rows = [correlation, *observer.usage]
         _require(all(row["thread_id_sha256"] == observer.thread and row["turn_id_sha256"] == observer.turn for row in rows))

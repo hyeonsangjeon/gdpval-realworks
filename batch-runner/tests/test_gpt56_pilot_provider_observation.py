@@ -7,7 +7,7 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from http.client import HTTPConnection, IncompleteRead
+from http.client import HTTPConnection, IncompleteRead, RemoteDisconnected
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from urllib.parse import urlsplit
@@ -260,7 +260,10 @@ def test_one_cumulative_deadline_no_retry_or_turn_count_substitution(monkeypatch
         capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
         try:
             assert _post(capture.base_url)[0] == 200
-            _post(capture.base_url)
+            try:
+                _post(capture.base_url)
+            except RemoteDisconnected:
+                pass  # The deadline watchdog may close before the error response.
         finally:
             capture.close()
     assert timeouts == [60, 25]

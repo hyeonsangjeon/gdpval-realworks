@@ -37,6 +37,7 @@ import sys
 import tempfile
 import threading
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -1067,6 +1068,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if (pilot_wire_observer.native_budget is not pilot_session.native_budget
                     or pilot_session.active.get(pilot_wire_observer.native_budget_task) is not pilot_wire_observer):
                 raise PilotWireReceiptRefused() from None
+            pilot_wire_observer.require_startup_supervision()
         self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
@@ -1087,11 +1089,20 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             env=environment,
             cwd=str(workspace.workspace),
         )
+        codex = None
         try:
-            codex = Codex(config)
+            with (pilot_wire_observer.supervise_provider_startup() if pilot_wire_observer is not None
+                  else nullcontext()):
+                codex = Codex(config)
         except BaseException:
-            if pilot_wire_observer is not None:
-                pilot_wire_observer.close_provider_observer()
+            # The SDK closes itself when initialization raises. If its return
+            # raced the deadline, the caller now owns the returned instance.
+            try:
+                if codex is not None:
+                    codex.close()
+            finally:
+                if pilot_wire_observer is not None:
+                    pilot_wire_observer.close_provider_observer()
             raise
         if pilot_wire_observer is not None:
             try:
@@ -1722,6 +1733,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     error_category="runtime_unavailable",
                 )
             except Exception as exc:  # noqa: BLE001
+                if pilot_wire_observer is not None and pilot_wire_observer.startup_timed_out:
+                    reason = pilot_wire_observer.cap_stop_reason
+                    return CodexRunOutcome(
+                        success=False, text="", error=reason, error_category=reason,
+                    )
                 return CodexRunOutcome(
                     success=False,
                     text="",

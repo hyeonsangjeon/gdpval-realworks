@@ -1,9 +1,11 @@
 """Synthetic caps only: no provider, credential, preparation or launch proof."""
 
 import json
+import signal
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -298,6 +300,206 @@ def test_watchdog_expires_without_any_http_request(monkeypatch):
         assert capture.server.socket.fileno() == -1
     finally:
         capture.close()
+
+
+@pytest.mark.parametrize("case", ["ready", "stuck", "term_ignored", "late_return", "already_expired",
+                                 "startup_error", "existing_alarm", "worker_thread"])
+def test_startup_deadline_supervises_real_sdk_initialization(monkeypatch, tmp_path, capsys, case):
+    """Real SDK initialize/cleanup on a local JSON-RPC child; no Rust/provider/auth."""
+    import openai_codex
+    from openai_codex.client import CodexClient, CodexConfig
+    import gpt56_pilot_native_result_host as native
+
+    before_handler = signal.getsignal(signal.SIGALRM)
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+    budget = wire._NativeRequestBudget(TASKS)
+    observer = _observer(budget=budget)
+    observer.bind_task_text(CANARY)
+    session = object.__new__(wire.PilotWireReceiptSession)
+    session.native_budget, session.active = budget, {TASKS[0]: observer}
+    host = SimpleNamespace()
+
+    def checked_host(value):
+        assert value is session
+        return host
+
+    monkeypatch.setattr(native, "native_result_host_for", checked_host)
+    runner = object.__new__(codex_runner.CodexAgentRunner)
+    runner.run_id = codex_runner.PilotInputCapture.RUN_ID
+    runner.pilot_wire_receipts, runner.cost_ledger = session, None
+    runner.timeout = 0.5 if case in ("stuck", "term_ignored") else 1800
+    runner.codex_bin = "unused-by-synthetic-launch-override"
+    overrides = ('model_providers.gdpval-foundry.base_url=' + json.dumps(UPSTREAM),)
+    runner.provider = SimpleNamespace(base_url=UPSTREAM, provider_id=REQUESTED["provider_id"],
+                                      config_overrides=lambda: overrides)
+    auth_calls, processes, clients, initialize_calls, effects = [], [], [], [], []
+    runner.require_a_usable_auth_command = lambda _workspace: auth_calls.append("synthetic-auth-boundary")
+    runner._build_environment = lambda _workspace: {}
+
+    def forbidden(*_args, **_kwargs):
+        effects.append("forbidden")
+        raise AssertionError("startup must not start a thread/turn, reserve a call, or collect files")
+
+    runner.start_thread = runner.resume_thread = runner._reserve_call = forbidden
+    workspace = SimpleNamespace(workspace=tmp_path, collect_deliverables=forbidden)
+    monkeypatch.setattr(wire, "HTTPSConnection", forbidden)
+    # Codex itself, its JSON-RPC initializer and its close method are unchanged.
+    # Only the CLI process is substituted, with no credentials or private input.
+    child = (
+        "import json, signal, sys\n"
+        + ("signal.signal(signal.SIGTERM, signal.SIG_IGN)\n" if case == "term_ignored" else "")
+        + "request = json.loads(sys.stdin.readline())\nassert request['method'] == 'initialize'\n"
+        + ("signal.pause()\n" if case in ("stuck", "term_ignored") else
+           "print(json.dumps({'id':request['id'],'result':{'userAgent':'fixture/0.147.0',"
+           "'serverInfo':{'name':'fixture','version':'0.147.0'}}}), flush=True)\n"
+           "for line in sys.stdin:\n assert json.loads(line)['method'] == 'initialized'\n")
+    )
+    clock = [1000.0]
+    if case in ("late_return", "already_expired"):
+        monkeypatch.setattr(wire.time, "monotonic", lambda: clock[0])
+
+    def config(**kwargs):
+        assert kwargs["env"] == {} and kwargs["cwd"] == str(tmp_path)
+        value = CodexConfig(**kwargs, launch_args_override=(sys.executable, "-I", "-u", "-c", child))
+        if case == "already_expired":
+            clock[0] = observer.provider_capture.deadline
+        return value
+
+    real_start, real_initialize, real_codex = CodexClient.start, CodexClient.initialize, openai_codex.Codex
+
+    def start(client):
+        real_start(client)
+        clients.append(client)
+        processes.append(client._proc)
+
+    def initialize(client):
+        initialize_calls.append("initialize")
+        if case == "startup_error":
+            raise ValueError(CANARY)
+        return real_initialize(client)
+
+    def late_return(config):
+        value = real_codex(config)
+        clock[0] = observer.provider_capture.deadline
+        return value
+
+    monkeypatch.setattr("openai_codex.client.CodexConfig", config)
+    monkeypatch.setattr(CodexClient, "start", start)
+    monkeypatch.setattr(CodexClient, "initialize", initialize)
+    if case == "late_return":
+        monkeypatch.setattr(openai_codex, "Codex", late_return)
+    started = time.perf_counter()
+    try:
+        if case in ("stuck", "term_ignored", "late_return", "already_expired"):
+            outcome = runner._run_one_turn(workspace=workspace, task_text=CANARY, experiment_prompt=None,
+                task_id=TASKS[0], pilot_wire_observer=observer, pilot_host_witness=object())
+            assert not outcome.success and outcome.text == ""
+            assert outcome.error == outcome.error_category == wire.NATIVE_DEADLINE_EXCEEDED
+            assert outcome.thread_id is outcome.turn_id is None
+            assert observer.provider_capture.closed and not observer.provider_capture.thread.is_alive()
+            assert observer.provider_capture.server.socket.fileno() == -1
+            assert all(process.poll() is not None for process in processes)
+            receipt = observer.finish(success=False, thread_id=None, turn_id=None)
+            usage = observer.caps_usage_observer.verified()
+            assert receipt["scope"] == "codex_app_server_startup_deadline_before_thread"
+            assert receipt["requests"] == {} and receipt["app_server_settings"] is None
+            assert receipt["correlation"] == {"thread_id_sha256": None, "turn_id_sha256": None, "status": None}
+            assert receipt["usage"]["state"] == "not_available" and receipt["usage"]["snapshots"] == []
+            assert usage["snapshots"] == [] and usage["threshold_observation"] == (
+                wire.NATIVE_DEADLINE_EXCEEDED + "_usage_may_be_partial")
+            observed = receipt["provider_observation"]
+            assert observed["native_request_count"] == 0 and observed["served_model"] is None
+            caps = observed["runtime_caps"]
+            assert caps["stop_reason"] == wire.NATIVE_DEADLINE_EXCEEDED
+            assert caps["input_tokens"] is caps["output_tokens"] is None
+            assert caps["wall_seconds_limit"] == 1800 and caps["effective_wall_seconds"] == runner.timeout
+            assert caps["task_requests"] == caps["pilot_requests"] == 0
+            assert caps["token_hard_limit_enforced"] is False
+            assert step2._bounded_codex_diagnostics({"provider_observation": observed}) == {"provider_observation": observed}
+            assert step2.infra_retry_category({"status": "error", "observability": {
+                "error_category": outcome.error_category}}) is None
+            output = capsys.readouterr()
+            assert all(secret not in json.dumps(receipt) + json.dumps(usage) + output.out + output.err
+                       for secret in (CANARY, UPSTREAM, "Bearer", str(tmp_path), observer.provider_capture.route))
+            assert len(processes) == len(initialize_calls) == (0 if case == "already_expired" else 1)
+        elif case == "ready":
+            codex = runner.open_runtime(workspace, pilot_wire_observer=observer)
+            assert type(codex) is real_codex and codex.metadata.serverInfo.version == "0.147.0"
+            assert observer.installed and observer.startup_attempted and not observer.startup_timed_out
+            assert observer.provider_runtime is codex and observer.cap_stop_reason is None
+            assert observer.provider_capture.timeout == 1800
+            assert 0 < observer.provider_capture.remaining() <= 1800
+            observer.close_provider_runtime()
+            observer.close_provider_observer()
+        elif case == "startup_error":
+            with pytest.raises(ValueError) as raised:
+                runner.open_runtime(workspace, pilot_wire_observer=observer)
+            assert raised.value.args == (CANARY,)
+            assert not observer.startup_timed_out and observer.cap_stop_reason is None
+            with pytest.raises(wire.PilotWireReceiptRefused):
+                observer.finish(success=False, thread_id=None, turn_id=None)
+        elif case == "existing_alarm":
+            signal.setitimer(signal.ITIMER_REAL, 30)
+            try:
+                with pytest.raises(wire.PilotWireReceiptRefused):
+                    runner.open_runtime(workspace, pilot_wire_observer=observer)
+                assert signal.getsignal(signal.SIGALRM) == before_handler
+                assert signal.getitimer(signal.ITIMER_REAL)[0] > 0
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, 0.0)
+            assert auth_calls == [] and observer.provider_capture is None
+        else:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(runner.open_runtime, workspace, pilot_wire_observer=observer)
+                with pytest.raises(wire.PilotWireReceiptRefused):
+                    future.result(timeout=2)
+            assert auth_calls == [] and observer.provider_capture is None
+        assert signal.getsignal(signal.SIGALRM) == before_handler
+        assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+        assert effects == [] and all(process.poll() is not None for process in processes)
+        assert all(client._proc is None and not client._reader_thread.is_alive()
+                   and not client._stderr_thread.is_alive() for client in clients)
+        assert time.perf_counter() - started < 5  # Includes the SDK's existing 2s TERM grace.
+    finally:
+        observer.close_provider_runtime()
+        observer.close_provider_observer()
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=1)
+            for stream in (process.stdin, process.stdout, process.stderr):
+                stream.close()
+
+
+@pytest.mark.parametrize("damage", ["not_started", "not_expired", "installed", "requests", "native_request",
+                                   "thread", "usage", "success"])
+def test_empty_startup_receipt_cannot_bypass_the_existing_wire_guards(monkeypatch, damage):
+    clock = [1000.0]
+    monkeypatch.setattr(wire.time, "monotonic", lambda: clock[0])
+    observer = _observer()
+    capture = _configure(observer, timeout=1800)
+    try:
+        with pytest.raises(TimeoutError, match="^native_attempt_deadline_exceeded$"):
+            with observer.supervise_provider_startup():
+                clock[0] = capture.deadline
+    finally:
+        capture.close()
+    if damage == "not_started":
+        observer.startup_attempted = False
+    elif damage == "not_expired":
+        observer.startup_timed_out = False
+    elif damage == "installed":
+        observer.installed = True
+    elif damage == "requests":
+        observer.requests["thread/start"] = {"request_id_sha256": "a" * 64}
+    elif damage == "native_request":
+        capture.requests = 1
+    elif damage == "thread":
+        observer.thread = "a" * 64
+    elif damage == "usage":
+        observer.usage.append({"native": _usage(1, 1)})
+    with pytest.raises(wire.PilotWireReceiptRefused):
+        observer.finish(success=damage == "success", thread_id=None, turn_id=None)
 
 
 @pytest.mark.parametrize("field", ["input_tokens", "output_tokens"])
