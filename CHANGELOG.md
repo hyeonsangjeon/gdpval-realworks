@@ -13,6 +13,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an attempt-owned loopback observer for the five-task Foundry Sol pilot.
+  Observe native HTTP forward attempts and allowlisted response-body `model`
+  through the existing wire receipt, runner and bounded Step 2 serialization.
+  Missing or conflicting evidence stays null with a closed reason; model
+  version, provider receipt, billing and native-cap enforcement are not inferred.
+  Preserve the checked HTTPS account, auth command, zero retries, sealed plans,
+  all caps, shared helper and execution rights. No bodies, headers or raw errors
+  enter the public summary. At clean code HEAD
+  `ae4b37da23518a7b0d9b0af567a43c81806e75f3`, tree
+  `e89dc33b38fb6e8eb74d9c96af16845148a0191a`, the new synthetic observer and
+  directly related contracts passed **81 tests, 0 failed in 3.99s**, exit **0**,
+  outer **4.518s**, under **TERM120s/KILL5s**. Preserve the initial missing-timer
+  collection-launcher exit **127** separately; no test body ran in that wrapper.
+  The initial **42472-byte** four-file code patch has SHA256
+  `2c8c38274c5927a520e339c8b12cb2be891acd2fdbd9a64b4418d9acd6c34041`.
+  A separate close regression then reported **1 failed in 2.21s**, outer
+  **2.594s**, exit **1**: incomplete local HTTP headers left an accepted socket
+  open after observer shutdown. Track inbound sockets at accept, close them
+  on shutdown, and freeze closed metadata. Only that node ran again at code
+  HEAD `f017607fb1ae0dbd334c9a2b6ae4ffaa847b45a3`, tree
+  `04e6e9f8ab27af6cee5ab27f0097738072d682d4`: **1 passed in 1.93s**, outer
+  **2.306s**, exit **0**, with the same finite wrapper. Keep these proofs
+  separate; the initial 81 nodes were not rerun. The final **44416-byte** code
+  patch is SHA256 `f01ceaec550887cd77e8586e1b42933504e238cf923caf29de2256aca2a953a5`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the exact command, hashes,
+  source rationale and limitations. The SDK subprocess and upstream TLS were
+  replaced by offline fixtures; this does not validate real CLI/provider
+  streaming, served deployment/version, billing or headroom under the unchanged
+  draft 32-per-attempt cap. Final-source review/CI and existing live gates remain.
+  No Azure/model call, dispatch, grading, push or reset of consumed rights.
+
 - Document the pinned Codex SDK/CLI 0.147.0 served-identity boundary and exact
   runner/receipt/persisted-result insertion points without fabricating a model
   from runtime settings or adding an unpopulatable field. Deduplicate archived

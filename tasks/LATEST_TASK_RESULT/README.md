@@ -1,175 +1,146 @@
 # Latest task result
 
-## Served identity and archived call-count investigation, local only (2026-10-24)
+## Native provider observation, local implementation only (2026-10-24)
 
-Scope: inspect Codex SDK/CLI 0.147.0 and existing local evidence for the five
-registered tasks; identify a truthful served-model capture seam and measure
-available call/turn counts. Worktree:
-`/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`;
-branch `codex/gpt56-native-pilot-caps-20261024`; inspected/tested head
-`75d6be526c971ab43332260b8d16d7befbadd2d7`.
-This is not an independently reviewed execution head or launch approval.
-Only this result record and CHANGELOG change. No sealed plan, cap, runtime,
-source pin, workflow, grader or execution right changes.
+Implemented an attempt-owned loopback observer for the existing five-task
+Foundry GPT-5.6 Sol pilot. It records native HTTP forward attempts and the
+provider response body's allowlisted `model`, separately from logical SDK
+turns. The initial offline selection passed **81 tests**. An additional socket
+closure regression then exposed one failure; after a narrow correction, only
+that node ran again and passed. These are separate source-bound results below,
+not a pooled suite or live pilot. No launch approval is granted.
 
-### A. No served-model identity is exposed by the pinned SDK
+Worktree: `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`;
+branch: `codex/gpt56-native-pilot-caps-20261024`.
+Base HEAD `f54b0ebcc1c2065d6a4cda30055878e6209793e6`, tree
+`cfae8372dd1fc1eb8aaf9908493ad58b9ddb0546`.
+Initial clean tested HEAD `ae4b37da23518a7b0d9b0af567a43c81806e75f3`, tree
+`e89dc33b38fb6e8eb74d9c96af16845148a0191a`.
+Corrected code/test HEAD `f017607fb1ae0dbd334c9a2b6ae4ffaa847b45a3`, tree
+`04e6e9f8ab27af6cee5ab27f0097738072d682d4`; only this record and CHANGELOG were
+pending during its one-node proof. The final local child commits those two
+records only; its full identity is returned in the handoff. No independent
+review or CI covers this change.
 
-Inspected the existing installation at
+### Why this observation point
+
+The installed `openai-codex` and CLI distributions are both `0.147.0`, under
 `/ai-work/copilot/_tmp/ghcp-sol-gate-ci-20261024-venv/lib/python3.10/site-packages/`.
-Both distribution metadata versions are `0.147.0`; nothing was installed.
-The following paths are relative to that installation's `openai_codex/`:
+No software was installed and no external documentation was fetched.
 
-| SDK source | Available fact, not a served-model attestation |
+- `openai_codex/client.py:241-267` passes configuration to a subprocess running
+  `codex app-server --listen stdio://`. A Python HTTP hook would not observe
+  the Rust process's provider traffic. The new SDK fixture checks those actual
+  argument-building lines while trapping process creation.
+- `openai_codex/_run.py:22-34,69-100` exposes items, status and usage, not the
+  provider response envelope or headers. Thread/rollout model settings are
+  not served identity; the synthetic rollout and quoted-output cases refuse.
+- The bundled binary contains `SSE event:`, `codex.api_request`,
+  `codex.sse_event` and `codex-api/src/sse/responses.rs` markers. These establish
+  trace facilities, not a verified lossless response-model/count contract.
+  Raw SSE logging can also contain private output. No old sessions or logs
+  were read to infer either measurement.
+- `core/codex_runtime_config.py:1066-1086` already supplies the provider URL,
+  auth command and zero retry settings through CLI overrides. The observer
+  changes only the URL in this process's copy, after the existing account and
+  task binding checks. Original provider settings and the auth command remain
+  unchanged. It forwards only the two fixed Responses/compaction POST routes
+  to that same HTTPS account, without redirects, retries or credential lookup.
+
+The receipt implementation is `batch-runner/gpt56_pilot_wire_receipt.py:97,173,476`.
+`core/codex_runner.py:1077,1600,1969` installs/closes it and returns its closed
+summary; `step2_run_inference.py:1339` preserves that allowlisted summary in
+persisted task observability. The existing non-pilot path remains unchanged.
+
+### What the values mean
+
+`native_request_count` counts forward attempts, including transport failures
+and remote compaction, within one owned attempt. It is not a count of confirmed
+provider arrivals, successful responses, billable calls or logical turns.
+Existing cost-ledger `model_calls` and unavailable native-count fields are not
+relabelled. A synthetic 33-request case verifies counting without treating the
+draft 32 as an enforced limit.
+
+`served_model` comes only from an actual response JSON/SSE envelope and a closed
+Sol-name syntax, never from requested deployment, rollout text or usage. An
+absent, unsafe, malformed, incomplete, oversized or conflicting observation
+retains `null` with a closed reason. Version remains `null`; no version is
+inferred from a model suffix. Neither field attests the deployment or a bill.
+Bodies and headers pass in memory; the report contains neither. Observation
+buffers are limited to 256 KiB plus a 64 KiB read chunk; this is not an output
+quota. The observer shares one deadline across requests, closes with the CLI,
+and does not add a retry or a native-call enforcement claim.
+
+### Exact offline evidence
+
+Evidence directory: `/ai-work/copilot/_tmp/p5-native-provider-observer.LJj1da/`.
+`invocation.txt` and `close-invocations.txt` contain the exact commands and
+selectors. Python **3.10.12**;
+`TERM120s/KILL5s`, empty task-local HOME, `env -i`, offline Hub/dataset flags,
+disabled plugin autoload, bytecode and pytest cache. Tests use fake provider
+bodies and actual loopback HTTP forwarding; all non-loopback socket connections
+are trapped. The upstream TLS connection is replaced by local HTTP, and SDK
+process creation is trapped. No Azure, model, credential or grading call ran.
+
+The first collection wrapper exited **127** because `/usr/bin/time` is absent;
+no pytest body started. Bash's existing timer then collected **81 tests in
+2.02s**, outer **2.409s**, exit **0**. That body invocation covers the new
+observer plus directly related wire/guard/legacy/Step 2/cap contracts, not an
+old full suite or a model outcome.
+
+| Source / scope | Actual pytest result | Outer wall / exit |
+| --- | --- | --- |
+| `ae4b37da23518a7b0d9b0af567a43c81806e75f3`, initial selection | 81 passed, 0 failed, 3.99s | 4.518s / 0 |
+| Same production source plus the new hashed close regression | 1 failed, 2.21s | 2.594s / 1 |
+| `f017607fb1ae0dbd334c9a2b6ae4ffaa847b45a3`, corrected close node only | 1 passed, 0 failed, 1.93s | 2.306s / 0 |
+
+The added node, `test_close_interrupts_incomplete_local_headers`, collected
+successfully before execution. It reproduced an accepted local socket left
+open when its HTTP headers were incomplete. The correction tracks inbound
+sockets from accept, closes them during shutdown, records failure metadata
+before responding, and prevents late workers from upgrading a closed report.
+The unchanged 81-node selection was not rerun. No warnings were reported;
+the failure log, JUnit and original test hash are retained separately.
+
+| Evidence file | SHA256 |
 | --- | --- |
-| `generated/v2_all.py:10241-10272` | `ThreadStartResponse.model` / `model_provider`: app-server thread configuration |
-| `generated/v2_all.py:8516-8542` | `ThreadSettings.model` in `thread/settings/updated`: runtime configuration |
-| `generated/v2_all.py:2443-2451` | `model/rerouted`: `from_model`, `to_model`, thread/turn IDs and reason, but no provider model version; the pilot already refuses this event |
-| `generated/v2_all.py:2454-2464,2493-2499` | Safety-buffering model names and verification flags, not provider response identity |
-| `_run.py:22-34,69-100` | `TurnResult` has status/items/text/usage, but no model/version or HTTP headers; collector retains only the last usage notification |
-| `generated/v2_all.py:8579-8595,9643-9696,9933-9940` | Usage has total/last token breakdowns and context window; `Turn` and raw response-item notifications do not carry the Responses response envelope's `model` or HTTP headers |
+| `invocation.txt` | `b59e74bee183133dfe1735d27fd5430d2fd8623b50b18edd08d5fc27b5da14b1` |
+| `test.log` (179 bytes) | `a52f4b35c1efdaf1a74f752372f29978fa6a90aab110bc4b0f1a230e431b4d2c` |
+| `junit.xml` (13152 bytes) | `967940dbc6d8024b70ee83980c7ea3243310e7a18807c6bc0ce34a19ae4a3b7b` |
+| `timing.txt` | `7c4da02fa373f330f776721bb23b1e2a326ceb30a651efeca2fb76c122b0dbc1` |
+| `collection.log` (launcher failure) | `6933a7e0df95783acf93ed90af942334f7d1619d9a6a1f897c79ed256537f3c9` |
+| `collection-corrected.log` | `8959a649bb84e194cc747d1e22135a02bf39db50f2869a0507a1800a4c182a4c` |
+| `sdk-source-sha256.txt` | `bebd1cfa92d0ac486019d72f3c82f5a3e3caebaa2aef4bfc80091b4af8800f97` |
+| `tested-code.patch` (42472 bytes, four code/test files) | `2c8c38274c5927a520e339c8b12cb2be891acd2fdbd9a64b4418d9acd6c34041` |
+| `close-failed.log` | `4a115c760ff90276e15a1b2cfd139564dac8c08f5797b68c6d58582c3576ca4e` |
+| `close-failed-junit.xml` | `986f98be948ce08646c9916d4f6bc886f318847158f3e4cf2a7f98ac5afae0b8` |
+| `close-corrected.log` | `a4f4eee5c3cfd4d66ed0e5640986e5fdcdc04bcae931e493f824f1968c722867` |
+| `close-corrected-junit.xml` | `8f4d3547c52a1c094c09a17d94719cc500930da6e5565573dce859c8d238cf78` |
+| `close-invocations.txt` | `2938023dbc0ed72de73ea34446c05df43f7ee7452caf45b46dce87f0a7d5eb5e` |
+| `close-fix.patch` (5764 bytes) | `63c01d75cdcfa3bc8f9e30c1189a56826355a87179c0c9a2a3d5bd80fda694be` |
+| `final-code.patch` (44416 bytes, four code/test files) | `f01ceaec550887cd77e8586e1b42933504e238cf923caf29de2256aca2a953a5` |
 
-A raw provider Responses envelope's `model` would be a candidate name source,
-with separate evidence needed for any version not explicitly returned. That
-envelope and provider response headers do not cross this app-server SDK seam.
-No existing inspected archive supplies them. Requested deployment, context
-window, token counts, safety flags and thread settings must not fill that gap.
+### Preserved boundaries and remaining work
 
-Exact repository insertion points, if a separately authenticated provider
-response observer becomes available:
+Sealed plans, caps, registrations, dependencies, workflow, grader and shared
+Git helper were not edited. The helper remains SHA256
+`77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62`;
+the draft cap file remains
+`7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`.
+Headroom under **32 per attempt / 128 per task** remains unestablished. The
+recorder does not approve those numbers, enforce native caps, change budgets
+or reserve any execution right.
 
-- `batch-runner/gpt56_pilot_wire_receipt.py:135-145,175-198` already separates
-  `app_server_thread_settings_not_served_identity` from unavailable
-  `served_model` / `served_model_version`. The latter is the pilot receipt
-  result seam; `response()` currently receives JSON-RPC replies, not Azure
-  HTTP envelopes.
-- `batch-runner/core/codex_runner.py:678-720,747-765,1569-1573` is the
-  observation -> outcome -> returned diagnostics path.
-  `batch-runner/step2_run_inference.py:1228-1230,1301-1342` is the bounded
-  projection into persisted task observability; adding only a runner field
-  would otherwise be dropped.
-- The diagnostic already emits nullable `served_model` and an explanation at
-  `batch-runner/scripts/diagnose_codex_foundry_connection.py:623-639`;
-  its stream consumer at `699-753` sees usage/settings/completion, not the
-  provider response.
+Real Rust CLI/provider streaming, Azure TLS, proxy overhead, served deployment
+and version, billing, hard native enforcement, frozen-judge/source admission,
+final-source review/CI and the existing live gates remain unverified or open.
+No push, workflow dispatch, grading or live experiment occurred. Task3 run
+`37756891578` remains uncertain, spent and nonretryable; no prior right is reset.
+Earlier archive/count findings and separate 244/408-test proofs remain in the
+[immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f54b0ebcc1c2065d6a4cda30055878e6209793e6/tasks/LATEST_TASK_RESULT/README.md),
+not pooled with this proof.
 
-**No production field-only patch:** it would add another permanently null
-copy, not capture served identity. A fixture asserting that a requested model
-was served would fabricate evidence. A truthful populated field needs a
-lower-level provider response observer and corresponding receipt/source-review
-work, beyond a small additive change and the sealed-plan boundary here.
-
-The already-local connection artifact `12257312458`, run `39407062120`, remains
-SHA256-verified:
-`5d1a2540f0ba1291093b231d0e12e489ca197c32683aee521fb1622893600841`.
-Its extracted `codex-foundry-connection.json` has one logical turn, eight
-notifications, one usage update, 9,444 input / 5 output tokens and null served
-identity. Neither one usage update nor equal total/last tokens measures HTTP
-requests. It is a text diagnostic, not any of the five benchmark tasks.
-
-### B. Measured turns are available; native request counts are not
-
-Task order below is exactly the sealed five-task order. Counts include failed
-and infrastructure-retry turns. These are ledger logical turns, **not native
-model requests** (`core/codex_cost.py:14-36`). A settled row is not necessarily
-a completed model response. Missing/unattempted tasks are excluded, not zero.
-
-| Task ID prefix | exp033 | exp034 | exp035 lineage A | exp035 lineage B | Observed max / median | n |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| T1 `02aa1805` | 2 | 4 | 4 | 4 | 4 / 4 | 4 |
-| T2 `0112fc9b` | 1 | 1 | 1 | 1 | 1 / 1 | 4 |
-| T3 `2ea2e5b5` | 1 | absent | 1 | 1 | 1 / 1 | 3 |
-| T4 `3baa0009` | 2 | 4 | unattempted | 1 | 4 / 2 | 3 |
-| T5 `0818571f` | 3 | 2 | 1 | 1 | 3 / 1.5 | 4 |
-
-Sources, all already tracked locally:
-
-- exp033 run `34528903950`: `batch-runner/tests/fixtures/run_record/step2_inference_results.json`
-  and `cost_ledger_condition_a.jsonl` in the same directory. Nine distinct
-  settled `call_id`s agree with the five result receipts; every row retains
-  `call_reachability_unknown`. Ledger SHA256
-  `60f9dd4a5bcf0598e5028c9064c40fae6695d5d728759d0edab0fe7a2b02b970`.
-- exp034 run `34540053904`: `batch-runner/tests/fixtures/run_record/exp034_turn_ledger.json`,
-  matching only the exact fixed-task IDs and counting distinct `call_id`s.
-  SHA256 `7cf55a1b63479c8e215e7aef68529cde2959b5d2f231572d35b6c15994abe8d1`.
-- exp035 lineage A: `batch-runner/docs/run_records/exp035_run34571840967_partial/outcomes.json`,
-  SHA256 `9813c6bef60526befb3314c1c589de5f938aaf8705664fa628b5b76ddb77874c`.
-  Independent restarted lineage B began at `34603033098`; its latest retained
-  snapshot is `exp035_run34685779030_partial/outcomes.json` under the same
-  run-record directory, SHA256
-  `9e98e98d3dbd0a9030c95642388ccb53b210a5e8f4cbc685b13391e67b4a8d6b`.
-  `docs/run_records/README.md:50-59` and that last snapshot's `report.md:14-21`
-  establish the lineage split and checkpoint inheritance. Intermediate B
-  snapshots are not independent samples and are not counted again. The table
-  uses the last snapshot as provenance, not a claim that it executed inherited
-  rows anew. Different historical protocols are descriptive, not matched repeats.
-
-Separate longer-budget evidence must not be pooled into that historical table:
-`tasks/codex_budget_pilot/retention_diagnostic_readout.json`, SHA256
-`cda3068a6f46ab8395aac0127e5f2252847e1f6d9af475d3d96068179bd12287`,
-records these inference receipt counts, not grader calls:
-
-| Task | Per-cell turns, with producer runs | Max / median |
-| --- | --- | ---: |
-| T4 | 10 (`36696961231`), 39 (`36845127347`), 39 (`36907894862`), 6 (`36947454688`) | 39 / 24.5 |
-| T5 | 18 (`37032230813`), 13 (`37066171719`), 38 (`37081963299`), 1 (`37101934436`) | 38 / 15.5 |
-
-These use 180-minute cumulative cells and different fresh/keep recovery rules;
-39/38 are whole-cell logical turns, not requests within one attempt.
-The original external-budget pilot additionally records T5 B1 as 33 receipt
-calls (`tasks/codex_budget_pilot/REPORT.md:316-325`); that incomplete subset
-does not support a five-task pooled median.
-
-Earlier GPT-5.4 comparison observations do not repair the gap:
-native T1 run `37574558224` is uncertain with null usage/counters; native T3
-run `37631184801` completed with null usage and no established native counters.
-These are existing leader-verified records, not newly fetched raw artifacts
-(`batch-runner/README.md:1560,2370-2384`;
-`gpt54_time_budget_result_readout.py:479-483`).
-They are excluded from numeric distributions, not imputed as zero.
-
-**Cap judgement:** no measured native-call maximum or median is available for
-any of the five tasks, so headroom under 32 native requests is **unestablished**.
-The small historical turn counts cannot prove it; the longer-budget counts
-also show why a whole-cell turn count cannot be substituted. The draft actually
-says **32 per attempt, 128 per task across four attempts**, not 32 across the
-whole task. Those numbers and their provisional heuristic derivation remain
-unchanged. Native request measurement and hard enforcement are still required.
-
-### Verification and remaining boundary
-
-At the inspected head above, a completed focused offline invocation reported
-**244 passed, 0 failed (15.06s)**. SDK field/metadata and real archived
-diagnostic/ledger assertions also passed without constructing a runtime/client.
-The pytest selection was:
-
-```text
-tests/test_codex_foundry_connection_probe.py
-tests/test_codex_cost_adapter.py
-tests/test_gpt56_pilot_wire_receipt.py::
-  test_actual_flushed_serialization_and_native_absence_are_preserved
-  test_changed_request_or_retry_is_refused_at_the_transport_seam
-  test_returned_route_drift_and_mismatched_response_fail_closed
-  test_closed_native_usage_shape_never_publishes_untyped_fields
-  test_incomplete_or_duplicated_observation_never_completes
-```
-
-From `batch-runner`, used `env -i`, explicit PATH, credential-empty
-session-local HOME outside `/tmp`, the existing dependency directory as
-PYTHONPATH, offline Hub/dataset flags, disabled bytecode/plugin autoload,
-`-m "not integration" -o addopts= -p no:cacheprovider -p pytest_timeout
---timeout=30 --tb=short -q`. No dependency changes.
-
-An earlier broader invocation was interrupted after stalling in unrelated
-result-host tests; it is not a completed suite or a pass count. Its two
-observed auth-preflight test failures were reproduced separately (**2 failed,
-0.48s**) and traced to the invalid test HOME `/tmp`, which correctly fails
-the non-temporary workspace-root guard before auth. Only those two tests were
-then rechecked with valid empty HOME: **2 passed, 0.53s**. The final 244-case
-selection includes both; these separate runs are not added to its count.
-The previously reported 408-test proof is historical and was not rerun here.
-
-Remaining: independently verified served identity/version, provider-native
-request measurement/enforcement, cumulative budgets, owner-approved caps,
-frozen-grader/live evidence gates and independent final-source review.
-No Azure/model call, credential minting, workflow dispatch, grading, push,
-merge or execution approval occurred. This commit records pre-merge facts only.
+Reporting used `experiment-report-en` to preserve units and synthetic/live
+limits, then `im-not-ai-en` for concise technical English. `openai-docs` used
+local SDK/binary evidence because the owner restricted this task to local
+work. No study redesign or UI skill applied.
