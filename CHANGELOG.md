@@ -28,6 +28,23 @@ entries land under a fresh dated heading the day they merge to `main`.
   specialist or launch approval is claimed. No push, workflow dispatch,
   paid call or private handoff access was performed or authorized.
 
+### Changed
+
+- Verify the GHCP Sol gate's previously SDK-blocked CI partition check at
+  local source `4e61a4bb20de67995d0684e051f1d3416eacea69`: install the
+  repository-pinned Codex SDK/CLI **0.147.0** in an isolated Python **3.10.12**
+  venv outside the checkout. The partition check passes (**1 passed**), as do
+  the backend job's repo-root script tests (**186 passed**). Its exact full
+  core partition reports **13,373 passed, 3 failed, 57 skipped, 46 deselected**.
+  All three failures reproduce at branch point
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`: inherited `GH_TOKEN` presence
+  and two missing-PyAV audio failures. Leave baseline behavior and all guards
+  unchanged; do not claim all touched CI jobs green or specialist/launch
+  approval. [Current result](tasks/LATEST_TASK_RESULT/README.md) records exact
+  commands, timings, log hashes, host limits and remaining work. No system
+  Python/user-checkout edit, model/GHCP call, GHCP auth, private download,
+  push, dispatch or paid execution occurred.
+
 ### Fixed
 
 - Harden the local-only GHCP Sol gate after directly reviewing fixed HEAD
@@ -40,8 +57,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   actual capture-shell rehearsals passed locally with zero model/grader
   calls and metadata-only envelopes. The **29 to 30** workflow inventory
   change passes cross-workflow scans; the backend workflow hash is unchanged.
-  One CI partition test remains unverified because local collection lacks
-  the declared `openai_codex` SDK; no network installation was attempted.
+  At that review, one CI partition test was unverified because local collection
+  lacked the declared `openai_codex` SDK; the follow-up local validation above
+  resolves that coverage gap without claiming the full CI gate is green.
   Specialist reviews could not complete because of worker path/model
   availability; exact-source approval and all paid-run blockers remain.
   Only the registered feature worktree was changed, with no push, PR,
