@@ -4,7 +4,74 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Offline per-call capture, 2026-10-24 21:30
+
+The model-free capture path now projects supplied GHCP JSON session events
+into `capture.json` under `session_event_receipt`. It records each
+`assistant.usage` event's allowlisted `model` and `reasoningEffort`, plus the
+latest preceding `session.usage_info.tokenLimit` for the same agent. The
+receipt identifies the context event's position and labels the association
+`preceding_same_agent_session_snapshot_not_call_attestation`. A main-agent
+snapshot cannot fill a sub-agent's missing context; a later snapshot cannot
+repair an earlier call. A sub-agent origin without `agentId` also refuses;
+the documented `initiator` or legacy `parentToolCallId` cannot implicitly
+select the main-agent snapshot. Missing fields, non-Sol models, non-Max effort,
+non-1000000 context limits, duplicate usage events and differences between
+calls fail the attempt with fixed reasons and exit 2. No value is filled from
+the requested settings. Arbitrary non-Sol model strings are suppressed as
+null plus `served_model_mismatch`, not copied into the public receipt.
+
+This is a document-based JSON projection tested with synthetic events, **not
+an actual GHCP output capture or a GHCP-to-Codex execution adapter**. The
+cached official event reference [G1] documents per-call model/optional effort
+and session-level `tokenLimit`; [G2] says usage is ephemeral and includes
+sub-agent calls. Codex's separate `modelContextWindow` signal [L1 below] has
+no established GHCP binding here. Its receipt field remains null with
+`not_in_documented_ghcp_event_contract`; the collector does not invent a
+GHCP field or combine unbound streams from different harnesses.
+
+Every receipt retains `evidence_level: settings_only`,
+`applied_settings_verified: false`, `live_source_verified: false` and
+`stream_completeness_verified: false`. Consistent metadata is not proof of
+the actual served model, applied Max or a granted 1M window. Supplied usage
+event counts are not a native-request counter. The dry-run runner itself
+makes zero model/grader calls; usage, cost and grade stay null. Paid execution
+and retry authority remain false even for `consistent_settings_only`.
+
+The default matrix/capture commands still perform an empty, model-free
+rehearsal. For an explicitly supplied **offline synthetic** JSONL stream, add
+`--session-events /absolute/synthetic-events.jsonl` to the existing capture
+command. The reader does not discover session logs or credentials. It accepts
+one regular, non-symlink file bounded to 1 MiB, 64 KiB per line and 4096
+events; these are parser limits, not a paid-call allowance. Parse/read failures
+retain only a failed metadata receipt. Raw conversations, errors, headers,
+event IDs and credentials never enter that receipt or CLI output.
+
+Before catalogue/event reads or capture writes, exact Sol selection is
+required. `--model auto`, `--byok` and any `--provider-config` refuse.
+Inherited `COPILOT_PROVIDER_*` or `COPILOT_PROVIDERS_CONFIG` names also refuse,
+without inspecting their values. Inherited `COPILOT_MODEL` and `COPILOT_HOME`
+refuse as unverified rather than being resolved. The default
+`.copilot/providers.json` is checked only for existence: even an empty or
+symlinked registry refuses, and its contents are never read. Tests substitute
+a synthetic home; no real user configuration was examined. These are local
+preflight checks, not a universal server-side no-fallback guarantee. A future
+reviewed adapter still needs controlled configuration/authentication and a
+subscription installed before any call, including sub-agent calls.
+
+The initial fixture cases and existing Actions/VM gate tests report **204
+passed, 0 failed in 9.89s** (pytest), **10.084s** wrapper wall time, exit **0**.
+Source review then found the missing-agent-ID sub-agent edge above. A separate
+follow-up on the corrected source reports **7 passed, 0 failed in 0.23s**,
+wrapper **0.390s**, exit **0**: two new origin cases and five directly coupled
+context cases. These are separate proofs, not a pooled full-suite pass on the
+final source. No full suite or live session was run. Exact source, command and
+evidence hashes are in the [current task result](../tasks/LATEST_TASK_RESULT/README.md).
+
 ## Evidence and authentication audit, 2026-10-24
+
+This section preserves the earlier **18:45** audit at the source below.
+The new offline collector does not close its live-runtime or authentication gaps.
 
 **Paid execution remains blocked.** At inspected source
 `f205207bb73f123ed7ff858e0feefd35d23e53ab` (tree

@@ -30,6 +30,27 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add closed per-call session-event projection to the existing model-free
+  GHCP Sol Actions capture path. Record allowlisted model/effort and explicitly
+  labelled same-agent session context metadata; fail missing, mismatched or
+  inconsistent evidence with fixed reasons. Refuse Auto, BYOK and unverified
+  user/provider configuration before capture. Do not read credential values
+  or provider-registry contents. Actual served identity, Max and 1M remain
+  settings only; paid execution and retry authority remain false. At base
+  `31679f60d98f4718e04c7dc173c1c6b84d37640b` plus code patch SHA-256
+  `a427cab2939b9a416ca18224b1d10c5f5d5ebf76cbcb876193ce9323926cb555`,
+  **204 offline tests passed, 0 failed in 9.89s**, wrapper **10.084s**, exit
+  **0**. Subsequent source review closed a case where a sub-agent origin lacked
+  `agentId`; a separate seven-case proof reports **7 passed, 0 failed in 0.23s**,
+  wrapper **0.390s**, exit **0**, on final code patch SHA-256
+  `1f749b6e062b3d88500c45c4c9fad0f949f578fa7e3fef3c6ed875806819479c`.
+  Do not pool the two source-specific results. This is synthetic parser/capture
+  and existing gate-contract evidence, not actual GHCP output, native-request
+  completeness or a paid/live result.
+  No plan, cap, workflow, pin, dependency or permission changed. See the
+  [capture contract](docs/ghcp-sol-actions-gate.md#offline-per-call-capture-2026-10-24-2130)
+  and [exact proof and remaining gates](tasks/LATEST_TASK_RESULT/README.md).
+
 - Document the GHCP Sol gate's applied-model/Max/1M evidence and three
   authentication drafts at audited source
   `f205207bb73f123ed7ff858e0feefd35d23e53ab`. All three properties remain

@@ -4,12 +4,31 @@ import json
 import os
 import socket
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 import yaml
 
 import ghcp_sol_actions_gate as gate
+
+
+@pytest.fixture(autouse=True)
+def synthetic_user_configuration(tmp_path, monkeypatch):
+    """Never examine the real user's Copilot directory, even its metadata."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "user-config")
+
+
+@pytest.fixture
+def no_runtime(monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("event capture attempted network or a runtime process")
+
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    monkeypatch.setattr(socket, "create_connection", forbidden)
+    monkeypatch.setattr(socket, "getaddrinfo", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    monkeypatch.setattr(os, "system", forbidden)
 
 
 def test_fixed_plan_and_all_five_captures(tmp_path, monkeypatch, capsys):
@@ -38,6 +57,9 @@ def test_fixed_plan_and_all_five_captures(tmp_path, monkeypatch, capsys):
         assert set(envelope["actual_served"].values()) == {"not available"}
         assert envelope["model_calls"] == envelope["grader_calls"] == 0
         assert envelope["paid_execution_allowed"] is False
+        assert envelope["session_event_receipt"]["status"] == "not_collected"
+        assert envelope["session_event_receipt"]["calls"] == []
+        assert envelope["session_event_receipt"]["applied_settings_verified"] is False
         assert envelope["limits"]["proposed_paid_timeout_seconds_per_task"] == 1200
         assert envelope["limits"]["proposed_paid_max_turns_per_task"] == 64
         assert envelope["limits"]["dry_run_max_model_turns"] == 0
@@ -191,3 +213,327 @@ def test_runner_refuses_nontrue_modes_before_catalogue(tmp_path, monkeypatch, dr
         gate.main(["--dry-run", dry_run, *args])
     assert error.value.code == 2
     assert not root.exists()
+
+
+CANARY = "SYNTHETIC_PRIVATE_EVENT_CANARY_NOT_FOR_RECEIPTS"
+
+
+def _usage(call=1, **overrides):
+    # Documented JSON event envelope, not an actual captured GHCP response.
+    return {
+        "id": f"00000000-0000-4000-8000-{call:012d}",
+        "type": "assistant.usage", "ephemeral": True,
+        "data": {"model": "gpt-5.6-sol", "reasoningEffort": "max", **overrides},
+    }
+
+
+def _context(limit=1_000_000, **envelope):
+    return {
+        "type": "session.usage_info", "ephemeral": True,
+        "data": {"tokenLimit": limit, "currentTokens": 25, "messagesLength": 1},
+        **envelope,
+    }
+
+
+def _captured(tmp_path, events, capsys):
+    source = tmp_path / "synthetic-events.jsonl"
+    source.write_text("".join(json.dumps(event) + "\n" for event in events))
+    root = tmp_path / "capture"
+    args = ["--task-id", gate.TASK_IDS[0], "--state-root", str(root),
+            "--session-events", str(source)]
+    try:
+        exit_code = gate.main(args)
+    except SystemExit as error:
+        exit_code = error.code
+    capture = json.loads((root / gate.TASK_IDS[0] / "capture.json").read_text())
+    private_exit = json.loads((root / gate.TASK_IDS[0] / gate.PRIVATE_PATHS["exit_status"]).read_text())
+    assert capture["exit_status"] == private_exit["exit_status"] == exit_code
+    assert private_exit["model_started"] is False
+    streams = capsys.readouterr()
+    assert CANARY not in json.dumps(capture) + streams.out + streams.err
+    assert str(tmp_path) not in json.dumps(capture) + streams.out + streams.err
+    assert streams.out == ("ghcp_sol_dry_capture_complete\n" if exit_code == 0 else "")
+    assert streams.err == ("" if exit_code == 0 else "ghcp_sol_session_evidence_refused\n")
+    assert capture["paid_execution_allowed"] is False
+    assert set(capture["actual_served"].values()) == {"not available"}
+    assert capture["model_calls"] == capture["grader_calls"] == 0
+    assert capture["usage"] is capture["cost"] is capture["grade"] is None
+    receipt = capture["session_event_receipt"]
+    assert receipt["evidence_level"] == "settings_only"
+    for field in ("paid_execution_allowed", "applied_settings_verified", "live_source_verified",
+                  "stream_completeness_verified", "retry_allowed"):
+        assert receipt[field] is False
+    assert receipt["observed_usage_events"] == len(receipt["calls"])
+    assert (receipt["status"] == "failed") == (exit_code == 2)
+    for name in ("transcript", "tool_calls", "commands"):
+        assert (root / gate.TASK_IDS[0] / gate.PRIVATE_PATHS[name]).read_text() == ""
+    return receipt
+
+
+def test_session_events_capture_documented_fields_without_promoting_evidence(tmp_path, capsys, no_runtime):
+    first = _usage(prompt=CANARY, headers={"Authorization": CANARY}, apiCallId=CANARY)
+    second = _usage(2)
+    second["agentId"] = CANARY
+    events = [
+        {"type": "session.start", "data": {"sessionId": CANARY}},
+        _context(), first,
+        {"type": "assistant.message", "data": {"content": CANARY}},
+        _context(agentId=CANARY), second,
+    ]
+    receipt = _captured(tmp_path, events, capsys)
+    assert receipt["status"] == "consistent_settings_only"
+    assert receipt["reason_codes"] == []
+    assert receipt["observed_usage_events"] == 2
+    for index, call in enumerate(receipt["calls"], 1):
+        assert call == {
+            "call_index": index, "event_index": 3 if index == 1 else 6,
+            "agent_scope": "main" if index == 1 else "subagent",
+            "model": "gpt-5.6-sol", "reasoningEffort": "max", "tokenLimit": 1_000_000,
+            "modelContextWindow": None, "context_event_index": 2 if index == 1 else 5,
+            "context_binding": "preceding_same_agent_session_snapshot_not_call_attestation",
+            "modelContextWindow_status": "not_in_documented_ghcp_event_contract",
+            "reason_codes": [],
+        }
+
+
+@pytest.mark.parametrize("change,reason", [
+    ({"model": "gpt-5.4"}, "served_model_mismatch"),
+    ({"model": "gpt-5.6-sol-fast"}, "served_model_mismatch"),
+    ({"model": CANARY}, "served_model_mismatch"),
+    ({"model": None}, "served_model_unverified"),
+    ({"model": []}, "served_model_unverified"),
+    ({"model": ""}, "served_model_unverified"),
+    ({"reasoningEffort": "high"}, "reasoning_effort_mismatch"),
+    ({"reasoningEffort": "xhigh"}, "reasoning_effort_mismatch"),
+    ({"reasoningEffort": None}, "reasoning_effort_unverified"),
+    ({"reasoningEffort": CANARY}, "reasoning_effort_unverified"),
+    ({"reasoningEffort": {}}, "reasoning_effort_unverified"),
+])
+def test_session_events_every_call_fails_closed(tmp_path, capsys, no_runtime, change, reason):
+    receipt = _captured(tmp_path, [_context(), _usage(), _usage(2, **change)], capsys)
+    assert receipt["status"] == "failed"
+    assert receipt["observed_usage_events"] == 2
+    assert receipt["calls"][0]["reason_codes"] == []
+    assert reason in receipt["calls"][1]["reason_codes"]
+    assert reason in receipt["reason_codes"]
+    assert "call_metadata_conflict" in receipt["reason_codes"]
+
+
+@pytest.mark.parametrize("field,reason", [
+    ("model", "served_model_unverified"),
+    ("reasoningEffort", "reasoning_effort_unverified"),
+])
+def test_session_events_missing_fields_are_not_filled_from_requests(tmp_path, capsys, no_runtime, field, reason):
+    call = _usage()
+    del call["data"][field]
+    receipt = _captured(tmp_path, [_context(), call], capsys)
+    assert receipt["reason_codes"] == [reason]
+    assert receipt["calls"][0][field] is None
+
+
+@pytest.mark.parametrize("limit,reason", [
+    (258400, "context_limit_mismatch"), (1_050_000, "context_limit_mismatch"),
+    (None, "context_limit_unverified"), (True, "context_limit_unverified"),
+    (0, "context_limit_unverified"), (-1, "context_limit_unverified"),
+    (1_000_000.0, "context_limit_unverified"), ("1000000", "context_limit_unverified"),
+    (CANARY, "context_limit_unverified"), (2**100, "context_limit_unverified"),
+])
+def test_session_context_changes_are_not_hidden(tmp_path, capsys, no_runtime, limit, reason):
+    receipt = _captured(tmp_path, [_context(), _usage(), _context(limit), _usage(2)], capsys)
+    assert reason in receipt["reason_codes"]
+    assert "call_metadata_conflict" in receipt["reason_codes"]
+    assert receipt["calls"][0]["tokenLimit"] == 1_000_000
+    assert receipt["calls"][1]["context_event_index"] == 3
+
+
+@pytest.mark.parametrize("variant", ["late", "subagent", "missing_limit", "codex_metadata"])
+def test_context_is_not_backfilled_or_borrowed(tmp_path, capsys, no_runtime, variant):
+    events = [_context(), _usage()]
+    if variant == "late":
+        events.reverse()
+    elif variant == "subagent":
+        events[1]["agentId"] = CANARY
+    elif variant == "missing_limit":
+        events[0]["data"] = {"modelContextWindow": 1_000_000}
+    else:
+        # Codex's different harness has no bound GHCP per-call context here.
+        events[0] = {"type": "thread.tokenUsage.updated", "data": {
+            "tokenUsage": {"modelContextWindow": 1_000_000},
+        }}
+    receipt = _captured(tmp_path, events, capsys)
+    assert receipt["reason_codes"] == ["context_limit_unverified"]
+    assert receipt["calls"][0]["tokenLimit"] is None
+    assert receipt["calls"][0]["modelContextWindow"] is None
+
+
+@pytest.mark.parametrize("origin", [{"initiator": "sub-agent"}, {"parentToolCallId": CANARY}])
+def test_subagent_without_agent_id_cannot_borrow_main_context(tmp_path, capsys, no_runtime, origin):
+    receipt = _captured(tmp_path, [_context(), _usage(**origin)], capsys)
+    assert receipt["reason_codes"] == ["session_event_identity_unverified", "context_limit_unverified"]
+    assert receipt["calls"][0]["agent_scope"] == "unbound_subagent"
+    assert receipt["calls"][0]["tokenLimit"] is None
+    assert receipt["calls"][0]["context_event_index"] is None
+
+
+@pytest.mark.parametrize("variant,reason", [
+    ("duplicate", "session_event_duplicate"), ("missing_id", "session_event_identity_unverified"),
+    ("malformed", "session_event_stream_refused"), ("resume", "session_event_stream_refused"),
+    ("new_session", "session_event_stream_refused"), ("invalid_agent", "session_event_stream_refused"),
+])
+def test_session_event_identity_and_stream_refusals(tmp_path, capsys, no_runtime, variant, reason):
+    events = [_context(), _usage()]
+    if variant == "duplicate":
+        events.append(deepcopy(events[-1]))
+    elif variant == "missing_id":
+        del events[-1]["id"]
+    elif variant == "malformed":
+        events.append({"type": "assistant.usage", "data": CANARY})
+    elif variant in ("resume", "new_session"):
+        events.append({"type": "session.resume" if variant == "resume" else "session.start", "data": {}})
+    else:
+        events[-1]["agentId"] = []
+    receipt = _captured(tmp_path, events, capsys)
+    assert reason in receipt["reason_codes"]
+
+
+def test_empty_event_stream_is_unknown_not_success(tmp_path, capsys, no_runtime):
+    receipt = _captured(tmp_path, [], capsys)
+    assert receipt["status"] == "failed"
+    assert receipt["reason_codes"] == [
+        "served_model_unverified", "reasoning_effort_unverified", "context_limit_unverified",
+    ]
+
+
+@pytest.mark.parametrize("variant", ["malformed", "duplicate_key", "nan", "line_bound", "file_bound", "symlink", "missing"])
+def test_event_file_failure_keeps_only_a_safe_receipt(tmp_path, capsys, no_runtime, variant):
+    source = tmp_path / "synthetic-events.jsonl"
+    contents = CANARY
+    if variant == "duplicate_key":
+        contents = '{"type":"assistant.usage","data":{"model":"gpt-5.6-sol","model":"' + CANARY + '"}}'
+    elif variant == "nan":
+        contents = '{"type":"session.usage_info","data":{"tokenLimit":NaN}}'
+    elif variant == "line_bound":
+        contents = " " * (gate.MAX_EVENT_LINE_BYTES + 1)
+    elif variant == "file_bound":
+        contents = " " * (gate.MAX_EVENT_BYTES + 1)
+    if variant == "symlink":
+        target = tmp_path / "do-not-read"
+        target.write_text(CANARY)
+        source.symlink_to(target)
+    elif variant != "missing":
+        source.write_text(contents)
+    root = tmp_path / "capture"
+    with pytest.raises(SystemExit) as error:
+        gate.main(["--task-id", gate.TASK_IDS[0], "--state-root", str(root), "--session-events", str(source)])
+    assert error.value.code == 2
+    data = (root / gate.TASK_IDS[0] / "capture.json").read_text()
+    receipt = json.loads(data)["session_event_receipt"]
+    assert receipt["status"] == "failed"
+    assert "session_event_stream_refused" in receipt["reason_codes"]
+    streams = capsys.readouterr()
+    assert streams.out == "" and streams.err == "ghcp_sol_session_evidence_refused\n"
+    assert CANARY not in data + streams.out + streams.err
+    assert str(tmp_path) not in data + streams.out + streams.err
+
+
+def test_event_iterator_failure_and_bound_preserve_partial_metadata(no_runtime, monkeypatch):
+    def failing():
+        yield _context()
+        yield _usage()
+        raise RuntimeError(CANARY)
+
+    receipt = gate.collect_session_events(failing())
+    assert receipt["observed_usage_events"] == 1
+    assert receipt["reason_codes"] == ["session_event_stream_refused"]
+    assert CANARY not in json.dumps(receipt)
+    monkeypatch.setattr(gate, "MAX_EVENTS", 2)
+    bounded = gate.collect_session_events([_context(), _usage(), _usage(2)])
+    assert bounded["observed_usage_events"] == 1
+    assert bounded["reason_codes"] == ["session_event_stream_refused"]
+
+
+@pytest.mark.parametrize("args,reason", [
+    (["--model", "auto"], "auto_model_refused"),
+    (["--model", " Auto "], "auto_model_refused"),
+    (["--model", "gpt-5.6-sol-fast"], "model_selection_refused"),
+    (["--model", CANARY], "model_selection_refused"),
+    (["--byok"], "custom_provider_refused"),
+    (["--provider-config", CANARY], "custom_provider_refused"),
+])
+@pytest.mark.parametrize("matrix", [False, True])
+def test_dry_run_selection_refuses_before_capture_or_reads(tmp_path, monkeypatch, capsys, no_runtime, args, reason, matrix):
+    def forbidden(*args, **kwargs):
+        pytest.fail("selection refusal reached catalogue or event reads")
+
+    monkeypatch.setattr(gate, "fixed_task_ids", forbidden)
+    monkeypatch.setattr(gate, "read_session_events", forbidden)
+    root = tmp_path / "not-created"
+    target = ["--matrix"] if matrix else ["--task-id", gate.TASK_IDS[0], "--state-root", str(root),
+                                         "--session-events", CANARY]
+    with pytest.raises(SystemExit) as error:
+        gate.main([*target, *args])
+    assert error.value.code == 2
+    assert not root.exists()
+    streams = capsys.readouterr()
+    assert streams.out == "" and streams.err == reason + "\n"
+
+
+@pytest.mark.parametrize("key,reason", [
+    ("COPILOT_PROVIDER_API_KEY", "custom_provider_refused"),
+    ("COPILOT_PROVIDER_API_KEY_COMMAND", "custom_provider_refused"),
+    ("COPILOT_PROVIDER_BASE_URL", "custom_provider_refused"),
+    ("COPILOT_PROVIDER_HEADERS", "custom_provider_refused"),
+    ("COPILOT_PROVIDERS_CONFIG", "custom_provider_refused"),
+    ("COPILOT_MODEL", "model_selection_unverified"),
+    ("COPILOT_HOME", "provider_configuration_unverified"),
+])
+def test_inherited_routing_is_refused_without_reading_values(monkeypatch, no_runtime, key, reason):
+    class NamesOnly(dict):
+        def __getitem__(self, key):
+            pytest.fail("environment value read")
+
+        def get(self, *args):
+            pytest.fail("environment value read")
+
+    monkeypatch.setattr(os, "environ", NamesOnly({key: CANARY}))
+    with pytest.raises(gate.GateRefused) as error:
+        gate.check_selection()
+    assert error.value.code == reason
+
+
+@pytest.mark.parametrize("kind", ["empty", "private_contents", "symlink", "config_dir_symlink"])
+def test_default_provider_registry_is_refused_without_opening_it(tmp_path, monkeypatch, no_runtime, kind):
+    config_dir = Path.home() / ".copilot"
+    config_dir.parent.mkdir()
+    if kind == "config_dir_symlink":
+        config_dir.symlink_to(tmp_path, target_is_directory=True)
+    else:
+        config_dir.mkdir()
+        registry = config_dir / "providers.json"
+        if kind == "symlink":
+            registry.symlink_to(tmp_path / "missing")
+        else:
+            registry.write_text("" if kind == "empty" else CANARY)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("provider registry or credential contents read")
+
+    monkeypatch.setattr(Path, "open", forbidden)
+    with pytest.raises(gate.GateRefused) as error:
+        gate.check_selection()
+    assert error.value.code == ("provider_configuration_unverified" if kind == "config_dir_symlink" else "custom_provider_refused")
+
+
+def test_direct_capture_and_cli_errors_cannot_bypass_or_leak(tmp_path, monkeypatch, capsys, no_runtime):
+    def forbidden(*args, **kwargs):
+        pytest.fail("refusal reached an input read")
+
+    monkeypatch.setattr(gate, "fixed_task_ids", forbidden)
+    with pytest.raises(gate.GateRefused, match="^auto_model_refused$"):
+        gate.dry_capture(gate.TASK_IDS[0], tmp_path / "unused", model="auto")
+    assert not (tmp_path / "unused").exists()
+    with pytest.raises(SystemExit) as error:
+        gate.main(["--unknown-option", CANARY])
+    assert error.value.code == 2
+    assert capsys.readouterr().err == "ghcp_sol_dry_capture_refused\n"
+    assert str(gate.GateRefused(CANARY)) == "model_selection_unverified"
