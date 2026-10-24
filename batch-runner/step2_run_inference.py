@@ -1336,6 +1336,10 @@ def _bounded_codex_diagnostics(raw: Optional[dict]) -> Optional[dict]:
     kind = raw.get("rate_limit_kind")
     if type(kind) is str and kind in RATE_LIMIT_KINDS:
         output["rate_limit_kind"] = kind
+    if "provider_observation" in raw:
+        from gpt56_pilot_wire_receipt import bounded_provider_observation
+
+        output["provider_observation"] = bounded_provider_observation(raw["provider_observation"])
     return output or None
 
 

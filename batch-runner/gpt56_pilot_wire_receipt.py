@@ -1,20 +1,27 @@
 """Session-owned receipts for the pinned Codex app-server transport.
 
-This is not an Azure HTTP observer. The pinned SDK exposes serialized stdio
-requests, correlated app-server replies and native thread usage, but no Foundry
-request ID or served model/version. Those facts remain unavailable; neither a
-receipt nor its hashes clear the live wire/identity blocker. A saved document
-cannot recreate the in-process witness required to accept a task result.
+The SDK's stdio settings are not served identity. An attempt-owned loopback
+observer can additionally count forwarded native HTTP attempts and read the
+provider response body's model. It neither attests a deployment/version nor
+clears a launch, billing or native-cap gate. No private body is retained. A
+saved document cannot recreate the in-process witness for task acceptance.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import socket
 import threading
+import time
+import uuid
 from contextlib import contextmanager
+from http.client import HTTPSConnection
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import gpt56_pilot_input_capture as capture
 import gpt56_pilot_deployment_binding as deployment
@@ -33,6 +40,361 @@ REFUSAL = "pilot_wire_receipt_refused"
 _bytes, _digest = capture._bytes, capture._digest
 _USAGE_FIELDS = {"inputTokens", "cachedInputTokens", "cacheWriteInputTokens",
                  "outputTokens", "reasoningOutputTokens", "totalTokens"}
+PROVIDER_OBSERVATION_SOURCE = "attempt_owned_loopback_forward_attempts_and_response_body"
+_MODEL = re.compile(r"gpt-5\.6-sol(?:-fast)?(?:-20[0-9]{2}-[0-9]{2}-[0-9]{2})?\Z")
+_CAPTURE_BYTES = 256 * 1024  # Observation memory, not a request/output quota.
+_CHUNK_BYTES = 64 * 1024
+_HOP_HEADERS = {"host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+                "te", "trailer", "transfer-encoding", "upgrade", "cookie", "set-cookie"}
+_OBSERVATION_REASONS = {
+    None, "observer_not_installed", "observer_start_failed", "observer_not_closed",
+    "unsupported_native_route", "no_provider_requests", "response_model_not_returned",
+    "response_model_not_allowlisted", "response_models_differ", "response_capture_incomplete",
+    "response_capture_limit", "malformed_response", "encoded_response", "provider_response_error",
+    "redirect_refused", "transport_failed", "deadline_exceeded", "invalid_observation",
+}
+
+
+def _provider_summary(reason="observer_not_installed") -> dict:
+    return {"source": PROVIDER_OBSERVATION_SOURCE,
+            "native_request_count": None, "native_request_count_reason": reason,
+            "served_model": None, "served_model_reason": reason,
+            "served_model_version": None, "served_model_version_reason": "not_observed",
+            "provider_receipt_confirmed": False, "native_cap_enforced": False}
+
+
+def bounded_provider_observation(raw: Any) -> dict:
+    """A closed projection shared by the wire receipt and persisted Step 2 row."""
+    invalid = _provider_summary("invalid_observation")
+    if type(raw) is not dict or set(raw) != set(invalid) or raw["source"] != PROVIDER_OBSERVATION_SOURCE:
+        return invalid
+    count, model = raw["native_request_count"], raw["served_model"]
+    if not (count is None or type(count) is int and 0 <= count < 2 ** 63):
+        return invalid
+    if not (model is None or type(model) is str and _MODEL.fullmatch(model)):
+        return invalid
+    for field, value in (("native_request_count_reason", count), ("served_model_reason", model)):
+        reason = raw[field]
+        if not (reason is None or type(reason) is str) or reason not in _OBSERVATION_REASONS:
+            return invalid
+        if (value is None) != (reason is not None):
+            return invalid
+    if (raw["served_model_version"] is not None or raw["served_model_version_reason"] != "not_observed"
+            or raw["provider_receipt_confirmed"] is not False or raw["native_cap_enforced"] is not False):
+        return invalid
+    return dict(raw)
+
+
+def _unique_json(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate_key")
+        value[key] = item
+    return value
+
+
+class _ResponseModel:
+    """Bounded, in-memory JSON/SSE inspection; never interpret rollout settings."""
+
+    def __init__(self, content_type: str, encoding: str, status: int):
+        self.sse = content_type.split(";", 1)[0].strip().lower() == "text/event-stream"
+        self.buffer = bytearray()
+        self.model = None
+        self.terminal = False
+        self.reason = ("provider_response_error" if not 200 <= status < 300 else
+                       "encoded_response" if encoding.lower() not in ("", "identity") else None)
+
+    def _document(self, data: bytes):
+        try:
+            document = json.loads(data, object_pairs_hook=_unique_json)
+            if self.sse:
+                if type(document) is not dict:
+                    raise ValueError("shape")
+                kind = document.get("type")
+                if kind not in {"response.created", "response.completed", "response.failed", "response.incomplete"}:
+                    return
+                self.terminal |= kind != "response.created"
+                document = document.get("response")
+            else:
+                self.terminal = True
+            if type(document) is not dict or document.get("object") != "response":
+                raise ValueError("shape")
+            model = document.get("model")
+            if model is None:
+                if self.terminal:
+                    self.reason = "response_model_not_returned"
+            elif type(model) is not str or not _MODEL.fullmatch(model):
+                self.reason = "response_model_not_allowlisted"
+            elif self.model is not None and self.model != model:
+                self.reason = "response_models_differ"
+            else:
+                self.model = model
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            self.reason = "malformed_response"
+
+    def feed(self, data: bytes):
+        if self.reason is not None:
+            return
+        self.buffer.extend(data)
+        if self.sse:
+            # SSE permits LF and CRLF, and data split across arbitrary TCP reads.
+            while True:
+                match = re.search(b"\r?\n\r?\n", self.buffer)
+                if match is None:
+                    break
+                event = bytes(self.buffer[:match.start()])
+                del self.buffer[:match.end()]
+                if len(event) > _CAPTURE_BYTES:
+                    self.reason = "response_capture_limit"
+                    break
+                lines = [line[5:].lstrip(b" ") for line in event.splitlines() if line.startswith(b"data:")]
+                payload = b"\n".join(lines)
+                if payload and payload != b"[DONE]":
+                    self._document(payload)
+                if self.reason is not None:
+                    break
+        if len(self.buffer) > _CAPTURE_BYTES:
+            self.reason = "response_capture_limit"
+        if self.reason is not None:
+            self.buffer.clear()
+
+    def finish(self) -> tuple[str | None, str | None]:
+        if self.reason is None:
+            if not self.sse:
+                self._document(bytes(self.buffer))
+            elif self.buffer.strip() or not self.terminal:
+                self.reason = "response_capture_incomplete"
+        self.buffer.clear()
+        reason = self.reason or (None if self.model is not None else "response_model_not_returned")
+        return (self.model if reason is None else None), reason
+
+
+class _ProviderHTTPObservation:
+    """A fixed-upstream, no-retry HTTP observer owned by one CLI process.
+
+    Counts include failed forward attempts and remote compaction, not logical
+    turns or confirmed arrivals/bills. No headers, paths, request/response bodies
+    or raw exceptions leave this object. HTTPS credentials pass only to the
+    already-checked account; there is no auth discovery or redirect following.
+    """
+
+    def __init__(self, base_url: str, timeout: float):
+        target = urlsplit(base_url)
+        _require(target.scheme == "https" and target.hostname is not None
+                 and target.port in (None, 443) and target.username is target.password is None
+                 and not target.query and not target.fragment and target.path == "/openai/v1"
+                 and classify_endpoint(base_url).kind is EndpointKind.DIRECT_V1
+                 and type(timeout) in (int, float) and 0 < timeout < float("inf"))
+        self.target = target
+        self.deadline = time.monotonic() + timeout
+        self.lock = threading.RLock()
+        self.closed = False
+        self.requests = self.finished = 0
+        self.model = self.model_reason = self.count_reason = None
+        self.connections = set()
+        self.route = "/" + uuid.uuid4().hex
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *_args):
+                pass
+
+            def do_POST(self):
+                owner.forward(self)
+
+            def send_error(self, *_args, **_kwargs):
+                owner.unsupported(self)
+
+        class Server(ThreadingHTTPServer):
+            daemon_threads = True
+            block_on_close = False
+
+            def get_request(self):
+                connection, address = super().get_request()
+                try:
+                    connection.settimeout(owner.remaining())
+                except Exception:
+                    connection.close()
+                    raise OSError("observer_unavailable") from None
+                return connection, address
+
+            def handle_error(self, *_args):
+                # socketserver's default prints raw request exceptions.
+                with owner.lock:
+                    owner.count_reason = "unsupported_native_route"
+
+        self.server = Server(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever,
+                                       kwargs={"poll_interval": 0.05}, daemon=True)
+        try:
+            self.thread.start()
+        except BaseException:
+            self.server.server_close()
+            raise
+
+    @property
+    def base_url(self):
+        return f"http://127.0.0.1:{self.server.server_port}{self.route}"
+
+    def remaining(self):
+        if self.closed:
+            raise RuntimeError("observer_closed")
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("deadline_exceeded")
+        return remaining
+
+    @staticmethod
+    def _empty(handler, status=502):
+        handler.close_connection = True
+        try:
+            handler.send_response_only(status)
+            handler.send_header("Content-Length", "0")
+            handler.send_header("Connection", "close")
+            handler.end_headers()
+        except Exception:
+            pass
+
+    def unsupported(self, handler):
+        with self.lock:
+            self.count_reason = "unsupported_native_route"
+        self._empty(handler, 400)
+
+    def forward(self, handler):
+        suffix = handler.path.removeprefix(self.route)
+        lengths = handler.headers.get_all("Content-Length", [])
+        if (handler.path != self.route + suffix or suffix not in ("/responses", "/responses/compact")
+                or len(lengths) != 1 or not re.fullmatch(r"[0-9]{1,19}", lengths[0])
+                or handler.headers.get("Transfer-Encoding") or handler.headers.get("Upgrade")):
+            self.unsupported(handler)
+            return
+        connection = upstream = None
+        started = False
+        response_started = False
+        reason, model = "transport_failed", None
+        try:
+            with self.lock:
+                if self.closed:
+                    raise RuntimeError("closed")
+                connection = HTTPSConnection(self.target.hostname, timeout=self.remaining())
+                self.connections.add((connection, handler.connection))
+                # This is the forward-attempt boundary, not provider receipt.
+                self.requests += 1
+                started = True
+            connection.connect()
+            upstream = connection.sock
+            with self.lock:
+                self.remaining()
+                self.connections.discard((connection, handler.connection))
+                self.connections.add((connection, handler.connection, upstream))
+            connection.putrequest("POST", self.target.path + suffix, skip_accept_encoding=True)
+            excluded = _HOP_HEADERS | {item.strip().lower() for item in handler.headers.get("Connection", "").split(",")}
+            for name, value in handler.headers.items():
+                if name.lower() not in excluded:
+                    connection.putheader(name, value)
+            connection.endheaders()
+            left = int(lengths[0])
+            while left:
+                handler.connection.settimeout(self.remaining())
+                data = handler.rfile.read(min(left, _CHUNK_BYTES))
+                if not data:
+                    raise ValueError("incomplete_request")
+                upstream.settimeout(self.remaining())
+                connection.send(data)
+                left -= len(data)
+            upstream.settimeout(self.remaining())
+            response = connection.getresponse()
+            if 300 <= response.status < 400:
+                reason = "redirect_refused"
+                self._empty(handler)
+                return
+            parser = _ResponseModel(response.getheader("Content-Type", ""),
+                                    response.getheader("Content-Encoding", ""), response.status)
+            handler.send_response_only(response.status)
+            excluded |= {"content-length"}
+            excluded |= {item.strip().lower() for item in response.getheader("Connection", "").split(",")}
+            for name, value in response.getheaders():
+                if name.lower() not in excluded:
+                    handler.send_header(name, value)
+            handler.send_header("Transfer-Encoding", "chunked")
+            handler.send_header("Connection", "close")
+            handler.end_headers()
+            response_started = True
+            handler.close_connection = True
+            while True:
+                handler.connection.settimeout(self.remaining())
+                upstream.settimeout(self.remaining())
+                data = response.read1(_CHUNK_BYTES)
+                self.remaining()
+                if not data:
+                    if response.length not in (None, 0):
+                        raise ValueError("incomplete_response")
+                    break
+                parser.feed(data)
+                handler.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
+            model, reason = parser.finish()
+            # Publish the observation before EOF lets the CLI complete its turn.
+            self._response_finished(model, reason)
+            started = False
+            handler.wfile.write(b"0\r\n\r\n")
+        except Exception as error:
+            reason = "deadline_exceeded" if isinstance(error, TimeoutError) else "transport_failed"
+            if response_started:
+                handler.close_connection = True
+            else:
+                self._empty(handler)
+        finally:
+            if started:
+                self._response_finished(None, reason)
+            if connection is not None:
+                connection.close()
+                with self.lock:
+                    self.connections.discard((connection, handler.connection))
+                    self.connections.discard((connection, handler.connection, upstream))
+
+    def _response_finished(self, model, reason):
+        with self.lock:
+            self.finished += 1
+            if reason is not None:
+                self.model_reason = reason
+            elif self.model is not None and self.model != model:
+                self.model_reason = "response_models_differ"
+            else:
+                self.model = model
+
+    def close(self):
+        with self.lock:
+            if self.closed:
+                return
+            self.closed = True
+            connections = tuple(self.connections)
+        for connection, inbound, *upstream in connections:
+            for stream in (connection.sock, inbound, *upstream):
+                if stream is not None:
+                    try:
+                        stream.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+            connection.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=1)
+
+    def summary(self):
+        with self.lock:
+            if not self.closed:
+                return _provider_summary("observer_not_closed")
+            result = _provider_summary()
+            result["native_request_count"] = self.requests if self.count_reason is None else None
+            result["native_request_count_reason"] = self.count_reason
+            reason = self.count_reason or ("response_capture_incomplete" if self.finished != self.requests else
+                      "no_provider_requests" if not self.requests else self.model_reason)
+            result["served_model"] = self.model if reason is None else None
+            result["served_model_reason"] = reason or ("response_model_not_returned" if self.model is None else None)
+            return bounded_provider_observation(result)
 
 
 class PilotWireReceiptRefused(ValueError):
@@ -81,6 +443,37 @@ class _TransportObservation:
         self.usage: list[dict] = []
         self.completion = None
         self.caps_usage_observer = None
+        self.approved_base_url = None
+        self.provider_capture = None
+        self.provider_capture_reason = "observer_not_installed"
+
+    def configure_provider_observer(self, provider, overrides, *, timeout):
+        """Replace only this process's checked provider URL; never mutate settings."""
+        from core.codex_runtime_config import _toml_literal
+
+        with self.guard():
+            _require(self.provider_capture is None and not self.installed
+                     and self.approved_base_url == provider.base_url
+                     and provider.provider_id == self.requested["provider_id"])
+            key = f"model_providers.{provider.provider_id}.base_url="
+            expected = key + _toml_literal(provider.base_url)
+            _require([item for item in overrides if item.startswith(key)] == [expected])
+            try:
+                self.provider_capture = _ProviderHTTPObservation(provider.base_url, timeout)
+            except OSError:
+                # Port/listener availability is not permission to fabricate data.
+                self.provider_capture_reason = "observer_start_failed"
+                return overrides
+            return tuple(key + _toml_literal(self.provider_capture.base_url) if item == expected else item
+                         for item in overrides)
+
+    def close_provider_observer(self):
+        if self.provider_capture is not None:
+            self.provider_capture.close()
+
+    def provider_observation(self):
+        return (self.provider_capture.summary() if self.provider_capture is not None else
+                _provider_summary(self.provider_capture_reason))
 
     @contextmanager
     def guard(self):
@@ -192,6 +585,14 @@ class _TransportObservation:
                       "foundry_http_payload": _unavailable(), "foundry_request_id": _unavailable(),
                       "served_model": _unavailable(), "served_model_version": _unavailable(),
                       "served_deployment": _unavailable()}
+            result["provider_observation"] = self.provider_observation()
+            if self.provider_capture is not None:
+                observed = result["provider_observation"]
+                result["served_model"] = {
+                    "state": "observed" if observed["served_model"] is not None else "not_available",
+                    "value": observed["served_model"], "reason": observed["served_model_reason"],
+                    "source": "provider_response_body_model_not_deployment_or_version_attestation",
+                }
             self.sealed = True
             self.task_text = self.runtime = None
             return json.loads(_bytes(result))
@@ -382,6 +783,7 @@ class PilotWireReceiptSession:
                 _root(path.parent)
                 _read_bytes(path, size=record["size"], sha256=record["sha256"])
             observer = _TransportObservation(json.loads(_bytes(requested)))
+            observer.approved_base_url = provider.endpoint.rstrip("/")
             self.active[task_id] = observer
             if getattr(self, "native_host", None) is not None:
                 from gpt56_pilot_runtime_caps_usage import runtime_caps_usage_for

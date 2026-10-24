@@ -1073,13 +1073,22 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             raise CodexRuntimeUnavailable(
                 f"the pinned Codex SDK could not be imported ({exc})"
             ) from None
+        if pilot_wire_observer is not None:
+            overrides = pilot_wire_observer.configure_provider_observer(
+                self.provider, overrides, timeout=self.timeout,
+            )
         config = CodexConfig(
             codex_bin=self.codex_bin,
             config_overrides=tuple(overrides),
             env=environment,
             cwd=str(workspace.workspace),
         )
-        codex = Codex(config)
+        try:
+            codex = Codex(config)
+        except BaseException:
+            if pilot_wire_observer is not None:
+                pilot_wire_observer.close_provider_observer()
+            raise
         if pilot_wire_observer is not None:
             try:
                 # Codex has already initialized. Only subsequent app-server
@@ -1090,6 +1099,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     codex.close()
                 except Exception:
                     pass
+                pilot_wire_observer.close_provider_observer()
                 raise PilotWireReceiptRefused() from None
         return codex
 
@@ -1587,6 +1597,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         result.update(success=False, error=STATE_REFUSED, error_category=STATE_REFUSED)
                 if pilot_session is not None:
                     result["pilot_wire_receipt"] = pilot_linkage
+                    result["codex_diagnostics"]["provider_observation"] = pilot_observer.provider_observation()
                     pilot_host.finish_task(pilot_host_witness, result=result)
             except TaskDeadlineRefused as exc:
                 return self._failure(str(exc), category=STATE_REFUSED)
@@ -1954,6 +1965,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     codex.close()
                 except Exception:  # noqa: BLE001 - closing must not mask a result
                     pass
+            if pilot_wire_observer is not None:
+                pilot_wire_observer.close_provider_observer()
             swept = () if observation is not None else sweep_orphans(before_pids)
             if swept:
                 self.last_swept_pids = swept
