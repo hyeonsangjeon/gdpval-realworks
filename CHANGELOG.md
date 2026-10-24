@@ -13,46 +13,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Extend the local Foundry Sol pilot's existing **32-request per-attempt** guard
-  with run-owned **128-per-task / 640-per-pilot** forward counters, fixed-reason
-  stops for reported **300,000-input / 10,000-output-token** overruns, and an
-  active **1,800-second** observer/bound-SDK deadline. Read the same **7343-byte**
-  caps draft, SHA256 `7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`;
-  do not change its values, plan bytes, null registration limits or launch gates.
-  Keep failed forward attempts spent, preserve over-limit samples and unknown
-  usage, and reject a raced SDK success. The receipt explicitly reports
-  `token_hard_limit_enforced=false`: post-response usage cannot establish a
-  pre-request token or billing ceiling. Synchronous SDK startup also remains
-  outside the confirmed process-cleanup coverage; no startup-inclusive timeout
-  guarantee is claimed. At `eaeef4861a3d9ebad805c2ba5c8443f02a4324d4`, tree
-  `5a479cf5765ff1a648fa2523cfb41c4b09aebfed`, the authorized existing 97 plus 28
-  new cases reported **114 passed, 11 failed in 15.52s**, outer **16.096s**, exit
-  **1**. A missing `time` import caused ten failures; watchdog closure obscured
-  the existing deadline reason in one. The correction fixes only those issues,
-  leaving all assertions intact. At `c3012107e170dd7b0ba076733568078634b810d3`, tree
-  `8b0e491bfc6c61c4a5130763251610a2e47c1a97`, only the unresolved cases ran:
-  **11 passed, 0 failed in 4.54s**, outer **5.074s**, exit **0**. Both used
-  **TERM120s/KILL5s** and produced JUnit with no warnings. The initial log/JUnit
-  hashes are `a8aa6d2d38b3dc87a99cf0fb6d06636f08feba0115dfe335b99c031abbe9d147` /
-  `2d8a993114c238cacd014778b1017f901168b550cac4174d90ac8c80dcf4faca`; corrected
-  log/JUnit hashes are `8aba684c8171815f9d71dbb90169dcf2ca07df9dd12982829c70e8602a57f1b6` /
-  `700d2b66bcb509a84093cf73e8655f9946fa6dc437ae6c586c6f7420f48d5ae1`.
-  A further local correction retained the old threshold refusal for late over-limit
-  usage after capture closure and refused non-scalar reason metadata. Only
-  two new cases ran at `0a53ee81c27ec79bdef72ffbdbd2f9c4e7f51b4c`, tree
-  `a0e7a6b4cef37fc3a0708199dc726d56bbc51869`: **2 passed, 0 failed in 2.31s**,
-  outer **2.707s**, exit **0**, with the same bound and no warnings. Log/JUnit
-  hashes are `65f313c081c0ef8ae25769e77cc41a6bb81f8365a1ced50c4c01aa68948c851c` /
-  `bcfa7d947f7607c6dbe482a510dc3ca1cf40c6d3647297390191ad856f647e28`.
-  The **52028-byte** final code patch is SHA256
-  `fbc4b99eb1262d894d9511f49356a0843a075947e022f48707f1927346a373e7`.
-  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the audit, commands,
-  source/file hashes, separately retained prior 97-case proof, and limitations.
-  These synthetic results are not a pooled full-pass suite or live pilot proof.
-  Hard token/spend ceilings, startup-inclusive cleanup, measured native-call
-  headroom, identity/frozen-source gates and final-source review/CI remain open.
-  No push, dispatch, paid call or grading; Task3 run `37756891578` remains
-  uncertain, spent and nonretryable.
+- Include synchronous SDK initialization in the local Foundry Sol pilot's
+  existing **1,800-second** observer deadline on supported main-thread hosts.
+  Keep the actual partially initialized SDK instance/process, interrupt its
+  initialize wait with `TimeoutError`, close sockets, and reap the child after
+  the SDK's existing TERM/KILL cleanup. The final wait is **1 second**, for
+  cleanup only; it never renews the attempt deadline. Refuse unsupported callers
+  and occupied alarms before auth. Preserve ordinary receipt correlation and
+  add only the witnessed pre-thread timeout scope, with null thread/turn/token
+  fields and the existing `native_attempt_deadline_exceeded` reason. No retry
+  allowance, plan value, pin or permission changes. Keep **32/128/640** native
+  forward caps and **300,000-input / 10,000-output-token** reported-overrun stops;
+  `token_hard_limit_enforced=false`. The **7343-byte** caps draft remains SHA256
+  `7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`.
+  The first combined invocation at clean `eb6bc6818249e3c7e12356df11e686218327c37d`,
+  tree `2c60e96f13b9b5f130bcfc13011c86affcb96e2c`, reported **126 passed,
+  1 failed, 0 skipped in 15.26s**, outer **15.808s**, exit **1**. Preserve that
+  socket-disconnect failure. Its fixture now catches only `RemoteDisconnected`
+  on deadline closure; exact **[60, 25]**, **2** forwards and refusal assertions
+  remain. At clean final code `ab72943aaa33e97620d33b36a7ac33f4c5c454a0`, tree
+  `f4f54873df89beaa476d4a9b5ef53531f96a1e7f`, the expanded combined bundle reported
+  **143 passed, 0 failed, 0 skipped in 20.13s**, outer **20.674s**, exit **0**.
+  Both used **TERM120s/KILL5s**, produced JUnit and had no warnings. The two
+  log/JUnit pairs are `81db7fac87f6527f48520414cce6520443f7b050a3e1dd9ed9032ee7e74d69f0` /
+  `5be99dd80c1980c6b1b4160eabe98b5b6aec1e0580079040727f78f0897b5351` and
+  `5ddd87ca82dbb89067f8d82c57c387e747e65de5aa097d7bee49f6ddae419f84` /
+  `4fad34f92f4a12c40609243de6d7fb2f70e70fbaa606aa50979e1948e37cdb0b`.
+  The **25904-byte** tested code patch is SHA256
+  `2afb2c62ad70d22bb18cf3b97a8b3de906d9c050368fad32ab90c8bb531ec778`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact commands, source/file
+  hashes and the separate earlier 114/11, unresolved-only 11 and late-usage 2
+  proofs via immutable history. Do not pool these populations. Input-token
+  prechecks were investigated only: no tokenizer is installed in the inspected
+  environment, and no Sol-specific error bound or hard pre-request ceiling was
+  established. No estimator was implemented. The SDK initialized synthetic
+  local children, not Rust Codex or a live provider; host/source admission,
+  provider behavior, universal process containment, hard token/spend bounds,
+  measured call headroom, served identity/Max/Long, frozen-source/judge gates
+  and final-source review/CI remain unverified. No push, dispatch, paid call or
+  grading; Task3 run `37756891578` remains uncertain, spent and nonretryable.
 
 ### Added
 
