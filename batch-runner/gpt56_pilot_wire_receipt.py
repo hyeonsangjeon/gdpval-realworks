@@ -224,7 +224,8 @@ def bounded_provider_observation(raw: Any) -> dict:
             return invalid
         if blocked:
             reason = raw["native_request_cap_reason"]
-            if (reason not in {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED}
+            if (type(reason) is not str
+                    or reason not in {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED}
                     or reason == NATIVE_REQUEST_CAP_EXCEEDED and count != limit
                     or reason != NATIVE_REQUEST_CAP_EXCEEDED
                     and (type(raw["runtime_caps"]) is not dict or raw["runtime_caps"].get("stop_reason") != reason)):

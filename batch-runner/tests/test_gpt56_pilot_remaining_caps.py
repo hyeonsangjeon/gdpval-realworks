@@ -316,6 +316,10 @@ def test_late_over_limit_usage_cannot_bypass_a_closed_observer(field):
         assert capture.summary() == frozen
         with pytest.raises(wire.PilotWireReceiptRefused):
             _finish(fake)
+        malformed = capture.summary()
+        malformed.update(native_request_count=32, native_request_blocked_count=1,
+                         native_request_cap_reason=[CANARY])
+        assert wire.bounded_provider_observation(malformed) == wire._provider_summary("invalid_observation")
     finally:
         capture.close()
 
