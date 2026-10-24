@@ -1,102 +1,91 @@
 # Latest task result
 
-## GHCP Sol gate: pinned-SDK local CI partition verification
+## GHCP Sol gate: model evidence and authentication audit
 
-Scope: FREE-only validation of branch
-`leader/ghcp-sol-gate-actions-20261024` at tested source HEAD
-`4e61a4bb20de67995d0684e051f1d3416eacea69`, in
+Scope: the leader's **2026-10-24 18:45** documentation-only order on
+`leader/ghcp-sol-gate-actions-20261024`, in
 `/ai-work/copilot/_tmp_worktrees/ghcp-sol-gate-actions-20261024`.
-No production code, workflow, assertion, marker or partition selection changed.
-Only this result record and the corresponding changelog entry were updated.
+The starting worktree was clean at audited HEAD
+`f205207bb73f123ed7ff858e0feefd35d23e53ab`, tree
+`942355a97c7c61fbe65aec6f0c5b070e0aeebb90`.
+Only `docs/ghcp-sol-actions-gate.md`, this record and `CHANGELOG.md` changed.
 
-### Concrete outcome
+### Current result
 
-- Installed repository pins **openai-codex 0.147.0** and
-  **openai-codex-cli-bin 0.147.0** in
-  `/ai-work/copilot/_tmp/ghcp-sol-gate-ci-20261024-venv`.
-  Python is **3.10.12**, pytest **9.1.1**;
-  `include-system-site-packages = false`. System Python and the user checkout
-  were not modified. Missing system `ensurepip` was handled by running a
-  downloaded pip 25.3 wheel against the venv, not by installing system packages.
-  Core/renderer test dependencies were installed there; this was not a complete
-  installation of every optional dependency in `requirements.txt`.
-- Previously unverified partition check: **1 passed in 22.43s**.
-  The unchanged backend workflow hash and exactly-once partition guards pass.
-- Full backend `pytest` job's core test command:
-  **3 failed, 13,373 passed, 57 skipped, 46 deselected, 1 warning in 3250.97s**.
-  The exact workflow command, including every ignore and the integration marker
-  filter, was retained. Local elapsed time exceeded the hosted job's 45-minute
-  ceiling; this host does not establish hosted timing.
-- The same job's repo-root script test command:
-  **186 passed in 46.50s**.
-- All three failures reproduced at exact branch point
-  `6efe99cbd40bb839037e7a20711a734e0a4ce002`, with the same venv and inherited
-  environment: **3 failed in 5.95s**. The failing tests and audio implementations
-  have no diff against that branch point. No branch-caused failure was found;
-  no baseline assertion or implementation was changed.
+**Do not proceed to paid execution.** Actual response model, Max effort and
+1M context are all **settings only** in the current GHCP + Codex route.
+The [audit memo](../../docs/ghcp-sol-actions-gate.md#evidence-and-authentication-audit-2026-10-24)
+records source locations, the evidence candidates and their limits:
 
-| Failing node (under `batch-runner/tests/`) | Same failure on HEAD and branch point |
-|---|---|
-| `test_codex_retention_budget_report.py::test_consolidated_budget_report_preserves_all_eight_observations` | Environment-presence assertion rejects inherited `GH_TOKEN`; no authentication was performed. |
-| `test_gold_ceiling_contract.py::test_spec_accounts_for_the_archive_answer_the_run_could_not_read` | `KeyError: 'sample_rate'`; absent PyAV makes the probe return backend `none`. |
-| `test_perception_audio.py::test_the_clip_is_re_encoded_to_the_rate_and_layout_that_is_sent` | `48000 != 16000`; absent PyAV makes the existing fallback retain raw audio. |
+- Copilot SDK documents per-call `assistant.usage.model` and optional
+  `reasoningEffort`, but no pinned adapter binds those signals to this gate's
+  Codex harness. Copilot CLI custom-agent selection is not proof of that harness.
+- Runtime context-window metadata and OpenAI's advertised **1,050,000**-token
+  Sol window do not establish this GHCP request's nominal **1,000,000**-token
+  allowance. Missing evidence remains unknown; this is not model-unavailability
+  evidence. A Python enum accepting `max` is not an applied-Max receipt.
+- Exact model selection, no Auto/BYOK/account fallback, per-call comparisons
+  and reroute detection are prospective checks. No inspected contract proves
+  universal server-side fallback prevention; detection cannot undo spend.
+- Three authentication drafts cover scope, lifetime, disposal and exposure:
+  conditionally recommended job-scoped `GITHUB_TOKEN`; owner fine-grained PAT;
+  or an existing approved App's **one-hour** installation token. The first
+  requires organization/policy/billing and selected-runtime eligibility that
+  were not queried. None changes permissions or grants launch authority.
 
-The baseline failures were left unchanged as requested. Missing PyAV also
-accounts for several reported skips. Other skips include unavailable Ruby,
-LibreOffice, dataset/private handoffs, Docker/sandbox and kernel capabilities.
-No skipped private-input test was enabled or supplied with downloaded inputs.
+The local Copilot wrapper was inspected as source only: it can invoke
+`gh auth token` and choose another binary. It was not executed. No credentials,
+credential stores, actual session logs or private transcripts were read.
 
-### Exact verification commands
+### Verification and retained evidence
 
-The venv's `bin` directory was prepended to `PATH` for all commands below.
-The workflow's `pytest.ini` integration-deselection grep passed before the
-full core command. Commands ran from the tested worktree unless noted.
+This step uses public-document/source inspection and documentation-only
+diff, hash and editorial checks. **No pytest, collection or old proof replay**
+was performed. Public documentation was fetched without account access;
+examples were not executed. The installed Codex SDK/CLI pair remains **0.147.0**.
+Installed Copilot package metadata says **1.0.98**, not a tested runtime binding.
 
-```bash
-cd batch-runner
-python -m pytest -m "not integration" --tb=short -q -rs tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
-python -m pytest -m "not integration" --tb=short -q -rs --ignore=tests/test_gpt54_codex_grading_input.py --ignore=tests/test_gpt54_codex_input_capture.py --ignore=tests/test_gpt54_comparison_preflight.py --ignore=tests/test_gpt54_disposable_checkout.py --ignore=tests/test_gpt54_prepared_input_attestation.py --ignore=tests/test_gpt54_run_config_bundle.py --ignore=tests/test_gpt54_run_input_bundle.py --ignore=tests/test_gpt54_runtime_checkout.py --ignore=tests/test_gpt54_time_budget_comparison.py --ignore=tests/test_gpt54_v2_grading_input.py --ignore=tests/test_gpt54_v2_input_capture.py --ignore=tests/test_gpt54_workflow_gate.py --ignore=tests/test_gpt56_evidence_preflight_gate.py --ignore=tests/test_gpt56_foundry_evidence_intake.py --ignore=tests/test_gpt56_pilot_config_bundle.py --ignore=tests/test_gpt56_pilot_deployment_binding.py --ignore=tests/test_gpt56_pilot_identity_plan.py --ignore=tests/test_gpt56_pilot_input_bundle.py --ignore=tests/test_gpt56_pilot_input_capture.py --ignore=tests/test_gpt56_pilot_wire_receipt.py --ignore=tests/test_gpt56_sol_codex_pilot_preflight.py --ignore-glob='tests/test_codex_budget_pilot*.py' --ignore-glob='tests/test_time_budget_*.py'
-cd ..
-python -m pytest scripts/__tests__ -m "not integration" --tb=short -q -rs
-```
+The documentation scope/whitespace checks passed, as did the memo and LATEST
+literal checks. The full CHANGELOG literal scan returned exit **3** at the
+verifier's safe complexity limit; its log is preserved. Checking only the
+changed CHANGELOG passage then passed with exit **0**, without changing the
+verifier or replaying the completed checks. These are editorial checks and
+same-session source review, not independent review or runtime tests.
 
-Baseline-only reproduction, from the temporary detached branch-point
-worktree's `batch-runner` directory (removed after verification):
+Evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-evidence-audit.Rqg0rU/`.
+It retains public documentation snapshots, their byte counts/SHA-256 values,
+original/structured record checkpoints and the documentation check report.
+The prior result's unchanged copy is `latest.before.md`, SHA-256
+`ac1da4f1ad43988f428da0f6a407a12cdbe9a73ae8f0d5e0ca1d9f9f4627e9ad`.
+The same detailed record remains in local Git at
+`f205207bb73f123ed7ff858e0feefd35d23e53ab:tasks/LATEST_TASK_RESULT/README.md`;
+no hosted availability is asserted for this unpushed commit.
 
-```bash
-python -m pytest -m "not integration" --tb=line -q -rs tests/test_codex_retention_budget_report.py::test_consolidated_budget_report_preserves_all_eight_observations tests/test_gold_ceiling_contract.py::test_spec_accounts_for_the_archive_answer_the_run_could_not_read tests/test_perception_audio.py::test_the_clip_is_re_encoded_to_the_rate_and_layout_that_is_sent
-```
+Historical tests remain separate, not new audit results: at tested source
+`4e61a4bb20de67995d0684e051f1d3416eacea69`, the partition check reported
+**1 passed in 22.43s**, core **3 failed, 13,373 passed, 57 skipped,
+46 deselected, 1 warning in 3250.97s**, and script tests **186 passed in 46.50s**.
+The same three failures reproduced at branch point
+`6efe99cbd40bb839037e7a20711a734e0a4ce002` (**3 failed in 5.95s**): inherited
+`GH_TOKEN` presence and two missing-PyAV audio failures. These are pytest
+durations, not hosted-job timing; core elapsed exceeded the hosted 45-minute
+ceiling. Baseline failures/skips were not fixed or enabled. The earlier
+**313 targeted checks** and **5/5 capture-shell rehearsals** also remain
+separate; none establishes hosted/paid behavior or a fully green CI gate.
 
-Logs remain outside the checkout under `/ai-work/copilot/_tmp/`, mode **0600**.
-Environment-representation traceback lines were removed before hashing to
-avoid retaining inherited credential values; failure messages/counts remain.
+### Remaining gates
 
-| Log | SHA-256 |
-|---|---|
-| `ghcp-sol-gate-partition-check.log` | `822c7ec067b84b38dc48a2e4b5237db1a04cdfb5223078688d3e9057472a991e` |
-| `ghcp-sol-gate-ci-core.log` | `bdb82f30c8ac1ddaa7f7563b13a5ae1b34f5841d46ad1089a5bfd996b6777f96` |
-| `ghcp-sol-gate-ci-scripts.log` | `1845bd7478109455bd5cec85dd8d070f46b9ed75ab963deff333ca699618f162` |
-| `ghcp-sol-gate-ci-baseline.log` | `9beb579aef1f651ca36526b0bb09f94afbecd6b57c0c3c704a5a5f0f925f76fd` |
+The supported GHCP-to-Codex runtime and applied model/Max/1M evidence,
+enforced timeout/tool/turn limits, credential isolation and revocation,
+private input/capture policy, usage accounting, grader validation and final
+fixed-source review remain unresolved. The earlier direct review of
+`f27cde892e144a242260e47a1c2b2e22e07abcf8` plus its correction is not approval
+of this documentation commit or of a paid route. Push/Draft PR and authentication
+decisions remain with the owner; no publication or launch is claimed.
 
-### Evidence boundary and remaining work
-
-**Not locally green for every touched CI job.** The requested core partition
-ran with three baseline/environment failures and host-dependent skips; the
-other backend partitions and Pages validation job were not run in this step.
-The SDK-dependent partition coverage gap is resolved, not the broader CI gate.
-An initial attempt in the fresh venv failed collection for missing
-`jsonschema`; installing declared core/renderer dependencies resolved it
-before the reported partition and full-suite runs.
-
-Prior evidence remains separate: **313 targeted checks** and **5/5 capture-shell
-rehearsals** passed during the previous review, with workflow inventory **29 to
-30** and no count/hash guard weakening. That review directly examined source
-`f27cde892e144a242260e47a1c2b2e22e07abcf8` plus its corrective diff;
-this step tests `4e61a4bb20de67995d0684e051f1d3416eacea69` and does not
-claim a new specialist review or exact-head launch approval.
-
-No model/GHCP call, GHCP authentication, private input download, push, PR,
-workflow dispatch, paid execution or remote project change was performed.
-Tests used synthetic/local fixtures, including local loopback SDK stubs.
-Existing specialist-review and paid-run authorization blockers remain;
-full CI and its required host capabilities still need separate evidence.
+OpenAI Docs guided official source checks. `experiment-report-en` preserved
+settings-versus-observations and separate historical test results;
+`im-not-ai-en` guided the English evidence wording. No study/configuration
+change or UI work applies. No production, helper, plan, cap, workflow, pin,
+dependency or permission changed. No Azure/model/GHCP use, authentication,
+workflow dispatch, grading, push or Project change was performed.

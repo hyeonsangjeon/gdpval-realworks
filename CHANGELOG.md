@@ -30,6 +30,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Document the GHCP Sol gate's applied-model/Max/1M evidence and three
+  authentication drafts at audited source
+  `f205207bb73f123ed7ff858e0feefd35d23e53ab`. All three properties remain
+  settings only on the unimplemented GHCP-to-Codex path. Distinguish Copilot
+  per-call telemetry candidates from Codex thread configuration, context
+  metadata and provider capability advertising. Record conditional job-token,
+  personal-token and one-hour App-token options with disposal and exposure
+  limits; no permission, plan, cap, executable or workflow changes. No tests
+  were rerun and no model/authentication/paid operation occurred. The
+  [audit memo](docs/ghcp-sol-actions-gate.md#evidence-and-authentication-audit-2026-10-24)
+  and [current result](tasks/LATEST_TASK_RESULT/README.md) retain the
+  stop-before-spend, fixed-source review and owner publication gates.
+
 - Verify the GHCP Sol gate's previously SDK-blocked CI partition check at
   local source `4e61a4bb20de67995d0684e051f1d3416eacea69`: install the
   repository-pinned Codex SDK/CLI **0.147.0** in an isolated Python **3.10.12**
@@ -40,8 +53,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   `6efe99cbd40bb839037e7a20711a734e0a4ce002`: inherited `GH_TOKEN` presence
   and two missing-PyAV audio failures. Leave baseline behavior and all guards
   unchanged; do not claim all touched CI jobs green or specialist/launch
-  approval. [Current result](tasks/LATEST_TASK_RESULT/README.md) records exact
-  commands, timings, log hashes, host limits and remaining work. No system
+  approval. The prior result at local commit
+  `f205207bb73f123ed7ff858e0feefd35d23e53ab` retains exact commands, timings,
+  log hashes and host limits; the current result keeps that evidence separate
+  from the later documentation audit. No system
   Python/user-checkout edit, model/GHCP call, GHCP auth, private download,
   push, dispatch or paid execution occurred.
 
