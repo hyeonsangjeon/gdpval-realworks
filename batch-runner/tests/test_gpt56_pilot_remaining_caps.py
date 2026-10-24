@@ -300,6 +300,26 @@ def test_watchdog_expires_without_any_http_request(monkeypatch):
         capture.close()
 
 
+@pytest.mark.parametrize("field", ["input_tokens", "output_tokens"])
+def test_late_over_limit_usage_cannot_bypass_a_closed_observer(field):
+    observer = _observer()
+    capture = _configure(observer)
+    fake = _transport(observer)
+    try:
+        _start(fake)
+        capture.close()
+        frozen = capture.summary()
+        with pytest.raises(wire.PilotWireReceiptRefused, match="^pilot_wire_receipt_refused$"):
+            _turn(fake, usage=_usage(300001 if field == "input_tokens" else 7,
+                                    10001 if field == "output_tokens" else 3))
+        assert observer.invalid and observer.caps_usage_observer.failed
+        assert capture.summary() == frozen
+        with pytest.raises(wire.PilotWireReceiptRefused):
+            _finish(fake)
+    finally:
+        capture.close()
+
+
 @pytest.mark.parametrize("damage", ["limit", "digest", "unknown_reason", "hard_claim", "task_total",
                                    "pilot_total", "token_bool", "hidden_overage", "false_exceeded", "extra"])
 def test_runtime_cap_projection_excludes_unverified_values_and_secret_canaries(monkeypatch, capsys, damage):

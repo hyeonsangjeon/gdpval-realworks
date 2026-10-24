@@ -483,10 +483,16 @@ class _ProviderHTTPObservation:
         added again; unknown usage is never silently converted to zero.
         """
         with self.lock:
-            if self.closed or self.stop_reason is not None:
+            limits = self.limits["per_attempt"]
+            if self.closed:
+                # A late reader must not bypass the old threshold check or
+                # upgrade an immutable closed summary into a successful overage.
+                _require(total["inputTokens"] <= limits["input_tokens"]
+                         and total["outputTokens"] <= limits["output_tokens"])
+                return
+            if self.stop_reason is not None:
                 return
             self.input_tokens, self.output_tokens = total["inputTokens"], total["outputTokens"]
-            limits = self.limits["per_attempt"]
             reason = (NATIVE_INPUT_CAP_EXCEEDED if self.input_tokens > limits["input_tokens"] else
                       NATIVE_OUTPUT_CAP_EXCEEDED if self.output_tokens > limits["output_tokens"] else None)
             if reason is not None:
