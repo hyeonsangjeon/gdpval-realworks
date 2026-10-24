@@ -18,15 +18,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   changing sealed plans, runtime enforcement or launch rights. Account for
   all four attempts per task and keep the USD cap null as an owner decision.
   The native-call number is explicitly a provisional heuristic, not measured
-  native usage. Record the historical baseline's `gpt-5.4` deployment versus
-  the requested `gpt-5.6-sol` label, null deployment bindings, and unavailable
-  diagnostic archive; actual deployment-name agreement remains unverified.
-  Final draft/deployment/source contracts passed 166 tests together at clean
-  proposal head `73d2a71f31ad78fdf90fa9a5e433412a019ed45b`, after the
-  source guard correctly refused the earlier dirty proposal worktree.
-  Native enforcement, owner approval, archived deployment evidence,
-  frozen-grader/live gates and independent final-source review remain required.
-  No model calls, workflow dispatches, grading or push.
+  native usage. Verify artifact `12257312458` from run `39407062120` against
+  ZIP SHA256 `5d1a2540f0ba1291093b231d0e12e489ca197c32683aee521fb1622893600841`:
+  both archived JSON files request `gpt-5.6-sol`, matching the cap/registration
+  model labels and Codex SDK/CLI `0.147.0`. Actual pilot deployment bindings
+  remain null; served identity and raw resource IDs are absent from the archive.
+  Record file:line evidence that historical baseline `gpt-5.4` fields are not
+  inherited: omitted bindings retain blockers, templates are inert, and explicit
+  hash-bound resource IDs supply both candidate deployment fields without a
+  baseline fallback. Preserve sealed plans, workflows and existing checks.
+  At clean tested head `9a31015526c0577b69f6f56e7704fd379a31e270`,
+  cap/source-registration/preflight/template/deployment contracts passed
+  **408 tests, 0 failed (177.19s)** offline. This is not an independently
+  reviewed execution head. Native enforcement, owner approval, verified
+  resource/served identity, frozen-grader/live gates and independent
+  final-source review remain required. Only free artifact reads and local
+  operations; no Azure/model calls, workflow dispatches, grading or push.
 
 - Add a prospective source profile for the existing five-task Foundry Sol
   pilot, without changing its study, run identity, historical registrations,
