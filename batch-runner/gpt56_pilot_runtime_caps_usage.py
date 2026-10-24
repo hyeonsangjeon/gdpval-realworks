@@ -137,18 +137,22 @@ class _UsageObservation:
             self.snapshots.append(_bytes(snapshot))
 
     def _document(self, observer: wire._TransportObservation) -> dict:
-        _require(observer is self.observer and observer.installed and bool(self.snapshots)
+        stopped = observer.native_request_cap_exceeded
+        _require(observer is self.observer and observer.installed and (bool(self.snapshots) or stopped)
                  and self.snapshots == [_bytes(row) for row in observer.usage])
         _require(set(observer.requests) in ({"thread/start", "turn/start"}, {"thread/start", "turn/start", "turn/interrupt"})
                  and observer.responses == {row["request_id_sha256"] for row in observer.requests.values()})
-        rows = [observer.completion, *observer.usage]
+        correlation = observer.terminal_correlation()
+        rows = [correlation, *observer.usage]
         _require(all(row["thread_id_sha256"] == observer.thread and row["turn_id_sha256"] == observer.turn for row in rows))
-        _require(observer.completion["status"] in ("completed", "failed", "interrupted"))
+        _require(correlation["status"] in ("completed", "failed", "interrupted")
+                 or stopped and correlation["status"] is None)
         return {"source": "app_server_thread_usage_not_provider_billing", "unit": "tokens",
                 "counter_semantics": "total_cumulative_per_thread_last_latest_model_request",
-                "correlation": observer.completion, "requests": observer.requests,
+                "correlation": correlation, "requests": observer.requests,
                 "snapshots": [json.loads(row) for row in self.snapshots],
-                "threshold_observation": "reported_input_and_output_within_reviewed_limits_not_native_enforcement"}
+                "threshold_observation": ("native_request_cap_exceeded_usage_may_be_partial" if stopped else
+                                          "reported_input_and_output_within_reviewed_limits_not_native_enforcement")}
 
     def finish(self, observer: wire._TransportObservation) -> None:
         """Seal only the exact stream just validated by the live wire owner."""

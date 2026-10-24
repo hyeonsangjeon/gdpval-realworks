@@ -2,7 +2,10 @@
 
 import json
 import socket
+import subprocess
+import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http.client import HTTPConnection, IncompleteRead
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,7 +16,8 @@ import pytest
 
 import gpt56_pilot_wire_receipt as wire
 import step2_run_inference as step2
-from .test_gpt56_pilot_wire_receipt import REQUESTED, _finish, _start, _transport, _turn
+from core import codex_runner
+from .test_gpt56_pilot_wire_receipt import REQUESTED, USAGE, _finish, _start, _transport, _turn
 
 CANARY = "PRIVATE_WIRE_CANARY_token_prompt_endpoint_never_publish"
 UPSTREAM = "https://fixture-foundry.services.ai.azure.com/openai/v1"
@@ -154,7 +158,11 @@ def test_native_posts_and_response_model_reach_receipt_and_step2(monkeypatch, ca
     assert observed["served_model"] == MODEL != REQUESTED["deployment"]
     assert observed["served_model_reason"] is None
     assert observed["served_model_version"] is None
-    assert observed["native_cap_enforced"] is observed["provider_receipt_confirmed"] is False
+    assert observed["native_cap_enforced"] is True
+    assert observed["provider_receipt_confirmed"] is False
+    assert observed["native_request_limit"] == 32
+    assert observed["native_request_limit_sha256"] == wire.NATIVE_CAPS_SHA256
+    assert observed["native_request_blocked_count"] == 0 and observed["native_request_cap_reason"] is None
     assert receipt["served_model"]["value"] == MODEL
     assert receipt["usage"]["model_call_count"] == wire._unavailable()
     assert set(receipt["requests"]) == {"thread/start", "turn/start"}
@@ -295,7 +303,8 @@ def test_listener_failure_and_missing_observer_are_explicit_not_zero(monkeypatch
         raise OSError(CANARY)
 
     monkeypatch.setattr(wire, "_ProviderHTTPObservation", unavailable)
-    assert observer.configure_provider_observer(provider, overrides, timeout=60) == overrides
+    with pytest.raises(wire.PilotWireReceiptRefused, match="^pilot_wire_receipt_refused$"):
+        observer.configure_provider_observer(provider, overrides, timeout=60)
     assert observer.provider_observation() == wire._provider_summary("observer_start_failed")
     assert step2._bounded_codex_diagnostics({"items_seen": 2}) == {"items_seen": 2}
 
@@ -327,16 +336,22 @@ def test_sse_byte_boundaries_and_rollout_quotes_never_supply_identity():
     assert parser.finish() == (None, "response_capture_incomplete")
 
 
-def test_capture_does_not_turn_the_provisional_32_into_a_native_limit(monkeypatch):
-    with _upstream(monkeypatch, [{"body": _body()}] * 33) as (received, _timeouts):
+def test_native_request_cap_blocks_33_before_upstream(monkeypatch):
+    with _upstream(monkeypatch, [{"body": _body()}] * 32) as (received, timeouts):
         capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
         try:
-            for _ in range(33):
+            for _ in range(32):
                 assert _post(capture.base_url)[0] == 200
+            assert _post(capture.base_url, "/responses/compact") == (400, b"")
         finally:
             capture.close()
-    assert len(received) == capture.summary()["native_request_count"] == 33
-    assert capture.summary()["native_cap_enforced"] is False
+    observed = capture.summary()
+    assert len(received) == len(timeouts) == observed["native_request_count"] == 32
+    assert observed["native_request_count_reason"] is None
+    assert observed["native_cap_enforced"] is True
+    assert observed["native_request_blocked_count"] == 1
+    assert observed["native_request_cap_reason"] == wire.NATIVE_REQUEST_CAP_EXCEEDED
+    assert capture.closed and not capture.thread.is_alive() and capture.server.socket.fileno() == -1
 
 
 def test_pinned_python_sdk_passes_the_observed_url_to_the_cli_not_python_http(monkeypatch):
@@ -388,3 +403,200 @@ def test_close_interrupts_incomplete_local_headers(monkeypatch):
     finally:
         client.close()
         capture.close()
+
+
+@pytest.mark.parametrize("count", [1, 31, 32])
+def test_native_request_cap_allows_the_snapshot_limit(monkeypatch, count):
+    with _upstream(monkeypatch, [{"body": _body()}] * count) as (received, timeouts):
+        capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+        try:
+            for index in range(count):
+                suffix = "/responses" if index % 2 == 0 else "/responses/compact"
+                assert _post(capture.base_url, suffix) == (200, _body())
+            assert not capture.cap_exceeded and not capture.closed
+        finally:
+            capture.close()
+    summary = capture.summary()
+    assert len(received) == len(timeouts) == summary["native_request_count"] == count
+    assert summary["native_request_limit"] == wire._native_request_limit() == 32
+    assert summary["native_request_blocked_count"] == 0
+    assert summary["native_request_cap_reason"] is None and summary["native_cap_enforced"] is True
+
+
+def test_native_request_cap_reserves_the_last_slot_atomically(monkeypatch):
+    with _upstream(monkeypatch, [{"body": _body()}] * 32) as (received, timeouts):
+        capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+        barrier = threading.Barrier(4)
+
+        def final_request(_index):
+            barrier.wait(timeout=2)
+            try:
+                return _post(capture.base_url)[0]
+            except (OSError, IncompleteRead):
+                return None  # Closure may interrupt another local connection.
+
+        try:
+            for _ in range(31):
+                assert _post(capture.base_url)[0] == 200
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(final_request, range(4)))
+        finally:
+            capture.close()
+    assert 31 <= len(received) <= 32
+    assert len(timeouts) == capture.summary()["native_request_count"] == 32
+    assert capture.summary()["native_request_blocked_count"] >= 1
+    assert capture.summary()["native_request_cap_reason"] == wire.NATIVE_REQUEST_CAP_EXCEEDED
+
+
+@pytest.mark.parametrize("damage", ["missing", "drift"])
+def test_native_request_cap_refuses_unsealed_caps_before_a_listener(monkeypatch, tmp_path, damage):
+    path = tmp_path / "caps.yaml"
+    if damage == "drift":
+        path.write_bytes(wire._NATIVE_CAPS_PATH.read_bytes().replace(b"native_model_calls: 32", b"native_model_calls: 99"))
+    monkeypatch.setattr(wire, "_NATIVE_CAPS_PATH", path)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("listener_before_sealed_cap")
+
+    monkeypatch.setattr(socket.socket, "bind", forbidden)
+    with pytest.raises(wire.PilotWireReceiptRefused, match="^pilot_wire_receipt_refused$"):
+        wire._ProviderHTTPObservation(UPSTREAM, 60)
+
+
+@pytest.mark.parametrize("damage", ["limit", "digest", "blocked", "reason", "forwarded"])
+def test_native_request_cap_projection_refuses_inconsistent_claims(monkeypatch, damage, capsys):
+    capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+    capture.close()
+    raw = capture.summary()
+    if damage == "limit":
+        raw["native_request_limit"] = 33
+    elif damage == "digest":
+        raw["native_request_limit_sha256"] = "0" * 64
+    elif damage == "blocked":
+        raw["native_request_blocked_count"] = 1
+    elif damage == "reason":
+        raw["native_request_cap_reason"] = CANARY
+    else:
+        raw["native_request_count"] = 33
+    projected = step2._bounded_codex_diagnostics({"provider_observation": raw})
+    assert projected == {"provider_observation": wire._provider_summary("invalid_observation")}
+    output = capsys.readouterr()
+    assert CANARY not in json.dumps(projected) + output.out + output.err
+
+
+@pytest.mark.parametrize("terminal", [None, "completed"])
+@pytest.mark.parametrize("with_usage", [False, True])
+def test_native_request_cap_stops_process_and_preserves_partial_receipt(
+        monkeypatch, tmp_path, capsys, terminal, with_usage):
+    """Real runner/SDK close + harmless child; no Rust, auth, provider or host admission.
+
+    The fake turn even returns success after its denied request. The real runner
+    must override that result, and unknown terminal/usage must stay unknown.
+    """
+    from openai_codex.client import CodexClient, CodexConfig
+    from gpt56_pilot_runtime_caps_usage import _UsageObservation
+
+    observer = wire._TransportObservation(dict(REQUESTED))
+    observer.approved_base_url = UPSTREAM
+    observer.bind_task_text(CANARY)
+    provider = SimpleNamespace(base_url=UPSTREAM, provider_id=REQUESTED["provider_id"])
+    overrides = ('model_providers.gdpval-foundry.base_url=' + json.dumps(UPSTREAM),)
+    owner = SimpleNamespace(failed=False, approved_limits={"model_calls": wire._native_request_limit(),
+                                                         "input_tokens": 300000, "output_tokens": 10000},
+                            wire=SimpleNamespace(document={"requested": dict(REQUESTED)}))
+
+    def poison():
+        owner.failed = True
+
+    owner._poison = poison
+    observer.caps_usage_observer = _UsageObservation(owner, observer)
+    runner = object.__new__(codex_runner.CodexAgentRunner)
+    runner.timeout, runner.cost_ledger = 5, None
+    monkeypatch.setattr(codex_runner, "_load_turn_collector", lambda: None)
+
+    with _upstream(monkeypatch, [{"body": _body()}] * 32) as (received, timeouts), subprocess.Popen(
+            [sys.executable, "-I", "-u", "-c", "import signal; print('ready', flush=True); signal.pause()"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", env={}) as process:
+        assert process.stdout.readline() == "ready\n"
+        client = CodexClient(CodexConfig())
+        client._proc = process  # Do not start or initialize a real Codex CLI.
+        client._router.route_response = lambda _message: "original-response"
+        client._coerce_notification = lambda *_args: "original-notification"
+        codex = SimpleNamespace(_client=client, close=client.close)
+        fake = SimpleNamespace(observer=observer, codex=codex, client=client,
+                               thread_id="thread-private", turn_id="turn-private")
+        observer.configure_provider_observer(provider, overrides, timeout=runner.timeout)
+        capture = observer.provider_capture
+        replies = []
+
+        def open_runtime(_workspace, *, pilot_wire_observer):
+            assert pilot_wire_observer is observer
+            wire.install_runtime_observer(codex, observer)
+            observer.bind_provider_runtime(codex)
+            return codex
+
+        def run_turn():
+            for _ in range(32):
+                replies.append(_post(capture.base_url))
+            replies.append(_post(capture.base_url))
+            if terminal is not None:
+                client._coerce_notification("turn/completed", {
+                    "threadId": fake.thread_id, "turn": {"id": fake.turn_id, "status": terminal},
+                })
+            return SimpleNamespace(final_response=CANARY, id=fake.turn_id, usage=None)
+
+        def turn(text):
+            client._write_message({"id": "rpc-turn", "method": "turn/start", "params": {
+                "threadId": fake.thread_id, "input": [{"type": "text", "text": text}],
+            }})
+            client._router.route_response({"id": "rpc-turn", "result": {"turn": {"id": fake.turn_id}}})
+            if with_usage:
+                client._coerce_notification("thread/tokenUsage/updated", {
+                    "threadId": fake.thread_id, "turnId": fake.turn_id, "tokenUsage": USAGE,
+                })
+            return SimpleNamespace(id=fake.turn_id, run=run_turn)
+
+        def start_thread(*_args, **_kwargs):
+            _start(fake)
+            return SimpleNamespace(id=fake.thread_id, turn=turn)
+
+        def collect():
+            assert capture.closed and not capture.thread.is_alive()
+            assert capture.server.socket.fileno() == -1
+            assert process.poll() is not None and observer.provider_runtime is None
+            return []
+
+        monkeypatch.setattr(runner, "open_runtime", open_runtime)
+        monkeypatch.setattr(runner, "start_thread", start_thread)
+        workspace = SimpleNamespace(workspace=tmp_path, collect_deliverables=collect)
+        try:
+            outcome = runner._run_one_turn(workspace=workspace, task_text=CANARY,
+                                          experiment_prompt={"system": "private developer text"},
+                                          task_id="synthetic-task", pilot_wire_observer=observer)
+            assert outcome.success is False and outcome.text == ""
+            assert outcome.error == outcome.error_category == wire.NATIVE_REQUEST_CAP_EXCEEDED
+            assert replies == [(200, _body())] * 32 + [(400, b"")]
+            assert process.wait(timeout=1) is not None
+            receipt = observer.finish(success=False, thread_id=outcome.thread_id, turn_id=outcome.turn_id)
+            usage = observer.caps_usage_observer.verified()
+        finally:
+            observer.close_provider_observer()
+            observer.close_provider_runtime()
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=1)
+    assert len(received) == len(timeouts) == receipt["provider_observation"]["native_request_count"] == 32
+    assert receipt["provider_observation"]["native_request_blocked_count"] == 1
+    assert receipt["provider_observation"]["native_request_cap_reason"] == wire.NATIVE_REQUEST_CAP_EXCEEDED
+    assert receipt["correlation"]["status"] == terminal  # No invented terminal acknowledgement.
+    assert usage["snapshots"] == receipt["usage"]["snapshots"]
+    assert len(usage["snapshots"]) == int(with_usage)
+    assert usage["threshold_observation"] == "native_request_cap_exceeded_usage_may_be_partial"
+    projected = step2._bounded_codex_diagnostics({"provider_observation": receipt["provider_observation"]})
+    assert projected["provider_observation"] == receipt["provider_observation"]
+    assert step2.infra_retry_category({"status": "error", "observability": {
+        "error_category": outcome.error_category}}) is None
+    output = capsys.readouterr()
+    assert all(value not in json.dumps(receipt) + json.dumps(projected) + output.out + output.err
+               for value in (CANARY, UPSTREAM, "Bearer", capture.route))

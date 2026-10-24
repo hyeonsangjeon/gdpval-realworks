@@ -1094,6 +1094,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 # Codex has already initialized. Only subsequent app-server
                 # traffic belongs to this task's observation interval.
                 install_runtime_observer(codex, pilot_wire_observer)
+                pilot_wire_observer.bind_provider_runtime(codex)
             except Exception:
                 try:
                     codex.close()
@@ -1880,6 +1881,23 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 return measured
 
             deadline_expired = task_deadline is not None and task_deadline.remaining_seconds() <= 0
+            if pilot_wire_observer is not None and pilot_wire_observer.native_request_cap_exceeded:
+                from gpt56_pilot_wire_receipt import NATIVE_REQUEST_CAP_EXCEEDED
+
+                # The HTTP admission lock already refused the extra request.
+                # Join the process closure before collecting any partial files,
+                # even if the SDK races the local stop with a completed turn.
+                pilot_wire_observer.close_provider_observer()
+                pilot_wire_observer.close_provider_runtime()
+                measured = _settle_what_was_measured()
+                return CodexRunOutcome(
+                    success=False, text="", files=collect_files(),
+                    error=NATIVE_REQUEST_CAP_EXCEEDED,
+                    error_category=NATIVE_REQUEST_CAP_EXCEEDED,
+                    usage_delta=measured, items_seen=observed.items_seen,
+                    thread_id=getattr(thread, "id", None),
+                    turn_id=getattr(turn_handle, "id", None),
+                )
             if timed_out or deadline_expired:
                 # The turn was sent and the model may well have answered, so
                 # the reservation is never abandoned. What the stream managed
@@ -1962,7 +1980,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 close_observation_runtime()
             elif codex is not None:
                 try:
-                    codex.close()
+                    if pilot_wire_observer is None:
+                        codex.close()
+                    else:
+                        pilot_wire_observer.close_provider_runtime()
                 except Exception:  # noqa: BLE001 - closing must not mask a result
                     pass
             if pilot_wire_observer is not None:

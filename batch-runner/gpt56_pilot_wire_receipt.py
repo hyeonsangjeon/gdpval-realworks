@@ -2,9 +2,10 @@
 
 The SDK's stdio settings are not served identity. An attempt-owned loopback
 observer can additionally count forwarded native HTTP attempts and read the
-provider response body's model. It neither attests a deployment/version nor
-clears a launch, billing or native-cap gate. No private body is retained. A
-saved document cannot recreate the in-process witness for task acceptance.
+provider response body's model, with a snapshot-bound per-attempt request cap.
+It neither attests a deployment/version nor clears a launch or billing gate.
+No private body is retained. A saved document cannot recreate the in-process
+witness for task acceptance.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+
+import yaml
 
 import gpt56_pilot_input_capture as capture
 import gpt56_pilot_deployment_binding as deployment
@@ -41,6 +44,9 @@ _bytes, _digest = capture._bytes, capture._digest
 _USAGE_FIELDS = {"inputTokens", "cachedInputTokens", "cacheWriteInputTokens",
                  "outputTokens", "reasoningOutputTokens", "totalTokens"}
 PROVIDER_OBSERVATION_SOURCE = "attempt_owned_loopback_forward_attempts_and_response_body"
+NATIVE_REQUEST_CAP_EXCEEDED = "native_request_cap_exceeded"
+NATIVE_CAPS_SHA256 = "7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6"
+_NATIVE_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml"
 _MODEL = re.compile(r"gpt-5\.6-sol(?:-fast)?(?:-20[0-9]{2}-[0-9]{2}-[0-9]{2})?\Z")
 _CAPTURE_BYTES = 256 * 1024  # Observation memory, not a request/output quota.
 _CHUNK_BYTES = 64 * 1024
@@ -60,7 +66,24 @@ def _provider_summary(reason="observer_not_installed") -> dict:
             "native_request_count": None, "native_request_count_reason": reason,
             "served_model": None, "served_model_reason": reason,
             "served_model_version": None, "served_model_version_reason": "not_observed",
-            "provider_receipt_confirmed": False, "native_cap_enforced": False}
+            "provider_receipt_confirmed": False, "native_cap_enforced": False,
+            "native_request_limit": None, "native_request_limit_sha256": None,
+            "native_request_blocked_count": None, "native_request_cap_reason": None}
+
+
+def _native_request_limit() -> int:
+    """Read the unchanged caps snapshot, not a default or a launch permission.
+
+    The registration still has null native caps. The owner's bounded enforcement
+    direction selects this exact draft's per-attempt value, not new plan bytes.
+    """
+    with _closed():
+        data = _read_bytes(_NATIVE_CAPS_PATH, size=7343, sha256=NATIVE_CAPS_SHA256)
+        caps = yaml.safe_load(data)
+        _require(caps["registered_plan"] == pilot.SOURCE_PROFILE)
+        value = caps["per_attempt"]["native_model_calls"]
+        _require(type(value) is int and 0 < value < 2 ** 63)
+        return value
 
 
 def bounded_provider_observation(raw: Any) -> dict:
@@ -80,7 +103,27 @@ def bounded_provider_observation(raw: Any) -> dict:
         if (value is None) != (reason is not None):
             return invalid
     if (raw["served_model_version"] is not None or raw["served_model_version_reason"] != "not_observed"
-            or raw["provider_receipt_confirmed"] is not False or raw["native_cap_enforced"] is not False):
+            or raw["provider_receipt_confirmed"] is not False or type(raw["native_cap_enforced"]) is not bool):
+        return invalid
+    if raw["native_cap_enforced"]:
+        try:
+            limit = _native_request_limit()
+        except PilotWireReceiptRefused:
+            return invalid
+        blocked = raw["native_request_blocked_count"]
+        if (type(raw["native_request_limit"]) is not int or raw["native_request_limit"] != limit
+                or raw["native_request_limit_sha256"] != NATIVE_CAPS_SHA256
+                or type(blocked) is not int or not 0 <= blocked < 2 ** 63
+                or count is not None and count > limit):
+            return invalid
+        if blocked:
+            if raw["native_request_cap_reason"] != NATIVE_REQUEST_CAP_EXCEEDED or count != limit:
+                return invalid
+        elif raw["native_request_cap_reason"] is not None:
+            return invalid
+    elif any(raw[field] is not None for field in (
+            "native_request_limit", "native_request_limit_sha256", "native_request_blocked_count",
+            "native_request_cap_reason")):
         return invalid
     return dict(raw)
 
@@ -187,10 +230,15 @@ class _ProviderHTTPObservation:
                  and classify_endpoint(base_url).kind is EndpointKind.DIRECT_V1
                  and type(timeout) in (int, float) and 0 < timeout < float("inf"))
         self.target = target
+        self.request_limit = _native_request_limit()
         self.deadline = time.monotonic() + timeout
         self.lock = threading.RLock()
+        self.close_lock = threading.Lock()
         self.closed = False
         self.requests = self.finished = 0
+        self.blocked_requests = 0
+        self.cap_exceeded = False
+        self.stop_runtime = None
         self.model = self.model_reason = self.count_reason = None
         self.connections = set()
         self.inbound = set()
@@ -291,11 +339,24 @@ class _ProviderHTTPObservation:
             with self.lock:
                 if self.closed:
                     raise RuntimeError("closed")
-                connection = HTTPSConnection(self.target.hostname, timeout=self.remaining())
-                self.connections.add((connection, handler.connection))
-                # This is the forward-attempt boundary, not provider receipt.
-                self.requests += 1
-                started = True
+                self.remaining()
+                # Reserve under the same lock, before constructing/connecting
+                # upstream. Concurrent requests cannot both take the last slot.
+                if self.requests >= self.request_limit:
+                    self.blocked_requests += 1
+                    self.cap_exceeded = True
+                else:
+                    connection = HTTPSConnection(self.target.hostname, timeout=self.remaining())
+                    self.connections.add((connection, handler.connection))
+                    # This is the forward-attempt boundary, not provider receipt.
+                    self.requests += 1
+                    started = True
+            if not started:
+                self._empty(handler, 400)  # Not 429: this is not provider throttling.
+                self.close()
+                if self.stop_runtime is not None:
+                    self.stop_runtime()
+                return
             connection.connect()
             upstream = connection.sock
             with self.lock:
@@ -385,37 +446,42 @@ class _ProviderHTTPObservation:
                 self.model = model
 
     def close(self):
-        with self.lock:
-            if self.closed:
-                return
-            self.closed = True
-            connections = tuple(self.connections)
-            inbound = tuple(self.inbound)
-        for stream in inbound:
-            try:
-                stream.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            stream.close()
-        for connection, inbound, *upstream in connections:
-            for stream in (connection.sock, inbound, *upstream):
-                if stream is not None:
-                    try:
-                        stream.shutdown(socket.SHUT_RDWR)
-                    except OSError:
-                        pass
-            connection.close()
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=1)
+        with self.close_lock:
+            with self.lock:
+                if self.closed:
+                    return
+                self.closed = True
+                connections = tuple(self.connections)
+                inbound = tuple(self.inbound)
+            for stream in inbound:
+                try:
+                    stream.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                stream.close()
+            for connection, inbound, *upstream in connections:
+                for stream in (connection.sock, inbound, *upstream):
+                    if stream is not None:
+                        try:
+                            stream.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+                connection.close()
+            self.server.shutdown()
+            self.server.server_close()
+            self.thread.join(timeout=1)
 
     def summary(self):
         with self.lock:
             if not self.closed:
                 return _provider_summary("observer_not_closed")
             result = _provider_summary()
-            result["native_request_count"] = self.requests if self.count_reason is None else None
-            result["native_request_count_reason"] = self.count_reason
+            result.update(native_cap_enforced=True, native_request_limit=self.request_limit,
+                          native_request_limit_sha256=NATIVE_CAPS_SHA256,
+                          native_request_blocked_count=self.blocked_requests,
+                          native_request_cap_reason=NATIVE_REQUEST_CAP_EXCEEDED if self.cap_exceeded else None)
+            result["native_request_count"] = self.requests if self.count_reason is None or self.cap_exceeded else None
+            result["native_request_count_reason"] = None if self.cap_exceeded else self.count_reason
             reason = self.count_reason or ("response_capture_incomplete" if self.finished != self.requests else
                       "no_provider_requests" if not self.requests else self.model_reason)
             result["served_model"] = self.model if reason is None else None
@@ -472,6 +538,8 @@ class _TransportObservation:
         self.approved_base_url = None
         self.provider_capture = None
         self.provider_capture_reason = "observer_not_installed"
+        self.provider_runtime = None
+        self.provider_runtime_lock = threading.Lock()
 
     def configure_provider_observer(self, provider, overrides, *, timeout):
         """Replace only this process's checked provider URL; never mutate settings."""
@@ -487,15 +555,47 @@ class _TransportObservation:
             try:
                 self.provider_capture = _ProviderHTTPObservation(provider.base_url, timeout)
             except OSError:
-                # Port/listener availability is not permission to fabricate data.
+                # A missing listener must not bypass the request-cap boundary.
                 self.provider_capture_reason = "observer_start_failed"
-                return overrides
+                raise PilotWireReceiptRefused() from None
             return tuple(key + _toml_literal(self.provider_capture.base_url) if item == expected else item
                          for item in overrides)
 
     def close_provider_observer(self):
         if self.provider_capture is not None:
             self.provider_capture.close()
+
+    def bind_provider_runtime(self, codex):
+        with self.guard():
+            _require(self.installed and self.provider_capture is not None and self.provider_runtime is None)
+            if self.caps_usage_observer is not None:
+                with self.caps_usage_observer._guard():
+                    _require(self.caps_usage_observer.limits["model_calls"] == self.provider_capture.request_limit)
+            with self.provider_capture.lock:
+                _require(not self.provider_capture.closed and self.provider_capture.requests == 0)
+                self.provider_runtime = codex
+                self.provider_capture.stop_runtime = self.close_provider_runtime
+
+    def close_provider_runtime(self):
+        # Both the denied HTTP worker and the runner's finally use this owner.
+        # The second caller waits for closure instead of racing SDK.close().
+        with self.provider_runtime_lock:
+            if self.provider_runtime is not None:
+                try:
+                    self.provider_runtime.close()
+                finally:
+                    self.provider_runtime = None
+
+    @property
+    def native_request_cap_exceeded(self):
+        return self.provider_capture is not None and self.provider_capture.cap_exceeded
+
+    def terminal_correlation(self):
+        if self.completion is not None:
+            return self.completion
+        _require(self.native_request_cap_exceeded)
+        # A local stop is not a fabricated app-server terminal acknowledgement.
+        return {"thread_id_sha256": self.thread, "turn_id_sha256": self.turn, "status": None}
 
     def provider_observation(self):
         return (self.provider_capture.summary() if self.provider_capture is not None else
@@ -593,17 +693,18 @@ class _TransportObservation:
 
     def finish(self, *, success: bool, thread_id: str, turn_id: str) -> dict:
         with self.guard():
-            _require(self.installed and type(success) is bool and self.completion is not None)
+            stopped = self.native_request_cap_exceeded
+            _require(self.installed and type(success) is bool and (self.completion is not None or stopped))
             _require(self.thread == _correlation(thread_id) and self.turn == _correlation(turn_id)
                      and {"thread/start", "turn/start"} <= set(self.requests)
                      and self.responses == {entry["request_id_sha256"] for entry in self.requests.values()})
             _require(all(row["thread_id_sha256"] == self.thread and row["turn_id_sha256"] == self.turn
-                         for row in [self.completion, *self.usage]))
-            _require(success == (self.completion["status"] == "completed"))
+                         for row in [self.terminal_correlation(), *self.usage]))
+            _require(not success if stopped else success == (self.completion["status"] == "completed"))
             if self.caps_usage_observer is not None:
                 self.caps_usage_observer.finish(self)
             result = {"scope": "codex_app_server_stdio_utf8_after_initialize",
-                      "requests": self.requests, "correlation": self.completion,
+                      "requests": self.requests, "correlation": self.terminal_correlation(),
                       "app_server_settings": self.settings,
                       "usage": {"state": "observed" if self.usage else "not_available", "unit": "tokens",
                                 "source": "app_server_thread_usage_not_provider_billing",
