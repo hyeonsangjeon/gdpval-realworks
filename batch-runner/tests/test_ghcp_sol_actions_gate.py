@@ -2,6 +2,7 @@
 
 import json
 import os
+import signal
 import socket
 import subprocess
 from copy import deepcopy
@@ -67,6 +68,7 @@ def test_fixed_plan_and_all_five_captures(tmp_path, monkeypatch, capsys):
         assert envelope["versions"]["codex_cli"] == "not available"
         assert envelope["versions"]["python"]
         assert envelope["usage"] is envelope["cost"] is envelope["grade"] is None
+        assert envelope["usage_status"] == envelope["cost_status"] == "not available"
         capture = envelope["capture"]
         assert capture["artifact_allowlist"] == ["capture.json"]
         assert capture["private_inputs_read"] is False
@@ -258,6 +260,7 @@ def _captured(tmp_path, events, capsys):
     assert set(capture["actual_served"].values()) == {"not available"}
     assert capture["model_calls"] == capture["grader_calls"] == 0
     assert capture["usage"] is capture["cost"] is capture["grade"] is None
+    assert capture["usage_status"] == capture["cost_status"] == "not available"
     receipt = capture["session_event_receipt"]
     assert receipt["evidence_level"] == "settings_only"
     for field in ("paid_execution_allowed", "applied_settings_verified", "live_source_verified",
@@ -537,3 +540,237 @@ def test_direct_capture_and_cli_errors_cannot_bypass_or_leak(tmp_path, monkeypat
     assert error.value.code == 2
     assert capsys.readouterr().err == "ghcp_sol_dry_capture_refused\n"
     assert str(gate.GateRefused(CANARY)) == "model_selection_unverified"
+
+
+def _turn(number, **envelope):
+    # Documented logical turn start, not a native request or a usage response.
+    return {"type": "assistant.turn_start", "data": {"turnId": str(number)}, **envelope}
+
+
+@pytest.mark.parametrize("turns", [63, 64, 65])
+def test_task_turn_capture_boundary_and_receipt(tmp_path, capsys, no_runtime, turns):
+    receipt = _captured(tmp_path, [_context(), _usage(), *(_turn(i) for i in range(turns))], capsys)
+    limits = receipt["collection_limits"]
+    assert limits["max_turns"] == 64
+    assert limits["observed_turn_starts"] == turns
+    assert receipt["observed_usage_events"] == 1  # Not counted as turns.
+    assert receipt["reason_codes"] == (["turn_cap_exceeded"] if turns > 64 else [])
+    assert limits["event_stream_cleanup"] == "closed"
+    assert limits["live_enforcement_verified"] is False
+    assert limits["scope"] == "offline_collection_not_live_task_execution"
+
+
+def test_turn_cap_stops_consumption_and_closes_stream(no_runtime):
+    closed = []
+
+    def events():
+        try:
+            yield _context()
+            yield _usage()
+            for i in range(65):
+                # Repeated turn numbers in different agents still count.
+                yield _turn(i // 2, agentId=f"{CANARY}-{i % 2}")
+            pytest.fail("capture consumed events after exceeding the turn cap")
+        finally:
+            closed.append(True)
+
+    receipt = gate.collect_session_events(events())
+    assert receipt["reason_codes"] == ["turn_cap_exceeded"]
+    assert receipt["collection_limits"]["observed_turn_starts"] == 65
+    assert closed == [True]
+    assert CANARY not in json.dumps(receipt)
+    # A fresh task has its own counter, never a continuation of the old one.
+    fresh = gate.collect_session_events([_context(), _usage(), _turn(1)])
+    assert fresh["reason_codes"] == []
+    assert fresh["collection_limits"]["observed_turn_starts"] == 1
+
+
+@pytest.mark.parametrize("bad", [None, "", 1, True, [], CANARY * 20, "duplicate", "bad_agent"])
+def test_turn_count_cannot_be_hidden_by_bad_identity(no_runtime, bad):
+    event = _turn(1)
+    if bad == "bad_agent":
+        event["agentId"] = []
+    elif bad != "duplicate":
+        event["data"]["turnId"] = bad
+    receipt = gate.collect_session_events([_context(), _usage(), _turn(1), event])
+    assert receipt["reason_codes"] == ["turn_count_unverified"]
+    assert receipt["collection_limits"]["observed_turn_starts"] == 1
+    assert CANARY not in json.dumps(receipt)
+
+
+@pytest.mark.parametrize("elapsed", [1199.0, 1200.0, 1201.0])
+def test_task_capture_deadline_is_cumulative_and_closes(no_runtime, monkeypatch, elapsed):
+    now = [1000.0]
+    monkeypatch.setattr(gate, "monotonic", lambda: now[0])
+    closed = []
+
+    def events():
+        try:
+            yield _context()
+            yield _usage()
+            now[0] += elapsed
+            # An event timestamp cannot reset the local monotonic deadline.
+            yield {"type": "assistant.message", "timestamp": 0, "data": {"content": CANARY}}
+            if elapsed >= 1200:
+                pytest.fail("capture resumed after its deadline")
+        finally:
+            closed.append(True)
+
+    before = signal.getsignal(signal.SIGALRM)
+    receipt = gate.collect_session_events(events())
+    assert receipt["reason_codes"] == (["task_timeout_exceeded"] if elapsed >= 1200 else [])
+    assert receipt["collection_limits"]["timeout_seconds"] == 1200
+    assert receipt["collection_limits"]["event_stream_cleanup"] == "closed"
+    assert receipt["observed_usage_events"] == 1
+    assert closed == [True]
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+    assert signal.getsignal(signal.SIGALRM) is before
+    assert CANARY not in json.dumps(receipt)
+
+
+def test_task_capture_checks_deadline_on_eof(no_runtime, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(gate, "monotonic", lambda: now[0])
+
+    def events():
+        yield _context()
+        yield _usage()
+        now[0] += 1200
+
+    receipt = gate.collect_session_events(events())
+    assert receipt["reason_codes"] == ["task_timeout_exceeded"]
+    assert receipt["collection_limits"]["event_stream_cleanup"] == "closed"
+
+
+def test_timeout_persists_failed_capture_and_exit_receipt(tmp_path, no_runtime, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(gate, "monotonic", lambda: now[0])
+
+    def events():
+        yield _context()
+        yield _usage()
+        now[0] += 1200
+        yield _turn(1)
+
+    root = tmp_path / "capture"
+    task_id = gate.TASK_IDS[0]
+    assert gate.dry_capture(task_id, root, session_events=events()) == 2
+    capture = json.loads((root / task_id / "capture.json").read_text())
+    private_exit = json.loads((root / task_id / gate.PRIVATE_PATHS["exit_status"]).read_text())
+    assert capture["status"] == "failed"
+    assert capture["session_event_receipt"]["reason_codes"] == ["task_timeout_exceeded"]
+    assert capture["exit_status"] == private_exit["exit_status"] == 2
+    assert private_exit["model_started"] is False
+    assert capture["paid_execution_allowed"] is False
+    assert capture["session_event_receipt"]["collection_limits"]["event_stream_cleanup"] == "closed"
+
+
+def test_task_capture_timer_interrupts_blocked_next(no_runtime, monkeypatch):
+    real_setitimer = signal.setitimer
+    armed = []
+    closed = []
+    monkeypatch.setattr(gate, "monotonic", lambda: 1000.0)
+
+    def accelerated_timer(which, seconds, interval=0):
+        # Keep the draft value intact; only accelerate the OS timer fixture.
+        if seconds:
+            armed.append(seconds)
+            assert seconds == 1200
+            return (0.0, 0.0)
+        return real_setitimer(which, 0, interval)
+
+    monkeypatch.setattr(signal, "setitimer", accelerated_timer)
+
+    def events():
+        try:
+            yield _context()
+            yield _usage()
+            # Arm only at the blocking point, avoiding a scheduling race while
+            # setting up the known-good metadata events.
+            real_setitimer(signal.ITIMER_REAL, 0.02)
+            signal.pause()
+            pytest.fail("blocked iterator resumed instead of refusing")
+        finally:
+            closed.append(True)
+
+    before = signal.getsignal(signal.SIGALRM)
+    receipt = gate.collect_session_events(events())
+    assert receipt["reason_codes"] == ["task_timeout_exceeded"]
+    assert armed == [1200]
+    assert closed == [True]
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+    assert signal.getsignal(signal.SIGALRM) is before
+
+
+@pytest.mark.parametrize("unsupported", ["owned_timer", "worker_thread"])
+def test_task_capture_refuses_without_stealing_timer_or_reading(no_runtime, monkeypatch, unsupported):
+    def forbidden(*args, **kwargs):
+        pytest.fail("unsupported capture read events or modified a timer")
+
+    if unsupported == "owned_timer":
+        monkeypatch.setattr(signal, "getitimer", lambda which: (30.0, 0.0))
+    else:
+        monkeypatch.setattr(gate.threading, "current_thread", lambda: object())
+    monkeypatch.setattr(signal, "setitimer", forbidden)
+
+    def events():
+        forbidden()
+        yield
+
+    receipt = gate.collect_session_events(events())
+    assert receipt["status"] == "failed"
+    assert receipt["reason_codes"][0] == "task_timeout_guard_unavailable"
+    assert receipt["collection_limits"]["event_stream_cleanup"] == "not_opened"
+    assert receipt["calls"] == []
+
+
+def test_capture_cleanup_failure_is_not_success_or_raw_error(no_runtime):
+    class Stream:
+        def __iter__(self):
+            return self
+
+        def __init__(self):
+            self.events = iter([_context(), _usage()])
+
+        def __next__(self):
+            return next(self.events)
+
+        def close(self):
+            raise RuntimeError(CANARY)
+
+    receipt = gate.collect_session_events(Stream())
+    assert receipt["status"] == "failed"
+    assert receipt["reason_codes"] == ["session_event_cleanup_refused"]
+    assert receipt["collection_limits"]["event_stream_cleanup"] == "failed"
+    assert CANARY not in json.dumps(receipt)
+
+
+def test_turn_cap_closes_actual_synthetic_file(tmp_path, monkeypatch, capsys, no_runtime):
+    real_fdopen = gate.os.fdopen
+    opened = []
+
+    def tracked_fdopen(*args, **kwargs):
+        stream = real_fdopen(*args, **kwargs)
+        opened.append(stream)
+        return stream
+
+    monkeypatch.setattr(gate.os, "fdopen", tracked_fdopen)
+    receipt = _captured(tmp_path, [_context(), _usage(), *(_turn(i) for i in range(65))], capsys)
+    assert receipt["reason_codes"] == ["turn_cap_exceeded"]
+    assert len(opened) == 1 and opened[0].closed
+
+
+@pytest.mark.parametrize("events", [None, [], [_context(), _usage()]])
+def test_unavailable_usage_and_undefined_tool_cap_are_explicit(no_runtime, events):
+    envelope = gate.capture_envelope(gate.TASK_IDS[0], session_events=events)
+    assert envelope["usage"] is envelope["cost"] is None
+    assert envelope["usage_status"] == envelope["cost_status"] == "not available"
+    assert envelope["usage_reason"] == "native_ghcp_usage_not_collected"
+    assert envelope["cost_reason"] == "native_ghcp_cost_not_collected"
+    assert envelope["limits"]["proposed_paid_max_tool_calls_per_task"] is None
+    limits = envelope["session_event_receipt"]["collection_limits"]
+    assert limits["max_tool_calls"] is None
+    assert limits["tool_call_cap_status"] == "value_not_defined"
+    assert limits["subprocess_cleanup"] == "not_applicable_no_subprocess_started"
+    assert envelope["limits"]["paid_limits_approved_or_verified"] is False
+    assert envelope["paid_execution_allowed"] is False

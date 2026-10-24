@@ -7,9 +7,13 @@ import hashlib
 import json
 import os
 import platform
+import signal
 import stat
+import threading
 from collections.abc import Iterable
+from contextlib import contextmanager
 from pathlib import Path
+from time import monotonic
 
 from core.execution_envelope_tasks import (
     CATALOG_PATH,
@@ -48,6 +52,14 @@ EFFORTS = frozenset({"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 MAX_EVENT_BYTES = 1_048_576
 MAX_EVENT_LINE_BYTES = 65_536
 MAX_EVENTS = 4096
+# Existing Actions draft values, not the separate native pilot's caps and not
+# paid approval. The inert VM plan still has no approved execution limits.
+PROPOSED_TASK_TIMEOUT_SECONDS = 1200
+PROPOSED_TASK_MAX_TURNS = 64
+COLLECTION_REASONS = frozenset({
+    "task_timeout_exceeded", "task_timeout_guard_unavailable",
+    "turn_cap_exceeded", "turn_count_unverified",
+})
 SELECTION_REASONS = frozenset({
     "auto_model_refused", "model_selection_refused", "custom_provider_refused",
     "model_selection_unverified", "provider_configuration_unverified",
@@ -137,6 +149,96 @@ def _token_limit(value):
     return value if type(value) is int and 0 < value <= 2**31 - 1 else None
 
 
+class _CollectionRefused(ValueError):
+    def __init__(self, code):
+        self.code = code if code in COLLECTION_REASONS else "task_timeout_guard_unavailable"
+        super().__init__(self.code)
+
+
+def _check_deadline(deadline):
+    if monotonic() >= deadline:
+        raise _CollectionRefused("task_timeout_exceeded")
+
+
+@contextmanager
+def _collection_timer(deadline):
+    """Interrupt even a blocked local iterator; do not replace another timer.
+
+    The hosted target is Linux. Unsupported embedding (including a worker
+    thread or an already-owned timer) refuses before reading any events.
+    This does not supervise a GHCP process: this route never starts one.
+    """
+    if (threading.current_thread() is not threading.main_thread()
+            or not hasattr(signal, "setitimer") or not hasattr(signal, "ITIMER_REAL")
+            or any(signal.getitimer(signal.ITIMER_REAL))):
+        raise _CollectionRefused("task_timeout_guard_unavailable")
+    _check_deadline(deadline)
+    previous = signal.getsignal(signal.SIGALRM)
+
+    def expired(signum, frame):
+        raise _CollectionRefused("task_timeout_exceeded")
+
+    signal.signal(signal.SIGALRM, expired)
+    try:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise _CollectionRefused("task_timeout_exceeded")
+        signal.setitimer(signal.ITIMER_REAL, remaining)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _bounded_session_events(events, limits):
+    """Stop this capture, not a historical task, at the existing draft caps.
+
+    Count documented assistant.turn_start events, including sub-agents; usage
+    events and native requests are different units. Never use event timestamps
+    to reset the clock or accept a claim of historical runtime enforcement.
+    """
+    deadline = monotonic() + PROPOSED_TASK_TIMEOUT_SECONDS
+    seen_turns = set()
+    with _collection_timer(deadline):
+        iterator = iter(events)
+        try:
+            while True:
+                _check_deadline(deadline)
+                try:
+                    event = next(iterator)
+                except StopIteration:
+                    _check_deadline(deadline)
+                    break
+                _check_deadline(deadline)
+                if type(event) is dict and event.get("type") == "assistant.turn_start":
+                    data = event.get("data")
+                    turn = data.get("turnId") if type(data) is dict else None
+                    agent = event.get("agentId")
+                    if (type(turn) is not str or not 0 < len(turn) <= 256
+                            or (agent is not None and (type(agent) is not str or not 0 < len(agent) <= 256))
+                            or (agent, turn) in seen_turns):
+                        raise _CollectionRefused("turn_count_unverified")
+                    seen_turns.add((agent, turn))
+                    limits["observed_turn_starts"] += 1
+                    if limits["observed_turn_starts"] > PROPOSED_TASK_MAX_TURNS:
+                        raise _CollectionRefused("turn_cap_exceeded")
+                yield event
+                _check_deadline(deadline)
+        finally:
+            # Closing the explicit file generator also releases its descriptor
+            # on cap, parser or settings failures. No child process is launched.
+            try:
+                close = getattr(iterator, "close", None)
+                if close is not None:
+                    close()
+                limits["event_stream_cleanup"] = "closed" if close is not None else "not_needed"
+            except _CollectionRefused:
+                limits["event_stream_cleanup"] = "failed"
+                raise
+            except Exception:
+                limits["event_stream_cleanup"] = "failed"
+
+
 def collect_session_events(events: Iterable[dict] | None) -> dict:
     """Project the documented JSON event envelope; never retain raw events.
 
@@ -156,6 +258,18 @@ def collect_session_events(events: Iterable[dict] | None) -> dict:
         "stream_completeness_verified": False,
         "paid_execution_allowed": False,
         "retry_allowed": False,
+        "collection_limits": {
+            "scope": "offline_collection_not_live_task_execution",
+            "timeout_seconds": PROPOSED_TASK_TIMEOUT_SECONDS,
+            "max_turns": PROPOSED_TASK_MAX_TURNS,
+            "max_tool_calls": None,
+            "tool_call_cap_status": "value_not_defined",
+            "observed_turn_starts": 0,
+            "turn_count_semantics": "supplied_assistant_turn_start_events_not_native_requests",
+            "event_stream_cleanup": "not_opened",
+            "live_enforcement_verified": False,
+            "subprocess_cleanup": "not_applicable_no_subprocess_started",
+        },
     }
     if events is None:
         return receipt
@@ -164,8 +278,9 @@ def collect_session_events(events: Iterable[dict] | None) -> dict:
     seen_calls = set()
     previous = None
     session_started = False
+    bounded = _bounded_session_events(events, receipt["collection_limits"])
     try:
-        for index, event in enumerate(events, 1):
+        for index, event in enumerate(bounded, 1):
             if index > MAX_EVENTS or type(event) is not dict:
                 raise ValueError("event_stream_refused")
             kind = event.get("type")
@@ -239,10 +354,20 @@ def collect_session_events(events: Iterable[dict] | None) -> dict:
             for reason in call_reasons:
                 if reason not in reasons:
                     reasons.append(reason)
+    except _CollectionRefused as error:
+        reasons.append(error.code)
     except Exception:
         # No exception text/args, paths, event bodies or partial raw JSON escape.
         if "session_event_stream_refused" not in reasons:
             reasons.append("session_event_stream_refused")
+    finally:
+        try:
+            bounded.close()
+        except _CollectionRefused as error:
+            if error.code not in reasons:
+                reasons.append(error.code)
+    if receipt["collection_limits"]["event_stream_cleanup"] == "failed":
+        reasons.append("session_event_cleanup_refused")
     receipt["observed_usage_events"] = len(receipt["calls"])
     if not receipt["calls"]:
         reasons.extend([
@@ -291,8 +416,9 @@ def capture_envelope(task_id: str, *, session_events: Iterable[dict] | None = No
         "execution_target": "GitHub Actions standard runner ubuntu-24.04",
         "target_observed": False,
         "limits": {
-            "proposed_paid_timeout_seconds_per_task": 1200,
-            "proposed_paid_max_turns_per_task": 64,
+            "proposed_paid_timeout_seconds_per_task": PROPOSED_TASK_TIMEOUT_SECONDS,
+            "proposed_paid_max_turns_per_task": PROPOSED_TASK_MAX_TURNS,
+            "proposed_paid_max_tool_calls_per_task": None,
             "proposed_paid_retries": 0,
             "paid_limits_approved_or_verified": False,
             "workflow_dry_run_process_timeout_seconds": 60,
@@ -311,7 +437,11 @@ def capture_envelope(task_id: str, *, session_events: Iterable[dict] | None = No
         },
         "exit_status": 2 if failed else 0,
         "usage": None,
+        "usage_status": "not available",
+        "usage_reason": "native_ghcp_usage_not_collected",
         "cost": None,
+        "cost_status": "not available",
+        "cost_reason": "native_ghcp_cost_not_collected",
         "grade": None,
         "evidence_boundary": "local_plan_and_empty_capture_wiring_not_hosted_or_paid_execution",
     }
