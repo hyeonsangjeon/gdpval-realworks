@@ -1063,6 +1063,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             from gpt56_pilot_native_result_host import native_result_host_for
 
             native_result_host_for(pilot_session)
+            if (pilot_wire_observer.native_budget is not pilot_session.native_budget
+                    or pilot_session.active.get(pilot_wire_observer.native_budget_task) is not pilot_wire_observer):
+                raise PilotWireReceiptRefused() from None
         self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
@@ -1821,7 +1824,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
 
             if observation is None:
                 observed = (
-                    self._await_turn(turn_handle)
+                    self._await_turn(turn_handle, **({"pilot_wire_observer": pilot_wire_observer}
+                                                     if pilot_wire_observer is not None else {}))
                     if task_deadline is None else
                     self._await_turn(turn_handle, task_deadline=task_deadline)
                 )
@@ -1881,10 +1885,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 return measured
 
             deadline_expired = task_deadline is not None and task_deadline.remaining_seconds() <= 0
-            if pilot_wire_observer is not None and pilot_wire_observer.native_request_cap_exceeded:
-                from gpt56_pilot_wire_receipt import NATIVE_REQUEST_CAP_EXCEEDED
-
-                # The HTTP admission lock already refused the extra request.
+            if pilot_wire_observer is not None and pilot_wire_observer.cap_stop_reason is not None:
+                # A native admission, usage or deadline gate stopped this attempt.
                 # Join the process closure before collecting any partial files,
                 # even if the SDK races the local stop with a completed turn.
                 pilot_wire_observer.close_provider_observer()
@@ -1892,8 +1894,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 measured = _settle_what_was_measured()
                 return CodexRunOutcome(
                     success=False, text="", files=collect_files(),
-                    error=NATIVE_REQUEST_CAP_EXCEEDED,
-                    error_category=NATIVE_REQUEST_CAP_EXCEEDED,
+                    error=pilot_wire_observer.cap_stop_reason,
+                    error_category=pilot_wire_observer.cap_stop_reason,
                     usage_delta=measured, items_seen=observed.items_seen,
                     thread_id=getattr(thread, "id", None),
                     turn_id=getattr(turn_handle, "id", None),
@@ -2027,7 +2029,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
 
     def _await_turn(
         self, turn_handle: Any, *, task_deadline: CodexTaskDeadline | None = None,
-        observation_control=None, observed=None,
+        observation_control=None, observed=None, pilot_wire_observer=None,
     ) -> TurnObservation:
         """Consume a turn under a wall clock; interrupt it if it overruns.
 
@@ -2079,6 +2081,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 pass
             return TurnObservation(timed_out=True)
         collector = _load_turn_collector()
+        capture = pilot_wire_observer.provider_capture if pilot_wire_observer is not None else None
+        if capture is not None:
+            # Use the remaining attempt deadline, never a fresh per-turn clock.
+            timeout = max(0, min(timeout, capture.deadline - time.monotonic()))
+        completed = threading.Event()
 
         def _consume() -> None:
             try:
@@ -2095,11 +2102,27 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     stream.close()
             except BaseException as exc:  # noqa: BLE001
                 observed.failure = str(exc)
+            finally:
+                completed.set()
+                if capture is not None:
+                    capture.wakeup.set()
 
         worker = threading.Thread(
             target=_consume, name="codex-turn", daemon=True
         )
         worker.start()
+        if capture is not None:
+            capture.wakeup.wait(timeout)
+            if (not completed.is_set() or time.monotonic() >= capture.deadline) and pilot_wire_observer.cap_stop_reason is None:
+                from gpt56_pilot_wire_receipt import NATIVE_DEADLINE_EXCEEDED
+
+                capture.request_stop(NATIVE_DEADLINE_EXCEEDED)
+            if pilot_wire_observer.cap_stop_reason is not None:
+                pilot_wire_observer.close_provider_observer()
+                pilot_wire_observer.close_provider_runtime()
+                worker.join(timeout=1)
+                observed.result = None
+            return observed
         worker.join(timeout)
 
         if worker.is_alive():

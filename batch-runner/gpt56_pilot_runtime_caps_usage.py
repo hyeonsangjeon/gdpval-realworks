@@ -126,8 +126,6 @@ class _UsageObservation:
             _require(all(type(total.get(field)) is int for field in ("inputTokens", "outputTokens", "totalTokens")))
             turn_usage_delta(_totals(self.known), _totals(total))
             _require(total["totalTokens"] >= self.known["totalTokens"])
-            _require(total["inputTokens"] <= self.limits["input_tokens"]
-                     and total["outputTokens"] <= self.limits["output_tokens"])
             for field, value in usage.get("last", {}).items():
                 if value is not None and total.get(field) is not None:
                     _require(value <= total[field])
@@ -135,9 +133,16 @@ class _UsageObservation:
                 _require(type(usage["modelContextWindow"]) is int and usage["modelContextWindow"] == self.context)
             self.known.update({field: value for field, value in total.items() if value is not None})
             self.snapshots.append(_bytes(snapshot))
+            if self.observer.provider_capture is not None:
+                # Preserve the first over-limit sample and close the owned
+                # runtime. A threshold event is not malformed private input.
+                self.observer.provider_capture.report_usage(total)
+            else:
+                _require(total["inputTokens"] <= self.limits["input_tokens"]
+                         and total["outputTokens"] <= self.limits["output_tokens"])
 
     def _document(self, observer: wire._TransportObservation) -> dict:
-        stopped = observer.native_request_cap_exceeded
+        stopped = observer.cap_stop_reason is not None
         _require(observer is self.observer and observer.installed and (bool(self.snapshots) or stopped)
                  and self.snapshots == [_bytes(row) for row in observer.usage])
         _require(set(observer.requests) in ({"thread/start", "turn/start"}, {"thread/start", "turn/start", "turn/interrupt"})
@@ -151,7 +156,7 @@ class _UsageObservation:
                 "counter_semantics": "total_cumulative_per_thread_last_latest_model_request",
                 "correlation": correlation, "requests": observer.requests,
                 "snapshots": [json.loads(row) for row in self.snapshots],
-                "threshold_observation": ("native_request_cap_exceeded_usage_may_be_partial" if stopped else
+                "threshold_observation": (observer.cap_stop_reason + "_usage_may_be_partial" if stopped else
                                           "reported_input_and_output_within_reviewed_limits_not_native_enforcement")}
 
     def finish(self, observer: wire._TransportObservation) -> None:

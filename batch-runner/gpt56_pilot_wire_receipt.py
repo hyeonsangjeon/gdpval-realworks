@@ -45,6 +45,16 @@ _USAGE_FIELDS = {"inputTokens", "cachedInputTokens", "cacheWriteInputTokens",
                  "outputTokens", "reasoningOutputTokens", "totalTokens"}
 PROVIDER_OBSERVATION_SOURCE = "attempt_owned_loopback_forward_attempts_and_response_body"
 NATIVE_REQUEST_CAP_EXCEEDED = "native_request_cap_exceeded"
+NATIVE_INPUT_CAP_EXCEEDED = "native_input_token_cap_exceeded"
+NATIVE_OUTPUT_CAP_EXCEEDED = "native_output_token_cap_exceeded"
+NATIVE_DEADLINE_EXCEEDED = "native_attempt_deadline_exceeded"
+NATIVE_TASK_CAP_EXCEEDED = "native_task_request_cap_exceeded"
+NATIVE_PILOT_CAP_EXCEEDED = "native_pilot_request_cap_exceeded"
+NATIVE_USAGE_UNVERIFIED = "native_token_usage_unverified"
+_CAP_STOPS = {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_INPUT_CAP_EXCEEDED, NATIVE_OUTPUT_CAP_EXCEEDED,
+              NATIVE_DEADLINE_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED,
+              NATIVE_USAGE_UNVERIFIED}
+_TOKEN_BOUNDARY = "reported_usage_stop_not_pre_request_token_or_billing_limit"
 NATIVE_CAPS_SHA256 = "7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6"
 _NATIVE_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml"
 _MODEL = re.compile(r"gpt-5\.6-sol(?:-fast)?(?:-20[0-9]{2}-[0-9]{2}-[0-9]{2})?\Z")
@@ -68,7 +78,8 @@ def _provider_summary(reason="observer_not_installed") -> dict:
             "served_model_version": None, "served_model_version_reason": "not_observed",
             "provider_receipt_confirmed": False, "native_cap_enforced": False,
             "native_request_limit": None, "native_request_limit_sha256": None,
-            "native_request_blocked_count": None, "native_request_cap_reason": None}
+            "native_request_blocked_count": None, "native_request_cap_reason": None,
+            "runtime_caps": None}
 
 
 def _native_request_limit() -> int:
@@ -77,13 +88,108 @@ def _native_request_limit() -> int:
     The registration still has null native caps. The owner's bounded enforcement
     direction selects this exact draft's per-attempt value, not new plan bytes.
     """
+    return _native_caps()["per_attempt"]["native_model_calls"]
+
+
+def _native_caps() -> dict:
+    """Read all thresholds from the same sealed, unchanged draft."""
     with _closed():
         data = _read_bytes(_NATIVE_CAPS_PATH, size=7343, sha256=NATIVE_CAPS_SHA256)
         caps = yaml.safe_load(data)
         _require(caps["registered_plan"] == pilot.SOURCE_PROFILE)
-        value = caps["per_attempt"]["native_model_calls"]
-        _require(type(value) is int and 0 < value < 2 ** 63)
-        return value
+        fields = {"per_attempt": ("native_model_calls", "input_tokens", "output_tokens", "wall_clock_seconds"),
+                  "per_task": ("native_model_calls",), "per_pilot": ("native_model_calls",)}
+        result = {scope: {key: caps[scope][key] for key in keys} for scope, keys in fields.items()}
+        _require(all(type(value) is int and 0 < value < 2 ** 63
+                     for limits in result.values() for value in limits.values()))
+        return result
+
+
+class _NativeRequestBudget:
+    """Run-owned forward reservations. Failures are counted and never refunded.
+
+    This object is created with the existing non-adoptable wire session, not
+    from a saved receipt, a new runner, or an infrastructure retry.
+    """
+
+    def __init__(self, task_ids):
+        _require(type(task_ids) in (list, tuple) and len(task_ids) == len(set(task_ids)) == 5)
+        self.limits = _native_caps()
+        self.lock = threading.Lock()
+        self.counts = {task_id: 0 for task_id in task_ids}
+        self.total = 0
+
+    def _reason(self, task_id):
+        _require(task_id in self.counts)
+        if self.total >= self.limits["per_pilot"]["native_model_calls"]:
+            return NATIVE_PILOT_CAP_EXCEEDED
+        if self.counts[task_id] >= self.limits["per_task"]["native_model_calls"]:
+            return NATIVE_TASK_CAP_EXCEEDED
+        return None
+
+    def require_available(self, task_id):
+        with self.lock:
+            _require(self._reason(task_id) is None)
+
+    def reserve(self, task_id):
+        with self.lock:
+            reason = self._reason(task_id)
+            if reason is None:
+                self.counts[task_id] += 1
+                self.total += 1
+            return reason
+
+    def snapshot(self, task_id):
+        with self.lock:
+            return {"task_requests": self.counts[task_id], "pilot_requests": self.total}
+
+
+def _checked_runtime_caps(raw, *, count):
+    if type(raw) is not dict:
+        return False
+    caps = _native_caps()
+    expected = {"sha256", "input_token_limit", "output_token_limit", "input_tokens", "output_tokens",
+                "token_boundary", "token_hard_limit_enforced", "wall_seconds_limit", "effective_wall_seconds",
+                "task_request_limit", "pilot_request_limit", "task_requests", "pilot_requests", "stop_reason"}
+    if (set(raw) != expected or raw["sha256"] != NATIVE_CAPS_SHA256
+            or raw["token_boundary"] != _TOKEN_BOUNDARY or raw["token_hard_limit_enforced"] is not False
+            or type(raw["stop_reason"]) not in (str, type(None))
+            or raw["stop_reason"] not in _CAP_STOPS | {None}):
+        return False
+    for field, scope, key in (("input_token_limit", "per_attempt", "input_tokens"),
+                              ("output_token_limit", "per_attempt", "output_tokens"),
+                              ("wall_seconds_limit", "per_attempt", "wall_clock_seconds"),
+                              ("task_request_limit", "per_task", "native_model_calls"),
+                              ("pilot_request_limit", "per_pilot", "native_model_calls")):
+        if type(raw[field]) is not int or raw[field] != caps[scope][key]:
+            return False
+    duration = raw["effective_wall_seconds"]
+    if type(duration) not in (int, float) or not 0 < duration <= raw["wall_seconds_limit"]:
+        return False
+    for field in ("input_tokens", "output_tokens", "task_requests", "pilot_requests"):
+        if raw[field] is not None and not (type(raw[field]) is int and 0 <= raw[field] < 2 ** 63):
+            return False
+    if (raw["input_tokens"] is None) != (raw["output_tokens"] is None):
+        return False
+    task, total = raw["task_requests"], raw["pilot_requests"]
+    if (task is None) != (total is None):
+        return False
+    if task is not None and (not 0 <= task <= raw["task_request_limit"]
+                             or not task <= total <= raw["pilot_request_limit"]
+                             or count is not None and count > task):
+        return False
+    reason = raw["stop_reason"]
+    if reason == NATIVE_TASK_CAP_EXCEEDED and task != raw["task_request_limit"]:
+        return False
+    if reason == NATIVE_PILOT_CAP_EXCEEDED and total != raw["pilot_request_limit"]:
+        return False
+    for field, stop in (("input_tokens", NATIVE_INPUT_CAP_EXCEEDED), ("output_tokens", NATIVE_OUTPUT_CAP_EXCEEDED)):
+        if reason == stop and (raw[field] is None or raw[field] <= raw[field[:-1] + "_limit"]):
+            return False
+    if reason is None and any(raw[field] is not None and raw[field] > raw[field[:-1] + "_limit"]
+                              for field in ("input_tokens", "output_tokens")):
+        return False
+    return True
 
 
 def bounded_provider_observation(raw: Any) -> dict:
@@ -117,7 +223,11 @@ def bounded_provider_observation(raw: Any) -> dict:
                 or count is not None and count > limit):
             return invalid
         if blocked:
-            if raw["native_request_cap_reason"] != NATIVE_REQUEST_CAP_EXCEEDED or count != limit:
+            reason = raw["native_request_cap_reason"]
+            if (reason not in {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED}
+                    or reason == NATIVE_REQUEST_CAP_EXCEEDED and count != limit
+                    or reason != NATIVE_REQUEST_CAP_EXCEEDED
+                    and (type(raw["runtime_caps"]) is not dict or raw["runtime_caps"].get("stop_reason") != reason)):
                 return invalid
         elif raw["native_request_cap_reason"] is not None:
             return invalid
@@ -125,7 +235,13 @@ def bounded_provider_observation(raw: Any) -> dict:
             "native_request_limit", "native_request_limit_sha256", "native_request_blocked_count",
             "native_request_cap_reason")):
         return invalid
-    return dict(raw)
+    try:
+        if raw["runtime_caps"] is not None and (not raw["native_cap_enforced"]
+                or not _checked_runtime_caps(raw["runtime_caps"], count=count)):
+            return invalid
+    except PilotWireReceiptRefused:
+        return invalid
+    return json.loads(_bytes(raw))
 
 
 def _unique_json(pairs):
@@ -230,14 +346,20 @@ class _ProviderHTTPObservation:
                  and classify_endpoint(base_url).kind is EndpointKind.DIRECT_V1
                  and type(timeout) in (int, float) and 0 < timeout < float("inf"))
         self.target = target
-        self.request_limit = _native_request_limit()
-        self.deadline = time.monotonic() + timeout
+        self.limits = _native_caps()
+        self.request_limit = self.limits["per_attempt"]["native_model_calls"]
+        self.timeout = min(timeout, self.limits["per_attempt"]["wall_clock_seconds"])
+        self.deadline = time.monotonic() + self.timeout
         self.lock = threading.RLock()
         self.close_lock = threading.Lock()
         self.closed = False
         self.requests = self.finished = 0
         self.blocked_requests = 0
         self.cap_exceeded = False
+        self.stop_reason = None
+        self.wakeup = threading.Event()
+        self.budget = self.budget_task = self.closed_budget = None
+        self.input_tokens = self.output_tokens = None
         self.stop_runtime = None
         self.model = self.model_reason = self.count_reason = None
         self.connections = set()
@@ -288,10 +410,16 @@ class _ProviderHTTPObservation:
         self.server = Server(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever,
                                        kwargs={"poll_interval": 0.05}, daemon=True)
+        self.timer = threading.Timer(self.timeout, self.check_deadline)
+        self.timer.daemon = True
         try:
             self.thread.start()
+            self.timer.start()
         except BaseException:
-            self.server.server_close()
+            if self.thread.is_alive():
+                self.close()
+            else:
+                self.server.server_close()
             raise
 
     @property
@@ -303,8 +431,66 @@ class _ProviderHTTPObservation:
             raise RuntimeError("observer_closed")
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
+            self.request_stop(NATIVE_DEADLINE_EXCEEDED)
             raise TimeoutError("deadline_exceeded")
         return remaining
+
+    def bind_budget(self, budget, task_id):
+        with self.lock:
+            _require(type(budget) is _NativeRequestBudget and budget.limits == self.limits
+                     and task_id in budget.counts and self.budget is None
+                     and not self.closed and self.requests == 0)
+            self.budget, self.budget_task = budget, task_id
+
+    def check_deadline(self):
+        with self.lock:
+            if self.closed:
+                return
+            remaining = self.deadline - time.monotonic()
+            if remaining > 0:
+                self.timer = threading.Timer(remaining, self.check_deadline)
+                self.timer.daemon = True
+                self.timer.start()
+                return
+        self.request_stop(NATIVE_DEADLINE_EXCEEDED)
+
+    def request_stop(self, reason, *, defer_cleanup=False):
+        """Latch a closed reason before cleanup, including from the SDK reader.
+
+        SDK.close joins its reader. Never call it while that reader holds the
+        transport/usage lock; the owned cleanup worker and runner serialize it.
+        """
+        _require(reason in _CAP_STOPS)
+        with self.lock:
+            if self.closed or self.stop_reason is not None:
+                return
+            self.stop_reason = reason
+            if not defer_cleanup:
+                self.wakeup.set()
+        if not defer_cleanup:
+            threading.Thread(target=self._close_stopped_runtime, daemon=True).start()
+
+    def _close_stopped_runtime(self):
+        self.wakeup.set()
+        self.close()
+        if self.stop_runtime is not None:
+            self.stop_runtime()
+
+    def report_usage(self, total):
+        """Stop on observed totals, without claiming a pre-request token cap.
+
+        Usage arrives after provider work. Cached/reasoning subcounts are not
+        added again; unknown usage is never silently converted to zero.
+        """
+        with self.lock:
+            if self.closed or self.stop_reason is not None:
+                return
+            self.input_tokens, self.output_tokens = total["inputTokens"], total["outputTokens"]
+            limits = self.limits["per_attempt"]
+            reason = (NATIVE_INPUT_CAP_EXCEEDED if self.input_tokens > limits["input_tokens"] else
+                      NATIVE_OUTPUT_CAP_EXCEEDED if self.output_tokens > limits["output_tokens"] else None)
+            if reason is not None:
+                self.request_stop(reason)
 
     @staticmethod
     def _empty(handler, status=502):
@@ -337,7 +523,7 @@ class _ProviderHTTPObservation:
         reason, model = "transport_failed", None
         try:
             with self.lock:
-                if self.closed:
+                if self.closed or self.stop_reason is not None:
                     raise RuntimeError("closed")
                 self.remaining()
                 # Reserve under the same lock, before constructing/connecting
@@ -345,17 +531,21 @@ class _ProviderHTTPObservation:
                 if self.requests >= self.request_limit:
                     self.blocked_requests += 1
                     self.cap_exceeded = True
+                    self.request_stop(NATIVE_REQUEST_CAP_EXCEEDED, defer_cleanup=True)
                 else:
-                    connection = HTTPSConnection(self.target.hostname, timeout=self.remaining())
-                    self.connections.add((connection, handler.connection))
-                    # This is the forward-attempt boundary, not provider receipt.
-                    self.requests += 1
-                    started = True
+                    reason = self.budget.reserve(self.budget_task) if self.budget is not None else None
+                    if reason is not None:
+                        self.blocked_requests += 1
+                        self.request_stop(reason, defer_cleanup=True)
+                    else:
+                        # A failed connection is still a spent forward reservation.
+                        self.requests += 1
+                        started = True
+                        connection = HTTPSConnection(self.target.hostname, timeout=self.remaining())
+                        self.connections.add((connection, handler.connection))
             if not started:
                 self._empty(handler, 400)  # Not 429: this is not provider throttling.
-                self.close()
-                if self.stop_runtime is not None:
-                    self.stop_runtime()
+                self._close_stopped_runtime()
                 return
             connection.connect()
             upstream = connection.sock
@@ -451,6 +641,8 @@ class _ProviderHTTPObservation:
                 if self.closed:
                     return
                 self.closed = True
+                self.timer.cancel()
+                self.closed_budget = self.budget.snapshot(self.budget_task) if self.budget is not None else None
                 connections = tuple(self.connections)
                 inbound = tuple(self.inbound)
             for stream in inbound:
@@ -470,6 +662,20 @@ class _ProviderHTTPObservation:
             self.server.shutdown()
             self.server.server_close()
             self.thread.join(timeout=1)
+        if self.timer.ident is not None and self.timer is not threading.current_thread():
+            self.timer.join(timeout=1)
+
+    def _runtime_caps(self):
+        attempt = self.limits["per_attempt"]
+        return {"sha256": NATIVE_CAPS_SHA256,
+                "input_token_limit": attempt["input_tokens"], "output_token_limit": attempt["output_tokens"],
+                "input_tokens": self.input_tokens, "output_tokens": self.output_tokens,
+                "token_boundary": _TOKEN_BOUNDARY, "token_hard_limit_enforced": False,
+                "wall_seconds_limit": attempt["wall_clock_seconds"], "effective_wall_seconds": self.timeout,
+                "task_request_limit": self.limits["per_task"]["native_model_calls"],
+                "pilot_request_limit": self.limits["per_pilot"]["native_model_calls"],
+                **(self.closed_budget or {"task_requests": None, "pilot_requests": None}),
+                "stop_reason": self.stop_reason}
 
     def summary(self):
         with self.lock:
@@ -479,7 +685,8 @@ class _ProviderHTTPObservation:
             result.update(native_cap_enforced=True, native_request_limit=self.request_limit,
                           native_request_limit_sha256=NATIVE_CAPS_SHA256,
                           native_request_blocked_count=self.blocked_requests,
-                          native_request_cap_reason=NATIVE_REQUEST_CAP_EXCEEDED if self.cap_exceeded else None)
+                          native_request_cap_reason=self.stop_reason if self.blocked_requests else None,
+                          runtime_caps=self._runtime_caps())
             result["native_request_count"] = self.requests if self.count_reason is None or self.cap_exceeded else None
             result["native_request_count_reason"] = None if self.cap_exceeded else self.count_reason
             reason = self.count_reason or ("response_capture_incomplete" if self.finished != self.requests else
@@ -540,6 +747,7 @@ class _TransportObservation:
         self.provider_capture_reason = "observer_not_installed"
         self.provider_runtime = None
         self.provider_runtime_lock = threading.Lock()
+        self.native_budget = self.native_budget_task = None
 
     def configure_provider_observer(self, provider, overrides, *, timeout):
         """Replace only this process's checked provider URL; never mutate settings."""
@@ -558,6 +766,8 @@ class _TransportObservation:
                 # A missing listener must not bypass the request-cap boundary.
                 self.provider_capture_reason = "observer_start_failed"
                 raise PilotWireReceiptRefused() from None
+            if self.native_budget is not None:
+                self.provider_capture.bind_budget(self.native_budget, self.native_budget_task)
             return tuple(key + _toml_literal(self.provider_capture.base_url) if item == expected else item
                          for item in overrides)
 
@@ -570,7 +780,10 @@ class _TransportObservation:
             _require(self.installed and self.provider_capture is not None and self.provider_runtime is None)
             if self.caps_usage_observer is not None:
                 with self.caps_usage_observer._guard():
-                    _require(self.caps_usage_observer.limits["model_calls"] == self.provider_capture.request_limit)
+                    limits = self.provider_capture.limits["per_attempt"]
+                    _require(self.caps_usage_observer.limits == {
+                        "model_calls": limits["native_model_calls"], "input_tokens": limits["input_tokens"],
+                        "output_tokens": limits["output_tokens"]})
             with self.provider_capture.lock:
                 _require(not self.provider_capture.closed and self.provider_capture.requests == 0)
                 self.provider_runtime = codex
@@ -590,10 +803,14 @@ class _TransportObservation:
     def native_request_cap_exceeded(self):
         return self.provider_capture is not None and self.provider_capture.cap_exceeded
 
+    @property
+    def cap_stop_reason(self):
+        return self.provider_capture.stop_reason if self.provider_capture is not None else None
+
     def terminal_correlation(self):
         if self.completion is not None:
             return self.completion
-        _require(self.native_request_cap_exceeded)
+        _require(self.cap_stop_reason is not None)
         # A local stop is not a fabricated app-server terminal acknowledgement.
         return {"thread_id_sha256": self.thread, "turn_id_sha256": self.turn, "status": None}
 
@@ -675,6 +892,8 @@ class _TransportObservation:
                 _require(status in ("completed", "failed", "interrupted"))
                 self.completion = {"thread_id_sha256": thread, "turn_id_sha256": _correlation(params["turn"]["id"]),
                                    "status": status}
+                if self.caps_usage_observer is not None and not self.usage and self.provider_capture is not None:
+                    self.provider_capture.request_stop(NATIVE_USAGE_UNVERIFIED)
             else:
                 usage = params["tokenUsage"]
                 _require(type(usage) is dict and set(usage) <= {"total", "last", "modelContextWindow"})
@@ -693,7 +912,7 @@ class _TransportObservation:
 
     def finish(self, *, success: bool, thread_id: str, turn_id: str) -> dict:
         with self.guard():
-            stopped = self.native_request_cap_exceeded
+            stopped = self.cap_stop_reason is not None
             _require(self.installed and type(success) is bool and (self.completion is not None or stopped))
             _require(self.thread == _correlation(thread_id) and self.turn == _correlation(turn_id)
                      and {"thread/start", "turn/start"} <= set(self.requests)
@@ -813,6 +1032,7 @@ class PilotWireReceiptSession:
             self.thread_ids: set[str] = set()
             self.files: dict[str, bytes] = {}
             self.attempts: dict[str, list[dict]] = {task_id: [] for task_id in self.document["task_ids"]}
+            self.native_budget = _NativeRequestBudget(self.document["task_ids"])
             self.ready: bytes | None = None
             self.reservation = _bytes({"reservation_version": "pilot-wire-reservation-v1", "run_id": pilot.RUN_ID,
                                        "prepared_capture": self.linkage, "launch_allowed": False, "full_220_allowed": False})
@@ -842,6 +1062,8 @@ class PilotWireReceiptSession:
                 raise PilotWireReceiptRefused() from None
 
     def _current(self) -> None:
+        _require(type(self.native_budget) is _NativeRequestBudget and self.native_budget.limits == _native_caps()
+                 and set(self.native_budget.counts) == set(self.document["task_ids"]))
         _require(capture.verify_pilot_input_capture(self.sources, workspace=self.workspace,
                                                   dataset_root=self.dataset_root) == self.linkage)
         _read_bytes(self.workspace / capture.CAPTURE_PATH, **_digest(self.capture_data))
@@ -866,6 +1088,7 @@ class PilotWireReceiptSession:
             previous = self.attempts[task_id]
             _require(not previous or previous[-1]["accepted"] and not previous[-1]["success"])
             self._current()
+            self.native_budget.require_available(task_id)
             if getattr(self, "native_host", None) is not None:
                 from gpt56_pilot_runtime_caps_usage import runtime_caps_usage_for
 
@@ -910,6 +1133,7 @@ class PilotWireReceiptSession:
                 _root(path.parent)
                 _read_bytes(path, size=record["size"], sha256=record["sha256"])
             observer = _TransportObservation(json.loads(_bytes(requested)))
+            observer.native_budget, observer.native_budget_task = self.native_budget, task_id
             observer.approved_base_url = provider.endpoint.rstrip("/")
             self.active[task_id] = observer
             if getattr(self, "native_host", None) is not None:
