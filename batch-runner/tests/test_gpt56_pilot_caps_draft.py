@@ -67,10 +67,35 @@ def test_proposal_does_not_claim_spend_or_deployment_approval():
     assert draft["launch_enabled"] is plan["launch_enabled"] is False
     assert draft["cost"]["approved_maximum_usd"] is plan["cost"]["approved_maximum_usd"] is None
     assert "null # owner decision" in DRAFT.read_text()
-    assert draft["evidence"]["diagnostic"]["archive_available_locally"] is False
+    assert draft["evidence"]["diagnostic"]["archive_available_locally"] is True
     assert check["requested_name"] == check["plan_identity_model"] == plan["identity"]["model"]
     assert check["plan_grading_judge_model"] == plan["grading"]["judge_model"] == "gpt-5.6-sol"
     assert check["plan_foundry_identity_deployment"] is plan["foundry_identity"]["deployment"] is None
     assert check["baseline_condition_a_deployment"] == baseline["condition_a"]["model"]["deployment"] == "gpt-5.4"
     assert check["baseline_codex_model"] == baseline["execution"]["codex"]["model"] == "gpt-5.4"
-    assert check["archived_diagnostic_input"] is None
+    assert check["archived_diagnostic_input"] == check["requested_name"] == "gpt-5.6-sol"
+    assert check["baseline_deployment_reachable_by_pilot_fallback"] is False
+    assert check["generated_runtime_template_deployment"] is check["preflight_expected_deployment"] is None
+    assert check["comparison"]["baseline_condition_a_deployment"] == "mismatch_historical_baseline_only"
+    assert check["comparison"]["baseline_codex_model"] == "mismatch_historical_baseline_only"
+
+
+def test_archived_connection_evidence_does_not_invent_served_identity():
+    diagnostic = _draft()["evidence"]["diagnostic"]
+    plan = yaml.safe_load((ROOT / _draft()["registered_plan"]).read_text())
+    assert diagnostic["run_id"] == "39407062120"
+    assert diagnostic["artifact_id"] == "12257312458"
+    assert diagnostic["archive_sha256"] == "5d1a2540f0ba1291093b231d0e12e489ca197c32683aee521fb1622893600841"
+    assert diagnostic["verdict"] == "connected"
+    assert diagnostic["requested_deployment"] == plan["identity"]["model"] == "gpt-5.6-sol"
+    for key in ("served_model", "served_model_version", "account_resource_id",
+                "project_resource_id", "deployment_resource_id"):
+        assert diagnostic[key] is None
+    for key in ("pinned_sdk_version", "installed_sdk_version"):
+        assert diagnostic[key] == plan["identity"]["sdk_version"] == "0.147.0"
+    for key in ("pinned_cli_version", "installed_cli_version"):
+        assert diagnostic[key] == plan["identity"]["cli_version"] == "0.147.0"
+    assert diagnostic["endpoint_kind"] == plan["foundry_route"]["route_profile"] == "direct-v1"
+    assert diagnostic["provider_id"] == plan["foundry_route"]["provider_id"] == "gdpval-foundry"
+    assert diagnostic["endpoint_host_fingerprint"] == "sha256:69057d59166a82e3"
+    assert diagnostic["endpoint_path"] == "/openai/v1/"
