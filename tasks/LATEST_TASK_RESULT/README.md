@@ -1,148 +1,159 @@
 # Latest task result
 
-## Native pilot SDK startup deadline and combined offline proof (2026-10-25 KST)
+## Native pilot caps self-review and pending-start receipts (2026-10-25 KST)
 
-The synchronous SDK initializer now shares the observer's existing
-**1,800-second** deadline on a supported main-thread host. Offline fixtures
-verified interruption, socket closure, SDK-child termination and a failed
-receipt with unknown thread, turn and token usage. This is not a live pilot
-result or a hard provider-token ceiling.
+Self-review found one defect in two early-return paths: a local deadline stop
+while awaiting `thread/start` or `turn/start` was returned as a generic start
+failure. The wire receipt then required the missing acknowledgement, and the
+turn path could abandon its logical-call reservation despite a native forward.
+The correction preserves the fixed stop reason, the unknown reservation and a
+closed partial receipt. No missing identifier, terminal acknowledgement or
+token usage is invented.
 
-The unchanged starting source reported **126 passed, 1 failed, 0 skipped** in
-one combined invocation. After the startup change and a directly coupled
-socket-fixture correction, the combined bundle reported
-**143 passed, 0 failed, 0 skipped**. These are separate invocations; the first
-failure remains evidence. No paid call, push, dispatch or grading occurred.
+The new reproducer reported **0 passed, 2 failed, 0 skipped** against unchanged
+runtime code. After correction, one combined invocation reported
+**165 passed, 0 failed, 0 skipped**. This is offline fixture evidence, not a live
+pilot result or a hard provider-token ceiling. No paid call, push, dispatch or
+grading occurred.
 
 ### Source and implementation
 
 Worktree: `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`;
 branch: `codex/gpt56-native-pilot-caps-20261024`. The supplied nested path was
 absent. This existing registered path matched the requested branch and starting
-HEAD and was clean; no worktree or branch was created or moved.
+HEAD and was clean. No worktree was created, moved or switched.
 
 | Source role | Full HEAD | Tree |
 | --- | --- | --- |
-| Clean baseline and first combined test | `eb6bc6818249e3c7e12356df11e686218327c37d` | `2c60e96f13b9b5f130bcfc13011c86affcb96e2c` |
-| Startup implementation and new-node collection | `e485dcdf889c961e8c520f121359342af6c01675` | `8afee76ba727ad4507457a27764a8655b131eddb` |
-| Clean final code/tests and second combined test | `ab72943aaa33e97620d33b36a7ac33f4c5c454a0` | `f4f54873df89beaa476d4a9b5ef53531f96a1e7f` |
+| Branch point and specified PR #785 head | `2bc77ad14cf7205694d11aa5909a9ea67cbb2891` | `753c55c66111dfc763385190766a75e0128dbf7a` |
+| Clean fixed head reviewed; runtime used by new reproducer | `59eb1d4e8e561d53b041f12506812a616112c5cc` | `15834afa26c16e3ab88b5fe53d77c3287c5c569f` |
+| Clean corrected code and one combined body invocation | `b436ba731ce7b25cf05b87c3776e2b467cb9e51c` | `7c468bb1893ef7592cfbcbce6894e54fa8720b8f` |
 
 The final local child changes only this record and CHANGELOG. Its full HEAD/tree
 and record hashes are returned in the handoff; executable bytes remain those
 of the final tested code above. No independent review or CI covers this source.
 
-The installed SDK **0.147.0**, `openai_codex/api.py:82`, starts its client and
-waits for initialize metadata in the constructor. `client.py:337` waits on a
-response queue without a timeout. Its constructor catches `Exception` and
-closes the client; `client.py:274` waits **2 seconds** after TERM, then KILLs
-without a final wait. The implementation uses this actual initializer, not a
-copy of the SDK or a timed-out background constructor.
+The full caps branch diff, `2bc77ad14..59eb1d4e8`, was self-reviewed. The
+following conclusions are bounded static/synthetic findings, not independent
+approval or proof that every possible runtime failure has a terminal receipt.
 
-At `batch-runner/core/codex_runner.py:1098`, the caller holds the SDK instance
-before invoking its initializer. `gpt56_pilot_wire_receipt.py:772` installs a
-temporary `SIGALRM` for the same remaining monotonic deadline. Expiry keeps the
-existing `native_attempt_deadline_exceeded` reason, closes the listener, and
-raises `TimeoutError` through SDK cleanup. The partial constructor's actual
-process is held before the SDK clears its reference, then killed if still live
-and reaped with a **1-second cleanup-only wait** at line 811. The attempt
-deadline is never renewed. A constructor returning at the deadline is refused.
+| Review area | Finding and code under `batch-runner/` |
+| --- | --- |
+| Counter admission and exceptions | `_ProviderHTTPObservation.forward` reserves under locks before constructing the upstream connection. Failed forwards are not refunded; denied and unsupported requests do not create an upstream request. No additional bypass was found. |
+| Task/pilot lifetime and retries | `_NativeRequestBudget` is owned by one non-adoptable wire session; Step 2 passes that same session through attempts. `arm_task` keeps the existing four-attempt and acceptance checks. Closed summaries retain a snapshot, not a changing shared total. No unintended reset or sharing was found. |
+| Off-by-one | Forward **32/128/640** is eligible; the next reservation is refused. Token overrun uses `>`; deadline expiry uses `<= 0`. These thresholds and their existing fixtures remain unchanged. |
+| Early stop and receipts | `core/codex_runner.py:1722` preserves a witnessed stop before a start acknowledgement and closes the observer/runtime before collecting partial files. Its two callers bypass the legacy abandonment path. |
+| Partial-record guards | `gpt56_pilot_wire_receipt.py:880` admits only the two actually flushed pending-start shapes after a local stop and returned SDK close. Success, extra/mismatched responses, missing close, usage or fabricated completion are refused. `gpt56_pilot_runtime_caps_usage.py:151` uses the same check. |
 
-An unsupported/non-main-thread caller or an active `ITIMER_REAL` is refused
-before auth at `gpt56_pilot_wire_receipt.py:763`. The previous handler is
-restored; another timer is not borrowed or cancelled. Existing auth/preparation
-stages were not moved into this clock. Kernel-level uninterruptible startup and
-detached-grandchild cleanup were not exercised, so this is not a universal
-process-containment guarantee.
+The new scope is `codex_app_server_local_stop_before_turn_ack`. A missing
+thread or turn ID and terminal status remain null; usage remains
+`not_available`. Ordinary wire guards and the separate witnessed startup
+timeout scope remain. Pre-admission failures, invalid observations and storage
+failures still refuse rather than manufacture a complete receipt. Raw prompts,
+bodies, headers, endpoints, private paths and exception text are excluded from
+the Step 2 projection. No retry category was added.
 
-Only a closed, locally witnessed startup timeout with no native forward or
-thread/turn traffic can produce the new
-`codex_app_server_startup_deadline_before_thread` receipt scope. Correlation and
-settings remain null, requests and usage snapshots remain empty, and usage is
-`not_available`. `gpt56_pilot_wire_receipt.py:989` and
-`gpt56_pilot_runtime_caps_usage.py:144` keep the ordinary post-initialize
-correlation checks. No missing thread identifier is invented or entered into
-the used-thread set. The Step 2 projection still excludes raw prompts, bodies,
-headers, endpoints, private paths and exceptions. No retry reason was added.
+The prior SDK **0.147.0** startup guard still uses the same **1,800-second**
+deadline, main-thread `SIGALRM`, refusal of an occupied alarm, SDK **2-second**
+TERM grace and **1-second cleanup-only** reap. Auth/preparation is not covered
+by that observer clock. Kernel-uninterruptible startup and detached-grandchild
+cleanup remain unproved; a returned SDK close is not provider-side cleanup
+attestation.
 
-### Two combined invocations, not pooled evidence
+### PR #785 relationship
 
-Evidence directory: `/ai-work/copilot/_tmp/p5-native-startup-deadline.ENTKcQ/`.
-`invocation.txt` and `invocation-after.txt` hold the complete selectors and
-commands. CWD was the worktree's `batch-runner/`; Python was
+The local branch creation record and merge base both identify `2bc77ad14`.
+The temporary branch `review/native-caps-pr785-20261025-0305` pointed to fixed
+`59eb1d4e8`. Its ancestor check and three-tree merge confirmed the caps source
+is already on the specified PR head, with no conflict files. The temporary
+branch was deleted after verification; neither real branch was rebased or
+switched. The installed Git lacks `merge-tree --write-tree`; that failed
+command form was replaced with its supported three-tree form. This checks
+only the specified local PR head, not a future remote head or CI result.
+
+### New reproducer and one combined invocation
+
+Evidence directory: `/ai-work/copilot/_tmp/p5-native-caps-self-review.ghcBdT/`.
+`invocation-reproducer.txt` and `invocation-combined.txt` hold the exact
+commands, selectors and source identities. CWD was the worktree's
+`batch-runner/`; Python was
 `/ai-work/copilot/_tmp/ghcp-sol-gate-ci-20261024-venv/bin/python`, **3.10.12**.
-Both used `timeout --signal=TERM --kill-after=5s 120s`, `env -i`, offline
-Hub/dataset flags, disabled plugin autoload/bytecode/pytest cache, and bounded
-existing local-Git fixtures. No HOME or CODEX_HOME override was declared.
+Both body commands used `timeout --signal=TERM --kill-after=5s 120s`, `env -i`,
+offline Hub/dataset flags, disabled plugin autoload/bytecode/pytest cache,
+`-q -ra --tb=short -o addopts= -p no:cacheprovider -m 'not integration'`, and
+JUnit. Existing local-Git fixture bounds remain. No HOME or CODEX_HOME override
+was declared.
 
 | Invocation | Result | Pytest elapsed | Wrapper wall | Exit |
 | --- | --- | ---: | ---: | ---: |
-| Baseline collection at `eb6bc6818` | 127 collected | 2.24s | 2.644s | 0 |
-| Step 1, one combined body invocation | 126 passed, 1 failed, 0 skipped | 15.26s | 15.808s | 1 |
-| Expanded collection at `e485dcdf8` | 143 collected | 2.20s | 2.599s | 0 |
-| Step 4, one combined body invocation at `ab72943aa` | 143 passed, 0 failed, 0 skipped | 20.13s | 20.674s | 0 |
+| New pending-start reproducer, runtime at `59eb1d4e8` plus the new test patch | 0 passed, 2 failed, 0 skipped | 3.82s | 4.549s | 1 |
+| One combined body invocation at `b436ba731` | 165 passed, 0 failed, 0 skipped | 24.53s | 25.288s | 0 |
 
-Both body invocations produced JUnit, with zero collection errors or warnings.
-The only baseline failure was
-`test_gpt56_pilot_provider_observation.py::test_one_cumulative_deadline_no_retry_or_turn_count_substitution`:
-the watchdog closed the second request's socket before its error response,
-raising `RemoteDisconnected`. The fixture now accepts that specific disconnect
-while preserving exact timeouts **[60, 25]**, **2** forwards, null served model
-and `deadline_exceeded`. No production transport assertion or deadline was
-relaxed to repair the test.
+Collection first reported **2 nodes in 2.50s**, then **165 nodes in 2.72s**;
+both exited **0**. The combined collection preceded the code commit without
+any intervening code change. Both body invocations produced JUnit, with no
+collection errors or warnings. The first source-hash command used root-relative
+paths from `batch-runner/` and exited before collection; corrected source
+evidence has the `-actual` suffix. No failed proof was overwritten.
 
-The expanded bundle adds **16 cases**: eight startup paths and eight refusal
-checks for incomplete/contradictory startup receipts. Real runner, receipt,
-usage projection and installed SDK initialization/cleanup run against harmless
-local Python children. The cases include successful initialize, no initialize
-response, a child ignoring TERM, deadline-raced return, already-expired budget,
-ordinary initializer failure, occupied alarm, non-main caller, canary exclusion
-and traps on thread/turn creation, call reservation and provider transmission.
-Real expiry fixtures use **0.5 seconds**; deterministic clock cases retain the
-**1,800-second** boundary. No private input, auth, Rust CLI or live provider was
-exercised. Host/source admission is synthetic in the process fixtures.
-
-After collection, a source check added explicit partial-process ownership and
-reaping, and changed the late-return fixture to wrap the real initializer.
-No node, parameter set or fixture dependency changed, and no new import was
-added. No test body
-ran at the intermediate collection commit, and no passing body was replayed
-beyond the two requested combined invocations.
+The two original failures retain their tracebacks: `session_start_failed` and
+`turn_start_failed` were returned instead of
+`native_attempt_deadline_exceeded`. The final bundle is the existing **143**
+cases plus **22** new cases: two real pipe/loopback/SDK-close pending-start
+fixtures and twenty rejection cases. The positive turn fixture observes one
+synthetic forward before a withheld acknowledgement and verifies that no
+reservation is abandoned or settlement fabricated. Both positive cases verify
+closed sockets/child, null unobserved fields, exact shared counts, receipt and
+Step 2 projection, nonretryable classification and canary exclusion. The
+negative cases cover missing stop/closure/installation, extra requests,
+mismatched responses, usage, fabricated completion/turn IDs and false success.
+No real Rust CLI, provider, credentials or private inputs were exercised;
+host/source admission remains synthetic in the process fixtures.
 
 | Evidence file | Bytes | SHA256 |
 | --- | ---: | --- |
-| `invocation.txt` | 4089 | `921888469fa9d49e6d435f524d76de6ad092917e07ff1742bda0cb56bdd81a43` |
-| `invocation-after.txt` | 4433 | `df74cd734cc6d164062994ecdd6f593e2adc0c128d0e5bb4cf8432cc710a6900` |
-| `collection-before.log` | 15345 | `bfafde0f0284e13c02f4734a70618657757d13b6b29e546ec2f0f7c7a0baa84a` |
-| `collection-after.log` | 17192 | `056d686a40406d6df35a44d3bc8a55c136d62687c7e11ae19b88be3ccba51a10` |
-| `test-before.log` | 1185 | `81db7fac87f6527f48520414cce6520443f7b050a3e1dd9ed9032ee7e74d69f0` |
-| `junit-before.xml` | 21396 | `5be99dd80c1980c6b1b4160eabe98b5b6aec1e0580079040727f78f0897b5351` |
-| `timing-before.txt` | 20 | `0eaf9df851803e301ae083f77569031927a459c77a331781e389d8a993329692` |
-| `test-after.log` | 181 | `5ddd87ca82dbb89067f8d82c57c387e747e65de5aa097d7bee49f6ddae419f84` |
-| `junit-after.xml` | 23137 | `4fad34f92f4a12c40609243de6d7fb2f70e70fbaa606aa50979e1948e37cdb0b` |
-| `timing-after.txt` | 20 | `a0e1b094f748c7122d0b6b23cdae1b2def2f321a04755389b32a96a0dddbd371` |
-| `tested-code.patch` | 25904 | `2afb2c62ad70d22bb18cf3b97a8b3de906d9c050368fad32ab90c8bb531ec778` |
+| `reproducer.log` | 1410 | `88594b77cc9d63a45a0c24aaabdf32589d54b1fe7371b284b73f1bcf9a8ac8af` |
+| `reproducer-junit.xml` | 1668 | `0b7899cbcea89b7a474830a0f787219686f99c1c4d1f090c88eece2ddc0f20ad` |
+| `combined.log` | 261 | `7bba10800937e49274d0412dcd37929e8fce258ac365ad9b4088c58537786e7c` |
+| `combined-junit.xml` | 26979 | `d02d76e9aa19bb9ee153fd0f64f0d07aa843aacb94478f721177246f8be8a272` |
+| `tested-code.patch` | 17082 | `a6206cca254e89533535b3b7def9149c535b35f5cf836bcfc3540ab797fe8c33` |
+
+The reproducer/combined command SHA256 values are
+`cca3571861fcc3cf99b072a3cc79e8c160057eef831c31c69307c1639bec6411` /
+`ea6c5d57b578cee29aaa77344b4f262f2d1a40c8e2c5de2ed7cc8e862118307d`;
+collection values are
+`f9700f789791d4029887aa952a2827441825485debe17844747da0438e980f3a` /
+`b7ec2c4dd6f1d38db1e8dd30cb8113f723a6401b9949355c8aaea2853497885f`;
+timing values are
+`c7313d4d292cac3b11cb8fb4dd6ab5ba3f33963b8aab70f8bf0f9e53641f7856` /
+`33ef88ecd14ebf6145147fa9760b35982b0dc4808b11cb2cae08b5bb2b2af50e`.
+`branch-relation-final.log` is SHA256
+`82a78974fbe0b30735dd9e49fa2154ede849b828a405e6e695a97cb517b68866`.
 
 Final tested source hashes, unchanged by the record-only child:
 
 | File under `batch-runner/` | SHA256 |
 | --- | --- |
-| `core/codex_runner.py` | `aadc19edd6691de97345fafb1ff941e262b67fe6b2a118e22c44c92ba731b509` |
-| `gpt56_pilot_wire_receipt.py` | `9bf7c94aacec0663d718e7462e138423b36e4b2d48471cd65801eda976f12007` |
-| `gpt56_pilot_runtime_caps_usage.py` | `80b75cb847295c27eabc139c3b1172177b9c1ebff74f6bb208ef3d782e5db44f` |
+| `core/codex_runner.py` | `d8de2b16319a433c42935327989210f58673f6f5afc3a2c531f0ac8bceadd80b` |
+| `gpt56_pilot_wire_receipt.py` | `3863983ea5d2a29703b0e5d978f61f3556d54685de55905dabc30135d850d306` |
+| `gpt56_pilot_runtime_caps_usage.py` | `ca6e40698f51670bf485895f8bc23d728d03a4d834affd3da846cb21bd159fbe` |
 | `tests/test_gpt56_pilot_provider_observation.py` | `b5cc7951c5122993780f3abbddb932a3ea8a134ca980059f8d620593704961a5` |
-| `tests/test_gpt56_pilot_remaining_caps.py` | `bde0589e9348e010e9123c9175a62e4e189782fa990a7645f04836b1108d9c5f` |
+| `tests/test_gpt56_pilot_remaining_caps.py` | `9aaeecf67558e40b426db0fcd35df8576e71a81222b3076f54f583ebe9bc69fc` |
 
-The prior **114 passed / 11 failed**, unresolved-only **11 passed**, and separate
-late-usage **2 passed** remain separate historical proofs in the
-[immutable preceding record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/eb6bc6818249e3c7e12356df11e686218327c37d/tasks/LATEST_TASK_RESULT/README.md).
-That record links the earlier 97-case and 81-case/socket proofs. None is pooled
-with the two new invocations, and no old evidence file was overwritten.
+The prior **126 passed / 1 failed** and later **143 passed / 0 failed** remain
+separate historical proofs in the
+[immutable preceding record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/59eb1d4e8e561d53b041f12506812a616112c5cc/tasks/LATEST_TASK_RESULT/README.md).
+That record preserves the socket-disconnect failure and links the earlier
+114/11, unresolved-only 11, late-usage 2, 97-case and 81-case/socket proofs.
+None is pooled with the new reproducer or combined invocation, and no old
+evidence file was overwritten.
 
 ### Input-token precheck: investigation only
 
-Package metadata/spec lookup in the existing Python environment found no
-installed `tiktoken`, `tokenizers` or `transformers`. No tokenizer, vocabulary
-or model file was installed, downloaded or initialized. The SDK's
+The preceding package metadata/spec lookup in the existing Python environment
+found no installed `tiktoken`, `tokenizers` or `transformers`. No installed
+`tiktoken` version or verified Sol-to-encoding binding was available. No
+tokenizer, vocabulary or model file was installed, downloaded or initialized. The SDK's
 `generated/v2_all.py:8579` exposes reported cumulative/last token usage;
 `TurnStartParams` at line 8638 has no input/output token reservation field.
 The existing observer can stop after an overrun, not undo it.
@@ -181,7 +192,7 @@ and final-source review/CI remain open. This source is not declared launchable.
 Task3 run `37756891578` remains uncertain, spent and nonretryable. No finite right
 was consumed, restored or retried by this offline task.
 
-`experiment-report-en` kept the two test populations, timings and synthetic/live
-limits separate; `im-not-ai-en` was used for technical English. `openai-docs`
-used installed SDK source as the offline fallback. No study redesign or UI
-skill applied.
+`experiment-report-en` kept the failed reproducer, combined proof, historical
+populations and synthetic/live limits separate; `im-not-ai-en` was used for
+technical English. `openai-docs` used installed SDK source as the offline
+fallback. No study redesign or UI skill applied.

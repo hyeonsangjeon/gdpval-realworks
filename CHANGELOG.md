@@ -160,6 +160,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Preserve a local native cap stop while the Sol pilot is waiting for a
+  `thread/start` or `turn/start` acknowledgement. Self-review of
+  `2bc77ad14..59eb1d4e8` found the two early returns replaced the deadline
+  reason with a generic start failure; the turn path could also abandon a
+  logical-call reservation despite a native forward. Keep
+  `native_attempt_deadline_exceeded`, the unknown reservation, closed-runtime
+  partial files and a guarded partial receipt with null unobserved IDs/usage.
+  Admit only the two actually flushed pending-start shapes after a witnessed
+  local stop and returned SDK close. Missing closure, mismatched responses and
+  fabricated success remain refused; no retry allowance is added.
+  The new reproducer against runtime `59eb1d4e8e561d53b041f12506812a616112c5cc`,
+  tree `15834afa26c16e3ab88b5fe53d77c3287c5c569f`, reported **0 passed, 2 failed,
+  0 skipped in 3.82s**, wrapper **4.549s**, exit **1**. At clean corrected code
+  `b436ba731ce7b25cf05b87c3776e2b467cb9e51c`, tree
+  `7c468bb1893ef7592cfbcbce6894e54fa8720b8f`, one combined invocation reported
+  **165 passed, 0 failed, 0 skipped in 24.53s**, wrapper **25.288s**, exit **0**.
+  Both used **TERM120s/KILL5s**, JUnit and a credential-free offline environment.
+  Preserve the failed reproducer and prior 126/1 and 143/0 proofs separately;
+  do not pool them. Reproducer log/JUnit SHA256:
+  `88594b77cc9d63a45a0c24aaabdf32589d54b1fe7371b284b73f1bcf9a8ac8af` /
+  `0b7899cbcea89b7a474830a0f787219686f99c1c4d1f090c88eece2ddc0f20ad`.
+  Combined log/JUnit SHA256:
+  `7bba10800937e49274d0412dcd37929e8fce258ac365ad9b4088c58537786e7c` /
+  `d02d76e9aa19bb9ee153fd0f64f0d07aa843aacb94478f721177246f8be8a272`.
+  The **17082-byte** correction patch is SHA256
+  `a6206cca254e89533535b3b7def9149c535b35f5cf836bcfc3540ab797fe8c33`.
+  The temporary-branch check confirmed caps already descends from specified
+  PR #785 head `2bc77ad14cf7205694d11aa5909a9ea67cbb2891`, with no conflicts;
+  only that verification branch was deleted. Both real branches were preserved.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact commands, source/file
+  hashes, tokenizer research and limits. Plans and **32/128/640** request caps,
+  **1,800 seconds**, and **300,000/10,000** reported-token stops are unchanged.
+  No verified Sol tokenizer/error bound supports a hard input-token precheck;
+  no estimator was implemented. This synthetic proof does not establish live
+  host/provider behavior, served identity/Max/Long, hard token/spend limits,
+  adequate headroom under 32 requests, or final-source review/CI. No paid call,
+  push, dispatch or grading. Task3 remains uncertain, spent and nonretryable.
+
 - Correct PR #785's stale expected refusal message in
   `test_active_grader_template_source_foundry_identity[stale_expected_hash]`.
   The intentional sealed-plan selector rejects the changed plan earlier and
