@@ -758,6 +758,7 @@ class _TransportObservation:
         self.provider_runtime_lock = threading.Lock()
         self.native_budget = self.native_budget_task = None
         self.startup_attempted = self.startup_timed_out = False
+        self.startup_process = None
 
     def require_startup_supervision(self):
         """Do not start an SDK we cannot interrupt, or borrow another alarm."""
@@ -768,7 +769,7 @@ class _TransportObservation:
                      and signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0))
 
     @contextmanager
-    def supervise_provider_startup(self):
+    def supervise_provider_startup(self, codex=None):
         """Interrupt the synchronous SDK constructor on the SAME deadline.
 
         Codex 0.147.0 catches Exception during start/initialize and closes its
@@ -789,6 +790,9 @@ class _TransportObservation:
                 signal.setitimer(signal.ITIMER_REAL, remaining)
                 return
             self.startup_timed_out = True
+            # Keep the actual partial constructor's process before SDK.close
+            # clears _proc. Its SIGKILL fallback does not wait/reap the child.
+            self.startup_process = getattr(getattr(codex, "_client", None), "_proc", None)
             capture.request_stop(NATIVE_DEADLINE_EXCEEDED)
             # An Exception, deliberately: the pinned SDK's constructor owns
             # its partially initialized client and closes it before rethrowing.
@@ -804,6 +808,13 @@ class _TransportObservation:
             signal.setitimer(signal.ITIMER_REAL, 0.0)
             signal.signal(signal.SIGALRM, previous)
 
+    def close_startup_process(self):
+        process = self.startup_process
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=1)  # Cleanup only; never renew the attempt deadline.
+
     def require_startup_timeout(self):
         """Only a local pre-thread timeout can have an empty wire receipt."""
         _require(self.startup_attempted and self.startup_timed_out and not self.installed
@@ -811,7 +822,8 @@ class _TransportObservation:
                  and self.provider_capture.closed and self.provider_capture.requests == 0
                  and self.provider_runtime is None and not self.requests and not self.responses
                  and self.thread is self.turn is self.settings is self.completion is None
-                 and not self.usage)
+                 and not self.usage
+                 and (self.startup_process is None or self.startup_process.poll() is not None))
 
     def configure_provider_observer(self, provider, overrides, *, timeout):
         """Replace only this process's checked provider URL; never mutate settings."""

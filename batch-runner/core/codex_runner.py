@@ -37,7 +37,6 @@ import sys
 import tempfile
 import threading
 import time
-from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -1091,18 +1090,26 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         )
         codex = None
         try:
-            with (pilot_wire_observer.supervise_provider_startup() if pilot_wire_observer is not None
-                  else nullcontext()):
+            if pilot_wire_observer is None:
                 codex = Codex(config)
+            else:
+                # Hold the same pinned SDK instance even when __init__ raises.
+                # No copied initializer, SDK-global patch, or worker survives.
+                codex = Codex.__new__(Codex)
+                with pilot_wire_observer.supervise_provider_startup(codex):
+                    Codex.__init__(codex, config)
         except BaseException:
             # The SDK closes itself when initialization raises. If its return
             # raced the deadline, the caller now owns the returned instance.
             try:
-                if codex is not None:
+                if codex is not None and getattr(codex, "_client", None) is not None:
                     codex.close()
             finally:
                 if pilot_wire_observer is not None:
-                    pilot_wire_observer.close_provider_observer()
+                    try:
+                        pilot_wire_observer.close_startup_process()
+                    finally:
+                        pilot_wire_observer.close_provider_observer()
             raise
         if pilot_wire_observer is not None:
             try:

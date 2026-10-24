@@ -366,6 +366,7 @@ def test_startup_deadline_supervises_real_sdk_initialization(monkeypatch, tmp_pa
         return value
 
     real_start, real_initialize, real_codex = CodexClient.start, CodexClient.initialize, openai_codex.Codex
+    real_constructor = real_codex.__init__
 
     def start(client):
         real_start(client)
@@ -378,16 +379,15 @@ def test_startup_deadline_supervises_real_sdk_initialization(monkeypatch, tmp_pa
             raise ValueError(CANARY)
         return real_initialize(client)
 
-    def late_return(config):
-        value = real_codex(config)
+    def late_return(instance, config):
+        real_constructor(instance, config)
         clock[0] = observer.provider_capture.deadline
-        return value
 
     monkeypatch.setattr("openai_codex.client.CodexConfig", config)
     monkeypatch.setattr(CodexClient, "start", start)
     monkeypatch.setattr(CodexClient, "initialize", initialize)
     if case == "late_return":
-        monkeypatch.setattr(openai_codex, "Codex", late_return)
+        monkeypatch.setattr(real_codex, "__init__", late_return)
     started = time.perf_counter()
     try:
         if case in ("stuck", "term_ignored", "late_return", "already_expired"):
