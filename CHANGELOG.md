@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Audit the Codex Foundry external-budget documents against committed source
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`. The diagnostic already records
+  all eight producer outcomes, two succeeded and six failed; no stale six-of-eight
+  status was found in the checked result documents. Add the missing root README
+  summary, list each failed run's unknown detailed cause
+  (`not_recorded_in_terminal_controls`) and distinguish the report's historical
+  finalization scope from this audit. Existing JSON and original pilot bytes,
+  including all grades, costs and budget observations, remain unchanged.
+  Per-condition measurement is inconclusive beyond the retained fields;
+  the C/B report is filled with existing full-denominator grades, but feedback
+  benefit remains inconclusive. Do not infer missing measurements or authorize
+  further paid execution. The final existing offline report selector passed
+  **1 test in 1.62s** with credentials removed and external plugins disabled;
+  direct consistency and prior-evidence preservation checks passed. No
+  new-head review/CI approval, push, dispatch or Project update is claimed.
+
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
   `b6702c679134f90b15a3f58fdacfbccd38522074`, after direct owner review
