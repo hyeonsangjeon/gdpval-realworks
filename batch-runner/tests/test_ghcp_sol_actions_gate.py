@@ -1,6 +1,7 @@
 """Free plan/capture checks; no dataset, handoff, model or network access."""
 
 import json
+import os
 import socket
 import subprocess
 from pathlib import Path
@@ -122,7 +123,13 @@ def test_workflow_contract():
     for job in jobs.values():
         assert job["runs-on"] == "ubuntu-24.04"
         assert job["timeout-minutes"] == "5"
+        assert "if" not in job and "continue-on-error" not in job
+        guard = job["steps"][0]
+        assert guard["name"] == "Refuse paid mode before checkout"
+        assert guard["env"] == {"DRY_RUN": "${{ inputs.dry_run }}"}
+        assert guard == jobs["plan"]["steps"][0]
         for step in job["steps"]:
+            assert "if" not in step and "continue-on-error" not in step
             if step.get("uses", "").startswith("actions/checkout@"):
                 assert step["with"]["persist-credentials"] == "false"
     task = jobs["task"]
@@ -138,3 +145,49 @@ def test_workflow_contract():
     assert "60s" in task["steps"][-2]["run"]
     for forbidden in ("secrets.", "id-token:", "/dev/kvm", "pip install", "azure/login", "hf download"):
         assert forbidden not in text
+
+
+@pytest.mark.parametrize("job_name", ["plan", "task"])
+@pytest.mark.parametrize("dry_run", [
+    "true", "false", "", "True", "TRUE", "1", "0", " true", "true\n", "true false",
+])
+def test_each_job_guard_executes_fail_closed_before_checkout(job_name, dry_run, tmp_path):
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/agentic-v2-ghcp-sol-gate.yml"
+    workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+    guard = workflow["jobs"][job_name]["steps"][0]
+    assert guard.get("env") == {"DRY_RUN": "${{ inputs.dry_run }}"}
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-c", guard["run"]],
+        cwd=tmp_path,
+        env={"PATH": os.defpath, "DRY_RUN": dry_run},
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == (0 if dry_run == "true" else 2)
+    assert result.stdout == (
+        "" if dry_run == "true"
+        else "::error::Paid execution is not implemented or approved.\n"
+    )
+    assert result.stderr == ""
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("dry_run", [
+    "false", "", "True", "TRUE", "1", "0", " true", "true\n", "true false",
+])
+@pytest.mark.parametrize("matrix", [False, True])
+def test_runner_refuses_nontrue_modes_before_catalogue(tmp_path, monkeypatch, dry_run, matrix):
+    def forbidden():
+        pytest.fail("invalid mode reached catalogue")
+
+    monkeypatch.setattr(gate, "fixed_task_ids", forbidden)
+    root = tmp_path / "must-not-exist"
+    args = ["--matrix"] if matrix else [
+        "--task-id", gate.TASK_IDS[0], "--state-root", str(root),
+    ]
+    with pytest.raises(SystemExit) as error:
+        gate.main(["--dry-run", dry_run, *args])
+    assert error.value.code == 2
+    assert not root.exists()

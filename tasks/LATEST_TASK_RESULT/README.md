@@ -1,86 +1,92 @@
 # Latest task result
 
-## GHCP Codex GPT-5.6 Sol fixed-five Actions gate: local dry-run draft
+## GHCP Codex GPT-5.6 Sol fixed-five Actions gate: local review and hardening
 
-Scope: owner decision 2026-10-24 00:01 selects GitHub Actions standard
-`ubuntu-24.04`, one job/task, reusing the Agentic Sandbox V2 workflow path.
-No nested VM or `/dev/kvm` inspection is required. Paid calls, push and
-workflow dispatch remain unapproved.
-
-Created only the new worktree
+Scope: review fixed HEAD `f27cde892e144a242260e47a1c2b2e22e07abcf8`
+against its local `origin/main` merge-base
+`6efe99cbd40bb839037e7a20711a734e0a4ce002`; fix findings, validate and
+commit locally only. The supplied nested worktree path did not exist.
+Git registered the same branch and exact HEAD at
 `/ai-work/copilot/_tmp_worktrees/ghcp-sol-gate-actions-20261024`, branch
-`leader/ghcp-sol-gate-actions-20261024`, from fetched `origin/main`
-`6efe99cbd` (base commit, not a reviewed implementation head).
+`leader/ghcp-sol-gate-actions-20261024`; only that worktree was modified.
 The user checkout and other worktrees were not modified.
 
-### Concrete result
+### Review result and concrete change
 
-- `.github/workflows/agentic-v2-ghcp-sol-gate.yml` adds a credential-free
-  plan-to-matrix dry-run lane using the existing V2 pinned Actions.
-  It derives exactly five public task IDs and allocates one standard
-  `ubuntu-24.04` job per task. `dry_run=false` refuses before checkout
-  in the planner and before reads/writes in the runner.
-- `batch-runner/ghcp_sol_actions_gate.py` verifies the public catalogue pin
-  and existing selector, records requested Sol/Codex agent/Max/1M settings,
-  explicit `not available` served values, Python/OS versions, unavailable
-  GHCP/Codex versions, proposed paid caps and actual workflow dry-run caps.
-  It creates empty private transcript/tool/command/hash/file capture paths
-  and a model-not-started exit record, not real task inputs or model output.
-- The only uploaded path is the generated `capture.json` envelope.
-  Raw captures, private inputs, input/output hashes and absolute host paths
-  never enter it. Logs contain fixed status only. No client, secret,
-  dataset download, grader, publishing or live execution path was added.
-- `docs/ghcp-sol-actions-gate.md` records workflow inputs, shard/task layout,
-  artifact/secret/masking findings, cohort/grader source locations, local
-  commands, evidence limits and paid-run questions. The legacy pinned VM
-  contract and grader policy were left unchanged.
+- No exploitable paid-mode bypass, GHCP authentication, model/grader client,
+  private input download or secret reference was found in the reviewed lane.
+  Only `workflow_dispatch` with a boolean `dry_run` input is exposed.
+  Permissions remain `contents: read`, checkout does not persist credentials,
+  and the pinned public catalogue yields exactly five unique task IDs with
+  one `ubuntu-24.04` matrix job per task plus one planner job.
+- **LOW, defense in depth:** the original task job lacked its own pre-checkout
+  shell guard. Its planner dependency and Python rejection already prevented
+  false-mode capture. Add the same exact-`true` refusal as the planner's first
+  step; regressions also forbid conditional/skippable or soft-failing steps.
+  This is not evidence that the original draft could call a model.
+- Capture remains constant/public metadata plus runtime versions. Only the
+  generated `capture.json` is upload-eligible; private paths are fixed logical
+  relative placeholders, not private input names or host paths. No actual
+  inputs, hashes, raw streams or deliverables enter the envelope. Local
+  capture-shell output was the fixed completion line only.
+- Workflow inventory grows from **29 to 30**. Cross-workflow scans pass;
+  no file-count guard adjustment was needed. The backend workflow is unchanged:
+  SHA-256 `01fe1494460ae36a6ded2caf3955b27ff9d922374b1ffbe3e91c4077d344d094`.
+  Existing legacy gate and backend-source hash guards pass.
 
 ### Verification evidence
 
-Existing Python **3.10.12**, pytest **9.1.1**; no dependencies installed.
-From this worktree's `batch-runner`:
+Existing Python **3.10.12**, pytest **9.1.1**; no dependency installation or
+network operations. Before the workflow fix, the added task-first-guard
+regression produced **11 expected failures**. After the fix:
 
 ```bash
-python3 -m pytest -q tests/test_ghcp_sol_actions_gate.py
-python3 -m pytest -q tests/test_ghcp_vm_gate_contract.py tests/test_catalogue_carries_no_scores.py
+cd batch-runner
+python3 -m pytest -q tests/test_ghcp_sol_actions_gate.py \
+  tests/test_ghcp_vm_gate_contract.py tests/test_catalogue_carries_no_scores.py \
+  tests/test_agentic_v2_phase1b_static.py \
+  tests/test_a_step_reference_that_names_nothing.py \
+  tests/test_agentic_v2_containment_readiness.py \
+  tests/test_a_test_file_nobody_runs_is_not_a_test.py \
+  tests/test_step8_grade.py::test_no_job_level_key_reads_a_context_github_refuses_to_provide_there \
+  tests/test_agentic_workflows.py \
+  -k 'not test_backend_jobs_partition_the_comparison_contracts'
 ```
 
-Results, independently reported: **6 passed in 0.37s** initially and **6 passed
-in 0.21s** after selecting the portable Actions Python `3.10` minor version;
-**114 passed in 22.04s** for the unchanged legacy contracts. The exact
-installed Python patch version is recorded at runtime. New checks cover
-exact five-task selection, requested versus served
-identity, caps, capture/exit paths, synthetic private canary exclusion,
-forbidden network/subprocess operations, paid refusal before reads/writes,
-fresh-state/symlink refusal, catalogue drift and the workflow contract.
+**313 passed, 1 deselected in 27.78s**, including **44 gate tests**.
+Both jobs' actual shell guards were executed for ten values each; the Python
+entrypoint rejects nine nontrue values in both matrix and capture modes before
+catalogue access. Existing no-network/process and synthetic-canary tests pass.
+The actual workflow capture shell also ran for all **5/5** matrix tasks under
+its TERM60s/KILL5s timeout, with no credentials supplied: zero model/grader
+calls, no private input reads, no temporary host path in envelopes, files
+mode **0600**, and only static completion logs. Temporary captures were removed.
+`git diff --check` passes.
 
-The actual CLI `--matrix` and all **5** task-specific `--dry-run true`
-invocations also completed locally under **TERM60s/KILL5s** each.
-Five generated envelopes were checked: model calls **0**, grader calls **0**,
-private inputs read **false**. Captures and matrix persist in session storage:
-`/home/dev/.copilot/session-state/edd84818-342c-4e16-a490-41b4397b9a74/files/ghcp-sol-actions-dry.4VrNCn/`.
-These are local empty-path rehearsals, not hosted-runner, authentication,
-served-capability, real transcript or benchmark-quality evidence.
+The excluded CI partition test was attempted, not silently ignored: its child
+pytest collection failed with three `ModuleNotFoundError: openai_codex`
+errors. The pinned SDK is declared in requirements but absent locally and
+not in the pip wheel cache; no online installation was attempted. That
+partition check and full CI are **not verified**, not a demonstrated
+new-workflow guard failure.
 
 ### Review boundary and remaining work
 
-Reviewed implementation head SHA: **none**. The required
-`extreme-reasoner` workflow decision-memo attempt failed before execution
-because its configured model was unavailable; no specialist endorsement or
-source-review approval is claimed. Direct implementation checks and the
-tests above do not replace the real-run review gate.
+Directly reviewed fixed source SHA:
+`f27cde892e144a242260e47a1c2b2e22e07abcf8`, plus the local corrective diff.
+The security-review worker could not access the supplied nonexistent path;
+the workflow `extreme-reasoner` attempt could not start because its configured
+model was unavailable. No specialist approval or corrected-head launch
+approval is claimed. Complete those reviews and the SDK-dependent partition
+check before considering hosted execution.
 
-Before paid execution, resolve supported unattended GHCP authentication and
-credential disposal; the actual Codex-harness route and pinned versions;
-independent served Sol/Max/1M evidence with no fallback; original private input
-verification/staging and private raw-capture retention; network/tool policy,
-approved spend/usage/time/turn/token limits and no-retry admission; and the
-five-task grader identity, judge validation, repeats and pass criteria.
-Proposed paid limits (**1200 seconds/task**, **64 turns**, **0 retries**) are
-draft values, not approved or live-enforced limits. Workflow dry-run bounds
-are **60 seconds/process**, **5 minutes/job**, **0 model turns**.
-
-No push, workflow run, paid model/GHCP/grader call, private handoff read,
-Azure operation or remote project edit was performed. No quality or launch
-approval follows. Exact-source review and separate owner approval are still
-required for push, hosted dry-run dispatch and, separately, paid work.
+Paid blockers remain: supported unattended GHCP authentication/disposal;
+actual Codex harness and pinned versions; independently observed Sol/Max/1M
+without fallback; original-input verification and private capture retention;
+network/tool policy and approved spend/usage/time/turn/token caps; five-task
+inference/grader identity, judge validation, repeats and pass criteria.
+Proposed paid limits (**1200 seconds/task**, **64 turns**, **0 retries**) remain
+unapproved; enforced dry-run limits are **60 seconds/process**, **5 minutes/job**,
+**0 model turns**. No push, PR, dispatch, model/grader call, private input read,
+Azure operation or remote project edit occurred. Owner authorization remains
+separate for push, hosted dry-run and paid execution.

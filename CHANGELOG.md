@@ -24,11 +24,28 @@ entries land under a fresh dated heading the day they merge to `main`.
   existing cohort/gate tests passed**, and **5 CLI dry-run captures** completed
   with zero model/grader calls and no private input reads. See
   [scope, survey and paid-run blockers](docs/ghcp-sol-actions-gate.md).
-  The specialist review could not start because its configured model was
-  unavailable; no reviewed-head approval is claimed. No push, workflow
-  dispatch, paid call or private handoff access was performed or authorized.
+  The subsequent local review and hardening are recorded below; no
+  specialist or launch approval is claimed. No push, workflow dispatch,
+  paid call or private handoff access was performed or authorized.
 
 ### Fixed
+
+- Harden the local-only GHCP Sol gate after directly reviewing fixed HEAD
+  `f27cde892e144a242260e47a1c2b2e22e07abcf8` against merge-base
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`: independently refuse
+  nontrue `dry_run` values before checkout in the task job, in addition to
+  the existing planner and Python refusals. This closes a low-severity
+  defense-in-depth gap, not an observed paid-call bypass. Verification:
+  **313 targeted tests passed** (including **44 gate tests**) and **5/5**
+  actual capture-shell rehearsals passed locally with zero model/grader
+  calls and metadata-only envelopes. The **29 to 30** workflow inventory
+  change passes cross-workflow scans; the backend workflow hash is unchanged.
+  One CI partition test remains unverified because local collection lacks
+  the declared `openai_codex` SDK; no network installation was attempted.
+  Specialist reviews could not complete because of worker path/model
+  availability; exact-source approval and all paid-run blockers remain.
+  Only the registered feature worktree was changed, with no push, PR,
+  dispatch, private input access or paid execution.
 
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree

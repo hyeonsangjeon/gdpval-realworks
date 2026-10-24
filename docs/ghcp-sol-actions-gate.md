@@ -66,7 +66,12 @@ Proposed paid caps are 1200 seconds/task (the V2 stage cap), 64 model turns/task
 (draft choice), zero retries; neither approval nor live enforcement is claimed.
 The dry-run workflow enforces 60 seconds/process and five minutes/job with
 zero model turns. Unknown usage/cost/grade stay null, never inferred as zero.
-`dry_run=false` exits 2 before input reads, capture or client construction.
+Both planner and task jobs independently reject every `dry_run` value except
+the exact string `true` before checkout. The Python entrypoint separately
+rejects false or malformed values before catalogue reads or capture writes.
+Local tests execute both shell guards with true, false, missing/empty,
+case-changed, numeric and whitespace-bearing values; they do not dispatch
+Actions or prove hosted behavior.
 
 ## Questions blocking paid execution
 
