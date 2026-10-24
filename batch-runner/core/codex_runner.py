@@ -1718,6 +1718,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             files = []
             observation.cleanup(lambda: files.extend(workspace.collect_deliverables()))
             return files
+
+        def stopped_pilot_start(thread=None):
+            # A local stop can interrupt thread/start or turn/start before its
+            # response supplies an ID. Preserve the reason and unknown ledger
+            # reservation; a lost acknowledgement cannot refund native work.
+            pilot_wire_observer.close_provider_observer()
+            pilot_wire_observer.close_provider_runtime()
+            reason = pilot_wire_observer.cap_stop_reason
+            return CodexRunOutcome(
+                success=False, text="", files=collect_files(), error=reason,
+                error_category=reason, thread_id=getattr(thread, "id", None),
+            )
+
         binds_native_state = task_deadline is not None and task_deadline.binds_native_state
         try:
             continuation = task_deadline.continuation() if binds_native_state else None
@@ -1785,6 +1798,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             except TaskDeadlineRefused:
                 raise
             except Exception as exc:  # noqa: BLE001
+                if pilot_wire_observer is not None and pilot_wire_observer.cap_stop_reason is not None:
+                    return stopped_pilot_start()
                 if binds_native_state:
                     raise TaskDeadlineRefused(
                         "native resume refused; retained binding was not replaced" if resumed else
@@ -1825,6 +1840,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 else:
                     turn_handle, observed = self._observation_turn(thread, turn_input, observation)
             except Exception as exc:  # noqa: BLE001
+                if pilot_wire_observer is not None and pilot_wire_observer.cap_stop_reason is not None:
+                    return stopped_pilot_start(thread)
                 category = "turn_start_failed"
                 if task_deadline is not None:
                     # A lost response does not prove the native request never

@@ -755,6 +755,7 @@ class _TransportObservation:
         self.provider_capture = None
         self.provider_capture_reason = "observer_not_installed"
         self.provider_runtime = None
+        self.provider_runtime_close_returned = False
         self.provider_runtime_lock = threading.Lock()
         self.native_budget = self.native_budget_task = None
         self.startup_attempted = self.startup_timed_out = False
@@ -872,8 +873,27 @@ class _TransportObservation:
             if self.provider_runtime is not None:
                 try:
                     self.provider_runtime.close()
+                    self.provider_runtime_close_returned = True
                 finally:
                     self.provider_runtime = None
+
+    def require_pending_start_stop(self):
+        """A closed local stop may retain missing RPC acknowledgements, never success.
+
+        Only the two actually flushed start shapes are eligible. Other missing,
+        mismatched or poisoned observations still fail the existing guards.
+        """
+        _require(self.installed and not self.startup_timed_out
+                 and self.cap_stop_reason in _CAP_STOPS and self.provider_capture.closed
+                 and self.provider_runtime is None and self.provider_runtime_close_returned
+                 and self.turn is self.completion is None and not self.usage)
+        if self.thread is None:
+            _require(set(self.requests) == {"thread/start"} and not self.responses
+                     and self.settings is None)
+        else:
+            _require(set(self.requests) == {"thread/start", "turn/start"}
+                     and self.responses == {self.requests["thread/start"]["request_id_sha256"]}
+                     and self.settings is not None)
 
     @property
     def native_request_cap_exceeded(self):
@@ -989,10 +1009,15 @@ class _TransportObservation:
     def finish(self, *, success: bool, thread_id: str | None, turn_id: str | None) -> dict:
         with self.guard():
             stopped = self.cap_stop_reason is not None
+            pending_start = stopped and not self.startup_timed_out and self.turn is None
             _require(type(success) is bool)
             if self.startup_timed_out:
                 self.require_startup_timeout()
                 _require(not success and thread_id is turn_id is None)
+            elif pending_start:
+                self.require_pending_start_stop()
+                _require(not success and turn_id is None
+                         and self.thread == (None if thread_id is None else _correlation(thread_id)))
             else:
                 _require(self.installed and (self.completion is not None or stopped))
                 _require(self.thread == _correlation(thread_id) and self.turn == _correlation(turn_id)
@@ -1004,6 +1029,7 @@ class _TransportObservation:
             if self.caps_usage_observer is not None:
                 self.caps_usage_observer.finish(self)
             result = {"scope": ("codex_app_server_startup_deadline_before_thread" if self.startup_timed_out else
+                                "codex_app_server_local_stop_before_turn_ack" if pending_start else
                                 "codex_app_server_stdio_utf8_after_initialize"),
                       "requests": self.requests, "correlation": self.terminal_correlation(),
                       "app_server_settings": self.settings,

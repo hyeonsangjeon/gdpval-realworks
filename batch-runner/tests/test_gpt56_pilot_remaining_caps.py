@@ -18,7 +18,9 @@ from gpt56_pilot_runtime_caps_usage import _UsageObservation
 from .test_gpt56_pilot_provider_observation import (
     CANARY, MODEL, UPSTREAM, _body, _post, _upstream, loopback_only,
 )
-from .test_gpt56_pilot_wire_receipt import REQUESTED, _finish, _start, _transport, _turn
+from .test_gpt56_pilot_wire_receipt import (
+    REQUESTED, _finish, _start, _thread_request, _transport, _turn, _turn_request,
+)
 
 TASKS = [f"synthetic-task-{index}" for index in range(5)]
 
@@ -300,6 +302,172 @@ def test_watchdog_expires_without_any_http_request(monkeypatch):
         assert capture.server.socket.fileno() == -1
     finally:
         capture.close()
+
+
+@pytest.mark.parametrize("pending", ["thread/start", "turn/start"])
+def test_deadline_pending_start_response_keeps_reason_receipt_and_reservation(
+        monkeypatch, tmp_path, capsys, pending):
+    """Real pipe hooks, loopback forward and SDK.close; no provider or live CLI.
+
+    The synthetic runtime withholds a start response until the owned watchdog
+    closes its child. A missing turn acknowledgement cannot refund a forward.
+    """
+    from openai_codex.client import CodexClient, CodexConfig
+
+    clock = [1000.0]
+    monkeypatch.setattr(wire.time, "monotonic", lambda: clock[0])
+    observer = _observer(budget=wire._NativeRequestBudget(TASKS))
+    observer.bind_task_text(CANARY)
+    capture = _configure(observer, timeout=1800)
+    runner = object.__new__(codex_runner.CodexAgentRunner)
+    runner.timeout, runner.cost_ledger = 1800, None
+    reserved, abandoned, collected = [], [], []
+
+    def reserve(_task):
+        reserved.append("synthetic-call")
+        return reserved[-1]
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("no resumed thread, completed turn, or fabricated settlement")
+
+    monkeypatch.setattr(runner, "_reserve_call", reserve)
+    monkeypatch.setattr(runner, "_abandon_call", lambda *args: abandoned.append(args))
+    monkeypatch.setattr(runner, "_settle_call", forbidden)
+    monkeypatch.setattr(runner, "_await_turn", forbidden)
+    monkeypatch.setattr(runner, "resume_thread", forbidden)
+    with _upstream(monkeypatch, [{"body": _body()}]) as (received, _timeouts), subprocess.Popen(
+            [sys.executable, "-I", "-u", "-c", "import signal; print('ready', flush=True); signal.pause()"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", env={}) as process:
+        assert process.stdout.readline() == "ready\n"
+        client = CodexClient(CodexConfig())
+        client._proc = process
+        client._router.route_response = lambda _message: "original-response"
+        client._coerce_notification = lambda *_args: "original-notification"
+        codex = SimpleNamespace(_client=client, close=client.close)
+        fake = SimpleNamespace(observer=observer, client=client, codex=codex,
+                               thread_id="thread-private", turn_id="turn-private")
+
+        def open_runtime(_workspace, *, pilot_wire_observer):
+            assert pilot_wire_observer is observer
+            wire.install_runtime_observer(codex, observer)
+            observer.bind_provider_runtime(codex)
+            return codex
+
+        def expire():
+            clock[0] = capture.deadline
+            capture.check_deadline()
+            assert process.wait(timeout=2) is not None
+            raise OSError(CANARY)  # Pending RPC fails after its runtime closes.
+
+        def turn(text):
+            client._write_message({"id": "rpc-turn", "method": "turn/start", "params": {
+                "threadId": fake.thread_id, "input": [{"type": "text", "text": text}]}})
+            assert _post(capture.base_url)[0] == 200
+            expire()
+
+        def start_thread(*_args, **_kwargs):
+            if pending == "thread/start":
+                client._write_message({"id": "rpc-thread", "method": "thread/start", "params": {
+                    "model": REQUESTED["deployment"], "modelProvider": REQUESTED["provider_id"],
+                    "cwd": str(tmp_path), "sandbox": "workspace-write", "approvalPolicy": "never",
+                    "developerInstructions": "private developer text"}})
+                expire()
+            _start(fake)
+            return SimpleNamespace(id=fake.thread_id, turn=turn)
+
+        def collect():
+            assert capture.closed and not capture.thread.is_alive()
+            assert capture.server.socket.fileno() == -1 and process.poll() is not None
+            assert observer.provider_runtime is None
+            collected.append("closed")
+            return []
+
+        monkeypatch.setattr(runner, "open_runtime", open_runtime)
+        monkeypatch.setattr(runner, "start_thread", start_thread)
+        workspace = SimpleNamespace(workspace=tmp_path, collect_deliverables=collect)
+        try:
+            outcome = runner._run_one_turn(workspace=workspace, task_text=CANARY,
+                experiment_prompt={"system": "private developer text"}, task_id=TASKS[0],
+                pilot_wire_observer=observer)
+            assert outcome.success is False and outcome.text == ""
+            assert outcome.error_category == wire.NATIVE_DEADLINE_EXCEEDED
+            assert outcome.error == wire.NATIVE_DEADLINE_EXCEEDED and abandoned == []
+            assert reserved == (["synthetic-call"] if pending == "turn/start" else [])
+            assert collected == ["closed"]
+            receipt = observer.finish(success=False, thread_id=outcome.thread_id, turn_id=outcome.turn_id)
+            usage = observer.caps_usage_observer.verified()
+        finally:
+            observer.close_provider_observer()
+            observer.close_provider_runtime()
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=1)
+    assert receipt["scope"] == "codex_app_server_local_stop_before_turn_ack"
+    assert receipt["correlation"] == {"thread_id_sha256": (
+        wire._correlation(fake.thread_id) if pending == "turn/start" else None),
+        "turn_id_sha256": None, "status": None}
+    assert receipt["usage"]["state"] == "not_available" and usage["snapshots"] == []
+    assert set(receipt["requests"]) == ({"thread/start", "turn/start"} if pending == "turn/start" else {"thread/start"})
+    observed = receipt["provider_observation"]
+    assert observed["native_request_count"] == len(received) == int(pending == "turn/start")
+    assert observed["runtime_caps"]["task_requests"] == observed["runtime_caps"]["pilot_requests"] == len(received)
+    assert observed["runtime_caps"]["stop_reason"] == wire.NATIVE_DEADLINE_EXCEEDED
+    assert observed["runtime_caps"]["input_tokens"] is observed["runtime_caps"]["output_tokens"] is None
+    assert step2._bounded_codex_diagnostics({"provider_observation": observed}) == {"provider_observation": observed}
+    assert step2.infra_retry_category({"status": "error", "observability": {
+        "error_category": outcome.error_category}}) is None
+    output = capsys.readouterr()
+    assert all(secret not in json.dumps(receipt) + json.dumps(usage) + output.out + output.err
+               for secret in (CANARY, UPSTREAM, str(tmp_path), capture.route, fake.thread_id))
+
+
+@pytest.mark.parametrize("pending", ["thread/start", "turn/start"])
+@pytest.mark.parametrize("damage", ["not_stopped", "not_closed", "runtime_not_closed", "not_installed",
+                                   "response", "extra_request", "usage", "completion", "turn_id", "success"])
+def test_pending_start_stop_does_not_adopt_incomplete_or_mismatched_wire(monkeypatch, pending, damage):
+    clock = [1000.0]
+    monkeypatch.setattr(wire.time, "monotonic", lambda: clock[0])
+    observer = _observer()
+    capture = _configure(observer)
+    fake = _transport(observer)
+    fake.codex.close = lambda: None
+    observer.bind_provider_runtime(fake.codex)
+    try:
+        if pending == "turn/start":
+            _start(fake)
+            fake.client._write_message(_turn_request())
+        else:
+            fake.client._write_message(_thread_request())
+        clock[0] = capture.deadline
+        capture.check_deadline()
+        observer.close_provider_observer()
+        observer.close_provider_runtime()
+        if damage == "not_stopped":
+            capture.stop_reason = None
+        elif damage == "not_closed":
+            capture.closed = False
+        elif damage == "runtime_not_closed":
+            observer.provider_runtime_close_returned = False
+        elif damage == "not_installed":
+            observer.installed = False
+        elif damage == "response":
+            observer.responses.add("f" * 64)
+        elif damage == "extra_request":
+            observer.requests["thread/resume"] = {"request_id_sha256": "f" * 64}
+        elif damage == "usage":
+            observer.usage.append({"native": _usage(1, 1)})
+        elif damage == "completion":
+            observer.completion = {"thread_id_sha256": observer.thread, "turn_id_sha256": None, "status": "completed"}
+        with pytest.raises(wire.PilotWireReceiptRefused, match="^pilot_wire_receipt_refused$"):
+            observer.finish(success=damage == "success",
+                thread_id=fake.thread_id if pending == "turn/start" else None,
+                turn_id=fake.turn_id if damage == "turn_id" else None)
+        assert observer.invalid and not observer.sealed
+    finally:
+        capture.closed = True  # The test changed this flag only after real closure.
+        observer.close_provider_observer()
+        observer.close_provider_runtime()
 
 
 @pytest.mark.parametrize("case", ["ready", "stuck", "term_ignored", "late_return", "already_expired",

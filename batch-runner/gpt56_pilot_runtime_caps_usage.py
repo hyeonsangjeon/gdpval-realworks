@@ -147,6 +147,8 @@ class _UsageObservation:
                  and self.snapshots == [_bytes(row) for row in observer.usage])
         if observer.startup_timed_out:
             observer.require_startup_timeout()
+        elif stopped and observer.turn is None:
+            observer.require_pending_start_stop()
         else:
             _require(observer.installed
                      and set(observer.requests) in ({"thread/start", "turn/start"}, {"thread/start", "turn/start", "turn/interrupt"})
