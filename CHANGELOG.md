@@ -30,6 +30,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Audit the GHCP Sol gate's actual execution path without widening its
+  contract. Both workflow jobs refuse paid mode; the task step launches only
+  the model-free capture, not a GHCP/Codex runtime. The existing **1200-second**
+  and **64-turn** guards therefore remain offline collection checks. No live
+  deadline, turn guard, process-tree cleanup or partial-output guarantee is
+  newly implemented or validated. Document countable tool events and
+  unselected **8/32 tool-call** candidates from separate local dispatchers;
+  the GHCP tool-call value stays undefined. One combined invocation on
+  `8d356e1c1dc13ae10193a045334c7e2ab089de35`, tree
+  `ad69ecf73a8fed221e2fcdf5272e8a7337196912`, reports **231 passed, 0 failed,
+  0 skipped in 11.36s**, wrapper **11.575s**, exit **0**, including Auto/BYOK
+  refusal. This is a fresh proof of the unchanged gate tests, not a live
+  execution or a pooled result with the earlier proofs. Only documentation
+  changes; no plan, cap, code, test, workflow, credential or permission change.
+  See the [execution-path audit](docs/ghcp-sol-actions-gate.md#execution-path-audit-2026-10-25-0240-kst)
+  and [exact evidence and remaining prerequisite](tasks/LATEST_TASK_RESULT/README.md).
+  A bound GHCP-to-Codex launch/event adapter is still required. Local commit
+  only; no push, dispatch, authentication, model call or grading.
+
 - Bound the GHCP Sol gate's offline event collector using the unchanged
   Actions draft values of **1200 seconds** and **64 turn starts**. Stop at
   the deadline or the 65th turn event with fixed reasons, close the explicit

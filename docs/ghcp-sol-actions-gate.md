@@ -4,6 +4,85 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Execution-path audit, 2026-10-25 02:40 KST
+
+**There is no GHCP/Codex task launcher in this gate to attach execution
+limits to.** The current task therefore produces a source-backed blocker and
+tool-cap options, not a new runtime guard. No executable, test, workflow,
+plan, cap, dependency or authentication setting changed. The audit used local
+source and previously cached public documentation only; no CLI was executed.
+
+| Item | Actual execution path: before and after | What remains possible but unimplemented |
+| --- | --- | --- |
+| 1200 seconds/task | Not attachable in this branch: the live task launcher is absent. The collector enforces this value only while consuming supplied events. | An owned subprocess could have a deadline started before launch, process-tree termination and a retained partial receipt. There is no approved GHCP-to-Codex command/process owner here to wire or test. |
+| 64 turns/task | Not attachable in this branch: there is no live event subscription or pre-turn admission hook. The collector stops at the 65th supplied turn-start event. | A live stream could trigger cancellation, but a start notification does not prove that the 65th turn was prevented before any effect. |
+| Tool calls/task | Value still undefined; no tool-call cap is installed. | Counting events is documented; selecting a value and proving pre-effect enforcement remain separate requirements. |
+
+The concrete route is
+`.github/workflows/agentic-v2-ghcp-sol-gate.yml:27-35,58-66,74-83` ->
+`batch-runner/ghcp_sol_actions_gate.py:485-527` -> `dry_capture:450-480`.
+Both jobs refuse paid mode before checkout. The task step launches only the
+model-free Python capture under **60 seconds plus 5 seconds for forced
+termination**, with a **5-minute job limit**. It does not launch Copilot or
+Codex. `collect_session_events:242-379` retains only supplied metadata; its
+`subprocess_cleanup` is explicitly `not_applicable_no_subprocess_started`.
+The separate inert VM plan still has `launch_enabled: false`, null CLI/SDK
+versions and null execution-limit fields. Its validator preserves those facts.
+
+The host's `/usr/local/bin/copilot:32-42` is not used by this workflow. Its
+fallback credential resolution and binary selection must not be inherited as
+an approved pilot adapter. Read-only package metadata reports **1.0.98** for
+the wrapper's default runtime location and **1.0.79** for `/usr/bin/copilot`'s
+package. Neither version is bound by the GHCP plan. Copilot's package README
+identifies its own coding-agent harness; cached CLI reference [G3], line 658,
+says `--agent` selects a custom agent, not the OpenAI Codex harness. Inventing
+that binding would change the unresolved execution contract. No such
+substitution, new launcher or fake-executable surrogate was added.
+
+### Tool-event evidence and unselected values
+
+The cached official streaming reference [G1], lines 297-305 and 417-428,
+documents `assistant.turn_start` with `turnId` and `tool.execution_start`
+with `toolCallId`; the latter means a tool **has begun executing**. Count
+starts by bound session/agent/tool identity, not completion/progress events
+again. The local **1.0.79** `session-events.schema.json:1244,15370` also
+declares those event types. This is source/schema evidence, not an observed
+session or a guarantee about the **1.0.98** runtime. The cached CLI reference
+at line 711 describes JSONL output, but it does not establish that this
+gate receives every event, including sub-agents. At line 697,
+`--max-autopilot-continues` counts continuation messages, not these turns or
+tool calls; it is not a substitute cap.
+
+The separately installed OpenAI Codex SDK **0.147.0** declares `item/started`
+and command/MCP/dynamic-tool items in `generated/v2_all.py:9183,9491,8239,4635,4663`.
+Those could support a separately bound Codex counter; they are not GHCP
+events. This branch's Foundry `batch-runner/core/codex_runner.py:1995-2050` has its own
+turn watchdog but no numeric tool-call cap in the inspected runner. Native
+HTTP requests, logical turns and tool executions are different units.
+
+| Candidate only | Existing source and rationale | Limitation |
+| --- | --- | --- |
+| 8 tool calls/task | `batch-runner/core/agentic_sandbox_runner.py:43` and `batch-runner/core/agentic_tools.py:199-233` use an 8-call dispatch ceiling; the latter rejects an oversized batch before dispatch. This supplies a conservative existing reference. | It may stop file-heavy tasks early; no GHCP workload sufficiency was measured. |
+| 32 tool calls/task | `batch-runner/core/agentic_v2_tools.py:56,141-145` and `batch-runner/core/agentic_v2_runner.py:753` use a 32-call dispatcher default with refusal before the next dispatch. This permits more tool work than the 8-call reference. | It is another harness's ceiling, not a GHCP entitlement or a measured requirement. It is unrelated to the native pilot's 32 HTTP requests. |
+
+**Neither candidate is selected.** No new cap or reason code is introduced.
+Existing `task_timeout_exceeded` and `turn_cap_exceeded` remain offline
+collector reasons. Process-tree termination, retained live partial outputs
+and fake-executable boundary/child-cleanup fixtures were **not implemented or
+validated**, because no matching task execution adapter is present. This is
+not a finding that GHCP cannot support a watchdog or emit countable events.
+The next prerequisite is an explicitly bound GHCP-to-Codex launch/event
+adapter with a process owner; it cannot be replaced by the host wrapper or
+the separate Foundry runner without a new execution-contract decision.
+
+On clean source `8d356e1c1dc13ae10193a045334c7e2ab089de35`, one combined
+offline invocation reported **231 passed, 0 failed, 0 skipped in 11.36s**;
+wrapper **11.575s**, exit **0**. This repeats the requested existing gate
+bundle only: **138 Actions checks plus 93 VM checks**, including **4 Auto**
+and **2 BYOK** refusals. No new test was added. The older **231/10.66s** proof
+below remains separate. Exact source, invocation, log/JUnit hashes and
+remaining gates are in the [current result](../tasks/LATEST_TASK_RESULT/README.md).
+
 ## Offline capture limits, 2026-10-25 00:15 KST
 
 The collector now stops reading supplied events at the existing Actions draft's
