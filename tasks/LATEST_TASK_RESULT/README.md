@@ -1,72 +1,103 @@
 # Latest task result
 
-## PR #785 CI correction verified for owner-approved fast-forward delivery
+## Five-task native-cap proposal, local only (2026-10-24)
 
-Scope: verify and deliver the existing CI correction on
-`codex/gpt56-direct-account-contract-20261022`, as explicitly authorized by
-the owner. The clean direct-account integration worktree has tested commit
-`cee9111d998f08015d767fb9fb2ad7be5326ee45` directly atop the inspected remote
-head `dcf97b68663084b12472b8a8fd8d81799c47e938`; delivery is fast-forward only.
-The user checkout is unchanged. Only these two completion records were updated
-after the new local verification.
+Scope: draft retry-inclusive native call, turn, token and wall-clock caps from
+existing evidence, and compare deployment-name references without Azure access.
+Worktree: `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`;
+branch: `codex/gpt56-native-pilot-caps-20261024`; inspected base:
+`2bc77ad14cf7205694d11aa5909a9ea67cbb2891`.
+This is not independent source-review approval. No new reviewed execution
+head is established; final-source review remains required.
 
-Cause: the intentional source-profile change in
-`d02d8e08beab85d5c443baaf60f8036c2d7308d3` passes the supplied plan's seal
-into the active-plan selector. Altering the expected grader hash changes that
-seal, so source registration refuses the plan before the former
-`active_contract_mismatch` check. The public compiler translates that refusal
-to `pilot_identity_compile_refused`. CI reported **1 failed, 916 passed**.
+### Outcome and derivation
 
-Only the stale test expectation was changed, from `active_contract_mismatch`
-to `pilot_identity_compile_refused`. The same test still directly requires
-`grader_template_source_drift` for the altered hash. Production code, the
-frozen grader hash, source checks, launch restrictions and all other test
-assertions are unchanged; no skip or xfail was added.
+The inert proposal is
+`batch-runner/experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml`.
+No runtime consumes it. Sealed plans, source pins, production code, workflows,
+credentials, grader identity and execution rights are unchanged.
 
-### Fresh local verification
+| Scope | Native requests | Logical turns | Input tokens | Output tokens | Wall seconds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Attempt | 32 | 1 | 300,000 | 10,000 | 1,800 |
+| Task, all four attempts | 128 | 4 | 1,200,000 | 40,000 | 7,620 |
+| Pilot, all five tasks | 640 | 20 | 6,000,000 | 200,000 | 38,100 |
 
-Python 3.10.12, pytest 9.1.1, at tested commit
-`cee9111d998f08015d767fb9fb2ad7be5326ee45`. Each subprocess used an empty
-inherited environment, explicit system PATH, offline Hub/dataset settings,
-disabled plugin autoload and no pytest cache. No credential values were read.
+Sources and explicit policy choices:
 
-| Selection | Result | pytest elapsed |
-| --- | --- | ---: |
-| Complete changed identity test file, including `stale_expected_hash` | 118 passed, 0 failed | 16.36s |
-| Exact seven-file CI "Run pilot contracts" selection | 917 passed, 0 failed | 485.21s |
-| Exact CI budget-pilot file selection, excluding readout files | 1537 passed, 0 failed, 3 warnings | 5129.92s |
+- `tests/fixtures/run_record/step2_inference_results.json` and
+  `cost_ledger_condition_a.jsonl` under `batch-runner/` preserve
+  `exp033_codex_foundry_fixed5:34528903950:1`: five tasks, nine ledger turns,
+  595,243 input / 22,253 output tokens. Maximum per-task input/output is
+  289,404 / 8,381 on task `2ea2e5b5`; rounding upward to the next 100,000 /
+  10,000 gives the proposed attempt token caps. These partial GPT-5.4
+  observations are not a Sol usage forecast. Cached input and reasoning
+  output are subcounts, not additional tokens.
+- The leader reports diagnostic `39407062120` at 9,444 input / 5 output.
+  Its archive was not found in the local repository/worktree artifact search;
+  these quantities are attributed to the instruction, not independently
+  verified. `ceil(300000 / 9444) = 32` is only a provisional native-call
+  planning heuristic. Request sizes vary; token budgets do not enforce a
+  request count. The historical ledger explicitly counts turns, not the
+  native model requests inside them. Native measurement/enforcement remains
+  unresolved; the proposal does not claim otherwise.
+- The registered source profile fixes one turn and 1,800 seconds per
+  attempt, with three infrastructure retries: four attempts per task.
+  `step2_run_inference.py::INFRA_RETRY_BACKOFF_SECONDS` is 60/120/240.
+  Task time is `4 * 1800 + 420 = 7620`; pilot totals multiply by five.
+  This is a proposed serial inference/retry deadline, excluding preparation,
+  upload and grading, not an existing enforced whole-pilot timeout.
+- `approved_maximum_usd: null # owner decision`; no USD amount was selected.
 
-These are separate invocations, not unique-test totals or model measurements.
-Commands ran from `batch-runner/` using `python3 -m pytest -m "not integration"
--o addopts= -p no:cacheprovider --tb=short -q`, with `-rs` for CI selections
-and `-x` for the budget selection. Both CI file selections match
-`.github/workflows/backend-tests.yml`; no workflow was changed.
+### Deployment comparison
 
-The initial budget attempt stopped at **71 passed, 1 setup error in 91.22s**
-because the local environment lacked `openai_codex`. The repository-pinned
-`openai-codex==0.147.0` and `openai-codex-cli-bin==0.147.0` dependencies were
-restored only under this session's `files/test-deps/`, then exposed through
-`PYTHONPATH` for the successful full rerun. No dependency manifest or shared
-environment changed. The three successful-run warnings concern pytest
-`record_property` with JUnit xunit2, not test failures.
+Both Foundry plan YAMLs and the preflight request `identity.model:
+gpt-5.6-sol`; the judge label also matches. Their actual
+`foundry_identity.deployment` is null, as is the generated runtime template
+in `gpt56_pilot_config_bundle.py::_runtime`.
+The referenced `exp035_codex_foundry_full220.yaml` instead has
+`condition_a.model.deployment` and `execution.codex.model` set to `gpt-5.4`.
+That historical baseline must not be dispatched unchanged as the Sol pilot.
 
-Logs and JUnit reports are retained under
-`/home/dev/.copilot/session-state/cc2a9ac6-2d8f-48e3-b68e-6a87c5d035e1/files/`
-as `identity-tests.*`, `pilot-contracts.*`, `budget-contracts.*` (initial
-dependency failure) and `budget-contracts-restored.*` (successful rerun).
+`codex-foundry-connection-diagnostic.yml` requires a deployment string with no
+default and forwards `inputs.deployment` through `DEPLOYMENT` to
+`--deployment`; it does not hard-code `gpt-5.6-sol`.
+`batch-run.yml` reads deployment from the selected experiment's
+`condition_a.model.deployment`. Neither file proves the historical dispatch
+input. Without the archived diagnostic input/result, exact deployment-name
+agreement is **unverified**, not a confirmed match or a confirmed live mismatch.
+No Azure, identity-platform, GitHub API or workflow operation was used.
 
-### Evidence boundary and remaining work
+### Verification
 
-The inspected failing CI head is
-`dcf97b68663084b12472b8a8fd8d81799c47e938` (run `39932101762`).
-The newly inspected and tested fix head is
-`cee9111d998f08015d767fb9fb2ad7be5326ee45`; neither inspection nor the
-owner's push authorization is final-source review approval. No new review
-approval is claimed. The code delta remains one expected-message line;
-all other delivery changes are completion documentation.
+Python 3.10.12 / pytest 9.1.1. Final focused invocations used an empty inherited
+environment, explicit PATH and installed user-package PYTHONPATH, offline
+Hub/dataset settings, disabled plugin autoload and no pytest cache:
 
-Only the approved branch push is authorized; no merge, manual workflow
-dispatch, paid model/grader call or secret-value access is part of this task.
-New automatic CI and final-source review, plus the existing frozen-grader
-binding and live-admission gates, remain required. These offline tests do not
-authorize benchmark execution or change any spent/uncertain right.
+```text
+python3 -m pytest -m "not integration" -o addopts= -p no:cacheprovider --tb=short -q
+  tests/test_gpt56_pilot_caps_draft.py tests/test_gpt56_pilot_deployment_binding.py
+```
+
+**165 passed, 0 failed (114.95s)** in the proposal worktree.
+The unchanged `tests/test_sol_source_registration.py` additionally passed
+**1 passed, 0 failed (14.67s)** at the inspected base in a temporary clean
+source-check worktree. That test requires an entirely clean Git status.
+The earlier combined invocation had **165 passed, 1 failed (117.67s)**:
+the real source-registration guard correctly rejected the untracked proposal
+files. It was not skipped, mocked or weakened; the clean-base rerun passed.
+An initial empty-environment attempt could not import user-installed pytest;
+explicit PYTHONPATH resolved that without installing any dependencies.
+An earlier narrow selection separately passed seven tests; counts are not
+cumulative unique-test totals.
+
+### Remaining work and boundary
+
+Owner approval of these provisional noncurrency caps and a USD cap; archived
+connection deployment comparison and externally reviewed account/deployment,
+served-model/version and Max/Long evidence; native request counting plus
+per-task/per-pilot hard enforcement including partial/uncertain usage;
+frozen-grader binding, prepared-input and live wire/host/usage evidence; and
+independent review of the fixed final execution source remain required.
+No model call, grading, dispatch, push, merge, approval or secret read occurred.
+All completion facts stop before any delivery/merge outcome.

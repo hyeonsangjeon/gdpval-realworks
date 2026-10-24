@@ -13,6 +13,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Draft inert, evidence-cited native caps for the five-task Foundry Sol pilot
+  from inspected base `2bc77ad14cf7205694d11aa5909a9ea67cbb2891`, without
+  changing sealed plans, runtime enforcement or launch rights. Account for
+  all four attempts per task and keep the USD cap null as an owner decision.
+  The native-call number is explicitly a provisional heuristic, not measured
+  native usage. Record the historical baseline's `gpt-5.4` deployment versus
+  the requested `gpt-5.6-sol` label, null deployment bindings, and unavailable
+  diagnostic archive; actual deployment-name agreement remains unverified.
+  Draft/deployment contracts passed 165 tests; the clean-base source contract
+  passed one test separately after correctly refusing the dirty proposal
+  worktree. Native enforcement, owner approval, archived deployment evidence,
+  frozen-grader/live gates and independent final-source review remain required.
+  No model calls, workflow dispatches, grading or push.
+
 - Add a prospective source profile for the existing five-task Foundry Sol
   pilot, without changing its study, run identity, historical registrations,
   judge, limits or execution rights. The existing preflight checks an explicit
