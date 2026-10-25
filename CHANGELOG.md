@@ -13,6 +13,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record the fixed-source registration guard review and complete related
+  CI-derived offline selection at clean
+  `e0fa32ef30dea02da3ee918b40ae08e744d67e14`, tree
+  `b67cd5e4d4b956b07850addbfbd1954330d341a0`: **6002 passed, 0 failed,
+  0 errors, 0 skipped, 3 warnings** in **15178.96s**, wrapper **15180.42s**,
+  exit **0**. Preserve the first full-selection watchdog timeout separately:
+  **3600.02s**, exit **124**, no final pytest summary or JUnit. The successful
+  invocation used the same source, assertions and 67-module selection, with a
+  verification-only **TERM22500s/KILL5s** ceiling reflecting the combined CI
+  scope. No production deadline or cap changed. Retain the three reported
+  `record_property`/xunit2 warnings without suppression. The two-file
+  `9511b3d70..e0fa32ef3` review found **3 maintained / 4 strengthened /
+  0 weakened** condition rows: preserve caps seals and integer checks; add
+  predecessor/delta/held-blob checks and closed old-profile selection. No
+  production, test or expected-value correction was needed; only completion
+  records change. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact
+  commands, source/tree, log/JUnit/file hashes, separate prior proofs and
+  unchanged **11** launch blockers (**0 cleared / 11 retained / 0 new**).
+  Final-head owner review and CI remain outstanding. No live/model call,
+  auth, external-network access, dispatch, grading, push, PR or finite-right
+  reset occurred.
+
 - Add the 2026-10-25 source-only successor for the same Foundry Sol pilot. Keep
   the sealed 10-23 registration, original plan, caps draft and all thresholds
   unchanged. Refresh the four caps source hashes plus the necessary selector

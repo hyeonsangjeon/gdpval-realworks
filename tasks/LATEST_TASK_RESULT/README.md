@@ -1,131 +1,148 @@
 # Latest task result
 
-## Native pilot source registration refresh (2026-10-25 13:20 KST order)
+## Native pilot guard review and combined offline verification
 
-The new 2026-10-25 source profile passes `source_plan_snapshot` and reaches
-`inspect_plan`: **58 source hashes match, 0 mismatch**, and
-`configuration_valid=true`. The bounded plan-only command exits **2**, because
-all **11** existing launch blockers remain. This clears only the earlier
-`pilot_source_registration_refused`; it does not authorize a pilot, retry or
-full-220 run.
+For the **2026-10-25 15:10 KST order**, the complete related CI-derived
+selection reported **6002 passed, 0 failed, 0 errors, 0 skipped, 3 warnings**.
+Pytest took **15178.96 seconds**; the outer command took **15180.42 seconds**,
+exit **0**. JUnit contains **6002 unique cases**, including the final real
+source-registration test. No production code, test, assertion or expected
+value needed correction. This task changes only this record and CHANGELOG.
 
-The first related test invocation reported **4 passed, 1 failed, 0 skipped**.
-After correcting the test's stale observed grader hash, only that failed node
-ran again: **1 passed, 0 failed, 0 skipped**. These are separate proofs, not a
-new combined five-test pass. No model/network call, authentication, preparation,
-dispatch, grading, push or PR occurred.
+The requested changed-line review found no weakened or deleted validation
+condition. This is bounded self-review and offline verification, not independent
+approval, a pilot result or execution authority. All **11** launch blockers remain.
+
+The first full-selection command hit its verification watchdog at **3600.02
+seconds**, exit **124**, without a final pytest summary or JUnit. Its log is
+retained separately; partial progress is not pooled with the completed run.
 
 ### Source and scope
 
-Worktree: `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`;
-branch: `codex/gpt56-native-pilot-caps-20261024`. It was clean at each tested
-commit. Other worktrees were not changed.
+Worktree: `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`.
+Branch: `codex/gpt56-native-pilot-caps-20261024`.
 
-| Source role | Full HEAD | Tree |
+| Role | Identity |
+| --- | --- |
+| Before the registration work | `9511b3d70719be2503d779b3fd17dcb07f49e312` |
+| Reviewed and tested HEAD | `e0fa32ef30dea02da3ee918b40ae08e744d67e14` |
+| Reviewed and tested tree | `b67cd5e4d4b956b07850addbfbd1954330d341a0` |
+| Before and after both body invocations | Clean; same HEAD/tree |
+
+The final local child changes completion records only. Its exact HEAD/tree and
+record hashes are in the evidence directory's `final-source.txt`. Runtime,
+test, registration and workflow bytes remain those of the tested HEAD. The
+documentation commit is not relabeled as a tested or independently approved
+source revision. Other worktrees were not changed by this task.
+
+The full two-file diff `9511b3d70..e0fa32ef3` was reviewed in
+`batch-runner/gpt56_sol_codex_pilot_preflight.py` and
+`batch-runner/gpt56_pilot_wire_receipt.py`:
+
+| Changed function or condition | Verdict | Evidence |
 | --- | --- | --- |
-| Starting caps source | `9511b3d70719be2503d779b3fd17dcb07f49e312` | `8ee899bc98550c0aaed033505deeed6fa487ec30` |
-| Registration implementation; first five-node invocation | `6fffb66a3bb43197bc5ccd7d5ac53bc9c864c577` | `d7aa3b8dbac9dc152c68f8024c398db3a879f10e` |
-| Test-only correction; one-node proof and plan-only command | `58a7f38abcc90dc63f490c444b5f83e7f05be82f` | `34146495094d0a58df72392bcd19ab224282e267` |
+| `wire._native_caps`, line 95 | Maintained | `SOURCE_PROFILE_PREVIOUS` preserves the exact 10-23 path. The 7343-byte read, fixed SHA256, positive-integer checks and cap values are unchanged. |
+| Preflight constants, line 49 | Maintained | Select the authorized source-only successor while retaining finite refresh/role sets, digest syntax and non-source field checks. |
+| `source_plan_snapshot`, line 295 | Strengthened | Require the predecessor's exact SHA256 and at most 65536 bytes; failures remain closed refusals. |
+| `source_plan_snapshot`, line 313 | Strengthened | Require exactly five changed roles against the predecessor, in addition to the existing exact refresh-set comparison. |
+| Held roles/rereads, lines 319 and 344 | Strengthened | Add predecessor bytes to archive membership/equality and the existing held-path, clean HEAD/tree, imported-file, admission and final rereads. |
+| Safe source report, line 364 | Maintained | Add fixed predecessor/reason metadata; launch/retry authority remains false and exceptions remain sanitized. |
+| `main`, line 932 | Strengthened | Explicit old-profile selection enters source verification and refuses at the changed source rather than bypassing those checks. |
 
-The final local child changes only this record and CHANGELOG. Its full identity
-and record hashes are in the evidence directory's `final-source.txt`; tested
-source/test/profile bytes remain those of `58a7f38ab`. The
-`--reviewed-source-sha` argument identifies local source bytes, not independent
-approval. Final-source review and CI remain outstanding.
+The review has **3 maintained / 4 strengthened / 0 weakened rows**. No source
+correction was justified. It covers changed lines in these two files, not all
+pre-existing execution paths. The **6640-byte** full-index review patch is
+SHA256 `cfb49ddad5b4ca09a47fb6422923aaf09068a4f984ce63771fa5270351a5d262`.
 
-Changed files under `batch-runner/`:
+### Complete offline selection and command
 
-- `experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261025.yaml`:
-  source-only successor for the same run, with the predecessor, reason and hash.
-- `gpt56_sol_codex_pilot_preflight.py`: select the successor, require exactly
-  five changed source roles against the sealed predecessor, and retain its
-  bytes in the existing held Git-blob checks and final rereads.
-- `gpt56_pilot_wire_receipt.py`: keep the caps draft's exact old registration
-  reference through `SOURCE_PROFILE_PREVIOUS`; no cap or guard is relaxed.
-- `tests/test_sol_source_registration.py` and
-  `tests/test_gpt56_sol_codex_pilot_preflight.py`: cover the successor, exact
-  delta, predecessor/stale-pin refusal, preserved caps loading and old-plan
-  source refusal.
+The selection recombines `.github/workflows/backend-tests.yml` targets at
+lines 444, 451-458, 518, 577, 635, 693, 752 and 814, plus the related caps,
+provider, remaining-caps and source-registration modules in the general
+non-integration job. Complementary preflight/wire partitions are combined
+without a `-k` filter. This is the whole related selection, not the whole repo.
 
-The five changed pins are the four already-drifted caps files
-(`core/codex_runner.py`, `step2_run_inference.py`, `gpt56_pilot_wire_receipt.py`,
-`gpt56_pilot_runtime_caps_usage.py`) plus the updated source selector. The
-58-role set and every non-source plan field are unchanged. Existing clean
-commit/tree, imported-file, held-blob, admission and final-reread checks remain.
-An explicit 10-23 request at this changed source still refuses.
+Collection found **67 modules / 6002 nodes / 0 duplicates**: **122** caps/provider/
+remaining-caps, **917** pilot-contract, **341** preflight, **155** wire,
+**1537** budget non-readout, **2929** budget readout and **1** source-registration
+case. Collection took **11.53 seconds** in pytest, **12.13 seconds** outside,
+exit **0**. Collection is separate from body execution and pass counts.
 
-| Registration | Bytes | Raw SHA256 | Canonical plan seal |
-| --- | ---: | --- | --- |
-| Unchanged 10-23 predecessor | 17227 | `506de35370ffe6d54e6decb2459a4f4abda47136d550c010086b0fffd5c1e482` | `d67216b5d74149c8f4516adb54712269aeb6f603fa507986625c344d83d3bde4` |
-| New 10-25 successor | 17430 | `f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2` | `c501e11418c4cefdbbcec143b9c53c8092b07660779bcf75f99d450a48f49e7b` |
+Evidence directory: `/ai-work/copilot/_tmp/p5-native-combined-review.gCP39k/`.
+The completed command, from this worktree's `batch-runner/` directory, was:
 
-The original active plan remains SHA256
-`f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd`.
-The **7343-byte** caps draft remains SHA256
-`7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`.
-No frozen plan, hash record, grader pin, shared Git helper, workflow, dependency,
-model, host or threshold was changed.
+```bash
+timeout --signal=TERM --kill-after=5s 22500s env -i \
+  PATH=/usr/local/bin:/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+  PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 \
+  /ai-work/copilot/_tmp/ghcp-sol-gate-ci-20261024-venv/bin/python \
+  -m pytest -q -ra --tb=short --durations=20 -o addopts= -p no:cacheprovider \
+  -m 'not integration' \
+  --junitxml=/ai-work/copilot/_tmp/p5-native-combined-review.gCP39k/junit-combined.xml \
+  tests/test_gpt56*.py tests/test_codex_budget_pilot*.py \
+  tests/test_sol_source_registration.py
+```
 
-### Offline proof
+The existing Python **3.10.12** environment was reused. No dependency was
+installed or HOME/CODEX_HOME override declared. Fixtures use synthetic inputs,
+mocked providers and local transports/children, not live study execution.
 
-Evidence directory: `/ai-work/copilot/_tmp/p5-native-source-20261025.4Hj6Eu/`.
-`invocation.txt`, `invocation-fixed.txt` and `preflight-invocation.txt` retain
-the exact commands, source identities and working directories. All body
-commands used **TERM120s/KILL5s**, `env -i`, the existing Python 3.10 environment,
-offline Hub/dataset flags, disabled bytecode/plugin autoload/pytest cache and
-local-only Git settings. No HOME or CODEX_HOME override was declared.
-
-| Invocation | Result | Pytest elapsed | Wrapper wall | Exit |
+| Invocation at the same clean HEAD | Outcome | Pytest seconds | Wrapper seconds | Exit |
 | --- | --- | ---: | ---: | ---: |
-| Five related nodes at `6fffb66a3` | 4 passed, 1 failed, 0 skipped | 5.70s | 6.10s | 1 |
-| Only the failed source-registration node at `58a7f38ab` | 1 passed, 0 failed, 0 skipped | 5.29s | 5.64s | 0 |
-| New-profile plan-only preflight at `58a7f38ab` | source verified; inspect reached; launch refused | not a test | 1.51s | 2 |
+| TERM3600s/KILL5s | Watchdog timeout; complete counts unknown; no JUnit | unknown | 3600.02 | 124 |
+| TERM22500s/KILL5s | 6002 passed, 0 failed, 0 errors, 0 skipped, 3 warnings | 15178.96 | 15180.42 | 0 |
 
-Collection reported **5 nodes in 2.76s**, outer **3.16s**, exit **0**. The first
-selection comprised `test_sol_source_registration`, the two current/stale-hash
-`test_active_grader_template_source_foundry_preflight` cases, and the two
-missing/drifted `test_native_request_cap_refuses_unsealed_caps_before_a_listener`
-cases. Only `tests/test_sol_source_registration.py::test_sol_source_registration`
-was rerun. Local Git/archive and adapter checks are real; provider, launch,
-preparation and external effects are forbidden-call fixtures, not live proof.
+The first watchdog used one CI job's ceiling, which was too short for this
+combined selection. The corrected **22500-second (375-minute)** ceiling reflects
+seven **45-minute** jobs and one **60-minute** job; it bounds local verification
+only. No production deadline, cap, assertion or test membership changed.
+`--durations=20` adds reporting only. No separate collect-only command reran.
 
-The failed node had already passed source registration and correctly refused
-identity compilation with `grader_template_source_drift`. Its expected
-*observed current* grader closure was stale. The test-only correction changes
-`b87877b47aab42d5b32f12222dfa515c8a94a08f316cbbe5e65cb13715c97cf4`
-to `0b5a59714e10b5193c88c32e934719741c8c17d4a433e565db38c21462802106`.
-The frozen expected closure remains
-`47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf`;
-the mismatch and required refusal are preserved. No failed artifact was replaced.
+JUnit reports **15178.701 seconds** for its suite and **6.411 seconds** for the
+final `test_sol_source_registration` case. These are distinct from pytest's
+displayed elapsed time and the shell wrapper's wall time. No known test/wrapper
+process-group member remained after completion.
+
+There were no assertion failures to classify as stale expectations or actual
+regressions. The earlier exit **124** is a verification-watchdog outcome, not
+such an assertion failure. All three `record_property`/xunit2 warnings remain:
+two parametrizations at `tests/test_codex_budget_pilot_grading.py:611` and one
+node at `tests/test_codex_budget_pilot_grading_source.py:115`. No warning was
+suppressed and no unrelated fixture or report format was changed.
+
+### Retained proof and unchanged bytes
 
 | Evidence file | Bytes | SHA256 |
 | --- | ---: | --- |
-| `test.log` | 895 | `28fdc9c833d7bdaf0b2c0d48c24429586962df9609bf3f57681338e2fea2c019` |
-| `junit.xml` | 1775 | `e50e134c6ccedae61941a6cdb7c4d99235421d940b4c8cc3dd1fdd2f3666f4a8` |
-| `test-fixed.log` | 98 | `747939a7ad1389d2150871a2e1986fed8e65dacd2c7b220577f2b4c3b0975d28` |
-| `junit-fixed.xml` | 360 | `e412507803208b44415b161fddb0a93a39f9279d0e2be63b3fcd2d3649d3d91f` |
-| `preflight.json` | 2451 | `2b6a06d4f8730de24a6f59dd26aea14b9837a0ddbe78805cacc3597c1645ee42` |
-| `tested-code.patch` at first test HEAD | 31842 | `e672db2e18b8063c413d8c4719527f95967702e04b8d70a01523222789057aa0` |
-| `tested-code-fixed.patch` (full-index, starting source to final tested code) | 32854 | `23d8da3687fe77219b97c8b4e8f4e297bf930cfbc4ae72a87e86c06e42c94bce` |
+| First `test.log` | 1529 | `6a6839310bdb801398d16e62261cf47eb1375ef3fa12d37301035874c90a88de` |
+| First `timing.txt` | 46 | `8ac2858493a4c579756d1e83f8837d36aeef049221004f1311c79507f4f69e40` |
+| `test-combined.log` | 10908 | `b405c81641e13481397a2d92ef70223e7cb60143c57f1e5dd0b54507f38cf580` |
+| `junit-combined.xml` | 945098 | `5d73d3cb35be4b8c27cd23b3420c80dbe437dca7291cad61465deeb24da521ea` |
+| `timing-combined.txt` | 46 | `6c2fb860cdfefb0c1031ada37d7a16686642b98d39c9e026e52256deba1b987d` |
+| `reviewed-source.patch` | 6640 | `cfb49ddad5b4ca09a47fb6422923aaf09068a4f984ce63771fa5270351a5d262` |
 
-`evidence.sha256` is SHA256
-`7b17de963c0fbeedcd7a96344ffa7029461f826679789e4e538ea04e796de813` and includes
-commands, collection, separate timing files, both proofs, the empty preflight
-stderr and tested-file hashes. `blocker-comparison.json` is SHA256
-`aa6cf9ab4653330794dfde04ac025153e70f6c20ef01dee5432a8aabfae7a6c4`.
+`invocation.txt` retains collection and the interrupted command, SHA256
+`2d808b89b819e9089891f761c4817861356ee1a3ac26fae044b50f146c36e460`.
+`invocation-combined.txt` records the completed command/result, SHA256
+`20074bfb8c559f0f9be06f66b541cd7803984deb32f8985540bea4f6a30ad8f8`.
+`source-hashes.sha256` is SHA256
+`ea5e228e3462e479dbf177fd16160cd26053326276efb0b13d8d55439b9d3d47`;
+all seven recorded runtime/test/registration/workflow hashes still match.
+The 10-23 registration remains
+`506de35370ffe6d54e6decb2459a4f4abda47136d550c010086b0fffd5c1e482`;
+the 10-25 successor remains
+`f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2`.
+The **7343-byte** caps draft remains
+`7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`.
+No plan, cap, source registration, hash algorithm, shared helper, workflow,
+dependency, model, host, frozen grader or permission was changed.
 
-### Preflight comparison and remaining conditions
+### Remaining gates and history
 
-The command selected the new `..._source_20261025.yaml` explicitly and passed
-`--reviewed-source-sha 58a7f38abcc90dc63f490c444b5f83e7f05be82f`.
-`source_registration.status=source_verified`, `configuration_valid=true`,
-`launch_allowed=false` and `full_220_allowed=false`. Source launch/retry authority
-remain false; the evidence gate has no consumed bundle or reviewed-source
-approval and returns `foundry_evidence_gate_refused`.
-
-Against the leader-provided 12:10 baseline, the source-registration refusal is
-cleared. Of the separate **11** launch blockers, **0 cleared, 11 retained,
-0 new**:
+No standalone plan-only preflight reran and no new launch evidence was added.
+The previously recorded **11** blockers remain: **0 cleared / 11 retained /
+0 new**. Passing this selection does not close them:
 
 ```text
 foundry_account_project_deployment_identity_unverified
@@ -141,23 +158,23 @@ actual_pilot_deployment_not_prepared
 prepared_request_capture_unverified
 ```
 
-The legacy account/project blocker name does not require a child-project ID
-for `direct-v1`. This task supplies no new account/deployment evidence. Caps
-remain **32/attempt, 128/task, 640/pilot**, **1,800 seconds**, and **300,000 input /
-10,000 output tokens**. The token limits remain reported-overrun stops, not
-hard provider ceilings; monetary cap remains null. Source consistency does not
-close served-model/version, Max/Long, private-input/capture, sandbox, usage/tariff,
-dispatch/grading identity or frozen-grader admission gaps.
+The legacy account/project name does not require a child-project ID for
+`direct-v1`. Caps remain **32/attempt, 128/task, 640/pilot**, **1800 seconds**,
+and **300000 input / 10000 output tokens**. Reported token-overrun stops are
+not hard provider token ceilings; the monetary cap remains null. Owner review
+of the final HEAD, CI and separate live evidence/authorization gates remain
+outstanding. No publication or live execution is authorized by these results.
 
-The preceding **165-pass** caps proof, failed reproducer, tokenizer investigation
-and their separate older proofs remain in the
-[immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/9511b3d70719be2503d779b3fd17dcb07f49e312/tasks/LATEST_TASK_RESULT/README.md).
-They were not rerun or pooled here. Task3 run `37756891578` remains uncertain,
-spent and nonretryable; no finite right was consumed, restored or retried.
+The [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/e0fa32ef30dea02da3ee918b40ae08e744d67e14/tasks/LATEST_TASK_RESULT/README.md)
+retains the separate **4-pass/1-fail** registration proof, its **one-node pass**,
+the **58-hash** plan-only refusal and the link to the earlier **165-case** caps
+proof. These results are not pooled with each other or the new complete
+invocation. Task3 run `37756891578` remains uncertain, spent and nonretryable;
+no finite right was consumed, restored or retried.
 
-`experiment-report-en` kept observations, separate test populations and live
-limits distinct; `im-not-ai-en` was applied after the protection brief. Numbers,
-source identities, hashes, refusal conditions and uncertainty were reconciled.
-No experiment redesign, UI work or specialist endorsement applies. Existing
-Git identity was retained, with no attribution trailers; publication and
-execution still require separate authority.
+`experiment-report-en` kept test populations, timing units, observations and
+live limits separate; `im-not-ai-en` preserved protected facts and hedges. The
+protection brief/reconciliation are retained with the evidence. No experiment
+redesign, UI work or specialist endorsement applies. Existing Git identity was
+retained without attribution trailers. No live provider/auth/external-network
+call, model run, grading, dispatch, push or PR occurred.
