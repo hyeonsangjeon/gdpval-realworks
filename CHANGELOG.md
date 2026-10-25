@@ -46,6 +46,26 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Trace the installed Copilot 1.0.79 JSONL writer: it excludes call usage,
+  context snapshots and model-change events, despite their presence in the
+  SDK schema. No Codex selector was found in the inspected installed
+  selectable interfaces. Desk 1.0.103 schema equivalence and applied Max/1M
+  remain unverified; propose 1.0.79 only as an offline reference, without
+  changing a pin. Parse the writer's separate CLI result envelope with strict
+  shape/session checks and safe allowlisted metadata. A zero result grants
+  neither completion nor settings authority and does not release process
+  supervision; nonzero results refuse with `cli_result_failed`. Add a filtered
+  synthetic stdout fixture and fourteen adapter cases. One combined offline
+  run on clean `59c23a1446533cc988cf74840cd00eb1a23c3605` reports **313 passed,
+  0 failed, 0 skipped in 16.50s**, wrapper **16.66s**, exit **0**, including
+  Auto/BYOK refusals. Keep the earlier **295 passed/4 failed** and separate
+  **4 passed** evidence distinct. No real CLI/help/authentication/network/model
+  invocation, plan/cap/collector/workflow change, dispatch, grading or push.
+  See the [installed harness/stdout audit](docs/ghcp-sol-actions-gate.md#installed-harness-and-stdout-audit-2026-10-25-1350-kst)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md). Local commit only;
+  actual VM/harness binding, complete event delivery and applied-settings
+  proof remain gates, not inferred authority.
+
 - Check installed Copilot/Codex help and packaged runtime schemas without
   starting a session. Record host executable versions **1.0.103 / 1.0.79**
   and Codex **0.144.5**, separately from package metadata and unverified VM

@@ -4,6 +4,125 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Installed harness and stdout audit, 2026-10-25 13:50 KST
+
+**The inspected installed selectors do not provide a Codex harness command,
+and the auditable 1.0.79 JSONL writer omits required settings metadata.** This
+is an installed-source finding, not a live session observation. No Copilot or
+Codex executable, including help/version commands, ran during this task.
+The versions below refer to the preceding audit, not a new VM measurement.
+
+### Command and harness: partial
+
+The preceding noninteractive syntax remains partial: `-p <prompt> --model
+gpt-5.6-sol --reasoning-effort max --context long_context --output-format json
+--stream on`, with updates and client telemetry disabled. It selects a model,
+effort and context tier, not a verified GHCP-to-Codex bridge or applied 1M.
+The system platform package is
+`/usr/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64`.
+Its `app.js:5600` describes `--agent <agent>` as "Specify a custom agent to use".
+The built-in registry at `app.js:287` contains `explore`, `task`, `code-review`,
+`rubber-duck`, `research`, `rem-agent`, `security-review` and `general-purpose`,
+not Codex. The inspected changelog describes Codex models/custom agents, not
+a Codex harness selector. Both Copilot package README files describe the
+Copilot coding-agent harness at line 5.
+
+`schemas/api.schema.json:12638` and
+`copilot-sdk/generated/rpc.d.ts:2594` name optional `codex_agent_enabled` as an
+account feature. This is neither an agent definition nor a selection command;
+no account query was made. Thus a Codex selector is **absent from the inspected
+installed selectable interfaces**. This does not establish absence from an
+opaque binary's internals, external plugins or other products.
+
+### Settings fields: schema confirmed, applied settings unverified
+
+The following locations are in the system package's
+`schemas/session-events.schema.json`, SHA-256
+`350df35914d4e2fdbadb8932ca66f1e58d759aad79b5be9291857c9052d31301`.
+
+| Event field | Schema lines | Meaning and limit |
+| --- | --- | --- |
+| `session.start.data.selectedModel`, `reasoningEffort`, `contextTier` | 13065–13088 | Optional selected configuration; tier may be null. Not per-call served/applied evidence. |
+| `assistant.turn_start.data.model` | 1186–1208 | Optional turn model label, not provider attestation. |
+| `assistant.usage.data.model`, `reasoningEffort` | 1338–1543 | Required call model label, optional effort; usage is ephemeral. |
+| `session.usage_info.data.tokenLimit` | 15936–16036 | Numeric session snapshot, not call-specific context attestation; ephemeral. |
+| `session.model_change.data.newModel`, optional effort/tier/`cause` | 8686–8745 | Can describe a switch, but only if the event is delivered. |
+
+`ContextTier` at line 4897 allows `default` or `long_context`; the schema has
+no event field named `modelContextWindow`. Documented model-change causes
+include `rate_limit_auto_switch` and `refusal_fallback`; these describe possible
+events, not an observed switch. None of these fields proves an applied Max
+setting or numeric 1M context, and start/turn labels cannot replace missing
+call metadata in the existing fail-closed collector.
+
+### Delivery: confirmed omissions, unverified completeness
+
+The 1.0.79 `app.js:2744` exclusion set `w6r` and writer `ron` filter
+`assistant.usage`, `session.usage_info`, `session.model_change`, `session.idle`
+and `session.shutdown` from stdout. The JSON-mode listener is attached at
+line 2821 and forwards through `ron` at line 2823. This is a concrete delivery
+gap, not merely a lack of evidence that all SDK events reach the CLI. Saved
+session logs also cannot restore ephemeral usage/context events.
+
+`app.js:2745` defines `ion`, invoked at line 2844, which writes a final
+`type: "result"` object with `timestamp`, `sessionId`, `exitCode` (0 or 1) and
+aggregate `usage`. It is not a `data`-bearing session event. The writers append
+newlines, but that does not establish prompt, complete delivery or a flush
+barrier. A zero result, EOF or selected `long_context` is not completion or
+settings authority. Aggregate usage is not a per-call model/context record
+or a verified charge.
+
+### Version recommendation: offline reference only
+
+Prior direct executable observations were Desk **1.0.103** and system
+**1.0.79**. The Desk platform directory
+`/home/dev/.local/share/nas-copilot-desk/copilot-cli/node_modules/@github/copilot-linux-x64`
+contains `copilot`, `package.json`, `README.md` and `LICENSE.md`; its metadata
+says **1.0.98**. It has no standalone schema, built-in registry or changelog,
+and the executable is opaque ELF. An exact 1.0.103-versus-1.0.79 schema diff is
+therefore **unverified**; no 1.0.79 field is attributed to 1.0.103 stdout.
+Propose **1.0.79 as an auditable offline reference only**, because the schema,
+options and serializer are inspectable. No version pin changed. Its filtered
+JSONL is not a sufficient live settings-evidence channel.
+
+### Source-supported correction and proof
+
+The adapter now separates the CLI result shape from session events. It checks
+the exact top-level keys, a bounded timestamp, matching observed session ID,
+integer 0/1 exit code and object-shaped usage. It records only a safe
+`cli_result` observation/exit code, with `completion_authority=false` and
+`settings_authority=false`; raw identities, usage, private paths and errors
+are not projected. Nonzero summaries refuse with `cli_result_failed`;
+malformed, duplicate or post-result frames use `session_event_stream_refused`.
+After a zero result it still supervises until actual EOF/process exit or the
+unchanged deadline. No command builder or collector guard was changed.
+
+The new **synthetic** five-line filtered-stdout fixture contains four session
+events plus the CLI result. All four session events validate against the
+installed Draft-07 schema; the CLI-only result is outside that schema. The
+filtered fixture still refuses missing model/effort/context evidence, even
+when start configuration says Sol/Max/long_context. Other new tests combine
+SDK events and result summaries synthetically, not as observed CLI output;
+they check summary refusal, private-canary exclusion and deadline cleanup
+after a zero result from a hanging fake process. No raw session was read.
+
+On clean `59c23a1446533cc988cf74840cd00eb1a23c3605`, tree
+`49033ac832de59987d19d41817f3fc6d6f4567ad`, one combined gate invocation reports
+**313 passed, 0 failed, 0 skipped in 16.50s** (wrapper **16.66s**, exit **0**):
+**138 Actions + 93 VM + 82 adapter**, including Auto/BYOK refusal. Fourteen
+cases are new. The earlier **295 passed/4 failed** and separate **4 passed**
+remain historical, not pooled. Commands use **120s TERM + 5s KILL**, cleared
+environment/offline flags and fake executables with existing network guards.
+[The current record](../tasks/LATEST_TASK_RESULT/README.md) binds exact commands,
+source/artifact hashes and the later documentation-only final HEAD.
+
+The adapter's default-disabled state and dry-only workflow are unchanged. The actual
+VM/harness binding, an unfiltered complete/prompt event channel, served/applied
+model/Max/1M evidence, approved tool cap, authentication isolation/disposal,
+input/grader bindings and fixed-HEAD review/CI remain required before any
+separate execution decision. Event-based cancellation is not pre-effect
+admission. No launch, retry, cost, score or study-completion claim is made.
+
 ## Installed CLI contract audit, 2026-10-25 12:15 KST
 
 **The exact GHCP-to-Codex launch command remains unconfirmed.** Local help
