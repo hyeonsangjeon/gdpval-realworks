@@ -13,6 +13,27 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Document the fixed Codex SDK/CLI **0.147.0** hard-token-cap investigation at
+  `af685f5c4a436a7f476a41c5cf4f44a702c0a67d`, tree
+  `96ca35aa8f8da94a5d6bf8c9ea5f33a3bb93494f`. **300,000 input / 10,000 output
+  tokens per attempt** remain client post-checks; generic Responses
+  `max_output_tokens` semantics do not establish the Codex-to-Foundry Sol path
+  or an attempt-wide sum. Preserve `token_hard_limit_enforced=false`, all
+  caps, sealed registrations and runtime bytes. The installed CLI generated
+  its experimental app-server schema offline under **TERM60s/KILL5s**,
+  **exit 0**, **0.041s** Bash wall time; schema generation is not a test or
+  provider observation. No pytest or preflight replay and no new JUnit.
+  Retain the prior **34-pass** proof and **exit 2 / inspect_plan** result at
+  `bbc12b694` separately from the **6002-pass** proof at `e0fa32ef3`.
+  The unchanged ledger remains **0 cleared / 11 retained / 0 new**, not a
+  fresh preflight verdict. The [contract report](batch-runner/docs/gpt56_native_hard_token_contract.md)
+  and [LATEST](tasks/LATEST_TASK_RESULT/README.md) record field/schema evidence,
+  hashes and the missing model-specific server/serializer contract. Deployment
+  quota controls remain owner/external. Only local documentation commits;
+  no runtime/plan/registration change, install, network/auth/model call,
+  dispatch, grading, push, PR or finite-right reset. Final-source review/CI,
+  environment approval and live-evidence gates remain.
+
 - Require the Foundry pilot preflight to match deployment evidence, identity,
   configuration and input hashes to the preceding gate results, and to match
   the capture's deployment digest and reviewed source. Retain the existing
