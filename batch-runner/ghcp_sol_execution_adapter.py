@@ -47,6 +47,12 @@ def _receipt(task_id):
         "subprocess_returncode": None,
         "elapsed_seconds": None,
         "event_stream_eof_observed": False,
+        "cli_result": {
+            "observed": False,
+            "exit_code": None,
+            "completion_authority": False,
+            "settings_authority": False,
+        },
         "limits": {
             "timeout_seconds": gate.PROPOSED_TASK_TIMEOUT_SECONDS,
             "max_turns": gate.PROPOSED_TASK_MAX_TURNS,
@@ -121,9 +127,10 @@ def _session_events(process, deadline, receipt):
     total = count = 0
     pending = bytearray()
     eof = False
+    session_id = None
 
     def decode(line):
-        nonlocal count
+        nonlocal count, session_id
         _remaining(deadline)
         if len(line) > gate.MAX_EVENT_LINE_BYTES:
             raise _Stop("session_event_stream_refused")
@@ -133,8 +140,33 @@ def _session_events(process, deadline, receipt):
         event = json.loads(line, object_pairs_hook=gate._unique_object,
                            parse_constant=gate._invalid_constant)
         if (type(event) is not dict or type(event.get("type")) is not str
-                or type(event.get("data")) is not dict):
+                or receipt["cli_result"]["observed"]):
             raise _Stop("session_event_stream_refused")
+        if event["type"] == "result":
+            # Copilot 1.0.79 app.js:2745/2844 writes this CLI-only summary,
+            # not a session event. Never project its session ID, timestamp,
+            # private file list, usage or cost, or substitute them for the
+            # assistant.usage/session.usage_info events filtered by its CLI.
+            if (set(event) != {"type", "timestamp", "sessionId", "exitCode", "usage"}
+                    or type(event["timestamp"]) is not str
+                    or not 0 < len(event["timestamp"]) <= 64
+                    or session_id is None or event["sessionId"] != session_id
+                    or type(event["exitCode"]) is not int or event["exitCode"] not in (0, 1)
+                    or type(event["usage"]) is not dict):
+                raise _Stop("session_event_stream_refused")
+            receipt["cli_result"]["observed"] = True
+            receipt["cli_result"]["exit_code"] = event["exitCode"]
+            if event["exitCode"] != 0:
+                raise _Stop("cli_result_failed")
+            _remaining(deadline)
+            # Keep supervising through EOF/process exit; this is not a flush
+            # barrier or permission to leave a child running after a summary.
+            return None
+        if type(event.get("data")) is not dict:
+            raise _Stop("session_event_stream_refused")
+        if event["type"] == "session.start":
+            candidate = event["data"].get("sessionId")
+            session_id = candidate if type(candidate) is str and 0 < len(candidate) <= 256 else None
         _count_start(event, receipt, seen)
         _remaining(deadline)
         return event
@@ -156,7 +188,9 @@ def _session_events(process, deadline, receipt):
                         eof = True
                         receipt["event_stream_eof_observed"] = True
                         if pending:
-                            yield decode(bytes(pending))
+                            event = decode(bytes(pending))
+                            if event is not None:
+                                yield event
                             pending.clear()
                         continue
                     total += len(chunk)
@@ -166,7 +200,9 @@ def _session_events(process, deadline, receipt):
                     while b"\n" in pending:
                         line, _, rest = pending.partition(b"\n")
                         pending = bytearray(rest)
-                        yield decode(bytes(line) + b"\n")
+                        event = decode(bytes(line) + b"\n")
+                        if event is not None:
+                            yield event
                     if len(pending) > gate.MAX_EVENT_LINE_BYTES:
                         raise _Stop("session_event_stream_refused")
     except _Stop as error:

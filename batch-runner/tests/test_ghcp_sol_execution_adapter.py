@@ -61,10 +61,12 @@ else:
         descendant = spawn("child")
         assert descendant.stdout.readline() == b"ready\n"
 
-    if mode == "packaged_schema":
+    if mode in {"packaged_schema", "packaged_schema_hang"}:
         # Synthetic, schema-shaped data supplied by the test; never a real CLI.
         for event in json.loads(sys.argv[3]):
             print(json.dumps(event), flush=True)
+        if mode == "packaged_schema_hang":
+            signal.pause()
         raise SystemExit(0)
 
     def emit(kind, data, **envelope):
@@ -346,6 +348,124 @@ def test_packaged_sdk_shape_is_not_cli_delivery_proof(tmp_path, fake_program, va
         assert evidence["calls"][0]["context_binding"] == (
             "preceding_same_agent_session_snapshot_not_call_attestation"
         )
+
+
+def _installed_stdout_fixture():
+    path = Path(__file__).parent / "fixtures" / "ghcp_sol_copilot_1079_stdout.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+@pytest.mark.parametrize("with_result", [False, True])
+def test_installed_cli_filter_cannot_supply_settings(tmp_path, fake_program, with_result):
+    # Installed 1.0.79 app.js:2744 filters these metadata/terminal events;
+    # 2745/2844 emits the separate result summary. All bytes are synthetic.
+    events = _installed_stdout_fixture()
+    sdk_path = Path(__file__).parent / "fixtures" / "ghcp_sol_packaged_sdk_events.jsonl"
+    sdk = [json.loads(line) for line in sdk_path.read_text().splitlines()]
+    sdk[0]["data"].update(selectedModel="gpt-5.6-sol", reasoningEffort="max",
+                          contextTier="long_context")
+    omitted = {"assistant.usage", "session.usage_info", "session.model_change",
+               "session.idle", "session.shutdown"}
+    assert events[:-1] == [event for event in sdk if event["type"] not in omitted]
+    if not with_result:
+        events.pop()
+
+    def command(mode, amount=0):
+        return fake_program(mode, amount) + [json.dumps(events)]
+
+    result, _ = _run(tmp_path, command, "packaged_schema")
+    assert result["status"] == "failed" and result["exit_status"] == 2
+    assert result["reason_codes"] == [
+        "served_model_unverified", "reasoning_effort_unverified", "context_limit_unverified",
+    ]
+    assert result["limits"]["observed_turn_starts"] == 1
+    assert result["limits"]["observed_tool_starts"] == 1
+    assert result["cli_result"] == {
+        "observed": with_result, "exit_code": 0 if with_result else None,
+        "completion_authority": False, "settings_authority": False,
+    }
+    evidence = result["session_event_receipt"]
+    assert evidence["calls"] == [] and evidence["observed_usage_events"] == 0
+    assert evidence["applied_settings_verified"] is False
+    assert evidence["stream_completeness_verified"] is False
+
+
+@pytest.mark.parametrize("variant,reason,observed", [
+    ("zero", None, True),
+    ("nonzero", "cli_result_failed", True),
+    ("boolean_exit", "session_event_stream_refused", False),
+    ("string_exit", "session_event_stream_refused", False),
+    ("other_exit", "session_event_stream_refused", False),
+    ("wrong_session", "session_event_stream_refused", False),
+    ("missing_usage", "session_event_stream_refused", False),
+    ("invalid_usage", "session_event_stream_refused", False),
+    ("extra_field", "session_event_stream_refused", False),
+    ("duplicate", "session_event_stream_refused", True),
+    ("event_after_result", "session_event_stream_refused", True),
+])
+def test_cli_result_is_only_a_bounded_process_summary(
+    tmp_path, fake_program, variant, reason, observed,
+):
+    # A synthetic unfiltered SDK stream plus a CLI summary isolates marker
+    # parsing. This is NOT the installed CLI's filtered stdout protocol.
+    path = Path(__file__).parent / "fixtures" / "ghcp_sol_packaged_sdk_events.jsonl"
+    events = [json.loads(line) for line in path.read_text().splitlines()]
+    marker = _installed_stdout_fixture()[-1]
+    if variant == "nonzero":
+        marker["exitCode"] = 1
+    elif variant == "boolean_exit":
+        marker["exitCode"] = False
+    elif variant == "string_exit":
+        marker["exitCode"] = "0"
+    elif variant == "other_exit":
+        marker["exitCode"] = 2
+    elif variant == "wrong_session":
+        marker["sessionId"] = CANARY
+    elif variant == "missing_usage":
+        del marker["usage"]
+    elif variant == "invalid_usage":
+        marker["usage"] = [CANARY]
+    elif variant == "extra_field":
+        marker["data"] = {"secret": CANARY}
+    events.append(marker)
+    if variant == "duplicate":
+        events.append(marker)
+    elif variant == "event_after_result":
+        events.append(events[1])
+
+    def command(mode, amount=0):
+        return fake_program(mode, amount) + [json.dumps(events)]
+
+    result, _ = _run(tmp_path, command, "packaged_schema")
+    assert result["status"] == ("failed" if reason else "completed_process_only")
+    assert result["reason_codes"] == ([reason] if reason else [])
+    assert result["cli_result"]["observed"] is observed
+    assert result["cli_result"]["exit_code"] == (
+        (1 if variant == "nonzero" else 0) if observed else None
+    )
+    assert result["cli_result"]["completion_authority"] is False
+    assert result["cli_result"]["settings_authority"] is False
+    evidence = result["session_event_receipt"]
+    assert evidence["observed_usage_events"] == 1
+    assert evidence["applied_settings_verified"] is False
+    assert evidence["stream_completeness_verified"] is False
+
+
+def test_cli_result_does_not_release_a_running_process(tmp_path, fake_program, monkeypatch):
+    _accelerate_after_ready(monkeypatch)
+    events = _installed_stdout_fixture()
+
+    def command(mode, amount=0):
+        return fake_program(mode, amount) + [json.dumps(events)]
+
+    result, files = _run(tmp_path, command, "packaged_schema_hang")
+    assert result["cli_result"]["observed"] is True
+    assert result["cli_result"]["exit_code"] == 0
+    assert result["status"] == "failed"
+    assert "task_timeout_exceeded" in result["reason_codes"]
+    assert result["elapsed_seconds"] >= 1200
+    assert _not_running(int((files / "leader.pid").read_text()))
+    assert result["stream_completeness_verified"] is False
 
 
 @pytest.mark.parametrize("mode,reason", [
