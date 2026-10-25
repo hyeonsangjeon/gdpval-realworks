@@ -134,7 +134,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(step8, "compute_grader_source_hash", observed_hash)
     with pytest.raises(identity.PilotIdentityRefused, match="^grader_template_source_drift$"):
         identity.compile_pilot_identity(profile, reviewed_source_sha=head)
-    assert measured_hashes == ["b87877b47aab42d5b32f12222dfa515c8a94a08f316cbbe5e65cb13715c97cf4"]
+    assert measured_hashes == ["0b5a59714e10b5193c88c32e934719741c8c17d4a433e565db38c21462802106"]
     assert profile["dispatch_grading_identity"]["grader_template_source_hash"] == (
         "47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf"
     )
