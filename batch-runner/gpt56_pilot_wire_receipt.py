@@ -97,7 +97,8 @@ def _native_caps() -> dict:
     with _closed():
         data = _read_bytes(_NATIVE_CAPS_PATH, size=7343, sha256=NATIVE_CAPS_SHA256)
         caps = yaml.safe_load(data)
-        _require(caps["registered_plan"] == pilot.SOURCE_PROFILE)
+        # The sealed caps draft still names the unchanged 2026-10-23 profile.
+        _require(caps["registered_plan"] == pilot.SOURCE_PROFILE_PREVIOUS)
         fields = {"per_attempt": ("native_model_calls", "input_tokens", "output_tokens", "wall_clock_seconds"),
                   "per_task": ("native_model_calls",), "per_pilot": ("native_model_calls",)}
         result = {scope: {key: caps[scope][key] for key in keys} for scope, keys in fields.items()}

@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261023.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025.yaml"
+SOURCE_PROFILE_PREVIOUS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261023.yaml"
+SOURCE_PROFILE_PREVIOUS_SHA256 = "506de35370ffe6d54e6decb2459a4f4abda47136d550c010086b0fffd5c1e482"
 FOUNDRY_PLAN_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 SOURCE_PROFILE_REFRESH = frozenset({
     "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
@@ -56,6 +58,14 @@ SOURCE_PROFILE_REFRESH = frozenset({
     "batch-runner/gpt54_prepared_input_attestation.py", "batch-runner/gpt54_run_input_bundle.py",
     "batch-runner/gpt56_pilot_identity_plan.py", "batch-runner/gpt56_pilot_deployment_binding.py",
     "batch-runner/gpt56_pilot_input_capture.py", "batch-runner/core/codex_task_deadline.py",
+    "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
+})
+# Exact successor delta: four caps files plus this source-profile selector.
+# Other original source changes remain those sealed in the 2026-10-23 profile.
+SOURCE_PROFILE_DELTA = frozenset({
+    "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+    "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
+    "batch-runner/gpt56_sol_codex_pilot_preflight.py",
 })
 SOURCE_PROFILE_AUXILIARY = {
     "batch-runner/gpt54_disposable_checkout.py":
@@ -282,6 +292,10 @@ def source_plan_snapshot(
         require(hashlib.sha256(original_data).hexdigest() == FOUNDRY_PLAN_SHA256)
         require(type(reviewed_source_sha) is str
                 and re.fullmatch(r"[0-9a-f]{40}", reviewed_source_sha) is not None)
+        previous_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_PREVIOUS),
+                                    sha256=SOURCE_PROFILE_PREVIOUS_SHA256)
+        require(len(previous_data) <= 65536)
+        previous = yaml.safe_load(previous_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -295,12 +309,15 @@ def source_plan_snapshot(
                     for value in pins.values()))
         require({name for name, digest in pins.items()
                  if digest != original["source_pins"][name]} == SOURCE_PROFILE_REFRESH)
+        require({name for name, digest in pins.items()
+                 if digest != previous["source_pins"][name]} == SOURCE_PROFILE_DELTA)
 
         # Reuse the existing sanitized, bounded, local-only Git implementation.
         # Archive reads Git objects, not LFS payloads; nothing is extracted.
         import gpt54_disposable_checkout as checkout
 
-        source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY}
+        source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY,
+                        SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -324,6 +341,7 @@ def source_plan_snapshot(
                     blobs[member.name] = stream.read()
             require(set(blobs) == set(roles))
             require(blobs[ACTIVE_PLAN] == original_data and blobs[SOURCE_PROFILE] == profile_data)
+            require(blobs[SOURCE_PROFILE_PREVIOUS] == previous_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -346,6 +364,9 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
+            "supersedes_profile": SOURCE_PROFILE_PREVIOUS,
+            "supersedes_profile_sha256": SOURCE_PROFILE_PREVIOUS_SHA256,
+            "source_change_reason": "native_caps_enforcement_and_source_selector_refresh",
             "plan_sha256": seal(profile), "historical_plan_sha256": FOUNDRY_PLAN_SHA256,
             "run_id": RUN_ID, "launch_authority": False, "retry_authority": False,
         }
@@ -908,7 +929,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--" + role + "-resource-id-file", type=Path, help="Private local resource ID bytes")
     try:
         args = parser.parse_args(arguments)
-        source_requested = args.plan.absolute() == ROOT / SOURCE_PROFILE
+        source_requested = args.plan.absolute() in {
+            ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_PREVIOUS,
+        }
         capture_requested = args.capture_workspace is not None
         evidence_requested = any(value is not None for value in (
             args.evidence_bundle, args.reviewed_source_sha, args.as_of,

@@ -84,6 +84,8 @@ def test_active_grader_template_source_foundry_preflight(
     assert current["configuration_problems"] == [
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/gpt56_pilot_wire_receipt.py",
+        "source_pin:batch-runner/gpt56_pilot_runtime_caps_usage.py",
         "source_pin:batch-runner/gpt56_sol_codex_pilot_preflight.py",
         "source_pin:batch-runner/gpt56_foundry_evidence_intake.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
