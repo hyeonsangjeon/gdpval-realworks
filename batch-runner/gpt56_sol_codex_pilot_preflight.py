@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025_bindings.yaml"
+SOURCE_PROFILE_CAPS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025.yaml"
+SOURCE_PROFILE_CAPS_SHA256 = "f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2"
 SOURCE_PROFILE_PREVIOUS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261023.yaml"
 SOURCE_PROFILE_PREVIOUS_SHA256 = "506de35370ffe6d54e6decb2459a4f4abda47136d550c010086b0fffd5c1e482"
 FOUNDRY_PLAN_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
@@ -296,6 +298,9 @@ def source_plan_snapshot(
                                     sha256=SOURCE_PROFILE_PREVIOUS_SHA256)
         require(len(previous_data) <= 65536)
         previous = yaml.safe_load(previous_data)
+        caps_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_CAPS), sha256=SOURCE_PROFILE_CAPS_SHA256)
+        require(len(caps_data) <= 65536)
+        caps_profile = yaml.safe_load(caps_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -311,13 +316,17 @@ def source_plan_snapshot(
                  if digest != original["source_pins"][name]} == SOURCE_PROFILE_REFRESH)
         require({name for name, digest in pins.items()
                  if digest != previous["source_pins"][name]} == SOURCE_PROFILE_DELTA)
+        require({name for name, digest in pins.items()
+                 if digest != caps_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
 
         # Reuse the existing sanitized, bounded, local-only Git implementation.
         # Archive reads Git objects, not LFS payloads; nothing is extracted.
         import gpt54_disposable_checkout as checkout
 
         source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY,
-                        SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256}
+                        SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256,
+                        SOURCE_PROFILE_CAPS: SOURCE_PROFILE_CAPS_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -342,6 +351,7 @@ def source_plan_snapshot(
             require(set(blobs) == set(roles))
             require(blobs[ACTIVE_PLAN] == original_data and blobs[SOURCE_PROFILE] == profile_data)
             require(blobs[SOURCE_PROFILE_PREVIOUS] == previous_data)
+            require(blobs[SOURCE_PROFILE_CAPS] == caps_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -364,9 +374,9 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_PREVIOUS,
-            "supersedes_profile_sha256": SOURCE_PROFILE_PREVIOUS_SHA256,
-            "source_change_reason": "native_caps_enforcement_and_source_selector_refresh",
+            "supersedes_profile": SOURCE_PROFILE_CAPS,
+            "supersedes_profile_sha256": SOURCE_PROFILE_CAPS_SHA256,
+            "source_change_reason": "deployment_and_capture_preflight_linkage_checks",
             "plan_sha256": seal(profile), "historical_plan_sha256": FOUNDRY_PLAN_SHA256,
             "run_id": RUN_ID, "launch_authority": False, "retry_authority": False,
         }
@@ -799,6 +809,32 @@ def _project_resource_required(plan: dict[str, Any]) -> bool:
     return plan.get("foundry_route", {}).get("route_profile") != "direct-v1"
 
 
+def _same_reported_upstreams(upstreams: dict[str, Any], result: dict[str, Any]) -> bool:
+    """Do not combine separately verified generations in one preflight report.
+
+    Real bundle verifiers still own schema, byte and freshness checks. These
+    comparisons additionally bind their output to the preceding gate results.
+    Missing or malformed metadata raises into the caller's closed refusal.
+    """
+    evidence = result["evidence_gate"]
+    identity = result["identity_plan_gate"]
+    inputs = result["input_bundle_gate"]
+    linkage = identity["evidence_linkage"]
+    pairs = (
+        (upstreams["evidence"]["ready_sha256"], evidence["consumed_bundle_sha256"]),
+        (upstreams["identity"]["plan_sha256"], identity["consumed_plan_sha256"]),
+        (upstreams["config"]["ready_sha256"], inputs["config_bundle_sha256"]),
+        (upstreams["input"]["ready_sha256"], inputs["consumed_bundle_sha256"]),
+        (inputs["identity_plan_sha256"], identity["consumed_plan_sha256"]),
+        (linkage["ready_bundle_sha256"], evidence["consumed_bundle_sha256"]),
+    )
+    return (all(type(expected) is str and re.fullmatch(r"[0-9a-f]{64}", expected)
+                and actual == expected for actual, expected in pairs)
+            and type(evidence["reviewed_source_sha"]) is str
+            and re.fullmatch(r"[0-9a-f]{40}", evidence["reviewed_source_sha"]) is not None
+            and linkage["reviewed_source_sha"] == evidence["reviewed_source_sha"])
+
+
 def _inspect_plan_with_deployment(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
@@ -831,6 +867,9 @@ def _inspect_plan_with_deployment(
 
         verified = verify_pilot_deployment_binding(plan, bundle_root=deployment_binding, **options, **resource_files)
         document = verified.as_dict()
+        if (not _same_reported_upstreams(document["upstream_bundles"], result)
+                or seal(document["evidence_linkage"]) != seal(result["identity_plan_gate"]["evidence_linkage"])):
+            return _deployment_refusal(result)
         remaining = [name for name in result["launch_blockers"] if name not in DEPLOYMENT_BINDING_BLOCKERS]
         gate = {
             "deployment_binding_complete": True, "consumed_bundle_sha256": verified.sha256,
@@ -890,6 +929,13 @@ def inspect_plan(
         verified = verify_pilot_input_capture(
             PilotCaptureSources(**options), workspace=capture_workspace, dataset_root=input_bundle, plan=plan,
         )
+        deployment_sha256 = result["deployment_binding_gate"]["consumed_bundle_sha256"]
+        if (not _same_reported_upstreams(verified["upstream_bundles"], result)
+                or type(deployment_sha256) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", deployment_sha256) is None
+                or verified["upstream_bundles"]["deployment"]["ready"]["sha256"] != deployment_sha256
+                or verified["reviewed_source_sha"] != reviewed_source_sha):
+            return _capture_refusal(result)
         remaining = [name for name in result["launch_blockers"] if name not in CAPTURE_BLOCKERS]
         gate = {"capture_complete": True, "capture_sha256": verified["sha256"],
                 "reviewed_source_sha": verified["reviewed_source_sha"], "evaluated_at": as_of,
@@ -930,7 +976,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(arguments)
         source_requested = args.plan.absolute() in {
-            ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_PREVIOUS,
+            ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_CAPS, ROOT / SOURCE_PROFILE_PREVIOUS,
         }
         capture_requested = args.capture_workspace is not None
         evidence_requested = any(value is not None for value in (

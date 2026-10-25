@@ -42,8 +42,20 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     previous_path = root / pilot.SOURCE_PROFILE_PREVIOUS
     previous_bytes = previous_path.read_bytes()
     previous = pilot.load_plan(previous_path)
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261025.yaml")
+    caps_path = root / pilot.SOURCE_PROFILE_CAPS
+    caps_bytes = caps_path.read_bytes()
+    caps_profile = pilot.load_plan(caps_path)
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261025_bindings.yaml")
+    assert pilot.SOURCE_PROFILE_CAPS.endswith("_source_20261025.yaml")
     assert pilot.SOURCE_PROFILE_PREVIOUS.endswith("_source_20261023.yaml")
+    assert hashlib.sha256(caps_bytes).hexdigest() == pilot.SOURCE_PROFILE_CAPS_SHA256 == (
+        "f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2"
+    )
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != caps_profile["source_pins"][name]} == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"}
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in caps_profile.items() if k != "source_pins"
+    }
     assert hashlib.sha256(previous_bytes).hexdigest() == (
         pilot.SOURCE_PROFILE_PREVIOUS_SHA256
     ) == "506de35370ffe6d54e6decb2459a4f4abda47136d550c010086b0fffd5c1e482"
@@ -115,9 +127,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_PREVIOUS
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_PREVIOUS_SHA256
-    assert report["source_change_reason"] == "native_caps_enforcement_and_source_selector_refresh"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_CAPS
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_CAPS_SHA256
+    assert report["source_change_reason"] == "deployment_and_capture_preflight_linkage_checks"
     assert report["run_id"] == original["pilot"]["run_id"]
     assert evidence._active_plan(plan_sha256=plan_sha, reviewed_source_sha=head)[0] == profile
 
@@ -156,21 +168,24 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": "0" * 64})
     with pytest.raises(pilot.PilotSourceRegistrationRefused):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(previous)})
+    with pytest.raises(pilot.PilotSourceRegistrationRefused):
+        pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(caps_profile)})
 
     # Synthetic mutations do not alter any repository file or Git object.
     read_bytes = reader._read_bytes
-    for missing in (False, True):
-        def bad_predecessor(path, **kwargs):
-            if path == previous_path:
-                if missing:
-                    raise FileNotFoundError(CANARY)
-                return read_bytes(path, **kwargs) + b"\n"
-            return read_bytes(path, **kwargs)
+    for predecessor_path in (previous_path, caps_path):
+        for missing in (False, True):
+            def bad_predecessor(path, **kwargs):
+                if path == predecessor_path:
+                    if missing:
+                        raise FileNotFoundError(CANARY)
+                    return read_bytes(path, **kwargs) + b"\n"
+                return read_bytes(path, **kwargs)
 
-        with monkeypatch.context() as patch:
-            patch.setattr(reader, "_read_bytes", bad_predecessor)
-            with pytest.raises(pilot.PilotSourceRegistrationRefused):
-                pilot.source_plan_snapshot(**options)
+            with monkeypatch.context() as patch:
+                patch.setattr(reader, "_read_bytes", bad_predecessor)
+                with pytest.raises(pilot.PilotSourceRegistrationRefused):
+                    pilot.source_plan_snapshot(**options)
     mutations = []
     changed = deepcopy(profile)
     changed["identity"]["model"] = "gpt-5.6-sol-fast"
@@ -183,6 +198,10 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     mutations.append(changed)
     changed = deepcopy(profile)
     del changed["source_pins"][pilot.GRADER]
+    mutations.append(changed)
+    changed = deepcopy(profile)
+    # A still-refreshed caps hash cannot bypass the new one-file delta seal.
+    changed["source_pins"]["batch-runner/gpt56_pilot_wire_receipt.py"] = "1" * 64
     mutations.append(changed)
     for name in pilot.SOURCE_PROFILE_DELTA:
         changed = deepcopy(profile)
@@ -215,6 +234,21 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             pilot.source_plan_snapshot(**options)
     assert len(reads) == 2  # Admission read succeeded; the final reread refused.
 
+    caps_reads = []
+
+    def final_caps_drift(path, **kwargs):
+        if path == caps_path:
+            caps_reads.append(path)
+            if len(caps_reads) == 3:
+                raise ValueError(CANARY)
+        return read_bytes(path, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(reader, "_read_bytes", final_caps_drift)
+        with pytest.raises(pilot.PilotSourceRegistrationRefused, match="^pilot_source_registration_refused$"):
+            pilot.source_plan_snapshot(**options)
+    assert len(caps_reads) == 3  # Initial selection, admission, final reread.
+
     real_git = checkout._git
     for kind in ("foreign", "symlink", "wrong_commit"):
         buffer = io.BytesIO()
@@ -239,12 +273,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert completion["launch_allowed"] is completion["full_220_allowed"] is False
     assert completion["launch_blockers"] == list(pilot.LAUNCH_BLOCKERS)
     assert completion["evidence_gate"]["evidence_complete"] is False
-    assert pilot.main(["--plan", str(previous_path), "--reviewed-source-sha", head]) == 2
-    previous_completion = json.loads(capsys.readouterr().out)
-    assert previous_completion["source_registration"] == {
-        "status": "refused", "refusal_code": "pilot_source_registration_refused",
-    }
-    assert previous_completion["launch_allowed"] is False
+    for predecessor_path in (previous_path, caps_path):
+        assert pilot.main(["--plan", str(predecessor_path), "--reviewed-source-sha", head]) == 2
+        previous_completion = json.loads(capsys.readouterr().out)
+        assert previous_completion["source_registration"] == {
+            "status": "refused", "refusal_code": "pilot_source_registration_refused",
+        }
+        assert previous_completion["launch_allowed"] is False
     with monkeypatch.context() as patch:
         patch.setattr(checkout, "_git", forbidden)
         assert pilot.main(["--plan", str(profile_path), "--reviewed-source-sha", head]) == 2

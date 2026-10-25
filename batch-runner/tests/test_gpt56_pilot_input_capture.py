@@ -257,6 +257,72 @@ def test_preflight_only_explicit_verified_capture_clears_one_blocker(sealed):
     assert str(sealed.parent).encode() not in report and all(value not in report for value in RAW_IDS)
 
 
+@pytest.mark.parametrize("drift", [
+    "none", "evidence", "identity", "config", "input", "deployment",
+    "input_identity", "missing", "null", "malformed", "capture_source", "capture_upstream",
+])
+def test_preflight_capture_requires_same_reported_deployment(sealed, monkeypatch, drift):
+    """Use the real capture verifier; simulate drift only between gate results."""
+    original_deployment = pilot._inspect_plan_with_deployment
+    original_verify = capture.verify_pilot_input_capture
+    earlier, checked = [], []
+    fields = {
+        "evidence": ("evidence_gate", "consumed_bundle_sha256"),
+        "identity": ("identity_plan_gate", "consumed_plan_sha256"),
+        "config": ("input_bundle_gate", "config_bundle_sha256"),
+        "input": ("input_bundle_gate", "consumed_bundle_sha256"),
+        "deployment": ("deployment_binding_gate", "consumed_bundle_sha256"),
+        "input_identity": ("input_bundle_gate", "identity_plan_sha256"),
+        "missing": ("deployment_binding_gate", "consumed_bundle_sha256"),
+        "null": ("deployment_binding_gate", "consumed_bundle_sha256"),
+        "malformed": ("deployment_binding_gate", "consumed_bundle_sha256"),
+    }
+
+    def deployment_snapshot(*args, **kwargs):
+        result = original_deployment(*args, **kwargs)
+        if kwargs.get("deployment_binding") is not None:
+            assert result["deployment_binding_gate"]["deployment_binding_complete"] is True
+            earlier.append(list(result["launch_blockers"]))
+            if drift in fields:
+                gate, key = fields[drift]
+                if drift == "missing":
+                    del result[gate][key]
+                else:
+                    result[gate][key] = {"null": None, "malformed": False}.get(drift, "0" * 64)
+        return result
+
+    def verify(*args, **kwargs):
+        result = original_verify(*args, **kwargs)
+        checked.append(result["sha256"])
+        if drift == "capture_source":
+            result["reviewed_source_sha"] = "0" * 40
+        elif drift == "capture_upstream":
+            # Missing metadata cannot clear the gate.
+            del result["upstream_bundles"]["deployment"]
+        return result
+
+    before = _tree(sealed.parent)
+    monkeypatch.setattr(pilot, "_inspect_plan_with_deployment", deployment_snapshot)
+    monkeypatch.setattr(capture, "verify_pilot_input_capture", verify)
+    result = _preflight(sealed, capture_workspace=sealed.workspace)
+    assert len(earlier) == len(checked) == 1
+    gate = result["pre_execution_capture_gate"]
+    if drift == "none":
+        assert gate["capture_complete"] is True and gate["cleared_blockers"] == [BLOCKER]
+        assert result["launch_blockers"] == [name for name in earlier[0] if name != BLOCKER]
+    else:
+        assert gate["capture_complete"] is False and gate["cleared_blockers"] == []
+        assert gate["refusal_code"] == pilot.CAPTURE_REFUSAL
+        assert gate["capture_sha256"] is gate["reviewed_source_sha"] is None
+        assert result["launch_blockers"] == earlier[0]
+    assert LIVE in result["launch_blockers"]
+    assert result["launch_allowed"] is result["full_220_allowed"] is False
+    encoded = _json(result)
+    assert PRIVATE.encode() not in encoded and str(sealed.parent).encode() not in encoded
+    assert all(raw not in encoded for raw in RAW_IDS)
+    assert _tree(sealed.parent) == before
+
+
 @pytest.mark.parametrize("change", ["missing", "null", "extra", "duplicate-key", "noncanonical", "digest", "secret"])
 def test_capture_exact_bytes_and_closed_shape_fail_before_provider(sealed, monkeypatch, change, capsys):
     path = sealed.workspace / capture.CAPTURE_PATH
