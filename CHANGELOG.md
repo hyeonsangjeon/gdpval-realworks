@@ -13,6 +13,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Require the Foundry pilot preflight to match deployment evidence, identity,
+  configuration and input hashes to the preceding gate results, and to match
+  the capture's deployment digest and reviewed source. Retain the existing
+  closed refusal codes, real verifiers and all launch blockers. Add the
+  source-only `..._source_20261025_bindings.yaml` successor: **58 matching
+  hashes**, only the preflight hash changed from the sealed 10-25 profile;
+  preserve both 10-23 and 10-25 files, their exact seals, and every non-source
+  plan/cap value. At clean code `bbc12b69414ef90580711f1d40f42eb17778f479`, tree
+  `a50869a6105782fa871b004f9f0ce883ef7e9587`, the single targeted invocation
+  reported **34 passed, 0 failed, 0 errors, 0 skipped** in **124.63s**, outer
+  **125.042s**, exit **0**, under **TERM600s/KILL5s**. This comprises **24 new
+  synthetic cases** plus **10 directly related cases**, not a full-suite replay.
+  Preserve the pre-collection launcher exit **127** (`/usr/bin/time` absent;
+  pytest never started); Bash timing then collected **34 nodes** in **6.75s**,
+  outer **7.844s**, exit **0**. The **env -i / TERM120s/KILL5s** plan-only
+  preflight reached `source_verified` and `inspect_plan`, exit **2** in
+  **1.644s**, with **0 cleared / 11 retained / 0 new** launch blockers.
+  Two local integrity checks are covered; no actual deployment/input/capture
+  evidence or launch permission is inferred. The existing frozen-grader
+  source mismatch remains a required refusal, not a new waiver. Keep the
+  earlier **6002-pass** proof and review at `e0fa32ef3` separate and unchanged.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) separates locally closed checks,
+  post-merge review/CI, owner decisions, authorized preparation and live
+  evidence; it retains exact commands, hashes and the collection failure.
+  Final-head review/CI and all external evidence gates remain. Only local
+  commits; no model/auth/network, private-input preparation, dispatch, grading,
+  push, PR, workflow/dependency change or finite-right consumption/reset.
+
 - Record the fixed-source registration guard review and complete related
   CI-derived offline selection at clean
   `e0fa32ef30dea02da3ee918b40ae08e744d67e14`, tree
