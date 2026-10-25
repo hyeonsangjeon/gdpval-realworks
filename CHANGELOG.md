@@ -13,6 +13,27 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add the 2026-10-25 source-only successor for the same Foundry Sol pilot. Keep
+  the sealed 10-23 registration, original plan, caps draft and all thresholds
+  unchanged. Refresh the four caps source hashes plus the necessary selector
+  hash; require that exact delta and hold/recheck the predecessor's bytes.
+  Preserve the caps draft's old registration reference and all refusal guards.
+  At clean code `6fffb66a3bb43197bc5ccd7d5ac53bc9c864c577`, the related selection
+  reported **4 passed, 1 failed in 5.70s**, outer **6.10s**, exit **1**. Correct
+  only the stale observed grader-closure value in the failed test, not the
+  frozen grader or its refusal. At clean
+  `58a7f38abcc90dc63f490c444b5f83e7f05be82f`, only that node ran again:
+  **1 passed in 5.29s**, outer **5.64s**, exit **0**. Keep the proofs separate.
+  The new-profile plan-only command at that same HEAD reached `inspect_plan`
+  with **58 matching source hashes**, `source_verified` and valid configuration;
+  it exited **2** in **1.51s** because all **11** existing launch blockers remain
+  (**0 cleared / 11 retained / 0 new**). The preceding source-registration
+  refusal alone is cleared. All three commands used **TERM120s/KILL5s**,
+  `env -i` and offline settings. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  records exact source/tree, profile/command/log/JUnit/patch hashes, the
+  immutable caps history and remaining review/CI/live gates. No network/model
+  call, auth, preparation, dispatch, grading, push, PR or finite-right reset.
+
 - Include synchronous SDK initialization in the local Foundry Sol pilot's
   existing **1,800-second** observer deadline on supported main-thread hosts.
   Keep the actual partially initialized SDK instance/process, interrupt its
