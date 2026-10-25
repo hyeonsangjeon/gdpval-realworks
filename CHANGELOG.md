@@ -46,6 +46,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Document where Copilot-backed Codex is offered using official GitHub,
+  VS Code and OpenAI sources and bounded installed help/version checks.
+  Distinguish cloud coding-agent sessions, `gh 2.98.0 agent-task`, Copilot
+  CLI's own harness and VS Code's extension/experimental Codex Agent Host.
+  The standalone host is documented; an approved unattended task-VM launch,
+  applied Sol/Max/1M proof, complete capture and fixed-limit mapping remain
+  unverified. Recommend preserving scope and holding execution; changing to
+  a Copilot CLI comparison or stopping the gate are owner decisions, not
+  grants. Reconfirm host Copilot **1.0.103 / 1.0.79**, separately from Desk
+  metadata **1.0.98** and unknown cross-version event equivalence. Preserve
+  the prior **313 passed, 0 failed, 0 skipped** proof at
+  `59c23a1446533cc988cf74840cd00eb1a23c3605`; no tests or collection reran.
+  Documentation-only checks and local commit, with no runtime/plan/cap/pin
+  changes, authentication, task/model execution, dispatch, grading or push.
+  See [route decisions and sources](docs/ghcp-sol-actions-gate.md#product-routes-and-scope-decision-2026-10-25-2145-kst)
+  and [the current record](tasks/LATEST_TASK_RESULT/README.md).
+
 - Trace the installed Copilot 1.0.79 JSONL writer: it excludes call usage,
   context snapshots and model-change events, despite their presence in the
   SDK schema. No Codex selector was found in the inspected installed

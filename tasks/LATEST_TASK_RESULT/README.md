@@ -1,80 +1,91 @@
 # Latest task result
 
-## GHCP Sol gate: installed harness and stdout contract
+## GHCP Sol gate: product routes and owner scope decision
 
-Scope: the leader's **2026-10-25 13:50 KST** order, local installed-source
-investigation and synthetic verification only. Worktree
+Scope: the leader's **2026-10-25 21:45 KST** order, installed help/package
+inspection and public official-document research only. Worktree
 `/ai-work/copilot/_tmp_worktrees/ghcp-sol-gate-actions-20261024`, branch
 `leader/ghcp-sol-gate-actions-20261024`, started clean at
-`8eb449d90a43fab68cd553ee73b95907a55a00e3`, tree
-`b0efd84089fcea3ef835741ca7dfa31193dc609f`. No other checkout was changed.
+`b9440698014eae3a941ea31d86f6b6bf5599a595`, tree
+`a2285ea2c50ae30e606015fe7b7a93acc8641880`. No other checkout was changed.
 
 ### Result
 
-**No Codex harness selector was found in the inspected installed interfaces,
-and the auditable 1.0.79 CLI writer omits required per-call metadata.** The
-adapter now parses that writer's separate result envelope without treating
-it as settings or completion authority. The full gate bundle passes once;
-the actual GHCP-to-Codex launch and applied Sol/Max/1M gate remain open.
+**Copilot-backed Codex is a documented product, but no inspected route
+closes this card's unattended VM and applied Sol/Max/1M gate.** Codex is
+available through GitHub cloud coding-agent sessions and VS Code integrations,
+not the installed Copilot CLI custom-agent selector. VS Code documents an
+experimental Codex Agent Host and standalone `code agent host`; an approved
+unattended task/bootstrap and evidence contract remains unverified.
 
 | Question | Finding and boundary |
 | --- | --- |
-| Command | **Partial**: noninteractive model/effort/context-tier/JSONL options are confirmed. `--agent` selects a custom agent; no Codex selector is present in the inspected built-in registry/options. The account feature `codex_agent_enabled` is not a launch command. Opaque binary internals and other products are not ruled out. |
-| Event schema | **Confirmed for installed 1.0.79 only**: start configuration, turn/call model labels, optional effort and session `tokenLimit` exist. There is no event `modelContextWindow`. None proves applied Max or numeric 1M. |
-| Delivery | **Confirmed omissions; completeness unverified**: the JSONL writer filters usage, context, model-change, idle and shutdown events. A newline or final result does not prove prompt/complete delivery. Saved logs cannot restore ephemeral metadata. |
-| Version | Prior executable observations were Desk **1.0.103**, system **1.0.79**; Desk metadata says **1.0.98**. The Desk bundle has no standalone schema. Exact cross-version differences remain unverified. Propose **1.0.79 as an offline reference only**; no pin changed. |
+| Product path | GitHub's Agents tab, issue assignment, PR mention and VS Code are documented entry points. Cloud work runs on provider-managed infrastructure, not the selected task job. `gh 2.98.0 agent-task create` submits remotely and exposes custom-agent selection, not Codex/model/effort/context controls. |
+| Exact settings | The fetched Codex cloud model list is Auto / GPT-5.3-Codex / GPT-5.4 nano, not Sol; the extension may have a different subset. This is not an account-entitlement check or a finding that Sol is unavailable. No applied Max/1M proof was found in the inspected contracts. |
+| Capture and caps | Logs/PR changes and Agent Host ordered state are documented, not the required complete private capture. A UI stop, local log-follower exit or soft credit cap does not prove 1,200-second/64-turn enforcement for the remote agent. The existing local adapter remains default-disabled. |
+| Versions | Direct host checks reconfirm Desk **1.0.103**, system **1.0.79**, Codex **0.144.5**; `gh` is **2.98.0**. Desk metadata remains **1.0.98**, with no standalone schema. Exact cross-version event equivalence and VM versions remain unverified. No pin changed. |
 
-No Copilot/Codex executable, including help/version, ran this turn. The
-[dated source audit](../../docs/ghcp-sol-actions-gate.md#installed-harness-and-stdout-audit-2026-10-25-1350-kst)
-provides installed paths and line references. Key 1.0.79 sources are
-`app.js:287` (built-ins), `app.js:5600` (options), `app.js:2744` (stdout filter),
-`app.js:2745` (result writer), and `schemas/session-events.schema.json`
-(field definitions). The described fallback causes are schema possibilities,
-not observed runtime switches.
+Recommend **A: preserve the registered scope and hold execution** while
+obtaining a version-bound Copilot-backed Codex Agent Host contract for launch,
+settings evidence, events and cancellation on the selected VM. **B**, a
+Copilot CLI harness comparison, needs a separate owner scope/registration
+decision and still has evidence gaps. **C** stops the gate without a benchmark
+result. These are options, not permissions. The
+[route matrix and official sources](../../docs/ghcp-sol-actions-gate.md#product-routes-and-scope-decision-2026-10-25-2145-kst)
+give the per-route yes/no/unknown decisions and their conditions.
 
-### Source-supported implementation
+### Current research evidence
 
-Changed `batch-runner/ghcp_sol_execution_adapter.py`, its test module and the
-new `tests/fixtures/ghcp_sol_copilot_1079_stdout.jsonl`. The adapter separates
-CLI-only results from session events, checks exact top-level keys and matching
-observed session ID, and permits only an integer 0/1 exit code. Its safe
-`cli_result` records observed/exit-code fields while keeping
-`completion_authority=false` and `settings_authority=false`. Raw identities,
-timestamps, usage, paths and errors are not projected. Nonzero summaries
-refuse with `cli_result_failed`; invalid, duplicate or post-result frames
-refuse with `session_event_stream_refused`. A zero result does not release
-supervision: EOF/process exit or the unchanged deadline must still occur.
+Evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-product-routes.6OzcYw/`.
+It contains public HTML snapshots, installed help stdout, `research-method.md`
+and the English protection/reconciliation record. Public reads used HTTPS,
+bounded sizes and deadlines, without supplied credentials. Help/version used
+cleared environments and **15s TERM + 3s KILL** wrappers, with Copilot updates
+disabled. No prompt, host, tunnel, login or agent-task operation ran.
 
-Fourteen new cases cover the filtered stream with/without a result, malformed
-or failed summaries, private-canary non-egress and a hanging process after a
-zero result. SDK-plus-summary combinations are **synthetic**, not observed CLI
-output. Start labels Sol/Max/long_context do not repair the filtered stream's
-missing call metadata; it still refuses. Usage/cost remain unavailable.
-No command builder, collector, workflow, plan, cap, dependency, registration,
-pin, identity, permission, score or consumed right changed.
+| Public source snapshot | Bytes | SHA-256 |
+| --- | --- | --- |
+| `github-third-party.html` | 607460 | `89b9e39cbca82ada7849241f4da914eafed777a44cac8fa282b7a16ad2a88e8c` |
+| `vscode-harnesses.html` | 141539 | `9fc45a95aeae10fb003516c331d0c7f29b6ebae8cbed074dd9ddbe54bf3c3b3d` |
+| `vscode-agent-host.html` | 113901 | `8b191b02c4e0c5dd495037bd64d5b55889dea60eea07a6bcc9bfe0f636d24950` |
 
-### One current proof; prior results stay separate
+A system 1.0.79 environment-help command rejected
+`--disable-client-telemetry`; its corrected help-only command omitted that
+unsupported flag. Discovery search misses and that diagnostic are recorded,
+not counted as test failures. Public GETs are not zero network activity;
+disabled updates are not an independently measured absence of background
+network behavior. No authentication or private-session query was made.
 
-Evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-harness-schema.zoULYD/`.
-Tests used clean HEAD `59c23a1446533cc988cf74840cd00eb1a23c3605`, tree
-`49033ac832de59987d19d41817f3fc6d6f4567ad`. Documentation was updated afterward;
-`final-source.txt` in that directory records the later local HEAD/tree and
-clean status. Only documentation may differ from the tested commit.
+Only the direct document, this record and CHANGELOG change. Verification is
+limited to documentation diff/scope, citations and claim boundaries, English
+literal fidelity and unchanged executable/test hashes. No code, workflow,
+plan, cap, dependency, registration, pin, identity, permission, score or
+consumed right changed. This is not an independent fixed-HEAD review or CI.
+
+### Last retained synthetic proof; no tests rerun
+
+Prior evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-harness-schema.zoULYD/`.
+The last tests used clean HEAD `59c23a1446533cc988cf74840cd00eb1a23c3605`, tree
+`49033ac832de59987d19d41817f3fc6d6f4567ad`; the subsequent documentation-only
+head was `b9440698014eae3a941ea31d86f6b6bf5599a595`. The
+[immutable pre-audit record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b9440698014eae3a941ea31d86f6b6bf5599a595/tasks/LATEST_TASK_RESULT/README.md)
+binds that proof. Its implementation, tests and fixture hashes still match.
+**No tests, collection or static fixture verification were rerun here.**
 
 | Invocation | Outcome | Pytest / wrapper time; exit |
 | --- | --- | --- |
 | Collection, three gate modules | **313 nodes** | **0.40s / 0.56s; 0** |
 | One combined body invocation | **313 passed, 0 failed, 0 skipped** | **16.50s / 16.66s; 0** |
 
-JUnit contains **138 Actions + 93 VM + 82 adapter** cases, including eight
+The retained JUnit contains **138 Actions + 93 VM + 82 adapter** cases, including eight
 Auto/BYOK-named refusals. No test failure, retry or warning was reported. A
-separate static check validates the new fixture's **four session events**
+separate prior static check validated the fixture's **four session events**
 against the exact installed Draft-07 schema with format checking and internal
 references only. Its fifth, CLI-only result is outside the session schema.
 Synthetic timestamps/zeros and fake-process cleanup are not runtime or cost
 measurements, complete delivery proof or general containment guarantees.
 
-The existing Python 3.10.12 environment ran in `batch-runner/`, under
+That prior invocation used the existing Python 3.10.12 environment in `batch-runner/`, under
 **120s TERM + 5s KILL**, cleared environment/offline flags and existing network/
 provider guards. Adapter subprocesses were generated fake executables only.
 The exact collection and body commands are in `invocation.txt`; the body was:
@@ -87,7 +98,7 @@ timeout --signal=TERM --kill-after=5s 120s env -i PATH=/usr/local/bin:/usr/bin:/
 | --- | --- |
 | `batch-runner/ghcp_sol_execution_adapter.py` | `9a5fb7ee55be3a990d61ec565c56314d235847c8f0c8ef29ec3213255bc01558` |
 | `batch-runner/tests/test_ghcp_sol_execution_adapter.py` | `4f4746c015d4f76eba338783abfe26a14793a4f075c28e4104147b7bd1311006` |
-| New `ghcp_sol_copilot_1079_stdout.jsonl` | `5d28496a0d825c80f0165b192bcd70641ba9ed415450eba1b786647f88ba0459` |
+| Retained `ghcp_sol_copilot_1079_stdout.jsonl` | `5d28496a0d825c80f0165b192bcd70641ba9ed415450eba1b786647f88ba0459` |
 | Unchanged collector `ghcp_sol_actions_gate.py` | `d757aafd7c18c32f6682b79ebd4f51bc901d58f2fa97c8c50030e1b4762ed698` |
 | Inspected installed 1.0.79 event schema | `350df35914d4e2fdbadb8932ca66f1e58d759aad79b5be9291857c9052d31301` |
 
@@ -107,7 +118,7 @@ package manifests and unchanged-scope hashes. The previous **295 passed,
 unverified background-network behavior remain in the
 [immutable prior record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/8eb449d90a43fab68cd553ee73b95907a55a00e3/tasks/LATEST_TASK_RESULT/README.md)
 and its unchanged `/ai-work/copilot/_tmp/ghcp-sol-cli-contract.9Qj6sx/` evidence.
-They are not pooled with, or relabeled by, this new 313-test invocation.
+They are not pooled with, or relabeled by, that later 313-test proof.
 
 ### Remaining gates and authority
 
@@ -119,15 +130,17 @@ review/CI remain required before a separate execution decision. Event-based
 cancellation is not pre-effect admission of turn/tool limits. Paid/retry and
 completion authority remain false; no performance, cost or score is inferred.
 
-Only local commits are authorized here. No real CLI, authentication/secret
-read, raw session/private input, network/model call, dispatch, grading, push,
-PR or Project edit occurred. A nonessential `file` diagnostic was unavailable
-(exit 127); bounded `od` inspection identified ELF headers without installing
-anything. This was not a failed test or a CLI invocation.
+Only local documentation commits are authorized here. Actual commands were
+help/version and public official-document reads, not a task/model execution.
+No authentication/secret read, raw session/private input, paid/model call,
+dispatch, grading, push, PR or Project edit occurred. The original plans,
+limits, runtime refusal behavior and prior evidence remain unchanged.
 
-`openai-docs` was applied using installed source only because network lookup
-was prohibited. `experiment-report-en` separates source findings, schema
-descriptions, synthetic proof and live hypotheses; `im-not-ai-en` preserves
-those limits and exact values. The evidence directory's `record-protection.md`
-records the protection brief and reconciliation. No experiment-design, UI or
-animation work applies; no specialist endorsement is claimed.
+`openai-docs` guided official OpenAI source checks; the owner explicitly
+included official GitHub/VS Code documents in this research. The full skill
+catalog was considered once. `experiment-report-en` separates documented
+routes, installed observations, prior synthetic proof and live unknowns;
+`im-not-ai-en` preserves their conditions and exact values. The new evidence
+directory's `record-protection.md` records the protection brief and
+reconciliation. Experiment-design, UI and animation skills do not apply:
+no experiment design or interface changed. No specialist endorsement is claimed.

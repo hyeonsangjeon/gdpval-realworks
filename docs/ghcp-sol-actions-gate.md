@@ -4,6 +4,146 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Product routes and scope decision, 2026-10-25 21:45 KST
+
+**Copilot-backed Codex exists, but no inspected route closes this card's
+unattended VM and applied Sol/Max/1M requirements.** GitHub documents a Codex
+cloud coding agent and a VS Code Codex integration. VS Code also documents an
+experimental Codex Agent Host integration and a standalone host. This is not
+an IDE-only product, nor is it the custom-agent selector in Copilot CLI.
+Availability in the documentation is not approval or availability for this
+account. No account policy, credential or live session was inspected.
+
+The audit starts from clean `b9440698014eae3a941ea31d86f6b6bf5599a595`, tree
+`a2285ea2c50ae30e606015fe7b7a93acc8641880`. Evidence consists of installed
+help/version output, package files and public official pages fetched on
+2026-10-25. It does not include a model response or a VM execution. Code,
+workflow, plans, caps, model identities, permissions and finite rights are
+unchanged. The new work is documentation only.
+
+### Route decisions
+
+Here **a** means unattended execution inside the owner-selected task VM, not
+merely submitting work from that VM to a different service. **b** requires
+both selecting and proving applied GPT-5.6 Sol, Max and numeric 1M context.
+**c** requires the complete transcript, tool calls and generated files,
+including uncommitted files. **d** requires the existing 1,200-second and
+64-turn limits during execution. Yes denotes a documented mechanism, not a
+live verification; unknown means the inspected sources do not close the
+requirement.
+
+| Route | a: unattended task VM | b: Sol/Max/1M selection and proof | c: complete capture | d: timeout and turn enforcement |
+| --- | --- | --- | --- | --- |
+| GitHub.com Codex coding-agent session, issue assignment or PR mention | **No** for the selected local job: the cloud target uses provider-managed infrastructure. Task submission is a separate operation. | **Unknown**: the fetched supported-model list does not name Sol; no applied Max/1M evidence contract is supplied. | **Unknown**: activity logs and PR changes are documented, not a complete private transcript/tool/file export. | **Unknown**: a UI stop is documented, not a 1,200-second/64-turn controller. |
+| Installed `gh agent-task`, 2.98.0 | **No** for local execution; noninteractive remote task submission is documented. This command does not expose a Codex provider selector. | **No** through the inspected create interface: no model, reasoning or context flags. | **Unknown**: `view --log` and selected JSON metadata exist, not a full-fidelity export contract. | **No** through this interface: only create/list/view; killing the local log follower does not establish remote cancellation. |
+| Copilot CLI's own harness, installed 1.0.103 / 1.0.79 | **Yes**, conditionally, for its documented `-p` mode with separately approved authentication and permissions; **not** a Codex harness binding. | **Unknown**: model/effort/context options show selection; 1.0.79 stdout omits required per-call metadata. | **Unknown**: JSONL and local edits exist, but omitted ephemeral metadata and unverified delivery prevent a completeness claim. | **Unknown** as a live pair: owned-process timeout is available in the offline adapter; complete/prompt turn delivery and the actual CLI binding remain unverified. |
+| VS Code Codex extension or experimental Codex Agent Host | **Unknown**: a standalone host is documented, but an approved cold-start, unattended Copilot-authenticated Codex task command is not established. | **Unknown**: authentication/model selection is documented, not this exact model/settings combination or applied-setting attestation. | **Unknown**: UI sessions and ordered Agent Host state exist, not a verified full raw-capture mapping for this adapter. | **Unknown**: no inspected binding connects Codex host events, owned-process cleanup and the two fixed limits. |
+
+The cloud findings use [GitHub's third-party-agent contract][route-github],
+[session management][route-sessions] and [VS Code's cloud/harness
+description][route-vscode]. GitHub's [2026-02-04 release][route-release]
+confirms the product entry points, not current billing or account entitlement.
+The CLI row uses installed `gh agent-task --help`, `create --help`,
+`view --help`, and the matching [published create manual][route-gh].
+No create, list, view-session, issue-assignment or PR-mention action ran.
+
+### What the interfaces actually establish
+
+- GitHub says its Codex coding agent and VS Code integration use the Codex
+  SDK and can use a Copilot subscription. Its fetched cloud list is `Auto`,
+  `GPT-5.3-Codex` and `GPT-5.4 nano`, not GPT-5.6 Sol. The same page says the
+  extension can have a different model subset. This is a documentation
+  finding, not evidence that this account lacks Sol. The extension's
+  documented "Sign in with Copilot" route requires Pro+ or Max; the VS Code
+  Agent Host page separately describes a Pro+ requirement. Neither was
+  tested or enabled here.
+- In `gh 2.98.0`, `--custom-agent` selects a repository agent definition, not
+  the OpenAI provider. Create exposes base/repo/file/follow/custom-agent
+  flags; view exposes logs and session/PR metadata. There is no installed
+  Codex/model/effort/context/turn selector or stop subcommand. A different
+  API or future CLI may offer more; this audit does not establish that.
+- [VS Code's harness guide][route-vscode] names
+  `chat.agentHost.codexAgent.enabled` and
+  `chat.editor.codex.preferAgentHost`. These are documented settings, not
+  changes made here. Enterprise-managed settings can disable the Codex
+  harness. The [Agent Host architecture][route-host] documents
+  `code agent host`, local or remote execution, and AHP JSON-RPC over
+  WebSocket. AHP supplies an initial snapshot and ordered actions, with
+  missed actions or a new snapshot on reconnection. A snapshot is not proof
+  of a complete historical transcript or provider settings. A host connection
+  token is not a Copilot model entitlement. No host, tunnel or token was
+  started or created. The Agent Host command is documentation evidence;
+  no installed VS Code/Agent Host version or task handshake was verified.
+- Both installed Copilot help surfaces call `--agent` a custom-agent
+  selector. Their environment help describes model choice and BYOK, not a
+  Codex harness selector. `--acp` selects a protocol server; 1.0.103's
+  `--host-environment` describes Mission Control hosting. Neither establishes
+  Codex selection. BYOK would change the route and remains refused by this
+  card. No hidden flag or feature toggle was tried.
+- Standalone Codex **0.144.5** documents noninteractive `exec`, `--model`,
+  TOML overrides and `--json`. Those options do not establish a GHCP bridge.
+  The [OpenAI authentication guide][route-openai-auth] describes its own
+  authentication paths; [Codex's GitHub review integration][route-openai-gh]
+  describes `@codex review`. Neither is substituted for the Copilot-backed
+  coding-agent contract or authorizes a different billing route.
+
+### Installed-version comparison and retained proof
+
+The exact host binary paths are in the [preceding inventory](#installed-cli-contract-audit-2026-10-25-1215-kst).
+New direct `--version` checks confirm Desk **1.0.103**, system **1.0.79**,
+Codex **0.144.5**, and `/usr/bin/gh` **2.98.0 (2026-08-20)**. These are host
+versions, not VM evidence. Direct platform binaries were used, never the
+`/usr/local/bin/copilot` authentication wrapper. Help/version commands used
+cleared environments and bounded **15s TERM + 3s KILL** wrappers; Copilot
+automatic updates were disabled. No prompt, session or login command ran.
+
+| Comparison | 1.0.103 Desk binary | 1.0.79 system binary |
+| --- | --- | --- |
+| Model/effort/context and JSONL | Options confirmed; not applied-setting evidence. | Options confirmed; not applied-setting evidence. |
+| Codex selector | None in inspected help/environment interfaces; embedded internals not exhaustively audited. | None in inspected interfaces/built-ins; `codex_agent_enabled` is an account feature, not a selector. |
+| Schema and serializer | Sibling metadata says **1.0.98**; no standalone event schema. Exact schema/stdout equivalence remains **unknown**. | Inspectable event schema and `app.js:2744` writer. Usage/context/model-change/idle/shutdown events are filtered. |
+| Additional help evidence | `help limits` describes a **soft** AI-credit cap, not a timeout or turn cap. | `--max-autopilot-continues` counts continuation messages, not all turns. |
+
+A 1.0.79 environment-help invocation rejected `--disable-client-telemetry`;
+the corrected help-only command omitted that unsupported flag. This was a
+help diagnostic, not a test failure. Cross-version flags must not be assumed
+interchangeable. No version pin changed; 1.0.79 remains an inspectable offline
+reference, not an approved execution route.
+
+The last combined test result remains **313 passed, 0 failed, 0 skipped**
+in **16.50s** pytest / **16.66s** wrapper time, exit **0**, at
+`59c23a1446533cc988cf74840cd00eb1a23c3605`. It includes eight Auto/BYOK-named
+refusals. **No tests or collection were rerun in this research task.**
+The earlier 295-pass/4-fail invocation and separate four-pass correction
+remain distinct. The [immutable pre-audit record][route-prior] preserves
+commands, JUnit/log hashes, the synthetic-only boundary and prior failures.
+
+### Owner choices, not a scope change
+
+| Option | Benefit | Remaining risk or cost |
+| --- | --- | --- |
+| **A. Keep GHCP + Codex + Sol/Max/1M; hold execution. Recommended.** | Preserves the registered comparison. The documented Codex Agent Host is a concrete next research target. | Needs a supported unattended task/authentication contract, exact model availability, applied-settings evidence, complete capture and fixed-limit/cleanup mapping on the selected VM. Cloud execution cannot silently replace that host. |
+| **B. Propose a separately approved Copilot CLI + Sol comparison.** | Uses documented noninteractive CLI syntax and the existing offline adapter. | Changes the harness/study scope and needs owner-approved registration; does not fix the settings/delivery gaps or approve billing, tool limits or authentication. Existing scores/rights cannot be reused. |
+| **C. Stop this gate without a benchmark result.** | Avoids spending under unverified conditions. | Produces no five-task comparison. Record the missing contract, not a failed or absent model. |
+
+Recommend A only as a documentation/contract follow-up. Before implementation,
+obtain one version-bound contract for a Copilot-backed Codex Agent Host task
+on the selected VM, covering launch, model/settings evidence, events and
+cancellation. If that contract cannot satisfy the unchanged requirements,
+return the choice to the owner rather than switching to B. No option is an
+execution grant. Fixed-HEAD review/CI, the tool-call cap, private input/grader
+bindings, authentication isolation/disposal and separate paid approval remain.
+
+[route-github]: https://docs.github.com/en/copilot/concepts/agent-capabilities/about-agents/about-third-party-coding-agents
+[route-sessions]: https://docs.github.com/en/copilot/how-tos/copilot-on-github/use-copilot-agents/manage-and-track-agents
+[route-release]: https://github.blog/changelog/2026-02-04-claude-and-codex-are-now-available-in-public-preview-on-github/
+[route-gh]: https://cli.github.com/manual/gh_agent-task_create
+[route-vscode]: https://code.visualstudio.com/docs/agents/run/agent-harnesses
+[route-host]: https://code.visualstudio.com/docs/agents/concepts/agent-host
+[route-openai-auth]: https://learn.chatgpt.com/docs/auth
+[route-openai-gh]: https://learn.chatgpt.com/docs/third-party/github
+[route-prior]: https://github.com/hyeonsangjeon/gdpval-realworks/blob/b9440698014eae3a941ea31d86f6b6bf5599a595/tasks/LATEST_TASK_RESULT/README.md
+
 ## Installed harness and stdout audit, 2026-10-25 13:50 KST
 
 **The inspected installed selectors do not provide a Codex harness command,
@@ -113,7 +253,7 @@ On clean `59c23a1446533cc988cf74840cd00eb1a23c3605`, tree
 cases are new. The earlier **295 passed/4 failed** and separate **4 passed**
 remain historical, not pooled. Commands use **120s TERM + 5s KILL**, cleared
 environment/offline flags and fake executables with existing network guards.
-[The current record](../tasks/LATEST_TASK_RESULT/README.md) binds exact commands,
+[The immutable result record][route-prior] binds exact commands,
 source/artifact hashes and the later documentation-only final HEAD.
 
 The adapter's default-disabled state and dry-only workflow are unchanged. The actual
