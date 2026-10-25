@@ -1,146 +1,128 @@
 # Latest task result
 
-## GHCP Sol gate: execution limits blocked by the absent task launcher
+## GHCP Sol gate: disabled process-adapter skeleton
 
-Scope: the leader's **2026-10-25 02:40 KST** order on
+Scope: the leader's **2026-10-25 10:35 KST** order, local implementation and
+synthetic verification only. The existing branch is
 `leader/ghcp-sol-gate-actions-20261024`, in
 `/ai-work/copilot/_tmp_worktrees/ghcp-sol-gate-actions-20261024`.
-The starting worktree was clean at HEAD
-`8d356e1c1dc13ae10193a045334c7e2ab089de35`, tree
-`ad69ecf73a8fed221e2fcdf5272e8a7337196912`.
-The nested path in the order was unavailable; this existing non-nested
-worktree matched the requested full HEAD and branch. No new worktree was made.
-Only the direct gate memo and these two completion records change. No code,
-test, plan, cap value, workflow, pin, dependency, permission or unrelated
-worktree changes. Delivery is local only, not publication.
+It was clean at HEAD `a40eb9f1e8781d92bb5c016c38da6b453e34d54e`, tree
+`c5f723c198a78eede9654c20f05ba19a7c6fcb33`. The nested path in the order was
+absent; this registered worktree matched its branch and HEAD. No worktree was
+created, and the root checkout and other branches were not changed.
 
-### Current result
+### Result and boundaries
 
-**No live task limit was added.** Source tracing confirms that this gate has
-no GHCP-to-Codex launcher, live event subscription or child-process owner.
-Its workflow runs only the model-free collector and refuses paid mode before
-checkout. A generic new launcher would require an unresolved harness/command
-binding; it would not establish enforcement on this card's actual route.
-The implementation portion is blocked, not declared complete.
+Added `batch-runner/ghcp_sol_execution_adapter.py::run_task` and its synthetic
+test module. The adapter accepts an explicit argv, not an inferred GHCP
+command. `execution_enabled=False` is the default and refuses before process
+creation. A missing/null `execution_config["tool_calls_per_task"]` refuses
+with `tool_call_cap_missing`; non-positive or non-integer values refuse with
+`tool_call_cap_invalid`. No default or paid tool-call value was selected.
 
-| Per-task item | Before | After |
+| Per-task bound | Before | New adapter |
 | --- | --- | --- |
-| Wall-clock timeout | 1200 seconds enforced only during offline event collection. | Unchanged; not attachable to live execution in this branch because no task launcher exists. Existing reason: `task_timeout_exceeded`. |
-| Tool-call cap | No value in the Actions draft or inert VM execution block. | Still null with `value_not_defined`. Candidate values 8 and 32 are documented, not selected. |
-| Turn cap | 64 supplied turn-start events accepted; stop on the 65th. | Unchanged; no live/pre-effect enforcement. Existing reason: `turn_cap_exceeded`. |
+| 1200 seconds | Offline collection only | Monotonic deadline started before launch and checked during reads/EOF; `task_timeout_exceeded`. |
+| 64 turns | Offline collection only | Agent-scoped start events counted while the child runs; stop when 65 is observed with `turn_cap_exceeded`. |
+| Tool calls | Undefined | Explicit positive value required; stop at the first observed excess with `tool_call_cap_exceeded`. No value was added to a plan. |
 
-The workflow's **60-second process limit plus 5 seconds for forced termination**
-and **5-minute job limit** still cover only the dry run. No process-tree
-termination or preservation of live partial outputs was implemented or tested.
-No fake-executable fixture was substituted for the missing adapter. The
-receipt's `not_applicable_no_subprocess_started` cleanup label remains accurate.
-Source locations and the feasibility boundary are in the
-[execution-path audit](../../docs/ghcp-sol-actions-gate.md#execution-path-audit-2026-10-25-0240-kst).
+The child has its own POSIX process group. TERM is followed by KILL, with a
+one-second grace and four-second final wait. The leader remains unreaped until
+group signalling to avoid PID reuse during descendant cleanup. The receipt
+records signals, leader reaping and stdout closure; private partial files
+remain untouched and are not uploaded. Group signals are not containment of
+processes that escape the group, nor proof that every orphan was reaped.
+The fake-process tests check that their known child/grandchild PIDs no longer
+run, treating zombies as exited rather than falsely calling them reaped.
 
-Local source/schema and cached public documentation establish countable
-Copilot `tool.execution_start`/`toolCallId` events, not a pre-dispatch barrier
-or this gate's actual stream completeness. Separate Codex item-start events
-are not GHCP evidence. The **8-call** Agentic Sandbox limit and **32-call** V2
-dispatcher limit supply two unselected candidates; no workload sufficiency
-or GHCP entitlement is inferred. Native HTTP requests are not tool calls.
+The existing collector is reused for bounded, allowlisted per-call metadata.
+The outer receipt describes adapter counts and cleanup; its nested collector
+receipt retains collection-only labels. No raw conversation, event identity,
+command, path, stderr, header or credential appears in the receipt. Usage and
+cost remain null with `not available`, grade remains null, and metadata is
+**settings only**, not applied-Max/1M or served-model proof. Paid authority,
+retry authority, live-source and stream-completeness verification remain false.
+Auto/BYOK checks, old collector behavior, workflow, plans, cap values, pins,
+QA, dependencies, scores and consumed rights are unchanged.
 
-Usage and cost remain null with explicit **`not available`** statuses and fixed
-not-collected reasons. No cost estimate is introduced. Grade stays null.
-Model/effort/context capture, Auto/BYOK refusal, source/input/grader pins,
-parser bounds and no-retry behavior are unchanged. Per-call metadata remains
-**settings only**: actual served model, applied Max and granted 1M are unverified.
-`paid_execution_allowed`, `retry_allowed` and `live_enforcement_verified` remain
-false. No historical result, score, entitlement or consumed cell is changed.
+### Verification
 
-### Verification and source identity
+The existing Python **3.10.12** environment collected **295 nodes in 0.80s**,
+wrapper wall time **1.79s**, exit **0**. One combined invocation then passed
+**295 tests, 0 failed, 0 skipped in 15.79s**, wrapper wall time **15.96s**,
+exit **0**. JUnit confirms **138 existing Actions checks + 93 existing VM
+checks + 64 new adapter checks**. Auto/BYOK tests are included. There was no
+failed invocation or test retry, and no full-repository suite was run.
+Both collection and bodies used **120s TERM + 5s KILL**.
 
-Tested HEAD **`8d356e1c1dc13ae10193a045334c7e2ab089de35`**, tree
-**`ad69ecf73a8fed221e2fcdf5272e8a7337196912`**, was clean before collection and
-the invocation. There is no new executable/test patch. The final local commit
-changes documentation only; its full HEAD/tree and clean status are retained
-in `final-source.txt` in the evidence directory. No new fixed-head review,
-hosted CI or execution approval is claimed.
+The new cases launch only a generated Python fake executable under a minimal
+environment. They cover 63/64/65 turns; configured tool caps with below/exact/
+above counts; 1199/1200/1201 seconds on a fixed-origin fixture clock; blocked,
+partial-line and closed stdout; absent/invalid caps and disabled flags;
+duplicate/malformed identities and streams; private-canary exclusion; partial
+files; and group cleanup with children/grandchildren, ignored TERM and an early
+leader exit. Deadline fixtures accelerate the clock, not the declared cap.
+Network/provider imports and network calls are trapped in the tests. Only the
+fake program can be launched by the new module's fixtures.
 
-Using the existing Python **3.10.12** environment, collection reported **231
-nodes in 0.30s**, wrapper **0.509s**, exit **0**. One combined invocation then
-reported **231 passed, 0 failed, 0 skipped in 11.36s**; wrapper wall time
-**11.575s**, exit **0**. This is **138 existing Actions capture checks** and
-**93 existing VM gate checks**. No new tests, retry or second invocation.
-It is the requested gate bundle, not the full repository suite, hosted CI
-or a five-task model experiment.
+The prior **231 passed in 11.36s**, wrapper **11.575s**, remains a separate
+proof of the earlier unchanged collector. Its record is retained at
+`a40eb9f1e8781d92bb5c016c38da6b453e34d54e:tasks/LATEST_TASK_RESULT/README.md`.
+It is not added to the new 295-test result.
 
-The unchanged synthetic cases check 63/64/65 turn starts, cumulative timeout
-and EOF, an accelerated real OS alarm at a blocked read, signal restoration, actual
-synthetic-file closure, invalid turn identities, unavailable usage/cost and
-canary non-egress. Capture fixtures trap network and runtime-process calls;
-the existing workflow tests execute only local bash guards. No real session,
-model, child runtime, credentials or private inputs are used.
+The tested worktree contained base HEAD `a40eb9f1e8781d92bb5c016c38da6b453e34d54e`
+plus the two new source/test files below. It was not a clean tested commit.
+Documentation was updated after validation. The final local commit's source
+identity and clean status are in the evidence directory's `final-source.txt`;
+the final source/test hashes must equal these tested identities.
 
-This invocation's JUnit confirms **Auto 4 passed**, **BYOK 2 passed**,
-custom-provider argument **2 passed**, and other-model selection **4 passed**,
-all with **0 failures and 0 skips**. These 12 cases are included in 231,
-not extra tests. The prior **231 passed in 10.66s**, **204 passed in 9.89s**
-and separate **7 passed in 0.23s** remain separate evidence. Their records
-are retained through local Git
-`8d356e1c1dc13ae10193a045334c7e2ab089de35:tasks/LATEST_TASK_RESULT/README.md`.
-
-Executable and test identities, unchanged by this task:
-
-| File | SHA-256 |
+| File | Tested SHA-256 |
 | --- | --- |
-| `batch-runner/ghcp_sol_actions_gate.py` | `d757aafd7c18c32f6682b79ebd4f51bc901d58f2fa97c8c50030e1b4762ed698` |
-| `batch-runner/tests/test_ghcp_sol_actions_gate.py` | `dab87ec665f68562fc95d3f9ef32855e9448e52d921f941f544cd500a61f5b57` |
-| Unchanged `.github/workflows/agentic-v2-ghcp-sol-gate.yml` | `455a7bca26dd866ac0f897ea4d2dc607250bf05514e285156ec09a89431ddd31` |
-| Unchanged `batch-runner/experiments/execution_envelope/gpt56_sol_ghcp_codex_vm_gate.yaml` | `121ae4dd3cfa901c5dd590d81e66318034efef7d0ecafc966b9db4f4d8740b5c` |
+| `batch-runner/ghcp_sol_execution_adapter.py` | `e9b399dd5e222d5f3c6587f59937a608ea433db1d0bdfa5b1f52753f6a8436fb` |
+| `batch-runner/tests/test_ghcp_sol_execution_adapter.py` | `796f34e7855da6b5d3b6c8f4ef15772905ed3752868e7049c9e75d549c24d29c` |
+| Unchanged `batch-runner/ghcp_sol_actions_gate.py` | `d757aafd7c18c32f6682b79ebd4f51bc901d58f2fa97c8c50030e1b4762ed698` |
+| Unchanged workflow `agentic-v2-ghcp-sol-gate.yml` | `455a7bca26dd866ac0f897ea4d2dc607250bf05514e285156ec09a89431ddd31` |
+| Unchanged VM gate plan | `121ae4dd3cfa901c5dd590d81e66318034efef7d0ecafc966b9db4f4d8740b5c` |
 
-From the worktree's `batch-runner` directory, the exact combined command was:
+Evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-process-adapter.D6V4IC/`.
+From the worktree's `batch-runner` directory, the combined command was:
 
 ```bash
-timeout --signal=TERM --kill-after=5s 120s env -i PATH=/usr/local/bin:/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 /ai-work/copilot/_tmp/ghcp-sol-gate-ci-20261024-venv/bin/python -m pytest -q -ra --tb=short -o addopts= -p no:cacheprovider --junitxml=/ai-work/copilot/_tmp/ghcp-sol-execution-audit.x5ostq/junit.xml tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_vm_gate_contract.py
+timeout --signal=TERM --kill-after=5s 120s env -i PATH=/usr/local/bin:/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 /ai-work/copilot/_tmp/ghcp-sol-gate-ci-20261024-venv/bin/python -m pytest -q -ra --tb=short -o addopts= -p no:cacheprovider --junitxml=/ai-work/copilot/_tmp/ghcp-sol-process-adapter.D6V4IC/junit.xml tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_vm_gate_contract.py tests/test_ghcp_sol_execution_adapter.py
 ```
-
-Evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-execution-audit.x5ostq/`.
-Both collection and bodies used **120s TERM + 5s KILL**. The exact collection
-command is also in `invocation.txt`.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `invocation.txt` | `87a1deacc9d38bbb1b566ca9652a3b19b20e1128ad55210ce97cf9bc79f745a5` |
-| `collection.log` | `dc0c9ea5b0b3ce950e148e28ec92acee1eb6b608bd7dbe7ed69d20b878e480d9` |
-| `collection-timing.txt` | `8e6d5060caf24c515c5324e4dab52a83e3097cb7f7eaff4b8d0b71d54cfd4b5b` |
-| `test.log` | `71c101a4aa352a0ffc880585425142b6a12ffc64fb7154ff86eef3bbe066d399` |
-| `junit.xml` | `61ebb245aea7bf78a53d9cd97fe7205ede90cdf9788bc2a6256e32b48f51564d` |
-| `timing.txt` | `49ab61f60ba41533cdec4c426a633e41de167cb278b44358fde549e93b79e81f` |
-| `junit-summary.json` | `f905cc6a192365f5a44000f5cfb9c1d1a8479b7f8fa3cb8513275667240c016a` |
+| `invocation.txt` | `7add8114d522879437bfe9d7f86b646e3c9a7a80ae6c47ad45d1b8f8a3d35600` |
+| `collection.log` | `c18ed8c91742fa65e60185fb80dd46dbb5248f9d3c8f24ee61fae75808b9be7c` |
+| `collection-timing.txt` | `216b5343d18a1a92dc4df036ac872fd4058d00fd39d87802254e7a60de74a1f2` |
+| `test.log` | `d19b451309c8c4a777686d61879b9a0cb6afe97920abb381b05fdbabbb3d30f0` |
+| `junit.xml` | `bcb3a912a1b11e549626df7a73570a0fdf94069dbd90a6cb0b3f26dec9dd07ec` |
+| `timing.txt` | `bbc6a29d5e4f60ff87a9ac716b9d2129b0d3a0aaa8f7cbfa7723ec832a5f770f` |
+| `tested-files.sha256` | `7de328b2132031509bedc8432f190a011a3951339bfa63edc064f6fbdaf511f4` |
 
-### Evidence limits and remaining gates
+### Remaining live gates
 
-**No actual GHCP output was inspected.** The audit used the previously
-cached `github-streaming-events.md:297-305,417-428` under
-`/ai-work/copilot/_tmp/ghcp-sol-evidence-audit.Rqg0rU/`, SHA-256
-`91feefbc0a9a1809aeeb6adfa6ffd4300c9690850ff02a4333f61f53348d208b`.
-It describes starts, not pre-call permission hooks. `local-references.sha256`
-records the cached documents and installed package/schema sources; it is not
-evidence of this account's effective CLI or service behavior. The existing
-[field/authentication audit](../../docs/ghcp-sol-actions-gate.md#evidence-and-authentication-audit-2026-10-24)
-preserves the other documentary candidates and their limitations.
+**No actual GHCP CLI command or output was validated.** The command/version
+that binds GHCP to the Codex harness is still unknown; substituting a Copilot
+custom-agent flag is not that binding. Fixtures use the previously documented
+`assistant.turn_start`, `tool.execution_start`, `assistant.usage` and
+`session.usage_info` envelope. Whether the eventual CLI emits those fields
+completely and promptly, including sub-agents, remains unverified.
+Start notifications can arrive after effects begin; this cancellation guard
+does not prove pre-effect exclusion of an excess turn/tool action.
 
-The immediate prerequisite is an explicitly bound GHCP-to-Codex launch/event
-adapter with an owned process tree. An independent generic launcher or
-changing `--agent` does not establish that binding. Paid execution also
-remains blocked on the absent tool-call cap value, approved
-limits and usage policy, a reviewed live adapter with pre-effect accounting and
-child-process cancellation, applied-settings evidence, authentication isolation
-and disposal, original-input verification, grader validation and fixed-source
-review/CI. Offline stream interruption cannot undo historical effects or prove
-that a live 65th turn was prevented. Prior reviews do not approve the new source.
-No publication, hosted validation, performance result or study completion is
-claimed. Root and other worktrees remain unchanged.
+The workflow remains dry-run only. A reviewed command/event adapter binding,
+an approved tool-call cap, authentication supply/disposal and isolation,
+verified original inputs, applied-settings and grader evidence, and fixed-source
+review/CI still precede any separate leader execution decision. No new launch,
+retry, performance, cost, score, publication or study-completion claim is made.
+The [direct memo](../../docs/ghcp-sol-actions-gate.md#disabled-process-adapter-2026-10-25-1035-kst)
+keeps the implementation and historical audit boundaries separate.
 
-`experiment-report-en` keeps configuration, offline enforcement and live proof
-separate and preserves test populations; `im-not-ai-en` guides the English
-records without strengthening claims. `openai-docs` informs the local Codex
-schema reading; the leader's offline restriction overrides its online-first
-lookup. No experiment-design or UI skill applies; no new documentation fetch.
-No Azure/model/GHCP call, authentication, credential/private-input read, workflow
-dispatch, grading, push, PR or Project change was performed.
+`experiment-report-en` separates observed fake-process behavior from live
+GHCP hypotheses and keeps test populations distinct. `im-not-ai-en` preserves
+those qualifications in the English records. No experiment redesign or UI
+skill applies; no new model documentation lookup was needed. No network,
+GHCP/model call, authentication or secret read, private input, paid execution,
+workflow dispatch, grading, push, PR or Project edit occurred.

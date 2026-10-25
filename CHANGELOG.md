@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a disabled-by-default GHCP process-adapter skeleton with an explicitly
+  supplied argv and a required, positive tool-call cap. Reuse the existing
+  **1200-second** and **64-turn** values without changing a plan or workflow.
+  Observe bounded JSONL start events, stop on an exceeded limit with fixed
+  reasons, signal the owned process group with TERM/KILL, reap its leader,
+  close stdout and retain private partial files with a safe local receipt.
+  No GHCP command or authentication route is bound. Event-based cancellation
+  is not pre-effect admission; settings remain settings only, unavailable
+  usage/cost stay null, and paid/retry authority stays false. One combined
+  offline invocation reports **295 passed, 0 failed, 0 skipped in 15.79s**,
+  wrapper **15.96s**, exit **0**: **231 unchanged** gate checks and **64 new**
+  fake-executable checks. The earlier 231-test proofs remain separate.
+  See the [adapter boundary](docs/ghcp-sol-actions-gate.md#disabled-process-adapter-2026-10-25-1035-kst)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md). Local commit only;
+  no network, model/GHCP execution, authentication, grading, dispatch or push.
+
 - Add a local-only GHCP GPT-5.6 Sol / Codex agent / Max / 1M Actions
   gate draft under the existing Agentic Sandbox V2 workflow path: fixed
   five-task matrix, one `ubuntu-24.04` job per task, and a model-free

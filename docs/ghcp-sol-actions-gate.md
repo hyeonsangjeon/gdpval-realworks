@@ -4,7 +4,66 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Disabled process adapter, 2026-10-25 10:35 KST
+
+The leader authorized a local process-adapter skeleton after the earlier
+execution-path audit. `batch-runner/ghcp_sol_execution_adapter.py::run_task`
+now supervises an explicitly supplied argv. `execution_enabled` defaults to
+false and rejects before configuration reads, task-state creation or process
+launch. The caller must also supply a positive integer in
+`execution_config["tool_calls_per_task"]`; missing, null and invalid values
+refuse before launch. There is no default tool-call value or selected candidate.
+The existing workflow and inert VM plan remain unchanged and cannot invoke it.
+
+| Limit | Previously available | New adapter behavior |
+| --- | --- | --- |
+| 1200 seconds/task | Supplied-event collection only | Start a monotonic deadline before `Popen`; check after launch, while reading and after EOF. Stop a silent, partial-line or closed-stdout process with `task_timeout_exceeded`. |
+| 64 turns/task | Supplied-event collection only | Count agent-scoped `assistant.turn_start`/`turnId` identities. Accept 64; stop when the 65th start is observed with `turn_cap_exceeded`. |
+| Tool-call cap | Undefined | Require the caller's value, count `tool.execution_start`/`toolCallId` once per agent, and stop on the first observed count above it with `tool_call_cap_exceeded`. Malformed or repeated start identities refuse. |
+
+The adapter creates one fresh private task directory and owns a new POSIX
+process group. Every started-process exit path signals that group with TERM
+and then KILL, including when the leader exits first. Cleanup allows one second
+for TERM and four seconds for the final wait; `waitid(..., WNOWAIT)` keeps the
+leader PID reserved until group signalling finishes. The receipt distinguishes
+group signals, leader reaping and stdout closure. It does not claim that escaped
+sessions were contained or every orphan was reaped. Partial files stay in
+`private/files`; they are neither read into the receipt nor uploaded.
+
+The JSONL reader retains the existing byte, line and event limits and reuses
+the existing collector for allowlisted settings metadata. The outer receipt's
+`limits` and `cleanup` describe the owned process; the nested collector receipt
+keeps its separate collection-only labels. Commands, paths, raw events, stderr,
+headers and credentials are not serialized. The child receives a minimal
+environment without inherited credential channels, not an approved GHCP
+authentication mechanism or proof that a CLI cannot discover a user cache.
+Auto/BYOK checks are reused. Missing usage and cost remain null with
+`not available`; settings stay settings only, and all paid/retry/live-proof
+authority flags remain false.
+
+One combined offline invocation passed **295 tests, 0 failed, 0 skipped in
+15.79s**, with **15.96s** wrapper wall time: the unchanged **231** gate tests
+and **64** new adapter tests. Only generated Python fake executables ran.
+They cover boundaries, accelerated deadlines, malformed streams, private
+canaries, refusal before spawn, partial-file retention, and child/grandchild
+group termination, including ignored TERM and a leader that exits first.
+The earlier 231-test results below remain separate historical proofs.
+[The current result](../tasks/LATEST_TASK_RESULT/README.md) records the exact
+source additions, invocation and log/JUnit identities.
+
+**The actual GHCP-to-Codex route remains unbound.** No exact command, pinned
+CLI version or real output stream was selected or tested. The documented
+event envelope is a fixture contract, not proof of complete, prompt delivery
+for this route or its sub-agents. Start events report effects already begun;
+cancellation cannot prove that an excess turn/tool action never took effect.
+An approved command/event binding, tool-call value, authentication isolation,
+input and grader checks, applied-settings evidence and fixed-source review/CI
+remain required before any separate execution decision. This change does not
+enable the workflow, exercise a model, reopen a spent right or change a plan.
+
 ## Execution-path audit, 2026-10-25 02:40 KST
+
+This historical audit predates the disabled adapter above.
 
 **There is no GHCP/Codex task launcher in this gate to attach execution
 limits to.** The current task therefore produces a source-backed blocker and
