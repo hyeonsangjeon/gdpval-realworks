@@ -46,6 +46,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Check installed Copilot/Codex help and packaged runtime schemas without
+  starting a session. Record host executable versions **1.0.103 / 1.0.79**
+  and Codex **0.144.5**, separately from package metadata and unverified VM
+  versions. Confirm JSONL/options and SDK event fields, not a GHCP-to-Codex
+  launch binding, applied Max/1M or complete delivery. Leave runtime parsers,
+  workflow, plans, caps and dependencies unchanged; add one eight-event
+  schema-validated synthetic fixture and four adapter cases. Combined proof:
+  **295 passed, 4 failed, 0 skipped in 15.60s**, wrapper **15.77s**, exit **1**.
+  Correct the fake-program argument index, then rerun only the four failures:
+  **4 passed in 0.30s**, wrapper **0.47s**, exit **0**. Do not pool these into
+  a 299-pass invocation or reuse the historical **295/15.79s** proof as new.
+  Preserve the failed launcher/help diagnostics and the lack of an audited
+  zero-background-network guarantee for initial help calls. No prompt,
+  authentication, model, dispatch, grading or push command was issued.
+  See the [installed CLI audit](docs/ghcp-sol-actions-gate.md#installed-cli-contract-audit-2026-10-25-1215-kst)
+  and [exact separate evidence](tasks/LATEST_TASK_RESULT/README.md).
+
 - Audit the GHCP Sol gate's actual execution path without widening its
   contract. Both workflow jobs refuse paid mode; the task step launches only
   the model-free capture, not a GHCP/Codex runtime. The existing **1200-second**

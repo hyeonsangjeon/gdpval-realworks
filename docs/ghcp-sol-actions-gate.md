@@ -4,6 +4,118 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Installed CLI contract audit, 2026-10-25 12:15 KST
+
+**The exact GHCP-to-Codex launch command remains unconfirmed.** Local help
+confirms noninteractive and JSONL options, but not that this route applies
+Sol, Max and a numeric 1M context together. No authenticated session, prompt,
+model call, server startup or live event capture was run. The adapter and
+collector are unchanged; only schema-shaped synthetic fixtures were added.
+
+The retained help files below are in
+`/ai-work/copilot/_tmp/ghcp-sol-cli-contract.9Qj6sx/`.
+
+| Inspected host executable | Observed version | Boundary |
+| --- | --- | --- |
+| `/home/dev/.local/share/nas-copilot-desk/copilot-cli/node_modules/@github/copilot-linux-x64/copilot` | `--no-auto-update --version`: **1.0.103** | Sibling `package.json:3` says **1.0.98**. Package metadata is not the executable version. |
+| `/usr/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/copilot` | `--no-auto-update --version`: **1.0.79** | Sibling metadata agrees; this package contains the inspected runtime/SDK schema. An earlier unpinned invocation reported 1.0.103. |
+| `/home/dev/.local/bin/codex` -> `/home/dev/.codex/packages/standalone/releases/0.144.5-x86_64-unknown-linux-musl/bin/codex` | **0.144.5** | This is the host executable, not VM version evidence. |
+
+The earlier host observation of Copilot **1.0.83** was not reproduced; none
+of these observations establishes the intended VM version. The default
+`/usr/local/bin/copilot` wrapper was read, **not executed**: lines 20-29 run
+entropy helpers and line 33 can call `gh auth token`. That wrapper is not an
+approved authentication or launch binding for this adapter.
+
+### Command syntax: confirmed options, unconfirmed route
+
+`copilot-pinned-help.txt:38-40,53-63,103-107` documents `-p` (noninteractive,
+exit on completion), `--model`, `--reasoning-effort max`,
+`--context long_context`, `--stream on` and `--output-format json` (JSONL,
+one object per line). `copilot-config-help-fixed.txt:148` lists `gpt-5.6-sol`.
+The following is **partial syntax only; it was not executed**:
+
+```text
+<pinned-copilot> --no-auto-update --disable-client-telemetry -p <prompt> --model gpt-5.6-sol --reasoning-effort max --context long_context --output-format json --stream on
+```
+
+`--agent` explicitly selects a **custom agent**, not a verified Codex harness.
+`long_context` is an eligible-model tier (`copilot-config-help-fixed.txt:165`),
+not a numeric or applied 1M attestation. Sol/Max options are requested settings,
+not served evidence. The config help also documents `continueOnAutoMode`
+at lines 110-112; this investigation neither enabled it nor changed guards.
+
+Codex `exec --help` confirms noninteractive execution, `--model`, TOML `-c`
+and `--json` (stdout JSONL, `codex-exec-help.txt:92-93`). It does not establish
+a GHCP authentication bridge or this four-part launch contract. The inspected
+0.144.5 release did not supply an event schema among its bundled resources.
+Only `app-server --help` and `app-server generate-json-schema --help` ran;
+no server or schema generator was started. A newer repository SDK is not
+substituted as evidence for this installed CLI.
+
+### Event shape versus delivery
+
+The packaged 1.0.79 runtime schema is
+`/usr/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64/schemas/session-events.schema.json`,
+SHA-256 `350df35914d4e2fdbadb8932ca66f1e58d759aad79b5be9291857c9052d31301`.
+Its SDK and schema describe these fields; they do **not** prove that the
+1.0.103 prompt-mode stdout stream emits every such event promptly.
+
+| Field or marker | Installed evidence | What it does not prove |
+| --- | --- | --- |
+| `assistant.turn_start`, `data.turnId`, optional top-level `agentId` | Schema lines 1186-1260; absent `agentId` denotes the root agent. | Complete turn delivery from the eventual GHCP-to-Codex route. |
+| `tool.execution_start`, `data.toolCallId`, `data.toolName` | Lines 15275-15386; IDs support per-agent counting. | Admission before a tool takes effect, or reliable delivery of all starts. |
+| `assistant.usage.data.model`, optional `reasoningEffort` | Lines 1340-1543; the event requires `ephemeral: true`. | Applied settings or a complete native-request count. A valid event can omit effort. |
+| `session.usage_info.data.tokenLimit` | Lines 15935-16036; also requires `currentTokens`, `messagesLength` and `ephemeral: true`. | A call-specific 1M context attestation. It remains a preceding session snapshot. |
+| `session.idle`, `session.shutdown` | Lines 6760-6788 and 12527-12553: idle means no in-flight agents/attached shell commands; shutdown carries termination metrics. | A stdout flush barrier, a complete stream, or proof that all sub-agent events arrived. |
+
+The same package's `copilot-sdk/session.d.ts:131-145` says `sendAndWait`
+waits for `session.idle`; its timeout does **not** abort in-flight work.
+`copilot-sdk/types.d.ts:1938-1953` describes streaming/sub-agent forwarding.
+Neither establishes CLI stdout buffering, flush timing or loss-free delivery.
+Ephemeral usage/idle events are not persisted in the session log. Reading a
+saved session file alone therefore cannot supply all required evidence.
+EOF, idle and shutdown do not upgrade `stream_completeness_verified`.
+
+### Narrow fixture change and separate proofs
+
+The existing parser already uses the documented field paths, so no parser,
+helper, workflow, plan, cap, dependency, registration or permission changed.
+Added an eight-event **synthetic** JSONL fixture with schema-required envelopes,
+linked parent IDs, tool name, context fields and ephemeral markers. All eight
+events pass the installed Draft-07 schema with format checking and internal
+references only. Four fake-process variants check full metadata, absent
+ephemeral events, optional effort missing, and absent terminal markers.
+They retain private-canary exclusion, settings-only labels and false authority
+and completeness flags. Fixture timestamps/zeros are not runtime measurements.
+
+One combined invocation returned **295 passed, 4 failed, 0 skipped in 15.60s**
+(wrapper **15.77s**, exit **1**). The four new cases failed because their fake
+program read the JSON argument at index 4 rather than 3. After that one-line
+fixture correction, **only those four** were rerun: **4 passed, 0 failed,
+0 skipped in 0.30s** (wrapper **0.47s**, exit **0**). Assertions and production
+code were unchanged. This is **not** a 299-pass final invocation. The earlier
+**295/15.79s** proof below remains historical and separate. Both test commands
+used **120s TERM + 5s KILL**; the first collection launcher also failed before
+pytest because `/usr/bin/time` was absent. Its log is retained.
+
+Direct help/version calls used a cleared inherited environment and an empty
+evidence working directory. After discovering the relevant flags, calls used
+`--no-auto-update` and `--disable-client-telemetry`. Initial calls lacked the
+update-disable flag; **no audited zero-background-network claim is made**.
+Attempted OS isolation was unavailable (user namespaces, Landlock, seccomp);
+the guarded help launcher stopped before CLI execution. No OS setting was
+changed. Three topic-help calls rejected unsupported `--config-dir`; removing
+only that argument allowed help to complete. It was not a config/cache sandbox.
+No update, login, token, model, network-fetch or dispatch command was issued.
+
+The next free prerequisite is to identify the intended VM executable and its
+exact **GHCP-to-Codex bridge plus stdout serializer contract**, from installed
+source/help only. Tool-cap approval, authentication isolation, complete live
+delivery and applied-settings proof remain separate gates; no launch or retry
+right was granted. [The current record](../tasks/LATEST_TASK_RESULT/README.md)
+binds file hashes, commands, failed and passing logs/JUnit, and local source.
+
 ## Disabled process adapter, 2026-10-25 10:35 KST
 
 The leader authorized a local process-adapter skeleton after the earlier

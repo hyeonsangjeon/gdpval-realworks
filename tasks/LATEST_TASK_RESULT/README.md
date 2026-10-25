@@ -1,6 +1,139 @@
 # Latest task result
 
-## GHCP Sol gate: disabled process-adapter skeleton
+## GHCP Sol gate: installed CLI help and schema evidence
+
+Scope: the leader's **2026-10-25 12:15 KST** order. This is a local
+help/package investigation with synthetic fixture verification, not a GHCP
+session, model measurement, launch approval or study completion. Worktree
+`/ai-work/copilot/_tmp_worktrees/ghcp-sol-gate-actions-20261024`, branch
+`leader/ghcp-sol-gate-actions-20261024`, was clean at
+`6ceb602bf99e418f932bf7c2fd9d5594b1429e66`, tree
+`e4dd1dd7dc1bf12fc4e0811d0c927a77de08db1b`. No other checkout was changed.
+
+### Result
+
+**The exact GHCP -> Codex + Sol + Max + numeric 1M command remains unknown.**
+Copilot help confirms noninteractive `-p`, model/effort/context-tier selection
+and stdout JSONL; `--agent` means custom agent, not a Codex harness binding.
+`long_context` is not proof of numeric or applied 1M. Direct host executable
+versions with update/cache selection disabled are **1.0.103** (Desk runtime;
+sibling package metadata **1.0.98**) and **1.0.79** (system package).
+Codex reports **0.144.5**. None verifies the intended VM versions; the earlier
+Copilot **1.0.83** observation was not reproduced. Exact executable paths,
+help quotations and file/line references are in the
+[direct audit](../../docs/ghcp-sol-actions-gate.md#installed-cli-contract-audit-2026-10-25-1215-kst).
+
+The inspected **1.0.79** package schema supports the existing parser's turn,
+tool, usage and context field paths. Runtime parsers were therefore left
+unchanged. The schema does not establish **1.0.103 CLI stdout delivery**.
+Usage/context/idle events are ephemeral, effort is optional, and neither
+EOF nor idle/shutdown proves complete, promptly flushed delivery. A saved
+session file alone cannot supply the missing ephemeral metadata. No newer
+Codex SDK schema was substituted for the installed 0.144.5 CLI.
+
+Added only a schema-shaped synthetic JSONL fixture and four variants in the
+existing adapter test. Eight generated events validate against the packaged
+Draft-07 schema, including format checks and internal references only. The
+variants cover full settings, missing ephemeral events, absent optional effort,
+and absent terminal markers. The latter still carries false completeness and
+applied-settings flags. Fixture zero values and timestamps are synthetic, not
+usage or performance reports. No tool-cap value, plan, runtime helper, workflow,
+dependency, registration, pin, permission, score or consumed right changed.
+
+### Current proof: keep the invocations separate
+
+Evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-cli-contract.9Qj6sx/`.
+
+| Invocation | Result | Timing and exit |
+| --- | --- | --- |
+| Initial collection launcher | `/usr/bin/time` absent; pytest never started. | Exit **127**, retained `collection.log`. |
+| Corrected collection, same three modules | **299 collected** | Pytest **0.39s**; wrapper **0.55s**; exit **0**. |
+| Combined gate/VM/adapter bodies | **295 passed, 4 failed, 0 skipped** | Pytest **15.60s**; wrapper **15.77s**; exit **1**. |
+| Only four failed new variants, after fixture fix | **4 passed, 0 failed, 0 skipped** | Pytest **0.30s**; wrapper **0.47s**; exit **0**. |
+
+The combined JUnit contains **138 Actions + 93 VM + 64 existing adapter**
+passes and **4 new fixture failures**. Auto/BYOK refusals are included in the
+passing population. The new fake program read `sys.argv[4]` instead of the
+supplied JSON argument at `sys.argv[3]` and exited before emitting events.
+Only that index was corrected; no assertion or runtime code was weakened.
+The four-case rerun is not a full final 299-test pass. The prior **295 passed
+in 15.79s** is a separate historical proof, retained below and at
+`6ceb602bf99e418f932bf7c2fd9d5594b1429e66:tasks/LATEST_TASK_RESULT/README.md`.
+
+Commands ran in the worktree's `batch-runner` directory under Python 3.10.12,
+**120s TERM + 5s KILL**, with a cleared environment, offline Hub flags,
+bytecode/cache/plugin auto-loading disabled, and existing provider/network
+traps. The adapter fixtures permit only the generated fake Python executable.
+Exact collection/full-test argv is in `invocation.txt`; the only rerun was:
+
+```bash
+timeout --signal=TERM --kill-after=5s 120s env -i PATH=/usr/local/bin:/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 /ai-work/copilot/_tmp/ghcp-sol-gate-ci-20261024-venv/bin/python -m pytest -q -ra --tb=short -o addopts= -p no:cacheprovider --junitxml=/ai-work/copilot/_tmp/ghcp-sol-cli-contract.9Qj6sx/junit-fixed.xml tests/test_ghcp_sol_execution_adapter.py::test_packaged_sdk_shape_is_not_cli_delivery_proof
+```
+
+Both body invocations used the starting HEAD plus uncommitted test/fixture
+bytes, **not a clean tested commit**. Documentation was updated after proof.
+The final local commit/HEAD/tree and clean status are recorded after commit
+in `final-source.txt`; its executable/test bytes must match the fixed hashes.
+
+| Source | SHA-256 |
+| --- | --- |
+| Test before the fake-argument correction | `c31204d5898712aa7decafbfad11ccda513ae3e56e55589402eda5532fb48b61` |
+| Final `batch-runner/tests/test_ghcp_sol_execution_adapter.py` | `fd920cc4a51626855b1a35835164c68372b201129d213bf944fb7c03e2a50533` |
+| New `batch-runner/tests/fixtures/ghcp_sol_packaged_sdk_events.jsonl` | `352aa198b0bf43c087f7fc64bc6f032e7839738e158c57c0b9e9a81884a8b323` |
+| Unchanged `batch-runner/ghcp_sol_execution_adapter.py` | `e9b399dd5e222d5f3c6587f59937a608ea433db1d0bdfa5b1f52753f6a8436fb` |
+| Unchanged `batch-runner/ghcp_sol_actions_gate.py` | `d757aafd7c18c32f6682b79ebd4f51bc901d58f2fa97c8c50030e1b4762ed698` |
+| Inspected installed Copilot 1.0.79 event schema | `350df35914d4e2fdbadb8932ca66f1e58d759aad79b5be9291857c9052d31301` |
+
+| Artifact in the evidence directory | SHA-256 |
+| --- | --- |
+| `invocation.txt` | `854c2bbc5a0b090f281070462896a89d26ab97130695738d82df841d6eec67aa` |
+| `invocation-fixed.txt` | `0ebe38518bc992c3f107f1c6f7b8c79eccde5b55140c73ad92660b54c710b581` |
+| `collection.log` (launcher failure) | `3e737f6a9117cec194b02103b357f8668fae9adb86a8a8cd0bf25efab8948548` |
+| `collection-fixed.log` | `f79dd21c0dabd4d6117c196e9c5a212c794294f7f0a587c8b8ccf8a598b02f0f` |
+| `collection-fixed-timing.txt` | `3402c7083fa08c10ff5c62156190ee8c2bde40678d2d824f50a46adb29a47a9f` |
+| `test.log` (combined failure) | `e6eea5f40d218a8da36e2763640ab307dfb0518e56f3e6891937c866a37e8000` |
+| `junit.xml` (combined failure) | `75154c856ee030f2db135bfffcab086bc64cf8459706edb13346b5919b0a3085` |
+| `timing.txt` | `cda1c5f91b81049541e0d9a39b8e7355dbab44cf31bcad906088bfdb0d8a5c4e` |
+| `test-fixed.log` (four cases only) | `f299cb0ffb4580215f4b9643a2f31cdf09e6c57c46f955b1d1c6a26a088f6fb3` |
+| `junit-fixed.xml` (four cases only) | `688c0c5708034504beffefb02e373d8b4f0bd09ea875f65474c0a8f20712203d` |
+| `timing-fixed.txt` | `5b4573c4e5671a2aa1054f846e6769754ef1f0736b6ebdeee81eaf79233479f5` |
+| `schema-validation.log` | `8a81e78a96f053b1d9c6220ee59ff1d3a2590d1ac3375b758e82de461f753639` |
+| `tested-files.sha256` (before fixture fix) | `0e6d63b22eed64be2f18562b908865aacd0af8b4bd082a3f999fdab93395cb19` |
+| `tested-files-fixed.sha256` | `35c088c024ef8fefdc86e8d9bfe6e14b31ac45d0e5a036ab482462e2c46f598d` |
+| `help-evidence.sha256` (help/version and failed-help hashes) | `dd4a23b4ce01e1eeed63e850559dd0e3b142edc397c9112f0b2acd01b7a82565` |
+| `installed-source.sha256` (three binaries, schema and SDK declarations) | `13a1019ee6ba6317634f06bd84262639a3f1305e93041eec2b52194b9ad47e8f` |
+
+### Help-only boundaries and remaining gate
+
+The host `copilot` wrapper was inspected but never invoked because it can
+resolve a token. Direct binaries ran only help/version commands under cleared
+inherited environments, in the evidence directory, bounded to 20s + 2s.
+User namespaces, Landlock and seccomp isolation were unavailable; the first
+guarded launcher failed before CLI exec (`copilot-help.stderr`). Initial
+direct calls did not disable automatic updates, so **background network
+absence was not audited or proved**. Later help calls explicitly disabled
+updates and client telemetry. No update/download, login, token, network-fetch,
+model/session, schema-generator or server-start command was issued.
+Three topic-help calls rejected `--config-dir` (exit 1); their exact errors
+remain in `copilot-{logging,config,environment}-help.stderr`. Removing only
+that unsupported argument let those help calls exit 0. It did not establish
+a config/cache sandbox. No credential value, user cache or raw session was read.
+
+The next free step is one installed-source binding of the intended VM
+executable, GHCP-to-Codex bridge and stdout serializer. Complete/prompt event
+delivery, applied model/Max/1M, approved tool cap, authentication isolation,
+input/grader evidence and fixed-source review/CI still precede any separate
+execution decision. The default-disabled adapter and dry-only workflow stay
+disabled; no paid call, retry, score, cost, publication or completion authority
+is inferred from this work. Local commit only; no push, dispatch or Project edit.
+
+`openai-docs` was applied using installed-source evidence because network
+lookup was prohibited. `experiment-report-en` keeps help, schemas, fixtures,
+failed diagnostics and measured test populations separate; `im-not-ai-en`
+preserves those limits in the English records. No experiment-design, UI or
+animation work applies, and no specialist endorsement is claimed.
+
+## Historical: GHCP Sol disabled process-adapter skeleton
 
 Scope: the leader's **2026-10-25 10:35 KST** order, local implementation and
 synthetic verification only. The existing branch is

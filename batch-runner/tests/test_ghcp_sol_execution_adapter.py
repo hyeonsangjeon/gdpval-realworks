@@ -61,6 +61,12 @@ else:
         descendant = spawn("child")
         assert descendant.stdout.readline() == b"ready\n"
 
+    if mode == "packaged_schema":
+        # Synthetic, schema-shaped data supplied by the test; never a real CLI.
+        for event in json.loads(sys.argv[3]):
+            print(json.dumps(event), flush=True)
+        raise SystemExit(0)
+
     def emit(kind, data, **envelope):
         print(json.dumps({"type": kind, "data": data, **envelope}), flush=True)
 
@@ -281,6 +287,65 @@ def test_subagents_are_counted_without_publishing_identities(tmp_path, fake_prog
     assert result["reason_codes"] == []
     assert result["limits"]["observed_turn_starts"] == 2
     assert result["limits"]["observed_tool_starts"] == 2
+
+
+@pytest.mark.parametrize("variant,reason", [
+    ("complete", None),
+    ("persisted_only", "served_model_unverified"),
+    ("optional_effort_missing", "reasoning_effort_unverified"),
+    ("terminal_markers_missing", None),
+])
+def test_packaged_sdk_shape_is_not_cli_delivery_proof(tmp_path, fake_program, variant, reason):
+    # Copilot 1.0.79 packaged schemas/session-events.schema.json, SHA-256
+    # 350df35914d4e2fdbadb8932ca66f1e58d759aad79b5be9291857c9052d31301.
+    # This is SDK schema evidence, NOT the CLI stdout serialization contract.
+    path = Path(__file__).parent / "fixtures" / "ghcp_sol_packaged_sdk_events.jsonl"
+    events = [json.loads(line) for line in path.read_text().splitlines()]
+    assert len(events) == 8
+    assert all({"id", "timestamp", "parentId", "type", "data"} <= event.keys()
+               for event in events)
+    assert [event["parentId"] for event in events] == [None] + [
+        event["id"] for event in events[:-1]
+    ]
+    if variant == "persisted_only":
+        events = [event for event in events if not event.get("ephemeral", False)]
+    elif variant == "optional_effort_missing":
+        for event in events:
+            if event["type"] == "assistant.usage":
+                del event["data"]["reasoningEffort"]
+    elif variant == "terminal_markers_missing":
+        events = [event for event in events if event["type"] not in {
+            "session.idle", "session.shutdown",
+        }]
+
+    def command(mode, amount=0):
+        return fake_program(mode, amount) + [json.dumps(events)]
+
+    result, _ = _run(tmp_path, command, "packaged_schema")
+    assert result["limits"]["observed_turn_starts"] == 1
+    assert result["limits"]["observed_tool_starts"] == 1
+    assert result["event_stream_eof_observed"] is True
+    evidence = result["session_event_receipt"]
+    assert evidence["evidence_level"] == "settings_only"
+    assert evidence["applied_settings_verified"] is False
+    assert evidence["stream_completeness_verified"] is False
+    if reason:
+        assert result["status"] == "failed"
+        assert result["exit_status"] == 2
+        assert reason in result["reason_codes"]
+        if variant == "persisted_only":
+            assert evidence["observed_usage_events"] == 0
+            assert evidence["calls"] == []
+        else:
+            assert evidence["calls"][0]["reasoningEffort"] is None
+    else:
+        assert result["status"] == "completed_process_only"
+        assert result["exit_status"] == 0
+        assert result["reason_codes"] == []
+        assert evidence["observed_usage_events"] == 1
+        assert evidence["calls"][0]["context_binding"] == (
+            "preceding_same_agent_session_snapshot_not_call_attestation"
+        )
 
 
 @pytest.mark.parametrize("mode,reason", [
