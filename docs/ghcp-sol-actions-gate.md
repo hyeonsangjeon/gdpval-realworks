@@ -1,5 +1,42 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## Authentication-source opt-in follow-up
+
+**No new smoke was started.** In this Desk worker's inherited environment,
+`COPILOT_GITHUB_TOKEN`, `GH_TOKEN` and `GITHUB_TOKEN` were all absent. Only name
+membership was inspected, not values. The active Desk's stored-login kind
+remains **unknown**; no keychain/config contents were read or credentials sought.
+
+The retained 1.0.103 `help environment` names those variables in that precedence
+order (with a documented Codespaces exception). The installed executable still
+matches SHA256 `f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d`.
+A names-only static inspection of `/usr/local/bin/copilot:32-34` identifies a
+`gh auth token` to `GH_TOKEN` bridge. That wrapper was not executed, and its
+presence does not establish this Desk session's actual authentication source.
+
+The adapter now requires an explicit `--auth-source` from the three-name
+allowlist. It passes only the chosen existing variable to the isolated child;
+there is no source fallback, store lookup or file copy. Missing selection or an
+unavailable source refuses before executable validation, directory creation or
+spawn. A receipt records only the chosen name as `auth_source`, never its value.
+Work/HOME/config/cache remain fresh, and model, effort, context and caps do not
+change. The execution flag still defaults false.
+
+An in-memory guard fails closed if the selected value, including its JSON-escaped
+form, appears in stdout/stderr, the receipt or the adapter-owned bounded JSONL
+transcript. Split pipe chunks are covered; credential-bearing lines are not
+written to that transcript. The guard does not scan arbitrary CLI cache/log
+files or attest protection against every possible encoding or process-memory
+reader. This directory setup is still not a VM or a security sandbox.
+
+One combined offline invocation passed **455 tests, 0 failed, 0 skipped** in
+**50.87 pytest seconds**. The evidence directory is
+`/tmp/p5-ghcp-auth-optin.F5QHs2/`. The current observation is a skipped-smoke
+record, not another CLI authentication error: exit, model, effort, context and
+usage are unknown/null; usage is `not available`. The earlier single prompt
+attempt and its receipt below remain unchanged. No five-task run, login, token
+issuance, credential-store change, retry, PR, merge or dispatch followed.
+
 ## Current NAS smoke decision and result, 2026-10-26
 
 **The single approved CONNECTED smoke reached an authentication failure.**

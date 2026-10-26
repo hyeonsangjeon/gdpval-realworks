@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Require explicit, allowlisted authentication-environment selection for the
+  isolated Copilot CLI smoke. Record only `auth_source` names; refuse missing
+  sources before launch and reject selected-value echoes in pipe, receipt and
+  adapter-transcript paths without publishing the value. One combined offline
+  invocation passed **455 tests, 0 failed, 0 skipped**. All three supported
+  variables are absent from the current worker environment, so no new real
+  smoke was attempted. Stored-login type remains unknown; no credential lookup,
+  login, token creation or five-task execution. Prior receipts are preserved.
+
 - Bind a disabled-by-default, fixed **CONNECTED** smoke to installed Copilot
   CLI **1.0.103**, with verified executable bytes and a fresh NAS work/HOME/
   config/cache environment. Label the condition **GHCP Copilot CLI agent +

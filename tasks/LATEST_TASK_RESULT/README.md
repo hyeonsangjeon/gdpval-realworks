@@ -1,5 +1,44 @@
 # Latest task result
 
+## GHCP authentication opt-in: source absent, smoke skipped
+
+At base `4a10996f2c8927896f711dd4722d57a6808d5c83`, add a name-selected,
+disabled-by-default authentication path to the fixed Copilot CLI smoke. The
+allowlist is `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`; only the explicitly
+chosen existing name is forwarded. Receipts contain `auth_source` as a name,
+not a value. Missing/invalid selection or an unavailable source refuses before
+executable validation, directory creation or spawning. No authentication file is copied.
+
+The three names are **all false/absent in this worker's inherited environment**.
+The CLI's retained 1.0.103 help documents their precedence. Static source names
+in `/usr/local/bin/copilot:32-34` show a GitHub CLI authentication bridge to
+`GH_TOKEN`; no wrapper or token command ran. The active Desk's stored-login
+kind remains **unknown**, not a claim of keychain/config absence. Values,
+credential stores and private configuration contents were not inspected.
+
+**No new smoke was started**, so the current smoke exit is **null**, and
+`served_model`, `reasoningEffort`, `tokenLimit` remain **null / unverified**.
+Usage is **not available**, not zero. No five-task/220-task run, retry, login,
+token creation, credential change, PR, merge or workflow dispatch occurred.
+The preceding actual CLI exit 1 / adapter exit 2 belongs only to the prior
+attempt; it is not reused as a new execution result.
+
+One combined offline gate invocation passed **455 tests, 0 failed/errors/skipped**,
+**50.87 pytest / 51.157132434 wrapper seconds**, exit **0**. The added fixtures
+cover names-only presence inspection, explicit source selection, pre-launch
+refusal and literal/JSON-escaped value non-egress through stdout, stderr,
+receipt and adapter-owned transcript, including split chunks. The guard is not
+a general encoding detector or a scan of arbitrary CLI stores/logs. No real
+credentials or installed CLI were used by fixtures. The earlier 433-test proof
+remains separate, not a pooled total.
+
+Evidence: `/tmp/p5-ghcp-auth-optin.F5QHs2/`, including
+`auth-source-observation.json`, `tested-code.sha256`, `tested-code.patch` and
+`gate-tests.*` with the exact command, log, JUnit and timings. Only this GHCP
+worktree changed. Fresh work/HOME/config/cache, 1,200 seconds, 64 turn starts,
+32 tool starts, model selection and the blocked five-task route are preserved.
+Final commit/push identity is returned in the handoff, not presumed here.
+
 ## GHCP Copilot CLI agent + GPT-5.6 Sol: one NAS smoke
 
 The leader selected the installed Copilot CLI default agent and a NAS isolated
