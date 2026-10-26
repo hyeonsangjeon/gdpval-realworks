@@ -4,6 +4,35 @@ Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
 This draft does not grant push, dispatch, paid inference or grading approval.
 
+## Owner execution request and publication boundary, 2026-10-26
+
+The owner subsequently authorized paid experimentation, pipeline work and
+ordinary commit/push. **Approval is no longer the missing prerequisite.**
+This request does not identify a replacement harness, a tool-call cap, a
+currency ceiling or an authentication supply method. No historical right
+or consumed attempt is reset.
+
+OpenAI's [GPT-5.6 Sol model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+advertises a **1,050,000-token context window**. The HTTPS read returned 200;
+the retained page is 461,900 bytes, SHA256
+`7bde0883be9345f5a4ef44ccbb5a1843ddd9f0672d0970ad35ae2ab03151d451`.
+This establishes the published model specification, not the context actually
+applied by a GHCP session. No model or session was run to obtain this evidence.
+
+| Remaining execution prerequisite | Existing source evidence |
+| --- | --- |
+| Runnable GHCP-backed Codex command and isolated authentication | `ghcp_sol_execution_adapter.py` explicitly binds neither; the workflow does not call the adapter. `code` and `code-insiders` are not on this host's PATH. This does not establish product absence elsewhere. |
+| Complete capture and enforced task limits | The retained adapter proof concerns fake executables. Real event delivery and pre-effect enforcement remain unverified; the existing 1,200-second/64-turn requirements are unchanged. |
+| Approved tool-call and monetary limits | The inert GHCP registration still has null `execution.tool_calls_per_task` and `cost.approved_maximum_usd`. No values were invented or borrowed from the separate Foundry condition. |
+| Dispatchable pipeline | The existing workflow implements dry capture only. The GitHub workflow metadata lookup returned HTTP 404; no dispatch was attempted, and that response alone does not distinguish a missing record from unavailable access. |
+
+The requested ordinary branch publication can proceed independently; it does
+not merge the workflow or turn dry capture into a paid experiment. Replacing
+Codex with the Copilot CLI's default harness would change the registered
+condition and still needs an explicit scope decision. The previous b/c/d
+unknowns therefore remain; they are not a claim that Sol lacks a 1M capability.
+Current evidence is retained in `/tmp/p5-ghcp-execution-20261026.GQp0K1/`.
+
 ## Product routes and scope decision, 2026-10-25 21:45 KST
 
 **Copilot-backed Codex exists, but no inspected route closes this card's

@@ -1,66 +1,57 @@
 # Latest task result
 
-## GHCP Sol gate: product routes and owner scope decision
+## GHCP Sol gate: execution approval and publication boundary
 
-Scope: the leader's **2026-10-25 21:45 KST** order, installed help/package
-inspection and public official-document research only. Worktree
+Scope: the owner's **2026-10-26** request to proceed with paid experiments,
+pipeline work and ordinary commit/push. Worktree
 `/ai-work/copilot/_tmp_worktrees/ghcp-sol-gate-actions-20261024`, branch
 `leader/ghcp-sol-gate-actions-20261024`, started clean at
-`b9440698014eae3a941ea31d86f6b6bf5599a595`, tree
-`a2285ea2c50ae30e606015fe7b7a93acc8641880`. No other checkout was changed.
+`2f0773b361a688ab7e93a8d8ae61adc5e568bece`, tree
+`6ac9e67f82557631f07a31e97a8ab170d8a4372c`. No other checkout was changed.
 
 ### Result
 
-**Copilot-backed Codex is a documented product, but no inspected route
-closes this card's unattended VM and applied Sol/Max/1M gate.** Codex is
-available through GitHub cloud coding-agent sessions and VS Code integrations,
-not the installed Copilot CLI custom-agent selector. VS Code documents an
-experimental Codex Agent Host and standalone `code agent host`; an approved
-unattended task/bootstrap and evidence contract remains unverified.
+**Paid execution and publication are now owner-authorized, but this branch
+does not implement a runnable GHCP-backed Codex task route.** No paid task,
+grading or pipeline dispatch ran. Approval has not been substituted for a
+working command, isolated authentication or missing execution-limit values.
 
 | Question | Finding and boundary |
 | --- | --- |
-| Product path | GitHub's Agents tab, issue assignment, PR mention and VS Code are documented entry points. Cloud work runs on provider-managed infrastructure, not the selected task job. `gh 2.98.0 agent-task create` submits remotely and exposes custom-agent selection, not Codex/model/effort/context controls. |
-| Exact settings | The fetched Codex cloud model list is Auto / GPT-5.3-Codex / GPT-5.4 nano, not Sol; the extension may have a different subset. This is not an account-entitlement check or a finding that Sol is unavailable. No applied Max/1M proof was found in the inspected contracts. |
-| Capture and caps | Logs/PR changes and Agent Host ordered state are documented, not the required complete private capture. A UI stop, local log-follower exit or soft credit cap does not prove 1,200-second/64-turn enforcement for the remote agent. The existing local adapter remains default-disabled. |
-| Versions | Direct host checks reconfirm Desk **1.0.103**, system **1.0.79**, Codex **0.144.5**; `gh` is **2.98.0**. Desk metadata remains **1.0.98**, with no standalone schema. Exact cross-version event equivalence and VM versions remain unverified. No pin changed. |
+| Model capacity | OpenAI's GPT-5.6 Sol model page advertises a **1,050,000-token context window**. This is a published model specification, not a measurement of the GHCP session's applied context. |
+| Actual execution | `.github/workflows/agentic-v2-ghcp-sol-gate.yml` is dry-only. The adapter has no GHCP command/authentication binding and is not wired into that workflow. `code` and `code-insiders` are not on PATH; no installation or account-entitlement conclusion is inferred. |
+| Remaining limits | The existing **1,200-second / 64-turn** requirements are unchanged. The inert registration's tool-call and USD ceilings remain null. No Foundry limit or pricing was imported. |
+| Publication and dispatch | The exact origin project was confirmed. The bounded remote-head lookup exited 0 with no matching branch. The workflow metadata GET returned **HTTP 404**, which does not identify whether the record is absent or inaccessible. No dispatch was attempted. The ordinary push outcome belongs to the final handoff, not an anticipated success in this record. |
 
-Recommend **A: preserve the registered scope and hold execution** while
-obtaining a version-bound Copilot-backed Codex Agent Host contract for launch,
-settings evidence, events and cancellation on the selected VM. **B**, a
-Copilot CLI harness comparison, needs a separate owner scope/registration
-decision and still has evidence gaps. **C** stops the gate without a benchmark
-result. These are options, not permissions. The
+The original GHCP/Codex condition is preserved. Switching to Copilot CLI's
+default harness would be a different condition, not an implementation fix.
+The owner can supply the missing Codex connection contract or explicitly
+choose that scope change. The
 [route matrix and official sources](../../docs/ghcp-sol-actions-gate.md#product-routes-and-scope-decision-2026-10-25-2145-kst)
 give the per-route yes/no/unknown decisions and their conditions.
 
-### Current research evidence
+### Current evidence and checks
 
-Evidence directory: `/ai-work/copilot/_tmp/ghcp-sol-product-routes.6OzcYw/`.
-It contains public HTML snapshots, installed help stdout, `research-method.md`
-and the English protection/reconciliation record. Public reads used HTTPS,
-bounded sizes and deadlines, without supplied credentials. Help/version used
-cleared environments and **15s TERM + 3s KILL** wrappers, with Copilot updates
-disabled. No prompt, host, tunnel, login or agent-task operation ran.
+Evidence directory: `/tmp/p5-ghcp-execution-20261026.GQp0K1/`.
+The [official model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+returned HTTP 200. Its retained 461,900-byte body has SHA256
+`7bde0883be9345f5a4ef44ccbb5a1843ddd9f0672d0970ad35ae2ab03151d451`.
+The attempted official search URL redirected and then returned 404; it is
+not treated as search evidence. Only the fetched model page supports the
+capacity statement. Public reads had 20-second and 2-MiB bounds with no
+supplied credentials. No model response or private input was read, and no
+credential value was inspected or exposed.
 
-| Public source snapshot | Bytes | SHA-256 |
-| --- | --- | --- |
-| `github-third-party.html` | 607460 | `89b9e39cbca82ada7849241f4da914eafed777a44cac8fa282b7a16ad2a88e8c` |
-| `vscode-harnesses.html` | 141539 | `9fc45a95aeae10fb003516c331d0c7f29b6ebae8cbed074dd9ddbe54bf3c3b3d` |
-| `vscode-agent-host.html` | 113901 | `8b191b02c4e0c5dd495037bd64d5b55889dea60eea07a6bcc9bfe0f636d24950` |
-
-A system 1.0.79 environment-help command rejected
-`--disable-client-telemetry`; its corrected help-only command omitted that
-unsupported flag. Discovery search misses and that diagnostic are recorded,
-not counted as test failures. Public GETs are not zero network activity;
-disabled updates are not an independently measured absence of background
-network behavior. No authentication or private-session query was made.
-
-Only the direct document, this record and CHANGELOG change. Verification is
-limited to documentation diff/scope, citations and claim boundaries, English
-literal fidelity and unchanged executable/test hashes. No code, workflow,
-plan, cap, dependency, registration, pin, identity, permission, score or
-consumed right changed. This is not an independent fixed-HEAD review or CI.
+The preceding installed-CLI/version evidence and eleven help/version
+invocations remain in the [prior document](../../docs/ghcp-sol-actions-gate.md#default-agent-evidence-refinement-2026-10-26).
+The prior route findings, public-page digests and diagnostic limitations remain
+in the [immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ff8249cd8d94d07349cbc81292365c5e0f782262/tasks/LATEST_TASK_RESULT/README.md).
+Neither investigation was repeated. Git comparison confirmed that the
+workflow, collector, adapter and three gate test modules/fixtures are unchanged
+from the retained 313-test source below. No tests or collection reran.
+Only the direct document, this record and CHANGELOG change in this update;
+verification covers documentation scope, protected evidence and unchanged
+runtime hashes. This is not independent fixed-HEAD review or CI approval.
 
 ### Last retained synthetic proof; no tests rerun
 
@@ -126,21 +117,21 @@ The adapter remains disabled by default, and the workflow remains dry-only.
 The actual VM/harness command binding, an unfiltered complete/prompt event
 channel, served/applied model/Max/1M evidence, approved tool-call cap,
 authentication isolation/disposal, input/grader bindings and fixed-HEAD
-review/CI remain required before a separate execution decision. Event-based
+review/CI remain required before execution. Event-based
 cancellation is not pre-effect admission of turn/tool limits. Paid/retry and
-completion authority remain false; no performance, cost or score is inferred.
+completion fields in the unchanged inert contract remain false; no performance,
+cost or score is inferred. The owner's new execution approval does not make
+those operational prerequisites true or reset consumed rights.
 
-Only local documentation commits are authorized here. Actual commands were
-help/version and public official-document reads, not a task/model execution.
-No authentication/secret read, raw session/private input, paid/model call,
-dispatch, grading, push, PR or Project edit occurred. The original plans,
-limits, runtime refusal behavior and prior evidence remain unchanged.
+Ordinary branch publication is authorized. Repository metadata access uses
+existing configured Git/GitHub authentication; no login, token extraction,
+credential-store inspection or secret movement was performed. No raw session,
+private input, model call, dispatch, grading, PR, merge or Project operation
+ran. Plans, limits, runtime refusal behavior and prior evidence are unchanged.
 
-`openai-docs` guided official OpenAI source checks; the owner explicitly
-included official GitHub/VS Code documents in this research. The full skill
-catalog was considered once. `experiment-report-en` separates documented
-routes, installed observations, prior synthetic proof and live unknowns;
-`im-not-ai-en` preserves their conditions and exact values. The new evidence
-directory's `record-protection.md` records the protection brief and
-reconciliation. Experiment-design, UI and animation skills do not apply:
-no experiment design or interface changed. No specialist endorsement is claimed.
+`openai-docs` guided the model-specification check. `experiment-design` kept
+the registered condition and unknown cost/tool limits explicit without
+inventing them. `experiment-report-en` and `im-not-ai-en` preserve the boundary
+between the owner's approval, public specifications, prior synthetic proof
+and unobserved runtime behavior. No UI work or experiment redesign was done.
+No specialist, CI or runtime endorsement is claimed.

@@ -46,6 +46,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record the owner's 2026-10-26 authorization for paid experimentation and
+  ordinary branch publication without converting the dry-only GHCP gate into
+  a runnable Codex route. Confirm that OpenAI's GPT-5.6 Sol specification
+  lists a **1,050,000-token context window**, not a GHCP applied-context
+  measurement. Preserve the missing command/authentication binding, null
+  tool-call/USD ceilings, capture and runtime-limit gates. A workflow metadata
+  GET returned **HTTP 404**; no dispatch or model call ran. Runtime, workflow,
+  registrations and tests are unchanged; the prior **313 passed, 0 failed,
+  0 skipped** result remains prior synthetic evidence, not a new test run.
+  See [the execution boundary](docs/ghcp-sol-actions-gate.md#owner-execution-request-and-publication-boundary-2026-10-26)
+  and [the current record](tasks/LATEST_TASK_RESULT/README.md).
+
 - Document where Copilot-backed Codex is offered using official GitHub,
   VS Code and OpenAI sources and bounded installed help/version checks.
   Distinguish cloud coding-agent sessions, `gh 2.98.0 agent-task`, Copilot
