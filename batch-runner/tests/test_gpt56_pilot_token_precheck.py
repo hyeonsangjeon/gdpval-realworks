@@ -132,7 +132,8 @@ def test_unknown_usage_cannot_be_reopened_by_late_sdk_totals(monkeypatch, damage
 
 
 @pytest.mark.parametrize("kind", ["created_only", "incomplete", "failed", "in_progress", "truncated",
-                                  "duplicate_terminal", "after_terminal", "http_error"])
+                                  "duplicate_terminal", "after_terminal", "error_conflict",
+                                  "incomplete_conflict", "http_error"])
 def test_partial_or_failed_response_blocks_the_next_request(monkeypatch, kind):
     row = _response()
     if kind == "created_only":
@@ -150,6 +151,10 @@ def test_partial_or_failed_response_blocks_the_next_request(monkeypatch, kind):
     elif kind == "after_terminal":
         row.update(body=_sse() + b'data: {"type":"response.output_text.delta","delta":"late"}\n\n',
                    type="text/event-stream")
+    elif kind in {"error_conflict", "incomplete_conflict"}:
+        document = json.loads(row["body"])
+        document["error" if kind == "error_conflict" else "incomplete_details"] = {"reason": CANARY}
+        row["body"] = json.dumps(document).encode()
     else:
         row["status"] = 503
     with _upstream(monkeypatch, [row]) as (received, calls):
@@ -267,6 +272,28 @@ def test_exhausted_output_does_not_insert_zero_or_start_another_request(monkeypa
             capture.close()
     assert len(received) == len(calls) == 1
     assert _caps(capture)["stop_reason"] == wire.NATIVE_OUTPUT_PRECHECK_EXCEEDED
+
+
+def test_closed_precheck_receipt_cannot_be_mutated_by_a_late_refusal(monkeypatch):
+    stopped, sealed = threading.Event(), []
+    with _upstream(monkeypatch, []) as (received, calls):
+        capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+        capture.stop_runtime = stopped.set
+
+        def close_before_refusal(_body, _suffix):
+            capture.close()
+            sealed.append(capture.summary())
+            raise wire._TokenPrecheckRefused(wire.NATIVE_TOKEN_REQUEST_UNVERIFIED)
+
+        monkeypatch.setattr(capture, "_token_request", close_before_refusal)
+        try:
+            with pytest.raises(OSError):
+                _post(capture.base_url)
+            assert stopped.wait(2)
+            assert not received and not calls and len(sealed) == 1
+            assert capture.summary() == sealed[0]
+        finally:
+            capture.close()
 
 
 @pytest.mark.parametrize("stream", [False, True])

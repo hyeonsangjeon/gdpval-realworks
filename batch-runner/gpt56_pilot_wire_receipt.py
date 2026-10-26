@@ -370,7 +370,8 @@ class _ResponseModel:
                 self.completed_usage = None
                 usage = document.get("usage")
                 if (self.usage_terminals == 1 and kind == "response.completed"
-                        and document.get("status") == "completed" and type(usage) is dict
+                        and document.get("status") == "completed" and document.get("error") is None
+                        and document.get("incomplete_details") is None and type(usage) is dict
                         and all(type(usage.get(field)) is int and 0 <= usage[field] < 2 ** 63
                                 for field in ("input_tokens", "output_tokens", "total_tokens"))
                         and usage["total_tokens"] == usage["input_tokens"] + usage["output_tokens"]):
@@ -709,6 +710,8 @@ class _ProviderHTTPObservation:
                 self._close_stopped_runtime()
                 return
             with self.lock:
+                if self.closed or self.stop_reason is not None:
+                    raise RuntimeError("closed")
                 self.precheck_checked += 1
             content_types = handler.headers.get_all("Content-Type", [])
             encodings = handler.headers.get_all("Content-Encoding", [])
@@ -803,8 +806,9 @@ class _ProviderHTTPObservation:
             handler.wfile.write(b"0\r\n\r\n")
         except _TokenPrecheckRefused as error:
             with self.lock:
-                self.precheck_blocked += 1
-                self.request_stop(error.reason, defer_cleanup=True)
+                if not self.closed:
+                    self.precheck_blocked += 1
+                    self.request_stop(error.reason, defer_cleanup=True)
             self._empty(handler, 400)
             self._close_stopped_runtime()
         except Exception as error:
