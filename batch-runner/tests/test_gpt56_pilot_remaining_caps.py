@@ -95,15 +95,16 @@ def test_aggregate_caps_reserve_actual_forwards_across_fresh_attempts(monkeypatc
     budget = wire._NativeRequestBudget(TASKS)
     limit = wire._native_caps()["per_" + scope]["native_model_calls"]
     observations = []
-    # All five tasks/four attempts share ONE owner; failure responses still count.
-    with _upstream(monkeypatch, [{"body": _body(), "status": 503}] * limit) as (received, timeouts):
+    # All five tasks/four attempts share ONE owner. Complete usage is now
+    # required between forwards; failed-connection reservations are tested below.
+    with _upstream(monkeypatch, [{"body": _body()}] * limit) as (received, timeouts):
         for index in range(limit // 32):
             task = TASKS[index // 4]
             observer = _observer(budget=budget, task=task)
             capture = _configure(observer)
             try:
                 for _ in range(32):
-                    assert _post(capture.base_url)[0] == 503
+                    assert _post(capture.base_url)[0] == 200
             finally:
                 capture.close()
             observations.append(capture.summary())
@@ -197,7 +198,9 @@ def test_attempt_deadline_uses_the_draft_not_a_larger_runner_timeout(monkeypatch
 
 @pytest.mark.parametrize("reason", [wire.NATIVE_INPUT_CAP_EXCEEDED, wire.NATIVE_OUTPUT_CAP_EXCEEDED,
                                   wire.NATIVE_DEADLINE_EXCEEDED, wire.NATIVE_TASK_CAP_EXCEEDED,
-                                  wire.NATIVE_PILOT_CAP_EXCEEDED, wire.NATIVE_USAGE_UNVERIFIED])
+                                  wire.NATIVE_PILOT_CAP_EXCEEDED, wire.NATIVE_USAGE_UNVERIFIED,
+                                  wire.NATIVE_INPUT_PRECHECK_EXCEEDED, wire.NATIVE_OUTPUT_PRECHECK_EXCEEDED,
+                                  wire.NATIVE_TOKEN_REQUEST_UNVERIFIED, wire.NATIVE_OUTPUT_LIMIT_UNAVAILABLE])
 def test_cap_stop_closes_real_sdk_child_before_receipt_and_rejects_raced_success(monkeypatch, tmp_path, capsys, reason):
     """Installed SDK.close on harmless child; provider, turns and host are synthetic."""
     from openai_codex.client import CodexClient, CodexConfig
@@ -246,6 +249,15 @@ def test_cap_stop_closes_real_sdk_child_before_receipt_and_rejects_raced_success
                 assert process.wait(timeout=2) is not None
             elif reason in (wire.NATIVE_TASK_CAP_EXCEEDED, wire.NATIVE_PILOT_CAP_EXCEEDED):
                 assert _post(capture.base_url) == (400, b"")
+            elif reason in wire._TOKEN_PRECHECK_STOPS - {wire.NATIVE_USAGE_UNVERIFIED}:
+                body, suffix = json.dumps({"input": CANARY, "max_output_tokens": 10001}).encode(), "/responses"
+                if reason == wire.NATIVE_INPUT_PRECHECK_EXCEEDED:
+                    body = json.dumps({"input": "x" * 300001, "max_output_tokens": 1}).encode()
+                elif reason == wire.NATIVE_TOKEN_REQUEST_UNVERIFIED:
+                    body = CANARY.encode()
+                elif reason == wire.NATIVE_OUTPUT_LIMIT_UNAVAILABLE:
+                    suffix = "/responses/compact"
+                assert _post(capture.base_url, suffix, body=body) == (400, b"")
             client._coerce_notification("turn/completed", {
                 "threadId": fake.thread_id, "turn": {"id": fake.turn_id, "status": "completed"}})
             return SimpleNamespace(final_response=CANARY, id=fake.turn_id, usage=None)

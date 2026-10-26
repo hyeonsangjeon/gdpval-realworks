@@ -45,14 +45,28 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     caps_path = root / pilot.SOURCE_PROFILE_CAPS
     caps_bytes = caps_path.read_bytes()
     caps_profile = pilot.load_plan(caps_path)
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261025_bindings.yaml")
+    bindings_path = root / pilot.SOURCE_PROFILE_BINDINGS
+    bindings_bytes = bindings_path.read_bytes()
+    bindings_profile = pilot.load_plan(bindings_path)
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261026_token_precheck.yaml")
+    assert pilot.SOURCE_PROFILE_BINDINGS.endswith("_source_20261025_bindings.yaml")
+    assert hashlib.sha256(bindings_bytes).hexdigest() == pilot.SOURCE_PROFILE_BINDINGS_SHA256 == (
+        "740ec085c047ad359b4c5e56a8bf5867ebc2cb6c229d479262d6815fbe8154cf"
+    )
     assert pilot.SOURCE_PROFILE_CAPS.endswith("_source_20261025.yaml")
     assert pilot.SOURCE_PROFILE_PREVIOUS.endswith("_source_20261023.yaml")
     assert hashlib.sha256(caps_bytes).hexdigest() == pilot.SOURCE_PROFILE_CAPS_SHA256 == (
         "f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2"
     )
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in bindings_profile["source_pins"].items()
             if digest != caps_profile["source_pins"][name]} == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"}
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != bindings_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in bindings_profile.items() if k != "source_pins"
+    }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in caps_profile.items() if k != "source_pins"
     }
@@ -127,9 +141,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_CAPS
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_CAPS_SHA256
-    assert report["source_change_reason"] == "deployment_and_capture_preflight_linkage_checks"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_BINDINGS
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_BINDINGS_SHA256
+    assert report["source_change_reason"] == "client_token_precheck_and_complete_response_usage"
     assert report["run_id"] == original["pilot"]["run_id"]
     assert evidence._active_plan(plan_sha256=plan_sha, reviewed_source_sha=head)[0] == profile
 
@@ -200,7 +214,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     del changed["source_pins"][pilot.GRADER]
     mutations.append(changed)
     changed = deepcopy(profile)
-    # A still-refreshed caps hash cannot bypass the new one-file delta seal.
+    # A changed allowed role still cannot bypass its held reviewed bytes.
     changed["source_pins"]["batch-runner/gpt56_pilot_wire_receipt.py"] = "1" * 64
     mutations.append(changed)
     for name in pilot.SOURCE_PROFILE_DELTA:
@@ -249,6 +263,21 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             pilot.source_plan_snapshot(**options)
     assert len(caps_reads) == 3  # Initial selection, admission, final reread.
 
+    bindings_reads = []
+
+    def final_bindings_drift(path, **kwargs):
+        if path == bindings_path:
+            bindings_reads.append(path)
+            if len(bindings_reads) == 3:
+                raise ValueError(CANARY)
+        return read_bytes(path, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(reader, "_read_bytes", final_bindings_drift)
+        with pytest.raises(pilot.PilotSourceRegistrationRefused, match="^pilot_source_registration_refused$"):
+            pilot.source_plan_snapshot(**options)
+    assert len(bindings_reads) == 3
+
     real_git = checkout._git
     for kind in ("foreign", "symlink", "wrong_commit"):
         buffer = io.BytesIO()
@@ -273,7 +302,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert completion["launch_allowed"] is completion["full_220_allowed"] is False
     assert completion["launch_blockers"] == list(pilot.LAUNCH_BLOCKERS)
     assert completion["evidence_gate"]["evidence_complete"] is False
-    for predecessor_path in (previous_path, caps_path):
+    for predecessor_path in (previous_path, caps_path, bindings_path):
         assert pilot.main(["--plan", str(predecessor_path), "--reviewed-source-sha", head]) == 2
         previous_completion = json.loads(capsys.readouterr().out)
         assert previous_completion["source_registration"] == {

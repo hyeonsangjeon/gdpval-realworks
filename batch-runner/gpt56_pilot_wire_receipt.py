@@ -52,14 +52,23 @@ NATIVE_DEADLINE_EXCEEDED = "native_attempt_deadline_exceeded"
 NATIVE_TASK_CAP_EXCEEDED = "native_task_request_cap_exceeded"
 NATIVE_PILOT_CAP_EXCEEDED = "native_pilot_request_cap_exceeded"
 NATIVE_USAGE_UNVERIFIED = "native_token_usage_unverified"
+NATIVE_INPUT_PRECHECK_EXCEEDED = "native_input_token_precheck_exceeded"
+NATIVE_OUTPUT_PRECHECK_EXCEEDED = "native_output_token_precheck_exceeded"
+NATIVE_TOKEN_REQUEST_UNVERIFIED = "native_token_request_unverified"
+NATIVE_OUTPUT_LIMIT_UNAVAILABLE = "native_output_token_limit_unavailable"
+_TOKEN_PRECHECK_STOPS = {NATIVE_INPUT_PRECHECK_EXCEEDED, NATIVE_OUTPUT_PRECHECK_EXCEEDED,
+                         NATIVE_TOKEN_REQUEST_UNVERIFIED, NATIVE_OUTPUT_LIMIT_UNAVAILABLE,
+                         NATIVE_USAGE_UNVERIFIED}
 _CAP_STOPS = {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_INPUT_CAP_EXCEEDED, NATIVE_OUTPUT_CAP_EXCEEDED,
               NATIVE_DEADLINE_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED,
-              NATIVE_USAGE_UNVERIFIED}
-_TOKEN_BOUNDARY = "reported_usage_stop_not_pre_request_token_or_billing_limit"
+              *_TOKEN_PRECHECK_STOPS}
+_TOKEN_BOUNDARY = "client_estimate_precheck_and_usage_stop_not_server_hard_limit"
+_INPUT_ESTIMATOR = "serialized_json_utf8_bytes_one_byte_per_estimated_token_not_a_tokenizer"
 NATIVE_CAPS_SHA256 = "7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6"
 _NATIVE_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml"
 _MODEL = re.compile(r"gpt-5\.6-sol(?:-fast)?(?:-20[0-9]{2}-[0-9]{2}-[0-9]{2})?\Z")
 _CAPTURE_BYTES = 256 * 1024  # Observation memory, not a request/output quota.
+_REQUEST_CAPTURE_BYTES = 1024 * 1024  # Bounded inspection, not native tokens.
 _CHUNK_BYTES = 64 * 1024
 _HOP_HEADERS = {"host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
                 "te", "trailer", "transfer-encoding", "upgrade", "cookie", "set-cookie"}
@@ -152,7 +161,8 @@ def _checked_runtime_caps(raw, *, count):
     caps = _native_caps()
     expected = {"sha256", "input_token_limit", "output_token_limit", "input_tokens", "output_tokens",
                 "token_boundary", "token_hard_limit_enforced", "wall_seconds_limit", "effective_wall_seconds",
-                "task_request_limit", "pilot_request_limit", "task_requests", "pilot_requests", "stop_reason"}
+                "task_request_limit", "pilot_request_limit", "task_requests", "pilot_requests", "stop_reason",
+                "client_token_precheck"}
     if (set(raw) != expected or raw["sha256"] != NATIVE_CAPS_SHA256
             or raw["token_boundary"] != _TOKEN_BOUNDARY or raw["token_hard_limit_enforced"] is not False
             or type(raw["stop_reason"]) not in (str, type(None))
@@ -191,6 +201,32 @@ def _checked_runtime_caps(raw, *, count):
     if reason is None and any(raw[field] is not None and raw[field] > raw[field[:-1] + "_limit"]
                               for field in ("input_tokens", "output_tokens")):
         return False
+    check = raw["client_token_precheck"]
+    fields = {"enabled", "input_estimator", "server_hard_limit_verified", "checked_requests",
+              "blocked_requests", "usage_known", "accounted_input_tokens", "accounted_output_tokens",
+              "remaining_input_tokens", "remaining_output_tokens", "last_input_estimate",
+              "last_output_limit"}
+    if (type(check) is not dict or set(check) != fields or check["enabled"] is not True
+            or check["input_estimator"] != _INPUT_ESTIMATOR
+            or check["server_hard_limit_verified"] is not False or type(check["usage_known"]) is not bool):
+        return False
+    for name in fields - {"enabled", "input_estimator", "server_hard_limit_verified", "usage_known"}:
+        value = check[name]
+        if value is not None and not (type(value) is int and 0 <= value < 2 ** 63):
+            return False
+    if (type(check["checked_requests"]) is not int or type(check["blocked_requests"]) is not int
+            or not 0 <= check["blocked_requests"] <= check["checked_requests"]):
+        return False
+    for kind in ("input", "output"):
+        accounted, remaining = check[f"accounted_{kind}_tokens"], check[f"remaining_{kind}_tokens"]
+        if check["usage_known"]:
+            if type(accounted) is not int or type(remaining) is not int:
+                return False
+            floor = max(accounted, raw[f"{kind}_tokens"] or 0)
+            if remaining != max(0, raw[f"{kind}_token_limit"] - floor):
+                return False
+        elif accounted is not None or remaining is not None:
+            return False
     return True
 
 
@@ -256,6 +292,47 @@ def _unique_json(pairs):
     return value
 
 
+class _TokenPrecheckRefused(Exception):
+    def __init__(self, reason):
+        self.reason = reason
+
+
+def _finite_json(_value):
+    raise ValueError("non_finite_json")
+
+
+def _text_input(value):
+    """Only locally visible text. Remote/opaque multimodal context is unknown."""
+    if type(value) is str:
+        return True
+    if type(value) is not list:
+        return False
+    for item in value:
+        if type(item) is not dict:
+            return False
+        if any(item.get(key) is not None for key in
+               ("encrypted_content", "image_url", "file_id", "file_data", "file_url", "audio")):
+            return False
+        kind = item.get("type")
+        if kind in (None, "message"):
+            content = item.get("content")
+            if type(content) is str:
+                continue
+            if (type(content) is not list or any(type(part) is not dict
+                    or part.get("type") not in {"input_text", "output_text"}
+                    or type(part.get("text")) is not str for part in content)):
+                return False
+        elif kind in ("function_call", "custom_tool_call"):
+            if type(item.get("arguments" if kind == "function_call" else "input")) is not str:
+                return False
+        elif kind in ("function_call_output", "custom_tool_call_output"):
+            if type(item.get("output")) is not str:
+                return False
+        else:
+            return False
+    return True
+
+
 class _ResponseModel:
     """Bounded, in-memory JSON/SSE inspection; never interpret rollout settings."""
 
@@ -264,6 +341,8 @@ class _ResponseModel:
         self.buffer = bytearray()
         self.model = None
         self.terminal = False
+        self.completed_usage = None
+        self.usage_terminals = 0
         self.reason = ("provider_response_error" if not 200 <= status < 300 else
                        "encoded_response" if encoding.lower() not in ("", "identity") else None)
 
@@ -279,9 +358,20 @@ class _ResponseModel:
                 self.terminal |= kind != "response.created"
                 document = document.get("response")
             else:
+                kind = "response.completed"
                 self.terminal = True
             if type(document) is not dict or document.get("object") != "response":
                 raise ValueError("shape")
+            if kind != "response.created":
+                self.usage_terminals += 1
+                self.completed_usage = None
+                usage = document.get("usage")
+                if (self.usage_terminals == 1 and kind == "response.completed"
+                        and document.get("status") == "completed" and type(usage) is dict
+                        and all(type(usage.get(field)) is int and 0 <= usage[field] < 2 ** 63
+                                for field in ("input_tokens", "output_tokens", "total_tokens"))
+                        and usage["total_tokens"] == usage["input_tokens"] + usage["output_tokens"]):
+                    self.completed_usage = (usage["input_tokens"], usage["output_tokens"])
             model = document.get("model")
             if model is None:
                 if self.terminal:
@@ -354,6 +444,7 @@ class _ProviderHTTPObservation:
         self.timeout = min(timeout, self.limits["per_attempt"]["wall_clock_seconds"])
         self.deadline = time.monotonic() + self.timeout
         self.lock = threading.RLock()
+        self.request_lock = threading.Lock()
         self.close_lock = threading.Lock()
         self.closed = False
         self.requests = self.finished = 0
@@ -363,6 +454,10 @@ class _ProviderHTTPObservation:
         self.wakeup = threading.Event()
         self.budget = self.budget_task = self.closed_budget = None
         self.input_tokens = self.output_tokens = None
+        self.precheck_inputs = self.precheck_outputs = 0
+        self.precheck_usage_known = True
+        self.precheck_checked = self.precheck_blocked = 0
+        self.precheck_last_input = self.precheck_last_output = None
         self.stop_runtime = None
         self.model = self.model_reason = self.count_reason = None
         self.connections = set()
@@ -501,6 +596,63 @@ class _ProviderHTTPObservation:
             if reason is not None:
                 self.request_stop(reason)
 
+    def _remaining_tokens(self):
+        if not self.precheck_usage_known:
+            return None, None
+        limits = self.limits["per_attempt"]
+        return (max(0, limits["input_tokens"] - max(self.precheck_inputs, self.input_tokens or 0)),
+                max(0, limits["output_tokens"] - max(self.precheck_outputs, self.output_tokens or 0)))
+
+    def _token_request(self, body, suffix):
+        """Called under the attempt lock immediately before upstream admission.
+
+        A byte-based TEXT estimate is not a Sol tokenizer or a server guarantee.
+        Account complete provider responses once; an SDK cumulative total is a
+        conservative floor, never added a second time and never a reset.
+        """
+        self.precheck_last_input = self.precheck_last_output = None
+        remaining_input, remaining_output = self._remaining_tokens()
+        if remaining_input is None:
+            raise _TokenPrecheckRefused(NATIVE_USAGE_UNVERIFIED)
+        if suffix != "/responses":  # No verified output-limit field for compact.
+            raise _TokenPrecheckRefused(NATIVE_OUTPUT_LIMIT_UNAVAILABLE)
+        try:
+            document = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_json,
+                                  parse_constant=_finite_json)
+            if (type(document) is not dict or not _text_input(document.get("input"))
+                    or any(document.get(key) is not None for key in
+                           ("previous_response_id", "conversation", "prompt", "context_management"))
+                    or document.get("background", False) is not False
+                    or type(document.get("stream", False)) is not bool
+                    or document.get("instructions") is not None and type(document["instructions"]) is not str
+                    or type(document.get("tools", [])) is not list
+                    or any(type(tool) is not dict or tool.get("type") not in {"function", "custom"}
+                           for tool in document.get("tools", []))):
+                raise ValueError("unbounded_input")
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED) from None
+        if any(key in document for key in ("max_tokens", "max_completion_tokens", "model_max_output_tokens",
+                                           "maxOutputTokens")):
+            raise _TokenPrecheckRefused(NATIVE_OUTPUT_LIMIT_UNAVAILABLE)
+        if remaining_output == 0:
+            raise _TokenPrecheckRefused(NATIVE_OUTPUT_PRECHECK_EXCEEDED)
+        if "max_output_tokens" not in document:
+            document["max_output_tokens"] = remaining_output
+            try:
+                body = json.dumps(document, ensure_ascii=False, allow_nan=False,
+                                  separators=(",", ":")).encode("utf-8")
+            except (ValueError, UnicodeError, RecursionError):
+                raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED) from None
+        maximum = document["max_output_tokens"]
+        if type(maximum) is not int or not 0 < maximum < 2 ** 63:
+            raise _TokenPrecheckRefused(NATIVE_OUTPUT_LIMIT_UNAVAILABLE)
+        self.precheck_last_input, self.precheck_last_output = len(body), maximum
+        if len(body) > remaining_input:
+            raise _TokenPrecheckRefused(NATIVE_INPUT_PRECHECK_EXCEEDED)
+        if maximum > remaining_output:
+            raise _TokenPrecheckRefused(NATIVE_OUTPUT_PRECHECK_EXCEEDED)
+        return body
+
     @staticmethod
     def _empty(handler, status=502):
         handler.close_connection = True
@@ -528,9 +680,14 @@ class _ProviderHTTPObservation:
             return
         connection = upstream = None
         started = False
+        serialized = False
         response_started = False
         reason, model = "transport_failed", None
         try:
+            while not self.request_lock.acquire(timeout=min(0.05, self.remaining())):
+                if self.stop_reason is not None:
+                    raise RuntimeError("stopped")
+            serialized = True
             with self.lock:
                 if self.closed or self.stop_reason is not None:
                     raise RuntimeError("closed")
@@ -541,7 +698,34 @@ class _ProviderHTTPObservation:
                     self.blocked_requests += 1
                     self.cap_exceeded = True
                     self.request_stop(NATIVE_REQUEST_CAP_EXCEEDED, defer_cleanup=True)
-                else:
+            if self.stop_reason is not None:
+                self._empty(handler, 400)
+                self._close_stopped_runtime()
+                return
+            with self.lock:
+                self.precheck_checked += 1
+            content_types = handler.headers.get_all("Content-Type", [])
+            encodings = handler.headers.get_all("Content-Encoding", [])
+            if (len(content_types) != 1 or content_types[0].lower().replace(" ", "") not in
+                    {"application/json", "application/json;charset=utf-8"}
+                    or len(encodings) > 1 or encodings and encodings[0].lower() != "identity"
+                    or int(lengths[0]) > _REQUEST_CAPTURE_BYTES):
+                raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED)
+            body = bytearray()
+            left = int(lengths[0])
+            while left:
+                handler.connection.settimeout(self.remaining())
+                data = handler.rfile.read(min(left, _CHUNK_BYTES))
+                if not data:
+                    raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED)
+                body.extend(data)
+                left -= len(data)
+            with self.lock:
+                self.remaining()
+                if self.stop_reason is not None:
+                    raise RuntimeError("stopped")
+                body = self._token_request(bytes(body), suffix)
+                if not self.closed:
                     reason = self.budget.reserve(self.budget_task) if self.budget is not None else None
                     if reason is not None:
                         self.blocked_requests += 1
@@ -563,20 +747,17 @@ class _ProviderHTTPObservation:
                 self.connections.discard((connection, handler.connection))
                 self.connections.add((connection, handler.connection, upstream))
             connection.putrequest("POST", self.target.path + suffix, skip_accept_encoding=True)
-            excluded = _HOP_HEADERS | {item.strip().lower() for item in handler.headers.get("Connection", "").split(",")}
+            excluded = _HOP_HEADERS | {"content-length", "content-type"}
+            excluded |= {item.strip().lower() for item in handler.headers.get("Connection", "").split(",")}
             for name, value in handler.headers.items():
                 if name.lower() not in excluded:
                     connection.putheader(name, value)
+            connection.putheader("Content-Type", "application/json")
+            connection.putheader("Content-Length", str(len(body)))
             connection.endheaders()
-            left = int(lengths[0])
-            while left:
-                handler.connection.settimeout(self.remaining())
-                data = handler.rfile.read(min(left, _CHUNK_BYTES))
-                if not data:
-                    raise ValueError("incomplete_request")
+            for offset in range(0, len(body), _CHUNK_BYTES):
                 upstream.settimeout(self.remaining())
-                connection.send(data)
-                left -= len(data)
+                connection.send(body[offset:offset + _CHUNK_BYTES])
             upstream.settimeout(self.remaining())
             response = connection.getresponse()
             if 300 <= response.status < 400:
@@ -588,7 +769,7 @@ class _ProviderHTTPObservation:
             parser = _ResponseModel(response.getheader("Content-Type", ""),
                                     response.getheader("Content-Encoding", ""), response.status)
             handler.send_response_only(response.status)
-            excluded |= {"content-length"}
+            excluded = _HOP_HEADERS | {"content-length"}
             excluded |= {item.strip().lower() for item in response.getheader("Connection", "").split(",")}
             for name, value in response.getheaders():
                 if name.lower() not in excluded:
@@ -611,11 +792,18 @@ class _ProviderHTTPObservation:
                 handler.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
             model, reason = parser.finish()
             # Publish the observation before EOF lets the CLI complete its turn.
-            self._response_finished(model, reason)
+            self._response_finished(model, reason, usage=parser.completed_usage)
             started = False
             handler.wfile.write(b"0\r\n\r\n")
+        except _TokenPrecheckRefused as error:
+            with self.lock:
+                self.precheck_blocked += 1
+                self.request_stop(error.reason, defer_cleanup=True)
+            self._empty(handler, 400)
+            self._close_stopped_runtime()
         except Exception as error:
             reason = "deadline_exceeded" if isinstance(error, TimeoutError) else "transport_failed"
+            before_upstream = not started and connection is None
             if started:
                 self._response_finished(None, reason)
                 started = False
@@ -623,20 +811,38 @@ class _ProviderHTTPObservation:
                 handler.close_connection = True
             else:
                 self._empty(handler)
+            if before_upstream and self.stop_reason is None:
+                self.request_stop(NATIVE_DEADLINE_EXCEEDED if isinstance(error, TimeoutError)
+                                  else NATIVE_TOKEN_REQUEST_UNVERIFIED, defer_cleanup=True)
+                self._close_stopped_runtime()
         finally:
-            if started:
-                self._response_finished(None, reason)
-            if connection is not None:
-                connection.close()
-                with self.lock:
-                    self.connections.discard((connection, handler.connection))
-                    self.connections.discard((connection, handler.connection, upstream))
+            try:
+                if started:
+                    self._response_finished(None, reason)
+                if connection is not None:
+                    connection.close()
+                    with self.lock:
+                        self.connections.discard((connection, handler.connection))
+                        self.connections.discard((connection, handler.connection, upstream))
+            finally:
+                if serialized:
+                    self.request_lock.release()
 
-    def _response_finished(self, model, reason):
+    def _response_finished(self, model, reason, *, usage=None):
         with self.lock:
             if self.closed:
                 return  # A late worker cannot upgrade an already-closed report.
             self.finished += 1
+            if self.precheck_usage_known and reason is None and usage is not None:
+                inputs, outputs = self.precheck_inputs + usage[0], self.precheck_outputs + usage[1]
+                if inputs < 2 ** 63 and outputs < 2 ** 63:
+                    self.precheck_inputs, self.precheck_outputs = inputs, outputs
+                else:
+                    self.precheck_usage_known = False
+            else:
+                self.precheck_usage_known = False
+            if not self.precheck_usage_known:
+                self.precheck_inputs = self.precheck_outputs = None
             if reason is not None:
                 self.model_reason = reason
             elif self.model is not None and self.model != model:
@@ -650,6 +856,9 @@ class _ProviderHTTPObservation:
                 if self.closed:
                     return
                 self.closed = True
+                if self.requests != self.finished:
+                    self.precheck_usage_known = False
+                    self.precheck_inputs = self.precheck_outputs = None
                 self.timer.cancel()
                 self.closed_budget = self.budget.snapshot(self.budget_task) if self.budget is not None else None
                 connections = tuple(self.connections)
@@ -676,10 +885,19 @@ class _ProviderHTTPObservation:
 
     def _runtime_caps(self):
         attempt = self.limits["per_attempt"]
+        remaining_input, remaining_output = self._remaining_tokens()
         return {"sha256": NATIVE_CAPS_SHA256,
                 "input_token_limit": attempt["input_tokens"], "output_token_limit": attempt["output_tokens"],
                 "input_tokens": self.input_tokens, "output_tokens": self.output_tokens,
                 "token_boundary": _TOKEN_BOUNDARY, "token_hard_limit_enforced": False,
+                "client_token_precheck": {
+                    "enabled": True, "input_estimator": _INPUT_ESTIMATOR,
+                    "server_hard_limit_verified": False, "checked_requests": self.precheck_checked,
+                    "blocked_requests": self.precheck_blocked, "usage_known": self.precheck_usage_known,
+                    "accounted_input_tokens": self.precheck_inputs,
+                    "accounted_output_tokens": self.precheck_outputs,
+                    "remaining_input_tokens": remaining_input, "remaining_output_tokens": remaining_output,
+                    "last_input_estimate": self.precheck_last_input, "last_output_limit": self.precheck_last_output},
                 "wall_seconds_limit": attempt["wall_clock_seconds"], "effective_wall_seconds": self.timeout,
                 "task_request_limit": self.limits["per_task"]["native_model_calls"],
                 "pilot_request_limit": self.limits["per_pilot"]["native_model_calls"],

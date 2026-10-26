@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025_bindings.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261026_token_precheck.yaml"
+SOURCE_PROFILE_BINDINGS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025_bindings.yaml"
+SOURCE_PROFILE_BINDINGS_SHA256 = "740ec085c047ad359b4c5e56a8bf5867ebc2cb6c229d479262d6815fbe8154cf"
 SOURCE_PROFILE_CAPS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025.yaml"
 SOURCE_PROFILE_CAPS_SHA256 = "f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2"
 SOURCE_PROFILE_PREVIOUS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261023.yaml"
@@ -301,6 +303,9 @@ def source_plan_snapshot(
         caps_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_CAPS), sha256=SOURCE_PROFILE_CAPS_SHA256)
         require(len(caps_data) <= 65536)
         caps_profile = yaml.safe_load(caps_data)
+        bindings_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_BINDINGS), sha256=SOURCE_PROFILE_BINDINGS_SHA256)
+        require(len(bindings_data) <= 65536)
+        bindings_profile = yaml.safe_load(bindings_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -316,9 +321,12 @@ def source_plan_snapshot(
                  if digest != original["source_pins"][name]} == SOURCE_PROFILE_REFRESH)
         require({name for name, digest in pins.items()
                  if digest != previous["source_pins"][name]} == SOURCE_PROFILE_DELTA)
-        require({name for name, digest in pins.items()
+        require({name for name, digest in bindings_profile["source_pins"].items()
                  if digest != caps_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+        require({name for name, digest in pins.items()
+                 if digest != bindings_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
 
         # Reuse the existing sanitized, bounded, local-only Git implementation.
         # Archive reads Git objects, not LFS payloads; nothing is extracted.
@@ -326,7 +334,8 @@ def source_plan_snapshot(
 
         source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY,
                         SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256,
-                        SOURCE_PROFILE_CAPS: SOURCE_PROFILE_CAPS_SHA256}
+                        SOURCE_PROFILE_CAPS: SOURCE_PROFILE_CAPS_SHA256,
+                        SOURCE_PROFILE_BINDINGS: SOURCE_PROFILE_BINDINGS_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -352,6 +361,7 @@ def source_plan_snapshot(
             require(blobs[ACTIVE_PLAN] == original_data and blobs[SOURCE_PROFILE] == profile_data)
             require(blobs[SOURCE_PROFILE_PREVIOUS] == previous_data)
             require(blobs[SOURCE_PROFILE_CAPS] == caps_data)
+            require(blobs[SOURCE_PROFILE_BINDINGS] == bindings_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -374,9 +384,9 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_CAPS,
-            "supersedes_profile_sha256": SOURCE_PROFILE_CAPS_SHA256,
-            "source_change_reason": "deployment_and_capture_preflight_linkage_checks",
+            "supersedes_profile": SOURCE_PROFILE_BINDINGS,
+            "supersedes_profile_sha256": SOURCE_PROFILE_BINDINGS_SHA256,
+            "source_change_reason": "client_token_precheck_and_complete_response_usage",
             "plan_sha256": seal(profile), "historical_plan_sha256": FOUNDRY_PLAN_SHA256,
             "run_id": RUN_ID, "launch_authority": False, "retry_authority": False,
         }

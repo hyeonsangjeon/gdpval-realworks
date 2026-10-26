@@ -26,6 +26,8 @@ MODEL = "gpt-5.6-sol"
 
 def _body(model=MODEL):
     return json.dumps({"object": "response", "id": CANARY, "model": model,
+                       "status": "completed", "usage": {"input_tokens": 4, "output_tokens": 1,
+                                                          "total_tokens": 5},
                        "output": [{"text": CANARY}]}).encode()
 
 
@@ -110,11 +112,12 @@ def _upstream(monkeypatch, rows, *, on_request=None):
         thread.join(timeout=1)
 
 
-def _post(base_url, suffix="/responses", *, method="POST", headers=None):
+def _post(base_url, suffix="/responses", *, method="POST", headers=None, body=None):
     parsed = urlsplit(base_url)
     connection = HTTPConnection("127.0.0.1", parsed.port, timeout=5)
     try:
-        connection.request(method, parsed.path + suffix, body=CANARY.encode(), headers={
+        payload = json.dumps({"model": MODEL, "input": CANARY}).encode() if body is None else body
+        connection.request(method, parsed.path + suffix, body=payload, headers={
             "Content-Type": "application/json", "Authorization": "Bearer " + CANARY,
             "Cookie": CANARY, "Proxy-Authorization": CANARY, **(headers or {}),
         })
@@ -147,7 +150,7 @@ def test_native_posts_and_response_model_reach_receipt_and_step2(monkeypatch, ca
             fake = _transport(observer)
             _start(fake)
             assert _post(observer.provider_capture.base_url) == (200, body)
-            assert _post(observer.provider_capture.base_url, "/responses/compact") == (200, body)
+            assert _post(observer.provider_capture.base_url) == (200, body)
             _turn(fake)
         finally:
             observer.close_provider_observer()
@@ -168,8 +171,12 @@ def test_native_posts_and_response_model_reach_receipt_and_step2(monkeypatch, ca
     assert set(receipt["requests"]) == {"thread/start", "turn/start"}
     projected = step2._bounded_codex_diagnostics({"items_seen": 7, "provider_observation": observed})
     assert projected == {"items_seen": 7, "provider_observation": observed}
-    assert [row[0] for row in received] == ["/openai/v1/responses", "/openai/v1/responses/compact"]
-    assert all(row[1] == CANARY.encode() and row[2]["Authorization"] == "Bearer " + CANARY for row in received)
+    assert [row[0] for row in received] == ["/openai/v1/responses"] * 2
+    assert [json.loads(row[1]) for row in received] == [
+        {"model": MODEL, "input": CANARY, "max_output_tokens": 10000},
+        {"model": MODEL, "input": CANARY, "max_output_tokens": 9999},
+    ]
+    assert all(row[2]["Authorization"] == "Bearer " + CANARY for row in received)
     assert all("Cookie" not in row[2] and "Proxy-Authorization" not in row[2] for row in received)
     output = capsys.readouterr()
     public = json.dumps(receipt) + json.dumps(projected) + output.out + output.err
@@ -414,7 +421,7 @@ def test_native_request_cap_allows_the_snapshot_limit(monkeypatch, count):
         capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
         try:
             for index in range(count):
-                suffix = "/responses" if index % 2 == 0 else "/responses/compact"
+                suffix = "/responses"  # Compact has no verified output-limit field.
                 assert _post(capture.base_url, suffix) == (200, _body())
             assert not capture.cap_exceeded and not capture.closed
         finally:
