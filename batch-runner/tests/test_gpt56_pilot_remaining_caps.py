@@ -200,7 +200,8 @@ def test_attempt_deadline_uses_the_draft_not_a_larger_runner_timeout(monkeypatch
                                   wire.NATIVE_DEADLINE_EXCEEDED, wire.NATIVE_TASK_CAP_EXCEEDED,
                                   wire.NATIVE_PILOT_CAP_EXCEEDED, wire.NATIVE_USAGE_UNVERIFIED,
                                   wire.NATIVE_INPUT_PRECHECK_EXCEEDED, wire.NATIVE_OUTPUT_PRECHECK_EXCEEDED,
-                                  wire.NATIVE_TOKEN_REQUEST_UNVERIFIED, wire.NATIVE_OUTPUT_LIMIT_UNAVAILABLE])
+                                  wire.NATIVE_TOKEN_REQUEST_UNVERIFIED, wire.NATIVE_OUTPUT_LIMIT_UNAVAILABLE,
+                                  *sorted(wire._USD_STOPS)])
 def test_cap_stop_closes_real_sdk_child_before_receipt_and_rejects_raced_success(monkeypatch, tmp_path, capsys, reason):
     """Installed SDK.close on harmless child; provider, turns and host are synthetic."""
     from openai_codex.client import CodexClient, CodexConfig
@@ -248,6 +249,11 @@ def test_cap_stop_closes_real_sdk_child_before_receipt_and_rejects_raced_success
                 capture.check_deadline()
                 assert process.wait(timeout=2) is not None
             elif reason in (wire.NATIVE_TASK_CAP_EXCEEDED, wire.NATIVE_PILOT_CAP_EXCEEDED):
+                assert _post(capture.base_url) == (400, b"")
+            elif reason in wire._USD_STOPS:
+                # Synthetic closed ledger state; real SDK child cleanup below
+                # must still happen before result collection and receipt sealing.
+                budget.usd._stop(reason)
                 assert _post(capture.base_url) == (400, b"")
             elif reason in wire._TOKEN_PRECHECK_STOPS - {wire.NATIVE_USAGE_UNVERIFIED}:
                 body, suffix = json.dumps({"input": CANARY, "max_output_tokens": 10001}).encode(), "/responses"

@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261026_token_precheck.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_usd_cap.yaml"
+SOURCE_PROFILE_TOKEN_PRECHECK = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261026_token_precheck.yaml"
+SOURCE_PROFILE_TOKEN_PRECHECK_SHA256 = "fbabe0aa40f6513bc77d86a29ae9ac9af35cfbd64b5b70fe3f6150aa0a6e1a44"
 SOURCE_PROFILE_BINDINGS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025_bindings.yaml"
 SOURCE_PROFILE_BINDINGS_SHA256 = "740ec085c047ad359b4c5e56a8bf5867ebc2cb6c229d479262d6815fbe8154cf"
 SOURCE_PROFILE_CAPS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025.yaml"
@@ -74,6 +76,10 @@ SOURCE_PROFILE_DELTA = frozenset({
 SOURCE_PROFILE_AUXILIARY = {
     "batch-runner/gpt54_disposable_checkout.py":
         "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
+    ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml":
+        "df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f",
+    ENVELOPE + "model_price_table.json":
+        "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
 }
 PLAN = ROOT / ACTIVE_PLAN
 RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
@@ -306,6 +312,10 @@ def source_plan_snapshot(
         bindings_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_BINDINGS), sha256=SOURCE_PROFILE_BINDINGS_SHA256)
         require(len(bindings_data) <= 65536)
         bindings_profile = yaml.safe_load(bindings_data)
+        token_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_TOKEN_PRECHECK),
+                                 sha256=SOURCE_PROFILE_TOKEN_PRECHECK_SHA256)
+        require(len(token_data) <= 65536)
+        token_profile = yaml.safe_load(token_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -327,6 +337,14 @@ def source_plan_snapshot(
         require({name for name, digest in pins.items()
                  if digest != bindings_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
+        require(seal({k: v for k, v in token_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in token_profile["source_pins"].items()
+                 if digest != bindings_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
+        require({name for name, digest in pins.items()
+                 if digest != token_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
 
         # Reuse the existing sanitized, bounded, local-only Git implementation.
         # Archive reads Git objects, not LFS payloads; nothing is extracted.
@@ -335,7 +353,8 @@ def source_plan_snapshot(
         source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY,
                         SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256,
                         SOURCE_PROFILE_CAPS: SOURCE_PROFILE_CAPS_SHA256,
-                        SOURCE_PROFILE_BINDINGS: SOURCE_PROFILE_BINDINGS_SHA256}
+                        SOURCE_PROFILE_BINDINGS: SOURCE_PROFILE_BINDINGS_SHA256,
+                        SOURCE_PROFILE_TOKEN_PRECHECK: SOURCE_PROFILE_TOKEN_PRECHECK_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -362,6 +381,7 @@ def source_plan_snapshot(
             require(blobs[SOURCE_PROFILE_PREVIOUS] == previous_data)
             require(blobs[SOURCE_PROFILE_CAPS] == caps_data)
             require(blobs[SOURCE_PROFILE_BINDINGS] == bindings_data)
+            require(blobs[SOURCE_PROFILE_TOKEN_PRECHECK] == token_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -384,9 +404,17 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_BINDINGS,
-            "supersedes_profile_sha256": SOURCE_PROFILE_BINDINGS_SHA256,
-            "source_change_reason": "client_token_precheck_and_complete_response_usage",
+            "supersedes_profile": SOURCE_PROFILE_TOKEN_PRECHECK,
+            "supersedes_profile_sha256": SOURCE_PROFILE_TOKEN_PRECHECK_SHA256,
+            "source_change_reason": "owner_usd_ceiling_and_shared_estimate_admission",
+            "monetary_decision": {
+                "record": ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
+                "sha256": SOURCE_PROFILE_AUXILIARY[ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml"],
+                "approved_maximum_usd": 1000, "currency": "USD",
+                "approved_at_utc": "2026-10-26T23:09:00Z",
+                "scope": "five_task_pilot_inference_and_grading_combined",
+                "actual_billing_hard_limit_verified": False, "grading_ledger_connected": False,
+            },
             "plan_sha256": seal(profile), "historical_plan_sha256": FOUNDRY_PLAN_SHA256,
             "run_id": RUN_ID, "launch_authority": False, "retry_authority": False,
         }
@@ -987,7 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(arguments)
         source_requested = args.plan.absolute() in {
             ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_BINDINGS,
-            ROOT / SOURCE_PROFILE_CAPS, ROOT / SOURCE_PROFILE_PREVIOUS,
+            ROOT / SOURCE_PROFILE_CAPS, ROOT / SOURCE_PROFILE_PREVIOUS, ROOT / SOURCE_PROFILE_TOKEN_PRECHECK,
         }
         capture_requested = args.capture_workspace is not None
         evidence_requested = any(value is not None for value in (

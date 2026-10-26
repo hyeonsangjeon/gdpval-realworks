@@ -1,0 +1,37 @@
+# Owner monetary decision and conservative runtime estimate; not launch authority.
+# The old caps draft and every older source registration remain byte-identical.
+record_version: gpt56-native-usd-cap-v1
+run_id: gpt56_sol_foundry_codex_pilot5_v1
+source_head_before_change: 36cc47af5f5b8feb147063a61e53b3ad4cc1fb9d
+supersedes_monetary_decision:
+  path: batch-runner/experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml
+  sha256: 7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6
+  field: cost.approved_maximum_usd
+  previous_value: null
+cost:
+  approved_maximum_usd: 1000
+  currency: USD
+  scope: five_task_pilot_inference_and_grading_combined
+  approval_source: owner_desk_message
+  approved_at_utc: '2026-10-26T23:09:00Z'
+  owner_text: '총비용 상한 1000'
+pricing:
+  path: batch-runner/experiments/execution_envelope/model_price_table.json
+  sha256: b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e
+  model: gpt-5.6-sol
+  meter: long_context_standard_global
+  unit: USD_per_million_tokens
+  effective_tariff_verified: false
+  cached_input_discount: false
+  cache_write_reserve: one_write_per_full_input_token_or_larger_reported_counter
+enforcement:
+  scope: inference_modeled_input_output_and_cache_write_reserve
+  next_input_reserve: remaining_attempt_input_allowance_not_request_byte_estimate
+  next_output_reserve: request_max_output_tokens
+  missing_or_partial_usage: block_session_and_keep_pending_reservations
+  failure_or_unknown_reachability: block_session_and_keep_pending_reservations
+  grading_ledger_connected: false
+  actual_billing_hard_limit_verified: false
+  cache_write_reserve_is_observed_billing: false
+launch_enabled: false
+new_study_or_retry_right: false

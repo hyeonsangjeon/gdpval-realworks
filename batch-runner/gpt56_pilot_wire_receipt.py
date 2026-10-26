@@ -19,6 +19,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
+from decimal import Decimal, InvalidOperation
 from http.client import HTTPSConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -56,17 +57,31 @@ NATIVE_INPUT_PRECHECK_EXCEEDED = "native_input_token_precheck_exceeded"
 NATIVE_OUTPUT_PRECHECK_EXCEEDED = "native_output_token_precheck_exceeded"
 NATIVE_TOKEN_REQUEST_UNVERIFIED = "native_token_request_unverified"
 NATIVE_OUTPUT_LIMIT_UNAVAILABLE = "native_output_token_limit_unavailable"
+USD_CEILING_EXCEEDED = "usd_ceiling_exceeded"
+USD_USAGE_UNVERIFIED = "usd_usage_unverified"
+USD_RESERVATION_EXCEEDED = "usd_reservation_exceeded"
+USD_PRICE_CONTRACT_UNVERIFIED = "usd_price_contract_unverified"
+_USD_STOPS = {USD_CEILING_EXCEEDED, USD_USAGE_UNVERIFIED,
+              USD_RESERVATION_EXCEEDED, USD_PRICE_CONTRACT_UNVERIFIED}
 _TOKEN_PRECHECK_STOPS = {NATIVE_INPUT_PRECHECK_EXCEEDED, NATIVE_OUTPUT_PRECHECK_EXCEEDED,
                          NATIVE_TOKEN_REQUEST_UNVERIFIED, NATIVE_OUTPUT_LIMIT_UNAVAILABLE,
                          NATIVE_USAGE_UNVERIFIED}
 _CAP_STOPS = {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_INPUT_CAP_EXCEEDED, NATIVE_OUTPUT_CAP_EXCEEDED,
               NATIVE_DEADLINE_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED,
-              *_TOKEN_PRECHECK_STOPS}
+              *_TOKEN_PRECHECK_STOPS, *_USD_STOPS}
 _TOKEN_BOUNDARY = "client_estimate_precheck_and_usage_stop_not_server_hard_limit"
 _INPUT_ESTIMATOR = "serialized_json_utf8_bytes_one_byte_per_estimated_token_not_a_tokenizer"
 NATIVE_CAPS_SHA256 = "7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6"
 _NATIVE_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml"
+USD_CAPS_SHA256 = "df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f"
+USD_PRICE_TABLE_SHA256 = "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e"
+_USD_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml"
+_USD_PRICE_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/model_price_table.json"
+_USD_SCOPE = "inference_modeled_input_output_and_cache_write_reserve"
+_USD_CACHE_POLICY = "one_write_per_full_input_token_or_larger_reported_counter"
+_USD_RATE_BASIS = "published_Standard_Global_long_reference_not_verified_effective_tariff"
 _MODEL = re.compile(r"gpt-5\.6-sol(?:-fast)?(?:-20[0-9]{2}-[0-9]{2}-[0-9]{2})?\Z")
+_USD_MODEL = re.compile(r"gpt-5\.6-sol(?:-20[0-9]{2}-[0-9]{2}-[0-9]{2})?\Z")
 _CAPTURE_BYTES = 256 * 1024  # Observation memory, not a request/output quota.
 _REQUEST_CAPTURE_BYTES = 1024 * 1024  # Bounded inspection, not native tokens.
 _CHUNK_BYTES = 64 * 1024
@@ -116,6 +131,198 @@ def _native_caps() -> dict:
         return result
 
 
+def _native_usd_caps() -> dict:
+    """Pinned owner decision and reference meters, never a billing quote.
+
+    Keep the deliberate-unpriced entry intact. Its missing live tariff/cache
+    bindings are not cured by reading the separate published-meter reference.
+    """
+    with _closed():
+        caps = yaml.safe_load(_read_bytes(_USD_CAPS_PATH, sha256=USD_CAPS_SHA256))
+        _require(caps["record_version"] == "gpt56-native-usd-cap-v1"
+                 and caps["run_id"] == pilot.RUN_ID and caps["launch_enabled"] is False
+                 and caps["new_study_or_retry_right"] is False)
+        cost = caps["cost"]
+        _require(type(cost["approved_maximum_usd"]) is int and cost["approved_maximum_usd"] == 1000
+                 and cost["currency"] == "USD"
+                 and cost["scope"] == "five_task_pilot_inference_and_grading_combined"
+                 and cost["approval_source"] == "owner_desk_message"
+                 and cost["approved_at_utc"] == "2026-10-26T23:09:00Z")
+        pricing, enforcement = caps["pricing"], caps["enforcement"]
+        _require(pricing["sha256"] == USD_PRICE_TABLE_SHA256
+                 and pricing["model"] == "gpt-5.6-sol"
+                 and pricing["meter"] == "long_context_standard_global"
+                 and pricing["unit"] == "USD_per_million_tokens"
+                 and pricing["effective_tariff_verified"] is False
+                 and pricing["cached_input_discount"] is False
+                 and pricing["cache_write_reserve"] == _USD_CACHE_POLICY
+                 and enforcement["scope"] == _USD_SCOPE
+                 and enforcement["grading_ledger_connected"] is False
+                 and enforcement["actual_billing_hard_limit_verified"] is False)
+        table = json.loads(_read_bytes(_USD_PRICE_PATH, sha256=USD_PRICE_TABLE_SHA256),
+                           object_pairs_hook=_unique_json, parse_constant=_finite_json)
+        meters = table["azure_published_meters"]
+        _require(meters["currency"] == "USD"
+                 and meters["unit"] == "per 1,000,000 tokens unless stated otherwise"
+                 and "azure:gpt-5.6-sol" in table["models_deliberately_not_priced"])
+        rates = {name: Decimal(meters["gpt-5.6-sol"][pricing["meter"]][name])
+                 for name in ("input", "output", "cache_write")}
+        _require(all(value.is_finite() and value > 0 for value in rates.values()))
+        return {"maximum": Decimal(cost["approved_maximum_usd"]), "rates": rates}
+
+
+def _usd_text(value):
+    return format(value, "f")
+
+
+class _PilotUsdLedger:
+    """Non-adoptable session estimate, not the existing billed-cost ledger.
+
+    Decimal reservations follow the existing agentic-budget convention. A
+    missing/failed response retains its reservation and poisons this session;
+    saved receipts cannot refill it. Grading has no admission hook here.
+    """
+
+    def __init__(self):
+        self.contract = _native_usd_caps()
+        self.lock = threading.RLock()
+        self.attempts = {}
+        self.pending = {}
+        self.sequence = 0
+        self.reason = None
+        self.blocked = 0
+
+    def require_current(self):
+        _require(self.contract == _native_usd_caps())
+
+    def begin(self, task_id):
+        with self.lock:
+            key = len(self.attempts) + 1
+            self.attempts[key] = {"task": task_id, "input": 0, "output": 0,
+                                  "sdk_input": 0, "sdk_output": 0,
+                                  "cache_write_floor": 0, "cache_write_observed": None,
+                                  "last_input": None, "last_output": None, "last_reserve": None}
+            return key
+
+    def _value(self, inputs, outputs, writes):
+        rates = self.contract["rates"]
+        return (Decimal(inputs) * rates["input"] + Decimal(outputs) * rates["output"]
+                + Decimal(writes) * rates["cache_write"]) / Decimal(1_000_000)
+
+    def _parts(self, row):
+        inputs, outputs = max(row["input"], row["sdk_input"]), max(row["output"], row["sdk_output"])
+        # A reserve assumption, NOT an invented observed cache-write count.
+        writes = max(inputs, row["cache_write_floor"])
+        return self._value(inputs, outputs, 0), self._value(0, 0, writes)
+
+    def _accounted(self):
+        return sum((sum(self._parts(row)) for row in self.attempts.values()), Decimal(0))
+
+    def _reserved(self):
+        # An SDK cumulative floor can arrive before HTTP EOF. Subtract the
+        # already-accounted part of that same reservation, never add it twice.
+        return sum((max(Decimal(0), amount - max(Decimal(0), sum(self._parts(self.attempts[attempt])) - baseline))
+                    for attempt, amount, baseline in self.pending.values()), Decimal(0))
+
+    def _stop(self, reason):
+        if self.reason is None:
+            self.reason = reason
+        return self.reason
+
+    def reserve(self, attempt, inputs, outputs):
+        with self.lock:
+            row = self.attempts[attempt]
+            if self.reason is None:
+                try:
+                    self.require_current()
+                except Exception:
+                    self._stop(USD_PRICE_CONTRACT_UNVERIFIED)
+            if self.reason is None and not all(type(value) is int and 0 <= value < 2 ** 63
+                                               for value in (inputs, outputs)):
+                self._stop(USD_USAGE_UNVERIFIED)
+            if self.reason is not None:
+                self.blocked += 1
+                return None, self.reason
+            amount = self._value(inputs, outputs, inputs)
+            row.update(last_input=inputs, last_output=outputs, last_reserve=amount)
+            if self._accounted() + self._reserved() + amount > self.contract["maximum"]:
+                self.blocked += 1
+                return None, self._stop(USD_CEILING_EXCEEDED)
+            self.sequence += 1
+            self.pending[self.sequence] = (attempt, amount, sum(self._parts(row)))
+            return self.sequence, None
+
+    def finish(self, reservation, inputs, outputs):
+        with self.lock:
+            if reservation not in self.pending:
+                return self._stop(USD_USAGE_UNVERIFIED)
+            attempt, reserved, baseline = self.pending[reservation]
+            row = self.attempts[attempt]
+            if (not all(type(value) is int and 0 <= value < 2 ** 63 for value in (inputs, outputs))
+                    or inputs < row["input"] or outputs < row["output"]):
+                return self._stop(USD_USAGE_UNVERIFIED)  # Keep the pending charge.
+            row.update(input=inputs, output=outputs)
+            del self.pending[reservation]
+            after = self._accounted()
+            if after + self._reserved() > self.contract["maximum"]:
+                return self._stop(USD_CEILING_EXCEEDED)
+            if sum(self._parts(row)) - baseline > reserved:
+                return self._stop(USD_RESERVATION_EXCEEDED)
+            return self.reason
+
+    def observe_sdk(self, attempt, total):
+        with self.lock:
+            row = self.attempts[attempt]
+            inputs, outputs = total.get("inputTokens"), total.get("outputTokens")
+            writes = total.get("cacheWriteInputTokens")
+            if (not all(type(value) is int and 0 <= value < 2 ** 63 for value in (inputs, outputs))
+                    or inputs < row["sdk_input"] or outputs < row["sdk_output"]
+                    or writes is not None and (type(writes) is not int or not 0 <= writes < 2 ** 63
+                                              or writes < row["cache_write_floor"])):
+                return self._stop(USD_USAGE_UNVERIFIED)
+            row.update(sdk_input=inputs, sdk_output=outputs, cache_write_observed=writes)
+            if writes is not None:
+                row["cache_write_floor"] = writes
+            if self._accounted() + self._reserved() > self.contract["maximum"]:
+                return self._stop(USD_CEILING_EXCEEDED)
+            return self.reason
+
+    def close_attempt(self, attempt):
+        with self.lock:
+            if any(owner == attempt for owner, _amount, _baseline in self.pending.values()):
+                self._stop(USD_USAGE_UNVERIFIED)
+            return self.snapshot(attempt)
+
+    def snapshot(self, attempt):
+        with self.lock:
+            row = self.attempts[attempt]
+            io = sum((self._parts(value)[0] for value in self.attempts.values()), Decimal(0))
+            cache = sum((self._parts(value)[1] for value in self.attempts.values()), Decimal(0))
+            pending = self._reserved()
+            observed = [value["cache_write_observed"] for value in self.attempts.values()]
+            return {
+                "enabled": True, "currency": "USD", "approved_maximum_usd": _usd_text(self.contract["maximum"]),
+                "approval_source": "owner_desk_message", "approved_at_utc": "2026-10-26T23:09:00Z",
+                "cap_record_sha256": USD_CAPS_SHA256, "price_table_sha256": USD_PRICE_TABLE_SHA256,
+                "rates_usd_per_million": {key: _usd_text(value) for key, value in self.contract["rates"].items()},
+                "rate_basis": _USD_RATE_BASIS, "scope": _USD_SCOPE, "cache_write_policy": _USD_CACHE_POLICY,
+                "inference_input_output_usd": _usd_text(io), "cache_write_reserve_usd": _usd_text(cache),
+                "modeled_accounted_usd": _usd_text(io + cache), "pending_reserve_usd": _usd_text(pending),
+                "modeled_total_usd": _usd_text(io + cache + pending),
+                "remaining_modeled_usd": _usd_text(max(Decimal(0), self.contract["maximum"] - io - cache - pending)),
+                "attempt_accounted_usd": _usd_text(sum(self._parts(row))),
+                "task_accounted_usd": _usd_text(sum((sum(self._parts(value)) for value in self.attempts.values()
+                                                     if value["task"] == row["task"]), Decimal(0))),
+                "cache_write_tokens_observed": sum(observed) if all(value is not None for value in observed) else None,
+                "pending_requests": len(self.pending), "blocked_requests": self.blocked,
+                "next_input_reserve_tokens": row["last_input"], "next_output_reserve_tokens": row["last_output"],
+                "next_request_reserve_usd": _usd_text(row["last_reserve"]) if row["last_reserve"] is not None else None,
+                "stop_reason": self.reason, "grading_included": False, "grading_usd": None,
+                "actual_total_pilot_usd": None, "effective_tariff_verified": False,
+                "actual_billing_hard_limit_verified": False,
+            }
+
+
 class _NativeRequestBudget:
     """Run-owned forward reservations. Failures are counted and never refunded.
 
@@ -129,6 +336,7 @@ class _NativeRequestBudget:
         self.lock = threading.Lock()
         self.counts = {task_id: 0 for task_id in task_ids}
         self.total = 0
+        self.usd = _PilotUsdLedger()
 
     def _reason(self, task_id):
         _require(task_id in self.counts)
@@ -141,6 +349,8 @@ class _NativeRequestBudget:
     def require_available(self, task_id):
         with self.lock:
             _require(self._reason(task_id) is None)
+            self.usd.require_current()
+            _require(self.usd.reason is None)
 
     def reserve(self, task_id):
         with self.lock:
@@ -154,6 +364,83 @@ class _NativeRequestBudget:
         with self.lock:
             return {"task_requests": self.counts[task_id], "pilot_requests": self.total}
 
+    def reserve_priced(self, task_id, attempt, inputs, outputs):
+        """The sole HTTP-forward seam reserves money and count atomically."""
+        with self.lock:
+            reason = self._reason(task_id)
+            if reason is not None:
+                return None, reason
+            reservation, reason = self.usd.reserve(attempt, inputs, outputs)
+            if reason is None:
+                self.counts[task_id] += 1
+                self.total += 1
+            return reservation, reason
+
+
+def _checked_usd_summary(raw):
+    fields = {
+        "enabled", "currency", "approved_maximum_usd", "approval_source", "approved_at_utc",
+        "cap_record_sha256", "price_table_sha256", "rates_usd_per_million", "rate_basis", "scope",
+        "cache_write_policy", "inference_input_output_usd", "cache_write_reserve_usd",
+        "modeled_accounted_usd", "pending_reserve_usd", "modeled_total_usd", "remaining_modeled_usd",
+        "attempt_accounted_usd", "task_accounted_usd", "cache_write_tokens_observed", "pending_requests",
+        "blocked_requests", "next_input_reserve_tokens", "next_output_reserve_tokens",
+        "next_request_reserve_usd", "stop_reason", "grading_included", "grading_usd",
+        "actual_total_pilot_usd", "effective_tariff_verified", "actual_billing_hard_limit_verified",
+    }
+    if type(raw) is not dict or set(raw) != fields:
+        return False
+    contract = _native_usd_caps()
+    fixed = {"enabled": True, "currency": "USD", "approved_maximum_usd": _usd_text(contract["maximum"]),
+             "approval_source": "owner_desk_message", "approved_at_utc": "2026-10-26T23:09:00Z",
+             "cap_record_sha256": USD_CAPS_SHA256, "price_table_sha256": USD_PRICE_TABLE_SHA256,
+             "rate_basis": _USD_RATE_BASIS, "scope": _USD_SCOPE, "cache_write_policy": _USD_CACHE_POLICY,
+             "rates_usd_per_million": {key: _usd_text(value) for key, value in contract["rates"].items()},
+             "grading_included": False, "grading_usd": None, "actual_total_pilot_usd": None,
+             "effective_tariff_verified": False, "actual_billing_hard_limit_verified": False}
+    if any(type(raw[key]) is not type(value) or raw[key] != value for key, value in fixed.items()):
+        return False
+    reason = raw["stop_reason"]
+    if type(reason) not in (str, type(None)) or reason not in _USD_STOPS | {None}:
+        return False
+    for key in ("pending_requests", "blocked_requests", "cache_write_tokens_observed",
+                "next_input_reserve_tokens", "next_output_reserve_tokens"):
+        value = raw[key]
+        if value is None and key not in {"pending_requests", "blocked_requests"}:
+            continue
+        if type(value) is not int or not 0 <= value < 2 ** 63:
+            return False
+    values = {}
+    for key in ("inference_input_output_usd", "cache_write_reserve_usd", "modeled_accounted_usd",
+                "pending_reserve_usd", "modeled_total_usd", "remaining_modeled_usd",
+                "attempt_accounted_usd", "task_accounted_usd", "next_request_reserve_usd"):
+        value = raw[key]
+        if value is None and key == "next_request_reserve_usd":
+            continue
+        if type(value) is not str or len(value) > 64 or re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", value) is None:
+            return False
+        try:
+            values[key] = Decimal(value)
+        except InvalidOperation:
+            return False
+    if (raw["next_input_reserve_tokens"] is None) != (raw["next_output_reserve_tokens"] is None):
+        return False
+    if (raw["next_input_reserve_tokens"] is None) != (raw["next_request_reserve_usd"] is None):
+        return False
+    if raw["next_request_reserve_usd"] is not None:
+        rates = contract["rates"]
+        expected = (Decimal(raw["next_input_reserve_tokens"]) * (rates["input"] + rates["cache_write"])
+                    + Decimal(raw["next_output_reserve_tokens"]) * rates["output"]) / Decimal(1_000_000)
+        if values["next_request_reserve_usd"] != expected:
+            return False
+    accounted, pending = values["modeled_accounted_usd"], values["pending_reserve_usd"]
+    return (accounted == values["inference_input_output_usd"] + values["cache_write_reserve_usd"]
+            and values["modeled_total_usd"] == accounted + pending
+            and values["remaining_modeled_usd"] == max(Decimal(0), contract["maximum"] - accounted - pending)
+            and 0 <= values["attempt_accounted_usd"] <= values["task_accounted_usd"] <= accounted
+            and (raw["pending_requests"] != 0 or pending == 0)
+            and (reason is not None or accounted + pending <= contract["maximum"]))
+
 
 def _checked_runtime_caps(raw, *, count):
     if type(raw) is not dict:
@@ -162,7 +449,7 @@ def _checked_runtime_caps(raw, *, count):
     expected = {"sha256", "input_token_limit", "output_token_limit", "input_tokens", "output_tokens",
                 "token_boundary", "token_hard_limit_enforced", "wall_seconds_limit", "effective_wall_seconds",
                 "task_request_limit", "pilot_request_limit", "task_requests", "pilot_requests", "stop_reason",
-                "client_token_precheck"}
+                "client_token_precheck", "usd_ceiling"}
     if (set(raw) != expected or raw["sha256"] != NATIVE_CAPS_SHA256
             or raw["token_boundary"] != _TOKEN_BOUNDARY or raw["token_hard_limit_enforced"] is not False
             or type(raw["stop_reason"]) not in (str, type(None))
@@ -191,6 +478,10 @@ def _checked_runtime_caps(raw, *, count):
                              or count is not None and count > task):
         return False
     reason = raw["stop_reason"]
+    if (raw["usd_ceiling"] is not None and not _checked_usd_summary(raw["usd_ceiling"])
+            or reason in _USD_STOPS and (raw["usd_ceiling"] is None
+                                        or raw["usd_ceiling"]["stop_reason"] != reason)):
+        return False
     if reason == NATIVE_TASK_CAP_EXCEEDED and task != raw["task_request_limit"]:
         return False
     if reason == NATIVE_PILOT_CAP_EXCEEDED and total != raw["pilot_request_limit"]:
@@ -263,7 +554,8 @@ def bounded_provider_observation(raw: Any) -> dict:
         if blocked:
             reason = raw["native_request_cap_reason"]
             if (type(reason) is not str
-                    or reason not in {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED}
+                    or reason not in {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED,
+                                      NATIVE_PILOT_CAP_EXCEEDED, *_USD_STOPS}
                     or reason == NATIVE_REQUEST_CAP_EXCEEDED and count != limit
                     or reason != NATIVE_REQUEST_CAP_EXCEEDED
                     and (type(raw["runtime_caps"]) is not dict or raw["runtime_caps"].get("stop_reason") != reason)):
@@ -457,6 +749,7 @@ class _ProviderHTTPObservation:
         self.stop_reason = None
         self.wakeup = threading.Event()
         self.budget = self.budget_task = self.closed_budget = None
+        self.budget_attempt = self.usd_reservation = self.closed_usd = None
         self.input_tokens = self.output_tokens = None
         self.precheck_inputs = self.precheck_outputs = 0
         self.precheck_usage_known = True
@@ -543,6 +836,7 @@ class _ProviderHTTPObservation:
                      and task_id in budget.counts and self.budget is None
                      and not self.closed and self.requests == 0)
             self.budget, self.budget_task = budget, task_id
+            self.budget_attempt = budget.usd.begin(task_id)
 
     def check_deadline(self):
         with self.lock:
@@ -597,8 +891,12 @@ class _ProviderHTTPObservation:
             self.input_tokens, self.output_tokens = total["inputTokens"], total["outputTokens"]
             reason = (NATIVE_INPUT_CAP_EXCEEDED if self.input_tokens > limits["input_tokens"] else
                       NATIVE_OUTPUT_CAP_EXCEEDED if self.output_tokens > limits["output_tokens"] else None)
+            usd_reason = (self.budget.usd.observe_sdk(self.budget_attempt, total)
+                          if self.budget is not None else None)
             if reason is not None:
                 self.request_stop(reason)
+            elif usd_reason is not None:
+                self.request_stop(usd_reason)
 
     def _remaining_tokens(self):
         if not self.precheck_usage_known:
@@ -624,6 +922,7 @@ class _ProviderHTTPObservation:
             document = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_json,
                                   parse_constant=_finite_json)
             if (type(document) is not dict or not _text_input(document.get("input"))
+                    or self.budget is not None and document.get("model") != "gpt-5.6-sol"
                     or any(document.get(key) is not None for key in
                            ("previous_response_id", "conversation", "prompt", "context_management"))
                     or document.get("background", False) is not False
@@ -735,7 +1034,14 @@ class _ProviderHTTPObservation:
                     raise RuntimeError("stopped")
                 body = self._token_request(bytes(body), suffix)
                 if not self.closed:
-                    reason = self.budget.reserve(self.budget_task) if self.budget is not None else None
+                    reason = None
+                    if self.budget is not None:
+                        # Reserve all remaining attempt input, not just the
+                        # byte-based estimate. It is still not a server bound.
+                        self.usd_reservation, reason = self.budget.reserve_priced(
+                            self.budget_task, self.budget_attempt, self._remaining_tokens()[0],
+                            self.precheck_last_output,
+                        )
                     if reason is not None:
                         self.blocked_requests += 1
                         self.request_stop(reason, defer_cleanup=True)
@@ -804,6 +1110,8 @@ class _ProviderHTTPObservation:
             self._response_finished(model, reason, usage=parser.completed_usage)
             started = False
             handler.wfile.write(b"0\r\n\r\n")
+            if self.stop_reason in _USD_STOPS:
+                self._close_stopped_runtime()
         except _TokenPrecheckRefused as error:
             with self.lock:
                 if not self.closed:
@@ -837,6 +1145,8 @@ class _ProviderHTTPObservation:
             finally:
                 if serialized:
                     self.request_lock.release()
+                if self.stop_reason in _USD_STOPS and not self.closed:
+                    self._close_stopped_runtime()
 
     def _response_finished(self, model, reason, *, usage=None):
         with self.lock:
@@ -853,6 +1163,16 @@ class _ProviderHTTPObservation:
                 self.precheck_usage_known = False
             if not self.precheck_usage_known:
                 self.precheck_inputs = self.precheck_outputs = None
+            if self.budget is not None and self.usd_reservation is not None:
+                priceable = type(model) is str and _USD_MODEL.fullmatch(model) is not None
+                usd_reason = self.budget.usd.finish(
+                    self.usd_reservation,
+                    self.precheck_inputs if priceable else None,
+                    self.precheck_outputs if priceable else None,
+                )
+                self.usd_reservation = None
+                if usd_reason is not None:
+                    self.request_stop(usd_reason, defer_cleanup=True)
             if reason is not None:
                 self.model_reason = reason
             elif self.model is not None and self.model != model:
@@ -871,6 +1191,8 @@ class _ProviderHTTPObservation:
                     self.precheck_inputs = self.precheck_outputs = None
                 self.timer.cancel()
                 self.closed_budget = self.budget.snapshot(self.budget_task) if self.budget is not None else None
+                self.closed_usd = (self.budget.usd.close_attempt(self.budget_attempt)
+                                   if self.budget is not None else None)
                 connections = tuple(self.connections)
                 inbound = tuple(self.inbound)
             for stream in inbound:
@@ -912,6 +1234,7 @@ class _ProviderHTTPObservation:
                 "task_request_limit": self.limits["per_task"]["native_model_calls"],
                 "pilot_request_limit": self.limits["per_pilot"]["native_model_calls"],
                 **(self.closed_budget or {"task_requests": None, "pilot_requests": None}),
+                "usd_ceiling": self.closed_usd,
                 "stop_reason": self.stop_reason}
 
     def summary(self):
@@ -1400,7 +1723,9 @@ class PilotWireReceiptSession:
 
     def _current(self) -> None:
         _require(type(self.native_budget) is _NativeRequestBudget and self.native_budget.limits == _native_caps()
-                 and set(self.native_budget.counts) == set(self.document["task_ids"]))
+                 and set(self.native_budget.counts) == set(self.document["task_ids"])
+                 and type(self.native_budget.usd) is _PilotUsdLedger)
+        self.native_budget.usd.require_current()
         _require(capture.verify_pilot_input_capture(self.sources, workspace=self.workspace,
                                                   dataset_root=self.dataset_root) == self.linkage)
         _read_bytes(self.workspace / capture.CAPTURE_PATH, **_digest(self.capture_data))

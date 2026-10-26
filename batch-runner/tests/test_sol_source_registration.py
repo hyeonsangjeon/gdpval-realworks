@@ -48,7 +48,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     bindings_path = root / pilot.SOURCE_PROFILE_BINDINGS
     bindings_bytes = bindings_path.read_bytes()
     bindings_profile = pilot.load_plan(bindings_path)
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261026_token_precheck.yaml")
+    token_path = root / pilot.SOURCE_PROFILE_TOKEN_PRECHECK
+    token_bytes = token_path.read_bytes()
+    token_profile = pilot.load_plan(token_path)
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_usd_cap.yaml")
+    assert hashlib.sha256(token_bytes).hexdigest() == pilot.SOURCE_PROFILE_TOKEN_PRECHECK_SHA256 == (
+        "fbabe0aa40f6513bc77d86a29ae9ac9af35cfbd64b5b70fe3f6150aa0a6e1a44"
+    )
     assert pilot.SOURCE_PROFILE_BINDINGS.endswith("_source_20261025_bindings.yaml")
     assert hashlib.sha256(bindings_bytes).hexdigest() == pilot.SOURCE_PROFILE_BINDINGS_SHA256 == (
         "740ec085c047ad359b4c5e56a8bf5867ebc2cb6c229d479262d6815fbe8154cf"
@@ -63,6 +69,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert {name for name, digest in profile["source_pins"].items()
             if digest != bindings_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+    }
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != token_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in token_profile.items() if k != "source_pins"
     }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in bindings_profile.items() if k != "source_pins"
@@ -84,6 +97,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     }
     shared = root / "batch-runner/gpt54_disposable_checkout.py"
     assert hashlib.sha256(shared.read_bytes()).hexdigest() == next(iter(pilot.SOURCE_PROFILE_AUXILIARY.values()))
+    assert pilot.SOURCE_PROFILE_AUXILIARY == {
+        "batch-runner/gpt54_disposable_checkout.py": "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
+        pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml": wire.USD_CAPS_SHA256,
+        pilot.ENVELOPE + "model_price_table.json": wire.USD_PRICE_TABLE_SHA256,
+    }
+    for role, digest in pilot.SOURCE_PROFILE_AUXILIARY.items():
+        assert hashlib.sha256((root / role).read_bytes()).hexdigest() == digest
     assert hashlib.sha256((root / pilot.ACTIVE_PLAN).read_bytes()).hexdigest() == pilot.FOUNDRY_PLAN_SHA256
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in original.items() if k != "source_pins"
@@ -141,9 +161,16 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_BINDINGS
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_BINDINGS_SHA256
-    assert report["source_change_reason"] == "client_token_precheck_and_complete_response_usage"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_TOKEN_PRECHECK
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_TOKEN_PRECHECK_SHA256
+    assert report["source_change_reason"] == "owner_usd_ceiling_and_shared_estimate_admission"
+    assert report["monetary_decision"] == {
+        "record": pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
+        "sha256": wire.USD_CAPS_SHA256, "approved_maximum_usd": 1000, "currency": "USD",
+        "approved_at_utc": "2026-10-26T23:09:00Z",
+        "scope": "five_task_pilot_inference_and_grading_combined",
+        "actual_billing_hard_limit_verified": False, "grading_ledger_connected": False,
+    }
     assert report["run_id"] == original["pilot"]["run_id"]
     assert evidence._active_plan(plan_sha256=plan_sha, reviewed_source_sha=head)[0] == profile
 
@@ -184,10 +211,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(previous)})
     with pytest.raises(pilot.PilotSourceRegistrationRefused):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(caps_profile)})
+    with pytest.raises(pilot.PilotSourceRegistrationRefused):
+        pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(token_profile)})
 
     # Synthetic mutations do not alter any repository file or Git object.
     read_bytes = reader._read_bytes
-    for predecessor_path in (previous_path, caps_path):
+    for predecessor_path in (previous_path, caps_path, token_path,
+                             wire._USD_CAPS_PATH, wire._USD_PRICE_PATH):
         for missing in (False, True):
             def bad_predecessor(path, **kwargs):
                 if path == predecessor_path:
@@ -277,6 +307,22 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         with pytest.raises(pilot.PilotSourceRegistrationRefused, match="^pilot_source_registration_refused$"):
             pilot.source_plan_snapshot(**options)
     assert len(bindings_reads) == 3
+
+    for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
+                      pilot.ENVELOPE + "model_price_table.json"):
+        checks = []
+        expected_reads = 3 if held_role == pilot.SOURCE_PROFILE_TOKEN_PRECHECK else 2
+        def final_money_drift(path, **kwargs):
+            if path == root / held_role:
+                checks.append(path)
+                if len(checks) == expected_reads:
+                    raise ValueError(CANARY)
+            return read_bytes(path, **kwargs)
+        with monkeypatch.context() as patch:
+            patch.setattr(reader, "_read_bytes", final_money_drift)
+            with pytest.raises(pilot.PilotSourceRegistrationRefused, match="^pilot_source_registration_refused$"):
+                pilot.source_plan_snapshot(**options)
+        assert len(checks) == expected_reads  # Both admission and final held-blob checks.
 
     real_git = checkout._git
     for kind in ("foreign", "symlink", "wrong_commit"):
