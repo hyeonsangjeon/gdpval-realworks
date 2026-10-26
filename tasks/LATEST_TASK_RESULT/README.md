@@ -1,131 +1,131 @@
 # Latest task result
 
-## Native pilot hard token cap contract investigation
+## Native pilot client token precheck
 
-The offline investigation found **no sufficient evidence to implement a
-server-enforced token cap** on the fixed Codex SDK/CLI **0.147.0** to Foundry
-GPT-5.6 Sol path. Both existing attempt limits remain client checks of reported
-usage. This task changes documentation only; it does not weaken or bypass a
-gate, change the plan, or declare the pilot launchable.
+The owner's **2026-10-26 23:40 KST** local implementation direction is complete
+at the tested code below. The loopback refuses a request before upstream
+connection/reservation when its input estimate or output field exceeds the
+remaining allowance, or the required evidence is unknown. **Server hard-token
+enforcement remains unverified.** This is not a pilot execution result.
 
-| Existing attempt limit | Verdict | Decisive boundary |
-| --- | --- | --- |
-| 300,000 input tokens | **Client post-check only** | Context-window and compaction config/readback fields do not establish a server input reservation or a sum across native requests. |
-| 10,000 output tokens | **Client post-check only** | Generic OpenAI `max_output_tokens` semantics cover one response's visible output and reasoning tokens. Neither this Codex sender's mapping nor the Foundry Sol-specific server contract was established. |
+### Behavior and limits
 
-The [contract investigation](../../batch-runner/docs/gpt56_native_hard_token_contract.md)
-records the exact package/schema/runtime locations, field-by-field findings,
-evidence hashes and aggregate-budget implications. The inspected wheels do not
-include the Rust provider serializer source or full `ConfigToml` schema.
-App-server `Config` permits extra properties, so a missing declared field does
-not prove that every spelling is rejected. A generic SDK request field, binary
-string or configured model label is not a verified provider contract.
+- Input remains **300,000 tokens per attempt**. The estimate is the outgoing
+  JSON's UTF-8 byte length, at one estimated token per byte. It is not a Sol
+  tokenizer, measured usage or a proven token upper bound. Opaque/remote state,
+  images/files, encrypted reasoning and hosted tools are refused; valid live
+  Codex requests may therefore be refused. Requests over **1 MiB** are not
+  inspected. Existing **256-KiB** response inspection and **64-KiB** chunks stay.
+- Output remains **10,000 tokens per attempt**. Supported `/responses` JSON
+  receives the remaining `max_output_tokens` if absent. Existing values above
+  the remainder, invalid/ambiguous fields and `/responses/compact` are refused.
+  No value is silently clamped and no maximum of zero is sent.
+- Requests are serialized. Complete response input/output totals are summed
+  once; cumulative SDK totals are a floor, not an extra sum. Missing, partial,
+  failed or conflicting usage/completion leaves the next allowance unknown.
+  Later SDK totals cannot reopen that state. Existing reported-overage stops
+  and owned SDK/socket cleanup remain; late refusals cannot alter closed receipts.
+- `runtime_caps.client_token_precheck` records enabled/check counts, the named
+  estimator, accounted usage, remaining allowances and last request limits.
+  Unknown usage/remainders are null. `token_hard_limit_enforced` and
+  `server_hard_limit_verified` both remain **false**. No private body is published.
 
-### Source and preserved boundaries
+The [contract](../../batch-runner/docs/gpt56_native_hard_token_contract.md)
+gives fixed refusal codes and preserves the previous server-contract findings.
+Native request caps **32 per attempt / 128 per task / 640 per pilot** and the **1,800-second** attempt deadline
+are unchanged. So are monetary-cap null, model/host/judge identity, QA,
+dependencies, workflows, retry allowlists and all earlier sealed registrations.
 
-Worktree: `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`.
-Branch: `codex/gpt56-native-pilot-caps-20261024`. All commits remain local.
+### Source identity
+
+Worktree `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`,
+branch `codex/gpt56-native-pilot-caps-20261024`, started clean at
+`ef7181a740b385745726950940c6aa3200621c82` (tree
+`6a3efa3a1ec4b57b9135249ff5060929b1973f07`). Only this worktree was edited.
 
 | Role | Identity |
 | --- | --- |
-| Clean inspected starting HEAD | `af685f5c4a436a7f476a41c5cf4f44a702c0a67d` |
-| Inspected tree | `96ca35aa8f8da94a5d6bf8c9ea5f33a3bb93494f` |
-| Runtime/source-registration changes | None; no successor registration was needed |
-| New runtime-tested or independently approved HEAD | None |
+| Tested code HEAD | `48632cd7c0b687051816b53723592e43de4831e2` |
+| Tested tree | `53fadeb30cd68f983dc5626eebbdec85b79e30f9` |
+| New source profile | `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261026_token_precheck.yaml` |
+| Profile bytes SHA256 | `fbabe0aa40f6513bc77d86a29ae9ac9af35cfbd64b5b70fe3f6150aa0a6e1a44` |
+| Canonical plan seal | `40db69bb3a26252fe4fa7ebe01b07f8ee448ee4fa0de809316ee165349213add` |
+| Sealed bindings predecessor SHA256 | `740ec085c047ad359b4c5e56a8bf5867ebc2cb6c229d479262d6815fbe8154cf` |
 
-The final documentation commit's full HEAD/tree and three file hashes are
-retained in the evidence directory's `final-source.txt` and returned in the
-handoff. That commit is not relabeled as a tested or approved runtime revision.
+The source-only successor changes the wire/preflight pins, with every non-source
+field unchanged. All **58** registered source hashes match. The predecessor is
+held/rechecked alongside the earlier seals; its old CLI selection still refuses.
+The runtime changes are in `gpt56_pilot_wire_receipt.py`; the source selector is
+in `gpt56_sol_codex_pilot_preflight.py`. Four test files cover the new behavior
+and existing contracts. Final documentation-only HEAD/tree are returned in the
+handoff; `verified-code.sha256` checks unchanged tested executable/profile bytes.
+This is not independent owner review or CI approval.
 
-Native request limits **32 per attempt / 128 per task / 640 per pilot**, the
-**1,800-second** deadline, all token values and the null monetary cap remain
-unchanged. Existing `native_input_token_cap_exceeded` and
-`native_output_token_cap_exceeded` stops still follow reported usage;
-`token_hard_limit_enforced=false` remains required. Missing usage is unknown,
-not zero. The earlier decision not to use an unverified Sol tokenizer estimate
-was preserved. No model, host, judge, QA, dependency or workflow changed.
+### Offline verification
 
-The unchanged sealed files retain these SHA256 identities:
+Evidence: `/tmp/p5-native-token-precheck.E4mVGq/`. The existing Python **3.10.12**
+environment and SDK **0.147.0** were used. Upstream HTTP was loopback-only,
+responses/inputs were synthetic, and SDK cleanup used harmless child processes.
+The real Codex CLI, model, credentials and grading services were not invoked.
+Each command cleared the environment and disabled online Hub/dataset access,
+bytecode writes, pytest plugin autoload/cache and Git lazy fetch. No install.
 
-| Record | SHA256 |
+| Completed group at the tested HEAD | Result | Pytest / wrapper seconds; exit |
+| --- | --- | --- |
+| Source registration, token precheck, provider observation, remaining caps and caps draft | **187 passed, 0 failed/errors/skipped** | **112.64 / 113.284424; 0** |
+| Wire receipt and plan-preflight contracts | **282 passed, 0 failed/errors/skipped; 214 deselected** | **1438.81 / 1439.264116; 0** |
+
+Both groups used **TERM1800s/KILL5s** verification bounds, not changed pilot
+limits. Their source files match and JUnit case identities are disjoint:
+**469 unique passed tests**, not a pooled model experiment. Host/external-live-
+receipt selections were excluded; no full-suite or live compatibility claim.
+`verified-native.*` and `verified-contracts.*` retain exact invocations, source
+HEAD/tree, stdout, JUnit and timing. The new module includes all five requested
+scenarios plus format, concurrency, non-egress and closed-receipt regressions.
+
+Earlier attempts remain separate:
+
+| Evidence prefix and source | Actual outcome |
 | --- | --- |
-| 7343-byte caps draft | `7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6` |
-| 10-23 source registration | `506de35370ffe6d54e6decb2459a4f4abda47136d550c010086b0fffd5c1e482` |
-| 10-25 source registration | `f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2` |
-| Active 10-25 bindings successor | `740ec085c047ad359b4c5e56a8bf5867ebc2cb6c229d479262d6815fbe8154cf` |
+| `test`, code `2710db3b5999f79ea3ca8165145c39f9eca5b64d` | **exit 124 / 600.017692s**; no final pytest summary or JUnit. Collection had selected 461/675 nodes. |
+| `final-test`, code `ad43facccf5b36f1805831e1897f33fc596da694` | **exit 124 / 1200.013353s**; no final pytest summary or JUnit. The filename is historical, not a final-pass claim. |
+| `close-race-before`, runtime code `ad43facccf5b36f1805831e1897f33fc596da694` plus the retained new-test diff | **1 failed**, pytest **2.37s**, wrapper **2.798549s**, exit **1**: a late refusal changed the already-closed blocked count from 0 to 1. Fixed in the tested HEAD; its regression passed in the 187-test group. |
 
-### New offline evidence, not a test replay
+The **76,803-byte** `tested-code.patch` has SHA256
+`a77ebcd8b3974f57bbd9b47613094a7ebbc8506a1384aa5a265a8267832a845e`.
+`verified-code.sha256` and `proof.sha256` bind sources and retained evidence.
+Earlier **34-pass**, **6002-pass** and schema-only proofs remain in the
+[immutable preceding record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ef7181a740b385745726950940c6aa3200621c82/tasks/LATEST_TASK_RESULT/README.md),
+not in the new totals. The prior server-contract section remains unchanged.
 
-Evidence directory: `/ai-work/copilot/_tmp/p5-native-hard-token-contract.aOpcll/`.
-The installed binary returned `codex-cli 0.147.0`. Its package metadata,
-binary, SDK client and generated Python protocol matched their local wheel
-`RECORD` size/digest entries. That check exited **0** and establishes local
-distribution consistency, not remote attestation or provider behavior.
+### Plan-only result and remaining conditions
 
-`invocation.txt` retains the exact schema command with
-`env -i / TERM60s / KILL5s`. The existing binary's
-`app-server generate-json-schema --experimental --out` exited **0**, Bash wall
-**0.041 seconds**, with a **0-byte** output log. No app-server session or
-model request was started. `schema-observations.json` records its extensible
-config and absent declared turn token-cap fields, SHA256
-`668e3bddf8dde7244601ef9bf0a17764415808d228be46f21d13deb312e36bca`.
-The report lists the three generated JSON files' exact sizes and hashes.
+`verified-preflight.invocation.txt` records the explicit new profile and tested
+40-hex source, under **env -i / TERM120s/KILL5s**. It reached `source_verified`
+and `inspect_plan`: **configuration_valid=true**, no configuration problems,
+**launch_allowed=false**, **exit 2 / 1.710567s**. All eleven original launch
+blockers remain: **0 cleared / 11 retained / 0 new**. Exit 2 is the intentional
+non-launch result, not a failed source/plan check. No identity/input/capture,
+model capability, provider limit, usage-price or sandbox evidence is inferred.
 
-No pytest body, collection or plan-only preflight ran for this documentation-only
-outcome. **0 tests were executed; pass/fail/skip counts are not applicable**, and
-there is no new JUnit. Validation was limited to the installed evidence/schema,
-documentation scope/whitespace and unchanged sealed-file hashes. No old passing
-suite was replayed. The optional `strings` lookup was unavailable; its help
-wrapper's exit **1** is recorded separately, not called a test failure or pass.
+The [OpenAI reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)
+supports the generic `max_output_tokens` description, including reasoning
+output. The retained **1,101,821-byte** page has SHA256
+`ddea039b39d8d48cae34cc1460127949856f08e751fe307a0104c94aa07f40d5`.
+It does not establish a model/version-bound Foundry hard-limit contract.
+The earlier reference 403 and size-limit refusal are not supporting evidence.
 
-The [immutable preceding record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/af685f5c4a436a7f476a41c5cf4f44a702c0a67d/tasks/LATEST_TASK_RESULT/README.md)
-preserves **34 passed, 0 failed, 0 errors, 0 skipped** at
-`bbc12b69414ef90580711f1d40f42eb17778f479`, pytest **124.63s**, wrapper
-**125.042s**, exit **0**. Its separate plan-only preflight reached
-`source_verified` and `inspect_plan`, exit **2** in **1.644s**, with
-`launch_allowed=false`. These are prior results, not fresh measurements at this
-documentation commit. The separate **6002-pass** proof at `e0fa32ef3`, earlier
-registration failure/correction, and older caps proofs remain linked there and
-are not pooled with this investigation.
+Final-source review/CI, environment approval and separately authorized live
+evidence remain required. Input-estimator error, live Codex payload compatibility
+and actual server enforcement are unmeasured. The frozen-grader source refusal
+is unchanged, not a new twelfth blocker. `direct-v1` does not require a child-
+project ID. Task3 run `37756891578` remains uncertain, spent and nonretryable.
+No finite right was consumed/reset; no model, Azure/auth/management call,
+dispatch, grading, push, PR or user-checkout edit occurred. Public documentation
+GETs and loopback fixtures are not zero network activity.
 
-### Remaining conditions
-
-The unchanged launch ledger is **0 cleared / 11 retained / 0 new**. This is not
-a fresh preflight verdict; `native_call_and_token_limits_unresolved` remains.
-
-```text
-foundry_account_project_deployment_identity_unverified
-foundry_served_model_version_unverified
-max_and_long_1m_capability_unverified
-native_call_and_token_limits_unresolved
-prepared_input_bytes_unverified
-live_inference_identity_and_wire_unverified
-pilot_dispatch_and_grading_identity_not_wired
-foundry_usage_and_tariff_mapping_unverified
-native_sandbox_and_result_bundle_host_unverified
-actual_pilot_deployment_not_prepared
-prepared_request_capture_unverified
-```
-
-Further implementation needs an approved evidence package binding the fixed
-Codex request serializer and exact Foundry Sol API/version to hard-limit
-semantics. Any per-response field would also need an evidence-backed remaining
-allowance across the attempt. Deployment TPM/quota controls remain
-**owner/external** matters, not a substitute for an attempt budget. Missing
-local evidence does not establish missing account/model access. `direct-v1`
-does not require a child-project ID.
-
-Final-source owner review, CI, environment approval and separately authorized
-live evidence remain open. The frozen-grader source refusal is unchanged, not
-a new twelfth blocker. Task3 run `37756891578` stays uncertain, spent and
-nonretryable. No finite right was consumed, restored or retried. No installation,
-download, credential/token read or issuance, network/model call, Azure
-management, dispatch, grading, push or PR operation occurred.
-
-`openai-docs` used installed first-party package/schema evidence under the
-offline restriction; no official online retrieval was performed.
-`experiment-report-en` kept schema, runtime and server claims separate;
-`im-not-ai-en` preserved the technical wording and evidence limits. The brief,
-checkpoints and reconciliation are retained with the evidence. No experiment
-redesign or UI/animation skill applies. Existing Git identity is unchanged;
-no attribution trailer or external approval is added.
+`openai-docs` supported the generic-field documentation check;
+`experiment-report-en` and `im-not-ai-en` preserve measurement units, source
+identities, failed/interrupted evidence and server-unknown limits. No experiment
+redesign or UI/animation work applies. Existing Git identity and no-trailer
+policy are preserved. Reporting review is not runtime or publication approval.

@@ -13,6 +13,26 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add prospective, fail-closed native-pilot token admission before upstream
+  connection/reservation. Compare a declared UTF-8 JSON byte-based input
+  estimate with the remaining **300,000-token** input allowance; require or
+  insert `max_output_tokens` within the remaining **10,000-token** output
+  allowance. Complete response usage is summed once, SDK totals are a floor,
+  and requests are serialized. Missing/partial/conflicting usage cannot reopen
+  a remainder. Reject unsupported/opaque inputs and preserve closed receipts
+  against late refusals. Both server-hard-limit flags remain **false**; this
+  heuristic is not a tokenizer or proven token upper bound. Preserve all
+  sealed plans/caps and add a source-only 10-26 successor with two changed pins.
+  At `48632cd7c0b687051816b53723592e43de4831e2`, disjoint offline groups report
+  **187 + 282 = 469 passed, 0 failed/errors/skipped**, with **214 deselected**.
+  Preserve the **600s/1200s** verification timeouts and the separate pre-fix
+  **1-failed** closed-receipt regression; neither is relabeled as a pass.
+  Plan-only preflight reaches `source_verified`/`inspect_plan`, exit **2**,
+  **1.710567s**, with **0 cleared / 11 retained / 0 new** launch blockers.
+  No model, paid execution, grading, dispatch, push or PR. See the
+  [client contract](batch-runner/docs/gpt56_native_hard_token_contract.md)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md).
+
 - Document the fixed Codex SDK/CLI **0.147.0** hard-token-cap investigation at
   `af685f5c4a436a7f476a41c5cf4f44a702c0a67d`, tree
   `96ca35aa8f8da94a5d6bf8c9ea5f33a3bb93494f`. **300,000 input / 10,000 output

@@ -1,5 +1,62 @@
 # Native pilot hard token cap contract
 
+## Prospective client precheck, 2026-10-26
+
+The owner's 23:40 KST direction is implemented at code
+`48632cd7c0b687051816b53723592e43de4831e2`. The attempt-owned loopback now
+checks a request before constructing its upstream connection or reserving a
+native forward. **This is a client admission check, not a verified server hard
+token limit.** The existing post-usage stops remain in place.
+
+| Check | Implemented behavior | Remaining boundary |
+| --- | --- | --- |
+| 300,000 input tokens per attempt | Compare the outgoing JSON's UTF-8 byte length, at one estimated token per byte, with the remaining input allowance. | A deliberately conservative heuristic, not a Sol tokenizer, measured consumption or a proven token upper bound. It includes serialized controls/tools and may reject valid requests. Provider rendering overhead is not established. |
+| 10,000 output tokens per attempt | Require a positive integer `max_output_tokens` no larger than the remainder. Insert the remainder when the field is absent on supported `/responses` JSON; reject larger or invalid fields instead of clamping them. | The proxy can supply the field. Foundry Sol's acceptance and server enforcement remain unverified. |
+| Usage between requests | Sum complete response-body totals once; use cumulative SDK totals as a floor, not an additional sum. Serialize requests until the prior response is settled; unknown usage blocks the next forward. | Missing, partial, failed or conflicting completion/usage evidence makes the remainder unknown. A later SDK sample cannot reopen it. |
+
+Unknown or unsupported requests stop before upstream effects: opaque/remote
+context, encrypted reasoning, image/file inputs, hosted tools, encoded bodies,
+malformed/duplicate-key JSON and `/responses/compact`. The last route has no
+established output-limit field here. This can stop an otherwise valid Codex
+session; live compatibility has not been tested. No tokenizer or dependency
+was installed. Request inspection is capped at **1 MiB**; the existing response
+inspection limit remains **256 KiB**, with **64-KiB** transport chunks.
+
+The receipt keeps `token_hard_limit_enforced=false` and adds
+`runtime_caps.client_token_precheck`: enabled state, checked/blocked counts,
+the named estimator, accounted usage, remaining allowances and the last
+estimate/output limit. Its `server_hard_limit_verified` also remains false.
+Unknown usage and remainders are null. Raw bodies, headers and errors are not
+published. The existing stop/SDK cleanup path handles the fixed refusal codes:
+`native_input_token_precheck_exceeded`, `native_output_token_precheck_exceeded`,
+`native_output_token_limit_unavailable`, `native_token_request_unverified` and
+`native_token_usage_unverified`. Closed receipts cannot be changed by a late
+refusal; the regression was reproduced before correction and then passed.
+
+The new `gpt56_sol_foundry_codex_pilot_source_20261026_token_precheck.yaml`
+changes only the wire/preflight source pins relative to the sealed bindings
+predecessor. All non-source plan fields, previous registrations, caps, models,
+host/judge identities, retry policies and finite rights are preserved. Source
+selection still verifies held Git blobs, actual imported paths and final
+rechecks; the predecessor is included in those rechecks.
+
+Two disjoint offline groups at the same code HEAD report **187 + 282 = 469
+passed**, **0 failed/errors/skipped**; **214** host/external-receipt cases were
+deselected. Plan-only validation reached `source_verified` and `inspect_plan`,
+with `configuration_valid=true`, exit **2**, and **11** unchanged launch blockers.
+The [current record](../../tasks/LATEST_TASK_RESULT/README.md) separates these
+results from the two interrupted verification runs and the pre-fix regression.
+No model call, paid execution, grading, dispatch, push or PR occurred.
+
+The [OpenAI reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)
+describes the generic per-response `max_output_tokens` field, including
+reasoning output. It is not a version-bound Foundry Sol hard-limit contract.
+
+## Prior fixed-source server-contract investigation
+
+The following investigation and its no-implementation/no-online-read statements
+are retained at their original source; they do not describe the new client code.
+
 At source `af685f5c4a436a7f476a41c5cf4f44a702c0a67d`, this offline investigation
 does **not establish server-enforced token caps** for the registered Foundry
 GPT-5.6 Sol pilot through Codex SDK/CLI **0.147.0**. Both attempt limits remain
