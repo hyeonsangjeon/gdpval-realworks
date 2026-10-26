@@ -13,6 +13,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Bind a disabled-by-default, fixed **CONNECTED** smoke to installed Copilot
+  CLI **1.0.103**, with verified executable bytes and a fresh NAS work/HOME/
+  config/cache environment. Label the condition **GHCP Copilot CLI agent +
+  GPT-5.6 Sol**, not a VM or Codex-agent result. Keep **1,200 seconds / 64 turn
+  starts**, select **32 tool starts**, and refuse missing/mismatched metadata.
+  One combined **432-test** pass preceded the single real prompt, which reported
+  **No authentication information found** (CLI **1**, adapter **2**). No model,
+  effort or context value was observed; no prompt retry or five-task run followed.
+  Preserve the original receipt and correct its duration-only usage projection:
+  **`totalApiDurationMs=0`** is not token usage or zero cost. Final code passed a
+  separate combined **433 tests, 0 failed, 0 skipped** after the synthetic fix;
+  no second live smoke. See [current evidence](tasks/LATEST_TASK_RESULT/README.md).
+
 - Add a disabled-by-default GHCP process-adapter skeleton with an explicitly
   supplied argv and a required, positive tool-call cap. Reuse the existing
   **1200-second** and **64-turn** values without changing a plan or workflow.

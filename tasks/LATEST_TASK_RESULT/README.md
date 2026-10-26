@@ -1,5 +1,91 @@
 # Latest task result
 
+## GHCP Copilot CLI agent + GPT-5.6 Sol: one NAS smoke
+
+The leader selected the installed Copilot CLI default agent and a NAS isolated
+directory, **VM 아님, 격리 디렉터리**. The owner-authorized single prompt was
+`Reply with exactly CONNECTED`. It reported **`No authentication information
+found`**, CLI exit **1**, adapter exit **2**. No model/effort/context event was
+observed: **model=null, reasoningEffort=null, tokenLimit=null**, all **unverified**.
+No retry or five-task run followed. This does not establish a lack of credentials
+elsewhere, and it does not establish zero billed usage.
+
+### Source and implementation
+
+Worktree `/ai-work/copilot/_tmp_worktrees/ghcp-sol-gate-actions-20261024`, branch
+`leader/ghcp-sol-gate-actions-20261024`, started clean at
+`1fbbd9040e55546ccfc0ab9454fb3d158f42efc8`. Implementation commit
+`b2ee44f3b80cc18663b2993b2a95230efb00468f`, tree
+`0312f7a9f1295d02df4aa537ea6fcf10657f3759`, binds the CLI and receipt projection.
+Only this worktree changed. The final documentation commit/push identity is
+returned in the handoff; publication is not assumed in this record.
+
+- Pin executable **1.0.103**, SHA256
+  `f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d`.
+  Four preparatory help/version commands used fresh configuration and disabled
+  auto-update/telemetry. They are not smoke prompts or model evidence.
+- The real adapter defaults disabled and accepts only the fixed smoke on this
+  bound route. Five GDPVal task IDs refuse. Fresh work/HOME/config/cache/data/
+  state/tmp directories and an allowlisted child environment prevent adopting
+  a prior session. Existing auth variables may be passed, never printed or
+  copied into records. No credential store was inspected or changed.
+- Retain **1,200 seconds / 64 turn starts** and use the leader's **32 tool
+  starts**. Group TERM/KILL cleanup closes both pipes and reaps the leader.
+  This is not VM isolation or proof about descendants escaping the group.
+- Record original allowlisted event fields separately from requested values.
+  Missing/conflicting settings refuse. Any `verified` status concerns field
+  agreement, not provider attestation. Usage sources are separate, never summed
+  into invented totals. Missing consumption stays `not available`.
+
+### Verification and the one actual prompt attempt
+
+Evidence root: `/tmp/p5-ghcp-cli-smoke.0tE4vK/`.
+
+| Invocation | Outcome | Pytest / wrapper seconds; exit |
+| --- | --- | --- |
+| `gate-tests.*`, before the smoke | **432 passed, 0 failed/errors/skipped** | **51.66 / 51.994685640; 0** |
+| `smoke.*`, one installed CLI prompt | Authentication error; no setting events | Wrapper **1.986582998; 2**, CLI **1** |
+| `verified-tests.*`, after the duration-only correction | **433 passed, 0 failed/errors/skipped** | **49.94 / 50.215530831; 0** |
+
+The final combined invocation covers **138 Actions**, **82 adapter**,
+**93 VM contract**, **81 input-bundle** and **39 CLI-smoke** cases, including
+existing Auto/BYOK refusals.
+Tests use Python **3.10.12**, a cleared offline environment and fake executables;
+no installed CLI or credentials are used in fixtures. The final 433 results
+are not added to the previous 432 or the historical 313-test proof below.
+
+The smoke used base `1fbbd9040e55546ccfc0ab9454fb3d158f42efc8` plus
+`tested-code.patch`, SHA256
+`1ce93e3b48fbd0d3f95410f9cfb99c979b1c3c6bc864a0b45249d0fad64f1153`.
+Final `verified-code.patch` SHA256 is
+`bdda028ee81200e9d592a4210093d0a042e852eae991d017e86044539f4b1ba0`.
+`verified-code.sha256` binds the tested executable/test bytes to the code commit.
+
+The original `smoke.receipt.json` has SHA256
+`bfa2b17ba9f24682433e669433bdf54480ccb0ed3f5c3e9502dad342578efa35`.
+Its only usage-file projection was **`totalApiDurationMs=0`**, incorrectly
+classified as available usage. That value is milliseconds, not tokens or money.
+The original receipt is preserved; `smoke-observation.json` corrects the
+interpretation to **usage/cost not available**, with no new execution. The
+final code removes duration fields from the usage projection and has a new
+synthetic regression. It was **not** used for a second real smoke.
+
+The actual process receipt records group signals, leader reaping and closed
+stdout/stderr. Model, effort, context, provider request count, billing and full
+event delivery remain unverified. No token search, credential change, login,
+grading, model retry, five-task/220-task run, PR, merge or workflow dispatch
+occurred. The next prerequisite is authentication approved for the fresh CLI
+environment and a new leader instruction. Original VM plans, other worktrees,
+frozen graders, dependencies and all prior finite rights are unchanged.
+
+`experiment-design` bounded this to a connectivity/metadata smoke, not a
+benchmark. `experiment-report-en` and `im-not-ai-en` preserve the source/run
+boundaries and distinguish a zero timing field from unavailable consumption.
+The [implementation contract](../../docs/ghcp-sol-actions-gate.md) retains the
+historical investigations below the new NAS condition.
+
+## Historical completion record retained unchanged
+
 ## GHCP Sol gate: execution approval and publication boundary
 
 Scope: the owner's **2026-10-26** request to proceed with paid experiments,

@@ -1,4 +1,52 @@
-# GHCP Sol fixed-five Actions gate (local draft)
+# GHCP Copilot CLI agent + GPT-5.6 Sol
+
+## Current NAS smoke decision and result, 2026-10-26
+
+**The single approved CONNECTED smoke reached an authentication failure.**
+The installed CLI reported `No authentication information found`, exited **1**,
+and the adapter exited **2**. No served-model, reasoning-effort or context event
+was observed. All three remain **null / unverified**. The five-task gate did not
+start, and the smoke was not retried. This is not a model-quality result or a
+finding that authentication is unavailable outside this isolated environment.
+
+The leader explicitly selected **GHCP Copilot CLI agent + GPT-5.6 Sol** and a
+NAS isolated directory: **VM 아님, 격리 디렉터리**. It is the default Copilot
+CLI agent, not a Codex-agent selector. Prior VM/Actions registrations and the
+historical sections below remain unchanged; they are not the current smoke
+condition or launch authority. No GDPVal input, grading or 220-task run is used.
+
+| Binding | Current smoke implementation | Evidence boundary |
+| --- | --- | --- |
+| Installed CLI | Direct executable **1.0.103**, SHA256 `f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d`; drift is refused before spawn. | Direct `--version` and help evidence, not a VM/package-version inference. |
+| Command | `-p "Reply with exactly CONNECTED" --model gpt-5.6-sol --reasoning-effort max --context long_context --output-format json --usage-output-file <private-file>`; streaming on. | Requested values are not observed settings. Only this fixed smoke is bound; all five GDPVal IDs refuse on this route. |
+| Isolation and authentication | New work directory, HOME, config, cache, data, state and temporary directory. Only already inherited supported CLI auth variables may pass to the child. | No store inspection/copy, login, token issuance or fallback search. Directory isolation is not a security sandbox. |
+| Permissions and limits | Execution defaults false. **1,200 seconds / 64 turn starts / 32 tool starts**, TERM/KILL process-group cleanup. The smoke exposes no tools, disables built-in MCP/custom instructions, and denies shell/write tools. | Start notifications support observed-limit cancellation, not native HTTP counts or pre-effect admission. Escaped sessions are outside group cleanup. |
+| Receipt | Allowlisted original model/effort/context and numeric consumption fields; missing/mismatched settings fail closed. Context snapshots remain labelled as session metadata. | `verified` would mean observed fields match requests, not provider attestation or an exercised 1M workload. Five-task permission remains false. |
+
+The pre-smoke combined offline invocation passed **432 tests**, with **0 failed /
+0 skipped**, in **51.66 pytest seconds**. Only then was the one real CLI prompt
+attempted, using that tested code. Its retained usage file contributed only
+`totalApiDurationMs=0`; this is a time diagnostic, **not zero token usage or zero
+cost**. The original receipt incorrectly labelled that duration-only projection
+as available usage. Its bytes remain unchanged. A separate observation record
+states **usage: not available**, and a narrow code correction excludes duration
+fields from consumption. No real CLI prompt was rerun after that correction.
+
+Final implementation `b2ee44f3b80cc18663b2993b2a95230efb00468f` passed one
+combined **433-test** invocation, **0 failed / 0 skipped**, in **49.94 pytest
+seconds**. The first 432 and final 433 results are separate invocations, not
+865 distinct tests. The [completion record](../tasks/LATEST_TASK_RESULT/README.md)
+binds the exact source patches, invocations, JUnit, timing and receipt digests.
+Evidence remains at `/tmp/p5-ghcp-cli-smoke.0tE4vK/`; no raw transcript, header,
+credential value or private usage file is published. The next prerequisite is
+approved authentication usable by the isolated CLI, followed by a new leader
+instruction. No retry, five-task execution, PR, merge or dispatch follows here.
+
+## Historical Actions draft and earlier investigations
+
+The remaining sections preserve earlier findings and approval states. Their
+no-command-binding and unresolved-scope statements describe their recorded
+sources, not the later smoke implementation above.
 
 Owner decision 2026-10-24 00:01: use one GitHub Actions standard
 `ubuntu-24.04` runner job per task. No nested VM or `/dev/kvm` prerequisite.
