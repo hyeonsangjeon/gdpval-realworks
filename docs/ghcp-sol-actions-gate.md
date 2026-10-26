@@ -1,5 +1,46 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## Authentication choices after the masked-prefix check, 2026-10-27
+
+The default, masked output of `gh auth status --active --hostname github.com`
+exposed the nonsecret prefix **`gho_`**, identifying the active gh login as
+**OAuth**. Exit was **0**; reported scopes were **gist, project, read:org, repo,
+workflow**. The parser accepted a prefix only when the remaining displayed
+characters were masking asterisks. No `--show-token`, token-export command,
+login, direct credential-file read, or credential copy was used; raw status output
+was discarded rather than logged. Only the prefix, type and scopes were retained.
+
+The [official Copilot CLI authentication documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli)
+lists **OAuth** as a supported token type. It also supports personal fine-grained
+PATs with **Copilot Requests**, but not classic PATs. This uses the public page
+retained on **2026-10-26**, not a new model or authentication-supply test.
+The previous JSON-projected audit did not identify the type; this masked-prefix
+check resolves that narrow gap. Copilot entitlement, billing identity and
+acceptance by the installed CLI remain **unverified**.
+
+The existing adapter accepts one explicitly selected environment name. It does
+not obtain a token from gh, unlock a keychain, copy a config file, or fall back
+automatically. Its fresh HOME/config/cache and missing-source refusal remain
+unchanged. The previous inventory found all three allowed variables absent;
+this follow-up does not supply one or select an authentication option.
+
+| Option | Operator's action, only after owner choice | Adapter's action | Risk | Availability after this check |
+| --- | --- | --- | --- | --- |
+| Existing gh OAuth through an explicit wrapper | Approve the account/scopes and a reviewed, runtime-only bridge to `GH_TOKEN`; define disposal/revocation | With explicit `--auth-source GH_TOKEN`, forward only that supplied name into the fresh child environment; refuse if absent | Existing repo/workflow scopes are broad; OAuth lifetime and same-user process exposure need review | **Type compatible**; entitlement and approved supply/bridge are still missing. No wrapper was added or run |
+| Dedicated short-lived personal fine-grained PAT | Supply a personal-account token with Copilot Requests through a protected channel as `COPILOT_GITHUB_TOKEN`; set expiration and revoke after the approved window | Select only `COPILOT_GITHUB_TOKEN`; retain source name, never its value; keep existing refusal/redaction checks | Bearer-secret exposure and revocation burden; the permission is not a five-task spending cap | **Documented alternative**, not supplied. Recommended for discussion if narrower permissions are preferred |
+| Protected Actions environment secret containing an approved supported token | Approve the separate Actions host/workflow/billing route, protected-secret supply and revocation policy | Consume only an explicitly injected allowed environment name in an approved job; no secret retrieval is implemented in the adapter | Persistent secret and job-code exposure; deleting the secret does not revoke the token | **Not ready on the current NAS route**; workflow remains dry-run-only, with no new auth wiring or permissions |
+
+Related offline authentication tests passed **23**, with **0 failed/errors/skipped**
+and **38 deselected**, exit **0**, in **1.05 pytest / 1.225 wall seconds**.
+The selection was `auth or credential or secret or presence` in
+`tests/test_ghcp_sol_copilot_smoke.py`; executable and credential values were
+synthetic. The earlier full **500-test** result remains separate, not rerun or
+pooled. No runtime/test source, plan, cap or workflow changed.
+
+Evidence: `/tmp/p5-ghcp-auth-kind.2zmgsj/auth-observation.json` and
+`auth-tests.*`. No installed Copilot CLI, model call, real smoke, five-task run,
+PR, dispatch or merge was performed. Authentication choice remains with the owner.
+
 ## Authentication inventory and fixed-five mock preflight, 2026-10-26
 
 **The final offline suite passed 500 tests; no model or installed Copilot CLI

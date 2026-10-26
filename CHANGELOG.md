@@ -13,6 +13,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Resolve the gh token-type question using only the default-masked **`gho_`**
+  prefix: **OAuth**, a documented Copilot CLI supported type, not proof of
+  entitlement or isolated supply. Document three owner authentication choices
+  with operator/adapter responsibilities and risks. Related synthetic tests:
+  **23 passed, 0 failed, 38 deselected**. Documentation only; no credential
+  export/copy, model call, real smoke or five-task execution.
+
 - Record metadata-only GitHub/Copilot authentication availability and three
   owner choices without retrieving or copying a credential. Reuse the fresh
   directory environment for the generic fake-command path and add **45**

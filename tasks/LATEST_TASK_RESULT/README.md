@@ -1,5 +1,24 @@
 # Latest task result
 
+## GHCP masked-prefix authentication follow-up
+
+At source `303e1f987`, default-masked `gh auth status` returned exit **0** and
+the nonsecret prefix **`gho_`**, identifying the existing gh token as **OAuth**.
+Scopes: **gist, project, read:org, repo, workflow**. The official Copilot CLI
+authentication documentation supports this token type; Copilot entitlement,
+billing identity and isolated supply remain **unverified**. No raw status output,
+token value or credential file content was retained or copied, and no token
+export/login command ran. The earlier JSON-projected result remains historical.
+
+[The authentication-choice section](../../docs/ghcp-sol-actions-gate.md)
+now separates operator actions, adapter behavior, risks and current feasibility
+for an existing-gh bridge, dedicated fine-grained PAT and protected Actions
+secret. None is selected or supplied. Only documentation/completion records change.
+Related synthetic tests: **23 passed, 0 failed/errors/skipped, 38 deselected**,
+exit **0**, **1.05 pytest / 1.225 wall seconds**. The old full **500-test** proof
+is separate and was not rerun. Evidence: `/tmp/p5-ghcp-auth-kind.2zmgsj/`.
+No model, installed Copilot CLI, real smoke, five-task run, PR, dispatch or merge.
+
 ## GHCP authentication inventory and fixed-five mock preflight
 
 Starting at clean, pushed `d99081b74`, the final combined offline suite passed
