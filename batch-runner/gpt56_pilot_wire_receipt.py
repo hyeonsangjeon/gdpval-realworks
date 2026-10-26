@@ -347,6 +347,9 @@ class _ResponseModel:
                        "encoded_response" if encoding.lower() not in ("", "identity") else None)
 
     def _document(self, data: bytes):
+        if self.usage_terminals:
+            # Any further data event makes completion/accounting ambiguous.
+            self.completed_usage = None
         try:
             document = json.loads(data, object_pairs_hook=_unique_json)
             if self.sse:
@@ -636,13 +639,16 @@ class _ProviderHTTPObservation:
             raise _TokenPrecheckRefused(NATIVE_OUTPUT_LIMIT_UNAVAILABLE)
         if remaining_output == 0:
             raise _TokenPrecheckRefused(NATIVE_OUTPUT_PRECHECK_EXCEEDED)
-        if "max_output_tokens" not in document:
+        insert_maximum = "max_output_tokens" not in document
+        if insert_maximum:
             document["max_output_tokens"] = remaining_output
-            try:
-                body = json.dumps(document, ensure_ascii=False, allow_nan=False,
-                                  separators=(",", ":")).encode("utf-8")
-            except (ValueError, UnicodeError, RecursionError):
-                raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED) from None
+        try:
+            encoded = json.dumps(document, ensure_ascii=False, allow_nan=False,
+                                 separators=(",", ":")).encode("utf-8")
+        except (ValueError, UnicodeError, RecursionError):
+            raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED) from None
+        if insert_maximum:
+            body = encoded
         maximum = document["max_output_tokens"]
         if type(maximum) is not int or not 0 < maximum < 2 ** 63:
             raise _TokenPrecheckRefused(NATIVE_OUTPUT_LIMIT_UNAVAILABLE)

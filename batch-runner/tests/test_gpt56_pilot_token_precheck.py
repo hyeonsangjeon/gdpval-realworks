@@ -3,6 +3,8 @@
 import json
 import threading
 from copy import deepcopy
+from http.client import HTTPConnection
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -130,7 +132,7 @@ def test_unknown_usage_cannot_be_reopened_by_late_sdk_totals(monkeypatch, damage
 
 
 @pytest.mark.parametrize("kind", ["created_only", "incomplete", "failed", "in_progress", "truncated",
-                                  "duplicate_terminal", "http_error"])
+                                  "duplicate_terminal", "after_terminal", "http_error"])
 def test_partial_or_failed_response_blocks_the_next_request(monkeypatch, kind):
     row = _response()
     if kind == "created_only":
@@ -145,6 +147,9 @@ def test_partial_or_failed_response_blocks_the_next_request(monkeypatch, kind):
         row["missing"] = 17
     elif kind == "duplicate_terminal":
         row.update(body=_sse() + _sse(), type="text/event-stream")
+    elif kind == "after_terminal":
+        row.update(body=_sse() + b'data: {"type":"response.output_text.delta","delta":"late"}\n\n',
+                   type="text/event-stream")
     else:
         row["status"] = 503
     with _upstream(monkeypatch, [row]) as (received, calls):
@@ -175,7 +180,7 @@ def test_invalid_explicit_output_field_never_connects(monkeypatch, maximum):
 
 @pytest.mark.parametrize("damage", ["compact", "alias", "duplicate", "malformed", "content_type",
                                     "encoding", "length", "remote_state", "template", "image", "opaque",
-                                    "server_tool", "background", "nonfinite"])
+                                    "server_tool", "background", "nonfinite", "nonfinite_exponent", "surrogate"])
 def test_uninspectable_request_fails_closed_without_private_egress(monkeypatch, capsys, damage):
     body, headers, suffix = _request(), {}, "/responses"
     reason = wire.NATIVE_TOKEN_REQUEST_UNVERIFIED
@@ -205,6 +210,10 @@ def test_uninspectable_request_fails_closed_without_private_egress(monkeypatch, 
         body = _request(tools=[{"type": "web_search"}])
     elif damage == "background":
         body = _request(background=True)
+    elif damage == "nonfinite_exponent":
+        body = b'{"input":"x","max_output_tokens":1,"temperature":1e309}'
+    elif damage == "surrogate":
+        body = b'{"input":"\\ud800","max_output_tokens":1}'
     else:
         body = b'{"input":"x","temperature":NaN}'
     with _upstream(monkeypatch, []) as (received, calls):
@@ -258,6 +267,25 @@ def test_exhausted_output_does_not_insert_zero_or_start_another_request(monkeypa
             capture.close()
     assert len(received) == len(calls) == 1
     assert _caps(capture)["stop_reason"] == wire.NATIVE_OUTPUT_PRECHECK_EXCEEDED
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_response_content_type_and_body_remain_transparent(monkeypatch, stream):
+    body, content_type = (_sse(), "text/event-stream") if stream else (_body(), "application/json")
+    with _upstream(monkeypatch, [{"body": body, "type": content_type}]):
+        capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+        address = urlsplit(capture.base_url)
+        connection = HTTPConnection("127.0.0.1", address.port, timeout=5)
+        try:
+            connection.request("POST", address.path + "/responses", body=_request(),
+                               headers={"Content-Type": "application/json"})
+            response = connection.getresponse()
+            assert response.status == 200 and response.getheader("Content-Type") == content_type
+            assert response.read() == body
+        finally:
+            connection.close()
+            capture.close()
+    assert _caps(capture)["client_token_precheck"]["usage_known"] is True
 
 
 @pytest.mark.parametrize("damage", ["server_claim", "estimator", "extra", "bool_count", "negative_count",

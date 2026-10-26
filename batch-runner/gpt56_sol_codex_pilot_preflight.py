@@ -986,7 +986,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(arguments)
         source_requested = args.plan.absolute() in {
-            ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_CAPS, ROOT / SOURCE_PROFILE_PREVIOUS,
+            ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_BINDINGS,
+            ROOT / SOURCE_PROFILE_CAPS, ROOT / SOURCE_PROFILE_PREVIOUS,
         }
         capture_requested = args.capture_workspace is not None
         evidence_requested = any(value is not None for value in (
