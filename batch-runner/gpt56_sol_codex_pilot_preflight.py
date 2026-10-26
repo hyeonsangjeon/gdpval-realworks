@@ -386,7 +386,7 @@ def source_plan_snapshot(
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
                     require(role not in source_roles or digest == source_roles[role])
-                    _read_bytes(_path(ROOT, role), sha256=digest, size=len(data))
+                    require(_read_bytes(_path(ROOT, role), sha256=digest, size=len(data)) == data)
                     if role.endswith(".py"):
                         module = sys.modules.get(role.removeprefix("batch-runner/")[:-3].replace("/", "."))
                         if module is not None:
