@@ -1,14 +1,17 @@
 """Real local fake processes, never a GHCP CLI, authentication or model call."""
 
 import builtins
+import hashlib
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -61,7 +64,26 @@ else:
         descendant = spawn("child")
         assert descendant.stdout.readline() == b"ready\n"
 
-    if mode in {"packaged_schema", "packaged_schema_hang"}:
+    if mode == "tree_fixed_five":
+        # Deliberately synthetic task staging, not a dataset or real CLI read.
+        task = json.loads(Path("fixture-input.json").read_text())
+        locations = {key: os.environ[key] for key in (
+            "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
+            "XDG_STATE_HOME", "TMPDIR", "GH_CONFIG_DIR",
+        )}
+        for key, value in locations.items():
+            path = Path(value)
+            assert path.is_absolute() and path.is_relative_to(Path.cwd().parent)
+            if key != "GH_CONFIG_DIR":
+                assert path.is_dir() and not list(path.iterdir())
+        assert len(set(locations.values())) == len(locations)
+        assert not any(key in os.environ for key in (
+            "COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "HF_TOKEN",
+        ))
+        Path("fixture-output.txt").write_text(task["task_id"] + "\n" + task["payload"])
+        Path("isolation-proof.json").write_text(json.dumps(locations))
+
+    if mode in {"packaged_schema", "packaged_schema_hang", "tree_fixed_five"}:
         # Synthetic, schema-shaped data supplied by the test; never a real CLI.
         for event in json.loads(sys.argv[3]):
             print(json.dumps(event), flush=True)
@@ -169,7 +191,18 @@ def fake_program(tmp_path, monkeypatch):
         assert kwargs["close_fds"] is True
         assert kwargs["stdin"] == subprocess.DEVNULL
         assert kwargs["stderr"] == subprocess.DEVNULL
-        assert kwargs["env"] == {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONUNBUFFERED": "1"}
+        private = kwargs["cwd"].parent
+        assert kwargs["env"] == {
+            "PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONUNBUFFERED": "1",
+            "HOME": str(private / "home"), "XDG_CONFIG_HOME": str(private / "config"),
+            "XDG_CACHE_HOME": str(private / "cache"), "XDG_DATA_HOME": str(private / "data"),
+            "XDG_STATE_HOME": str(private / "state"), "TMPDIR": str(private / "tmp"),
+            "GH_CONFIG_DIR": str(private / "config" / "gh"),
+        }
+        if command[2] == "tree_fixed_five":
+            # This test-only bridge supplies fake bytes; no private input or
+            # credential store is opened, and no paid task route is enabled.
+            (kwargs["cwd"] / "fixture-input.json").write_text(command[5])
         process = real_popen(command, **kwargs)
         owned.append(process)
         return process
@@ -532,6 +565,128 @@ def _not_running(pid):
         return state in {"Z", "X"}
     except FileNotFoundError:
         return True
+
+
+@pytest.mark.parametrize("task_id", gate.TASK_IDS)
+@pytest.mark.parametrize("case,turns,tools,elapsed,missing,reason", [
+    ("below_caps", 63, 31, 1199.0, None, None),
+    ("at_caps", 64, 32, 1199.0, None, None),
+    ("turn_over", 65, 0, None, None, "turn_cap_exceeded"),
+    ("tool_over", 1, 33, None, None, "tool_call_cap_exceeded"),
+    ("deadline_equal", 1, 0, 1200.0, None, "task_timeout_exceeded"),
+    ("deadline_over", 1, 0, 1201.0, None, "task_timeout_exceeded"),
+    ("model_missing", 1, 0, None, "model", "served_model_unverified"),
+    ("effort_missing", 1, 0, None, "reasoningEffort", "reasoning_effort_unverified"),
+    ("context_missing", 1, 0, None, "tokenLimit", "context_limit_unverified"),
+])
+def test_fixed_five_free_preflight(
+    tmp_path, fake_program, monkeypatch, capsys, task_id,
+    case, turns, tools, elapsed, missing, reason,
+):
+    """Five fixed IDs, fake inputs/processes/events; never a paid task route.
+
+    Staging/capture/temporary-directory disposal are this mock controller's
+    responsibility. The adapter, parser, counters, receipt and process-group
+    cleanup are real. A synthetic clock avoids a 1,200-second test wait.
+    """
+    assert task_id in gate.fixed_task_ids()
+    assert len(gate.TASK_IDS) == len(set(gate.TASK_IDS)) == 5
+    monkeypatch.setenv("GH_TOKEN", "SYNTHETIC_INHERITANCE_CANARY_NOT_A_CREDENTIAL")
+    context = {"tokenLimit": 1_000_000}
+    usage = {"model": gate.SOL_MODEL, "reasoningEffort": "max"}
+    context.pop(missing, None)
+    usage.pop(missing, None)
+    events = [
+        {"type": "session.start", "data": {"sessionId": "fixture-only"}},
+        {"type": "session.usage_info", "data": context},
+        {"type": "assistant.usage", "id": "fixture-usage", "data": usage},
+        *[{"type": "assistant.turn_start", "data": {"turnId": str(n)}} for n in range(turns)],
+        *[{"type": "tool.execution_start", "data": {"toolCallId": str(n)}} for n in range(tools)],
+    ]
+    now = [1000.0]
+    original_count = adapter._count_start
+
+    def count(event, *args):
+        original_count(event, *args)
+        if event["type"] == "fixture.clock":
+            now[0] = 1000.0 + elapsed
+
+    if elapsed is not None:
+        events.append({"type": "fixture.clock", "data": {}})
+        monkeypatch.setattr(adapter, "_count_start", count)
+        monkeypatch.setattr(adapter, "monotonic", lambda: now[0])
+    payload = json.dumps({"task_id": task_id, "payload": CANARY + " synthetic input"})
+    capture_root = tmp_path / "capture"
+    assert gate.dry_capture(task_id, capture_root) == 0
+    captured = capture_root / task_id
+    public = json.loads((captured / "capture.json").read_text())
+    assert public["paid_execution_allowed"] is False
+    assert public["model_calls"] == public["grader_calls"] == 0
+
+    with TemporaryDirectory(prefix="fixed-five-", dir=tmp_path) as disposable:
+        owned = Path(disposable)
+        command = fake_program("tree_fixed_five") + [json.dumps(events), payload]
+        result = adapter.run_task(
+            task_id, command, owned / "state", execution_enabled=True,
+            execution_config={"tool_calls_per_task": adapter.SMOKE_TOOL_CALL_CAP},
+        )
+        task_root = owned / "state" / task_id
+        disk = json.loads((task_root / "execution-receipt.json").read_text())
+        assert result == disk
+        assert result["task_id"] == task_id
+        assert result["reason_codes"] == ([] if reason is None else [reason])
+        assert result["exit_status"] == (0 if reason is None else 2)
+        assert result["status"] == ("completed_process_only" if reason is None else "failed")
+        assert result["limits"]["timeout_seconds"] == 1200
+        assert result["limits"]["max_turns"] == 64
+        assert result["limits"]["max_tool_calls"] == 32
+        assert result["limits"]["observed_turn_starts"] == turns
+        assert result["limits"]["observed_tool_starts"] == tools
+        assert result["paid_execution_allowed"] is result["retry_allowed"] is False
+        assert result["pre_effect_limits_verified"] is result["live_source_verified"] is False
+        assert result["session_event_receipt"]["applied_settings_verified"] is False
+        assert result["usage"] is result["cost"] is None
+        assert result["usage_status"] == result["cost_status"] == "not available"
+        assert result["cleanup"]["leader_reaped"] is True
+        assert result["cleanup"]["stdout_closed"] is True
+        assert result["cleanup"]["status"] == "group_signalled_leader_reaped"
+        assert result["cleanup"]["signals_sent"] == ["TERM", "KILL"]
+        files = task_root / "private" / "files"
+        locations = json.loads((files / "isolation-proof.json").read_text())
+        assert len(set(locations.values())) == 7
+        assert all(Path(path).is_relative_to(owned) for path in locations.values())
+        assert (files / "fixture-input.json").read_text() == payload
+        assert (files / "fixture-output.txt").read_text() == (
+            task_id + "\n" + CANARY + " synthetic input"
+        )
+        identities = {}
+        for name in ("fixture-input.json", "fixture-output.txt", "partial.txt"):
+            target = captured / "private" / "files" / name
+            shutil.copyfile(files / name, target)
+            assert target.read_bytes() == (files / name).read_bytes()
+            identities[name] = {"bytes": target.stat().st_size,
+                                "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+        shutil.copyfile(task_root / "execution-receipt.json", captured / "execution-receipt.json")
+        pids = [int((files / f"{role}.pid").read_text())
+                for role in ("leader", "child", "grandchild")]
+        until = time.monotonic() + 2
+        while not all(_not_running(pid) for pid in pids) and time.monotonic() < until:
+            time.sleep(0.01)
+        assert all(_not_running(pid) for pid in pids)
+        assert CANARY not in json.dumps(result)
+    assert not owned.exists()
+    assert all(not Path(path).exists() for path in locations.values())
+    assert json.loads((captured / "execution-receipt.json").read_text()) == result
+    report = {
+        "task_id": task_id, "scenario": case, "synthetic_only": True,
+        "private_dataset_read": False, "real_cli_started": False, "model_calls": 0,
+        "isolated_directories_removed_after_capture": True, "owned_processes_stopped": True,
+        "input_output_capture": identities, "receipt_exit": result["exit_status"],
+        "reason_codes": result["reason_codes"], "paid_execution_allowed": False,
+        "boundary": "fixture_staging_capture_not_a_registered_live_five_task_pipeline",
+    }
+    (captured / "free-preflight.json").write_text(json.dumps(report, indent=2) + "\n")
+    assert capsys.readouterr() == ("", "")
 
 
 @pytest.mark.parametrize("mode,amount,reason", [

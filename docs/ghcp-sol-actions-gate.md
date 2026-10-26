@@ -1,5 +1,87 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## Authentication inventory and fixed-five mock preflight, 2026-10-26
+
+**The final offline suite passed 500 tests; no model or installed Copilot CLI
+was invoked.** GitHub CLI has an active login, but the isolated adapter still
+has no selected authentication source. This audit does not establish Copilot
+entitlement, an OAuth token type, or actually applied Sol/Max/1M settings.
+
+### Authentication metadata, without credential contents
+
+| Source | Observed presence and type | Use in a fresh, noninteractive directory | Evidence |
+| --- | --- | --- | --- |
+| `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` | All absent from this Desk worker's inherited environment | Supported in that precedence order, but a source must first be explicitly owner-supplied/approved | Retained 1.0.103 `help environment`, `/tmp/p5-ghcp-cli-smoke.0tE4vK/cli-environment.txt:15` |
+| Existing `gh` login | Active `hyeonsangjeon` login on github.com, state `success`; token type **unknown** from masked status | A supported OAuth token can be bridged through an allowed variable; the current account's token type and Copilot entitlement remain unverified | `gh` 2.98.0, metadata-filtered `gh auth status`; [authentication documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli) |
+| Default Copilot config | `/home/dev/.copilot/config.json` is a regular file; contents and stored-login presence **unknown** | A file's existence is not authentication evidence. This adapter requires an environment source and does not copy stored login into fresh HOME/config/cache | `lstat` only; installed package README:107 and public authentication documentation |
+| OS keychain item, service `copilot-cli` | **Unknown**; no available metadata-only query client or session-bus/runtime-dir variable | Do not infer availability or absence; the adapter will not select this source implicitly | Public documentation names Linux libsecret; no item or secret was read |
+
+The `gh` status check returned exit **0** and scopes **gist, project, read:org,
+repo, workflow**, with the token source reported as its normal `hosts.yml` file.
+Those scopes do not prove Copilot access or distinguish OAuth from a PAT.
+The command used `--json hosts` with an allowlist projection, never `--show-token`;
+no token command, authentication wrapper, login, store search or file-content
+read was performed. Only default-path metadata was checked.
+
+The installed package README at
+`/home/dev/.local/share/nas-copilot-desk/copilot-cli/node_modules/@github/copilot/README.md:109-116`
+documents a personal fine-grained PAT with **Copilot Requests**. The public
+authentication page supports OAuth and that PAT type, rejects classic PATs,
+and describes stored-login and lowest-priority `gh` fallback. These are mutable
+interface documents, not evidence that the pinned executable accepted a token
+here. Its public HTML SHA256 and excerpts are retained in the evidence directory.
+
+### Owner choices; none selected or implemented here
+
+| Option | Benefit and remaining risk | Required owner action |
+| --- | --- | --- |
+| Explicit bridge from the existing `gh` login | Reuses an existing login; its broad scopes, token type and Copilot entitlement still need review. A fresh HOME alone does not provide this login | Approve the named account and a bounded in-memory bridge to `GH_TOKEN`, plus disposal/revocation policy; no bridge was executed here |
+| Short-lived personal fine-grained PAT, **recommended for discussion** | Can limit permissions to Copilot Requests; still a personal-account credential with same-user process exposure and no built-in five-task spending cap | Supply an owner-approved expiring token as `COPILOT_GITHUB_TOKEN` through a protected channel, then revoke it after the approved window; no token was created or retrieved here |
+| Protected Actions environment secret | Enables approval-gated CI injection; storing a secret is not execution permission and does not revoke the token when deleted | Approve a separate Actions host/workflow/billing route and expiry/revocation policy. The current workflow remains dry-run-only; no secret, permission or workflow was changed |
+
+### What the free preflight checked
+
+At base `d99081b74`, the generic fake-command adapter omitted HOME. It now
+reuses the smoke's existing fresh work/HOME/config/cache/data/state/temp
+environment, without inheriting any authentication variable. Only the existing
+explicitly selected smoke path can forward an authentication source. This
+change does not bind a live five-task command or make a directory a VM/security
+sandbox.
+
+The added test uses each of the **five catalog-pinned task IDs** with **nine
+synthetic conditions**, for **45 cases**. It stages fake input bytes, runs a
+fake executable and events through the actual adapter, captures output/partial
+files and receipt bytes, verifies hashes, then removes the controller-owned
+temporary directories. Child and grandchild processes are checked as stopped;
+the leader is reaped. Only synthetic private captures remain in the test evidence.
+
+| Conditions, each repeated for all five IDs | Expected result |
+| --- | --- |
+| 63/31 and 64/32 turn/tool starts, simulated 1,199 seconds | Process-only success; paid/settings-proof authority stays false |
+| 65 turn starts or 33 tool starts | `turn_cap_exceeded` or `tool_call_cap_exceeded` |
+| Simulated elapsed 1,200 or 1,201 seconds | `task_timeout_exceeded` |
+| Missing model, reasoningEffort or tokenLimit | `served_model_unverified`, `reasoning_effort_unverified` or `context_limit_unverified` |
+
+The **10 process-only receipts and 35 expected refusal receipts** all matched
+their assertions. Usage and cost remain **not available**, not zero. The final
+combined invocation passed **500 / 0 failed / 0 errors / 0 skipped**, exit **0**,
+in **55.77 pytest / 56.053 wall seconds**. It includes existing Auto/BYOK,
+secret-redaction, input-bundle and gate contracts. This is not a live GDPVal
+result or proof of actual Sol/Max/1M, complete CLI event delivery, escaped-session
+containment, or pre-effect tool admission. The mocked clock is not a 20-minute
+live run; the test-only staging/capture controller is not a registered paid pipeline.
+
+The first launcher found no `/usr/bin/time` and did not start pytest. The first
+actual suite passed **455** and failed the **45** new fixtures because their
+usage event lacked its required ID. Adding that fake ID, without relaxing any
+check or assertion, produced the full final pass. Both runs and the launcher
+failure are retained separately, not pooled.
+
+Evidence: `/tmp/p5-ghcp-free-preflight.HkdCO8/`, including metadata-only
+`auth-inventory.json`, public-source excerpts, `gate-tests*.log`/JUnit/timing,
+and 45 `pytest-final/.../capture/<task-id>/free-preflight.json` records.
+No model call, new smoke, paid five-task/220-task run, PR, dispatch or merge.
+
 ## Authentication-source opt-in follow-up
 
 **No new smoke was started.** In this Desk worker's inherited environment,

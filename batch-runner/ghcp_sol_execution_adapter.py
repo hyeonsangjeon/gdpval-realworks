@@ -618,9 +618,10 @@ def run_task(
         work.mkdir(mode=0o700)
         sink = (task_root / "execution-receipt.json").open("x", encoding="utf-8")
         receipt["partial_files"] = "retained_private_not_uploaded"
-        environment = {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONUNBUFFERED": "1"}
+        # The model-free command path must not fall back to the OS user's HOME
+        # when testing the same fixed-task isolation boundary as the smoke.
+        environment, config = _smoke_environment(private, authentication or {})
         if bound_cli:
-            environment, config = _smoke_environment(private, authentication)
             usage_file = private / "usage.json"
             transcript = (private / "transcript.jsonl").open("xb")
             command = _smoke_command(copilot_cli, config, usage_file)
@@ -631,8 +632,8 @@ def run_task(
                 list(command), cwd=work, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE if bound_cli else subprocess.DEVNULL,
                 start_new_session=True, close_fds=True, bufsize=0,
-                # Legacy fixtures inherit nothing. The bound smoke adds only
-                # fresh directories and documented environment authentication.
+                # All paths use fresh directories. Only the bound smoke can
+                # add one explicitly selected authentication environment name.
                 env=environment,
             )
         except Exception:

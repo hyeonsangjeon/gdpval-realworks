@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Record metadata-only GitHub/Copilot authentication availability and three
+  owner choices without retrieving or copying a credential. Reuse the fresh
+  directory environment for the generic fake-command path and add **45**
+  fixed-five mock preflight cases. Final full suite: **500 passed, 0 failed,
+  0 skipped**; retain the initial **455 passed / 45 failed** fixture-ID result.
+  No model call or live five-task wiring; settings proof, usage and authentication
+  selection remain unresolved. Plans, caps, workflow and finite rights are unchanged.
+
 - Require explicit, allowlisted authentication-environment selection for the
   isolated Copilot CLI smoke. Record only `auth_source` names; refuse missing
   sources before launch and reject selected-value echoes in pipe, receipt and

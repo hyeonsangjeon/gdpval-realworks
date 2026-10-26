@@ -1,5 +1,34 @@
 # Latest task result
 
+## GHCP authentication inventory and fixed-five mock preflight
+
+Starting at clean, pushed `d99081b74`, the final combined offline suite passed
+**500 tests, 0 failed/errors/skipped**, exit **0**, in **55.77 pytest / 56.053
+wall seconds**. The new **45 cases** cover five fixed task IDs with nine fake
+input/event conditions each. The generic command path now shares the existing
+fresh HOME/config/cache environment; no live five-task command is enabled.
+Capture/temporary-directory disposal is a test-only controller. The actual
+adapter/parser/counter/receipt/process-group cleanup is exercised. Expected
+refusals, missing usage and false paid/settings-proof authority are preserved.
+
+Metadata-only `gh auth status` reports active account `hyeonsangjeon`, success,
+and scopes **gist, project, read:org, repo, workflow**. Token type and Copilot
+entitlement are **unknown**. All three allowed auth environment names are absent.
+The default Copilot config file exists, but its contents/stored-login status and
+keychain-item presence remain **unknown**. No secret value or credential file
+content was inspected, printed, recorded or copied; no login or token export.
+Owner choices and their required actions are in
+[the updated gate document](../../docs/ghcp-sol-actions-gate.md).
+
+The first launcher failed before pytest because `/usr/bin/time` was absent.
+The first actual suite was **455 passed / 45 failed**; the new fixtures omitted
+a required usage-event ID. Only that fake event was corrected before the full
+final run; checks and assertions were not weakened. Prior evidence is retained.
+Evidence: `/tmp/p5-ghcp-free-preflight.HkdCO8/`. No model, installed Copilot CLI,
+new smoke, paid task, PR, merge or dispatch ran. No source was chosen for auth;
+Sol/Max/1M live evidence and usage remain unavailable. Commit and ordinary push
+are limited to this GHCP branch; the separate cost-proposal branch is untouched.
+
 ## GHCP authentication opt-in: source absent, smoke skipped
 
 At base `4a10996f2c8927896f711dd4722d57a6808d5c83`, add a name-selected,
