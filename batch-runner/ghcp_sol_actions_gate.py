@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import signal
 import stat
 import threading
@@ -149,6 +150,36 @@ def _token_limit(value):
     return value if type(value) is int and 0 < value <= 2**31 - 1 else None
 
 
+# These are reported numeric fields, not a conversion to invoices or native
+# request counts. Unknown keys (including files, prompts and headers) stay out.
+USAGE_FIELDS = frozenset({
+    "inputTokens", "outputTokens", "totalTokens", "cachedInputTokens",
+    "cacheReadTokens", "cacheWriteTokens", "promptTokens", "completionTokens",
+    "input_tokens", "output_tokens", "total_tokens", "cached_tokens",
+    "premiumRequests", "totalPremiumRequests", "requests", "cost", "totalCost",
+})
+
+
+def reported_usage(value):
+    """Copy consumption fields, not duration-only diagnostics or estimated usage."""
+    if type(value) is not dict:
+        return None
+    fields = {
+        key: number for key, number in value.items()
+        if key in USAGE_FIELDS and type(number) in (int, float)
+        and 0 <= number <= 2**53 and number == number
+    }
+    return fields or None
+
+
+def observed_model_label(value):
+    """Retain public-shaped model labels, never arbitrary error/private text."""
+    if (type(value) is str and len(value) <= 96
+            and re.fullmatch(r"(?:gpt-|claude-|gemini-|o[1-9](?:-|$))[a-z0-9.-]*", value)):
+        return value
+    return None
+
+
 class _CollectionRefused(ValueError):
     def __init__(self, code):
         self.code = code if code in COLLECTION_REASONS else "task_timeout_guard_unavailable"
@@ -239,7 +270,7 @@ def _bounded_session_events(events, limits):
                 limits["event_stream_cleanup"] = "failed"
 
 
-def collect_session_events(events: Iterable[dict] | None) -> dict:
+def collect_session_events(events: Iterable[dict] | None, *, runtime_projection=False) -> dict:
     """Project the documented JSON event envelope; never retain raw events.
 
     assistant.usage has per-call model/effort, not a per-call context window.
@@ -273,6 +304,8 @@ def collect_session_events(events: Iterable[dict] | None) -> dict:
     }
     if events is None:
         return receipt
+    if runtime_projection:
+        receipt["context_observations"] = []
     reasons = receipt["reason_codes"]
     contexts = {}
     seen_calls = set()
@@ -300,7 +333,27 @@ def collect_session_events(events: Iterable[dict] | None) -> dict:
                 raise ValueError("event_stream_refused")
             data = event["data"]
             if kind == "session.usage_info":
-                contexts[agent] = (_token_limit(data.get("tokenLimit")), index)
+                token_limit = _token_limit(data.get("tokenLimit"))
+                context_window = _token_limit(data.get("modelContextWindow")) if runtime_projection else None
+                invalid = runtime_projection and any(
+                    field in data and _token_limit(data[field]) is None
+                    for field in ("tokenLimit", "modelContextWindow")
+                )
+                conflict = invalid or (token_limit is not None and context_window is not None
+                                       and token_limit != context_window)
+                contexts[agent] = (
+                    None if conflict else token_limit if token_limit is not None else context_window,
+                    index,
+                    {"tokenLimit": token_limit, "modelContextWindow": context_window},
+                    conflict,
+                )
+                if runtime_projection:
+                    receipt["context_observations"].append({
+                        "event_index": index, "tokenLimit": token_limit,
+                        "modelContextWindow": context_window,
+                        "verification": "verified" if not conflict and contexts[agent][0] == 1_000_000 else "unverified",
+                        "source": "session.usage_info.data_not_provider_attestation",
+                    })
                 continue
             call_reasons = []
             identity = event.get("id")
@@ -327,7 +380,14 @@ def collect_session_events(events: Iterable[dict] | None) -> dict:
                 call_reasons.append("reasoning_effort_unverified")
             elif effort != "max":
                 call_reasons.append("reasoning_effort_mismatch")
-            limit, context_index = (None, None) if unbound_subagent else contexts.get(agent, (None, None))
+            limit, context_index, context_fields, context_conflict = (
+                (None, None, {"tokenLimit": None, "modelContextWindow": None}, False)
+                if unbound_subagent else contexts.get(
+                    agent, (None, None, {"tokenLimit": None, "modelContextWindow": None}, False),
+                )
+            )
+            if context_conflict:
+                call_reasons.append("context_metadata_conflict")
             if limit is None:
                 call_reasons.append("context_limit_unverified")
             elif limit != REQUESTED["context_tokens"]:
@@ -351,9 +411,33 @@ def collect_session_events(events: Iterable[dict] | None) -> dict:
                 "modelContextWindow_status": "not_in_documented_ghcp_event_contract",
                 "reason_codes": call_reasons,
             })
+            if runtime_projection:
+                # Raw allowlisted fields remain separate from the legacy
+                # normalized projection. Session context is not a per-call
+                # provider attestation; never backfill from requested flags.
+                receipt["calls"][-1].update({
+                    "observed_fields": {
+                        "model": observed_model_label(raw_model),
+                        "reasoningEffort": effort,
+                        **context_fields,
+                    },
+                    "field_sources": {
+                        "model": "assistant.usage.data.model",
+                        "reasoningEffort": "assistant.usage.data.reasoningEffort",
+                        "context": "preceding_same_agent_session.usage_info.data",
+                    },
+                    "verification": "unverified" if call_reasons else "verified",
+                    "verification_scope": "event_fields_match_requested_not_provider_attestation",
+                    "usage": reported_usage(data),
+                    "usage_status": "reported" if reported_usage(data) is not None else "not available",
+                })
             for reason in call_reasons:
                 if reason not in reasons:
                     reasons.append(reason)
+            if runtime_projection and call_reasons:
+                # The live supervisor's finally block terminates the owned
+                # process group as soon as a required field is unverified.
+                break
     except _CollectionRefused as error:
         reasons.append(error.code)
     except Exception:

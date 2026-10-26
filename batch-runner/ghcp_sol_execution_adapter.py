@@ -1,16 +1,20 @@
-"""Disabled-by-default process supervision; no bound GHCP command or authority.
+"""Disabled-by-default supervision plus a fixed, separately enabled CLI smoke.
 
 The caller must supply an argv and an explicit tool-call cap. JSONL start
 notifications support cancellation after observation, not pre-effect admission.
-The existing workflow does not call this adapter. No authentication is supplied.
+The existing workflow does not call this adapter. The fixed CONNECTED smoke
+uses a fresh NAS directory, not a VM, and never starts the five-task gate.
 """
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import os
 import selectors
 import signal
+import stat
 import subprocess
 import threading
 import time
@@ -22,6 +26,23 @@ import ghcp_sol_actions_gate as gate
 POLL_SECONDS = 0.05
 TERM_GRACE_SECONDS = 1.0
 KILL_WAIT_SECONDS = 4.0
+COPILOT_CLI_VERSION = "1.0.103"
+COPILOT_CLI_SHA256 = "f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d"
+SMOKE_TASK_ID = "connected-smoke"
+SMOKE_ROW = "GHCP Copilot CLI agent + GPT-5.6 Sol"
+SMOKE_PROMPT = "Reply with exactly CONNECTED"
+SMOKE_TOOL_CALL_CAP = 32  # Leader-selected, 2026-10-26; not a VM-plan rewrite.
+AUTH_ENV_NAMES = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+MAX_USAGE_FILE_BYTES = 65_536
+AUTH_MESSAGES = (
+    "No authentication information found",
+    "Authentication required",
+    "Authentication failed",
+    "Failed to authenticate",
+    "not logged in",
+    "not authenticated",
+    "Please authenticate",
+)
 
 
 class _Stop(Exception):
@@ -34,6 +55,125 @@ class _Stop(Exception):
 def _reason(receipt, code):
     if code not in receipt["reason_codes"]:
         receipt["reason_codes"].append(code)
+
+
+def _verify_copilot_binary(path):
+    if not isinstance(path, Path) or not path.is_absolute():
+        raise _Stop("copilot_binary_unverified")
+    try:
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= 512 * 1024 * 1024:
+                raise _Stop("copilot_binary_unverified")
+            digest = hashlib.sha256()
+            total = 0
+            while chunk := stream.read(1024 * 1024):
+                total += len(chunk)
+                if total > info.st_size:
+                    raise _Stop("copilot_binary_unverified")
+                digest.update(chunk)
+        if digest.hexdigest() != COPILOT_CLI_SHA256:
+            raise _Stop("copilot_binary_unverified")
+    except OSError:
+        raise _Stop("copilot_binary_unverified") from None
+
+
+def _smoke_environment(private):
+    """New HOME/config/cache only; never inspect or copy an existing auth store."""
+    locations = {name: private / name for name in ("home", "config", "cache", "data", "state", "tmp")}
+    for directory in locations.values():
+        directory.mkdir(mode=0o700)
+    environment = {
+        "PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONUNBUFFERED": "1",
+        "HOME": str(locations["home"]), "XDG_CONFIG_HOME": str(locations["config"]),
+        "XDG_CACHE_HOME": str(locations["cache"]), "XDG_DATA_HOME": str(locations["data"]),
+        "XDG_STATE_HOME": str(locations["state"]), "TMPDIR": str(locations["tmp"]),
+        "GH_CONFIG_DIR": str(locations["config"] / "gh"),
+    }
+    # Normal documented CLI auth resolution only. Pass an already inherited
+    # value straight to the child; do not print, persist, inspect or mint it.
+    for name in AUTH_ENV_NAMES:
+        if name in os.environ:
+            environment[name] = os.environ[name]
+            break
+    return environment, locations["config"]
+
+
+def _smoke_command(binary, config, usage_file):
+    return [
+        str(binary), "--no-auto-update", "--disable-client-telemetry",
+        "--config-dir", str(config), "--no-custom-instructions", "--disable-builtin-mcps",
+        # Prompt mode requires autoapproval; an empty availability list hides
+        # all tools. Denials also override autoapproval for shell/file writes.
+        "--allow-all-tools", "--available-tools", "--deny-tool=shell", "--deny-tool=write",
+        "--disallow-temp-dir", "--secret-env-vars=" + ",".join(AUTH_ENV_NAMES),
+        "-p", SMOKE_PROMPT, "--model", gate.SOL_MODEL, "--reasoning-effort", "max",
+        "--context", "long_context", "--output-format", "json", "--stream", "on",
+        "--usage-output-file", str(usage_file),
+    ]
+
+
+def _observe_diagnostic(chunk, receipt):
+    diagnostic = receipt.get("diagnostic")
+    if diagnostic is None:
+        return
+    # Match static phrases only. Never retain a raw line, token, URL or user ID.
+    lower = chunk.lower()
+    for message in AUTH_MESSAGES:
+        if message.lower().encode() in lower:
+            diagnostic["message"] = message
+            diagnostic["status"] = "reported_authentication_error"
+            _reason(receipt, "copilot_authentication_failed")
+            return
+
+
+def _usage_file(path):
+    try:
+        if any(parent.is_symlink() for parent in path.parents):
+            return None, "refused"
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_USAGE_FILE_BYTES:
+                return None, "refused"
+            raw = stream.read(MAX_USAGE_FILE_BYTES + 1)
+        if len(raw) > MAX_USAGE_FILE_BYTES:
+            return None, "refused"
+        value = json.loads(raw, object_pairs_hook=gate._unique_object, parse_constant=gate._invalid_constant)
+        projected = gate.reported_usage(value)
+        return projected, "reported" if projected is not None else "not available"
+    except FileNotFoundError:
+        return None, "not available"
+    except (OSError, ValueError, UnicodeError):
+        return None, "refused"
+
+
+def _finish_smoke(receipt, usage_file):
+    calls = receipt["session_event_receipt"]["calls"]
+    receipt["observed_event_fields"] = [call["observed_fields"] for call in calls]
+    receipt["observed_context_fields"] = receipt["session_event_receipt"].get("context_observations", [])
+    file_usage, file_status = _usage_file(usage_file)
+    receipt["usage_output_file_status"] = file_status
+    if file_status == "refused":
+        _reason(receipt, "usage_output_file_refused")
+    sources = {
+        "assistant.usage": [call["usage"] for call in calls if call.get("usage") is not None],
+        "result.usage": receipt.pop("reported_result_usage", None),
+        "usage_output_file": file_usage,
+    }
+    receipt["usage"] = sources if any(sources.values()) else None
+    receipt["usage_status"] = "reported_not_reconciled_billing" if receipt["usage"] else "not available"
+    if not receipt["cli_result"]["observed"]:
+        _reason(receipt, "cli_result_unverified")
+    if receipt["smoke_reply_exact"] is not True:
+        _reason(receipt, "smoke_reply_unverified")
+    receipt["settings_verification"] = (
+        "verified" if calls and all(call.get("verification") == "verified" for call in calls)
+        and not receipt["reason_codes"] else "unverified"
+    )
+    receipt["metadata_gate_passed"] = receipt["settings_verification"] == "verified"
+    if receipt["reason_codes"]:
+        receipt["status"] = "failed" if receipt["subprocess_started"] else "refused"
+        receipt["exit_status"] = 2
 
 
 def _receipt(task_id):
@@ -128,6 +268,10 @@ def _session_events(process, deadline, receipt):
     pending = bytearray()
     eof = False
     session_id = None
+    bound_cli = "copilot_cli" in receipt
+    stderr_total = 0
+    stderr_digest = hashlib.sha256()
+    diagnostic_tail = b""
 
     def decode(line):
         nonlocal count, session_id
@@ -137,6 +281,10 @@ def _session_events(process, deadline, receipt):
         count += 1
         if count > gate.MAX_EVENTS:
             raise _Stop("session_event_stream_refused")
+        if bound_cli:
+            _observe_diagnostic(line, receipt)
+            if "copilot_authentication_failed" in receipt["reason_codes"]:
+                raise _Stop("copilot_authentication_failed")
         event = json.loads(line, object_pairs_hook=gate._unique_object,
                            parse_constant=gate._invalid_constant)
         if (type(event) is not dict or type(event.get("type")) is not str
@@ -145,8 +293,9 @@ def _session_events(process, deadline, receipt):
         if event["type"] == "result":
             # Copilot 1.0.79 app.js:2745/2844 writes this CLI-only summary,
             # not a session event. Never project its session ID, timestamp,
-            # private file list, usage or cost, or substitute them for the
+            # private file list, or substitute aggregate usage for the
             # assistant.usage/session.usage_info events filtered by its CLI.
+            # The new smoke may copy only allowlisted aggregate numeric fields.
             if (set(event) != {"type", "timestamp", "sessionId", "exitCode", "usage"}
                     or type(event["timestamp"]) is not str
                     or not 0 < len(event["timestamp"]) <= 64
@@ -156,6 +305,8 @@ def _session_events(process, deadline, receipt):
                 raise _Stop("session_event_stream_refused")
             receipt["cli_result"]["observed"] = True
             receipt["cli_result"]["exit_code"] = event["exitCode"]
+            if bound_cli:
+                receipt["reported_result_usage"] = gate.reported_usage(event["usage"])
             if event["exitCode"] != 0:
                 raise _Stop("cli_result_failed")
             _remaining(deadline)
@@ -167,6 +318,10 @@ def _session_events(process, deadline, receipt):
         if event["type"] == "session.start":
             candidate = event["data"].get("sessionId")
             session_id = candidate if type(candidate) is str and 0 < len(candidate) <= 256 else None
+        if bound_cli and event["type"] == "assistant.message":
+            content = event["data"].get("content")
+            if type(content) is str:
+                receipt["smoke_reply_exact"] = content == "CONNECTED"
         _count_start(event, receipt, seen)
         _remaining(deadline)
         return event
@@ -174,15 +329,33 @@ def _session_events(process, deadline, receipt):
     try:
         os.set_blocking(process.stdout.fileno(), False)
         with selectors.DefaultSelector() as ready:
-            ready.register(process.stdout, selectors.EVENT_READ)
+            ready.register(process.stdout, selectors.EVENT_READ, "stdout")
+            if bound_cli and process.stderr is not None:
+                os.set_blocking(process.stderr.fileno(), False)
+                ready.register(process.stderr, selectors.EVENT_READ, "stderr")
             while True:
                 remaining = _remaining(deadline)
-                if eof and _exited_without_reaping(process):
+                if eof and not ready.get_map() and _exited_without_reaping(process):
                     _remaining(deadline)
                     return
                 for key, _ in ready.select(min(remaining, POLL_SECONDS)):
                     _remaining(deadline)
                     chunk = os.read(key.fd, gate.MAX_EVENT_LINE_BYTES + 1)
+                    if key.data == "stderr":
+                        if not chunk:
+                            ready.unregister(key.fileobj)
+                            continue
+                        stderr_total += len(chunk)
+                        stderr_digest.update(chunk)
+                        receipt["diagnostic"]["stderr_bytes"] = stderr_total
+                        receipt["diagnostic"]["stderr_sha256"] = stderr_digest.hexdigest()
+                        _observe_diagnostic(diagnostic_tail + chunk, receipt)
+                        diagnostic_tail = chunk[-256:]
+                        if "copilot_authentication_failed" in receipt["reason_codes"]:
+                            raise _Stop("copilot_authentication_failed")
+                        if stderr_total > gate.MAX_EVENT_BYTES:
+                            raise _Stop("session_error_stream_refused")
+                        continue
                     if not chunk:
                         ready.unregister(process.stdout)
                         eof = True
@@ -250,6 +423,12 @@ def _cleanup(process, receipt):
         cleanup["stdout_closed"] = True
     except OSError:
         failed = True
+    if process.stderr is not None:
+        try:
+            process.stderr.close()
+            cleanup["stderr_closed"] = True
+        except OSError:
+            failed = True
     cleanup["status"] = "failed" if failed else "group_signalled_leader_reaped"
     if failed:
         _reason(receipt, "subprocess_cleanup_failed")
@@ -259,6 +438,7 @@ def run_task(
     task_id: str, command: list[str] | tuple[str, ...], state_root: Path, *,
     execution_enabled: bool = False, execution_config: dict | None = None,
     model: str = gate.SOL_MODEL, byok: bool = False, provider_config=None,
+    copilot_cli: Path | None = None,
 ) -> dict:
     """Supervise one explicitly enabled, fresh task; return a safe receipt.
 
@@ -268,6 +448,25 @@ def run_task(
     paid permission, retry grant, model attestation or GHCP command binding.
     """
     receipt = _receipt(task_id)
+    bound_cli = copilot_cli is not None
+    if bound_cli:
+        receipt.update({
+            "task_id": SMOKE_TASK_ID if task_id == SMOKE_TASK_ID else None,
+            "row_name": SMOKE_ROW,
+            "execution_target": "NAS isolated directory (not a VM)",
+            "copilot_cli": {"version": COPILOT_CLI_VERSION, "sha256": COPILOT_CLI_SHA256},
+            "requested": {"model": gate.SOL_MODEL, "reasoningEffort": "max",
+                          "context": "long_context", "tokenLimit": 1_000_000},
+            "settings_verification": "unverified", "observed_event_fields": [],
+            "metadata_gate_passed": False, "five_task_gate_allowed": False,
+            "paid_smoke_authorized": execution_enabled is True,
+            "full_220_allowed": False, "smoke_reply_exact": None,
+            "diagnostic": {"status": "not available", "message": None,
+                           "stderr_bytes": 0, "stderr_sha256": None},
+            "evidence_level": "cli_event_settings_not_provider_attestation",
+            "authentication": "inherited_supported_environment_only_no_cache_copy_or_login",
+            "isolation": "fresh_work_home_config_cache_not_a_vm_or_security_sandbox",
+        })
     try:
         if execution_enabled is not True:
             raise _Stop("execution_disabled")
@@ -281,12 +480,17 @@ def run_task(
             raise _Stop("tool_call_cap_invalid")
         receipt["limits"]["max_tool_calls"] = cap
         gate.check_selection(model, byok=byok, provider_config=provider_config)
-        if task_id not in gate.fixed_task_ids():
+        if bound_cli and (task_id != SMOKE_TASK_ID or command or cap != SMOKE_TOOL_CALL_CAP):
+            raise _Stop("copilot_smoke_scope_refused")
+        if not bound_cli and task_id not in gate.fixed_task_ids():
             raise _Stop("execution_task_refused")
-        if (type(command) not in (list, tuple) or not command
+        if not bound_cli and (type(command) not in (list, tuple) or not command
                 or any(type(arg) is not str or not arg or "\0" in arg for arg in command)
                 or not Path(command[0]).is_absolute()):
             raise _Stop("execution_command_refused")
+        if bound_cli:
+            _verify_copilot_binary(copilot_cli)
+            receipt["ghcp_command_binding_verified"] = True
         if os.name != "posix" or any(not hasattr(os, name) for name in (
                 "killpg", "waitid", "WNOWAIT", "P_PID", "WEXITED", "WNOHANG")):
             raise _Stop("execution_platform_unsupported")
@@ -308,6 +512,7 @@ def run_task(
     process = None
     sink = None
     started = None
+    usage_file = None
     try:
         state_root.mkdir(mode=0o700, exist_ok=True)
         task_root = state_root / task_id
@@ -318,21 +523,29 @@ def run_task(
         work.mkdir(mode=0o700)
         sink = (task_root / "execution-receipt.json").open("x", encoding="utf-8")
         receipt["partial_files"] = "retained_private_not_uploaded"
+        environment = {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONUNBUFFERED": "1"}
+        if bound_cli:
+            environment, config = _smoke_environment(private)
+            usage_file = private / "usage.json"
+            command = _smoke_command(copilot_cli, config, usage_file)
         started = monotonic()
         deadline = started + gate.PROPOSED_TASK_TIMEOUT_SECONDS
         try:
             process = subprocess.Popen(
                 list(command), cwd=work, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True, bufsize=0,
-                # Never inherit tokens, routing overrides or credential channels.
-                # This minimal environment is not proof of a CLI cache sandbox.
-                env={"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONUNBUFFERED": "1"},
+                stderr=subprocess.PIPE if bound_cli else subprocess.DEVNULL,
+                start_new_session=True, close_fds=True, bufsize=0,
+                # Legacy fixtures inherit nothing. The bound smoke adds only
+                # fresh directories and documented environment authentication.
+                env=environment,
             )
         except Exception:
             raise _Stop("subprocess_start_failed") from None
         receipt["subprocess_started"] = True
         _remaining(deadline)
-        evidence = gate.collect_session_events(_session_events(process, deadline, receipt))
+        evidence = gate.collect_session_events(
+            _session_events(process, deadline, receipt), runtime_projection=bound_cli,
+        )
         receipt["session_event_receipt"] = evidence
         for reason in evidence["reason_codes"]:
             _reason(receipt, reason)
@@ -357,6 +570,8 @@ def run_task(
             receipt["exit_status"] = 0
         elif receipt["subprocess_started"]:
             receipt["status"] = "failed"
+        if bound_cli and usage_file is not None:
+            _finish_smoke(receipt, usage_file)
         if sink is not None:
             try:
                 json.dump(receipt, sink, indent=2, sort_keys=True, allow_nan=False)
@@ -369,3 +584,26 @@ def run_task(
             finally:
                 sink.close()
     return receipt
+
+
+def run_copilot_smoke(binary: Path, state_root: Path, *, execution_enabled=False):
+    """One fixed non-GDPVal prompt; no task selection, retries or gate dispatch."""
+    return run_task(
+        SMOKE_TASK_ID, [], state_root, execution_enabled=execution_enabled,
+        execution_config={"tool_calls_per_task": SMOKE_TOOL_CALL_CAP}, copilot_cli=binary,
+    )
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Single fixed Copilot CLI CONNECTED smoke, disabled by default")
+    parser.add_argument("--copilot-bin", type=Path, required=True)
+    parser.add_argument("--state-root", type=Path, required=True)
+    parser.add_argument("--execute-smoke", action="store_true", default=False)
+    args = parser.parse_args(argv)
+    receipt = run_copilot_smoke(args.copilot_bin, args.state_root, execution_enabled=args.execute_smoke)
+    print(json.dumps(receipt, separators=(",", ":"), allow_nan=False))
+    return receipt["exit_status"]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
