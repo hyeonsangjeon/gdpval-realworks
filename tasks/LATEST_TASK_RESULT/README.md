@@ -1,5 +1,40 @@
 # Latest task result
 
+## Five-task native pilot: owner USD-ceiling proposal
+
+At clean source `abb883c95f008331697db79132c62b13c294e8ef`, prepare the
+[cost-ceiling proposal](../../batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md)
+without changing code, registrations, caps, judge, host, model or permissions.
+Only that document, this record and CHANGELOG change; local commit only, no push.
+
+Registered arithmetic is **5 × (1 + 3) = 20 attempt slots**, each with
+**300,000 input / 10,000 output tokens**, totalling **6,000,000 / 200,000**.
+There are **five grading passes**, not five judge calls or twenty grading passes.
+The committed Azure Standard Global Sol meters give a no-write solver allowance
+of **$36.00 short / $69.00 long**; the applicable live tariff is still unbound.
+Using the larger of two explicitly quoted historical per-task grading high
+endpoints, **$58.24**, is a proposal premise, not a proven future upper bound.
+Five such allocations give **$291.20**, for a combined **$360.20** before writes.
+
+The separate one-write-per-uncached-token stress assumption adds **$75.00** for
+solving and **$364.00** for grading, producing **$799.20** conditionally.
+Owner-choice ceilings are **$800 / $1,000 / $1,200**, not approved amounts.
+Unknown extras remain `U`; **no finite all-in worst-case bill is established**.
+`approved_maximum_usd` and the tariff-evidence hash remain **null**. No future
+grade is guaranteed to fit the historical allocation; no cap is operationalized.
+
+Run **39407062120** supplies the separate connection-shaped reference of
+**9,444 input / 5 output**, served model **null**. Applying stored rates gives
+**$0.047370–$0.094665**, not an invoice or task forecast. No artifact was fetched
+or replayed. The prior **469-test** proof below remains unchanged and was not rerun.
+
+Evidence: `/tmp/p5-native-cost-proposal.Php740/`. The first arithmetic selector
+also matched a non-cost verification row and asserted; its status is retained.
+Selecting the exact two per-task cost rows preserved the value assertions and
+the final Decimal checks passed. This is arithmetic validation, not pytest.
+Protected-source hashes and documentation scope are checked. No model call,
+grading, source edit, private input preparation, dispatch or new paid right.
+
 ## Native pilot client token precheck
 
 The owner's **2026-10-26 23:40 KST** local implementation direction is complete

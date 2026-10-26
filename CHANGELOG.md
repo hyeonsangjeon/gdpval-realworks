@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add an owner-only [five-task native pilot USD-ceiling proposal](batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md).
+  Preserve the **20-attempt / 6,000,000-input / 200,000-output** budget arithmetic,
+  separate **$69.00** solver and **$291.20** historical-allocation grading costs,
+  and label **$799.20** as a conditional cache-write stress reserve, not a bill
+  or an unconditional upper bound. Propose **$800 / $1,000 / $1,200** for owner
+  discussion only; actual tariff and extra charges remain unverified and the
+  approved USD cap remains null. No code/plan/grader change, execution or test replay.
+
 - Add prospective, fail-closed native-pilot token admission before upstream
   connection/reservation. Compare a declared UTF-8 JSON byte-based input
   estimate with the remaining **300,000-token** input allowance; require or
