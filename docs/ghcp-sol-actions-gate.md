@@ -848,3 +848,109 @@ Actions or prove hosted behavior.
   from this wiring rehearsal or from these five cases alone.
 - Who reviews the exact source and authorizes push, hosted dry-run dispatch,
   and separately paid inference/grading? All remain unapproved on this card.
+
+## Default-agent evidence refinement, 2026-10-26
+
+**The full b/c/d requirements remain unknown.** Installed help confirms
+selection and file-export mechanisms, including a final usage JSON option and
+local OpenTelemetry output. It does not establish applied Sol/Max/numeric 1M,
+complete capture under termination, or both fixed execution limits on the real
+CLI route. This is a documentation-only follow-up at clean source
+`ff8249cd8d94d07349cbc81292365c5e0f782262`, tree
+`603a619c5ddf7715346f7dbdd135009f431d4eeb`; no execution approval is added.
+
+### Installed evidence and version boundary
+
+The Desk platform package is
+`/home/dev/.local/share/nas-copilot-desk/copilot-cli/node_modules/@github/copilot-linux-x64`.
+The system platform package is
+`/usr/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-x64`.
+Package-relative source references below refer to the system package unless
+explicitly marked Desk. New help files are retained in
+`/ai-work/copilot/_tmp/p5-ghcp-cli-contract.7F3vmK/`.
+
+Direct `--no-auto-update --version` output again reports Desk **1.0.103** and
+system **1.0.79**. The Desk sibling `package.json:3` reports **1.0.98**;
+its `README.md:5-8` says the executable embeds the JavaScript bundle and native
+addons. The inspected Desk platform and parent package expose no standalone
+event schema or independently versioned 1.0.98 executable. Consequently, the
+requested **1.0.103 versus 1.0.98 output-schema comparison could not be
+verified**. The 1.0.79 schema/serializer is a separately identified reference,
+not evidence that either other version emits identical events. No download,
+installation, binary-asset extraction or version-pin change was performed.
+
+Eleven help/version invocations exited **0**, using direct platform binaries,
+`env -i`, fresh task-owned `--config-dir` paths, `--no-auto-update`, and
+**15s TERM + 3s KILL** bounds. Only Desk received the supported
+`--disable-client-telemetry` flag. `help-invocations.md` records the exact
+argument/output mapping. No wrapper, prompt, login, session or export was run;
+no telemetry/content capture was enabled. These are host help observations,
+not tests, VM evidence, account entitlement or provider observations.
+
+### Requirement decisions
+
+| Requirement | Decision | Confirmed mechanism and unresolved condition | Evidence |
+| --- | --- | --- | --- |
+| b: select and prove Sol, Max and numeric 1M | **Unknown** overall; **yes** for selection syntax | `--model gpt-5.6-sol --reasoning-effort max --context long_context` is documented syntax, not an executed command. A tier label does not attest numeric 1M or applied reasoning. Session state and call-model labels are not independent served-setting proof. | `desk-help.txt:53-59`; `desk-config-help.txt:148,165-167`; `schemas/api.schema.json:12983-13001` |
+| c: complete transcript, tool calls and generated files | **Unknown** overall; **yes** for documented file-output options | JSONL, Markdown sharing, final usage JSON and a local telemetry exporter exist. Neither exact 1.0.103 event coverage nor complete delivery/flush on interruption is established. These exports do not establish a byte-complete archive of generated or uncommitted files. | `desk-help.txt:95-110,230-231`; `desk-monitoring-help.txt:33,124-188`; system `app.js:2744-2745` |
+| d: enforce 1,200 seconds and 64 turns during execution | **Unknown** as the required pair | No top-level prompt-mode timeout or total-turn cap is documented in the inspected help/config surfaces. The existing disabled adapter has a deadline and observed-start counters; its real CLI binding, stream completeness and pre-effect limits remain unverified. | `desk-help.txt:188-189`; `schemas/api.schema.json:28781-28792`; repository `batch-runner/ghcp_sol_execution_adapter.py:1-5,79-84,88-115,321-335` |
+
+The b syntax uses neither Auto nor BYOK, but the syntax alone is not proof that
+fallback never occurs. `desk-config-help.txt:110-112` documents an optional
+rate-limit switch to Auto, default false. No actual user's setting was read.
+The existing Auto/BYOK refusal and per-call mismatch requirements are unchanged.
+
+### What capture can and cannot supply
+
+| Surface | Source-supported record | Limit |
+| --- | --- | --- |
+| Session/API state, 1.0.79 | `session.start` exposes optional selected model/effort/tier fields; tier may be null. `CurrentModel` reports selected state, reading effort synchronously after the model lookup resolves. `assistant.usage.data.model` labels the API call and optional `reasoningEffort` describes effort. `session.usage_info.data.tokenLimit` is a numeric context snapshot. | No live value was read. Start/state labels are not provider attestation. Usage/context events are ephemeral, and the JSON stdout writer excludes them and model-change events. |
+| Stdout and saved session export | `--output-format json --stream on` documents JSONL. `--share [<path>]` saves Markdown **after completion**; `--log-dir` and `--log-level` configure diagnostic logs. | The 1.0.79 writer excludes usage, context, model changes and workspace-file-change events. Its final `result` carries aggregate usage, not per-call served settings. Disk session logs cannot restore events declared ephemeral. |
+| Final usage file, Desk 1.0.103 | `--usage-output-file <file>` promises final usage statistics in JSON. | Help supplies no field-level schema, per-call model/effort/context contract or guarantee of a file after forced termination. This flag was not used and does not prove reconciled charges. |
+| Local OpenTelemetry file | `COPILOT_OTEL_FILE_EXPORTER_PATH` is documented to write signals as JSONL. The trace tree includes `chat <model>` and `execute_tool <tool>` spans. | Help does not identify a provider-response model attestation or applied Max/numeric 1M fields. Prompt/response/tool arguments are excluded by default. Opt-in content capture describes them, but requires a separate privacy decision and still does not prove full delivery or generated-file retention. |
+
+The schema locations for the first row are
+`schemas/session-events.schema.json:1338-1344,1444-1446,1515-1518,13065-13090,15936-15942`.
+The stdout exclusion set and final aggregate result are in `app.js:2744-2745`.
+Desk help documents the local telemetry path at
+`desk-monitoring-help.txt:20-33`, the span tree at `124-136`, and default/opt-in
+content behavior at `171-188`. `help logging` lists diagnostic levels, not a
+full transcript or served-model guarantee. No private logs or session files
+were inspected, and no exporter was configured or started.
+
+### Limit names that must not be substituted
+
+- `--max-autopilot-continues` counts continuation messages, not every agent
+  turn (`desk-help.txt:188-189`; system `app.js:2334,2389,2837`).
+- `maxAgentTurns` in `sdk/index.d.ts:451-465` belongs to internal agent
+  definitions; `app.js:2338` uses it for the completion reviewer. It is not an
+  established top-level `-p` option.
+- `COPILOT_TASK_WAIT_TIMEOUT_SECONDS` bounds waiting for pending background
+  work, not the whole task (`sdk/index.d.ts:11105-11111`).
+- `FactoryRunLimits.timeoutSeconds` covers factory active execution
+  (`schemas/api.schema.json:15638-15657`), a different execution interface.
+  The ordinary `SessionLimitsConfig` at `28781-28792` only declares
+  `maxAiCredits`. Help explicitly calls the credit stop post-call
+  (`desk-config-help.txt:177-183`), not a wall-clock or turn limit.
+- The existing adapter's owned-process deadline and TERM/KILL cleanup remain
+  available as an offline mechanism. Counting `assistant.turn_start` can stop
+  after notification; it does not prove the next effect was prevented. The
+  adapter itself records these limitations and is not wired into the workflow.
+
+### Evidence retention and unchanged decision
+
+`installed-evidence.sha256` binds both binaries and metadata, the system
+serializer, both schemas and SDK declarations; its SHA256 is
+`e054e9ab47d84e00a0e365811831592ec4ec7c0d1e72e829263c61512efa01ad`.
+`help-evidence.sha256` binds all eleven retained help/version files; its SHA256
+is `53af9ce0714318440b964dab18f22f038c9a93875e9c97a1bae221f46d122e62`.
+No pytest or collection was rerun; the earlier synthetic results remain
+separate. This addition preserves the preceding document and changes no
+adapter, workflow, model, cap, permission, authentication or finite right.
+
+**Recommendation A is unchanged:** preserve GHCP + Codex + Sol/Max/1M and
+hold execution while obtaining the missing contract. B still requires an
+owner-approved harness/scope change; C still stops without a benchmark result.
+The new export options do not authorize B or close the paid gate. VS Code
+Agent Host was not re-audited in this installed-Copilot follow-up; its prior
+a/b/c/d unknown decisions remain, not a new finding of product absence.
