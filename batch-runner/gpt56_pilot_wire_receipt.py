@@ -922,7 +922,6 @@ class _ProviderHTTPObservation:
             document = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_json,
                                   parse_constant=_finite_json)
             if (type(document) is not dict or not _text_input(document.get("input"))
-                    or self.budget is not None and document.get("model") != "gpt-5.6-sol"
                     or any(document.get(key) is not None for key in
                            ("previous_response_id", "conversation", "prompt", "context_management"))
                     or document.get("background", False) is not False
@@ -957,6 +956,8 @@ class _ProviderHTTPObservation:
             raise _TokenPrecheckRefused(NATIVE_INPUT_PRECHECK_EXCEEDED)
         if maximum > remaining_output:
             raise _TokenPrecheckRefused(NATIVE_OUTPUT_PRECHECK_EXCEEDED)
+        if self.budget is not None and document.get("model") != "gpt-5.6-sol":
+            raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED)
         return body
 
     @staticmethod
