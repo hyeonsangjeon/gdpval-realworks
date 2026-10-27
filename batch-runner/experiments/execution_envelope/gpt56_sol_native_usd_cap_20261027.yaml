@@ -2,19 +2,23 @@
 # The old caps draft and every older source registration remain byte-identical.
 record_version: gpt56-native-usd-cap-v1
 run_id: gpt56_sol_foundry_codex_pilot5_v1
-source_head_before_change: 36cc47af5f5b8feb147063a61e53b3ad4cc1fb9d
+source_head_before_change: 32c79f6774a9b4620c9fbf77f9756e32c30f6c0b
 supersedes_monetary_decision:
-  path: batch-runner/experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml
-  sha256: 7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6
+  path: batch-runner/experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml
+  git_commit: 32c79f6774a9b4620c9fbf77f9756e32c30f6c0b
+  sha256: df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f
   field: cost.approved_maximum_usd
-  previous_value: null
+  previous_value: 1000
+  approved_at_utc: '2026-10-26T23:09:00Z'
+  approval_source: owner_desk_message
 cost:
-  approved_maximum_usd: 1000
+  approved_maximum_usd: 200
   currency: USD
   scope: five_task_pilot_inference_and_grading_combined
-  approval_source: owner_desk_message
-  approved_at_utc: '2026-10-26T23:09:00Z'
-  owner_text: '총비용 상한 1000'
+  approval_source: owner_card_record
+  approved_at_utc: '2026-10-27T01:56:00Z'
+  approved_at_local: '2026-10-27T10:56:00+09:00'
+  decision_summary: 'USD 200 combined inference and grading ceiling for the five-task pilot'
 pricing:
   path: batch-runner/experiments/execution_envelope/model_price_table.json
   sha256: b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e

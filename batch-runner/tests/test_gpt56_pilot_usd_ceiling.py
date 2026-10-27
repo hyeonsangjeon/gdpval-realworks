@@ -31,7 +31,7 @@ def _summary(observer):
     assert step2._bounded_codex_diagnostics({"provider_observation": result}) == {"provider_observation": result}
     assert CANARY not in json.dumps(result) and UPSTREAM not in json.dumps(result)
     money = result["runtime_caps"]["usd_ceiling"]
-    assert money["approved_maximum_usd"] == "1000"
+    assert money["approved_maximum_usd"] == "200"
     assert money["actual_billing_hard_limit_verified"] is money["effective_tariff_verified"] is False
     assert money["grading_included"] is False
     assert money["grading_usd"] is money["actual_total_pilot_usd"] is None
@@ -42,22 +42,30 @@ def _summary(observer):
 def _seed_boundary(budget, offset=0):
     """Artificial lower-level ledger floor, NOT a valid native pilot history.
 
-    USD 992.80 plus the unchanged next-request reserve of USD 7.20 equals 1000.
+    USD 192.80 plus the unchanged next-request reserve of USD 7.20 equals 200.
     The seed exercises exact currency boundaries without changing approved caps,
     prices or spending anything. It is not injected through the guarded SDK.
     """
     key = budget.usd.begin(TASKS[-1])
     assert budget.usd.observe_sdk(key, {"inputTokens": 0, "outputTokens": 0,
-                                      "cacheWriteInputTokens": 79_424_000 + offset}) is None
+                                      "cacheWriteInputTokens": 15_424_000 + offset}) is None
 
 
 def test_owner_decision_and_reference_rates_do_not_reprice_history():
     decision = yaml.safe_load(wire._USD_CAPS_PATH.read_bytes())
     assert decision["cost"] == {
-        "approved_maximum_usd": 1000, "currency": "USD",
+        "approved_maximum_usd": 200, "currency": "USD",
         "scope": "five_task_pilot_inference_and_grading_combined",
-        "approval_source": "owner_desk_message", "approved_at_utc": "2026-10-26T23:09:00Z",
-        "owner_text": "총비용 상한 1000",
+        "approval_source": "owner_card_record", "approved_at_utc": "2026-10-27T01:56:00Z",
+        "approved_at_local": "2026-10-27T10:56:00+09:00",
+        "decision_summary": "USD 200 combined inference and grading ceiling for the five-task pilot",
+    }
+    assert decision["supersedes_monetary_decision"] == {
+        "path": "batch-runner/experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml",
+        "git_commit": "32c79f6774a9b4620c9fbf77f9756e32c30f6c0b",
+        "sha256": "df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f",
+        "field": "cost.approved_maximum_usd", "previous_value": 1000,
+        "approved_at_utc": "2026-10-26T23:09:00Z", "approval_source": "owner_desk_message",
     }
     assert hashlib.sha256(wire._USD_CAPS_PATH.read_bytes()).hexdigest() == wire.USD_CAPS_SHA256
     assert hashlib.sha256(wire._USD_PRICE_PATH.read_bytes()).hexdigest() == wire.USD_PRICE_TABLE_SHA256
@@ -65,7 +73,7 @@ def test_owner_decision_and_reference_rates_do_not_reprice_history():
     assert old["cost"]["approved_maximum_usd"] is None
     assert hashlib.sha256(wire._NATIVE_CAPS_PATH.read_bytes()).hexdigest() == wire.NATIVE_CAPS_SHA256
     policy = wire._native_usd_caps()
-    assert policy == {"maximum": Decimal(1000), "rates": {
+    assert policy == {"maximum": Decimal(200), "rates": {
         "input": Decimal("10.00"), "output": Decimal("45.00"), "cache_write": Decimal("12.50"),
     }}
     assert "azure:gpt-5.6-sol" in json.loads(wire._USD_PRICE_PATH.read_bytes())["models_deliberately_not_priced"]
@@ -92,7 +100,7 @@ def test_usd_boundary_blocks_before_upstream_construction(monkeypatch, offset, c
     assert money["blocked_requests"] == int(offset > 0)
     if offset > 0:
         assert result["native_request_cap_reason"] == wire.USD_CEILING_EXCEEDED
-        assert Decimal(money["modeled_total_usd"]) + Decimal(money["next_request_reserve_usd"]) > Decimal(1000)
+        assert Decimal(money["modeled_total_usd"]) + Decimal(money["next_request_reserve_usd"]) > Decimal(200)
         for task in TASKS:
             with pytest.raises(wire.PilotWireReceiptRefused):
                 budget.require_available(task)
@@ -253,7 +261,7 @@ def test_price_or_approval_drift_refuses_before_upstream(monkeypatch, tmp_path, 
 
 
 @pytest.mark.parametrize("key,value", [
-    ("approved_maximum_usd", "1000.01"), ("actual_billing_hard_limit_verified", True),
+    ("approved_maximum_usd", "200.01"), ("actual_billing_hard_limit_verified", True),
     ("effective_tariff_verified", True), ("grading_included", True), ("grading_usd", "0"),
     ("actual_total_pilot_usd", "0"), ("modeled_total_usd", "NaN"),
     ("pending_reserve_usd", -1), ("remaining_modeled_usd", "999"),

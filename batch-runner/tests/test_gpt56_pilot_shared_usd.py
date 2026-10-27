@@ -74,11 +74,11 @@ class _FakeClient:
 
 
 @pytest.mark.parametrize("first,second", [("inference", "grading"), ("grading", "inference")])
-@pytest.mark.parametrize("amount,allowed", [("399.99", True), ("400", True), ("400.01", False)])
+@pytest.mark.parametrize("amount,allowed", [("79.99", True), ("80", True), ("80.01", False)])
 def test_combined_ceiling_reserves_before_either_origin(ledger, first, second, amount, allowed):
     one = ledger.begin(first, TASKS[0])
-    ticket = ledger.reserve(one, Decimal(600))
-    assert ledger.settle(ticket, Decimal(600), Decimal(0)) is None
+    ticket = ledger.reserve(one, Decimal(120))
+    assert ledger.settle(ticket, Decimal(120), Decimal(0)) is None
     two = ledger.begin(second, TASKS[1])
     if allowed:
         ledger.reserve(two, Decimal(amount))
@@ -89,7 +89,7 @@ def test_combined_ceiling_reserves_before_either_origin(ledger, first, second, a
     snapshot = ledger.snapshot()
     assert usd.checked_snapshot(snapshot)
     assert snapshot["stop_source"] == (None if allowed else second)
-    assert Decimal(snapshot["combined_modeled_usd"]) == Decimal(600) + (Decimal(amount) if allowed else 0)
+    assert Decimal(snapshot["combined_modeled_usd"]) == Decimal(120) + (Decimal(amount) if allowed else 0)
     assert snapshot["actual_billing_hard_limit_verified"] is False
 
 
@@ -97,18 +97,18 @@ def test_combined_ceiling_reserves_before_either_origin(ledger, first, second, a
 def test_clean_reopen_and_idempotent_settlement_never_refill(tmp_path, origin):
     first = _ledger(tmp_path, create=True)
     account = first.begin(origin, TASKS[0])
-    ticket = first.reserve(account, Decimal(700))
-    first.settle(ticket, Decimal(650), Decimal(0))
+    ticket = first.reserve(account, Decimal(140))
+    first.settle(ticket, Decimal(130), Decimal(0))
     binding = first.binding()
     first.close()
     reopened = _ledger(tmp_path)
     try:
         assert reopened.binding() == binding
-        assert reopened.settle(ticket, Decimal(650), Decimal(0)) is None
-        assert reopened.snapshot()["remaining_modeled_usd"] == "350"
+        assert reopened.settle(ticket, Decimal(130), Decimal(0)) is None
+        assert reopened.snapshot()["remaining_modeled_usd"] == "70"
         other = reopened.begin("grading" if origin == "inference" else "inference", TASKS[1])
         with pytest.raises(usd.PilotUsdRefused, match=usd.CEILING):
-            reopened.reserve(other, Decimal(351))
+            reopened.reserve(other, Decimal(71))
     finally:
         reopened.close()
 
@@ -117,12 +117,12 @@ def test_clean_reopen_and_idempotent_settlement_never_refill(tmp_path, origin):
 def test_unknown_usage_consumes_reservation_and_blocks_other_origin(tmp_path, origin):
     first = _ledger(tmp_path, create=True)
     account = first.begin(origin, TASKS[0])
-    first.reserve(account, Decimal(600))
-    first.observe(account, Decimal(100), Decimal(0))
+    first.reserve(account, Decimal(120))
+    first.observe(account, Decimal(20), Decimal(0))
     first.abandon(account)
     snapshot = first.snapshot()
-    assert snapshot["combined_modeled_usd"] == "600"
-    assert snapshot["unknown_consumed_usd"] == "500"
+    assert snapshot["combined_modeled_usd"] == "120"
+    assert snapshot["unknown_consumed_usd"] == "100"
     assert snapshot["unknown_requests"] == 1 and snapshot["stop_reason"] == usd.UNKNOWN
     first.close()
     reopened = _ledger(tmp_path)
@@ -130,7 +130,7 @@ def test_unknown_usage_consumes_reservation_and_blocks_other_origin(tmp_path, or
         other = reopened.begin("grading" if origin == "inference" else "inference", TASKS[1])
         with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
             reopened.reserve(other, Decimal(1))
-        assert reopened.snapshot()["combined_modeled_usd"] == "600"
+        assert reopened.snapshot()["combined_modeled_usd"] == "120"
     finally:
         reopened.close()
 
@@ -138,16 +138,16 @@ def test_unknown_usage_consumes_reservation_and_blocks_other_origin(tmp_path, or
 def test_close_with_pending_and_duplicate_request_id_are_fail_closed(tmp_path):
     instance = _ledger(tmp_path, create=True)
     a, b = [instance.begin(origin, TASKS[0]) for origin in ("inference", "grading")]
-    instance.reserve(a, Decimal(500), request_id="c" * 32)
+    instance.reserve(a, Decimal(100), request_id="c" * 32)
     with pytest.raises(usd.PilotUsdRefused, match=usd.UNVERIFIED):
-        instance.reserve(b, Decimal(500), request_id="c" * 32)
+        instance.reserve(b, Decimal(100), request_id="c" * 32)
     assert instance.snapshot()["pending_requests"] == 1
     instance.close()
     reopened = _ledger(tmp_path)
     try:
         snapshot = reopened.snapshot()
         assert snapshot["unknown_requests"] == 1
-        assert snapshot["combined_modeled_usd"] == "500"
+        assert snapshot["combined_modeled_usd"] == "100"
     finally:
         reopened.close()
 
@@ -156,11 +156,11 @@ def _reserve_worker(workspace, role, pipe, release):
     instance = _ledger(workspace)
     account = instance.begin(role, TASKS[0])
     try:
-        ticket = instance.reserve(account, Decimal(100))
+        ticket = instance.reserve(account, Decimal(20))
         pipe.send((True, role))
         if not release.wait(10):
             raise RuntimeError("synthetic coordinator timeout")
-        instance.settle(ticket, Decimal(100), Decimal(0))
+        instance.settle(ticket, Decimal(20), Decimal(0))
     except usd.PilotUsdRefused as refused:
         pipe.send((False, refused.code))
     finally:
@@ -186,7 +186,7 @@ def test_process_concurrency_never_reserves_more_than_combined_ceiling(tmp_path)
             replies.append(pipe.recv())
         assert sum(success for success, _ in replies) == 10
         assert all(value == usd.CEILING for success, value in replies if not success)
-        assert instance.snapshot()["combined_modeled_usd"] == "1000"
+        assert instance.snapshot()["combined_modeled_usd"] == "200"
         release.set()
         for process, pipe in jobs:
             process.join(10)
@@ -194,7 +194,7 @@ def test_process_concurrency_never_reserves_more_than_combined_ceiling(tmp_path)
             pipe.close()
         snapshot = instance.snapshot()
         assert snapshot["pending_requests"] == snapshot["unknown_requests"] == 0
-        assert snapshot["combined_modeled_usd"] == "1000"
+        assert snapshot["combined_modeled_usd"] == "200"
     finally:
         release.set()
         for process, pipe in jobs:
@@ -208,7 +208,7 @@ def test_process_concurrency_never_reserves_more_than_combined_ceiling(tmp_path)
 def _crash_worker(workspace, pipe):
     instance = _ledger(workspace)
     account = instance.begin("inference", TASKS[0])
-    instance.reserve(account, Decimal(600))
+    instance.reserve(account, Decimal(120))
     pipe.send("reserved")
     pipe.close()
     os._exit(0)
@@ -229,7 +229,7 @@ def test_process_restart_consumes_lost_reply_without_reset(tmp_path):
         reopened = _ledger(tmp_path)
         try:
             snapshot = reopened.snapshot()
-            assert snapshot["unknown_consumed_usd"] == "600"
+            assert snapshot["unknown_consumed_usd"] == "120"
             assert snapshot["stop_reason"] == usd.UNKNOWN and snapshot["stop_source"] == "inference"
             account = reopened.begin("grading", TASKS[1])
             with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
@@ -315,7 +315,7 @@ def test_grading_unknown_never_egresses_a_followup(ledger, priced, tmp_path, bad
 
 def test_shared_grade_spend_blocks_real_native_forward_seam(monkeypatch, ledger):
     grade = ledger.begin("grading", TASKS[0])
-    ledger.observe(grade, Decimal(995), Decimal(0))
+    ledger.observe(grade, Decimal(195), Decimal(0))
     budget = wire._NativeRequestBudget(TASKS, usd_ledger=ledger)
     with _upstream(monkeypatch, [_response()]) as (received, connections):
         capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
@@ -329,13 +329,13 @@ def test_shared_grade_spend_blocks_real_native_forward_seam(monkeypatch, ledger)
     assert wire.bounded_provider_observation(raw) == raw
     shared = raw["runtime_caps"]["usd_ceiling"]["shared_budget"]
     assert shared["stop_reason"] == usd.CEILING and shared["stop_source"] == "inference"
-    assert shared["grading_known_usd"] == "995"
+    assert shared["grading_known_usd"] == "195"
     assert capture.server.socket.fileno() == -1 and not capture.thread.is_alive()
 
 
 def test_inference_spend_blocks_actual_grading_wrapper(ledger, priced, tmp_path):
     account = ledger.begin("inference", TASKS[0])
-    ledger.observe(account, Decimal(1000), Decimal(0))
+    ledger.observe(account, Decimal(200), Decimal(0))
     audit = CostReceiptLedger(tmp_path / "audit.sqlite3", run_id="synthetic")
     recorder = CostRecorder(audit, usd_admission=priced)
     client = _FakeClient(_reply())
@@ -399,7 +399,7 @@ def test_hidden_request_overrides_are_refused_before_any_call(ledger, priced, tm
 def test_sub_receipt_precision_cannot_round_a_request_inside_the_cap(ledger):
     account = ledger.begin("grading", TASKS[0])
     with pytest.raises(usd.PilotUsdRefused):
-        ledger.reserve(account, Decimal("1000.000000001"))
+        ledger.reserve(account, Decimal("200.000000001"))
     assert ledger.snapshot()["pending_requests"] == 0
     ticket = ledger.reserve(account, Decimal("0.00000001"))
     assert ledger.settle(ticket, Decimal("0.00000001"), Decimal(0)) is None

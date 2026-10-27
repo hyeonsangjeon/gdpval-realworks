@@ -75,7 +75,7 @@ _TOKEN_BOUNDARY = "client_estimate_precheck_and_usage_stop_not_server_hard_limit
 _INPUT_ESTIMATOR = "serialized_json_utf8_bytes_one_byte_per_estimated_token_not_a_tokenizer"
 NATIVE_CAPS_SHA256 = "7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6"
 _NATIVE_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_caps_draft_20261024.yaml"
-USD_CAPS_SHA256 = "df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f"
+USD_CAPS_SHA256 = "a0f67d8845a165fd660c7600dbb3c233d07f9008e7efb44edb4054e3070cb9c6"
 USD_PRICE_TABLE_SHA256 = "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e"
 _USD_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml"
 _USD_PRICE_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/model_price_table.json"
@@ -146,11 +146,12 @@ def _native_usd_caps() -> dict:
                  and caps["run_id"] == pilot.RUN_ID and caps["launch_enabled"] is False
                  and caps["new_study_or_retry_right"] is False)
         cost = caps["cost"]
-        _require(type(cost["approved_maximum_usd"]) is int and cost["approved_maximum_usd"] == 1000
+        _require(type(cost["approved_maximum_usd"]) is int and cost["approved_maximum_usd"] == shared_usd.APPROVED_MAXIMUM_USD
                  and cost["currency"] == "USD"
                  and cost["scope"] == "five_task_pilot_inference_and_grading_combined"
-                 and cost["approval_source"] == "owner_desk_message"
-                 and cost["approved_at_utc"] == "2026-10-26T23:09:00Z")
+                 and cost["approval_source"] == "owner_card_record"
+                 and cost["approved_at_utc"] == "2026-10-27T01:56:00Z"
+                 and cost["approved_at_local"] == "2026-10-27T10:56:00+09:00")
         pricing, enforcement = caps["pricing"], caps["enforcement"]
         _require(pricing["sha256"] == USD_PRICE_TABLE_SHA256
                  and pricing["model"] == "gpt-5.6-sol"

@@ -54,7 +54,20 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     usd_path = root / pilot.SOURCE_PROFILE_USD
     usd_bytes = usd_path.read_bytes()
     usd_profile = pilot.load_plan(usd_path)
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_shared_usd.yaml")
+    shared_path = root / pilot.SOURCE_PROFILE_SHARED
+    shared_bytes = shared_path.read_bytes()
+    shared_profile = pilot.load_plan(shared_path)
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_usd200.yaml")
+    assert hashlib.sha256(shared_bytes).hexdigest() == pilot.SOURCE_PROFILE_SHARED_SHA256 == (
+        "7619cd0c6baa35a8660c2e076ed171f271f6b4ad3c5de7115b19e7f2f30a7652"
+    )
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != shared_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in shared_profile.items() if k != "source_pins"
+    }
     assert hashlib.sha256(usd_bytes).hexdigest() == pilot.SOURCE_PROFILE_USD_SHA256 == (
         "d2398e54ddad22bc42e6d47bce12ef3b3053f575f2ac5725e605dc3a516e3f29"
     )
@@ -122,7 +135,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt54_disposable_checkout.py": "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
         pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml": wire.USD_CAPS_SHA256,
         pilot.ENVELOPE + "model_price_table.json": wire.USD_PRICE_TABLE_SHA256,
-        "batch-runner/gpt56_pilot_usd_budget.py": "1c3452ee53c4af37d538bb6814cedb0637ebdb21bf6ca1e337862650c3000066",
+        "batch-runner/gpt56_pilot_usd_budget.py": "7c3c43d39df84c344faf930de7f0588791c076633d89d9335e66de43bd1d22eb",
         "batch-runner/core/cost_metering.py": "aad0635d3918268db96bdcab97e652eabffed88c3992ad7c2644cc065f9a8c2b",
     }
     for role, digest in pilot.SOURCE_PROFILE_AUXILIARY.items():
@@ -184,13 +197,14 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_USD
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_USD_SHA256
-    assert report["source_change_reason"] == "persistent_shared_inference_grading_usd_admission"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_SHARED
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_SHARED_SHA256
+    assert report["source_change_reason"] == "owner_combined_ceiling_reduced_to_usd200"
     assert report["monetary_decision"] == {
         "record": pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
-        "sha256": wire.USD_CAPS_SHA256, "approved_maximum_usd": 1000, "currency": "USD",
-        "approved_at_utc": "2026-10-26T23:09:00Z",
+        "sha256": wire.USD_CAPS_SHA256, "approved_maximum_usd": 200, "currency": "USD",
+        "approved_at_utc": "2026-10-27T01:56:00Z",
+        "approved_at_local": "2026-10-27T10:56:00+09:00", "approval_source": "owner_card_record",
         "scope": "five_task_pilot_inference_and_grading_combined",
         "actual_billing_hard_limit_verified": False, "grading_ledger_connected": True,
         "grading_price_contract_verified": False,
@@ -237,10 +251,12 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(caps_profile)})
     with pytest.raises(pilot.PilotSourceRegistrationRefused):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(token_profile)})
+    with pytest.raises(pilot.PilotSourceRegistrationRefused):
+        pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(shared_profile)})
 
     # Synthetic mutations do not alter any repository file or Git object.
     read_bytes = reader._read_bytes
-    for predecessor_path in (previous_path, caps_path, token_path,
+    for predecessor_path in (previous_path, caps_path, token_path, shared_path,
                              wire._USD_CAPS_PATH, wire._USD_PRICE_PATH):
         for missing in (False, True):
             def bad_predecessor(path, **kwargs):
@@ -332,12 +348,12 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             pilot.source_plan_snapshot(**options)
     assert len(bindings_reads) == 3
 
-    for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD,
+    for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD, pilot.SOURCE_PROFILE_SHARED,
                       pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
                       pilot.ENVELOPE + "model_price_table.json", "batch-runner/gpt56_pilot_usd_budget.py",
                       "batch-runner/core/cost_metering.py"):
         checks = []
-        expected_reads = 3 if held_role in {pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD} else 2
+        expected_reads = 3 if held_role in {pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD, pilot.SOURCE_PROFILE_SHARED} else 2
         def final_money_drift(path, **kwargs):
             if path == root / held_role:
                 checks.append(path)

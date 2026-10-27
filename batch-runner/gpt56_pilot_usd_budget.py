@@ -25,7 +25,7 @@ RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
 DIRECTORY = ".pilot-usd-budget"
 DATABASE = "ledger.sqlite3"
 IDENTITY = "identity.json"
-CAP_SHA256 = "df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f"
+CAP_SHA256 = "a0f67d8845a165fd660c7600dbb3c233d07f9008e7efb44edb4054e3070cb9c6"
 PRICE_SHA256 = "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e"
 _ENVELOPE = Path(__file__).resolve().parent / "experiments/execution_envelope"
 CAP_PATH = _ENVELOPE / "gpt56_sol_native_usd_cap_20261027.yaml"
@@ -37,6 +37,7 @@ UNPRICED = "usd_price_contract_unverified"
 UNVERIFIED = "usd_ledger_unverified"
 STOPS = frozenset({CEILING, UNKNOWN, OVERRUN, UNPRICED, UNVERIFIED})
 ORIGINS = frozenset({"inference", "grading"})
+APPROVED_MAXIMUM_USD = Decimal("200")  # Exact decision in the hash-pinned CAP_PATH.
 
 
 class PilotUsdRefused(ValueError):
@@ -125,7 +126,7 @@ class PilotUsdLedger:
         _require(self.process_start is not None)
         expected = {"version": "pilot-shared-usd-v1", "run_id": RUN_ID,
                     "cap_record_sha256": CAP_SHA256, "price_table_sha256": PRICE_SHA256,
-                    "approved_maximum_usd": "1000", "currency": "USD",
+                    "approved_maximum_usd": str(APPROVED_MAXIMUM_USD), "currency": "USD",
                     "capture_sha256": capture_sha256, "task_ids": task_ids}
         fresh = False
         if not os.path.lexists(self.directory):
@@ -296,7 +297,7 @@ class PilotUsdLedger:
             if reason is None and (self.connection.execute("SELECT 1 FROM reservations WHERE id=? OR (account=? AND state != 'settled')", (reservation, account)).fetchone()):
                 reason = UNVERIFIED
             known, pending, unknown, _, _ = self._totals()
-            if reason is None and sum(known.values()) + pending + unknown + amount > Decimal(1000):
+            if reason is None and sum(known.values()) + pending + unknown + amount > APPROVED_MAXIMUM_USD:
                 reason = CEILING
             if reason is not None:
                 self._stop(reason, row["origin"])
@@ -316,7 +317,7 @@ class PilotUsdLedger:
             _require(io >= _money(row["io"]) and cache >= _money(row["cache"]))
             self.connection.execute("UPDATE accounts SET io=?,cache=? WHERE id=?", (_text(io), _text(cache), account))
             known, pending, unknown, _, _ = self._totals()
-            if sum(known.values()) + pending + unknown > Decimal(1000):
+            if sum(known.values()) + pending + unknown > APPROVED_MAXIMUM_USD:
                 self._stop(CEILING, row["origin"])
             reason = self.connection.execute("SELECT reason FROM meta WHERE id=1").fetchone()[0]
         return reason
@@ -339,7 +340,7 @@ class PilotUsdLedger:
                 if io + cache - _money(entry["baseline"]) > _money(entry["amount"]):
                     self._stop(OVERRUN, row["origin"])
                 known, pending, unknown, _, _ = self._totals()
-                if sum(known.values()) + pending + unknown > Decimal(1000):
+                if sum(known.values()) + pending + unknown > APPROVED_MAXIMUM_USD:
                     self._stop(CEILING, row["origin"])
             reason = self.connection.execute("SELECT reason FROM meta WHERE id=1").fetchone()[0]
         return reason
@@ -359,12 +360,12 @@ class PilotUsdLedger:
             native = self.connection.execute("SELECT io,cache FROM accounts WHERE origin='inference'").fetchall()
             return {"schema": "pilot-shared-usd-v1", "ledger_id": self.identity["ledger_id"],
                     "run_id": RUN_ID, "cap_record_sha256": CAP_SHA256, "price_table_sha256": PRICE_SHA256,
-                    "approved_maximum_usd": "1000", "currency": "USD", "persistent": True,
+                    "approved_maximum_usd": str(APPROVED_MAXIMUM_USD), "currency": "USD", "persistent": True,
                     "inference_known_usd": _text(known["inference"]), "grading_known_usd": _text(known["grading"]),
                     "inference_input_output_usd": _text(sum((_money(row["io"]) for row in native), Decimal(0))),
                     "inference_cache_reserve_usd": _text(sum((_money(row["cache"]) for row in native), Decimal(0))),
                     "pending_usd": _text(pending), "unknown_consumed_usd": _text(unknown),
-                    "combined_modeled_usd": _text(total), "remaining_modeled_usd": _text(max(Decimal(0), Decimal(1000) - total)),
+                    "combined_modeled_usd": _text(total), "remaining_modeled_usd": _text(max(Decimal(0), APPROVED_MAXIMUM_USD - total)),
                     "pending_requests": pending_count, "unknown_requests": unknown_count,
                     "blocked_inference": meta["blocked_inference"], "blocked_grading": meta["blocked_grading"],
                     "stop_reason": meta["reason"], "stop_source": meta["origin"],
@@ -390,7 +391,7 @@ class PilotUsdLedger:
 def checked_snapshot(raw):
     fixed = {"schema": "pilot-shared-usd-v1", "run_id": RUN_ID,
              "cap_record_sha256": CAP_SHA256, "price_table_sha256": PRICE_SHA256,
-             "approved_maximum_usd": "1000", "currency": "USD", "persistent": True,
+             "approved_maximum_usd": str(APPROVED_MAXIMUM_USD), "currency": "USD", "persistent": True,
              "grading_admission_connected": True, "actual_billing_hard_limit_verified": False}
     amounts = {"inference_known_usd", "grading_known_usd", "inference_input_output_usd",
                "inference_cache_reserve_usd", "pending_usd", "unknown_consumed_usd",
@@ -418,8 +419,8 @@ def checked_snapshot(raw):
     total = sum(values[key] for key in ("inference_known_usd", "grading_known_usd", "pending_usd", "unknown_consumed_usd"))
     return (values["inference_known_usd"] == values["inference_input_output_usd"] + values["inference_cache_reserve_usd"]
             and values["combined_modeled_usd"] == total
-            and values["remaining_modeled_usd"] == max(Decimal(0), Decimal(1000) - total)
-            and (raw["stop_reason"] is not None or total <= Decimal(1000))
+            and values["remaining_modeled_usd"] == max(Decimal(0), APPROVED_MAXIMUM_USD - total)
+            and (raw["stop_reason"] is not None or total <= APPROVED_MAXIMUM_USD)
             and (raw["unknown_requests"] == 0 or raw["stop_reason"] is not None)
             and (raw["pending_requests"] != 0 or values["pending_usd"] == 0)
             and (raw["unknown_requests"] != 0 or values["unknown_consumed_usd"] == 0))
