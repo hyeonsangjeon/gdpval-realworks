@@ -91,6 +91,7 @@ def test_active_grader_template_source_foundry_preflight(
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
         "source_pin:batch-runner/gpt54_run_config_bundle.py",
         "source_pin:batch-runner/gpt56_pilot_identity_plan.py",
+        "source_pin:batch-runner/step8_grade.py",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt56_pilot_deployment_binding.py",

@@ -483,7 +483,8 @@ def test_grading_prices_must_be_exact_and_unambiguous(monkeypatch, bad):
         usd.grading_prices(CONFIG)
 
 
-def test_real_step8_refuses_unpriced_sol_before_input_auth_or_client(monkeypatch, tmp_path, capsys):
+@pytest.mark.parametrize("module_drift", [False, True])
+def test_real_step8_refuses_unpriced_sol_before_input_auth_or_client(monkeypatch, tmp_path, capsys, module_drift):
     config = yaml.safe_load((Path(step8.__file__).parent / "grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml").read_bytes())
     config["config_name"] = CONFIG["config_name"]
     config.pop("rerun_identity")
@@ -498,7 +499,20 @@ def test_real_step8_refuses_unpriced_sol_before_input_auth_or_client(monkeypatch
 
     monkeypatch.setattr(step8, "load_local_inference_results", never)
     monkeypatch.setattr(step8, "Grader", never)
+    if module_drift:
+        monkeypatch.setattr(usd, "__file__", str(tmp_path / "foreign_usd.py"))
     assert step8.main() == 4
     result = json.loads(capsys.readouterr().err)
-    assert result == {"status": "refused", "source": "grading", "reason": usd.UNPRICED,
+    assert result == {"status": "refused", "source": "grading", "reason": usd.UNVERIFIED if module_drift else usd.UNPRICED,
                       "actual_billing_hard_limit_verified": False}
+
+
+def test_pilot_grader_source_closure_binds_the_imported_amount_guard(monkeypatch, tmp_path):
+    batch = Path(step8.__file__).parent
+    config_path = batch / "grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml"
+    config = yaml.safe_load(config_path.read_bytes())
+    config["config_name"] = CONFIG["config_name"]
+    assert len(step8.compute_grader_source_hash(config_path, config, batch_root=batch)) == 64
+    monkeypatch.setattr(usd, "__file__", str(tmp_path / "foreign_usd.py"))
+    with pytest.raises(ValueError, match="^pilot USD helper source path mismatch$"):
+        step8.compute_grader_source_hash(config_path, config, batch_root=batch)

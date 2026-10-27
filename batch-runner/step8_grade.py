@@ -261,7 +261,11 @@ def compute_grader_source_hash(
     # This pilot's amount guard is outside core/. Include its actual helper in
     # the existing sorted-byte source closure; old frozen hashes are not waived.
     if config.get("config_name") == "gpt56_sol_foundry_codex_pilot5_v1_v2_sol_max":
-        source_paths.append(batch_root / "gpt56_pilot_usd_budget.py")
+        import gpt56_pilot_usd_budget as usd_module
+        actual_helper = Path(os.path.abspath(usd_module.__file__))
+        if actual_helper != batch_root / "gpt56_pilot_usd_budget.py":
+            raise ValueError("pilot USD helper source path mismatch")
+        source_paths.append(actual_helper)
     if config.get("prompt", {}).get("tool_template") or (
         (config.get("judge") or {}).get("tools", {}).get("read_deliverable")
     ):
@@ -2498,6 +2502,11 @@ def main() -> int:
 
     # This pilot may not inherit the ordinary cost-recorder's fail-open mode.
     # Price admission happens before input loading, credentials or a judge client.
+    import gpt56_pilot_usd_budget as usd_module
+    if Path(os.path.abspath(usd_module.__file__)) != Path(os.path.abspath(__file__)).parent / "gpt56_pilot_usd_budget.py":
+        print(json.dumps({"status": "refused", "source": "grading", "reason": "usd_ledger_unverified",
+                          "actual_billing_hard_limit_verified": False}, sort_keys=True), file=sys.stderr)
+        return 4
     from gpt56_pilot_usd_budget import (
         PilotUsdRefused, grading_prices, is_pilot_grading, open_grading_admission,
     )

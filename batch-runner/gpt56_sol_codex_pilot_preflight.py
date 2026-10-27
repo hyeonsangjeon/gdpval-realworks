@@ -69,7 +69,8 @@ SOURCE_PROFILE_REFRESH = frozenset({
     "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
     "batch-runner/step8_grade.py",
 })
-# Exact successor delta: four caps files plus this source-profile selector.
+# Exact delta from 10-23: four caps files, this selector and Step 8 admission.
+# The shared budget and metering modules are held as auxiliary reviewed blobs.
 # Other original source changes remain those sealed in the 2026-10-23 profile.
 SOURCE_PROFILE_DELTA = frozenset({
     "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
