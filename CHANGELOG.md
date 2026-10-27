@@ -13,6 +13,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record the owner's **2026-10-26 23:09Z USD 1,000** combined five-task
+  inference/grading decision in a new pinned monetary companion; keep every
+  sealed plan/caps null and prior source seal unchanged. Add one shared,
+  in-process inference USD estimate ledger with pre-upstream reservation,
+  complete-usage settlement, unknown-usage refusal and existing owned cleanup.
+  Reference prices and cache-write reserves are not verified billing; grading
+  remains disconnected, `actual_billing_hard_limit_verified=false` and actual
+  combined USD stays null. Refresh two pins in a new 58-role source profile;
+  strengthen returned-byte checks without weakening admission or token refusals.
+  At code `01001d4448eba62e254d7a6ae570222cdbc673a2`, disjoint offline bundles
+  report **224 + 282 = 506 passed, 0 failed/errors/skipped; 214 deselected**.
+  Preserve earlier failures/interruption separately. Plan-only reaches
+  `source_verified`/`inspect_plan`, **exit 2 / 1.691s**, **0 cleared / 11 retained /
+  0 new** launch blockers. The amount choice is no longer pending, but combined
+  billing protection remains open. See [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  and the [updated cost report](batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md).
+  Local commits only; no model, paid run, grading, token issuance, dispatch,
+  push, PR, merge or new retry right. The proposal entry below is historical.
+
 - Add an owner-only [five-task native pilot USD-ceiling proposal](batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md).
   Preserve the **20-attempt / 6,000,000-input / 200,000-output** budget arithmetic,
   separate **$69.00** solver and **$291.20** historical-allocation grading costs,

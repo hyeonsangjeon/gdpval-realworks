@@ -1,16 +1,28 @@
-# Five-task Foundry Sol pilot: proposed USD ceilings
+# Five-task Foundry Sol pilot: approved USD ceiling and estimate guard
 
-**Owner-decision candidates: $800, $1,000 or $1,200. None is approved.** The
-arithmetic below produces a **$799.20 conditional stress reserve**, not a forecast
-or a guaranteed all-in bill. A finite unconditional worst-case cost remains
-**unknown** because future grading usage, applicable billing axes and provider
-token enforcement are not fully bound. Choosing a number does not authorize a run.
+**The owner selected USD 1,000 as the total five-task inference-plus-grading
+ceiling**, in the desk message **2026-10-26 23:09Z**, "총비용 상한 1000".
+The amount decision is recorded; it is not permission to launch this offline
+change. The runtime now checks an inference-only USD estimate before forwarding
+requests. **A hard ceiling on the actual combined bill is not established**:
+grading is not connected to that ledger, and effective tariff/cache/server
+token bounds remain unverified. The **$799.20** below remains a conditional
+stress reserve, not a forecast or a guaranteed all-in bill.
 
-This document uses source `abb883c95f008331697db79132c62b13c294e8ef`, the
-registered Foundry GPT-5.6 Sol + Codex pilot, and existing repository records.
+The original cost calculations use source `abb883c95f008331697db79132c62b13c294e8ef`,
+the registered Foundry GPT-5.6 Sol + Codex pilot, and existing repository records.
+The approval/guard update starts from proposal commit
+`36cc47af5f5b8feb147063a61e53b3ad4cc1fb9d`; its tested code identity is in LATEST.
 It does not use the GHCP smoke's condition, credentials or usage. The source
 plan, caps draft, frozen judge, model/host identities and all finite rights are
-unchanged. `approved_maximum_usd` remains **null**.
+unchanged in their sealed originals. The active monetary decision is
+`cost.approved_maximum_usd: 1000` in the new
+[USD-cap companion](../experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml).
+The old plans/draft retain their historical **null** fields byte-for-byte; the
+wire budget reads the companion, not a silently edited old registration. The
+[source-only successor](../experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261027_usd_cap.yaml)
+binds the changed wire/preflight code and holds the companion and price-table
+bytes through admission and final rechecks. It grants no new study/retry right.
 
 ## Registered quantities, without adding retries
 
@@ -50,7 +62,8 @@ prices. Units are **USD per 1,000,000 tokens**; the recorded retrieval date is
 The effective tariff is **still unverified**. The table deliberately leaves
 `azure:gpt-5.6-sol` unpriced because tier, zone and write-token accounting are
 unresolved ([line 153](../experiments/execution_envelope/model_price_table.json#L153)).
-The plan's tariff-evidence hash and approved USD maximum remain null, and using
+The sealed plan's tariff-evidence hash and legacy USD-maximum field remain null;
+the separate owner-approved companion now supplies **USD 1,000**. Using
 OpenAI/Copilot tariffs for Foundry is false ([registration:235](../experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261026_token_precheck.yaml#L235)).
 The numerical scenarios assume Standard Global and use the higher of its two
 context rows. They do not settle that assumption or refresh the stored prices.
@@ -122,20 +135,61 @@ Audio outside the reference, other attributable runtime/service charges, taxes,
 contract-rate differences, provider overruns and failures of these premises
 remain unknown. There is **no finite all-in worst-case bound established here**.
 
-## Owner options; no plan change
+## Owner selection and retained proposal alternatives
 
-| Proposed USD ceiling | Headroom over $799.20 | Decision tradeoff |
+| Original proposed USD ceiling | Headroom over $799.20 | Decision tradeoff |
 | --- | ---: | --- |
 | **$800** | $0.80 | Nearly no room beyond the explicit stress assumptions. |
-| **$1,000** | $200.80 | Suggested discussion option, roughly 25% room above that scenario. |
+| **$1,000 — selected** | $200.80 | Owner-selected limit, roughly 25% room above that conditional scenario. |
 | **$1,200** | $400.80 | More room for uncertainty; still not a validated all-in bound. |
 
-These are proposed authorization ceilings, not expected charges or assurance
-that all five tasks can finish. Unknown extra cost is a parameter `U`, not zero:
+The selected **$1,000** is a limit, not expected charges or assurance that all
+five tasks can finish. The other amounts remain unselected alternatives from
+the proposal. Unknown extra cost is a parameter `U`, not zero:
 the scenario is `$799.20 + U`, and `U` has no verified upper bound. Before any
-chosen ceiling can be operational, pricing and monetary admission/stop checks
-must be bound; an owner choice alone does not close the existing launch gates.
-No option is written into the plan or granted execution authority by this document.
+chosen ceiling can protect the combined bill, pricing and monetary admission/stop
+checks across inference AND grading must be bound; an owner choice alone does
+not close the existing launch gates. The companion records the amount, and the
+inference estimate guard below is only one part of that work. No launch occurs.
+
+## Runtime estimate guard and remaining billing gap
+
+`gpt56_pilot_wire_receipt.py` reads the pinned companion and existing price-table
+bytes. One non-adoptable, in-process ledger spans the five tasks and their
+permitted infrastructure attempts. Before constructing an upstream connection,
+it reserves the **remaining attempt input-token allowance**, the request's
+`max_output_tokens`, and the one-full-input-write reserve at the stored long
+Standard Global rates. Concurrent reservations share the same **USD 1,000**.
+There is no cached-read discount, new per-task allocation, refill or disk-resume API.
+
+Complete provider usage settles a reservation once. SDK cumulative totals are
+a floor, not another sum; a pending reservation excludes the portion already
+accounted by that floor. Missing, partial, failed or unpriceable response usage
+retains the reservation and stops further admission in the session. A request
+whose estimate would exceed the ceiling stops before upstream construction with
+`usd_ceiling_exceeded`. Other fixed reasons are `usd_usage_unverified`,
+`usd_reservation_exceeded` and `usd_price_contract_unverified`. Existing native
+request/token/deadline guards, stop cleanup and retry allowlists are preserved.
+Unknown monetary usage is a new fail-closed stop even where an infrastructure
+retry would otherwise have been eligible; no automatic retry resets that ledger.
+
+The receipt's `runtime_caps.usd_ceiling` separates estimated input/output cost,
+cache-write reserves, pending amounts and remaining modeled USD. Missing actual
+cache-write counts stay **null**; the reserve is **not observed billing** or a
+proven provider limit. Request token admission is still a client check, not a
+proven server bound. `actual_billing_hard_limit_verified` and
+`effective_tariff_verified` remain **false**. `grading_included` is **false**;
+`grading_usd` and `actual_total_pilot_usd` remain **null**, never zero.
+
+Grading integration was investigated, not implemented. Step 8 opens its own
+[persistent cost ledger](../step8_grade.py#L2817), with a separately derived run
+identity. The [meter](../core/cost_metering.py#L921) reserves an **audit row** before
+the client call and settles returned usage afterward; that is not this shared
+USD-amount reservation or a pre-call monetary ceiling. Combining stored receipts
+afterward could aid reporting but could not prevent an already incurred charge.
+A common atomic budget owner, current pricing and admission hooks for every
+grading/perception/runtime charge would be needed. The frozen grader and its
+configuration remain unchanged. No historical grading estimate is booked as spend.
 
 ## Connection-shaped reference, not a task forecast
 
@@ -148,7 +202,9 @@ gives **$0.047370–$0.094665** for one connection-shaped sample, or
 illustrations on old reported usage, not measured dollars, new calls, a
 five-task forecast or evidence that Sol/Max/1M was actually served.
 
-Only local source/record reads and Decimal arithmetic were used. No model,
-grading, preparation, dispatch, external pricing lookup or test replay ran.
-The existing 469-test implementation evidence is preserved separately; this
-document does not renew it or turn it into financial-enforcement proof.
+The original proposal used only local source/record reads and Decimal arithmetic,
+with no test replay. This approval/guard update adds synthetic USD fixtures and
+reruns the existing related bundles; exact results are kept in LATEST and
+`/tmp/p5-native-usd-cap.1hIeAd/`, separately from the historical 469-test proof.
+No model, grading service, paid preparation, dispatch, external pricing lookup
+or five-task execution ran. Offline tests do not attest provider billing.

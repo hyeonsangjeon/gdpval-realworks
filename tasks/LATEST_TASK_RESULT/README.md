@@ -1,5 +1,108 @@
 # Latest task result
 
+## Five-task native pilot: approved USD 1,000 and inference estimate guard
+
+The owner's desk message **2026-10-26 23:09Z**, "총비용 상한 1000", selects
+**USD 1,000 for the five-task inference-plus-grading total**. The amount is now
+recorded in the pinned [monetary companion](../../batch-runner/experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml),
+`cost.approved_maximum_usd: 1000`. The old sealed plans/caps retain their
+historical nulls byte-for-byte. This offline change grants no launch or retry
+right. **Actual combined-bill enforcement is not established.**
+
+### Implemented scope
+
+The existing wire session owns one in-process USD estimate ledger shared across
+tasks and permitted attempts. Before constructing an upstream connection, it
+atomically reserves the remaining attempt input allowance, outgoing
+`max_output_tokens`, and one full-input cache-write reserve. It reads pinned
+Standard Global long reference prices from `model_price_table.json`:
+**$10 input / $45 output / $12.50 cache write per million tokens**, without a
+cached-read discount. These are stored reference prices, not a verified tariff.
+
+Complete provider usage settles once; SDK cumulative usage is a floor, not an
+extra sum. Missing/partial/failed or unpriceable usage retains reservations and
+blocks later admission. Fixed stop codes are `usd_ceiling_exceeded`,
+`usd_usage_unverified`, `usd_reservation_exceeded` and
+`usd_price_contract_unverified`. The existing socket/SDK cleanup, native/token/
+deadline guards and retry allowlists remain. Unknown monetary usage now blocks
+the session even when an infrastructure retry would otherwise be eligible.
+No persisted-ledger adoption, refill or resume API is added.
+
+`provider_observation.runtime_caps.usd_ceiling` records estimated costs,
+reservations and remaining modeled USD. Unobserved cache writes remain null;
+their separate reserve is not billed usage or a proven provider maximum.
+`effective_tariff_verified=false`, `actual_billing_hard_limit_verified=false`,
+`grading_included=false`, `grading_usd=null` and `actual_total_pilot_usd=null`.
+The existing `token_hard_limit_enforced=false` boundary is unchanged.
+
+Grading was investigated only: [Step 8](../../batch-runner/step8_grade.py#L2817)
+has a separate persistent ledger, and its [meter](../../batch-runner/core/cost_metering.py#L921)
+reserves an audit row before a call and settles usage afterward. It has no
+shared USD-amount admission owner with this wire session. Combining receipts
+afterward cannot prevent incurred charges; integrating every grading/perception/
+runtime charge requires a common atomic owner. No grader code or price table changed.
+
+### Source identity and completed offline proof
+
+Worktree `/ai-work/copilot/_tmp_worktrees/gpt56-native-pilot-caps-20261024`,
+branch `codex/gpt56-native-pilot-caps-20261024`, started clean at
+`36cc47af5f5b8feb147063a61e53b3ad4cc1fb9d`. Tested code is
+`01001d4448eba62e254d7a6ae570222cdbc673a2`, tree
+`18eeb71f3f05add86068bb138bb467399945ac7a`. Later reporting edits do not change
+tested executable/profile bytes. No other worktree or branch was modified.
+
+The new [source-only profile](../../batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261027_usd_cap.yaml)
+keeps **58 registered roles** and refreshes the wire/preflight pins. Its held
+auxiliary records include the monetary companion, existing price table and
+predecessor profile. Admission/final rereads also compare returned local bytes
+with the immutable Git blob; no hash/refusal check is weakened. `tested-code.sha256`
+and `protected.sha256` in the evidence directory bind changed and preserved files.
+
+Evidence: `/tmp/p5-native-usd-cap.1hIeAd/`. Existing Python **3.10.12** and SDK
+**0.147.0**, synthetic inputs/loopback responses and harmless SDK child processes
+only. Commands use **env -i / TERM1800s/KILL5s**, offline Hub/dataset flags, no
+pytest plugin autoload/cache, no bytecode writes and no Git lazy fetch.
+
+| Completed group at the tested code | Actual result | Pytest / wrapper seconds; exit |
+| --- | --- | --- |
+| Native, source-registration, caps and new USD fixtures | **224 passed, 0 failed/errors/skipped** | **55.14 / 55.727; 0** |
+| Wire receipt and preflight contracts | **282 passed, 0 failed/errors/skipped; 214 deselected** | **1447.58 / 1448.003; 0** |
+
+The JUnit identity sets are disjoint: **506 unique passed tests** preserve all
+**469 historical cases**, plus **33 USD** and **4 cleanup-reason** cases. These
+are two completed related bundles, not a pooled live experiment or full-suite
+claim. Host/external-live-receipt selectors remain excluded. Exact invocations,
+stdout, JUnit and timings are in `confirmed-native.*`/`confirmed-contracts.*`.
+
+Earlier diagnostics are retained separately in `initial-validation-status.md`:
+**29 passed** before four added cases; **1 failed** returned-byte drift test;
+an intentionally stopped contract run (**exit 143**); then **128 passed / 1 failed**
+because the new model check masked an existing token-limit reason; and a
+**14-pass** targeted cleanup regression. Fixes strengthened byte binding and
+restored refusal precedence. No assertions were weakened or failed runs pooled.
+
+### Plan-only and remaining conditions
+
+At the tested code, `tested-preflight.*` records explicit
+`source_plan_snapshot(expected_plan_sha256=seal(plan), reviewed_source_sha=...)`
+then `inspect_plan(loaded)` under **env -i / TERM120s/KILL5s**. It reaches
+`source_verified` and `inspect_plan`, **configuration_valid=true**, no configuration
+problems, **launch_allowed=false**, **exit 2 / 1.691s**. The report includes the
+approved USD 1,000 companion; the launch-blocker list remains **0 cleared /
+11 retained / 0 new**. Exit 2 is the intentional plan-only non-launch result.
+
+The amount decision is closed, but effective tariff, cache-write accounting,
+server token bounds and combined grading admission remain open. No model,
+smoke, five-task run, grading, token issuance, dispatch, push, PR or merge ran.
+All previous finite rights, frozen grader and source seals remain unchanged.
+The [cost report](../../batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md)
+preserves $799.20 as a conditional stress scenario, not an actual or guaranteed bill.
+`experiment-report-en`/`im-not-ai-en` keep approval, estimates, observed usage,
+unknown billing and the separate failed/interrupted diagnostics distinct.
+
+The following sections preserve historical results and the amount status before
+this approval; their old null/proposal wording is not the current decision.
+
 ## Five-task native pilot: owner USD-ceiling proposal
 
 At clean source `abb883c95f008331697db79132c62b13c294e8ef`, prepare the
