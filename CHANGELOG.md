@@ -13,6 +13,27 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Apply the owner's **2026-10-27 10:56 KST (01:56Z)** decision lowering the same
+  five-task inference-plus-grading ceiling to **USD 200**. Preserve all sealed
+  registrations, native token/request/deadline limits, reservation rules, prices
+  and frozen grader configuration. The named monetary companion preserves the
+  superseded decision's commit/path/hash; a new source profile binds the changed
+  amount code and refuses old ledger/receipt identities without resetting them.
+  Sixteen synthetic scenarios replay the card's reported cost ranges: maximum
+  settled-plus-pending exposure **$129.00096**, including the explicit cache-write
+  stress. A separate full-cap stress refuses grading request three before
+  **$191.40192 + $23.70096 = $215.10288** could be reserved. These are monetary
+  simulations, not current Sol usage or a verified tariff; Sol grading remains
+  deliberately unpriced/refused. Record each of the eleven retained preflight
+  requirements and its free local versus owner/external evidence dependency.
+  Final validation at `5b3c25885fd9e4debbdd9c4f0ff6b3e5d1047838`: **961 passed,
+  0 failed/errors/skipped** (296 native + 383 grading + 282 contracts), retaining
+  the old 214 contract deselections. All 943 previous cases remain after seven
+  currency-boundary parameter translations; 18 new cases are added. No earlier
+  or preliminary proof is pooled into this result. Plan-only reaches
+  `source_verified` / `inspect_plan`, **exit 2 / 1.964s**, **0 cleared / 11 retained /
+  0 new** blockers. Local commits only; no model/Azure call, dispatch, push, PR or
+  merge. See [LATEST](tasks/LATEST_TASK_RESULT/README.md) for proof and limitations.
 - Connect native inference and Step 8 grading to one persistent, atomic
   **USD 1,000** reservation ledger under the existing pilot capture workspace.
   Reserve before provider calls, settle complete usage once, and consume unknown

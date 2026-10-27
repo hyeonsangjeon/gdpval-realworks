@@ -1,5 +1,155 @@
 # Latest task result
 
+## Five-task native pilot: owner-approved USD 200 combined ceiling
+
+The owner's **2026-10-27 10:56 KST** card decision (**01:56Z**) sets the same
+five-task inference-plus-grading ceiling to **USD 200**. It supersedes the
+**2026-10-26 23:09Z USD 1,000** decision; no further amount approval was requested.
+This is an offline cap change, not a launch, paid grade, billing reconciliation
+or new attempt/study right. The earlier records and cost proposal below are
+dated history and do not supply the current allowance.
+
+The named [monetary companion](../../batch-runner/experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml)
+now carries `cost.approved_maximum_usd: 200`, the local/UTC decision timestamps,
+and the superseded record's exact commit/path/hash. Its new SHA256 is
+`a0f67d8845a165fd660c7600dbb3c233d07f9008e7efb44edb4054e3070cb9c6`.
+The old companion bytes remain at commit
+`32c79f6774a9b4620c9fbf77f9756e32c30f6c0b` with SHA256
+`df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f`.
+All sealed registrations, native caps, prices, grader configuration and the
+cost proposal remain byte-identical. The companion's native-estimate policy
+sub-block is retained; the shared runtime receipt records connected grading.
+
+Native admission, the persistent common ledger, receipt validation and the
+preflight amount report now agree on **USD 200**. `usd_ceiling_exceeded` still
+refuses before either inference or grading is forwarded and records its origin.
+Missing/partial usage consumes its reservation and blocks later requests.
+An old-cap ledger/receipt is refused without replacing its files or refilling
+money/attempt rights; no automatic migration or budget reset is added.
+
+The [source-only successor](../../batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261027_usd200.yaml)
+preserves **58 registered roles** and all non-source plan values. It adds held
+checks of the sealed shared-USD predecessor and updates only the wire/preflight
+pins plus the already-held monetary/helper hashes. The inherited plan null is
+historical; active admission reads the approved companion. A bounded grep of
+active code/new profile finds **zero** old amount literals. The companion's
+only `1000` is `supersedes_monetary_decision.previous_value`, not an allowance.
+Historical source profiles, old reports and the explicitly superseded-decision
+test retain their old facts; context size **1,000,000** is not a dollar cap.
+A wider check of pilot modules, metering and Steps 2/8 finds only nine remaining
+`1000` literals used to convert seconds and milliseconds, not monetary limits.
+
+### Reservation amounts and five-task simulation
+
+Reservation rules were not reduced. Native input **300,000**, output **10,000**,
+request counts, **1,800 seconds**, cache policy, retries and every existing
+unknown-usage/unpriced-model refusal remain unchanged.
+
+| Request fixture | Input reserve | Output reserve | Cache-write reserve | Total USD reserved |
+| --- | ---: | ---: | ---: | ---: |
+| First native request in a full-allowance attempt | 300,000 x $10/M = $3.00 | 10,000 x $45/M = $0.45 | 300,000 x $12.50/M = $3.75 | **$7.20** |
+| Maximum admitted visible-text grading fixture; frozen output field | 1,048,576 UTF-8 bytes x $10/M = $10.48576 | 2,400 x $45/M = $0.108 | 1,048,576 x $12.50/M = $13.10720 | **$23.70096** |
+
+The second row uses the current guard's **1 MiB** serialized request limit and
+the unchanged grader's **2,400** output field, not a measured grading prompt.
+Real grading reservations vary with bytes and the explicit output limit.
+Bytes are a client estimate, not a verified Sol tokenizer/server bound.
+Rates **10/45/12.50 USD/M** are explicit synthetic fixtures using the stored
+reference numbers; the real Sol table remains deliberately unpriced.
+See the actual [request allowance/admission](../../batch-runner/gpt56_pilot_usd_budget.py#L476)
+and [frozen judge settings](../../batch-runner/grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml#L283).
+
+The card reports **$0.06–$0.99 per solving attempt** and **$2–$6 per graded task**.
+No per-task raw usage or request sizes accompany those ranges. The tests replay
+their endpoints as synthetic settled USD against the exact five registered task
+IDs; they do not invent provider tokens or claim to reverify those measurements.
+There are **16 scenarios**: low/high endpoints, one/four solving attempts,
+one/two synthetic grading calls per task, and zero/1.25 extra write factor.
+Four attempts means the existing initial plus three infrastructure retry slots,
+not permission to retry; grading-call counts are fixture choices, not actual
+grade call counts. The extra write factor is conditional on one write per
+uncached input token at the stated reference rates, not an observed/proven maximum.
+
+| Five-task scenario | Settled USD without extra writes | With conditional 1.25x IO write reserve |
+| --- | ---: | ---: |
+| One solving attempt per task | **$10.30–$34.95** | **$23.175–$78.6375** |
+| All four allowed attempt slots per task | **$11.20–$49.80** | **$25.20–$112.05** |
+
+All 16 scenarios finish below **$200** with no monetary refusal. The largest
+**settled plus pending** exposure is **$129.00096**. The largest sum of
+reservations over time is **$381.00960**, which is not simultaneous spend: after
+complete settlement, unused reservation is released. Missing usage never
+receives that release. A small final bill alone cannot establish that every
+future request shape will fit; media/opaque requests and hidden retries remain
+refused, and the fixture does not establish a runnable real grade.
+
+The separate maximum-consumption stress fills all **20** native attempt slots
+at **$7.20**, consuming **$144**. Two full grading fixtures then reach
+**$191.40192**. The **third grading request** is refused before reservation:
+its **$23.70096** would reach **$215.10288**. The reason remains
+`usd_ceiling_exceeded`, origin `grading`. This is a demonstrated worst-case
+stop, not a claim that the card's normal reported amounts would stop there.
+
+### Remaining requirements, not eleven failed tests
+
+Plan-only at the tested code reports `source_verified` then `inspect_plan`,
+configuration valid, **exit 2 / 1.964s**, launch false and **0 cleared / 11 retained /
+0 new** blockers. This call supplies no runtime/evidence/input bundles; retaining
+a requirement is not proof that its artifact is unavailable elsewhere. The
+separate price refusal below overlaps the tariff requirement; it is not a
+twelfth preflight blocker. Classification distinguishes free local assembly
+from an owner decision about evidence/proposed execution; approval cannot make
+an unverified provider fact true.
+
+| Requirement | What this invocation lacks | Free local work / owner or external dependency |
+| --- | --- | --- |
+| Grading price refusal, `usd_price_contract_unverified` | Exact applicable Sol tier/zone/write contract; table deliberately refuses it. | Free validation of supplied facts; **owner/external evidence needed** to bind the applicable tariff. Do not select a speculative price or edit the table here. |
+| `foundry_account_project_deployment_identity_unverified` | Fresh approved account/deployment/host identity bundle bound to this source. | **Free assembly possible** from approved retained evidence; owner supplies/authorizes the record if absent. `direct-v1` does not require a child-project ID. |
+| `foundry_served_model_version_unverified` | Actual served model/version evidence, not the requested label. | **Owner execution/evidence decision needed**; existing valid receipts could be checked free. No new call in this task. |
+| `max_and_long_1m_capability_unverified` | Evidence that Max/Long 1M was supported/applied, not just configured. | Free document/receipt validation; **owner/external capability or execution evidence needed**. Approval alone is not proof. |
+| `native_call_and_token_limits_unresolved` | Complete native/server-token limit contract and qualifying observed usage. | Free contract investigation remains possible; **owner/external contract or execution evidence needed** for complete closure. Client estimates are not server bounds. |
+| `prepared_input_bytes_unverified` | Verified local parquet/reference/input bundle for these five tasks. | **Free assembly possible**, conditional on the approved local inputs and upstream bundles; no download or model call here. |
+| `live_inference_identity_and_wire_unverified` | A real session-owned inference/wire receipt. | **Owner execution decision needed**; fixtures and saved unsigned claims cannot supply the live witness. |
+| `pilot_dispatch_and_grading_identity_not_wired` | Accepted reviewed source/grader identity and its compiled bundle. | Free compilation is implemented; **owner review/decision needed** for the frozen grader source mismatch. No repinning or merge authority here. |
+| `foundry_usage_and_tariff_mapping_unverified` | Provider usage mapped to the applicable tariff/cache meters. | Free reconciliation of supplied records; **owner/provider evidence needed**, not an assumed bill from the synthetic prices. |
+| `native_sandbox_and_result_bundle_host_unverified` | Session-owned host/workspace/result evidence tied to actual inference. | **Owner execution decision needed** for the real witness; local cleanup fixtures do not prove the live host. |
+| `actual_pilot_deployment_not_prepared` | Verified inert runtime/config/deployment binding for the chosen account/deployment. | **Free assembly possible** after approved upstream identity/config/input bundles; not Azure deployment creation or a new child-project request. |
+| `prepared_request_capture_unverified` | Exact local prepared-request capture linked to the preceding bundles. | **Free assembly possible** once those local inputs and bindings are supplied; it still does not prove model consumption. |
+
+These are the existing [preflight requirements](../../batch-runner/gpt56_sol_codex_pilot_preflight.py#L244),
+with [direct-account project omission](../../batch-runner/gpt56_sol_codex_pilot_preflight.py#L883)
+and [price refusal](../../batch-runner/gpt56_pilot_usd_budget.py#L429) preserved.
+The frozen grader hash mismatch is still refused, not approved by this amount
+change. No new monetary decision is needed: the current approved amount is $200.
+
+### Offline proof and limits
+
+Start `32c79f6774a9b4620c9fbf77f9756e32c30f6c0b`; fixed code
+`5b3c25885fd9e4debbdd9c4f0ff6b3e5d1047838`, tree
+`0fbb902953b8b0d6cd33dd7be1d27496dde39685`. Evidence is in
+`/tmp/p5-native-usd200.8MGVKz/`, including exact selectors, logs, JUnit/timings,
+simulation properties, source/protected hashes and the old decision bytes.
+
+| Final group at the fixed code | Result | Pytest / wrapper seconds; exit |
+| --- | --- | --- |
+| Native, source registration and USD 200 scenarios | **296 passed, 0 failed/errors/skipped** | **109.20 / 109.869; 0** |
+| Existing grading/metering/receipt regressions | **383 passed, 0 failed/errors/skipped** | **43.10 / 43.494; 0** |
+| Wire/preflight contracts | **282 passed, 0 failed/errors/skipped** | **1446.23 / 1446.652; 0** |
+
+Final aggregate is **961 passed, 0 failed/errors/skipped**, with disjoint JUnit
+identities. The previous **943** cases are preserved after seven parameter-name
+translations for the new currency boundary; **18** new USD 200 cases are added.
+The contract selector retains the previous **214 deselections**; no
+full-project-suite claim. The preliminary **104 passed**
+(`83.75 / 84.154s`, exit 0) and old **943-test** proof are separate, not pooled.
+Price/usage ambiguity still fails closed. Actual tariff, server token bounds,
+cache accounting, non-model/service/tax charges and filesystem rollback remain
+unverified; actual billing flags remain false. Reports distinguish modelled USD
+from bills under the experimental-reporting/copyediting checks. No model/Azure
+call, paid grade, dispatch, push, PR or merge occurred.
+
+The following records are historical snapshots; their earlier USD 1,000
+allowance and source identifiers are superseded by the decision above.
 ## Five-task native pilot: shared persistent USD admission
 
 Inference and grading now use one durable reservation ledger for the owner's
