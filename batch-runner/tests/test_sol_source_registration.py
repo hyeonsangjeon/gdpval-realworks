@@ -306,7 +306,10 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(step8, "compute_grader_source_hash", observed_hash)
     with pytest.raises(identity.PilotIdentityRefused, match="^grader_template_source_drift$"):
         identity.compile_pilot_identity(profile, reviewed_source_sha=head)
-    assert measured_hashes == ["5c6ee11e6bda5eda9d1c275fe438abffd0334bfd54408ec9cd20c22b6831bfb4"]
+    # The existing closure includes every core/*.py, including this change's
+    # runner adapter. Update only the observed current hash, never the frozen
+    # grader pin or its mandatory source-drift refusal.
+    assert measured_hashes == ["f64b9c394f04766ed3bb544a7e9cb963b7bf5d0885ace1f19bf5bc3563fc4bd5"]
     assert profile["dispatch_grading_identity"]["grader_template_source_hash"] == (
         "47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf"
     )
