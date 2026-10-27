@@ -47,6 +47,15 @@ class PilotUsdRefused(ValueError):
         super().__init__(self.code)
 
 
+class GradingUsdStopped(BaseException):
+    """Stop the run; provider retry handlers must not turn money into a score."""
+
+    def __init__(self, code=UNVERIFIED):
+        self.code = code if code in STOPS else UNVERIFIED
+        self.source = "grading"
+        super().__init__(self.code)
+
+
 def _require(value, code=UNVERIFIED, source="grading"):
     if not value:
         raise PilotUsdRefused(code, source)
@@ -481,18 +490,46 @@ def _request_allowance(kwargs):
               "audio", "file_id", "file_data", "input_file", "encrypted_content", "service_tier",
               "extra_body", "extra_query", "extra_headers", "request_options", "base_url", "modalities"}
 
-    def visit(value):
+    def schema(value):
+        # A function's parameters are literal JSON Schema, not model input
+        # objects. Their union types and property names have different meaning.
+        # No reference is fetched; only literal/local schemas can be bounded.
+        from jsonschema import Draft202012Validator, SchemaError
+
+        def local_references(node):
+            if type(node) is dict:
+                for key, item in node.items():
+                    if key in {"$ref", "$dynamicRef"} and type(item) is str:
+                        _require(item.startswith("#"), UNKNOWN)
+                    local_references(item)
+            elif type(node) is list:
+                for item in node:
+                    local_references(item)
+
+        _require(type(value) is dict, UNKNOWN)
+        try:
+            Draft202012Validator.check_schema(value)
+            local_references(value)
+        except (SchemaError, RecursionError, TypeError, ValueError):
+            raise PilotUsdRefused(UNKNOWN) from None
+
+    def visit(value, path=()):
         if type(value) is dict:
             _require(not (set(value) & opaque), UNKNOWN)
             if "type" in value:
                 _require(type(value["type"]) is str and value["type"] in {"message", "input_text", "text", "output_text", "function",
                                             "function_call", "function_call_output", "object", "array",
                                             "string", "number", "integer", "boolean", "null"}, UNKNOWN)
-            for item in value.values():
-                visit(item)
+            function_tool = (len(path) == 2 and path[0] == "tools" and type(path[1]) is int
+                             and value.get("type") == "function")
+            for key, item in value.items():
+                if function_tool and key == "parameters":
+                    schema(item)
+                else:
+                    visit(item, (*path, key))
         elif type(value) in (list, tuple):
-            for item in value:
-                visit(item)
+            for index, item in enumerate(value):
+                visit(item, (*path, index))
         else:
             _require(type(value) in (str, int, float, bool, type(None)), UNKNOWN)
 
@@ -513,6 +550,14 @@ class GradingUsdAdmission:
         self.ledger = ledger
         self.config = json.loads(_json(config))
         self.prices = grading_prices(self.config)
+
+    @contextmanager
+    def grading_request(self):
+        """Keep the persisted refusal outside the judge's Exception fallback."""
+        try:
+            yield
+        except PilotUsdRefused as refused:
+            raise GradingUsdStopped(refused.code) from None
 
     def check_client(self, client):
         # A wrapper around create() cannot settle invisible SDK retries. Do not

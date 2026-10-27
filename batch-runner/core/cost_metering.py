@@ -888,6 +888,15 @@ class MeteredClient:
 
     def _around(self, call: Any, kwargs: dict[str, Any]) -> Any:
         recorder: CostRecorder = object.__getattribute__(self, "_recorder")
+        if recorder.usd_admission is None:
+            return self._around_with_receipt(call, kwargs)
+        # Money refusal is run control, not a provider reply or rubric verdict.
+        # Keep the existing reservation/settlement/exception receipts intact.
+        with recorder.usd_admission.grading_request():
+            return self._around_with_receipt(call, kwargs)
+
+    def _around_with_receipt(self, call: Any, kwargs: dict[str, Any]) -> Any:
+        recorder: CostRecorder = object.__getattribute__(self, "_recorder")
         usd_admission = recorder.usd_admission
         attribution = recorder.current()
         if attribution is None:

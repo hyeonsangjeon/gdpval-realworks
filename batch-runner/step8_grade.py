@@ -2508,7 +2508,7 @@ def main() -> int:
                           "actual_billing_hard_limit_verified": False}, sort_keys=True), file=sys.stderr)
         return 4
     from gpt56_pilot_usd_budget import (
-        PilotUsdRefused, grading_prices, is_pilot_grading, open_grading_admission,
+        GradingUsdStopped, PilotUsdRefused, grading_prices, is_pilot_grading, open_grading_admission,
     )
     pilot_workspace = getattr(args, "pilot_usd_workspace", None)
     pilot_usd_admission = None
@@ -3424,6 +3424,16 @@ def main() -> int:
             grade = grader.grade_task(
                 task, deliverable_dir, resume_from=resume_progress
             )
+        except GradingUsdStopped as stopped:
+            # Do not manufacture a judge_error or shrink this task's score
+            # denominator. Preserve only already completed tasks and stop;
+            # exit 4 never requests another paid chunk.
+            if task_payloads:
+                try:
+                    save_checkpoint("partial")
+                except Exception as error:
+                    print(f"ERROR: budget-stop checkpoint failed: {type(error).__name__}", file=sys.stderr)
+            return finish(refuse_pilot_money(stopped))
         except GradingDeadlineExceeded as expired:
             # The task is still dropped whole rather than saved half-marked:
             # an unfinished task scored on the items it got through would read

@@ -1,5 +1,34 @@
 # Latest task result
 
+## Grader USD guard: repair schema scope without turning money into marks
+
+On local branch `leader/grader-guard-scope-20261028`, based on
+`7c7a637967a0f2af4e5482d98d205a1d2ceeedf8`, fix two boundaries rather than remove
+the required combined inference-plus-grading USD 200 admission. A Responses
+function tool's parameters are JSON Schema, so its nullable `scope.type` is
+validated as schema and still fully counted in the request reservation. Opaque
+runtime input/overrides, missing output limits, invalid/external schemas,
+unknown usage, hidden retries and over-budget requests remain fail-closed.
+
+Typed money refusals now cross provider/judge retries as run control, not a
+`judge_error`. Step8 exits 4 with the original grading reason, flushes metering
+receipts, closes the judge and preserves only already completed tasks as partial.
+The interrupted task contributes no manufactured verdict or reduced denominator.
+Scoring/rubric/prompt code, frozen registrations, price table and caps are unchanged.
+
+One final related offline invocation passed **598 tests, 0 failures/errors/skips**,
+exit **0**, **88.98s** pytest / **88.961s** JUnit. It includes a comparison against
+actual frozen Git source `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`: under the same
+fixed fake response, synthetic tariff and clock, the guarded request/grade/summary
+matches the frozen output. This is not a real Sol or five-task score experiment.
+Preliminary red/CLI-fixture/interrupted runs are retained separately, not pooled.
+
+The original caps worktree remains clean at `7c7a637967a0`; no model, token/login,
+dispatch, paid execution, push or PR. This local code fix does not renew any seal,
+clear the pilot's existing source/evidence gates or grant launch authority.
+See [scope and verification](../../batch-runner/docs/gpt56_grader_guard_scope.md)
+and `/tmp/p5-grader-guard-fix.yWSNpq/` for exact logs/JUnit and the handoff.
+
 ## Native pilot: response capture ready; live proof and ten blockers remain
 
 Prospective Sol connection diagnostics and the pilot now share response-side

@@ -13,6 +13,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Fix the native pilot grader's USD-guard schema and stop scope on the separate
+  local `leader/grader-guard-scope-20261028` branch. Validate Responses function
+  parameters as literal/local JSON Schema while retaining full byte reservation
+  and existing opaque-input/amount refusals. Keep financial stop signals out of
+  rubric verdicts; Step8 emits the fixed refusal, preserves completed partial
+  tasks, exports receipts/closes the judge and exits 4 without a paid resume.
+  One related offline invocation passes **598 tests, 0 failures/errors/skips**,
+  **88.98s**, including output parity with frozen source `8ac891e3e` under fixed
+  synthetic inputs/replies/prices. Preserve USD 200, price/cap/source seals,
+  prompts/rubrics/scoring and the original caps worktree. No model, dispatch,
+  paid run, push or PR; this is not successor-seal or launch approval. See
+  [grader guard scope](batch-runner/docs/gpt56_grader_guard_scope.md).
+
 - Capture prospective native Sol response bodies/headers in secret-redacted,
   no-clobber artifacts and bind their SHA256 plus response-only identity/effort/
   context fields to diagnostic and pilot receipts. Missing evidence refuses

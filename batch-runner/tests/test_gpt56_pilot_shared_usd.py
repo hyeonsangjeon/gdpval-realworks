@@ -300,9 +300,9 @@ def test_grading_unknown_never_egresses_a_followup(ledger, priced, tmp_path, bad
         del kwargs["max_output_tokens"]
     try:
         with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
-            with pytest.raises((usd.PilotUsdRefused, RuntimeError)):
+            with pytest.raises(RuntimeError if bad == "exception" else usd.GradingUsdStopped):
                 wrapped.responses.create(**kwargs)
-            with pytest.raises(usd.PilotUsdRefused):
+            with pytest.raises(usd.GradingUsdStopped):
                 wrapped.responses.create(**_kwargs())
         assert client.calls == int(bad != "no_output_limit")
         snapshot = ledger.snapshot()
@@ -342,7 +342,7 @@ def test_inference_spend_blocks_actual_grading_wrapper(ledger, priced, tmp_path)
     try:
         wrapped = recorder.meter(client, provider="azure", model=MODEL)
         with recorder.attributed(task_id=TASKS[1], stage=STAGE_GRADING):
-            with pytest.raises(usd.PilotUsdRefused, match=usd.CEILING) as error:
+            with pytest.raises(usd.GradingUsdStopped, match=usd.CEILING) as error:
                 wrapped.responses.create(**_kwargs())
         assert error.value.source == "grading" and client.calls == 0
         assert ledger.snapshot()["stop_source"] == "grading"
@@ -372,7 +372,7 @@ def test_changed_transport_is_rechecked_before_each_grading_call(ledger, priced,
     client.max_retries = 2
     try:
         with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
-            with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
+            with pytest.raises(usd.GradingUsdStopped, match=usd.UNKNOWN):
                 wrapped.responses.create(**_kwargs())
         assert client.calls == 0 and ledger.snapshot()["pending_requests"] == 0
     finally:
@@ -389,7 +389,7 @@ def test_hidden_request_overrides_are_refused_before_any_call(ledger, priced, tm
     wrapped = recorder.meter(client, provider="azure", model=MODEL)
     try:
         with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
-            with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
+            with pytest.raises(usd.GradingUsdStopped, match=usd.UNKNOWN):
                 wrapped.responses.create(**{**_kwargs(), **extra})
         assert client.calls == 0
     finally:
