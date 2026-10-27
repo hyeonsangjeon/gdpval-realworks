@@ -1,5 +1,116 @@
 # Latest task result
 
+## Five-task native pilot: shared persistent USD admission
+
+Inference and grading now use one durable reservation ledger for the owner's
+**USD 1,000 combined ceiling**, approved **2026-10-26 23:09Z**. This is prospective
+client-side admission, not a reconciled bill or a pilot execution result.
+**Actual Sol grading is still refused before task inputs, authentication or
+client construction because its price contract is deliberately unpriced.**
+No current pricing, server-token or cache-billing guarantee is inferred.
+
+### Actual call boundaries
+
+| Origin | Bound runtime entrypoint | Admission behavior |
+| --- | --- | --- |
+| Inference | `PilotWireReceiptSession` / `_NativeRequestBudget.reserve_priced` | Reserve remaining attempt input allowance, outgoing output maximum and the existing modelled cache-write allowance before the loopback constructs an upstream connection. |
+| Grading | Step 8 `main` / `open_grading_admission` / `CostRecorder` / `MeteredClient._around` | Require exact configured-model prices and the inference-bound financial file; reserve before invoking the judge/perception/retry wrapper's provider call. |
+
+The new `gpt56_pilot_usd_budget.py` uses SQLite transactions under the verified
+capture workspace, `.pilot-usd-budget/ledger.sqlite3`. Its identity file binds
+the run, capture digest, ordered five tasks, cap/price hashes, amount and unique
+ledger identity. A grading process must reopen that existing identity via
+`--pilot-usd-workspace`; it cannot initialize its own fresh allowance.
+Atomic reservations share the same USD 1,000 across both origins. Complete
+usage settles once. SDK cumulative usage is a floor, not another charge.
+
+Unknown, partial, failed or mismatched usage consumes the reservation and
+blocks future admission. Dead owners' pending reservations are consumed on
+reopen; a pending close also preserves the held amount. Neither restoration
+from an old cost receipt nor repeated settlement refills the budget. The
+financial state can outlive a process, but this grants no native live-session
+adoption, new study right or automatic resumption of a spent attempt.
+Same-host retained files are required; cross-host recovery and restoring older
+valid filesystem snapshots are not protected by this mechanism.
+
+`usd_ceiling_exceeded` records the originating inference/grading side. Other
+fixed reasons are `usd_usage_unverified`, `usd_reservation_exceeded`,
+`usd_price_contract_unverified` and `usd_ledger_unverified`. The native socket/SDK
+cleanup and previous request/token/deadline guards remain. Amounts finer than
+the existing **1e-8 USD** receipt precision are refused rather than rounded into
+the cap. Grading rejects hidden SDK retries at wrapping and before each call;
+it also refuses missing output limits, opaque/media/streaming requests and
+body overrides. These are refusals, not new verified live capabilities.
+
+The exact stored table still lists `azure:gpt-5.6-sol` as deliberately unpriced.
+Grading cannot substitute the native long-context reference scenario or a
+nearby model's rate. Tests use explicitly synthetic priced fixtures; they do
+not alter the real price table. The separate historical audit ledger still
+reserves audit rows, while the new common ledger reserves monetary amounts.
+
+The persistent receipt adds `runtime_caps.usd_ceiling.shared_budget`, showing
+known modelled amounts, pending/consumed-unknown reserves and both origins.
+`grading_included=true` means admission is wired, not that a paid grade passed.
+`grading_usd` is a known modelled subtotal, not a complete bill; unknown amounts
+remain separately reserved. `actual_total_pilot_usd` stays null and both
+effective-tariff/actual-billing-hard-limit flags stay false. Native cache-write
+allowances and grading's visible UTF-8 byte estimate are not provider/token
+theorems. Non-model runtime/service/tax charges remain outside this guarantee.
+
+### Source and completed evidence
+
+This worktree/branch started clean at
+`5906f24e0cd520c37099ff5e4b42ce95c55c6ee3`. The fixed implementation HEAD is
+`979082af62c5a546e95cd7a15d4531e479165006`, tree
+`e0585f6711f1baa56284c6aed263691ba33bd043`. No other checkout was modified.
+The [source-only successor](../../batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261027_shared_usd.yaml)
+preserves **58 registered roles** and all non-source plan values; it updates
+wire/preflight/Step 8 pins and holds the actual shared-budget/metering modules
+as auxiliary reviewed blobs. Step 8 additionally checks the imported helper's
+actual file and includes it in the pilot grader's existing source closure.
+The frozen grader configuration, prompts and grading algorithm are not changed.
+Its old source mismatch remains a refusal, not a newly approved judge hash.
+
+Evidence: `/tmp/p5-native-shared-usd.nrwZrl/`. Existing Python **3.10.12** and SDK
+**0.147.0**, synthetic inputs/replies, loopback-only fake providers and harmless
+child processes only. Verification clears the environment, disables online
+Hub/dataset access, bytecode, pytest plugin autoload/cache and Git lazy fetch.
+Native/contract commands use **TERM1800s/KILL5s**; grading uses **TERM600s/KILL5s**.
+These are verification bounds, not changed execution limits.
+
+| Group at the fixed code | Result | Pytest / wrapper seconds; exit |
+| --- | --- | --- |
+| Native, source-registration and shared amount fixtures | **278 passed, 0 failed/errors/skipped** | **65.61 / 66.243; 0** |
+| Existing grading/metering/receipt regressions | **383 passed, 0 failed/errors/skipped** | **34.70 / 35.122; 0** |
+| Wire receipt and preflight contracts | **282 passed, 0 failed/errors/skipped** | **1468.01 / 1468.438; 0** |
+
+Final JUnit reconciliation: **943 passed, 0 failed/errors/skipped**, with disjoint
+case identities across the three groups. All **506** original case identities
+are present in these fresh results. The contract selector retains the previous
+**214 deselections** (`native_result_host` / `external_live_receipt`); this is not
+a full-project-suite claim. The earlier **506-test** proof remains historical,
+not pooled into these runs.
+`validation-commands.md` records exact selectors/environment/bounds; `final-*`
+files retain stdout, JUnit and timings. `diagnostic-results.md` separately keeps
+the early **35-pass** selector, stale-current-hash **1-failure**, earlier **383-pass**
+and **276-pass** runs, and the contract **84 passed / 1 failed** stale drift-list
+expectation. Exact expectations were updated without weakening any refusal.
+
+`validated-preflight.*` at this code reaches `source_verified`/`inspect_plan`,
+configuration valid, **exit 2 / 1.915s**, launch false and **0 cleared / 11 retained /
+0 new** blockers. It reports connected grading admission AND unverified grading
+prices. The original owner companion and all old caps/registrations/price/grader
+records remain byte-identical; its old enforcement fields are historical.
+`protected.sha256` and the final code manifest bind those boundaries.
+
+No model/Azure call, smoke, five-task run, grading service, token issuance,
+dispatch, push, PR or merge occurred. All finite rights remain unchanged.
+The [cost report](../../batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md)
+retains the conditional **$799.20** scenario and separates approval, estimates
+and actual billing under the experimental-reporting/copyediting checks.
+
+The following records are historical snapshots, including the earlier
+inference-only implementation; their old disconnection status is not current.
 ## Five-task native pilot: approved USD 1,000 and inference estimate guard
 
 The owner's desk message **2026-10-26 23:09Z**, "총비용 상한 1000", selects

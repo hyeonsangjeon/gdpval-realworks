@@ -13,6 +13,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Connect native inference and Step 8 grading to one persistent, atomic
+  **USD 1,000** reservation ledger under the existing pilot capture workspace.
+  Reserve before provider calls, settle complete usage once, and consume unknown
+  reservations across process restart without refilling study/attempt rights.
+  Current Sol grading remains refused because the pinned price table deliberately
+  leaves it unpriced; synthetic tariff fixtures are not real price approval.
+  Preserve old sealed plans/caps, the owner decision, price table and grader
+  config. Bind the actual shared helper and metering source through a new
+  source-only profile and the grader closure; do not waive its frozen-source
+  refusal. Keep actual-billing flags false and unsupported request paths refused.
+  Validation at `979082af62c5a546e95cd7a15d4531e479165006`: **943 passed,
+  0 failed/errors/skipped** across disjoint native (278), grading (383) and
+  contract (282) groups; all original 506 case identities are included. Keep the
+  established 214 contract deselections and earlier failed/stopped diagnostics
+  separate; this is not full-project-suite coverage. Plan-only reaches
+  `source_verified`/`inspect_plan`, **exit 2 / 1.915s**, with **11 blockers retained**.
+  Local commits only, no model/Azure call, paid run, dispatch, push, PR or merge.
+  See [LATEST](tasks/LATEST_TASK_RESULT/README.md) for entrypoints, limits and proof.
 - Record the owner's **2026-10-26 23:09Z USD 1,000** combined five-task
   inference/grading decision in a new pinned monetary companion; keep every
   sealed plan/caps null and prior source seal unchanged. Add one shared,
