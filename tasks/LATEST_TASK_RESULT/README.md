@@ -1,5 +1,46 @@
 # Latest task result
 
+## Native pilot: approved target bound; ten launch requirements remain
+
+Run **39407062120** / artifact **12257312458** is now linked to the approved
+configured account/deployment/host through a pinned nonsecret reference. The
+actual runtime target must match it before observer/SDK effects; attempt and
+ready receipts carry the reference, and admission/final checks reject drift.
+Existing resource-file byte checks remain; direct-v1 needs no child-project ID.
+This closes configured-route selection only, not a fresh management or served
+model fact. See the [binding, public prices and eleven-item status report](../../batch-runner/docs/gpt56_native_retained_identity_and_pricing.md).
+
+The original diagnostic's exact members still match their hashes. Runtime and
+served model are `null`; version and reasoning effort are not retained. The
+**258400** app-server window and SDK-reported **9444 input / 5 output** are not
+Max/1M proof or billing. No raw Responses HTTP body is retained. The diagnostic
+did not request the pilot Max/Long overrides.
+
+Unauthenticated public Retail API lookup found Standard Global Sol prices in
+eastus2, USD per 1M tokens: Short input/cached/write/output **4 / 0.4 / 5 / 20**;
+Long **8 / 0.8 / 10 / 30**, effective **2026-09-01**, retrieved **2026-10-27**.
+The applicable short/long rule and provider cache-write mapping remain
+unverified. Prices and the `usd_price_contract_unverified` grading refusal are
+unchanged; no effective rate was guessed. The approved combined ceiling stays
+**USD 200**, not a verified billing guarantee.
+
+Code is fixed at `6c907d789bed4628d46173c72e27f92f8e15a68c`. One related offline
+invocation reports **379 passed, 0 failed/errors/skipped**, **638.81s** pytest /
+**639.388s** wrapper, exit **0**. This includes **24** new connection cases and
+targeted existing contracts, not the full project or an integration/provider
+suite. Synthetic route fixtures are not real target/capability proof. The
+preliminary 24-case pass and its earlier fixture-setup error remain separate.
+The explicit source/reference plan-only check reaches
+`source_verified` / `inspect_plan`, **exit 2 / 3.314s**, with
+**1 cleared / 10 retained / 0 new** blockers and launch disabled. All **58**
+source pins match; only binding/wire/preflight pins change in a new successor,
+and the exact reference is additionally held against reviewed Git blobs.
+
+Evidence: `/tmp/p5-native-identity.MpFccK/`. The prior USD 200 proof below is
+historical and is not pooled into this result. This turn used public pricing
+GETs and local work only: no model/Azure management call, credential lookup,
+paid grade, dispatch, push, PR, merge or new study/retry right.
+
 ## Five-task native pilot: owner-approved USD 200 combined ceiling
 
 The owner's **2026-10-27 10:56 KST** card decision (**01:56Z**) sets the same

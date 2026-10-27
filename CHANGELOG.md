@@ -13,6 +13,28 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Bind the approved native pilot account/deployment/host to retained run
+  **39407062120** / artifact **12257312458**, without publishing private route
+  bytes. Match the actual call target before observer/SDK effects, retain the
+  existing raw-byte guards, and carry the pinned reference in owned receipts.
+  A new source-only registration preserves all predecessor seals and non-source
+  plan values, adds held reference checks, and changes only three source pins.
+  Explicit source/reference preflight reaches `source_verified` / `inspect_plan`,
+  **exit 2**, **1 cleared / 10 retained / 0 new**, with launch disabled. Retained
+  served-model/Max/1M fields do not verify those capabilities. Public Sol
+  Standard Global tier rates were recorded, but missing tier/cache mapping
+  keeps effective grading prices unverified and the existing refusal intact.
+  Preserve USD 200 combined scope, original diagnostic members, price table,
+  frozen grader and finite rights. At code
+  `6c907d789bed4628d46173c72e27f92f8e15a68c`, one related offline invocation passes
+  **379 unique cases, 0 failed/errors/skipped**, **638.81s** pytest / **639.388s**
+  wrapper, exit **0**, including 24 new connection cases. Keep the preliminary
+  24-case and historical 961-case proofs separate; no full-project/integration
+  claim. Public unauthenticated pricing
+  GETs and local work only; no model/management/auth/dispatch/push/PR/merge.
+  See [LATEST](tasks/LATEST_TASK_RESULT/README.md) and the
+  [eleven-item report](batch-runner/docs/gpt56_native_retained_identity_and_pricing.md).
+
 - Apply the owner's **2026-10-27 10:56 KST (01:56Z)** decision lowering the same
   five-task inference-plus-grading ceiling to **USD 200**. Preserve all sealed
   registrations, native token/request/deadline limits, reservation rules, prices
