@@ -1,5 +1,39 @@
 # Latest task result
 
+## GHCP owner-file injection and model-free entitlement check
+
+Existing stored gh login: **yes**, `GET /copilot_internal/user`, HTTP **200**,
+plan **enterprise**. Only those projected metadata fields were retained; raw
+responses and headers were discarded. No token-export, token-issuance or
+completion endpoint was used.
+General Copilot entitlement is not installed-CLI acceptance or Sol/Max/1M proof.
+
+The single explicit auth selector now supports `COPILOT_GITHUB_TOKEN_FILE`:
+an absolute, owned, regular, single-link **0600** file outside source/capture
+trees, with a bounded read and rechecks. Bad/missing/empty files refuse before
+launch; the value goes only to the child `COPILOT_GITHUB_TOKEN` environment and
+the transient leak guard. No file copy or parent-env mutation occurs. Existing
+`GH_TOKEN` injection remains the opt-in interface for a future approved gh
+wrapper; the adapter never extracts a gh token or chooses a fallback.
+Receipts store the source name only. File-source pipe/transcript/receipt/handoff
+leak tests fail closed and mask retained metadata. Arbitrary CLI logs, encodings
+and same-user process access remain outside that guarantee; this is not a VM.
+
+One combined offline gate run: **543 passed, 0 failed/errors/skipped**, exit
+**0**, **57.18 pytest / 57.463 wall seconds**. It includes all previous 500 cases
+and 43 new cases. The initial incomplete 102-pass invocation stopped on pytest
+progress reporting versus the existing names-only environment fixture; only
+output settings changed before the final full pass, not guards/assertions.
+Evidence: `/tmp/p5-ghcp-token-file.IUoE0w/`, including the metadata projection,
+exact command, final log/JUnit/timing and preserved incomplete-run diagnostic.
+
+The [owner's B procedure](../../docs/ghcp-sol-actions-gate.md) has five steps
+covering permission, expiry, protected file location, explicit selection and
+revocation. The owner has not chosen a source; no real PAT was created/read,
+no installed Copilot CLI or smoke/model/five-task run, dispatch or PR occurred.
+Plans, caps, workflow and finite rights remain unchanged. Commit and normal
+push are restricted to this GHCP branch; other worktrees are untouched.
+
 ## GHCP masked-prefix authentication follow-up
 
 At source `303e1f987`, default-masked `gh auth status` returned exit **0** and

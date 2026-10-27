@@ -13,6 +13,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add explicit owner-file authentication through `COPILOT_GITHUB_TOKEN_FILE`.
+  Require an owned, single-link regular 0600 file outside source/capture trees,
+  reject unsafe/missing/empty/drifted files, and forward only the value to the
+  child's `COPILOT_GITHUB_TOKEN`. Reuse source selection for externally supplied
+  gh OAuth; no fallback, token extraction, file copy or parent-env mutation.
+  Extend secret non-egress checks with 43 synthetic file-source cases. Full
+  gate suite: **543 passed, 0 failed/errors/skipped**, **57.18s** pytest,
+  exit 0; preserve the earlier interrupted 102-case progress-reporting diagnostic.
+  A model-free entitlement GET reports **yes / HTTP 200 / enterprise** for the
+  existing gh login, not served-setting or CLI execution proof. Add a five-step
+  owner PAT procedure. No real token file supplied, model/smoke/five-task run,
+  dispatch or PR; plans, limits, workflow and finite rights remain unchanged.
+
 - Resolve the gh token-type question using only the default-masked **`gho_`**
   prefix: **OAuth**, a documented Copilot CLI supported type, not proof of
   entitlement or isolated supply. Document three owner authentication choices

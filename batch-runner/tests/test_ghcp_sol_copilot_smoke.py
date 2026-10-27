@@ -39,6 +39,7 @@ assert "COPILOT_ALLOW_ALL" not in os.environ
 assert "AZURE_OPENAI_API_KEY" not in os.environ
 assert "HF_TOKEN" not in os.environ
 assert "COPILOT_PROVIDER_BASE_URL" not in os.environ
+assert "COPILOT_GITHUB_TOKEN_FILE" not in os.environ
 locations = {name: os.environ[name] for name in (
     "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "TMPDIR",
 )}
@@ -133,6 +134,7 @@ def offline_only(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "synthetic-parent-home")
     for name in adapter.AUTH_ENV_NAMES:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv(adapter.AUTH_FILE_ENV_NAME, raising=False)
     monkeypatch.setenv("COPILOT_GITHUB_TOKEN", AUTH_CANARY)
 
     def forbidden(*args, **kwargs):
@@ -498,3 +500,199 @@ def test_cli_published_stdout_and_stderr_never_contain_forwarded_value(tmp_path,
     assert result == (0 if mode == "normal" else 2)
     if mode != "normal":
         assert "authentication_secret_exposure_refused" in receipt["reason_codes"]
+
+
+def _token_file(tmp_path, monkeypatch, data=None):
+    directory = tmp_path / "owner-only"
+    directory.mkdir(mode=0o700)
+    path = directory / "credential"
+    path.write_bytes(AUTH_CANARY.encode() if data is None else data)
+    path.chmod(0o600)
+    monkeypatch.setenv(adapter.AUTH_FILE_ENV_NAME, str(path))
+    return path
+
+
+@pytest.mark.parametrize("ending", [b"", b"\n", b"\r\n"])
+def test_owner_file_only_enters_child_env_not_parent_capture_or_handoff(tmp_path, fake_cli, monkeypatch, capsys, ending):
+    source = _token_file(tmp_path, monkeypatch, AUTH_CANARY.encode() + ending)
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "UNSELECTED_SYNTHETIC_PARENT_VALUE")
+    monkeypatch.setenv("GH_TOKEN", "UNSELECTED_SYNTHETIC_GH_VALUE")
+    receipt, private = run_fake(tmp_path, fake_cli, "auth_check", auth_source=adapter.AUTH_FILE_ENV_NAME)
+    assert receipt["exit_status"] == 0
+    assert receipt["auth_source"] == adapter.AUTH_FILE_ENV_NAME
+    assert json.loads((private / "files" / "auth-source-proof.json").read_text()) == ["COPILOT_GITHUB_TOKEN"]
+    assert os.environ["COPILOT_GITHUB_TOKEN"] == "UNSELECTED_SYNTHETIC_PARENT_VALUE"
+    assert source.read_bytes() == AUTH_CANARY.encode() + ending and source.stat().st_mode & 0o7777 == 0o600
+    handoff = json.dumps(receipt)
+    assert str(source) not in handoff and AUTH_CANARY not in handoff
+    assert AUTH_CANARY not in (private.parent / "execution-receipt.json").read_text()
+    assert all(AUTH_CANARY.encode() not in path.read_bytes() for path in private.rglob("*") if path.is_file())
+    out = capsys.readouterr()
+    assert AUTH_CANARY not in out.out + out.err
+
+
+@pytest.mark.parametrize("kind", [
+    "unset", "missing", "blank_path", "relative", "traversal", "repo_path", "symlink", "parent_symlink",
+    "directory", "fifo", "hardlink", "foreign_owner", "permission_644", "permission_640", "permission_400",
+    "permission_700", "empty", "empty_line", "whitespace", "multiline", "nul", "non_ascii", "oversized",
+])
+def test_bad_token_file_refuses_before_binary_directory_or_process(tmp_path, monkeypatch, kind):
+    path = _token_file(tmp_path, monkeypatch)
+    if kind == "unset":
+        monkeypatch.delenv(adapter.AUTH_FILE_ENV_NAME)
+    elif kind == "missing":
+        path.unlink()
+    elif kind in {"blank_path", "relative", "traversal", "repo_path"}:
+        location = {"blank_path": "", "relative": CANARY,
+                    "traversal": str(tmp_path / "owner-only" / ".." / CANARY),
+                    "repo_path": str(Path(adapter.__file__).resolve().parents[1] / CANARY)}[kind]
+        monkeypatch.setenv(adapter.AUTH_FILE_ENV_NAME, location)
+    elif kind == "symlink":
+        link = tmp_path / "link"
+        link.symlink_to(path)
+        monkeypatch.setenv(adapter.AUTH_FILE_ENV_NAME, str(link))
+    elif kind == "parent_symlink":
+        link = tmp_path / "linked-parent"
+        link.symlink_to(path.parent, target_is_directory=True)
+        monkeypatch.setenv(adapter.AUTH_FILE_ENV_NAME, str(link / path.name))
+    elif kind in {"directory", "fifo"}:
+        path.unlink()
+        path.mkdir(mode=0o600) if kind == "directory" else os.mkfifo(path, 0o600)
+    elif kind == "hardlink":
+        os.link(path, tmp_path / "second-link")
+    elif kind == "foreign_owner":
+        actual = os.geteuid()
+        monkeypatch.setattr(adapter.os, "geteuid", lambda: actual + 1)
+    elif kind.startswith("permission_"):
+        path.chmod(int(kind.removeprefix("permission_"), 8))
+    else:
+        path.write_bytes({"empty": b"", "empty_line": b"\n", "whitespace": b" ", "multiline": b"one\ntwo",
+                          "nul": b"one\x00two", "non_ascii": b"\xff", "oversized": b"X" * 8193}[kind])
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("rejected auth file crossed an execution boundary")
+
+    monkeypatch.setattr(adapter, "_verify_copilot_binary", forbidden)
+    monkeypatch.setattr(adapter, "_smoke_environment", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    receipt = adapter.run_copilot_smoke(tmp_path / "unread", tmp_path / "state", execution_enabled=True,
+                                       auth_source=adapter.AUTH_FILE_ENV_NAME)
+    assert receipt["reason_codes"] == ["auth_source_unavailable" if kind == "unset" else "auth_token_file_refused"]
+    assert receipt["subprocess_started"] is False and receipt["auth_source"] is None
+    assert not (tmp_path / "state").exists()
+    assert AUTH_CANARY not in json.dumps(receipt) and CANARY not in json.dumps(receipt)
+
+
+def test_token_file_in_capture_tree_is_not_read_or_copied(tmp_path, monkeypatch):
+    source = _token_file(tmp_path, monkeypatch)
+    monkeypatch.setattr(adapter.os, "open", lambda *a, **k: pytest.fail("capture-tree token was opened"))
+    receipt = adapter.run_copilot_smoke(tmp_path / "unread", tmp_path, execution_enabled=True,
+                                       auth_source=adapter.AUTH_FILE_ENV_NAME)
+    assert receipt["reason_codes"] == ["auth_token_file_refused"]
+    assert receipt["subprocess_started"] is False
+    assert source.read_bytes() == AUTH_CANARY.encode()
+
+
+@pytest.mark.parametrize("damage", ["changed", "widened", "replaced"])
+def test_token_file_mutation_during_read_is_fail_closed(tmp_path, monkeypatch, damage):
+    source = _token_file(tmp_path, monkeypatch)
+    real_read = os.read
+
+    def changed_read(descriptor, size):
+        raw = real_read(descriptor, size)
+        if damage == "changed":
+            source.write_bytes(b"DIFFERENT_SYNTHETIC_VALUE")
+        elif damage == "widened":
+            source.chmod(0o640)
+        else:
+            replacement = tmp_path / "replacement"
+            replacement.write_bytes(AUTH_CANARY.encode())
+            replacement.chmod(0o600)
+            os.replace(replacement, source)
+        return raw
+
+    monkeypatch.setattr(adapter.os, "read", changed_read)
+    with pytest.raises(adapter._Stop) as refused:
+        adapter._selected_auth_environment(adapter.AUTH_FILE_ENV_NAME, state_root=tmp_path / "state")
+    assert refused.value.code == "auth_token_file_refused"
+    assert AUTH_CANARY not in str(refused.value)
+
+
+@pytest.mark.parametrize("damage", ["removed", "widened", "changed"])
+def test_token_file_rechecked_after_binary_validation_before_launch(tmp_path, monkeypatch, damage):
+    source = _token_file(tmp_path, monkeypatch)
+
+    def binary_validated(_):
+        if damage == "removed":
+            source.unlink()
+        elif damage == "widened":
+            source.chmod(0o644)
+        else:
+            source.write_bytes(b"DIFFERENT_SYNTHETIC_VALUE")
+
+    monkeypatch.setattr(adapter, "_verify_copilot_binary", binary_validated)
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("drifted file launched a process"))
+    receipt = adapter.run_copilot_smoke(tmp_path / "synthetic", tmp_path / "state", execution_enabled=True,
+                                       auth_source=adapter.AUTH_FILE_ENV_NAME)
+    assert receipt["reason_codes"] == ["auth_token_file_refused"]
+    assert receipt["subprocess_started"] is False and not (tmp_path / "state").exists()
+    assert AUTH_CANARY not in json.dumps(receipt)
+
+
+def test_gh_wrapper_env_and_file_use_one_explicit_selection_without_fallback(tmp_path, fake_cli, monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", AUTH_CANARY)
+    monkeypatch.setenv(adapter.AUTH_FILE_ENV_NAME, CANARY)
+    monkeypatch.setattr(adapter, "_read_auth_token_file", lambda **k: pytest.fail("unselected file source was read"))
+    receipt, private = run_fake(tmp_path, fake_cli, auth_source="GH_TOKEN")
+    assert receipt["exit_status"] == 0 and receipt["auth_source"] == "GH_TOKEN"
+    assert json.loads((private / "files" / "auth-source-proof.json").read_text()) == ["GH_TOKEN"]
+
+
+def test_disabled_file_source_never_reads_auth_or_starts_a_process(tmp_path, monkeypatch):
+    monkeypatch.setattr(adapter, "_read_auth_token_file", lambda **k: pytest.fail("disabled execution read a token"))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("disabled execution spawned"))
+    receipt = adapter.run_copilot_smoke(tmp_path / "unread", tmp_path / "state", auth_source=adapter.AUTH_FILE_ENV_NAME)
+    assert receipt["reason_codes"] == ["execution_disabled"] and receipt["auth_source"] is None
+
+
+@pytest.mark.parametrize("mode", ["secret_stdout", "secret_stderr", "secret_stdout_split", "secret_stderr_split"])
+def test_file_token_echo_is_blocked_before_logs_transcript_or_handoff(tmp_path, fake_cli, monkeypatch, capsys, mode):
+    _token_file(tmp_path, monkeypatch)
+    receipt, private = run_fake(tmp_path, fake_cli, mode, auth_source=adapter.AUTH_FILE_ENV_NAME)
+    assert receipt["exit_status"] == 2 and "authentication_secret_exposure_refused" in receipt["reason_codes"]
+    assert receipt["settings_verification"] == "unverified" and receipt["diagnostic"]["stderr_sha256"] is None
+    assert AUTH_CANARY not in json.dumps(receipt)
+    assert AUTH_CANARY not in (private / "transcript.jsonl").read_text()
+    assert AUTH_CANARY not in (private.parent / "execution-receipt.json").read_text()
+    captured = capsys.readouterr()
+    assert AUTH_CANARY not in captured.out + captured.err
+
+
+def test_file_token_in_nested_handoff_is_masked_and_failed(tmp_path, fake_cli, monkeypatch, capsys):
+    _token_file(tmp_path, monkeypatch)
+    original = adapter._finish_smoke
+
+    def inject(receipt, *args, **kwargs):
+        original(receipt, *args, **kwargs)
+        receipt["synthetic_handoff"] = {"note": AUTH_CANARY}
+
+    monkeypatch.setattr(adapter, "_finish_smoke", inject)
+    receipt, private = run_fake(tmp_path, fake_cli, auth_source=adapter.AUTH_FILE_ENV_NAME)
+    assert receipt["exit_status"] == 2 and "authentication_secret_exposure_refused" in receipt["reason_codes"]
+    assert receipt["synthetic_handoff"] == {"note": "[redacted]"}
+    assert AUTH_CANARY not in (private.parent / "execution-receipt.json").read_text()
+    assert AUTH_CANARY not in (private / "transcript.jsonl").read_text()
+    captured = capsys.readouterr()
+    assert AUTH_CANARY not in captured.out + captured.err
+
+
+@pytest.mark.parametrize("mode", ["normal", "secret_stdout", "secret_stderr"])
+def test_file_source_cli_stdout_is_only_safe_handoff_metadata(tmp_path, fake_cli, monkeypatch, capsys, mode):
+    _token_file(tmp_path, monkeypatch)
+    status = adapter.main(["--copilot-bin", str(fake_cli(mode)), "--state-root", str(tmp_path / "state"),
+                           "--execute-smoke", "--auth-source", adapter.AUTH_FILE_ENV_NAME])
+    captured = capsys.readouterr()
+    assert captured.err == "" and AUTH_CANARY not in captured.out
+    receipt = json.loads(captured.out)
+    assert receipt["auth_source"] == adapter.AUTH_FILE_ENV_NAME
+    assert status == (0 if mode == "normal" else 2)

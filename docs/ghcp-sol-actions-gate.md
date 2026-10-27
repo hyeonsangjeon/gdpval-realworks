@@ -1,5 +1,71 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## Owner-file authentication and entitlement, 2026-10-27
+
+| Existing gh login: general Copilot entitlement | Read-only endpoint | HTTP | Plan |
+| --- | --- | ---: | --- |
+| **Yes** | `GET https://api.github.com/copilot_internal/user` | **200** | **enterprise** |
+
+This authenticated metadata GET used the existing stored gh login, without
+inheriting token environment overrides. Only the verdict, endpoint, HTTP status
+and plan were retained; raw response/headers/error output were discarded. The
+installed schema describes the general chat entitlement and plan fields
+(`schemas/api.schema.json:12550,12554` in the packaged 1.0.79 reference).
+No token-export, token-issuance or completion endpoint was called. This confirms
+general Copilot entitlement only, not CLI acceptance, a particular model's
+availability, applied Sol/Max/1M settings or billing identity. The endpoint is
+an internal GitHub entitlement surface, not a promised stable public API.
+
+The adapter now selects all supported authentication sources in one place.
+With explicit `--auth-source COPILOT_GITHUB_TOKEN_FILE`, that variable is an
+absolute file locator, not a token value. The file must be regular, single-link,
+owned by the runner UID, exactly **0600**, nonempty and at most **8192 bytes**.
+No symlink ancestor, traversal, source-tree or capture-tree location is accepted.
+A bounded descriptor read checks the file/name identity before and after the
+read; binary validation is followed by another source check before launch.
+One terminal LF/CRLF is accepted; embedded whitespace, NUL and non-ASCII bytes
+are refused. Missing or unsafe files fail closed with no process started.
+
+Only the selected value enters the child `COPILOT_GITHUB_TOKEN` environment
+and the transient in-memory leak guard. The parent environment is unchanged;
+the locator is not forwarded, no credential file is copied, and receipts record
+only `auth_source=COPILOT_GITHUB_TOKEN_FILE`, never a path, value or token hash.
+Option A can use the same selector as `--auth-source GH_TOKEN` after an approved
+external wrapper supplies it. No gh-token extraction, automatic fallback,
+refresh loop or saved-login lookup was added to the adapter. Execution still
+defaults false, and the five-task route remains disabled.
+
+The existing literal/JSON-escaped leak guard is reused for this file source.
+Token echoes in stdout/stderr or the adapter transcript fail closed; a value
+in receipt/handoff metadata is replaced with `[redacted]` and the run fails.
+This covers adapter-owned sinks, not arbitrary CLI cache/log files, every
+possible encoding or same-UID process inspection. The fresh NAS directories
+remain **not a VM or security sandbox**. No real PAT was issued, supplied or
+read for this change; the file and process tests used synthetic values only.
+
+### If the owner selects B: five steps
+
+1. Create a personal fine-grained PAT with only the account-level **Copilot Requests** permission; do not add repository/workflow scopes.
+2. Set the shortest supported expiration covering the separately approved execution window; do not enable automatic renewal.
+3. Use a protected input channel to store it outside Git/run captures, e.g. `/run/user/<uid>/ghcp-sol/token`: parent **0700**, file **0600**, owned by the runner UID; never put the value in an argv or log.
+4. Set the locator `COPILOT_GITHUB_TOKEN_FILE` and explicitly select `--auth-source COPILOT_GITHUB_TOKEN_FILE`; leave execution disabled until a separately authorized run.
+5. On completion, failure or cancellation, revoke the PAT on GitHub, remove the file and clear the locator; deleting a file/secret alone does not revoke a token.
+
+One full offline gate invocation passed **543 unique cases**, **0 failures,
+errors or skips**, exit **0**, in **57.18 pytest / 57.463 wall seconds**.
+The existing 500 cases and 43 new file-source cases ran together, including
+Auto/BYOK refusals, isolation/capture, limits and process cleanup. The first
+verbose invocation stopped after 102 passes because pytest's terminal-width
+lookup hit an existing names-only environment guard. Disabling progress output
+fixed that harness conflict without changing product checks or assertions;
+the incomplete run is not pooled into the final result.
+
+Evidence: `/tmp/p5-ghcp-token-file.IUoE0w/`. The owner still has not selected an
+authentication source. No installed Copilot CLI, real smoke, model request,
+five-task run, dispatch or PR was started. Plans, limits, workflow and finite
+rights are unchanged. Earlier dated sections below retain their historical
+authentication findings and test results.
+
 ## Authentication choices after the masked-prefix check, 2026-10-27
 
 The default, masked output of `gh auth status --active --hostname github.com`

@@ -18,6 +18,7 @@ import stat
 import subprocess
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from time import monotonic
 
@@ -33,6 +34,10 @@ SMOKE_ROW = "GHCP Copilot CLI agent + GPT-5.6 Sol"
 SMOKE_PROMPT = "Reply with exactly CONNECTED"
 SMOKE_TOOL_CALL_CAP = 32  # Leader-selected, 2026-10-26; not a VM-plan rewrite.
 AUTH_ENV_NAMES = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+AUTH_FILE_ENV_NAME = "COPILOT_GITHUB_TOKEN_FILE"
+AUTH_SOURCE_TARGETS = {**{name: name for name in AUTH_ENV_NAMES}, AUTH_FILE_ENV_NAME: "COPILOT_GITHUB_TOKEN"}
+AUTH_SOURCE_NAMES = tuple(AUTH_SOURCE_TARGETS)
+MAX_AUTH_FILE_BYTES = 8192
 MAX_USAGE_FILE_BYTES = 65_536
 AUTH_MESSAGES = (
     "No authentication information found",
@@ -64,11 +69,68 @@ def auth_source_presence(environment=None):
     return {name: name in environment for name in AUTH_ENV_NAMES}
 
 
-def _selected_auth_environment(name):
+def _read_auth_token_file(*, state_root=None):
+    """Consume only the selected owner file; never return its path as metadata.
+
+    Walk no-follow directory descriptors, require an owned single-link 0600
+    regular file and recheck the descriptor/name after the bounded read. No
+    store lookup, file copy, parent-environment mutation or token refresh.
+    """
+    if AUTH_FILE_ENV_NAME not in os.environ:
+        raise _Stop("auth_source_unavailable")
+    try:
+        path = Path(os.environ[AUTH_FILE_ENV_NAME])
+        if path.anchor != "/" or ".." in path.parts or not path.name:
+            raise _Stop("auth_token_file_refused")
+        # A supplied secret must not already live in a source/capture tree that
+        # could later be committed or handed off. Never copy it out of there.
+        if path.is_relative_to(Path(__file__).resolve().parents[1]):
+            raise _Stop("auth_token_file_refused")
+        if state_root is not None and (not isinstance(state_root, Path) or not state_root.is_absolute()
+                                       or ".." in state_root.parts or path.is_relative_to(state_root)):
+            raise _Stop("auth_token_file_refused")
+        identity = lambda info: (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+                                 info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        with ExitStack() as handles:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK
+            parent = os.open("/", flags)
+            handles.callback(os.close, parent)
+            for component in path.parts[1:-1]:
+                parent = os.open(component, flags, dir_fd=parent)
+                handles.callback(os.close, parent)
+            selected = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+            if (not stat.S_ISREG(selected.st_mode) or stat.S_IMODE(selected.st_mode) != 0o600
+                    or selected.st_uid != os.geteuid() or selected.st_nlink != 1
+                    or not 0 < selected.st_size <= MAX_AUTH_FILE_BYTES):
+                raise _Stop("auth_token_file_refused")
+            descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+            handles.callback(os.close, descriptor)
+            before = os.fstat(descriptor)
+            if identity(before) != identity(selected):
+                raise _Stop("auth_token_file_refused")
+            raw = os.read(descriptor, MAX_AUTH_FILE_BYTES + 1)
+            if (len(raw) != before.st_size or identity(os.fstat(descriptor)) != identity(before)
+                    or identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False)) != identity(before)):
+                raise _Stop("auth_token_file_refused")
+        # A terminal LF/CRLF is a file delimiter, never part of the credential.
+        value = (raw[:-2] if raw.endswith(b"\r\n") else raw[:-1] if raw.endswith(b"\n") else raw).decode("ascii")
+        if not value or any(not "!" <= character <= "~" for character in value):
+            raise _Stop("auth_token_file_refused")
+        return value
+    except _Stop:
+        raise
+    except Exception:
+        raise _Stop("auth_token_file_refused") from None
+
+
+def _selected_auth_environment(name, *, state_root=None):
+    """One explicit selection point for owner-file, env or external gh bridge."""
     if name is None:
         raise _Stop("auth_source_not_selected")
-    if type(name) is not str or name not in AUTH_ENV_NAMES:
+    if type(name) is not str or name not in AUTH_SOURCE_TARGETS:
         raise _Stop("auth_source_not_allowed")
+    if name == AUTH_FILE_ENV_NAME:
+        return {AUTH_SOURCE_TARGETS[name]: _read_auth_token_file(state_root=state_root)}
     if name not in os.environ:
         raise _Stop("auth_source_unavailable")
     # The selected value is consumed only for child-environment transfer and
@@ -552,7 +614,7 @@ def run_task(
             "diagnostic": {"status": "not available", "message": None,
                            "stderr_bytes": 0, "stderr_sha256": None},
             "evidence_level": "cli_event_settings_not_provider_attestation",
-            "authentication": "inherited_supported_environment_only_no_cache_copy_or_login",
+            "authentication": "explicit_env_or_owner_file_no_store_lookup_copy_or_login",
             "auth_source": None,
             "transcript": "private/transcript.jsonl",
             "transcript_scope": "adapter_owned_bounded_stdout_not_all_cli_logs",
@@ -580,10 +642,13 @@ def run_task(
                 or not Path(command[0]).is_absolute()):
             raise _Stop("execution_command_refused")
         if bound_cli:
-            authentication = _selected_auth_environment(auth_source)
-            credential_guard = _CredentialGuard(authentication[auth_source])
+            authentication = _selected_auth_environment(auth_source, state_root=state_root)
+            credential_guard = _CredentialGuard(authentication[AUTH_SOURCE_TARGETS[auth_source]])
             receipt["auth_source"] = auth_source
             _verify_copilot_binary(copilot_cli)
+            if (auth_source == AUTH_FILE_ENV_NAME
+                    and _selected_auth_environment(auth_source, state_root=state_root) != authentication):
+                raise _Stop("auth_token_file_refused")
             receipt["ghcp_command_binding_verified"] = True
         if os.name != "posix" or any(not hasattr(os, name) for name in (
                 "killpg", "waitid", "WNOWAIT", "P_PID", "WEXITED", "WNOHANG")):
@@ -715,8 +780,8 @@ def main(argv=None):
     parser.add_argument("--copilot-bin", type=Path, required=True)
     parser.add_argument("--state-root", type=Path, required=True)
     parser.add_argument("--execute-smoke", action="store_true", default=False)
-    parser.add_argument("--auth-source", choices=AUTH_ENV_NAMES, default=None,
-                        help="Explicit existing environment-variable name; never a token value")
+    parser.add_argument("--auth-source", choices=AUTH_SOURCE_NAMES, default=None,
+                        help="Explicit source name; COPILOT_GITHUB_TOKEN_FILE locates an owner-only 0600 file")
     args = parser.parse_args(argv)
     receipt = run_copilot_smoke(args.copilot_bin, args.state_root,
                                execution_enabled=args.execute_smoke, auth_source=args.auth_source)
