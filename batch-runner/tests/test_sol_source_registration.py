@@ -122,8 +122,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt54_disposable_checkout.py": "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
         pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml": wire.USD_CAPS_SHA256,
         pilot.ENVELOPE + "model_price_table.json": wire.USD_PRICE_TABLE_SHA256,
-        "batch-runner/gpt56_pilot_usd_budget.py": "68d32295e0fc4cc84b3a1689389f3a2dc374509b8a82ecb968dabd04a61d2e8e",
-        "batch-runner/core/cost_metering.py": "56cad48e9e60690de46ea64988eeb406db149f49330786a6954009fbb2eb635e",
+        "batch-runner/gpt56_pilot_usd_budget.py": "1c3452ee53c4af37d538bb6814cedb0637ebdb21bf6ca1e337862650c3000066",
+        "batch-runner/core/cost_metering.py": "aad0635d3918268db96bdcab97e652eabffed88c3992ad7c2644cc065f9a8c2b",
     }
     for role, digest in pilot.SOURCE_PROFILE_AUXILIARY.items():
         assert hashlib.sha256((root / role).read_bytes()).hexdigest() == digest
@@ -211,7 +211,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(step8, "compute_grader_source_hash", observed_hash)
     with pytest.raises(identity.PilotIdentityRefused, match="^grader_template_source_drift$"):
         identity.compile_pilot_identity(profile, reviewed_source_sha=head)
-    assert measured_hashes == ["0b5a59714e10b5193c88c32e934719741c8c17d4a433e565db38c21462802106"]
+    assert measured_hashes == ["43cb436f38955aa5c92975539d8cb6ab77b2f7df957286e5879fa1a98f13a1c9"]
     assert profile["dispatch_grading_identity"]["grader_template_source_hash"] == (
         "47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf"
     )

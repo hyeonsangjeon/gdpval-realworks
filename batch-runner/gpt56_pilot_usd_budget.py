@@ -53,8 +53,11 @@ def _require(value, code=UNVERIFIED, source="grading"):
 
 def _money(value):
     _require(type(value) in (str, int, Decimal) and not isinstance(value, bool))
-    text = str(value)
+    text = format(value, "f") if isinstance(value, Decimal) else str(value)
     _require(len(text) <= 64 and re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", text) is not None)
+    # Match the existing cost receipt's 1e-8 USD precision. Reject a finer
+    # admission amount instead of letting Decimal context rounding admit it.
+    _require("." not in text or len(text.partition(".")[2].rstrip("0")) <= 8)
     try:
         result = Decimal(text)
     except InvalidOperation:
@@ -204,8 +207,12 @@ class PilotUsdLedger:
     def _transaction(self):
         with self.lock:
             try:
+                _require(self.pid == os.getpid())  # Forked callers must reopen, never reuse a connection.
                 self._check_files()
                 self.connection.execute("BEGIN IMMEDIATE")
+                schema = self.connection.execute("SELECT type,name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchall()
+                _require({(row[0], row[1]) for row in schema} == {
+                    ("table", "meta"), ("table", "accounts"), ("table", "reservations")})
                 row = self.connection.execute("SELECT * FROM meta WHERE id=1").fetchone()
                 _require(row is not None and row["identity"] == self.identity_bytes
                          and row["reason"] in STOPS | {None} and row["origin"] in ORIGINS | {None})
@@ -470,13 +477,14 @@ def _request_allowance(kwargs):
     limits = [kwargs[key] for key in ("max_output_tokens", "max_completion_tokens", "max_tokens") if key in kwargs]
     _require(len(limits) == 1 and type(limits[0]) is int and 0 < limits[0] < 2 ** 31, UNKNOWN)
     opaque = {"previous_response_id", "conversation", "image_url", "input_image", "image", "input_audio",
-              "audio", "file_id", "file_data", "input_file", "encrypted_content", "service_tier"}
+              "audio", "file_id", "file_data", "input_file", "encrypted_content", "service_tier",
+              "extra_body", "extra_query", "extra_headers", "request_options", "base_url", "modalities"}
 
     def visit(value):
         if type(value) is dict:
             _require(not (set(value) & opaque), UNKNOWN)
             if "type" in value:
-                _require(value["type"] in {"message", "input_text", "text", "output_text", "function",
+                _require(type(value["type"]) is str and value["type"] in {"message", "input_text", "text", "output_text", "function",
                                             "function_call", "function_call_output", "object", "array",
                                             "string", "number", "integer", "boolean", "null"}, UNKNOWN)
             for item in value.values():
@@ -545,6 +553,8 @@ class GradingUsdAdmission:
                 if _value(detail, "cached_tokens") is not None:
                     _require(_count(detail, "cached_tokens") <= inputs, UNKNOWN)
                 _require(_value(detail, "audio_tokens") in (None, 0), UNKNOWN)
+            for name in ("output_tokens_details", "completion_tokens_details"):
+                _require(_value(_value(usage, name), "audio_tokens") in (None, 0), UNKNOWN)
             rates = ticket["rates"]
             writes = _count(usage, "cache_write_input_tokens", "cache_creation_input_tokens") if rates["cache_write"] else 0
             io = (Decimal(inputs) * rates["input"] + Decimal(outputs) * rates["output"]) / Decimal(1_000_000)

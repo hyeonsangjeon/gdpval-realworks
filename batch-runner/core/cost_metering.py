@@ -943,6 +943,7 @@ class MeteredClient:
         usd_ticket = None
         try:
             if usd_admission is not None:
+                usd_admission.check_client(inner)
                 usd_ticket = usd_admission.reserve(task_id=attribution.task_id,
                                                   provider=object.__getattribute__(self, "_provider"),
                                                   kwargs=kwargs)

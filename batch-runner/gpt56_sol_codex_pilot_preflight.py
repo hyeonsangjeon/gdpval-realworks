@@ -85,9 +85,9 @@ SOURCE_PROFILE_AUXILIARY = {
     ENVELOPE + "model_price_table.json":
         "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
     "batch-runner/gpt56_pilot_usd_budget.py":
-        "68d32295e0fc4cc84b3a1689389f3a2dc374509b8a82ecb968dabd04a61d2e8e",
+        "1c3452ee53c4af37d538bb6814cedb0637ebdb21bf6ca1e337862650c3000066",
     "batch-runner/core/cost_metering.py":
-        "56cad48e9e60690de46ea64988eeb406db149f49330786a6954009fbb2eb635e",
+        "aad0635d3918268db96bdcab97e652eabffed88c3992ad7c2644cc065f9a8c2b",
 }
 PLAN = ROOT / ACTIVE_PLAN
 RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"

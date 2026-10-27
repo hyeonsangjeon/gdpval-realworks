@@ -364,6 +364,48 @@ def test_hidden_sdk_retries_cannot_bypass_grading_reservations(ledger, priced, t
         audit.close()
 
 
+def test_changed_transport_is_rechecked_before_each_grading_call(ledger, priced, tmp_path):
+    audit = CostReceiptLedger(tmp_path / "audit.sqlite3", run_id="synthetic")
+    recorder = CostRecorder(audit, usd_admission=priced)
+    client = _FakeClient(_reply())
+    wrapped = recorder.meter(client, provider="azure", model=MODEL)
+    client.max_retries = 2
+    try:
+        with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
+            with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
+                wrapped.responses.create(**_kwargs())
+        assert client.calls == 0 and ledger.snapshot()["pending_requests"] == 0
+    finally:
+        audit.close()
+
+
+@pytest.mark.parametrize("extra", [{"extra_body": {"max_output_tokens": 100000}},
+                                   {"modalities": ["audio"]}, {"previous_response_id": "opaque"},
+                                   {"stream": True}])
+def test_hidden_request_overrides_are_refused_before_any_call(ledger, priced, tmp_path, extra):
+    audit = CostReceiptLedger(tmp_path / "audit.sqlite3", run_id="synthetic")
+    recorder = CostRecorder(audit, usd_admission=priced)
+    client = _FakeClient(_reply())
+    wrapped = recorder.meter(client, provider="azure", model=MODEL)
+    try:
+        with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
+            with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
+                wrapped.responses.create(**{**_kwargs(), **extra})
+        assert client.calls == 0
+    finally:
+        audit.close()
+
+
+def test_sub_receipt_precision_cannot_round_a_request_inside_the_cap(ledger):
+    account = ledger.begin("grading", TASKS[0])
+    with pytest.raises(usd.PilotUsdRefused):
+        ledger.reserve(account, Decimal("1000.000000001"))
+    assert ledger.snapshot()["pending_requests"] == 0
+    ticket = ledger.reserve(account, Decimal("0.00000001"))
+    assert ledger.settle(ticket, Decimal("0.00000001"), Decimal(0)) is None
+    assert Decimal(ledger.snapshot()["combined_modeled_usd"]) == Decimal("0.00000001")
+
+
 def test_sdk_floor_and_wire_settlement_share_one_reserved_amount(ledger):
     facade = wire._PilotUsdLedger(ledger)
     attempt = facade.begin(TASKS[0])
