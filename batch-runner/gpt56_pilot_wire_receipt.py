@@ -1750,6 +1750,7 @@ class PilotWireReceiptSession:
             self.document = json.loads(self.capture_data)
             self.prepared = json.loads(_read_bytes(self.workspace / capture.PREPARED_PATH,
                                                    sha256=self.linkage["prepared_sha256"]))
+            self.connection_reference = deployment.approved_connection_reference()
             _require(self.linkage["run_id"] == pilot.RUN_ID == self.document["run_id"]
                      and self.document["task_ids"] == [row["task_id"] for row in self.prepared["tasks"]])
             self.root = self.workspace / DIRECTORY
@@ -1758,6 +1759,7 @@ class PilotWireReceiptSession:
             self.failed = False
             self.armed: dict[str, int] = {}
             self.active: dict[str, _TransportObservation] = {}
+            self.bound_connections: dict[str, bytes] = {}
             self.thread_ids: set[str] = set()
             self.files: dict[str, bytes] = {}
             self.attempts: dict[str, list[dict]] = {task_id: [] for task_id in self.document["task_ids"]}
@@ -1793,6 +1795,12 @@ class PilotWireReceiptSession:
                 raise PilotWireReceiptRefused() from None
 
     def _current(self) -> None:
+        _require(self.connection_reference == deployment.approved_connection_reference())
+        expected_connection = _bytes({**deployment.connection_reference_receipt(self.connection_reference),
+                                      "configured_route_matched": True,
+                                      "route_sha256": _digest(_bytes(self.connection_reference["route"]))["sha256"]})
+        _require(set(self.bound_connections) == set(self.active)
+                 and all(value == expected_connection for value in self.bound_connections.values()))
         _require(type(self.native_budget) is _NativeRequestBudget and self.native_budget.limits == _native_caps()
                  and set(self.native_budget.counts) == set(self.document["task_ids"])
                  and type(self.native_budget.usd) is _PilotUsdLedger)
@@ -1853,6 +1861,9 @@ class PilotWireReceiptSession:
             account = deployment._resource_bytes(deployment._resource_path(self.sources.account_resource_id_file))
             _require(_digest(account) == {key: ready["resource_files"]["account"][key] for key in ("size", "sha256")})
             account_leaf = deployment._resource_parts(account, "account")[-1]
+            deployment_id = deployment._resource_bytes(deployment._resource_path(self.sources.deployment_resource_id_file))
+            _require(_digest(deployment_id) == {key: ready["resource_files"]["deployment"][key] for key in ("size", "sha256")})
+            connection = deployment.bind_approved_connection(self.connection_reference, provider, account, deployment_id)
             endpoint = classify_endpoint(provider.endpoint)
             _require(provider.model == requested["deployment"] and provider.provider_id == requested["provider_id"]
                      and provider.reasoning_effort == requested["reasoning_effort"]
@@ -1870,6 +1881,7 @@ class PilotWireReceiptSession:
                 _root(path.parent)
                 _read_bytes(path, size=record["size"], sha256=record["sha256"])
             observer = _TransportObservation(json.loads(_bytes(requested)))
+            self.bound_connections[task_id] = _bytes(connection)
             observer.native_budget, observer.native_budget_task = self.native_budget, task_id
             observer.approved_base_url = provider.endpoint.rstrip("/")
             self.active[task_id] = observer
@@ -1897,6 +1909,7 @@ class PilotWireReceiptSession:
                            "task": task, "attempt_index": index, "retry_kind": "initial" if index == 0 else "infrastructure",
                            "repeat": 1, "logical_turn": 1, "call_id": call_id, "success": success,
                            "prepared_capture": self.linkage, "requested": {**self.document["requested"], "profile": "direct-v1"},
+                           "approved_connection_reference": json.loads(self.bound_connections[task_id]),
                            "transport": transport, "launch_allowed": False, "full_220_allowed": False})
             with _held_parents(self.workspace, (RESERVATION, DIRECTORY + "/" + name)) as check:
                 self._current()
@@ -1910,7 +1923,7 @@ class PilotWireReceiptSession:
             self.attempts[task_id].append({"linkage": linkage, "success": success, "accepted": False})
             if thread_digest is not None:
                 self.thread_ids.add(thread_digest)
-            del self.active[task_id], self.armed[task_id]
+            del self.active[task_id], self.armed[task_id], self.bound_connections[task_id]
             return json.loads(_bytes(linkage))
 
     def accept_task(self, *, task_id: str, attempt_index: int, result: dict) -> None:
@@ -1931,6 +1944,7 @@ class PilotWireReceiptSession:
             data = _bytes({"bundle_version": "pilot-wire-receipts-ready-v1", "evidence_boundary": BOUNDARY,
                            "run_id": pilot.RUN_ID, "task_ids": ordered_task_ids, "prepared_capture": self.linkage,
                            "reservation": _digest(self.reservation),
+                           "approved_connection_reference": deployment.connection_reference_receipt(self.connection_reference),
                            "shared_usd_budget": self.native_budget.usd.shared.binding(),
                            "receipts": {task_id: [row["linkage"] for row in self.attempts[task_id]] for task_id in ordered_task_ids},
                            "live_inference_identity_and_wire_unverified": True,

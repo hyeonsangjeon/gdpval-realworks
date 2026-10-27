@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_usd200.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_connection.yaml"
+SOURCE_PROFILE_USD200 = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_usd200.yaml"
+SOURCE_PROFILE_USD200_SHA256 = "d05363c8745245c8279fb9b30404e88922b79b26e874ed3d97a2c0444de9715d"
 SOURCE_PROFILE_SHARED = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_shared_usd.yaml"
 SOURCE_PROFILE_SHARED_SHA256 = "7619cd0c6baa35a8660c2e076ed171f271f6b4ad3c5de7115b19e7f2f30a7652"
 SOURCE_PROFILE_USD = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_usd_cap.yaml"
@@ -79,6 +81,7 @@ SOURCE_PROFILE_DELTA = frozenset({
     "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
     "batch-runner/gpt56_sol_codex_pilot_preflight.py",
     "batch-runner/step8_grade.py",
+    "batch-runner/gpt56_pilot_deployment_binding.py",
 })
 SOURCE_PROFILE_AUXILIARY = {
     "batch-runner/gpt54_disposable_checkout.py":
@@ -91,6 +94,8 @@ SOURCE_PROFILE_AUXILIARY = {
         "7c3c43d39df84c344faf930de7f0588791c076633d89d9335e66de43bd1d22eb",
     "batch-runner/core/cost_metering.py":
         "aad0635d3918268db96bdcab97e652eabffed88c3992ad7c2644cc065f9a8c2b",
+    ENVELOPE + "gpt56_sol_connection_reference_20261027.json":
+        "293ee682d01cbb64ee2b330f603b49a90522f07429dcd3cf036070808c271b76",
 }
 PLAN = ROOT / ACTIVE_PLAN
 RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
@@ -333,6 +338,9 @@ def source_plan_snapshot(
         shared_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_SHARED), sha256=SOURCE_PROFILE_SHARED_SHA256)
         require(len(shared_data) <= 65536)
         shared_profile = yaml.safe_load(shared_data)
+        usd200_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_USD200), sha256=SOURCE_PROFILE_USD200_SHA256)
+        require(len(usd200_data) <= 65536)
+        usd200_profile = yaml.safe_load(usd200_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -353,7 +361,7 @@ def source_plan_snapshot(
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
         require({name for name, digest in pins.items()
                  if digest != bindings_profile["source_pins"][name]}
-                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py"})
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
         require(seal({k: v for k, v in token_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
         require({name for name, digest in token_profile["source_pins"].items()
@@ -361,21 +369,27 @@ def source_plan_snapshot(
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
         require({name for name, digest in pins.items()
                  if digest != token_profile["source_pins"][name]}
-                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py"})
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
         require(seal({k: v for k, v in usd_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
         require({name for name, digest in usd_profile["source_pins"].items()
                  if digest != token_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
         require({name for name, digest in pins.items() if digest != usd_profile["source_pins"][name]}
-                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py"})
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
         require(seal({k: v for k, v in shared_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
         require({name for name, digest in shared_profile["source_pins"].items()
                  if digest != usd_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py"})
-        require({name for name, digest in pins.items() if digest != shared_profile["source_pins"][name]}
+        require({name for name, digest in usd200_profile["source_pins"].items() if digest != shared_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
+        require({name for name, digest in pins.items() if digest != shared_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
+        require(seal({k: v for k, v in usd200_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in pins.items() if digest != usd200_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
 
         # Reuse the existing sanitized, bounded, local-only Git implementation.
         # Archive reads Git objects, not LFS payloads; nothing is extracted.
@@ -387,7 +401,8 @@ def source_plan_snapshot(
                         SOURCE_PROFILE_BINDINGS: SOURCE_PROFILE_BINDINGS_SHA256,
                         SOURCE_PROFILE_TOKEN_PRECHECK: SOURCE_PROFILE_TOKEN_PRECHECK_SHA256,
                         SOURCE_PROFILE_USD: SOURCE_PROFILE_USD_SHA256,
-                        SOURCE_PROFILE_SHARED: SOURCE_PROFILE_SHARED_SHA256}
+                        SOURCE_PROFILE_SHARED: SOURCE_PROFILE_SHARED_SHA256,
+                        SOURCE_PROFILE_USD200: SOURCE_PROFILE_USD200_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -417,6 +432,7 @@ def source_plan_snapshot(
             require(blobs[SOURCE_PROFILE_TOKEN_PRECHECK] == token_data)
             require(blobs[SOURCE_PROFILE_USD] == usd_data)
             require(blobs[SOURCE_PROFILE_SHARED] == shared_data)
+            require(blobs[SOURCE_PROFILE_USD200] == usd200_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -439,9 +455,9 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_SHARED,
-            "supersedes_profile_sha256": SOURCE_PROFILE_SHARED_SHA256,
-            "source_change_reason": "owner_combined_ceiling_reduced_to_usd200",
+            "supersedes_profile": SOURCE_PROFILE_USD200,
+            "supersedes_profile_sha256": SOURCE_PROFILE_USD200_SHA256,
+            "source_change_reason": "approved_retained_connection_bound_before_call_and_in_receipt",
             "monetary_decision": {
                 "record": ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
                 "sha256": SOURCE_PROFILE_AUXILIARY[ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml"],
@@ -977,7 +993,7 @@ def _capture_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
-def inspect_plan(
+def _inspect_plan_with_capture(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
     identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
@@ -1026,6 +1042,79 @@ def inspect_plan(
         return _capture_refusal(result)
 
 
+def _approved_connection_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
+    if result is None:
+        result = {"configuration_valid": False}
+    result.update(launch_allowed=False, full_220_allowed=False, launch_blockers=list(LAUNCH_BLOCKERS))
+    for value in result.values():
+        if type(value) is dict and "remaining_blockers" in value:
+            value["remaining_blockers"] = list(LAUNCH_BLOCKERS)
+    result["approved_connection_gate"] = {
+        "configured_route_bound": False, "cleared_blockers": [],
+        "remaining_blockers": list(LAUNCH_BLOCKERS), "refusal_code": "approved_connection_reference_refused",
+    }
+    return result
+
+
+def inspect_plan(
+    plan: dict[str, Any], *, evidence_bundle: Path | None = None,
+    reviewed_source_sha: str | None = None, as_of: str | None = None,
+    identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
+    deployment_binding: Path | None = None, account_resource_id_file: Path | None = None,
+    project_resource_id_file: Path | None = None, deployment_resource_id_file: Path | None = None,
+    capture_workspace: Path | None = None, retained_connection: Path | None = None,
+    retained_connection_source_sha: str | None = None,
+) -> dict[str, Any]:
+    """Optionally bind the approved historical target, never served capabilities.
+
+    The old complete evidence intake and absent-option behavior are unchanged.
+    A bad optional reference cannot clear an existing refusal or launch gate.
+    """
+    result = _inspect_plan_with_capture(
+        plan, evidence_bundle=evidence_bundle, reviewed_source_sha=reviewed_source_sha, as_of=as_of,
+        identity_bundle=identity_bundle, config_bundle=config_bundle, input_bundle=input_bundle,
+        deployment_binding=deployment_binding, account_resource_id_file=account_resource_id_file,
+        project_resource_id_file=project_resource_id_file, deployment_resource_id_file=deployment_resource_id_file,
+        capture_workspace=capture_workspace,
+    )
+    if retained_connection is None and retained_connection_source_sha is None:
+        return result
+    try:
+        import gpt56_pilot_deployment_binding as binding
+
+        if (not result["configuration_valid"] or retained_connection is None
+                or Path(os.path.abspath(retained_connection)) != ROOT / binding.CONNECTION_REFERENCE_PATH
+                or any(type(value) is dict and value.get("refusal_code") for value in result.values())):
+            raise ValueError
+        checked, _, source = source_plan_snapshot(expected_plan_sha256=seal(plan), reviewed_source_sha=retained_connection_source_sha)
+        if source is None or source["status"] != "source_verified" or seal(checked) != seal(plan):
+            raise ValueError
+        reference = binding.approved_connection_reference()
+        route = reference["route"]
+        if (plan["foundry_route"]["route_profile"] != route["profile"]
+                or plan["foundry_route"]["provider_id"] != route["provider_id"]
+                or plan["identity"]["model"] != route["deployment"]
+                or plan["identity"]["sdk_version"] != route["sdk_version"]
+                or plan["identity"]["cli_version"] != route["cli_version"]):
+            raise ValueError
+        remaining = [name for name in result["launch_blockers"] if name != binding.CONNECTION_BLOCKER]
+        cleared = [name for name in result["launch_blockers"] if name == binding.CONNECTION_BLOCKER]
+        gate = {**binding.connection_reference_receipt(reference), "configured_route_bound": True,
+                "reviewed_source_sha": retained_connection_source_sha,
+                "cleared_blockers": cleared, "remaining_blockers": remaining}
+        # Recheck source/record bytes after constructing the bounded report.
+        if source_plan_snapshot(expected_plan_sha256=seal(plan), reviewed_source_sha=retained_connection_source_sha)[2] != source:
+            raise ValueError
+        for value in result.values():
+            if type(value) is dict and "remaining_blockers" in value:
+                value["remaining_blockers"] = remaining
+        result["launch_blockers"] = remaining
+        result["approved_connection_gate"] = gate
+        return result
+    except Exception:
+        return _approved_connection_refusal(result)
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     evidence_requested = False
@@ -1033,6 +1122,7 @@ def main(argv: list[str] | None = None) -> int:
     input_requested = False
     deployment_requested = False
     capture_requested = False
+    connection_requested = False
     source_requested = False
     source_report = None
     # A misspelled option can conceal which mode was intended. All argument
@@ -1047,6 +1137,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input-bundle", type=Path, help="Published five-task local input bundle")
     parser.add_argument("--deployment-binding", type=Path, help="Published local deployment binding")
     parser.add_argument("--capture-workspace", type=Path, help="Local Step 1 prepared request capture (not launch approval)")
+    parser.add_argument("--retained-connection-reference", type=Path,
+                        help="Source-held approved connection reference (configured target only)")
     for role in ("account", "project", "deployment"):
         parser.add_argument("--" + role + "-resource-id-file", type=Path, help="Private local resource ID bytes")
     try:
@@ -1054,9 +1146,10 @@ def main(argv: list[str] | None = None) -> int:
         source_requested = args.plan.absolute() in {
             ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_BINDINGS,
             ROOT / SOURCE_PROFILE_CAPS, ROOT / SOURCE_PROFILE_PREVIOUS, ROOT / SOURCE_PROFILE_TOKEN_PRECHECK,
-            ROOT / SOURCE_PROFILE_USD, ROOT / SOURCE_PROFILE_SHARED,
+            ROOT / SOURCE_PROFILE_USD, ROOT / SOURCE_PROFILE_SHARED, ROOT / SOURCE_PROFILE_USD200,
         }
         capture_requested = args.capture_workspace is not None
+        connection_requested = args.retained_connection_reference is not None
         evidence_requested = any(value is not None for value in (
             args.evidence_bundle, args.reviewed_source_sha, args.as_of,
         ))
@@ -1070,13 +1163,21 @@ def main(argv: list[str] | None = None) -> int:
             plan, _, source_report = source_plan_snapshot(
                 expected_plan_sha256=seal(plan), reviewed_source_sha=args.reviewed_source_sha,
             )
+        connection_only = connection_requested and source_requested and not any(value is not None for value in (
+            args.evidence_bundle, args.as_of, args.identity_bundle, args.config_bundle, args.input_bundle,
+            args.deployment_binding, args.capture_workspace, args.account_resource_id_file,
+            args.project_resource_id_file, args.deployment_resource_id_file,
+        ))
         result = inspect_plan(
             plan, evidence_bundle=args.evidence_bundle,
-            reviewed_source_sha=args.reviewed_source_sha, as_of=args.as_of, identity_bundle=args.identity_bundle,
+            reviewed_source_sha=None if connection_only else args.reviewed_source_sha,
+            as_of=args.as_of, identity_bundle=args.identity_bundle,
             config_bundle=args.config_bundle, input_bundle=args.input_bundle,
             deployment_binding=args.deployment_binding, account_resource_id_file=args.account_resource_id_file,
             project_resource_id_file=args.project_resource_id_file, deployment_resource_id_file=args.deployment_resource_id_file,
             capture_workspace=args.capture_workspace,
+            retained_connection=args.retained_connection_reference,
+            retained_connection_source_sha=args.reviewed_source_sha if connection_requested else None,
         )
     except Exception as error:
         if source_requested:
@@ -1086,9 +1187,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if isinstance(error, _CLIArgumentsRefused):
             evidence_requested = True
-        if not (evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
+        if not (evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested or connection_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
             raise
-        result = _capture_refusal() if capture_requested else _deployment_refusal() if deployment_requested else _input_refusal() if input_requested else _identity_refusal() if identity_requested else _evidence_refusal() if evidence_requested else {
+        result = _capture_refusal() if capture_requested else _deployment_refusal() if deployment_requested else _input_refusal() if input_requested else _identity_refusal() if identity_requested else _approved_connection_refusal() if connection_requested else _evidence_refusal() if evidence_requested else {
             "configuration_valid": False,
             "launch_allowed": False,
             "full_220_allowed": False,
@@ -1096,7 +1197,7 @@ def main(argv: list[str] | None = None) -> int:
         }
     if source_report is not None:
         result["source_registration"] = source_report
-    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested else json.dumps(result, indent=2, ensure_ascii=False))
+    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested or connection_requested else json.dumps(result, indent=2, ensure_ascii=False))
     return 2  # No paid pilot or 220-task run can be launched by this module.
 
 

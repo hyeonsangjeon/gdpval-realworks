@@ -1,6 +1,7 @@
 """One offline selector: real Step 1 bytes, early Step 2 gate, no inference."""
 
 import ast
+import hashlib
 import json
 import os
 from copy import deepcopy
@@ -109,6 +110,19 @@ def _fresh(capture_seed, parent, monkeypatch, *, published=True):
                       if name not in ("workspace/" + capture.CAPTURE_PATH, "workspace/" + capture.PREPARED_PATH))
     _copy(files, parent)
     context = _runtime_paths(monkeypatch, parent)
+    # This whole bundle is a synthetic account/deployment. Keep the new route
+    # matcher real, but give it an explicitly synthetic approved-selection
+    # fixture; the actual pinned reference is tested separately, without mocks.
+    reference = json.loads((Path(__file__).resolve().parents[2] / deployment.CONNECTION_REFERENCE_PATH).read_bytes())
+    account = deployment._resource_parts(context.account_resource_id_file.read_bytes(), "account")
+    model = deployment._resource_parts(context.deployment_resource_id_file.read_bytes(), "deployment")
+    selection = lambda parts: hashlib.sha256(("/" + "/".join(parts)).casefold().encode()).hexdigest()
+    host_hash = hashlib.sha256((account[-1] + ".services.ai.azure.com").encode()).hexdigest()
+    reference["approval_source"] = "offline_synthetic_route_fixture_not_owner_approval"
+    reference["route"].update(host_sha256=host_hash, diagnostic_host_fingerprint="sha256:" + host_hash[:16],
+                              account_resource_id_sha256=selection(account), deployment_resource_id_sha256=selection(model),
+                              deployment=model[-1])
+    monkeypatch.setattr(deployment, "approved_connection_reference", lambda: deepcopy(reference))
     return SimpleNamespace(parent=parent, context=context, workspace=parent / "workspace",
                            candidate=parent / "deployment" / deployment.CANDIDATE_PATH,
                            plan=pilot.load_plan(pilot.PLAN))
