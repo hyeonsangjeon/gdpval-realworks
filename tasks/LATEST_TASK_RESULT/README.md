@@ -1,5 +1,37 @@
 # Latest task result
 
+## Native pilot: response capture ready; live proof and ten blockers remain
+
+Prospective Sol connection diagnostics and the pilot now share response-side
+capture: redacted body/headers in exclusive artifacts, SHA256 and fixed
+model/version/effort/context fields in receipts. Missing fields are
+`not_reported`, never copied from the request or SDK settings. Missing/mismatched
+model, required Max/1M fields or safe storage prevent CLI response delivery and
+`connected`; a failed pilot receipt also blocks subsequent tasks/retries.
+The existing deadline can close sockets/SDK while an artifact writer is stalled;
+late writes cannot revive success. No server-capability or billing claim follows.
+
+At `7b2cd13d6ae23a7f65f4f481636976da436a1e42`, one related offline invocation
+passed **618 cases, 0 failures/errors/skips**, exit **0**, **700.09s** pytest /
+**700.676s** wrapper. This includes the previous 379-case selection, 188 diagnostic
+contracts, 47 response fixtures and four new session gates, not separately pooled
+proofs. The prior 617-case pass preceded a separately reproduced stalled-write
+failure; its fix and new regression are included in the final 618. Synthetic
+HTTP/SDK/process fixtures are not real model, integration or full-project tests.
+
+Plan-only at the tested HEAD reaches `source_verified → inspect_plan`,
+**exit 2 / 3.151s**, **0 newly cleared / 10 retained / 0 new** blockers.
+Only the next-call capture readiness for model/version and Max/1M changed.
+All 58 source pins match; the new helper, diagnostic and artifact workflow
+also enter held reviewed-blob checks. The previous connection registration,
+original run 39407062120 / artifact 12257312458, USD 200 combined ceiling,
+native caps, prices and frozen grader pin remain unchanged. No model/smoke,
+authentication/management call, dispatch, push, PR, merge or new finite right.
+
+See the [response contract, changed files and ten-blocker report](../../batch-runner/docs/gpt56_native_response_capture.md).
+Exact commands, logs, JUnit, timings and final-HEAD preflight are retained in
+`/tmp/p5-native-response.tz5Zd7/`. The historical results below stay separate.
+
 ## Native pilot: approved target bound; ten launch requirements remain
 
 Run **39407062120** / artifact **12257312458** is now linked to the approved

@@ -13,6 +13,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Capture prospective native Sol response bodies/headers in secret-redacted,
+  no-clobber artifacts and bind their SHA256 plus response-only identity/effort/
+  context fields to diagnostic and pilot receipts. Missing evidence refuses
+  CLI delivery/`connected` and subsequent pilot tasks; stalled artifact writes
+  cannot hold SDK deadline cleanup or later upgrade a closed receipt. Add
+  receipt-bound artifact verification to the existing diagnostic upload guard.
+  Preserve predecessor registrations, original diagnostic, USD 200 combined
+  scope, caps, prices, frozen grader and finite rights. One related invocation
+  at `7b2cd13d6ae23a7f65f4f481636976da436a1e42` passes **618 cases, 0 failed/errors/
+  skipped**, **700.09s** pytest / **700.676s** wrapper. Keep preliminary proofs
+  separate. Plan-only remains **exit 2**, `source_verified → inspect_plan`,
+  **0 newly cleared / 10 retained / 0 new**; capture readiness is not live proof.
+  Offline validation; no model, authentication/management call, dispatch, push,
+  PR or merge. See the [response-capture report](batch-runner/docs/gpt56_native_response_capture.md).
+
 - Bind the approved native pilot account/deployment/host to retained run
   **39407062120** / artifact **12257312458**, without publishing private route
   bytes. Match the actual call target before observer/SDK effects, retain the
