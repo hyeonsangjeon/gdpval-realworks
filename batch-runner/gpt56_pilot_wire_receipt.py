@@ -31,6 +31,7 @@ import yaml
 import gpt56_pilot_input_capture as capture
 import gpt56_pilot_deployment_binding as deployment
 import gpt56_sol_codex_pilot_preflight as pilot
+import gpt56_pilot_usd_budget as shared_usd
 from core.cost_receipts import make_call_id
 from core.azure_ai_clients import EndpointKind, classify_endpoint
 from gpt54_codex_input_capture import _write_no_clobber
@@ -61,8 +62,9 @@ USD_CEILING_EXCEEDED = "usd_ceiling_exceeded"
 USD_USAGE_UNVERIFIED = "usd_usage_unverified"
 USD_RESERVATION_EXCEEDED = "usd_reservation_exceeded"
 USD_PRICE_CONTRACT_UNVERIFIED = "usd_price_contract_unverified"
+USD_LEDGER_UNVERIFIED = "usd_ledger_unverified"
 _USD_STOPS = {USD_CEILING_EXCEEDED, USD_USAGE_UNVERIFIED,
-              USD_RESERVATION_EXCEEDED, USD_PRICE_CONTRACT_UNVERIFIED}
+              USD_RESERVATION_EXCEEDED, USD_PRICE_CONTRACT_UNVERIFIED, USD_LEDGER_UNVERIFIED}
 _TOKEN_PRECHECK_STOPS = {NATIVE_INPUT_PRECHECK_EXCEEDED, NATIVE_OUTPUT_PRECHECK_EXCEEDED,
                          NATIVE_TOKEN_REQUEST_UNVERIFIED, NATIVE_OUTPUT_LIMIT_UNAVAILABLE,
                          NATIVE_USAGE_UNVERIFIED}
@@ -78,6 +80,7 @@ USD_PRICE_TABLE_SHA256 = "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe6
 _USD_CAPS_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml"
 _USD_PRICE_PATH = Path(__file__).resolve().parent / "experiments/execution_envelope/model_price_table.json"
 _USD_SCOPE = "inference_modeled_input_output_and_cache_write_reserve"
+_SHARED_USD_SCOPE = "pilot_combined_modeled_input_output_and_cache_write_reserve"
 _USD_CACHE_POLICY = "one_write_per_full_input_token_or_larger_reported_counter"
 _USD_RATE_BASIS = "published_Standard_Global_long_reference_not_verified_effective_tariff"
 _MODEL = re.compile(r"gpt-5\.6-sol(?:-fast)?(?:-20[0-9]{2}-[0-9]{2}-[0-9]{2})?\Z")
@@ -176,15 +179,18 @@ def _usd_text(value):
 
 
 class _PilotUsdLedger:
-    """Non-adoptable session estimate, not the existing billed-cost ledger.
+    """Attempt accounting, backed by durable admission in actual pilot sessions.
 
     Decimal reservations follow the existing agentic-budget convention. A
-    missing/failed response retains its reservation and poisons this session;
-    saved receipts cannot refill it. Grading has no admission hook here.
+    missing/failed response consumes its reservation and poisons the budget;
+    saved receipts cannot refill it. The no-file form is for isolated fixtures.
     """
 
-    def __init__(self):
+    def __init__(self, shared=None):
         self.contract = _native_usd_caps()
+        self.shared = shared
+        self.shared_accounts = {}
+        self.shared_reservations = {}
         self.lock = threading.RLock()
         self.attempts = {}
         self.pending = {}
@@ -194,6 +200,9 @@ class _PilotUsdLedger:
 
     def require_current(self):
         _require(self.contract == _native_usd_caps())
+        if self.shared is not None:
+            _require(type(self.shared) is shared_usd.PilotUsdLedger)
+            self.shared.binding()
 
     def begin(self, task_id):
         with self.lock:
@@ -202,6 +211,8 @@ class _PilotUsdLedger:
                                   "sdk_input": 0, "sdk_output": 0,
                                   "cache_write_floor": 0, "cache_write_observed": None,
                                   "last_input": None, "last_output": None, "last_reserve": None}
+            if self.shared is not None:
+                self.shared_accounts[key] = self.shared.begin("inference", task_id)
             return key
 
     def _value(self, inputs, outputs, writes):
@@ -227,6 +238,11 @@ class _PilotUsdLedger:
     def _stop(self, reason):
         if self.reason is None:
             self.reason = reason
+        if self.shared is not None:
+            try:
+                self.shared.refuse(reason, "inference")
+            except Exception:
+                self.reason = USD_LEDGER_UNVERIFIED
         return self.reason
 
     def reserve(self, attempt, inputs, outputs):
@@ -248,8 +264,16 @@ class _PilotUsdLedger:
             if self._accounted() + self._reserved() + amount > self.contract["maximum"]:
                 self.blocked += 1
                 return None, self._stop(USD_CEILING_EXCEEDED)
+            if self.shared is not None:
+                try:
+                    held = self.shared.reserve(self.shared_accounts[attempt], amount)
+                except shared_usd.PilotUsdRefused as error:
+                    self.blocked += 1
+                    return None, self._stop(error.code)
             self.sequence += 1
             self.pending[self.sequence] = (attempt, amount, sum(self._parts(row)))
+            if self.shared is not None:
+                self.shared_reservations[self.sequence] = held
             return self.sequence, None
 
     def finish(self, reservation, inputs, outputs):
@@ -262,6 +286,13 @@ class _PilotUsdLedger:
                     or inputs < row["input"] or outputs < row["output"]):
                 return self._stop(USD_USAGE_UNVERIFIED)  # Keep the pending charge.
             row.update(input=inputs, output=outputs)
+            if self.shared is not None:
+                try:
+                    reason = self.shared.settle(self.shared_reservations[reservation], *self._parts(row))
+                except Exception:
+                    return self._stop(USD_LEDGER_UNVERIFIED)
+                if reason is not None:
+                    self._stop(reason)
             del self.pending[reservation]
             after = self._accounted()
             if after + self._reserved() > self.contract["maximum"]:
@@ -283,6 +314,13 @@ class _PilotUsdLedger:
             row.update(sdk_input=inputs, sdk_output=outputs, cache_write_observed=writes)
             if writes is not None:
                 row["cache_write_floor"] = writes
+            if self.shared is not None:
+                try:
+                    reason = self.shared.observe(self.shared_accounts[attempt], *self._parts(row))
+                except Exception:
+                    return self._stop(USD_LEDGER_UNVERIFIED)
+                if reason is not None:
+                    self._stop(reason)
             if self._accounted() + self._reserved() > self.contract["maximum"]:
                 return self._stop(USD_CEILING_EXCEEDED)
             return self.reason
@@ -291,6 +329,8 @@ class _PilotUsdLedger:
         with self.lock:
             if any(owner == attempt for owner, _amount, _baseline in self.pending.values()):
                 self._stop(USD_USAGE_UNVERIFIED)
+                if self.shared is not None:
+                    self.shared.abandon(self.shared_accounts[attempt])
             return self.snapshot(attempt)
 
     def snapshot(self, attempt):
@@ -300,7 +340,7 @@ class _PilotUsdLedger:
             cache = sum((self._parts(value)[1] for value in self.attempts.values()), Decimal(0))
             pending = self._reserved()
             observed = [value["cache_write_observed"] for value in self.attempts.values()]
-            return {
+            result = {
                 "enabled": True, "currency": "USD", "approved_maximum_usd": _usd_text(self.contract["maximum"]),
                 "approval_source": "owner_desk_message", "approved_at_utc": "2026-10-26T23:09:00Z",
                 "cap_record_sha256": USD_CAPS_SHA256, "price_table_sha256": USD_PRICE_TABLE_SHA256,
@@ -321,6 +361,19 @@ class _PilotUsdLedger:
                 "actual_total_pilot_usd": None, "effective_tariff_verified": False,
                 "actual_billing_hard_limit_verified": False,
             }
+            if self.shared is not None:
+                shared = self.shared.snapshot()
+                result.update(scope=_SHARED_USD_SCOPE, shared_budget=shared,
+                              inference_input_output_usd=shared["inference_input_output_usd"],
+                              cache_write_reserve_usd=shared["inference_cache_reserve_usd"],
+                              modeled_accounted_usd=_usd_text(Decimal(shared["combined_modeled_usd"]) - Decimal(shared["pending_usd"])),
+                              pending_reserve_usd=shared["pending_usd"], modeled_total_usd=shared["combined_modeled_usd"],
+                              remaining_modeled_usd=shared["remaining_modeled_usd"],
+                              pending_requests=shared["pending_requests"],
+                              blocked_requests=shared["blocked_inference"] + shared["blocked_grading"],
+                              stop_reason=shared["stop_reason"] or self.reason,
+                              grading_included=True, grading_usd=shared["grading_known_usd"])
+            return result
 
 
 class _NativeRequestBudget:
@@ -330,13 +383,13 @@ class _NativeRequestBudget:
     from a saved receipt, a new runner, or an infrastructure retry.
     """
 
-    def __init__(self, task_ids):
+    def __init__(self, task_ids, *, usd_ledger=None):
         _require(type(task_ids) in (list, tuple) and len(task_ids) == len(set(task_ids)) == 5)
         self.limits = _native_caps()
         self.lock = threading.Lock()
         self.counts = {task_id: 0 for task_id in task_ids}
         self.total = 0
-        self.usd = _PilotUsdLedger()
+        self.usd = _PilotUsdLedger(usd_ledger)
 
     def _reason(self, task_id):
         _require(task_id in self.counts)
@@ -351,6 +404,8 @@ class _NativeRequestBudget:
             _require(self._reason(task_id) is None)
             self.usd.require_current()
             _require(self.usd.reason is None)
+            if self.usd.shared is not None:
+                _require(self.usd.shared.snapshot()["stop_reason"] is None)
 
     def reserve(self, task_id):
         with self.lock:
@@ -378,6 +433,7 @@ class _NativeRequestBudget:
 
 
 def _checked_usd_summary(raw):
+    shared = raw.get("shared_budget") if type(raw) is dict else None
     fields = {
         "enabled", "currency", "approved_maximum_usd", "approval_source", "approved_at_utc",
         "cap_record_sha256", "price_table_sha256", "rates_usd_per_million", "rate_basis", "scope",
@@ -388,6 +444,10 @@ def _checked_usd_summary(raw):
         "next_request_reserve_usd", "stop_reason", "grading_included", "grading_usd",
         "actual_total_pilot_usd", "effective_tariff_verified", "actual_billing_hard_limit_verified",
     }
+    if shared is not None:
+        fields.add("shared_budget")
+        if not shared_usd.checked_snapshot(shared):
+            return False
     if type(raw) is not dict or set(raw) != fields:
         return False
     contract = _native_usd_caps()
@@ -398,6 +458,12 @@ def _checked_usd_summary(raw):
              "rates_usd_per_million": {key: _usd_text(value) for key, value in contract["rates"].items()},
              "grading_included": False, "grading_usd": None, "actual_total_pilot_usd": None,
              "effective_tariff_verified": False, "actual_billing_hard_limit_verified": False}
+    if shared is not None:
+        fixed.update(scope=_SHARED_USD_SCOPE, grading_included=True, grading_usd=shared["grading_known_usd"],
+                     inference_input_output_usd=shared["inference_input_output_usd"],
+                     cache_write_reserve_usd=shared["inference_cache_reserve_usd"],
+                     pending_reserve_usd=shared["pending_usd"], modeled_total_usd=shared["combined_modeled_usd"],
+                     remaining_modeled_usd=shared["remaining_modeled_usd"])
     if any(type(raw[key]) is not type(value) or raw[key] != value for key, value in fixed.items()):
         return False
     reason = raw["stop_reason"]
@@ -434,7 +500,8 @@ def _checked_usd_summary(raw):
         if values["next_request_reserve_usd"] != expected:
             return False
     accounted, pending = values["modeled_accounted_usd"], values["pending_reserve_usd"]
-    return (accounted == values["inference_input_output_usd"] + values["cache_write_reserve_usd"]
+    other = (Decimal(shared["grading_known_usd"]) + Decimal(shared["unknown_consumed_usd"])) if shared else Decimal(0)
+    return (accounted == values["inference_input_output_usd"] + values["cache_write_reserve_usd"] + other
             and values["modeled_total_usd"] == accounted + pending
             and values["remaining_modeled_usd"] == max(Decimal(0), contract["maximum"] - accounted - pending)
             and 0 <= values["attempt_accounted_usd"] <= values["task_accounted_usd"] <= accounted
@@ -1693,7 +1760,6 @@ class PilotWireReceiptSession:
             self.thread_ids: set[str] = set()
             self.files: dict[str, bytes] = {}
             self.attempts: dict[str, list[dict]] = {task_id: [] for task_id in self.document["task_ids"]}
-            self.native_budget = _NativeRequestBudget(self.document["task_ids"])
             self.ready: bytes | None = None
             self.reservation = _bytes({"reservation_version": "pilot-wire-reservation-v1", "run_id": pilot.RUN_ID,
                                        "prepared_capture": self.linkage, "launch_allowed": False, "full_220_allowed": False})
@@ -1711,6 +1777,9 @@ class PilotWireReceiptSession:
                 check()
             metadata = self.root.stat()
             self.root_identity = (metadata.st_dev, metadata.st_ino)
+            durable = shared_usd.PilotUsdLedger(self.workspace, capture_sha256=self.linkage["sha256"],
+                                               task_ids=self.document["task_ids"], create=True)
+            self.native_budget = _NativeRequestBudget(self.document["task_ids"], usd_ledger=durable)
 
     @contextmanager
     def _guard(self):
@@ -1727,6 +1796,10 @@ class PilotWireReceiptSession:
                  and set(self.native_budget.counts) == set(self.document["task_ids"])
                  and type(self.native_budget.usd) is _PilotUsdLedger)
         self.native_budget.usd.require_current()
+        shared = self.native_budget.usd.shared
+        _require(type(shared) is shared_usd.PilotUsdLedger and shared.workspace == self.workspace
+                 and shared.identity["capture_sha256"] == self.linkage["sha256"]
+                 and shared.identity["task_ids"] == self.document["task_ids"])
         _require(capture.verify_pilot_input_capture(self.sources, workspace=self.workspace,
                                                   dataset_root=self.dataset_root) == self.linkage)
         _read_bytes(self.workspace / capture.CAPTURE_PATH, **_digest(self.capture_data))
@@ -1857,6 +1930,7 @@ class PilotWireReceiptSession:
             data = _bytes({"bundle_version": "pilot-wire-receipts-ready-v1", "evidence_boundary": BOUNDARY,
                            "run_id": pilot.RUN_ID, "task_ids": ordered_task_ids, "prepared_capture": self.linkage,
                            "reservation": _digest(self.reservation),
+                           "shared_usd_budget": self.native_budget.usd.shared.binding(),
                            "receipts": {task_id: [row["linkage"] for row in self.attempts[task_id]] for task_id in ordered_task_ids},
                            "live_inference_identity_and_wire_unverified": True,
                            "launch_allowed": False, "full_220_allowed": False})

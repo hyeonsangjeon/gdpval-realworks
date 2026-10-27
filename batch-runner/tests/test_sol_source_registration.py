@@ -51,7 +51,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     token_path = root / pilot.SOURCE_PROFILE_TOKEN_PRECHECK
     token_bytes = token_path.read_bytes()
     token_profile = pilot.load_plan(token_path)
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_usd_cap.yaml")
+    usd_path = root / pilot.SOURCE_PROFILE_USD
+    usd_bytes = usd_path.read_bytes()
+    usd_profile = pilot.load_plan(usd_path)
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_shared_usd.yaml")
+    assert hashlib.sha256(usd_bytes).hexdigest() == pilot.SOURCE_PROFILE_USD_SHA256 == (
+        "d2398e54ddad22bc42e6d47bce12ef3b3053f575f2ac5725e605dc3a516e3f29"
+    )
     assert hashlib.sha256(token_bytes).hexdigest() == pilot.SOURCE_PROFILE_TOKEN_PRECHECK_SHA256 == (
         "fbabe0aa40f6513bc77d86a29ae9ac9af35cfbd64b5b70fe3f6150aa0a6e1a44"
     )
@@ -69,8 +75,22 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert {name for name, digest in profile["source_pins"].items()
             if digest != bindings_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+        "batch-runner/step8_grade.py",
     }
     assert {name for name, digest in profile["source_pins"].items()
+            if digest != token_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+        "batch-runner/step8_grade.py",
+    }
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != usd_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+        "batch-runner/step8_grade.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in usd_profile.items() if k != "source_pins"
+    }
+    assert {name for name, digest in usd_profile["source_pins"].items()
             if digest != token_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
     }
@@ -91,6 +111,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
         "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
         "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+        "batch-runner/step8_grade.py",
     }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in previous.items() if k != "source_pins"
@@ -101,6 +122,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt54_disposable_checkout.py": "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
         pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml": wire.USD_CAPS_SHA256,
         pilot.ENVELOPE + "model_price_table.json": wire.USD_PRICE_TABLE_SHA256,
+        "batch-runner/gpt56_pilot_usd_budget.py": "68d32295e0fc4cc84b3a1689389f3a2dc374509b8a82ecb968dabd04a61d2e8e",
+        "batch-runner/core/cost_metering.py": "56cad48e9e60690de46ea64988eeb406db149f49330786a6954009fbb2eb635e",
     }
     for role, digest in pilot.SOURCE_PROFILE_AUXILIARY.items():
         assert hashlib.sha256((root / role).read_bytes()).hexdigest() == digest
@@ -161,15 +184,16 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_TOKEN_PRECHECK
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_TOKEN_PRECHECK_SHA256
-    assert report["source_change_reason"] == "owner_usd_ceiling_and_shared_estimate_admission"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_USD
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_USD_SHA256
+    assert report["source_change_reason"] == "persistent_shared_inference_grading_usd_admission"
     assert report["monetary_decision"] == {
         "record": pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
         "sha256": wire.USD_CAPS_SHA256, "approved_maximum_usd": 1000, "currency": "USD",
         "approved_at_utc": "2026-10-26T23:09:00Z",
         "scope": "five_task_pilot_inference_and_grading_combined",
-        "actual_billing_hard_limit_verified": False, "grading_ledger_connected": False,
+        "actual_billing_hard_limit_verified": False, "grading_ledger_connected": True,
+        "grading_price_contract_verified": False,
     }
     assert report["run_id"] == original["pilot"]["run_id"]
     assert evidence._active_plan(plan_sha256=plan_sha, reviewed_source_sha=head)[0] == profile
@@ -308,10 +332,12 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             pilot.source_plan_snapshot(**options)
     assert len(bindings_reads) == 3
 
-    for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
-                      pilot.ENVELOPE + "model_price_table.json"):
+    for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD,
+                      pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
+                      pilot.ENVELOPE + "model_price_table.json", "batch-runner/gpt56_pilot_usd_budget.py",
+                      "batch-runner/core/cost_metering.py"):
         checks = []
-        expected_reads = 3 if held_role == pilot.SOURCE_PROFILE_TOKEN_PRECHECK else 2
+        expected_reads = 3 if held_role in {pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD} else 2
         def final_money_drift(path, **kwargs):
             if path == root / held_role:
                 checks.append(path)

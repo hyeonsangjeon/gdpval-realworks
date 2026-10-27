@@ -583,10 +583,12 @@ class CostRecorder:
         *,
         run_id: str | None = None,
         round_index: int = 0,
+        usd_admission: Any = None,
     ):
         self.ledger = ledger
         self.run_id = str(run_id or ledger.run_id)
         self.round_index = int(round_index)
+        self.usd_admission = usd_admission
         self._sequences: dict[tuple[str, str, str, int], int] = {}
 
     # -- attribution -----------------------------------------------------
@@ -686,6 +688,8 @@ class CostRecorder:
             raise ValueError(f"unknown stage {stage!r}")
         if retry_kind is not None and retry_kind not in RETRY_KINDS:
             raise ValueError(f"unknown retry kind {retry_kind!r}")
+        if self.usd_admission is not None:
+            self.usd_admission.check_client(client)
         return MeteredClient(
             client,
             recorder=self,
@@ -884,8 +888,11 @@ class MeteredClient:
 
     def _around(self, call: Any, kwargs: dict[str, Any]) -> Any:
         recorder: CostRecorder = object.__getattribute__(self, "_recorder")
+        usd_admission = recorder.usd_admission
         attribution = recorder.current()
         if attribution is None:
+            if usd_admission is not None:
+                usd_admission.unattributed()
             # Outside any task's scope. Report generation and other
             # out-of-band work belongs to neither pipeline, and inventing a
             # home for it would corrupt both totals.
@@ -933,16 +940,30 @@ class MeteredClient:
             request_sha256=request_digest_of(kwargs),
         )
         object.__setattr__(self, "last_call_id", call_id)
+        usd_ticket = None
         try:
+            if usd_admission is not None:
+                usd_ticket = usd_admission.reserve(task_id=attribution.task_id,
+                                                  provider=object.__getattribute__(self, "_provider"),
+                                                  kwargs=kwargs)
             response = call(**kwargs)
         except BaseException as error:
+            if usd_ticket is not None:
+                usd_admission.abandon(usd_ticket)
             _record_failed_call(recorder.ledger, call_id, error)
             raise
-        recorder.ledger.settle(
-            call_id,
-            usage=extract_usage(response),
-            resolved_model=resolved_model_of(response, requested),
-        )
+        try:
+            recorder.ledger.settle(
+                call_id,
+                usage=extract_usage(response),
+                resolved_model=resolved_model_of(response, requested),
+            )
+            if usd_ticket is not None:
+                usd_admission.finish(usd_ticket, response)
+        except BaseException:
+            if usd_ticket is not None:
+                usd_admission.abandon(usd_ticket)
+            raise
         return response
 
 
@@ -983,6 +1004,7 @@ def open_cost_recorder(
     continue_rounds: bool = False,
     price_table_path: Path | str | None = None,
     logger: Any = None,
+    usd_admission: Any = None,
 ) -> tuple[CostRecorder | None, str | None]:
     """Open the ledger for one run, or explain why there is none.
 
@@ -1028,4 +1050,4 @@ def open_cost_recorder(
 
     if continue_rounds:
         round_index = max(int(round_index), ledger.call_count())
-    return CostRecorder(ledger, round_index=round_index), note
+    return CostRecorder(ledger, round_index=round_index, usd_admission=usd_admission), note

@@ -258,6 +258,10 @@ def compute_grader_source_hash(
         batch_root / "scripts" / "download_inference_from_hf.py",
         Path(config["prompt"]["template"]),
     ]
+    # This pilot's amount guard is outside core/. Include its actual helper in
+    # the existing sorted-byte source closure; old frozen hashes are not waived.
+    if config.get("config_name") == "gpt56_sol_foundry_codex_pilot5_v1_v2_sol_max":
+        source_paths.append(batch_root / "gpt56_pilot_usd_budget.py")
     if config.get("prompt", {}).get("tool_template") or (
         (config.get("judge") or {}).get("tools", {}).get("read_deliverable")
     ):
@@ -565,6 +569,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tasks", help="Comma-separated task ids")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of tasks")
     parser.add_argument("--source", choices=["local", "hf"], default="local")
+    parser.add_argument("--pilot-usd-workspace", default=None,
+                        help="Existing five-task pilot capture/financial workspace; never creates or refills its USD ledger")
     parser.add_argument(
         "--resume",
         action="store_true",
@@ -2490,6 +2496,28 @@ def main() -> int:
         print(f"ERROR: experiment yaml load failed: {exc}", file=sys.stderr)
         return 1
 
+    # This pilot may not inherit the ordinary cost-recorder's fail-open mode.
+    # Price admission happens before input loading, credentials or a judge client.
+    from gpt56_pilot_usd_budget import (
+        PilotUsdRefused, grading_prices, is_pilot_grading, open_grading_admission,
+    )
+    pilot_workspace = getattr(args, "pilot_usd_workspace", None)
+    pilot_usd_admission = None
+    pilot_money_required = is_pilot_grading(experiment_id=exp_config.experiment_id,
+                                           config=config, workspace=pilot_workspace)
+
+    def refuse_pilot_money(error):
+        code = getattr(error, "code", "usd_ledger_unverified")
+        print(json.dumps({"status": "refused", "source": "grading", "reason": code,
+                          "actual_billing_hard_limit_verified": False}, sort_keys=True), file=sys.stderr)
+        return 4
+
+    if pilot_money_required:
+        try:
+            grading_prices(config)
+        except Exception as error:
+            return refuse_pilot_money(error)
+
     if args.source == "local":
         try:
             inf_results = load_local_inference_results()
@@ -2499,6 +2527,13 @@ def main() -> int:
     else:
         print("ERROR: --source hf is not implemented in Phase A. Use scripts/download_inference_from_hf.py first.", file=sys.stderr)
         return 2
+
+    pilot_money_required = pilot_money_required or is_pilot_grading(inference=inf_results)
+    if pilot_money_required:
+        try:
+            grading_prices(config)
+        except Exception as error:
+            return refuse_pilot_money(error)
 
     try:
         inference_repo_id, inference_revision = resolve_source_inference_identity(
@@ -2558,6 +2593,14 @@ def main() -> int:
         return 1
 
     expected_task_ids = [task["task_id"] for task in tasks]
+    if pilot_money_required:
+        try:
+            pilot_usd_admission = open_grading_admission(workspace=pilot_workspace,
+                                                        inference=inf_results,
+                                                        task_ids=expected_task_ids, config=config)
+            atexit.register(pilot_usd_admission.ledger.close)
+        except Exception as error:
+            return refuse_pilot_money(error)
     source_provenance_status = inf_results.get(
         "azure_ai_provenance_status", "local-runtime"
     )
@@ -2860,7 +2903,10 @@ def main() -> int:
         cost_ledger_path,
         run_id=cost_run_id,
         continue_rounds=True,
+        **({"usd_admission": pilot_usd_admission} if pilot_usd_admission is not None else {}),
     )
+    if pilot_usd_admission is not None and cost_recorder is None:
+        return refuse_pilot_money(PilotUsdRefused())
     if cost_ledger_note:
         print(f"[cost] {cost_ledger_note}", file=sys.stderr)
 
