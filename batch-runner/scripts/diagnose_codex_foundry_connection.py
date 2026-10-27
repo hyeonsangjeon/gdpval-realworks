@@ -80,6 +80,7 @@ import sys
 import threading
 from collections.abc import Mapping, Sequence
 from enum import Enum
+from pathlib import Path
 from time import monotonic
 from typing import Any, Callable, Iterable, Iterator
 
@@ -131,6 +132,8 @@ from core.codex_runtime_config import (  # noqa: E402
 #: The two are not comparable, which is the whole reason this string exists.
 #: ``observed.final_response_source`` is new in /3.
 SCHEMA = "codex_foundry_connection/3"
+# Prospective Sol HTTP evidence; historical /3 receipts are never rewritten.
+RESPONSE_CAPTURE_SCHEMA = "codex_foundry_connection/4"
 
 # ── The verdict vocabulary ──────────────────────────────────────────────────
 #
@@ -185,6 +188,7 @@ VERDICT_NOT_SENT = "not_sent"
 #: A failure the structured error did not explain. Deliberately last, and
 #: deliberately not a synonym for any of the above.
 VERDICT_UNCLASSIFIED_FAILURE = "unclassified_failure"
+VERDICT_RESPONSE_EVIDENCE_REFUSED = "response_evidence_unverified"
 
 VERDICTS: tuple[str, ...] = (
     VERDICT_CONNECTED,
@@ -205,6 +209,7 @@ VERDICTS: tuple[str, ...] = (
     VERDICT_SETTINGS_INCOMPLETE,
     VERDICT_NOT_SENT,
     VERDICT_UNCLASSIFIED_FAILURE,
+    VERDICT_RESPONSE_EVIDENCE_REFUSED,
 )
 
 #: Verdicts that mean a request reached the provider and was answered by it,
@@ -660,7 +665,7 @@ def _record(
     if verdict not in VERDICTS:  # pragma: no cover - guarded by tests
         raise ValueError(f"{verdict!r} is not one of the fixed verdicts")
     return {
-        "schema": SCHEMA,
+        "schema": RESPONSE_CAPTURE_SCHEMA if "provider_response_evidence" in observed else SCHEMA,
         "verdict": verdict,
         "provider_answered": verdict in VERDICTS_THE_PROVIDER_ANSWERED,
         "note": note,
@@ -840,6 +845,7 @@ def _observe_native_stream(handle: Any, timeout: float) -> tuple[Any, dict[str, 
 
 def _cleanup_native_session(
     codex: Any, workspace: Any, handle: Any, worker: Any, state: dict[str, Any] | None,
+    *, response_observer: Any = None,
 ) -> bool:
     """Attempt interruption and existing close/cleanup under one grace bound.
 
@@ -869,7 +875,10 @@ def _cleanup_native_session(
 
     def close_session() -> None:
         try:
-            if codex is not None:
+            if response_observer is not None:
+                response_observer.close_provider_observer()
+                response_observer.close_provider_runtime()
+            elif codex is not None:
                 codex.close()
         except Exception:  # noqa: BLE001
             failures.append(True)
@@ -899,6 +908,7 @@ def probe(
     *,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     redact: Callable[[Any], str | None] | None = None,
+    response_artifact_parent: Path | None = None,
 ) -> dict[str, Any]:
     """Send the one fixed turn and record what came back.
 
@@ -912,6 +922,27 @@ def probe(
     redact = redact or build_redactor()
     description = describe_settings(settings)
     observed = _empty_observation()
+    response_observer = None
+    if settings.model == "gpt-5.6-sol":
+        from gpt56_native_response_capture import NativeResponseArtifacts, empty_evidence
+        from gpt56_pilot_wire_receipt import _TransportObservation
+
+        observed["provider_response_evidence"] = empty_evidence("native_response_artifact_failed")
+        for field in ("served_model", "served_model_version", "reasoning_effort", "context_tokens"):
+            observed[field] = "not_reported"
+        try:
+            if response_artifact_parent is None:
+                raise ValueError("a persistent artifact parent is required")
+            artifacts = NativeResponseArtifacts(response_artifact_parent, "codex-foundry-connection-responses")
+            response_observer = _TransportObservation({"provider_id": settings.provider_id,
+                "deployment": settings.model, "model": settings.model,
+                "reasoning_effort": "max", "context_tokens": 1_000_000})
+            response_observer.approved_base_url = settings.base_url
+            response_observer.response_artifacts = artifacts
+            observed["provider_response_evidence"] = empty_evidence()
+        except Exception:
+            return _record(verdict=VERDICT_RESPONSE_EVIDENCE_REFUSED, description=description,
+                           observed=observed, note="native_response_artifact_failed; nothing was sent")
 
     try:
         runner = CodexAgentRunner(settings, timeout=timeout)
@@ -956,7 +987,8 @@ def probe(
             )
 
         try:
-            codex = runner.open_runtime(workspace)
+            codex = (runner.open_runtime(workspace, native_response_observer=response_observer)
+                     if response_observer is not None else runner.open_runtime(workspace))
         except Exception as exc:  # noqa: BLE001
             observed["error"] = {"stage": "runtime", "message": redact(exc)}
             return _record(
@@ -1091,6 +1123,7 @@ def probe(
     finally:
         cleaned = _cleanup_native_session(
             codex, workspace, handle, stream_worker, stream_state,
+            **({"response_observer": response_observer} if response_observer is not None else {}),
         )
         if not cleaned and record is None:
             raise RuntimeError("native session cleanup failed") from None
@@ -1101,6 +1134,17 @@ def probe(
         observed["usage"] = stream_state["usage"]
         if record is not None:
             record["observed"]["usage"] = observed["usage"]
+    if response_observer is not None:
+        evidence = response_observer.response_artifacts.report()
+        observed["provider_response_evidence"] = evidence
+        for field in ("served_model", "served_model_version", "reasoning_effort", "context_tokens"):
+            observed[field] = evidence[field]
+        observed["served_model_note"] = "provider response body only; missing fields are not_reported, never requested values"
+        if record is not None:
+            record["observed"].update(observed)
+            if record["verdict"] == VERDICT_CONNECTED and evidence["state"] != "observed":
+                record = _record(verdict=VERDICT_RESPONSE_EVIDENCE_REFUSED, description=description,
+                                 observed=observed, note=evidence["reason"])
     if not cleaned:
         observed["error"] = {
             "stage": "cleanup",
@@ -2911,7 +2955,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.send_request:
         _emit(_plan(description, settings), args.out)
         return 0
-    record = probe(settings, timeout=args.timeout, redact=redact)
+    options = ({"response_artifact_parent": Path(args.out).absolute().parent if args.out else None}
+               if settings.model == "gpt-5.6-sol" else {})
+    record = probe(settings, timeout=args.timeout, redact=redact, **options)
     _emit(record, args.out)
     return 0 if record["verdict"] == VERDICT_CONNECTED else 1
 

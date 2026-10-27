@@ -4,8 +4,9 @@ The SDK's stdio settings are not served identity. An attempt-owned loopback
 observer can additionally count forwarded native HTTP attempts and read the
 provider response body's model, with a snapshot-bound per-attempt request cap.
 It neither attests a deployment/version nor clears a launch or billing gate.
-No private body is retained. A saved document cannot recreate the in-process
-witness for task acceptance.
+Prospective strict sessions retain secret-redacted response bodies/headers in
+separate owned artifacts. A saved document cannot recreate the in-process
+witness for task acceptance, and capture readiness is not live evidence.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ import gpt56_pilot_input_capture as capture
 import gpt56_pilot_deployment_binding as deployment
 import gpt56_sol_codex_pilot_preflight as pilot
 import gpt56_pilot_usd_budget as shared_usd
+import gpt56_native_response_capture as response_capture
 from core.cost_receipts import make_call_id
 from core.azure_ai_clients import EndpointKind, classify_endpoint
 from gpt54_codex_input_capture import _write_no_clobber
@@ -70,7 +72,7 @@ _TOKEN_PRECHECK_STOPS = {NATIVE_INPUT_PRECHECK_EXCEEDED, NATIVE_OUTPUT_PRECHECK_
                          NATIVE_USAGE_UNVERIFIED}
 _CAP_STOPS = {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_INPUT_CAP_EXCEEDED, NATIVE_OUTPUT_CAP_EXCEEDED,
               NATIVE_DEADLINE_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED,
-              *_TOKEN_PRECHECK_STOPS, *_USD_STOPS}
+              *_TOKEN_PRECHECK_STOPS, *_USD_STOPS, *response_capture.STOPS}
 _TOKEN_BOUNDARY = "client_estimate_precheck_and_usage_stop_not_server_hard_limit"
 _INPUT_ESTIMATOR = "serialized_json_utf8_bytes_one_byte_per_estimated_token_not_a_tokenizer"
 NATIVE_CAPS_SHA256 = "7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6"
@@ -107,7 +109,7 @@ def _provider_summary(reason="observer_not_installed") -> dict:
             "provider_receipt_confirmed": False, "native_cap_enforced": False,
             "native_request_limit": None, "native_request_limit_sha256": None,
             "native_request_blocked_count": None, "native_request_cap_reason": None,
-            "runtime_caps": None}
+            "runtime_caps": None, "response_evidence": response_capture.empty_evidence()}
 
 
 def _native_request_limit() -> int:
@@ -608,6 +610,8 @@ def bounded_provider_observation(raw: Any) -> dict:
     if (raw["served_model_version"] is not None or raw["served_model_version_reason"] != "not_observed"
             or raw["provider_receipt_confirmed"] is not False or type(raw["native_cap_enforced"]) is not bool):
         return invalid
+    if response_capture.bounded_evidence(raw["response_evidence"]) != raw["response_evidence"]:
+        return invalid
     if raw["native_cap_enforced"]:
         try:
             limit = _native_request_limit()
@@ -702,6 +706,7 @@ class _ResponseModel:
         self.model = None
         self.terminal = False
         self.completed_usage = None
+        self.response_fields = response_capture.empty_fields()
         self.usage_terminals = 0
         self.reason = ("provider_response_error" if not 200 <= status < 300 else
                        "encoded_response" if encoding.lower() not in ("", "identity") else None)
@@ -728,6 +733,7 @@ class _ResponseModel:
             if kind != "response.created":
                 self.usage_terminals += 1
                 self.completed_usage = None
+                self.response_fields = response_capture.response_fields(document)
                 usage = document.get("usage")
                 if (self.usage_terminals == 1 and kind == "response.completed"
                         and document.get("status") == "completed" and document.get("error") is None
@@ -790,12 +796,13 @@ class _ProviderHTTPObservation:
     """A fixed-upstream, no-retry HTTP observer owned by one CLI process.
 
     Counts include failed forward attempts and remote compaction, not logical
-    turns or confirmed arrivals/bills. No headers, paths, request/response bodies
-    or raw exceptions leave this object. HTTPS credentials pass only to the
+    turns or confirmed arrivals/bills. Strict owners persist redacted response
+    artifacts; public receipts contain only bounded fields/hashes, not raw
+    bodies, headers or exceptions. HTTPS credentials pass only to the
     already-checked account; there is no auth discovery or redirect following.
     """
 
-    def __init__(self, base_url: str, timeout: float):
+    def __init__(self, base_url: str, timeout: float, *, artifacts=None):
         target = urlsplit(base_url)
         _require(target.scheme == "https" and target.hostname is not None
                  and target.port in (None, 443) and target.username is target.password is None
@@ -803,6 +810,8 @@ class _ProviderHTTPObservation:
                  and classify_endpoint(base_url).kind is EndpointKind.DIRECT_V1
                  and type(timeout) in (int, float) and 0 < timeout < float("inf"))
         self.target = target
+        _require(artifacts is None or type(artifacts) is response_capture.NativeResponseArtifacts)
+        self.artifacts = artifacts
         self.limits = _native_caps()
         self.request_limit = self.limits["per_attempt"]["native_model_calls"]
         self.timeout = min(timeout, self.limits["per_attempt"]["wall_clock_seconds"])
@@ -1024,7 +1033,7 @@ class _ProviderHTTPObservation:
             raise _TokenPrecheckRefused(NATIVE_INPUT_PRECHECK_EXCEEDED)
         if maximum > remaining_output:
             raise _TokenPrecheckRefused(NATIVE_OUTPUT_PRECHECK_EXCEEDED)
-        if self.budget is not None and document.get("model") != "gpt-5.6-sol":
+        if (self.budget is not None or self.artifacts is not None) and document.get("model") != "gpt-5.6-sol":
             raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED)
         return body
 
@@ -1057,6 +1066,7 @@ class _ProviderHTTPObservation:
         started = False
         serialized = False
         response_started = False
+        artifact = None
         reason, model = "transport_failed", None
         try:
             while not self.request_lock.acquire(timeout=min(0.05, self.remaining())):
@@ -1144,25 +1154,36 @@ class _ProviderHTTPObservation:
                 connection.send(body[offset:offset + _CHUNK_BYTES])
             upstream.settimeout(self.remaining())
             response = connection.getresponse()
+            if self.artifacts is not None:
+                artifact = self.artifacts.begin(response.status, response.getheaders(),
+                    list(handler.headers.items()), (self.target.hostname, self.target.hostname.split(".")[0]))
             if 300 <= response.status < 400:
                 reason = "redirect_refused"
+                if artifact is not None:
+                    self.request_stop(artifact.finish(), defer_cleanup=True)
                 self._response_finished(None, reason)
                 started = False
                 self._empty(handler)
                 return
             parser = _ResponseModel(response.getheader("Content-Type", ""),
                                     response.getheader("Content-Encoding", ""), response.status)
-            handler.send_response_only(response.status)
-            excluded = _HOP_HEADERS | {"content-length"}
-            excluded |= {item.strip().lower() for item in response.getheader("Connection", "").split(",")}
-            for name, value in response.getheaders():
-                if name.lower() not in excluded:
-                    handler.send_header(name, value)
-            handler.send_header("Transfer-Encoding", "chunked")
-            handler.send_header("Connection", "close")
-            handler.end_headers()
-            response_started = True
-            handler.close_connection = True
+
+            def start_response():
+                nonlocal response_started
+                handler.send_response_only(response.status)
+                excluded = _HOP_HEADERS | {"content-length"}
+                excluded.update(item.strip().lower() for item in response.getheader("Connection", "").split(","))
+                for name, value in response.getheaders():
+                    if name.lower() not in excluded:
+                        handler.send_header(name, value)
+                handler.send_header("Transfer-Encoding", "chunked")
+                handler.send_header("Connection", "close")
+                handler.end_headers()
+                response_started = True
+                handler.close_connection = True
+
+            if artifact is None:
+                start_response()
             while True:
                 handler.connection.settimeout(self.remaining())
                 upstream.settimeout(self.remaining())
@@ -1173,11 +1194,30 @@ class _ProviderHTTPObservation:
                         raise ValueError("incomplete_response")
                     break
                 parser.feed(data)
-                handler.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
+                if artifact is not None:
+                    artifact.feed(data)
+                else:
+                    handler.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
             model, reason = parser.finish()
+            if artifact is not None:
+                evidence_reason = artifact.finish(parser.response_fields,
+                    complete=reason in {None, "response_model_not_returned", "response_model_not_allowlisted"}
+                    and parser.usage_terminals == 1 and parser.completed_usage is not None)
+                if evidence_reason is not None:
+                    self.request_stop(evidence_reason, defer_cleanup=True)
             # Publish the observation before EOF lets the CLI complete its turn.
             self._response_finished(model, reason, usage=parser.completed_usage)
             started = False
+            if artifact is not None:
+                if self.stop_reason is not None:
+                    self._empty(handler)
+                    self._close_stopped_runtime()
+                    return
+                # Withhold tool/text deltas until raw evidence is durable and
+                # the response-side contract passes, not merely until EOF.
+                start_response()
+                data = bytes(artifact.body)
+                handler.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
             handler.wfile.write(b"0\r\n\r\n")
             if self.stop_reason in _USD_STOPS:
                 self._close_stopped_runtime()
@@ -1189,6 +1229,11 @@ class _ProviderHTTPObservation:
             self._empty(handler, 400)
             self._close_stopped_runtime()
         except Exception as error:
+            if artifact is not None:
+                evidence_reason = artifact.finish()
+                self.request_stop(evidence_reason or "native_response_capture_incomplete", defer_cleanup=True)
+            elif self.artifacts is not None and started:
+                self.request_stop(self.artifacts.refuse("native_response_artifact_failed"), defer_cleanup=True)
             reason = "deadline_exceeded" if isinstance(error, TimeoutError) else "transport_failed"
             before_upstream = not started and connection is None
             if started:
@@ -1214,7 +1259,7 @@ class _ProviderHTTPObservation:
             finally:
                 if serialized:
                     self.request_lock.release()
-                if self.stop_reason in _USD_STOPS and not self.closed:
+                if self.stop_reason in _USD_STOPS | response_capture.STOPS and not self.closed:
                     self._close_stopped_runtime()
 
     def _response_finished(self, model, reason, *, usage=None):
@@ -1262,6 +1307,8 @@ class _ProviderHTTPObservation:
                 self.closed_budget = self.budget.snapshot(self.budget_task) if self.budget is not None else None
                 self.closed_usd = (self.budget.usd.close_attempt(self.budget_attempt)
                                    if self.budget is not None else None)
+                if self.artifacts is not None:
+                    self.artifacts.seal(self.requests, self.finished)
                 connections = tuple(self.connections)
                 inbound = tuple(self.inbound)
             for stream in inbound:
@@ -1323,6 +1370,8 @@ class _ProviderHTTPObservation:
                       "no_provider_requests" if not self.requests else self.model_reason)
             result["served_model"] = self.model if reason is None else None
             result["served_model_reason"] = reason or ("response_model_not_returned" if self.model is None else None)
+            if self.artifacts is not None:
+                result["response_evidence"] = self.artifacts.report()
             return bounded_provider_observation(result)
 
 
@@ -1375,6 +1424,7 @@ class _TransportObservation:
         self.approved_base_url = None
         self.provider_capture = None
         self.provider_capture_reason = "observer_not_installed"
+        self.response_artifacts = None
         self.provider_runtime = None
         self.provider_runtime_close_returned = False
         self.provider_runtime_lock = threading.Lock()
@@ -1459,7 +1509,8 @@ class _TransportObservation:
             expected = key + _toml_literal(provider.base_url)
             _require([item for item in overrides if item.startswith(key)] == [expected])
             try:
-                self.provider_capture = _ProviderHTTPObservation(provider.base_url, timeout)
+                self.provider_capture = _ProviderHTTPObservation(provider.base_url, timeout,
+                                                                 artifacts=self.response_artifacts)
             except OSError:
                 # A missing listener must not bypass the request-cap boundary.
                 self.provider_capture_reason = "observer_start_failed"
@@ -1472,6 +1523,17 @@ class _TransportObservation:
     def close_provider_observer(self):
         if self.provider_capture is not None:
             self.provider_capture.close()
+
+    def bind_connection_runtime(self, codex):
+        """The native diagnostic owns HTTP evidence, not a pilot RPC witness."""
+        with self.guard():
+            _require(not self.installed and self.native_budget is None and self.provider_runtime is None
+                     and type(self.response_artifacts) is response_capture.NativeResponseArtifacts
+                     and self.provider_capture.artifacts is self.response_artifacts)
+            with self.provider_capture.lock:
+                _require(not self.provider_capture.closed and self.provider_capture.requests == 0)
+                self.provider_runtime = codex
+                self.provider_capture.stop_runtime = self.close_provider_runtime
 
     def bind_provider_runtime(self, codex):
         with self.guard():
@@ -1661,6 +1723,10 @@ class _TransportObservation:
                       "served_model": _unavailable(), "served_model_version": _unavailable(),
                       "served_deployment": _unavailable()}
             result["provider_observation"] = self.provider_observation()
+            if self.response_artifacts is not None:
+                evidence = self.response_artifacts.report()
+                _require(not success or evidence["state"] == "observed")
+                result["provider_observation"]["response_evidence"] = evidence
             if self.provider_capture is not None:
                 observed = result["provider_observation"]
                 result["served_model"] = {
@@ -1760,6 +1826,8 @@ class PilotWireReceiptSession:
             self.armed: dict[str, int] = {}
             self.active: dict[str, _TransportObservation] = {}
             self.bound_connections: dict[str, bytes] = {}
+            self.response_artifacts = []
+            self.response_evidence_stop = None
             self.thread_ids: set[str] = set()
             self.files: dict[str, bytes] = {}
             self.attempts: dict[str, list[dict]] = {task_id: [] for task_id in self.document["task_ids"]}
@@ -1795,6 +1863,10 @@ class PilotWireReceiptSession:
                 raise PilotWireReceiptRefused() from None
 
     def _current(self) -> None:
+        for artifacts in self.response_artifacts:
+            _require(type(artifacts) is response_capture.NativeResponseArtifacts)
+            artifacts.verify()
+        _require(all(observer.response_artifacts in self.response_artifacts for observer in self.active.values()))
         _require(self.connection_reference == deployment.approved_connection_reference())
         expected_connection = _bytes({**deployment.connection_reference_receipt(self.connection_reference),
                                       "configured_route_matched": True,
@@ -1826,7 +1898,8 @@ class PilotWireReceiptSession:
     def arm_task(self, task_id: str, attempt_index: int) -> None:
         """Use Step 2's actual zero-based infrastructure attempt, before auth."""
         with self._guard():
-            _require(self.ready is None and task_id in self.attempts and task_id not in self.armed
+            _require(self.response_evidence_stop is None and self.ready is None
+                     and task_id in self.attempts and task_id not in self.armed
                      and task_id not in self.active and type(attempt_index) is int
                      and attempt_index == len(self.attempts[task_id])
                      and 0 <= attempt_index <= self.prepared["execution"]["max_retries"])
@@ -1843,7 +1916,8 @@ class PilotWireReceiptSession:
     def begin_task(self, *, task_id, run_id, condition_name, task_prompt, occupation,
                    experiment_prompt, perception_text, reference_files, provider) -> _TransportObservation:
         with self._guard():
-            _require(run_id == pilot.RUN_ID and condition_name == "condition_a" and task_id in self.armed
+            _require(self.response_evidence_stop is None and run_id == pilot.RUN_ID
+                     and condition_name == "condition_a" and task_id in self.armed
                      and task_id not in self.active and perception_text is None)
             row = next(row for row in self.prepared["tasks"] if row["task_id"] == task_id)
             prompt = self.prepared["condition_a"]["prompt"]
@@ -1881,6 +1955,9 @@ class PilotWireReceiptSession:
                 _root(path.parent)
                 _read_bytes(path, size=record["size"], sha256=record["sha256"])
             observer = _TransportObservation(json.loads(_bytes(requested)))
+            artifacts = response_capture.NativeResponseArtifacts(self.workspace, "pilot-native-responses-" + uuid.uuid4().hex)
+            self.response_artifacts.append(artifacts)
+            observer.response_artifacts = artifacts
             self.bound_connections[task_id] = _bytes(connection)
             observer.native_budget, observer.native_budget_task = self.native_budget, task_id
             observer.approved_base_url = provider.endpoint.rstrip("/")
@@ -1921,6 +1998,13 @@ class PilotWireReceiptSession:
             linkage = {"path": DIRECTORY + "/" + name, **_digest(data), "attempt_index": index,
                        "evidence_boundary": BOUNDARY}
             self.attempts[task_id].append({"linkage": linkage, "success": success, "accepted": False})
+            response = transport["provider_observation"]["response_evidence"]
+            if (response["state"] != "observed" and (response["responses"]
+                    or observer.cap_stop_reason in response_capture.STOPS
+                    or (transport["provider_observation"]["native_request_count"] or 0) > 0)):
+                # Persist/accept the failed attempt record, but never start a
+                # different task or retry on unverified provider evidence.
+                self.response_evidence_stop = response["reason"]
             if thread_digest is not None:
                 self.thread_ids.add(thread_digest)
             del self.active[task_id], self.armed[task_id], self.bound_connections[task_id]
@@ -1939,7 +2023,8 @@ class PilotWireReceiptSession:
 
     def finalize(self, ordered_task_ids: list[str]) -> dict:
         with self._guard():
-            _require(self.ready is None and not self.armed and not self.active and ordered_task_ids == self.document["task_ids"])
+            _require(self.response_evidence_stop is None and self.ready is None
+                     and not self.armed and not self.active and ordered_task_ids == self.document["task_ids"])
             _require(all(rows and all(row["accepted"] for row in rows) for rows in self.attempts.values()))
             data = _bytes({"bundle_version": "pilot-wire-receipts-ready-v1", "evidence_boundary": BOUNDARY,
                            "run_id": pilot.RUN_ID, "task_ids": ordered_task_ids, "prepared_capture": self.linkage,

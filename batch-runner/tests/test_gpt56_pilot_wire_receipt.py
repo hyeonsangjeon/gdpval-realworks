@@ -46,8 +46,19 @@ class Pipe:
         self.flushed += 1
 
 
-def _transport(observer=None, *, thread_id="thread-private", turn_id="turn-private", workspace=Path("/private/task-workspace")):
+def _transport(observer=None, *, thread_id="thread-private", turn_id="turn-private", workspace=Path("/private/task-workspace"),
+               with_response_evidence=True):
     observer = observer or wire._TransportObservation(deepcopy(REQUESTED))
+    # Session acceptance now needs a separate provider-response witness. This
+    # explicit synthetic HTTP artifact is NOT derived from the fake RPC stream.
+    # Lower-level transport-only fixtures still have no artifact owner.
+    if with_response_evidence and observer.response_artifacts is not None:
+        value = {"object": "response", "model": "gpt-5.6-sol", "model_version": "synthetic-version",
+                 "reasoning": {"effort": "max"}, "context_window": 1_000_000}
+        response = observer.response_artifacts.begin(200, [("Content-Type", "application/json")], [])
+        response.feed(wire._bytes(value))
+        assert response.finish(wire.response_capture.response_fields(value), complete=True) is None
+        observer.response_artifacts.seal(1, 1)
     if observer.task_text is None:
         observer.bind_task_text(PRIVATE_TEXT)
     observer.bind_runtime(workspace=workspace, developer_instructions="private developer text")
@@ -333,6 +344,51 @@ def test_each_current_upstream_drift_refuses_task_acceptance(case, change):
     with pytest.raises(wire.PilotWireReceiptRefused):
         session.accept_task(task_id=TASK_IDS[0], attempt_index=0, result=result)
     assert not (session.root / wire.READY_PATH).exists()
+
+
+def test_success_without_provider_response_witness_cannot_publish(case):
+    session = _session(case)
+    observer = _begin(session, TASK_IDS[0])
+    fake = _transport(observer, with_response_evidence=False)
+    _start(fake)
+    _turn(fake)
+    with pytest.raises(wire.PilotWireReceiptRefused):
+        session.finish_task(observer, success=True, thread_id=fake.thread_id, turn_id=fake.turn_id)
+    assert session.files == {} and session.failed
+
+
+def test_saved_provider_response_drift_refuses_task_acceptance(case):
+    session = _session(case)
+    result = _task(session, TASK_IDS[0])
+    store = session.response_artifacts[0]
+    path = store.root / next(iter(store.files))
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(wire.PilotWireReceiptRefused):
+        session.accept_task(task_id=TASK_IDS[0], attempt_index=0, result=result)
+    assert not (session.root / wire.READY_PATH).exists()
+
+
+@pytest.mark.parametrize("next_task", [0, 1])
+def test_missing_response_evidence_keeps_failure_receipt_but_blocks_pilot_progress(case, next_task):
+    session = _session(case)
+    observer = _begin(session, TASK_IDS[0])
+    fake = _transport(observer, with_response_evidence=False)
+    _start(fake)
+    _turn(fake, success=False)
+    response = observer.response_artifacts.begin(200, [("Content-Type", "application/json")], [])
+    value = {"object": "response", "reasoning": {"effort": "max"}, "context_window": 1_000_000}
+    response.feed(wire._bytes(value))
+    assert response.finish(wire.response_capture.response_fields(value), complete=True) == "served_model_unverified"
+    observer.response_artifacts.seal(1, 1)
+    link = session.finish_task(observer, success=False, thread_id=fake.thread_id, turn_id=fake.turn_id)
+    receipt = json.loads((case.workspace / link["path"]).read_bytes())
+    assert receipt["success"] is False
+    assert receipt["transport"]["provider_observation"]["response_evidence"]["reason"] == "served_model_unverified"
+    session.accept_task(task_id=TASK_IDS[0], attempt_index=0, result={"success": False, "pilot_wire_receipt": link})
+    assert session.response_evidence_stop == "served_model_unverified"
+    with pytest.raises(wire.PilotWireReceiptRefused):
+        session.arm_task(TASK_IDS[next_task], 1 if next_task == 0 else 0)
+    assert len(session.files) == 1 and not session.active
 
 
 @pytest.mark.parametrize("change", ["missing", "digest", "request-digest", "attempt", "run", "upstream", "extra", "hardlink", "symlink", "reservation"])

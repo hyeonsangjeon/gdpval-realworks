@@ -700,10 +700,12 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json, os, re, sys
+          from pathlib import Path
           from urllib.parse import urlsplit
 
           leaked = []
           checked = 0
+          response_artifacts_checked = False
           endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "").strip()
           needles = []
           if endpoint:
@@ -810,12 +812,30 @@ jobs:
               elif schema.startswith("codex_foundry_connection/"):
                   if record["observed"]["tool_execution_observed"] is not False:
                       leaked.append(f"{path}: claims tool execution, which this probe cannot observe")
+                  evidence = record["observed"].get("provider_response_evidence")
+                  if evidence is not None:
+                      # No raw response is published without the receipt-bound
+                      # SHA256, safe file boundary and a second masking check.
+                      sys.path.insert(0, str(Path(scope_source).resolve().parents[1]))
+                      from gpt56_native_response_capture import verify_artifact_bundle
+                      try:
+                          verify_artifact_bundle(Path(path).parent, evidence)
+                          folder = Path(path).parent / "codex-foundry-connection-responses"
+                          listed = {Path(path).parent / row["artifact"]["path"] for row in evidence["responses"]}
+                          if folder.exists() and set(folder.iterdir()) != listed:
+                              raise ValueError("unlisted_response_artifact")
+                          response_artifacts_checked = True
+                      except Exception:
+                          leaked.append(f"{path}: response artifacts failed verification")
               else:
                   leaked.append(
                       f"{path}: schema {schema!r} has no check here, so nothing "
                       f"vouched for this record"
                   )
 
+          # `path` is the final (connection) record in the fixed list above.
+          if os.path.lexists(Path(path).parent / "codex-foundry-connection-responses") and not response_artifacts_checked:
+              leaked.append("response artifact directory has no verified connection receipt")
           if leaked:
               print("FATAL:")
               for item in sorted(set(leaked)):
@@ -852,6 +872,7 @@ jobs:
             /tmp/codex-foundry-valid-request.json
             /tmp/codex-foundry-closing-sweep.json
             /tmp/codex-foundry-connection.json
+            /tmp/codex-foundry-connection-responses/*.json
           if-no-files-found: warn
           retention-days: 90
 

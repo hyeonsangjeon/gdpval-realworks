@@ -1026,6 +1026,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
 
     def open_runtime(
         self, workspace: CodexWorkspace, *, pilot_wire_observer: Any | None = None,
+        native_response_observer: Any | None = None,
     ) -> Any:
         """Start the Codex client a run uses, against this provider.
 
@@ -1068,6 +1069,23 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     or pilot_session.active.get(pilot_wire_observer.native_budget_task) is not pilot_wire_observer):
                 raise PilotWireReceiptRefused() from None
             pilot_wire_observer.require_startup_supervision()
+        if native_response_observer is not None:
+            from gpt56_pilot_wire_receipt import _TransportObservation, PilotWireReceiptRefused
+            from gpt56_native_response_capture import NativeResponseArtifacts
+
+            if (pilot_wire_observer is not None or pilot_session is not None
+                    or getattr(self, "run_id", None) == PilotInputCapture.RUN_ID
+                    or type(native_response_observer) is not _TransportObservation
+                    or type(native_response_observer.response_artifacts) is not NativeResponseArtifacts
+                    or native_response_observer.native_budget is not None
+                    or self.provider.model != "gpt-5.6-sol"
+                    or native_response_observer.requested["deployment"] != self.provider.model):
+                raise PilotWireReceiptRefused() from None
+            native_response_observer.response_artifacts.verify()
+            native_response_observer.require_startup_supervision()
+        # Both routes use the same owned HTTP observer and startup deadline.
+        # A diagnostic cannot use this parameter to impersonate a pilot session.
+        http_observer = pilot_wire_observer or native_response_observer
         self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
@@ -1078,8 +1096,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             raise CodexRuntimeUnavailable(
                 f"the pinned Codex SDK could not be imported ({exc})"
             ) from None
-        if pilot_wire_observer is not None:
-            overrides = pilot_wire_observer.configure_provider_observer(
+        if http_observer is not None:
+            overrides = http_observer.configure_provider_observer(
                 self.provider, overrides, timeout=self.timeout,
             )
         config = CodexConfig(
@@ -1090,13 +1108,13 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         )
         codex = None
         try:
-            if pilot_wire_observer is None:
+            if http_observer is None:
                 codex = Codex(config)
             else:
                 # Hold the same pinned SDK instance even when __init__ raises.
                 # No copied initializer, SDK-global patch, or worker survives.
                 codex = Codex.__new__(Codex)
-                with pilot_wire_observer.supervise_provider_startup(codex):
+                with http_observer.supervise_provider_startup(codex):
                     Codex.__init__(codex, config)
         except BaseException:
             # The SDK closes itself when initialization raises. If its return
@@ -1105,11 +1123,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 if codex is not None and getattr(codex, "_client", None) is not None:
                     codex.close()
             finally:
-                if pilot_wire_observer is not None:
+                if http_observer is not None:
                     try:
-                        pilot_wire_observer.close_startup_process()
+                        http_observer.close_startup_process()
                     finally:
-                        pilot_wire_observer.close_provider_observer()
+                        http_observer.close_provider_observer()
             raise
         if pilot_wire_observer is not None:
             try:
@@ -1123,6 +1141,15 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 except Exception:
                     pass
                 pilot_wire_observer.close_provider_observer()
+                raise PilotWireReceiptRefused() from None
+        if native_response_observer is not None:
+            try:
+                native_response_observer.bind_connection_runtime(codex)
+            except Exception:
+                try:
+                    codex.close()
+                finally:
+                    native_response_observer.close_provider_observer()
                 raise PilotWireReceiptRefused() from None
         return codex
 

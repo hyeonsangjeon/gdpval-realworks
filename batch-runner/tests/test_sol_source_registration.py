@@ -24,6 +24,7 @@ import gpt56_pilot_identity_plan as identity
 import gpt56_pilot_input_capture as capture
 import gpt56_pilot_deployment_binding as binding
 import gpt56_pilot_wire_receipt as wire
+import gpt56_native_response_capture as native_response
 import gpt56_sol_codex_pilot_preflight as pilot
 import step8_grade as step8
 from core import azure_ai_clients, codex_azure_token
@@ -61,12 +62,26 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     usd200_path = root / pilot.SOURCE_PROFILE_USD200
     usd200_bytes = usd200_path.read_bytes()
     usd200_profile = pilot.load_plan(usd200_path)
+    connection_path = root / pilot.SOURCE_PROFILE_CONNECTION
+    connection_bytes = connection_path.read_bytes()
+    connection_profile = pilot.load_plan(connection_path)
     reference_path = root / binding.CONNECTION_REFERENCE_PATH
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_connection.yaml")
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_response_capture.yaml")
+    assert hashlib.sha256(connection_bytes).hexdigest() == pilot.SOURCE_PROFILE_CONNECTION_SHA256 == (
+        "84b74f81bddb623d6b0cc34e0cff4b90696f8016890e119de8febaa4990092aa"
+    )
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != connection_profile["source_pins"][name]} == {
+        "batch-runner/core/codex_runner.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in connection_profile.items() if k != "source_pins"
+    }
     assert hashlib.sha256(usd200_bytes).hexdigest() == pilot.SOURCE_PROFILE_USD200_SHA256 == (
         "d05363c8745245c8279fb9b30404e88922b79b26e874ed3d97a2c0444de9715d"
     )
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in connection_profile["source_pins"].items()
             if digest != usd200_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
         "batch-runner/gpt56_pilot_deployment_binding.py",
@@ -81,7 +96,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert hashlib.sha256(shared_bytes).hexdigest() == pilot.SOURCE_PROFILE_SHARED_SHA256 == (
         "7619cd0c6baa35a8660c2e076ed171f271f6b4ad3c5de7115b19e7f2f30a7652"
     )
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in connection_profile["source_pins"].items()
             if digest != shared_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
         "batch-runner/gpt56_pilot_deployment_binding.py",
@@ -106,17 +121,17 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     )
     assert {name for name, digest in bindings_profile["source_pins"].items()
             if digest != caps_profile["source_pins"][name]} == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"}
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in connection_profile["source_pins"].items()
             if digest != bindings_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
         "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py",
     }
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in connection_profile["source_pins"].items()
             if digest != token_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
         "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py",
     }
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in connection_profile["source_pins"].items()
             if digest != usd_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py",
         "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py",
@@ -159,6 +174,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt56_pilot_usd_budget.py": "7c3c43d39df84c344faf930de7f0588791c076633d89d9335e66de43bd1d22eb",
         "batch-runner/core/cost_metering.py": "aad0635d3918268db96bdcab97e652eabffed88c3992ad7c2644cc065f9a8c2b",
         binding.CONNECTION_REFERENCE_PATH: binding.CONNECTION_REFERENCE_SHA256,
+        "batch-runner/gpt56_native_response_capture.py": "33f002acd2f00fee512c44eb26c5c734e4873be305534b5e44a5dbe484981a47",
+        "batch-runner/scripts/diagnose_codex_foundry_connection.py": "ea2390a40268f7203849277cd73a8d2eca8d7bd3eee15e2f27495fe0d5315b55",
+        ".github/workflows/codex-foundry-connection-diagnostic.yml": "796ca407bdfbb08d1d9cd5f9dfe603cc92263da50aeb45aa32467a4563586d01",
     }
     for role, digest in pilot.SOURCE_PROFILE_AUXILIARY.items():
         assert hashlib.sha256((root / role).read_bytes()).hexdigest() == digest
@@ -219,9 +237,15 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_USD200
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_USD200_SHA256
-    assert report["source_change_reason"] == "approved_retained_connection_bound_before_call_and_in_receipt"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_CONNECTION
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_CONNECTION_SHA256
+    assert report["source_change_reason"] == "prospective_redacted_provider_response_artifacts_and_fail_closed_evidence"
+    assert report["response_capture_readiness"] == {
+        "status": "next_call_capture_path_only", "live_evidence_observed": False,
+        "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
+        "cleared_blockers": [], "missing_response_field": "not_reported",
+        "provider_emits_required_fields_verified": False,
+    }
     assert report["monetary_decision"] == {
         "record": pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
         "sha256": wire.USD_CAPS_SHA256, "approved_maximum_usd": 200, "currency": "USD",
@@ -312,10 +336,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(shared_profile)})
     with pytest.raises(pilot.PilotSourceRegistrationRefused):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(usd200_profile)})
+    with pytest.raises(pilot.PilotSourceRegistrationRefused):
+        pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(connection_profile)})
 
     # Synthetic mutations do not alter any repository file or Git object.
     read_bytes = reader._read_bytes
-    for predecessor_path in (previous_path, caps_path, token_path, shared_path, usd200_path,
+    for predecessor_path in (previous_path, caps_path, token_path, shared_path, usd200_path, connection_path,
+                             root / "batch-runner/gpt56_native_response_capture.py",
                              wire._USD_CAPS_PATH, wire._USD_PRICE_PATH, reference_path):
         for missing in (False, True):
             def bad_predecessor(path, **kwargs):
@@ -357,7 +384,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             with pytest.raises(pilot.PilotSourceRegistrationRefused):
                 pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(changed)})
 
-    for module in (evidence, binding):
+    for module in (evidence, binding, native_response):
         with monkeypatch.context() as patch:
             patch.setattr(module, "__file__", str(tmp_path / CANARY))
             with pytest.raises(pilot.PilotSourceRegistrationRefused):
@@ -409,13 +436,17 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert len(bindings_reads) == 3
 
     for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD, pilot.SOURCE_PROFILE_SHARED,
-                      pilot.SOURCE_PROFILE_USD200, binding.CONNECTION_REFERENCE_PATH,
+                      pilot.SOURCE_PROFILE_USD200, pilot.SOURCE_PROFILE_CONNECTION, binding.CONNECTION_REFERENCE_PATH,
+                      "batch-runner/gpt56_native_response_capture.py",
+                      "batch-runner/scripts/diagnose_codex_foundry_connection.py",
+                      ".github/workflows/codex-foundry-connection-diagnostic.yml",
                       pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
                       pilot.ENVELOPE + "model_price_table.json", "batch-runner/gpt56_pilot_usd_budget.py",
                       "batch-runner/core/cost_metering.py"):
         checks = []
         expected_reads = 3 if held_role in {pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD,
-                                          pilot.SOURCE_PROFILE_SHARED, pilot.SOURCE_PROFILE_USD200} else 2
+                                          pilot.SOURCE_PROFILE_SHARED, pilot.SOURCE_PROFILE_USD200,
+                                          pilot.SOURCE_PROFILE_CONNECTION} else 2
         def final_money_drift(path, **kwargs):
             if path == root / held_role:
                 checks.append(path)

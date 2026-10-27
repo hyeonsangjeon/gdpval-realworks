@@ -2168,7 +2168,7 @@ def test_native_only_retains_ref_identity_runtime_timeout_and_publication_gates(
             "plan", "readonly", "auth-discriminator", "transmission-sweep",
             "valid-request", "closing-sweep", "connection",
         )
-    ]
+    ] + ["/tmp/codex-foundry-connection-responses/*.json"]
     assert upload["with"]["retention-days"] == 90
     assert upload["with"]["if-no-files-found"] == "warn"
     assert "CODEX_HOME" not in upload["with"]["path"]
