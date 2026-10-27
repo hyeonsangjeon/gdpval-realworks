@@ -410,3 +410,43 @@ def test_pilot_runner_keeps_failure_receipt_and_closes_sdk_child(monkeypatch, tm
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=1)
+
+
+def test_stalled_artifact_write_cannot_hold_deadline_cleanup(monkeypatch, tmp_path):
+    blocked, release, stopped = (threading.Event() for _ in range(3))
+    original = evidence._write_no_clobber
+
+    def stalled(path, data):
+        blocked.set()
+        assert release.wait(5)
+        original(path, data)
+
+    monkeypatch.setattr(evidence, "_write_no_clobber", stalled)
+    store = evidence.NativeResponseArtifacts(tmp_path, "stalled-response")
+    with _upstream(monkeypatch, [{"body": _payload(_response())}]) as (received, _):
+        observer = wire._ProviderHTTPObservation(UPSTREAM, 0.5, artifacts=store)
+        observer.stop_runtime = stopped.set
+        results = []
+
+        def client():
+            try:
+                results.append(_post(observer.base_url))
+            except Exception:
+                results.append("closed")
+
+        worker = threading.Thread(target=client, daemon=True)
+        worker.start()
+        try:
+            assert blocked.wait(2)
+            assert stopped.wait(1.5), "artifact write must not block the SDK deadline cleanup"
+            assert observer.stop_reason == wire.NATIVE_DEADLINE_EXCEEDED
+            assert observer.closed and store.report()["state"] == "unverified"
+            assert store.report()["responses"] == []  # No invented retained hash.
+            with pytest.raises(evidence.ResponseCaptureRefused):
+                store.verify()
+        finally:
+            release.set()
+            worker.join(5)
+            observer.close()
+    assert len(received) == 1 and not worker.is_alive()
+    assert store.report()["state"] == "unverified"  # Late fsync cannot revive success.

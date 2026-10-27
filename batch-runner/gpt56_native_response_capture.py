@@ -37,6 +37,7 @@ _SECRET_KEY = re.compile(
     r"(?:access[-_]?|refresh[-_]?|id[-_]?)?token|client[-_]?secret|password|secret|credential)", re.I)
 _SECRET_HEADER = re.compile(r"authorization|api[-_]?key|token|cookie|secret|credential|password", re.I)
 _STRING = re.compile(r'"(?:[^"\\]|\\.)*"', re.S)
+_COLON = re.compile(r"\s*:\s*")
 _TOKEN = re.compile(r"\b(?:ey[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}(?:\.[A-Za-z0-9_-]+)?|"
                     r"(?:gh[pousr]_|github_pat_|sk-)[A-Za-z0-9_-]{8,})\b")
 _BEARER = re.compile(r"\bBearer\s+[^\s\"'\\,;]+", re.I)
@@ -100,24 +101,26 @@ def _redact_body(body, secrets):
         if match.start() < covered:
             continue
         value = json.loads(match.group())
-        rest = text[match.end():]
-        colon = re.match(r"\s*:\s*", rest)
+        colon = _COLON.match(text, match.end())
         if colon and _SECRET_KEY.fullmatch(value):
-            start = match.end() + colon.end()
+            start = colon.end()
             try:
-                _, length = decoder.raw_decode(text[start:])
+                _, end = decoder.raw_decode(text, start)
             except ValueError:
                 # A partially received credential must not be persisted.
                 raise ValueError("unsafe_partial_secret") from None
-            spans.append((start, start + length, '"[REDACTED]"'))
-            covered = start + length
+            spans.append((start, end, '"[REDACTED]"'))
+            covered = end
             continue
         clean = _redact_text(value, secrets)
         if clean != value:
             spans.append((match.start(), match.end(), json.dumps(clean, ensure_ascii=False)))
-    for start, end, clean in reversed(spans):
-        text = text[:start] + clean + text[end:]
-    return _redact_text(text, secrets)
+    parts, previous = [], 0
+    for start, end, clean in spans:
+        parts.extend((text[previous:start], clean))
+        previous = end
+    parts.append(text[previous:])
+    return _redact_text("".join(parts), secrets)
 
 
 def empty_evidence(reason="native_response_capture_incomplete"):
@@ -222,6 +225,7 @@ class NativeResponseArtifacts:
         self.rows, self.files = [], {}
         self.reason = None
         self.sealed = False
+        self.unpublished_after_close = threading.Event()
         try:
             with _held_parents(self.parent, (directory,)) as check:
                 check()
@@ -240,7 +244,10 @@ class NativeResponseArtifacts:
             return self.reason
 
     def verify(self):
-        with self.lock:
+        # A stalled writer must not make admission/final refusal hang either.
+        if self.unpublished_after_close.is_set() or not self.lock.acquire(blocking=False):
+            raise ResponseCaptureRefused()
+        try:
             try:
                 root = _root(self.root)
                 stat = root.stat()
@@ -251,6 +258,8 @@ class NativeResponseArtifacts:
             except Exception:
                 self.refuse("native_response_artifact_failed")
                 raise ResponseCaptureRefused() from None
+        finally:
+            self.lock.release()
 
     def begin(self, status, headers, request_headers, private_values=()):
         with self.lock:
@@ -317,12 +326,27 @@ class NativeResponseArtifacts:
         return None
 
     def seal(self, requests, finished):
-        with self.lock:
+        # Called by the native deadline cleanup. Never wait for redaction/fsync
+        # before terminating the SDK. A late writer cannot revive the evidence.
+        self.sealed = True
+        if not self.lock.acquire(blocking=False):
+            self.unpublished_after_close.set()
+            return
+        try:
             if requests != finished or len(self.rows) != requests or not requests:
                 self.refuse("native_response_capture_incomplete")
-            self.sealed = True
+        finally:
+            self.lock.release()
 
     def report(self):
+        if self.unpublished_after_close.is_set() or not self.lock.acquire(blocking=False):
+            return empty_evidence()
+        try:
+            return self._report_locked()
+        finally:
+            self.lock.release()
+
+    def _report_locked(self):
         with self.lock:
             try:
                 self.verify()

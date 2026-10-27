@@ -174,7 +174,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt56_pilot_usd_budget.py": "7c3c43d39df84c344faf930de7f0588791c076633d89d9335e66de43bd1d22eb",
         "batch-runner/core/cost_metering.py": "aad0635d3918268db96bdcab97e652eabffed88c3992ad7c2644cc065f9a8c2b",
         binding.CONNECTION_REFERENCE_PATH: binding.CONNECTION_REFERENCE_SHA256,
-        "batch-runner/gpt56_native_response_capture.py": "33f002acd2f00fee512c44eb26c5c734e4873be305534b5e44a5dbe484981a47",
+        "batch-runner/gpt56_native_response_capture.py": "1e3db1b4f6b956b24fd6b892118e0d4a2b491c23e3a52c8a1536849a6a36aca6",
         "batch-runner/scripts/diagnose_codex_foundry_connection.py": "ea2390a40268f7203849277cd73a8d2eca8d7bd3eee15e2f27495fe0d5315b55",
         ".github/workflows/codex-foundry-connection-diagnostic.yml": "796ca407bdfbb08d1d9cd5f9dfe603cc92263da50aeb45aa32467a4563586d01",
     }
