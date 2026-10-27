@@ -309,7 +309,8 @@ def test_listener_failure_and_missing_observer_are_explicit_not_zero(monkeypatch
     provider = SimpleNamespace(base_url=UPSTREAM, provider_id=REQUESTED["provider_id"])
     overrides = ('model_providers.gdpval-foundry.base_url=' + json.dumps(UPSTREAM),)
 
-    def unavailable(*_args):
+    def unavailable(*_args, artifacts):
+        assert artifacts is None  # This fixture has no strict artifact owner.
         raise OSError(CANARY)
 
     monkeypatch.setattr(wire, "_ProviderHTTPObservation", unavailable)
