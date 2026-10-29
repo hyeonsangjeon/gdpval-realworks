@@ -1,5 +1,14 @@
 # Latest task result
 
+## Preserve the historical reader seal, 2026-10-29
+
+The retention follow-up reached **209 passed / 1 failed / 1 skipped**; its
+remaining failure correctly rejected changes to two frozen historical readers.
+Restore those exact files, keeping their old metadata boundary and immutable
+digests. The generic budget-pilot output reader retains the new validated
+runner receipt; the wrong-hash/wrong-stage cases remain enforced. Do not refresh
+the historical reader seal or treat it as accepting new-format results.
+
 ## Retention receipt compatibility follow-up, 2026-10-29
 
 The clean integrated suite at `74a03d7ea` passed **1,110 tests**, no failures or

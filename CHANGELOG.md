@@ -13,6 +13,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Keep the closed historical retention reader/verifier byte-identical to their
+  frozen identities; their unsupported new payloads must still refuse. Retain
+  the validated runner-field fix only in the generic budget-pilot output
+  reader. The follow-up suite reached 209 passes/1 skip before its exact frozen
+  reader identity assertion caught the over-broad compatibility edit. Restore
+  the original bytes instead of refreshing that seal or weakening the assertion.
+
 - Preserve optional, hash/stage-validated inference runner evidence when the
   three retention readers reconstruct Step2 observability. Previously the
   writer emitted it but the readers omitted it and refused the same bytes.
