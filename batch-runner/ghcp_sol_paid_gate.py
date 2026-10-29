@@ -37,7 +37,7 @@ def require_dispatch():
 
 
 def _plan():
-    plan = frozen.load_plan()
+    plan = frozen.load_plan(frozen.ROOT / frozen.SOURCE_PROFILE_PATH)
     report = frozen.inspect_plan(plan)
     if report["configuration_valid"] is not True or report["task_ids"] != list(gate.TASK_IDS):
         raise adapter._Stop("paid_input_contract_refused")

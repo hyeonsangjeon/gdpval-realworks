@@ -207,7 +207,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         binding.CONNECTION_REFERENCE_PATH: binding.CONNECTION_REFERENCE_SHA256,
         "batch-runner/gpt56_native_response_capture.py": "1e3db1b4f6b956b24fd6b892118e0d4a2b491c23e3a52c8a1536849a6a36aca6",
         "batch-runner/scripts/diagnose_codex_foundry_connection.py": "d3a657e9443917e2345e62a22e5ccd7518a4ff6c4c91206b1762dec91c53612b",
-        ".github/workflows/codex-foundry-connection-diagnostic.yml": "23a6182e0b4b03fb53102dad7455acb91b5ce5893afa403ad740877ad2897857",
+        ".github/workflows/codex-foundry-connection-diagnostic.yml": "2b8f15dfe68ed0259ee2058f4c36fb6a5a051dec86bbb8b26a713602a5e0aa6b",
         "batch-runner/core/runner_environment.py": "c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a",
         "batch-runner/scripts/prepare_codex_sandbox_host.py": "6324b206656abf609af6c6d4f8a1c93c68a0c3d48e53aef0d35955630b66825a",
         "batch-runner/step9_merge_shards.py": "9079fd701fbc7e4cca65fbcc1705f03891e4e13be3a4fb9145a2bb17b1352872",

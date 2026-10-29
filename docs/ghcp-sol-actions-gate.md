@@ -1504,3 +1504,13 @@ owner-approved harness/scope change; C still stops without a benchmark result.
 The new export options do not authorize B or close the paid gate. VS Code
 Agent Host was not re-audited in this installed-Copilot follow-up; its prior
 a/b/c/d unknown decisions remain, not a new finding of product absence.
+# 2026-10-29 integration note
+
+The model-free policy/input bridge explicitly selects
+`gpt56_sol_ghcp_source_20261029.yaml` after native runner/grader integration.
+This source-only successor retains the original contract bytes and all
+non-source fields/false execution flags; it binds exactly Step8, core/grader,
+core/grade_payload and the reader. Default historical inspection still refuses
+current drift. This is not frozen-grader-seal renewal, judge validation, a
+completed grade or credential supply. The protected GHCP environment/token
+remains absent by metadata-only inspection; no substitute token is obtained.

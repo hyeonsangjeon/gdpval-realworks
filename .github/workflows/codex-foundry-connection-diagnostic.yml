@@ -83,6 +83,11 @@ on:
         description: Deployment to call (required; there is no default)
         required: true
         type: string
+      expected_source_sha:
+        description: Exact reviewed main commit required for a paid Sol native diagnostic
+        required: false
+        default: ''
+        type: string
       native_only:
         description: >-
           Only plan or send the native turn; skip all legacy probes. Cannot be
@@ -168,6 +173,31 @@ jobs:
           }; then
             echo "::error::native_only cannot be combined with send_valid_request or send_closing_sweep."
             exit 1
+          fi
+
+      - name: Guard paid Sol source and native-only scope
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          NATIVE_ONLY: ${{ inputs.native_only }}
+          SEND_REQUEST: ${{ inputs.send_request }}
+          SEND_VALID_REQUEST: ${{ inputs.send_valid_request }}
+          SEND_CLOSING_SWEEP: ${{ inputs.send_closing_sweep }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+          ACTUAL_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOYMENT" != gpt-5.6-sol ]] || {
+            [[ "$SEND_REQUEST" != true && "$SEND_VALID_REQUEST" != true && "$SEND_CLOSING_SWEEP" != true ]];
+          }; then
+            exit 0
+          fi
+          if [[ "$NATIVE_ONLY" != true || "$SEND_REQUEST" != true || "$SEND_VALID_REQUEST" != false || "$SEND_CLOSING_SWEEP" != false ]]; then
+            echo '::error::Paid Sol diagnostics require the single native-only path.'
+            exit 2
+          fi
+          if [[ ! "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ || "$GITHUB_SHA" != "$EXPECTED_SOURCE_SHA" || "$ACTUAL_WORKFLOW_SHA" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo '::error::Paid Sol source is not the explicitly reviewed main commit.'
+            exit 2
           fi
 
       - name: Check out

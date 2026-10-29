@@ -24,6 +24,13 @@ BASE_SHA = "99e62ed5d4f1b1506841dd70a66c2696ac95b4c6"
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN_PATH = ENVELOPE + "gpt56_sol_ghcp_codex_vm_gate.yaml"
 PLAN = ROOT / PLAN_PATH
+SOURCE_PROFILE_PATH = ENVELOPE + "gpt56_sol_ghcp_source_20261029.yaml"
+ORIGINAL_PLAN_SHA256 = "121ae4dd3cfa901c5dd590d81e66318034efef7d0ecafc966b9db4f4d8740b5c"
+SOURCE_PROFILE_UPDATES = {
+    "batch-runner/step8_grade.py": "0911eaff30b3c4cfbd6f3dfa0ced2b11319062a154a610dd5d9ddaf79215bf1c",
+    "batch-runner/core/grader.py": "50bfd46bdf71a3ad922b83999eb75d44845711ec5ab82d6ee346cf0bfe0ef044",
+    "batch-runner/core/grade_payload.py": "50c5ec721a23862aebe9996ddda26167dd8db56850ede26c99e824fa7c09fc21",
+}
 SELF = "batch-runner/ghcp_vm_gate_preflight.py"
 INPUT_BUNDLE = "batch-runner/ghcp_vm_input_bundle.py"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
@@ -136,11 +143,25 @@ def load_plan(path: Path | None = None) -> dict[str, Any]:
 def _sources(plan: dict[str, Any]) -> dict[str, bytes]:
     pins = plan.get("source_pins")
     _require(type(pins) is dict and set(pins) == REQUIRED_SOURCES)
+    expected_pins = PINNED_SOURCES
+    if any(pins[name] != PINNED_SOURCES[name] for name in SOURCE_PROFILE_UPDATES):
+        # A reviewed source-only successor, never a waiver of the old seal.
+        # Only the three integrated grader files and this reader may differ.
+        profile = load_plan(ROOT / SOURCE_PROFILE_PATH)
+        original_bytes = _read_regular_path(ROOT / PLAN_PATH, MAX_PLAN_BYTES)
+        _require(sha256_bytes(original_bytes) == ORIGINAL_PLAN_SHA256)
+        original = _yaml(original_bytes)
+        _require(canonical_json(profile) == canonical_json(plan))
+        _require(canonical_json({k: v for k, v in plan.items() if k != "source_pins"})
+                 == canonical_json({k: v for k, v in original.items() if k != "source_pins"}))
+        _require({name for name, digest in pins.items()
+                  if digest != original["source_pins"][name]} == {*SOURCE_PROFILE_UPDATES, SELF})
+        expected_pins = {**PINNED_SOURCES, **SOURCE_PROFILE_UPDATES}
     sources = {}
     for name in sorted(REQUIRED_SOURCES):
         digest = pins[name]
         _require(type(digest) is str and re.fullmatch(r"[0-9a-f]{64}", digest) is not None)
-        _require(name in LOCAL_MODULES or digest == PINNED_SOURCES[name])
+        _require(name in LOCAL_MODULES or digest == expected_pins[name])
         data = _read_regular_path(ROOT / name, MAX_SOURCE_BYTES)
         _require(sha256_bytes(data) == digest)
         if name in LOCAL_MODULES:
@@ -256,6 +277,12 @@ def inspect_plan(
         _require(canonical_json({key: value for key, value in plan.items() if key != "source_pins"}) == canonical_json(expected))
         report = {**_report(), **derived, "configuration_valid": True, "configuration_problems": [],
                   "plan_sha256": sha256_bytes(canonical_json(plan))}
+        if plan["source_pins"]["batch-runner/step8_grade.py"] != PINNED_SOURCES["batch-runner/step8_grade.py"]:
+            report["source_registration"] = {
+                "profile": SOURCE_PROFILE_PATH, "supersedes": PLAN_PATH,
+                "original_sha256": ORIGINAL_PLAN_SHA256,
+                "scope": "source_consistency_only_not_grader_seal_or_launch_approval",
+            }
         if local_input_bundle is None:
             _require(reviewed_plan_sha256 is None)
             return report

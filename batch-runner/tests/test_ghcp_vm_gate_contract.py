@@ -84,7 +84,7 @@ def offline_only(monkeypatch):
 
 
 @pytest.fixture
-def gate(approved_pilot_source, offline_only, monkeypatch):
+def gate(approved_pilot_source, frozen_ghcp_gate, offline_only):
     import ghcp_vm_gate_preflight
 
     # Current source must still refuse this immutable historical registration.
@@ -92,8 +92,8 @@ def gate(approved_pilot_source, offline_only, monkeypatch):
     assert_refused(current)
     assert (approved_pilot_source / ghcp_vm_gate_preflight.PLAN_PATH).read_bytes() == (
         ROOT / ghcp_vm_gate_preflight.PLAN_PATH).read_bytes()
-    monkeypatch.setattr(ghcp_vm_gate_preflight, "ROOT", approved_pilot_source)
-    return ghcp_vm_gate_preflight
+    assert frozen_ghcp_gate.ROOT == approved_pilot_source
+    return frozen_ghcp_gate
 
 
 @pytest.fixture

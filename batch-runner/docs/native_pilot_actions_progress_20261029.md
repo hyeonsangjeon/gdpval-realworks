@@ -10,6 +10,16 @@ Those three PRs are not yet merged into main; the integrated tree needs CI.
 The GHCP protected environment/token is absent in GitHub metadata (names only
 were read), so that paid gate is not dispatched or supplied another credential.
 
+Integration exposed GHCP's current source checks still using the historical
+Step8/core pins. A separate source-only GHCP profile binds the three reviewed
+grader files and its reader, preserving all policy fields, the original YAML
+and every false execution flag. Historical positive tests execute the actual
+immutable reader; current-source refusal and successor mutation tests remain.
+This restores model-free input/policy checks, not the native grader seal or
+an actual grade. The paid Sol diagnostic additionally requires an explicit
+reviewed main/workflow SHA before checkout/authentication and permits only the
+native-only single-turn mode, so a moving main cannot silently change the run.
+
 Model-free Actions **40924442821** at `62b29f343` passed on hosted Ubuntu
 24.04, image **20261026.354.1**: bwrap and the pinned Codex marker both exited
 0. The bwrap-only AppArmor profile was added; the system-wide userns restriction

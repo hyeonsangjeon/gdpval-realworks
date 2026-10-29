@@ -626,6 +626,32 @@ def test_an_environment_that_describes_nothing_raises_rather_than_guessing():
         settings_from_environment(DEPLOYMENT, {})
 
 
+@pytest.mark.parametrize("change,allowed", [
+    (None, True), ("missing", False), ("head", False), ("workflow", False),
+    ("legacy", False), ("valid-request", False), ("closing-sweep", False), ("plan-only", True),
+])
+def test_paid_sol_requires_reviewed_main_source_and_single_native_scope(change, allowed):
+    steps = _steps()
+    guard = steps["Guard paid Sol source and native-only scope"]
+    ordered = list(steps)
+    assert ordered.index("Guard paid Sol source and native-only scope") < ordered.index("Check out")
+    assert guard["env"]["EXPECTED_SOURCE_SHA"] == "${{ inputs.expected_source_sha }}"
+    assert guard["env"]["ACTUAL_WORKFLOW_SHA"] == "${{ github.workflow_sha }}"
+    environment = {"PATH": os.defpath, "DEPLOYMENT": "gpt-5.6-sol", "NATIVE_ONLY": "true",
+                   "SEND_REQUEST": "true", "SEND_VALID_REQUEST": "false", "SEND_CLOSING_SWEEP": "false",
+                   "EXPECTED_SOURCE_SHA": "a" * 40, "GITHUB_SHA": "a" * 40, "ACTUAL_WORKFLOW_SHA": "a" * 40}
+    if change == "missing": environment["EXPECTED_SOURCE_SHA"] = ""
+    elif change == "head": environment["GITHUB_SHA"] = "b" * 40
+    elif change == "workflow": environment["ACTUAL_WORKFLOW_SHA"] = "b" * 40
+    elif change == "legacy": environment["NATIVE_ONLY"] = "false"
+    elif change == "valid-request": environment["SEND_VALID_REQUEST"] = "true"
+    elif change == "closing-sweep": environment["SEND_CLOSING_SWEEP"] = "true"
+    elif change == "plan-only": environment.update(SEND_REQUEST="false", EXPECTED_SOURCE_SHA="")
+    result = subprocess.run(["/bin/bash", "--noprofile", "--norc", "-c", guard["run"]],
+                            env=environment, capture_output=True, text=True, timeout=5)
+    assert (result.returncode == 0) is allowed, result.stdout + result.stderr
+
+
 def test_sol_diagnostic_requests_and_fingerprints_the_registered_max_1m_controls():
     settings = settings_from_environment("gpt-5.6-sol", {
         "AZURE_AI_ROUTE_PROFILE": "direct-v1", "FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT,

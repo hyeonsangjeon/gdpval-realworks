@@ -18,6 +18,44 @@ import ghcp_sol_grader_contract as bridge
 CANARY = "PRIVATE_SYNTHETIC_GRADER_INPUT_CANARY"
 
 
+def test_source_only_successor_preserves_original_policy_and_refusal():
+    gate = bridge.contract
+    original = gate.load_plan()
+    profile = gate.load_plan(gate.ROOT / gate.SOURCE_PROFILE_PATH)
+    assert hashlib.sha256((gate.ROOT / gate.PLAN_PATH).read_bytes()).hexdigest() == gate.ORIGINAL_PLAN_SHA256
+    assert {k: v for k, v in original.items() if k != "source_pins"} == {
+        k: v for k, v in profile.items() if k != "source_pins"}
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != original["source_pins"][name]} == {
+        gate.SELF, "batch-runner/step8_grade.py", "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py"}
+    assert gate.inspect_plan(original)["configuration_valid"] is False
+    report = gate.inspect_plan(profile)
+    assert report["configuration_valid"] is True
+    assert all(report[flag] is False for flag in gate.FALSE_FLAGS)
+    assert report["observed"]["grader_validation"] is None
+    assert report["cleared_blockers"] == [] and report["launch_blockers"] == list(gate.LAUNCH_BLOCKERS)
+    assert report["source_registration"]["scope"] == "source_consistency_only_not_grader_seal_or_launch_approval"
+
+
+@pytest.mark.parametrize("change", ["model", "limit", "source", "missing-source", "extra-source"])
+def test_source_only_successor_refuses_unreviewed_deltas(change):
+    gate = bridge.contract
+    profile = gate.load_plan(gate.ROOT / gate.SOURCE_PROFILE_PATH)
+    if change == "model":
+        profile["identity"]["model"] = "other"
+    elif change == "limit":
+        profile["execution"]["turns_per_task"] = 65
+    elif change == "source":
+        profile["source_pins"]["batch-runner/core/grader.py"] = "0" * 64
+    elif change == "missing-source":
+        del profile["source_pins"][gate.SELF]
+    else:
+        profile["source_pins"]["unreviewed.py"] = "0" * 64
+    report = gate.inspect_plan(profile)
+    assert report["configuration_valid"] is False
+    assert all(report[flag] is False for flag in gate.FALSE_FLAGS)
+
+
 @pytest.fixture
 def bundle(tmp_path, github_hosted_ubuntu_2404):
     root = tmp_path / "captures"

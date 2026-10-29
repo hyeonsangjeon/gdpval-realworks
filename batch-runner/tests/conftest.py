@@ -1,12 +1,23 @@
 """Immutable historical source bytes for explicitly requested legacy fixtures."""
 
 import io
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
 import tarfile
 
 import pytest
+
+
+@pytest.fixture
+def frozen_ghcp_gate(approved_pilot_source):
+    """Actually execute the immutable reader for historical positive fixtures."""
+    source = approved_pilot_source / "batch-runner/ghcp_vm_gate_preflight.py"
+    spec = importlib.util.spec_from_file_location("frozen_ghcp_vm_gate_fixture", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.fixture

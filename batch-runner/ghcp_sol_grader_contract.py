@@ -169,7 +169,7 @@ def _cwd(path):
 
 
 def _step8_checks(output, payload):
-    plan = contract.load_plan()
+    plan = contract.load_plan(contract.ROOT / contract.SOURCE_PROFILE_PATH)
     checked = contract.inspect_plan(plan)
     _require(checked["configuration_valid"] is True, "pinned_grader_contract_refused")
     batch = ROOT / "batch-runner"
