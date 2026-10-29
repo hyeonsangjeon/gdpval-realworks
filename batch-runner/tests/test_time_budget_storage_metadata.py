@@ -228,7 +228,8 @@ def test_time_budget_storage_metadata_cumulative_bound(source, transport, monkey
     transport.hook = lambda number: now.__setitem__(0, now[0] + 35)
     assert invoke(source) == 2
     assert subject.SECONDS == 60 and len(transport.calls) == 2
-    assert transport.calls[1].extensions["timeout"]["read"] == 25
+    # The fake clock starts at the real monotonic value, so 60 - 35 is float arithmetic, not exactly 25.
+    assert transport.calls[1].extensions["timeout"]["read"] == pytest.approx(25)
     assert envelope(source)["prefix_outcome"] == "refused"
 
 
