@@ -416,9 +416,12 @@ def test_time_budget_first_v2_entrypoint_defaults_and_source_roles(handoff_sourc
     # CURRENT differs for these exact bytes. Historical positives remain on F.
     current = legacy.inspect_plan(profile)
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
+        "source_pin:batch-runner/step8_grade.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
     ]
     assert current["launch_allowed"] is False
     with monkeypatch.context() as source:
