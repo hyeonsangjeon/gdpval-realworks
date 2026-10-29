@@ -36,7 +36,7 @@ def write_files(root, files):
 
 
 @pytest.fixture
-def inputs(tmp_path, monkeypatch, offline_only):
+def inputs(tmp_path, monkeypatch, approved_pilot_source, offline_only):
     """Fresh source pins and files per case; never cache an owner or verdict.
 
     The existing fixed-five fixture supplies the original prompts and roles.
@@ -48,7 +48,9 @@ def inputs(tmp_path, monkeypatch, offline_only):
     import ghcp_vm_input_bundle as bundle
 
     production = gate.load_plan()
-    originals = {role: (ROOT / role).read_bytes() for role in gate.REQUIRED_SOURCES}
+    assert gate.inspect_plan(production)["configuration_valid"] is False
+    assert (approved_pilot_source / gate.PLAN_PATH).read_bytes() == (ROOT / gate.PLAN_PATH).read_bytes()
+    originals = {role: (approved_pilot_source / role).read_bytes() for role in gate.REQUIRED_SOURCES}
     original_pins = dict(gate.PINNED_SOURCES)
     prepared = json.loads((ROOT / "batch-runner/tests/fixtures/run_record/step1_tasks_prepared.json").read_bytes())
 

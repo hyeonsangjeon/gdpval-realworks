@@ -29,6 +29,23 @@ def validate_grade_payload(payload: Any, schema: dict) -> None:
         validate_receipt(payload["runner_evidence"])
         if payload["runner_evidence"]["stage"] != "grading":
             raise ValueError("grade runner receipt stage is invalid")
+    provenance = payload.get("shard_provenance")
+    has_shard_runner = isinstance(provenance, list) and any(
+        isinstance(row, dict) and "runner_evidence" in row for row in provenance)
+    if has_shard_runner:
+        from core.runner_environment import validate_receipt
+        for index, row in enumerate(provenance):
+            if (not isinstance(row, dict) or "runner_evidence" not in row
+                    or type(row.get("index")) is not int or row["index"] != index
+                    or type(row.get("count")) is not int or row["count"] != len(provenance)
+                    or not isinstance(row.get("grade_file_sha256"), str)
+                    or not FULL_SHA256_RE.fullmatch(row["grade_file_sha256"])):
+                raise ValueError("grade shard runner binding is incomplete")
+            validate_receipt(row["runner_evidence"])
+            if row["runner_evidence"]["stage"] != "grading":
+                raise ValueError("grade shard runner receipt stage is invalid")
+            if "runner_evidence" in payload and row["runner_evidence"] != payload["runner_evidence"]:
+                raise ValueError("grade common runner receipt differs from a shard")
     current_schema = payload.get("schema_version") in {"1.2", "1.3", "1.4"}
     if current_schema and "run_status" not in payload:
         raise ValueError("current grade lifecycle identity is missing")

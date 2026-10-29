@@ -167,13 +167,15 @@ def test_ci_input_bundle_current_input_registration_does_not_compile_dispatch():
     with pytest.raises(comparison.DispatchPlanRefused) as refused:
         bundle._registered()  # Real full compiler; no source hash or fingerprint substitution.
     assert str(refused.value) == (
-        "comparison refused: source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
+        "comparison refused: source_pin:.github/workflows/batch-run.yml, "
+        "source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
         "source_pin:batch-runner/gpt54_codex_input_capture.py, "
         "source_pin:batch-runner/gpt54_v2_input_capture.py, "
         "source_pin:batch-runner/gpt54_run_config_bundle.py, "
         "source_pin:batch-runner/gpt54_run_input_bundle.py, "
         "source_pin:batch-runner/gpt54_disposable_checkout.py, "
         "source_pin:batch-runner/gpt54_workflow_gate.py, "
+        "source_pin:batch-runner/step8_grade.py, "
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py, "
         "source_pin:batch-runner/core/codex_runner.py, "
         "source_pin:batch-runner/step2_run_inference.py, "

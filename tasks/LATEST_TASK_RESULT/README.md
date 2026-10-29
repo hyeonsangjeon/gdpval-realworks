@@ -1,5 +1,22 @@
 # Latest task result
 
+## Native CI repair and hosted proof, 2026-10-29
+
+PR #785 merged as `0a15af39b3dddb8275a82be0b609303c4bdc570d` under the
+owner's instruction to handle the queued PRs. PR #789 remains in CI repair.
+Model-free Actions 40924442821 at `62b29f343` passed both bubblewrap and
+the pinned Codex 0.147.0 sandbox marker on hosted Ubuntu 24.04, image
+20261026.354.1. The targeted AppArmor profile was added; the system-wide
+userns restriction stayed enabled. This is host readiness, not a model result.
+
+Preserve per-shard grading runner evidence, register the reviewed source-only
+successor, and isolate historical test sources without weakening refusals.
+The successor has 58 matching pins, eight changed from the unchanged response
+capture predecessor; all non-source settings are identical. USD 200, fixed
+five tasks and original grader/source seals remain unchanged. Current source
+registration and expanded regression checks run after this commit, so no
+passing final-head result is claimed here. No paid dispatch/model call yet.
+
 ## Native pilot publication and Actions preparation, 2026-10-29
 
 The owner now approves publication/CI and paid execution of the existing

@@ -113,6 +113,7 @@ def _v2_cfg(with_perception: bool) -> dict:
 
 def test_grader_wires_perception_subjudges():
     from core.grader import Grader
+    from core.runner_environment import GuardedGradingClient
 
     fake_client = SimpleNamespace(responses=ScriptedResponses([]))
 
@@ -127,8 +128,9 @@ def test_grader_wires_perception_subjudges():
     assert tj.vision_perception is not None, "VisionPerception must be wired"
     assert tj.audio_perception is not None, "AudioPerception must be wired"
     # Sub-judges share the grader's Azure client.
-    assert tj.vision_perception.client is fake_client
-    assert tj.audio_perception.client is fake_client
+    assert isinstance(tj.vision_perception.client, GuardedGradingClient)
+    assert tj.vision_perception.client is tj.audio_perception.client
+    assert tj.vision_perception.client._inner is fake_client
     assert tj.vision_perception.deployment == "gpt-5.4"
     assert tj.audio_perception.deployment == "gpt-audio-1.5"
     assert getattr(tj.before_upstream_call, "__self__", None) is grader

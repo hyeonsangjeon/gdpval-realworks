@@ -65,15 +65,31 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     connection_path = root / pilot.SOURCE_PROFILE_CONNECTION
     connection_bytes = connection_path.read_bytes()
     connection_profile = pilot.load_plan(connection_path)
+    response_path = root / pilot.SOURCE_PROFILE_RESPONSE
+    response_bytes = response_path.read_bytes()
+    response_profile = pilot.load_plan(response_path)
     reference_path = root / binding.CONNECTION_REFERENCE_PATH
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261027_response_capture.yaml")
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261029_runner_receipt.yaml")
+    assert hashlib.sha256(response_bytes).hexdigest() == pilot.SOURCE_PROFILE_RESPONSE_SHA256 == (
+        "768adaed42d65233986447810dd5a8646306b3e44f42bf7feb2037042b9c1446"
+    )
     assert hashlib.sha256(connection_bytes).hexdigest() == pilot.SOURCE_PROFILE_CONNECTION_SHA256 == (
         "84b74f81bddb623d6b0cc34e0cff4b90696f8016890e119de8febaa4990092aa"
     )
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in response_profile["source_pins"].items()
             if digest != connection_profile["source_pins"][name]} == {
         "batch-runner/core/codex_runner.py", "batch-runner/gpt56_pilot_wire_receipt.py",
         "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != response_profile["source_pins"][name]} == {
+        "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+        "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_native_result_host.py",
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/step8_grade.py",
+        "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in response_profile.items() if k != "source_pins"
     }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in connection_profile.items() if k != "source_pins"
@@ -161,6 +177,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
         "batch-runner/gpt56_sol_codex_pilot_preflight.py",
         "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py",
+        "batch-runner/gpt56_pilot_native_result_host.py",
+        "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py",
     }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in previous.items() if k != "source_pins"
@@ -171,12 +189,16 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt54_disposable_checkout.py": "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
         pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml": wire.USD_CAPS_SHA256,
         pilot.ENVELOPE + "model_price_table.json": wire.USD_PRICE_TABLE_SHA256,
-        "batch-runner/gpt56_pilot_usd_budget.py": "7c3c43d39df84c344faf930de7f0588791c076633d89d9335e66de43bd1d22eb",
-        "batch-runner/core/cost_metering.py": "aad0635d3918268db96bdcab97e652eabffed88c3992ad7c2644cc065f9a8c2b",
+        "batch-runner/gpt56_pilot_usd_budget.py": "d28dbe71db00d301e2dad54852515df15c254be09002fa43b16e2d0f2131048e",
+        "batch-runner/core/cost_metering.py": "f2d63e7812bd8557232bc0a3bdc0deb76a3565a4d1398b1fb191008fa9aff888",
         binding.CONNECTION_REFERENCE_PATH: binding.CONNECTION_REFERENCE_SHA256,
         "batch-runner/gpt56_native_response_capture.py": "1e3db1b4f6b956b24fd6b892118e0d4a2b491c23e3a52c8a1536849a6a36aca6",
-        "batch-runner/scripts/diagnose_codex_foundry_connection.py": "ea2390a40268f7203849277cd73a8d2eca8d7bd3eee15e2f27495fe0d5315b55",
-        ".github/workflows/codex-foundry-connection-diagnostic.yml": "796ca407bdfbb08d1d9cd5f9dfe603cc92263da50aeb45aa32467a4563586d01",
+        "batch-runner/scripts/diagnose_codex_foundry_connection.py": "9ba187e79a0eff2fc3afb9e931af8aedf3b89ba574e5b112048aa954ee61efc2",
+        ".github/workflows/codex-foundry-connection-diagnostic.yml": "a89a6777cf82aee7703934eb4bf99c3f028213444738c1db75e60f642190df83",
+        "batch-runner/core/runner_environment.py": "c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a",
+        "batch-runner/scripts/prepare_codex_sandbox_host.py": "6324b206656abf609af6c6d4f8a1c93c68a0c3d48e53aef0d35955630b66825a",
+        "batch-runner/step9_merge_shards.py": "9079fd701fbc7e4cca65fbcc1705f03891e4e13be3a4fb9145a2bb17b1352872",
+        ".github/workflows/batch-run.yml": "06519bc2abb0f69fe688cd864dadb536e907a433e2726c5bf60c1115c5c220bb",
     }
     for role, digest in pilot.SOURCE_PROFILE_AUXILIARY.items():
         assert hashlib.sha256((root / role).read_bytes()).hexdigest() == digest
@@ -237,9 +259,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_CONNECTION
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_CONNECTION_SHA256
-    assert report["source_change_reason"] == "prospective_redacted_provider_response_artifacts_and_fail_closed_evidence"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_RESPONSE
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_RESPONSE_SHA256
+    assert report["source_change_reason"] == "reviewed_grader_guard_runner_admission_and_receipt_preservation"
     assert report["response_capture_readiness"] == {
         "status": "next_call_capture_path_only", "live_evidence_observed": False,
         "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],

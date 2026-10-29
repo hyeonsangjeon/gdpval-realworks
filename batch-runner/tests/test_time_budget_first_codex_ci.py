@@ -116,7 +116,7 @@ def actions_layout(handoff_source_seed, tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, local_kernel):
+def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, local_kernel, request):
     import huggingface_hub
     import step8_grade
 
@@ -167,6 +167,18 @@ def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, local_kern
     for key in tuple(os.environ):
         if key.startswith(("AZURE_", "FOUNDRY_", "GITHUB_", "ACTIONS_", "HF_", "OPENAI_", "CODEX_", "RUNNER_")):
             monkeypatch.delenv(key)
+    # The native callable runs only against the synthetic transport below.
+    # Give that unit path explicit admitted host facts after clearing inherited
+    # state; this is not evidence about the NAS or the legacy CI request's host.
+    request.getfixturevalue("native_hosted_runner")
+    # This legacy controller separately validates its immutable ubuntu22 CI
+    # descriptor. Its callable/transport tests are not host-admission proofs:
+    # freeze the synthetic permitted observation rather than pretending the
+    # descriptor admits a real 22.04 execution under the new global policy.
+    from core import runner_environment
+    synthetic_runner = runner_environment.observe()
+    assert synthetic_runner["eligible_for_execution"]
+    monkeypatch.setattr(runner_environment, "observe", lambda: deepcopy(synthetic_runner))
     real_open, real_stat = Path.open, Path.stat
 
     def proc_open(path, *args, **kwargs):

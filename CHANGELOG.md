@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Preserve native grading runner receipts through shard merging and validate
+  their per-shard bindings. Repair legacy offline fixtures using explicit
+  historical source origins, while retaining current-source refusal tests.
+  Route all 20 gpt56 modules through CI exactly once and register a source-only
+  2026-10-29 successor (58 pins; no original seal, model or limit changes).
+  Hosted sandbox proof passed in Actions 40924442821 at `62b29f343`, with zero
+  model calls. PR #785 merged under the owner's publishing/PR approval;
+  remaining integration checks and paid execution are still pending.
+
 - Publish the native runner stack as Draft PR #789 under the owner's new
   publication and bounded-paid-run approval. Add a secret-free Ubuntu 24.04
   readiness workflow that runs only offline tests and the pinned local sandbox

@@ -422,7 +422,8 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     # Restore the old budget command and remove its readout job, then undo only
     # PR749's two explicit time-budget test-inventory additions and the exact
     # owned-host JUnit/receipt additions checked above. Every other pre-existing
-    # job, trigger, permission and guard must match the captured baseline.
+    # job, trigger, permission and guard must match the captured baseline,
+    # including the reviewed complete gpt56 partition (20 modules, not 9).
     previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(workflow))
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
@@ -446,7 +447,7 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
         steps[0]["run"] = run.replace(literal, " ", 1)
     canonical = json.dumps(previous, separators=(",", ":"), ensure_ascii=True).encode()
     assert hashlib.sha256(canonical).hexdigest() == (
-        "fd2871a0ec60895d50fd16650a0ddfe47b71634a53fe0164b2fb765ea3319c47"
+        "e1751a82e044b206d984570b96e9f922eb8539f88ca56089e427226a545a5606"
     )
 
     runner = REPO_ROOT / "batch-runner"
@@ -686,7 +687,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt56_*.py")
     )
-    assert len(comparison_files) == 12 and len(pilot_files) == 9
+    assert len(comparison_files) == 12 and len(pilot_files) == 20
     wire_file = "tests/test_gpt56_pilot_wire_receipt.py"
     pilot_preflight_file = "tests/test_gpt56_sol_codex_pilot_preflight.py"
     publication_functions = (
@@ -699,7 +700,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert wire_file in pilot_files
     assert pilot_preflight_file in pilot_files
     general_pilot_files = [path for path in pilot_files if path not in {wire_file, pilot_preflight_file}]
-    assert len(general_pilot_files) == 7
+    assert len(general_pilot_files) == 18
     actual = sorted(comparison_files + pilot_files)
     assert argv[0][len(prefix):] == [
         *[f"--ignore={path}" for path in actual], f"--ignore-glob={budget_glob}",
@@ -721,7 +722,11 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert len(pilot_preflight_selected) == len(set(pilot_preflight_selected))
 
     pilot_sources = {path: (runner / path).read_text(encoding="utf-8") for path in pilot_files}
-    assert {path for path, source in pilot_sources.items() if keyword in source.casefold()} == {wire_file}
+    assert {path for path, source in pilot_sources.items() if keyword in source.casefold()} == {
+        wire_file, pilot_preflight_file, "tests/test_gpt56_pilot_remaining_caps.py"}
+    # Other files mentioning the host are selected whole, never with the wire
+    # file's keyword filter. Keep the existing per-node disjointness checks.
+    assert "tests/test_gpt56_pilot_remaining_caps.py" in general_pilot_files
     # Use pytest's own expression parser, without collecting/importing the
     # shared file. Both possible keyword-match states must select one job,
     # including parametrized nodes whose IDs can affect keyword matching.
