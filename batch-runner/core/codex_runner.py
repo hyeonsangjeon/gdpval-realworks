@@ -1092,6 +1092,15 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
+        if native_response_observer is not None:
+            # The fixed CONNECTED diagnostic asks for no tools. The pinned
+            # runtime otherwise advertises remote web_search, whose opaque
+            # context cannot pass the unchanged token precheck. Remove only
+            # that tool through Codex 0.147.0's documented native setting;
+            # pilot/default runtime configuration and all HTTP guards stay put.
+            if any(item.startswith("web_search=") for item in overrides):
+                raise PilotWireReceiptRefused() from None
+            overrides = (*overrides, 'web_search="disabled"')
         try:
             from openai_codex import Codex
             from openai_codex.client import CodexConfig

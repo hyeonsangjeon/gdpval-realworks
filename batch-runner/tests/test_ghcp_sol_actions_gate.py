@@ -187,6 +187,8 @@ def test_workflow_contract():
     assert upload["if-no-files-found"] == "error"
     assert "60s" in task["steps"][-2]["run"]
     ci = jobs["offline-ci"]
+    checkout = next(step for step in ci["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"] == {"fetch-depth": "0", "persist-credentials": "false"}
     installer = next(step for step in ci["steps"] if step.get("name", "").startswith("Install and verify"))
     assert "v1.0.103/copilot-linux-x64.tar.gz" in installer["run"]
     assert "9aeb4430e9ac9523546db07b227c7aba179a4710a55f9ac29ad143b0f9e1b325" in installer["run"]

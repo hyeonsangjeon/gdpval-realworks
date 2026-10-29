@@ -44,6 +44,71 @@ def _caps(capture):
     return caps
 
 
+def _additional_tools(*, namespace=False):
+    tools = [{"type": "function", "name": "fixture", "description": CANARY,
+              "parameters": {"type": "object", "properties": {}}},
+             {"type": "custom", "name": "fixture_patch", "description": "local text",
+              "format": {"type": "grammar", "syntax": "lark", "definition": "start: /.+/"}}]
+    if namespace:
+        tools = [{"type": "namespace", "name": "functions", "description": "", "tools": tools}]
+    return {"type": "additional_tools", "role": "developer", "tools": tools}
+
+
+@pytest.mark.parametrize("namespace", [False, True])
+def test_pinned_lite_local_definitions_are_preserved_and_fully_counted(monkeypatch, namespace):
+    inputs = [_additional_tools(namespace=namespace),
+              {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "CONNECTED"}]}]
+    with _upstream(monkeypatch, [_response()]) as (received, _):
+        capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+        try:
+            assert _post(capture.base_url, body=_request(text=inputs))[0] == 200
+        finally:
+            capture.close()
+    assert len(received) == 1
+    sent = json.loads(received[0][1])
+    assert sent["input"] == inputs and sent["max_output_tokens"] == 10_000
+    assert _caps(capture)["client_token_precheck"]["last_input_estimate"] == len(received[0][1])
+
+
+@pytest.mark.parametrize("damage", ["remote", "namespaced-remote", "nested-namespace", "missing-tools",
+                                    "tools-not-list", "opaque", "id", "wrong-role", "extra-field",
+                                    "bad-namespace-field", "oversized"])
+def test_lite_container_cannot_hide_remote_or_opaque_context_or_evade_caps(monkeypatch, damage):
+    item = _additional_tools(namespace=damage.startswith("namespaced") or "namespace" in damage)
+    reason = wire.NATIVE_TOKEN_REQUEST_UNVERIFIED
+    if damage == "remote":
+        item["tools"].append({"type": "web_search"})
+    elif damage == "namespaced-remote":
+        item["tools"][0]["tools"].append({"type": "file_search"})
+    elif damage == "nested-namespace":
+        item["tools"][0]["tools"] = deepcopy(item["tools"])
+    elif damage == "missing-tools":
+        item.pop("tools")
+    elif damage == "tools-not-list":
+        item["tools"] = {"type": "function"}
+    elif damage == "opaque":
+        item["encrypted_content"] = CANARY
+    elif damage == "id":
+        item["id"] = CANARY
+    elif damage == "wrong-role":
+        item["role"] = "user"
+    elif damage == "extra-field":
+        item["remote_tools"] = CANARY
+    elif damage == "bad-namespace-field":
+        item["tools"][0]["remote_tools"] = CANARY
+    elif damage == "oversized":
+        item["tools"][0]["description"] = "x" * 300_001
+        reason = wire.NATIVE_INPUT_PRECHECK_EXCEEDED
+    with _upstream(monkeypatch, []) as (received, calls):
+        capture = wire._ProviderHTTPObservation(UPSTREAM, 60)
+        try:
+            assert _post(capture.base_url, body=_request(text=[item])) == (400, b"")
+        finally:
+            capture.close()
+    assert not received and not calls
+    assert _caps(capture)["stop_reason"] == reason
+
+
 def test_complete_usage_drives_remaining_field_without_sdk_double_count(monkeypatch, capsys):
     with _upstream(monkeypatch, [_response(30, 6), _response(20, 4)]) as (received, calls):
         capture = wire._ProviderHTTPObservation(UPSTREAM, 60)

@@ -666,8 +666,31 @@ def _finite_json(_value):
     raise ValueError("non_finite_json")
 
 
+def _local_tool_definitions(value, *, namespaces=False):
+    """Locally serialized definitions, never provider-hosted/remote tools.
+
+    Codex 0.147.0 Responses-lite moves these into AdditionalTools input.
+    Its namespace wrapper has exactly name/description/tools, with only
+    function/custom children (tools/src/responses_api.rs). No remote child,
+    unknown wrapper field or recursively opaque namespace is admitted.
+    """
+    if type(value) is not list:
+        return False
+    for tool in value:
+        if type(tool) is not dict:
+            return False
+        if tool.get("type") in {"function", "custom"}:
+            continue
+        if (not namespaces or tool.get("type") != "namespace"
+                or set(tool) != {"type", "name", "description", "tools"}
+                or type(tool["name"]) is not str or type(tool["description"]) is not str
+                or not _local_tool_definitions(tool["tools"])):
+            return False
+    return True
+
+
 def _text_input(value):
-    """Only locally visible text. Remote/opaque multimodal context is unknown."""
+    """Visible text/definitions only. Remote/opaque multimodal context is unknown."""
     if type(value) is str:
         return True
     if type(value) is not list:
@@ -692,6 +715,15 @@ def _text_input(value):
                 return False
         elif kind in ("function_call_output", "custom_tool_call_output"):
             if type(item.get("output")) is not str:
+                return False
+        elif kind == "additional_tools":
+            # Pinned protocol/src/models.rs and core/src/client.rs: the
+            # Responses-lite prefix contains the same visible local tools,
+            # not previous response state. Count ALL of its serialized bytes
+            # in _token_request, just as for top-level tool definitions.
+            if (set(item) - {"type", "role", "tools", "id"}
+                    or item.get("role") != "developer" or item.get("id") is not None
+                    or not _local_tool_definitions(item.get("tools"), namespaces=True)):
                 return False
         else:
             return False
@@ -1006,9 +1038,7 @@ class _ProviderHTTPObservation:
                     or document.get("background", False) is not False
                     or type(document.get("stream", False)) is not bool
                     or document.get("instructions") is not None and type(document["instructions"]) is not str
-                    or type(document.get("tools", [])) is not list
-                    or any(type(tool) is not dict or tool.get("type") not in {"function", "custom"}
-                           for tool in document.get("tools", []))):
+                    or not _local_tool_definitions(document.get("tools", []))):
                 raise ValueError("unbounded_input")
         except (ValueError, TypeError, UnicodeError, RecursionError):
             raise _TokenPrecheckRefused(NATIVE_TOKEN_REQUEST_UNVERIFIED) from None

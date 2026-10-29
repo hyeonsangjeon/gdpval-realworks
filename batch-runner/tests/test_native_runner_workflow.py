@@ -17,7 +17,8 @@ def document():
 
 def test_only_model_free_push_and_pr_events(document):
     assert set(document['on']) == {'push', 'pull_request'}
-    assert document['on']['push']['branches'] == ['leader/runner-receipt-20261029']
+    assert document['on']['push']['branches'] == [
+        'leader/runner-receipt-20261029', 'fix/sol-native-smoke-no-web-20261029']
     assert set(document['jobs']) == {'native-runner-check'}
 
 
@@ -33,7 +34,7 @@ def test_host_is_fixed_and_has_no_identity_or_secret_capability(document):
     text = WORKFLOW.read_text()
     for forbidden in ('secrets.', 'id-token:', 'azure/login', '--send-request',
                       'step2_run_inference.py', 'step8_grade.py',
-                      'diagnose_codex_foundry_connection.py', '--valid-request',
+                      'python scripts/diagnose_codex_foundry_connection.py', '--valid-request',
                       '--closing-sweep', 'continue-on-error'):
         assert forbidden not in text
 
@@ -57,6 +58,7 @@ def test_closed_step_order_and_readiness_failure_cannot_be_ignored(document):
         'Checkout exact source', 'Set up Python', 'Install the registered dependencies',
         'Run offline admission contracts', 'Install system bubblewrap if absent',
         'Prove the pinned local sandbox without a model',
+        'Prove the real native request against a scripted loopback server',
         'Retain bounded runner and sandbox evidence',
     ]
     assert "-m 'not integration'" in steps[3]['run']
@@ -68,9 +70,20 @@ def test_closed_step_order_and_readiness_failure_cannot_be_ignored(document):
     assert probe['run'] == ('set -euo pipefail\n'
         'python scripts/prepare_codex_sandbox_host.py \\\n'
         '  --out "$RUNNER_TEMP/native-sandbox-proof.json"\n')
-    upload = steps[6]
+    proof = steps[6]
+    assert 'if' not in proof and 'continue-on-error' not in proof
+    assert 'timeout --signal=TERM --kill-after=5s 120s env -i' in proof['run']
+    assert 'GDPVAL_NATIVE_LOOPBACK_PROOF=1' in proof['run']
+    assert '-m integration' in proof['run'] and 'tests/test_sol_native_loopback.py' in proof['run']
+    for field in ('GITHUB_ACTIONS', 'RUNNER_ENVIRONMENT', 'ImageOS', 'ImageVersion',
+                  'RUNNER_NAME', 'RUNNER_OS', 'RUNNER_ARCH', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'):
+        assert f'{field}="${field}"' in proof['run']
+    upload = steps[7]
     assert upload['if'] == 'always()'
-    assert upload['with']['path'] == '${{ runner.temp }}/native-sandbox-proof.json'
+    assert upload['with']['path'].splitlines() == [
+        '${{ runner.temp }}/native-sandbox-proof.json',
+        '${{ runner.temp }}/native-loopback-proof.json',
+        '${{ runner.temp }}/native-loopback-tests.xml']
     assert upload['with']['if-no-files-found'] == 'error'
 
 
