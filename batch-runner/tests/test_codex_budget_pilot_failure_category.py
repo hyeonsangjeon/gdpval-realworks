@@ -20,7 +20,7 @@ import codex_budget_pilot_ci as ci
 import codex_budget_pilot_output as output
 import step2_run_inference as step2
 import step8_grade
-from core import azure_ai_clients, codex_azure_token, codex_runner
+from core import azure_ai_clients, codex_azure_token, codex_runner, runner_environment
 from core.codex_runtime_config import CodexProviderSettings
 from core.cost_projection import project_cost_receipt
 from core.cost_receipts import BUCKET_PROBLEM_SOLVING, CostReceiptLedger, load_receipt_price_table
@@ -35,9 +35,13 @@ UNCHANGED = object()
 
 
 @pytest.fixture(autouse=True)
-def no_runtime_auth_or_publication(monkeypatch):
+def no_runtime_auth_or_publication(monkeypatch, native_hosted_runner):
     from huggingface_hub import HfApi
     from huggingface_hub.utils import _auth, _headers
+
+    synthetic_runner = runner_environment.observe()
+    assert synthetic_runner["eligible_for_execution"]
+    monkeypatch.setattr(runner_environment, "observe", lambda: copy.deepcopy(synthetic_runner))
 
     def forbidden(*args, **kwargs):
         pytest.fail("failure-category regression crossed a live boundary")

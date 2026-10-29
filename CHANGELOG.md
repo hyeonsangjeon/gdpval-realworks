@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Preserve optional, hash/stage-validated inference runner evidence when the
+  three retention readers reconstruct Step2 observability. Previously the
+  writer emitted it but the readers omitted it and refused the same bytes.
+  Add corrupted-digest/wrong-stage cases and explicit fake-host observations
+  to the old model-free writer fixtures; update exact legacy source refusals.
+  No historical record, seal, score, model, cap or actual host-admission rule
+  changes. The integrated gate/source/diagnostic suite at `74a03d7ea` passed
+  1,110 tests; these additional retention regressions are checked separately.
+
 - Integrate the reviewed Task4, Task5 documentation and GHCP gate branches
   without enabling paid push/PR triggers. Require explicit Max/1M in the Sol
   connection probe and persist its full-attempt USD 7.20 reference reservation

@@ -396,6 +396,7 @@ def prepare(*, root: Path, campaign: str, cell_id: str, source_sha: str, config_
             # The registered Codex treatment has no preprocessing or sandbox QA.
             # Reuse Step2's bounded metadata projection; refuse rather than edit.
             projected = _build_execution_observability({
+                "runner_evidence": observed.get("runner_evidence"),
                 "error_category": observed.get("error_category"), "execution_metrics": observed.get("execution_metrics"),
                 "codex_diagnostics": observed.get("codex"), "task_deadline": observed.get("task_deadline"),
                 "budget_metrics": observed.get("budget_metrics"), "substrate_manifest": observed.get("substrate"),

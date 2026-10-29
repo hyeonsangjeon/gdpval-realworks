@@ -181,6 +181,7 @@ def _payload(files, summary, plan, cell, roles, deliverables):
         observed = row["observability"]
         require(type(observed) is dict and observed.get("preprocessors", []) == [], "unsafe_result_observability")
         require(observed == _build_execution_observability({
+            "runner_evidence": observed.get("runner_evidence"),
             "error_category": observed.get("error_category"), "execution_metrics": observed.get("execution_metrics"),
             "codex_diagnostics": observed.get("codex"), "task_deadline": observed.get("task_deadline"),
             "budget_metrics": observed.get("budget_metrics"), "substrate_manifest": observed.get("substrate"),

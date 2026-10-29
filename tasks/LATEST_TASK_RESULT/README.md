@@ -1,5 +1,16 @@
 # Latest task result
 
+## Retention receipt compatibility follow-up, 2026-10-29
+
+The clean integrated suite at `74a03d7ea` passed **1,110 tests**, no failures or
+skips, in 173.25s. Further old-CI log review found a real metadata compatibility
+defect: the three retention readers reprojected Step2 observability without
+its new optional runner receipt. Preserve that input through the existing
+hash/stage validator and exact equality check; never strip or accept unchecked
+fields. Add wrong-stage/digest cases. Historical transport fixtures get explicit
+synthetic runner facts, not permission to run on NAS or the legacy 22.04 host.
+Related regression rerun and final full CI remain pending at this source commit.
+
 ## Queued PR integration and paid-diagnostic preparation, 2026-10-29
 
 Under the owner's PR/CI and paid-run instructions, #785 is merged; the
