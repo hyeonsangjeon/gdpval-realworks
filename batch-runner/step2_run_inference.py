@@ -1208,6 +1208,13 @@ def _build_execution_observability(
 ) -> dict:
     """Build compact task provenance without duplicating heavy QA reports."""
     observability = {"preprocessors": preprocessor_observations}
+    runner_evidence = (result or {}).get("runner_evidence")
+    if runner_evidence is not None:
+        from core.runner_environment import validate_receipt
+        validate_receipt(runner_evidence)
+        if runner_evidence["stage"] != "inference":
+            raise ValueError("inference runner receipt stage is invalid")
+        observability["runner_evidence"] = runner_evidence
     # Why the attempt failed, in one word from a fixed vocabulary. Every
     # backend already produces this and, until now, only the sandbox and
     # agentic paths kept it -- inside their own metrics, where a caller that

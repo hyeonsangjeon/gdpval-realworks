@@ -9,12 +9,15 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 import yaml
 from openai_codex import ApprovalMode, Codex, Sandbox
 from openai_codex._sandbox import _sandbox_policy
@@ -144,7 +147,7 @@ class SDKTransport:
 
         monkeypatch.setattr(codex_runner.CodexWorkspace, "stage_references", stage)
         monkeypatch.setattr(codex_runner.CodexAgentRunner, "open_runtime", open_runtime)
-        monkeypatch.setattr(codex_runner, "threading", SimpleNamespace(Thread=Worker))
+        monkeypatch.setattr(codex_runner, "threading", SimpleNamespace(Thread=Worker, Event=threading.Event))
 
     def request(self, method, params, *, response_model):
         self.requests.append((method, params))
@@ -400,6 +403,7 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
             "source_pin:batch-runner/gpt54_run_input_bundle.py, "
             "source_pin:batch-runner/gpt54_disposable_checkout.py, "
             "source_pin:batch-runner/gpt54_workflow_gate.py, "
+            "source_pin:batch-runner/step8_grade.py, "
             "source_pin:batch-runner/core/agentic_v2_conversation_runner.py, "
             "source_pin:batch-runner/core/codex_runner.py, "
             "source_pin:batch-runner/step2_run_inference.py, "

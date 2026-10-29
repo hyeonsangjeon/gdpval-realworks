@@ -24,6 +24,11 @@ def validate_grade_payload(payload: Any, schema: dict) -> None:
     validate(instance=payload, schema=schema)
     if not isinstance(payload, dict):
         return
+    if "runner_evidence" in payload:
+        from core.runner_environment import validate_receipt
+        validate_receipt(payload["runner_evidence"])
+        if payload["runner_evidence"]["stage"] != "grading":
+            raise ValueError("grade runner receipt stage is invalid")
     current_schema = payload.get("schema_version") in {"1.2", "1.3", "1.4"}
     if current_schema and "run_status" not in payload:
         raise ValueError("current grade lifecycle identity is missing")

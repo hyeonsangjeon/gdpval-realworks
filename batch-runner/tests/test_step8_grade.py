@@ -7,6 +7,8 @@ import sys
 import tempfile
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 import yaml
 
 import step8_grade as s8

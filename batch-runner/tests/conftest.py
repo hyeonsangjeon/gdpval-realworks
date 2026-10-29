@@ -9,6 +9,32 @@ import tarfile
 import pytest
 
 
+@pytest.fixture
+def native_hosted_runner(monkeypatch, tmp_path):
+    """Synthetic runner labels for existing fake-client/loopback-only tests.
+
+    The production admission function still runs. This is not a local launch
+    permission, and integration/live clients must not use this fixture.
+    """
+    from core import runner_environment as host
+    fields = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
+              "RUNNER_NAME": "synthetic-native-runner", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
+              "ImageOS": "ubuntu22", "ImageVersion": "20261026.354.1",
+              "GITHUB_RUN_ID": "123456789", "GITHUB_RUN_ATTEMPT": "1"}
+    for name, value in fields.items():
+        monkeypatch.setenv(name, value)
+    # env-i has no HOME; fake-runtime work must still stay outside its own
+    # temporary carve-out without consulting the developer's cache or login.
+    monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(tmp_path / "native-workspaces"))
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "os-temp"))
+    for name in ("NATIVE_AZURE_VM_APPROVAL", "NATIVE_AZURE_VM_APPROVAL_SHA256", "NATIVE_AZURE_VM_ID"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(host.platform, "freedesktop_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"})
+    monkeypatch.setattr(host.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(host.platform, "machine", lambda: "x86_64")
+    return fields
+
+
 @pytest.fixture(scope="session")
 def frozen_local_comparison_source(tmp_path_factory):
     """F882 supplies historical positive bytes, never the current runtime R."""
@@ -91,6 +117,7 @@ def historical_comparison_source(approved_pilot_source, monkeypatch):
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/gpt54_workflow_gate.py",
+        "source_pin:batch-runner/step8_grade.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",

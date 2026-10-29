@@ -50,6 +50,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.codex_cost import (  # noqa: E402

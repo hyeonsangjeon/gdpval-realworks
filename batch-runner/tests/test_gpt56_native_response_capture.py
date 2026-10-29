@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 import gpt56_native_response_capture as evidence
 import gpt56_pilot_wire_receipt as wire
 import step2_run_inference as step2

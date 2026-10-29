@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add fail-closed native runner admission and hash-bound image/OS/architecture/
+  run evidence to diagnostic, inference and grading paths on a separate local
+  branch. Require metadata before model calls; preserve stop/cleanup without
+  converting host refusal into a judge verdict. Bind runner evidence before
+  native private-result sealing and retain it in Step2/grade payloads. Completed
+  disjoint offline checks: **1,151 + 7 + 8 = 1,166 passed, 0 failed/errors/skipped**;
+  the expanded 1,476-case timeout is not reported as passed. No model/auth/Azure
+  call, workflow migration, dispatch, push or PR. Sealed values remain unchanged;
+  seven active source pins now differ and require subsequent review/registration.
+  See [runner admission and evidence](batch-runner/docs/native_runner_receipt_20261029.md).
+
 - Fix the native pilot grader's USD-guard schema and stop scope on the separate
   local `leader/grader-guard-scope-20261028` branch. Validate Responses function
   parameters as literal/local JSON Schema while retaining full byte reservation

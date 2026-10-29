@@ -6,6 +6,8 @@ import copy
 from dataclasses import asdict
 from datetime import datetime, timezone
 import json
+import os
+import platform
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -18,6 +20,16 @@ def main():
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--guarded", action="store_true")
     args = parser.parse_args()
+
+    # Both immutable and candidate probes use synthetic host metadata. Network
+    # and subprocess audit denial below remains active; no real runner is used.
+    os.environ.update({"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
+        "RUNNER_NAME": "synthetic-grader-replay", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
+        "ImageOS": "ubuntu22", "ImageVersion": "20261026.354.1",
+        "GITHUB_RUN_ID": "123456789", "GITHUB_RUN_ATTEMPT": "1"})
+    platform.freedesktop_os_release = lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"}
+    platform.system = lambda: "Linux"
+    platform.machine = lambda: "x86_64"
 
     def offline(event, _args):
         if event in {"socket.connect", "socket.getaddrinfo", "socket.sendto", "subprocess.Popen"}:

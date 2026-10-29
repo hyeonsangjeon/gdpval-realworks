@@ -134,6 +134,7 @@ from core.codex_runtime_config import (  # noqa: E402
 SCHEMA = "codex_foundry_connection/3"
 # Prospective Sol HTTP evidence; historical /3 receipts are never rewritten.
 RESPONSE_CAPTURE_SCHEMA = "codex_foundry_connection/4"
+from core import runner_environment
 
 # ── The verdict vocabulary ──────────────────────────────────────────────────
 #
@@ -189,6 +190,7 @@ VERDICT_NOT_SENT = "not_sent"
 #: deliberately not a synonym for any of the above.
 VERDICT_UNCLASSIFIED_FAILURE = "unclassified_failure"
 VERDICT_RESPONSE_EVIDENCE_REFUSED = "response_evidence_unverified"
+VERDICT_ENVIRONMENT_REFUSED = runner_environment.REFUSED
 
 VERDICTS: tuple[str, ...] = (
     VERDICT_CONNECTED,
@@ -210,6 +212,7 @@ VERDICTS: tuple[str, ...] = (
     VERDICT_NOT_SENT,
     VERDICT_UNCLASSIFIED_FAILURE,
     VERDICT_RESPONSE_EVIDENCE_REFUSED,
+    VERDICT_ENVIRONMENT_REFUSED,
 )
 
 #: Verdicts that mean a request reached the provider and was answered by it,
@@ -624,6 +627,7 @@ NOT_ESTABLISHED_BY_A_TEXT_TURN: tuple[str, ...] = (
 
 def _empty_observation() -> dict[str, Any]:
     return {
+        "runner_evidence": runner_environment.receipt("diagnostic"),
         "thread_started": False,
         "turn_sent": False,
         "turn_status": None,
@@ -675,6 +679,7 @@ def _record(
         ),
         "request": request_plan(description),
         "observed": dict(observed),
+        "runner_evidence": observed.get("runner_evidence") or runner_environment.receipt("diagnostic"),
         "not_established": list(NOT_ESTABLISHED_BY_A_TEXT_TURN),
     }
 
@@ -919,9 +924,14 @@ def probe(
     """
     from core.codex_runner import CodexAgentRunner, CodexWorkspace
 
-    redact = redact or build_redactor()
     description = describe_settings(settings)
     observed = _empty_observation()
+    try:
+        runner_environment.require_execution(observed["runner_evidence"]["observation"])
+    except runner_environment.ExecutionEnvironmentRefused as error:
+        return _record(verdict=VERDICT_ENVIRONMENT_REFUSED, description=description, observed=observed,
+                       note=error.code + "; no model request or authentication was started")
+    redact = redact or build_redactor()
     response_observer = None
     if settings.model == "gpt-5.6-sol":
         from gpt56_native_response_capture import NativeResponseArtifacts, empty_evidence
@@ -2201,6 +2211,7 @@ def post_valid_request(
     at a time against a request that is known to be *served* rather than
     merely accepted.
     """
+    runner_environment.require_execution()
     import urllib.error
     import urllib.request
 
@@ -2763,6 +2774,8 @@ def _emit(record: Mapping[str, Any], out: str | None) -> None:
     happened -- and the difference between those two is the whole subject of
     this diagnostic.
     """
+    record = dict(record)
+    record["runner_evidence"] = (record.get("observed") or {}).get("runner_evidence") or runner_environment.receipt("diagnostic")
     text = json.dumps(record, indent=2, sort_keys=False)
     sys.stdout.write(text + "\n")
     if out:
@@ -2869,6 +2882,13 @@ def main(argv: list[str] | None = None) -> int:
             "records; run them separately"
         )
 
+    if args.send_request or args.valid_request or args.closing_sweep:
+        try:
+            runner_environment.require_execution()
+        except runner_environment.ExecutionEnvironmentRefused as error:
+            _emit(_record(verdict=VERDICT_ENVIRONMENT_REFUSED, description=None,
+                          observed=_empty_observation(), note=error.code), args.out)
+            return 2
     redact = build_redactor()
 
     try:

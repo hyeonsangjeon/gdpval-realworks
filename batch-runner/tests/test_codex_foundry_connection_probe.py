@@ -26,6 +26,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 import yaml
 
 from scripts.diagnose_codex_foundry_connection import (

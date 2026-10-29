@@ -10,6 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 import gpt56_pilot_input_capture as capture
 import gpt56_pilot_wire_receipt as wire
 import gpt56_pilot_native_result_host as native
@@ -514,10 +516,12 @@ def test_legacy_runner_absent_and_null_do_not_install_or_serialize_receipts(kwar
     runner.provider = SimpleNamespace(model="legacy")
     result = runner.run("text", model="different")
     assert "pilot_wire_receipt" not in result
-    assert result == runner._failure(
+    from core import runner_environment
+    expected = runner._failure(
         "this Codex run place is configured for deployment 'legacy' and was asked for 'different'; "
         "refusing rather than calling a different model than the one the run will be recorded against",
         category="model_mismatch")
+    assert result == {**expected, "runner_evidence": runner_environment.receipt("inference")}
 
 
 @pytest.mark.parametrize("boundary", ["constructor", "run", "open_runtime", "task-acceptance"])
@@ -726,7 +730,9 @@ def _native_finish(state, *, success=True, output=True, text=PRIVATE_TEXT):
     files = state.host.collect_deliverables(state.witness, state.workspace)
     linkage = state.host.wire.finish_task(state.observer, success=success,
                                          thread_id=state.fake.thread_id, turn_id=state.fake.turn_id)
-    result = {"success": success, "files": files, "text": text if success else "", "pilot_wire_receipt": linkage}
+    from core import runner_environment
+    result = {"success": success, "files": files, "text": text if success else "", "pilot_wire_receipt": linkage,
+              "runner_evidence": runner_environment.receipt("inference", state.observer.runner_observation)}
     if not success:
         result.update(error="pilot_task_failed", error_category="timeout")
     state.host.finish_task(state.witness, result=result)
@@ -861,7 +867,8 @@ def test_native_result_host_current_upstream_and_wire_bytes_required(case, damag
     assert host.failed and host.wire.failed and not (host.root / native.READY_PATH).exists()
 
 
-@pytest.mark.parametrize("damage", ["text", "file", "name", "wire", "missing-wire", "attempt", "task", "extra"])
+@pytest.mark.parametrize("damage", ["text", "file", "name", "wire", "missing-wire", "attempt", "task", "extra",
+                                  "missing-runner", "runner-drift"])
 def test_native_result_host_rejects_forged_or_mismatched_runner_handoff(case, damage):
     host = native.PilotNativeResultHostSession(_session(case))
     state = _native_start(case, host)
@@ -881,6 +888,10 @@ def test_native_result_host_rejects_forged_or_mismatched_runner_handoff(case, da
         attempt = 1
     elif damage == "task":
         task = TASK_IDS[1]
+    elif damage == "missing-runner":
+        del result["runner_evidence"]
+    elif damage == "runner-drift":
+        result["runner_evidence"]["observation"]["run_attempt"] = "2"
     else:
         result["command"] = PRIVATE_TEXT
     with pytest.raises(native.PilotNativeResultHostRefused):
@@ -1000,7 +1011,9 @@ def test_native_result_host_post_collection_drift_is_refused_before_cleanup(case
         state.workspace.codex_home.rename(state.workspace.root / "displaced-runtime")
         state.workspace.codex_home.mkdir()
     with pytest.raises(native.PilotNativeResultHostRefused):
-        host.finish_task(state.witness, result={"success": True, "text": "", "files": files, "pilot_wire_receipt": link})
+        from core import runner_environment
+        host.finish_task(state.witness, result={"success": True, "text": "", "files": files, "pilot_wire_receipt": link,
+            "runner_evidence": runner_environment.receipt("inference", state.observer.runner_observation)})
 
 
 @pytest.mark.parametrize("damage", ["missing-witness", "duplicate-collect", "duplicate-finish", "duplicate-accept", "different-session"])

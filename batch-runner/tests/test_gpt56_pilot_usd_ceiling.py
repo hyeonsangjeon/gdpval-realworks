@@ -8,6 +8,8 @@ from copy import deepcopy
 from decimal import Decimal
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 import yaml
 
 import gpt56_pilot_wire_receipt as wire

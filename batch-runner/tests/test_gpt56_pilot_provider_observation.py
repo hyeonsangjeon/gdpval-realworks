@@ -14,6 +14,8 @@ from urllib.parse import urlsplit
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 import gpt56_pilot_wire_receipt as wire
 import step2_run_inference as step2
 from core import codex_runner

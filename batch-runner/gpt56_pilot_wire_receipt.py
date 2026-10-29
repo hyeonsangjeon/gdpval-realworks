@@ -35,6 +35,7 @@ import gpt56_sol_codex_pilot_preflight as pilot
 import gpt56_pilot_usd_budget as shared_usd
 import gpt56_native_response_capture as response_capture
 from core.cost_receipts import make_call_id
+from core import runner_environment
 from core.azure_ai_clients import EndpointKind, classify_endpoint
 from gpt54_codex_input_capture import _write_no_clobber
 from gpt54_run_config_bundle import _held_parents, _path, _root
@@ -72,7 +73,7 @@ _TOKEN_PRECHECK_STOPS = {NATIVE_INPUT_PRECHECK_EXCEEDED, NATIVE_OUTPUT_PRECHECK_
                          NATIVE_USAGE_UNVERIFIED}
 _CAP_STOPS = {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_INPUT_CAP_EXCEEDED, NATIVE_OUTPUT_CAP_EXCEEDED,
               NATIVE_DEADLINE_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED, NATIVE_PILOT_CAP_EXCEEDED,
-              *_TOKEN_PRECHECK_STOPS, *_USD_STOPS, *response_capture.STOPS}
+              *_TOKEN_PRECHECK_STOPS, *_USD_STOPS, *response_capture.STOPS, *runner_environment.STOPS}
 _TOKEN_BOUNDARY = "client_estimate_precheck_and_usage_stop_not_server_hard_limit"
 _INPUT_ESTIMATOR = "serialized_json_utf8_bytes_one_byte_per_estimated_token_not_a_tokenizer"
 NATIVE_CAPS_SHA256 = "7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6"
@@ -627,7 +628,7 @@ def bounded_provider_observation(raw: Any) -> dict:
             reason = raw["native_request_cap_reason"]
             if (type(reason) is not str
                     or reason not in {NATIVE_REQUEST_CAP_EXCEEDED, NATIVE_TASK_CAP_EXCEEDED,
-                                      NATIVE_PILOT_CAP_EXCEEDED, *_USD_STOPS}
+                                      NATIVE_PILOT_CAP_EXCEEDED, *_USD_STOPS, *runner_environment.STOPS}
                     or reason == NATIVE_REQUEST_CAP_EXCEEDED and count != limit
                     or reason != NATIVE_REQUEST_CAP_EXCEEDED
                     and (type(raw["runtime_caps"]) is not dict or raw["runtime_caps"].get("stop_reason") != reason)):
@@ -803,6 +804,7 @@ class _ProviderHTTPObservation:
     """
 
     def __init__(self, base_url: str, timeout: float, *, artifacts=None):
+        self.runner_observation = runner_environment.observe()
         target = urlsplit(base_url)
         _require(target.scheme == "https" and target.hostname is not None
                  and target.port in (None, 443) and target.username is target.password is None
@@ -1069,6 +1071,7 @@ class _ProviderHTTPObservation:
         artifact = None
         reason, model = "transport_failed", None
         try:
+            runner_environment.require_execution(self.runner_observation)
             while not self.request_lock.acquire(timeout=min(0.05, self.remaining())):
                 if self.stop_reason is not None:
                     raise RuntimeError("stopped")
@@ -1221,6 +1224,12 @@ class _ProviderHTTPObservation:
             handler.wfile.write(b"0\r\n\r\n")
             if self.stop_reason in _USD_STOPS:
                 self._close_stopped_runtime()
+        except runner_environment.ExecutionEnvironmentRefused as error:
+            with self.lock:
+                self.blocked_requests += 1
+                self.request_stop(error.code, defer_cleanup=True)
+            self._empty(handler, 400)
+            self._close_stopped_runtime()
         except _TokenPrecheckRefused as error:
             with self.lock:
                 if not self.closed:
@@ -1407,6 +1416,7 @@ class _TransportObservation:
 
     def __init__(self, requested: dict) -> None:
         self.requested = requested
+        self.runner_observation = runner_environment.observe()
         self.lock = threading.RLock()
         self.invalid = False
         self.installed = False
@@ -1982,6 +1992,7 @@ class PilotWireReceiptSession:
             name = call_id + ".json"
             task = next(row for row in self.document["tasks"] if row["task_id"] == task_id)
             data = _bytes({"receipt_version": "pilot-wire-receipt-v1", "evidence_boundary": BOUNDARY,
+                           "runner_evidence": runner_environment.receipt("inference", observer.runner_observation),
                            "run_id": pilot.RUN_ID, "condition": "codex_foundry", "task_order": self.document["task_ids"],
                            "task": task, "attempt_index": index, "retry_kind": "initial" if index == 0 else "infrastructure",
                            "repeat": 1, "logical_turn": 1, "call_id": call_id, "success": success,

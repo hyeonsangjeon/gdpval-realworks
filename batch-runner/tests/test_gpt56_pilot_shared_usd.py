@@ -10,12 +10,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 import yaml
 
 import gpt56_pilot_usd_budget as usd
 import gpt56_pilot_wire_receipt as wire
 import step8_grade as step8
 from core.cost_metering import CostRecorder
+from core import runner_environment
 from core.cost_receipts import CostReceiptLedger, STAGE_GRADING, STAGE_PERCEPTION
 from .test_gpt56_pilot_remaining_caps import TASKS
 from .test_gpt56_pilot_provider_observation import _post, _upstream, UPSTREAM
@@ -491,7 +494,7 @@ def test_real_step8_refuses_unpriced_sol_before_input_auth_or_client(monkeypatch
     path = tmp_path / "grading.json"
     path.write_text(json.dumps(config))
     monkeypatch.setattr(step8, "parse_args", lambda: SimpleNamespace(config=str(path), experiment_yaml_name=usd.RUN_ID,
-                                                                    source="local", pilot_usd_workspace=None))
+                                                                    source="local", pilot_usd_workspace=None, dry_run=False))
     monkeypatch.setattr(step8, "load_experiment_yaml", lambda name: SimpleNamespace(experiment_id=usd.RUN_ID))
 
     def never(*args, **kwargs):
@@ -504,7 +507,8 @@ def test_real_step8_refuses_unpriced_sol_before_input_auth_or_client(monkeypatch
     assert step8.main() == 4
     result = json.loads(capsys.readouterr().err)
     assert result == {"status": "refused", "source": "grading", "reason": usd.UNVERIFIED if module_drift else usd.UNPRICED,
-                      "actual_billing_hard_limit_verified": False}
+                      "actual_billing_hard_limit_verified": False,
+                      "runner_evidence": runner_environment.receipt("grading")}
 
 
 def test_pilot_grader_source_closure_binds_the_imported_amount_guard(monkeypatch, tmp_path):

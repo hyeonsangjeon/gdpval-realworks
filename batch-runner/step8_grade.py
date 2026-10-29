@@ -2382,6 +2382,7 @@ def _build_grade_payload(
     source_experiment_id: str | None = None,
     renderer_fingerprint: dict[str, str] | None = None,
     cost_ledger: dict[str, str] | None = None,
+    runner_evidence: dict | None = None,
 ) -> dict:
     if run_status not in {"partial", "final", "diagnostic"}:
         raise ValueError("grade run_status is invalid")
@@ -2399,7 +2400,7 @@ def _build_grade_payload(
     ):
         raise ValueError("primary grader route identity is invalid")
     src_id = (source_experiment_id or exp_name or "").strip() or exp_name
-    return {
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "run_status": run_status,
         "expected_task_count": len(expected_ids),
@@ -2463,6 +2464,9 @@ def _build_grade_payload(
             unpriced_models=_unpriced_models(config),
         ),
     }
+    if runner_evidence is not None:
+        payload["runner_evidence"] = runner_evidence
+    return payload
 
 
 def _validate_schema(payload: dict) -> None:
@@ -2487,6 +2491,27 @@ def _print_dry_run_stats(tasks: list[dict], loader: RubricLoader) -> None:
 
 def main() -> int:
     args = parse_args()
+    from core import runner_environment
+    grading_host = runner_environment.observe()
+
+    def refuse_runner(error):
+        record = {"status": "refused", "source": "grading", "reason": error.code,
+                  "runner_evidence": getattr(error, "runner_evidence", None)
+                      or runner_environment.receipt("grading", getattr(error, "observation", None))}
+        print(json.dumps(record, sort_keys=True), file=sys.stderr)
+        # Separate audit receipt, never a scored task or a changed denominator.
+        import uuid
+        try:
+            _save_json(Path("workspace/runner-receipts") / (uuid.uuid4().hex + ".json"), record)
+        except Exception:
+            print("runner_receipt_persistence_failed", file=sys.stderr)
+        return 4
+
+    if not args.dry_run:
+        try:
+            runner_environment.require_execution(grading_host)
+        except runner_environment.ExecutionEnvironmentRefused as error:
+            return refuse_runner(error)
 
     config_path = Path(args.config)
     with open(config_path, "r", encoding="utf-8") as f:
@@ -2505,7 +2530,8 @@ def main() -> int:
     import gpt56_pilot_usd_budget as usd_module
     if Path(os.path.abspath(usd_module.__file__)) != Path(os.path.abspath(__file__)).parent / "gpt56_pilot_usd_budget.py":
         print(json.dumps({"status": "refused", "source": "grading", "reason": "usd_ledger_unverified",
-                          "actual_billing_hard_limit_verified": False}, sort_keys=True), file=sys.stderr)
+                          "actual_billing_hard_limit_verified": False,
+                          "runner_evidence": runner_environment.receipt("grading", grading_host)}, sort_keys=True), file=sys.stderr)
         return 4
     from gpt56_pilot_usd_budget import (
         GradingUsdStopped, PilotUsdRefused, grading_prices, is_pilot_grading, open_grading_admission,
@@ -2518,7 +2544,8 @@ def main() -> int:
     def refuse_pilot_money(error):
         code = getattr(error, "code", "usd_ledger_unverified")
         print(json.dumps({"status": "refused", "source": "grading", "reason": code,
-                          "actual_billing_hard_limit_verified": False}, sort_keys=True), file=sys.stderr)
+                          "actual_billing_hard_limit_verified": False,
+                          "runner_evidence": runner_environment.receipt("grading", grading_host)}, sort_keys=True), file=sys.stderr)
         return 4
 
     if pilot_money_required:
@@ -2690,6 +2717,7 @@ def main() -> int:
         return 0
 
     try:
+        runner_environment.require_execution(grading_host)
         azure_ai_routes = preflight_routes(
             grader_route_workloads(config),
             **grader_transport_options(config),
@@ -2697,6 +2725,8 @@ def main() -> int:
         primary_runtime_fingerprint = azure_ai_routes[0][
             "runtime_fingerprint"
         ]
+    except runner_environment.ExecutionEnvironmentRefused as error:
+        return refuse_runner(error)
     except ValueError as exc:
         print(f"ERROR: Azure AI route validation failed: {exc}", file=sys.stderr)
         return 1
@@ -3289,6 +3319,7 @@ def main() -> int:
             source_experiment_id=args.source_experiment_id,
             renderer_fingerprint=renderer_fingerprint,
             cost_ledger=cost_ledger_pointer(),
+            runner_evidence=runner_environment.receipt("grading", grading_host),
         )
 
     def save_checkpoint(run_status: str, *, verify: bool = True) -> None:
@@ -3424,6 +3455,13 @@ def main() -> int:
             grade = grader.grade_task(
                 task, deliverable_dir, resume_from=resume_progress
             )
+        except runner_environment.GradingEnvironmentStopped as stopped:
+            if task_payloads:
+                try:
+                    save_checkpoint("partial")
+                except Exception:
+                    print("runner_stop_checkpoint_failed", file=sys.stderr)
+            return finish(refuse_runner(stopped))
         except GradingUsdStopped as stopped:
             # Do not manufacture a judge_error or shrink this task's score
             # denominator. Preserve only already completed tasks and stop;

@@ -1,5 +1,41 @@
 # Latest task result
 
+## Native runner admission and receipts, 2026-10-29
+
+On `leader/runner-receipt-20261029`, based on `cf1401e1c`, bind diagnostic,
+native inference and Step8 grading to observed GitHub-hosted Ubuntu metadata
+or explicit direct-Azure-VM approval markers plus matching local DMI identity.
+Missing/conflicting metadata refuses before model transmission; native HTTP
+and grader/perception/retry requests recheck the admitted observation. Grading
+host refusals stop the run rather than becoming a reduced-denominator verdict.
+Runner evidence includes image/OS/architecture, run ID/attempt and a canonical
+SHA256. The registered native handoff requires that same evidence **before**
+its private-result hash is sealed; Step2 and grade outputs retain it.
+
+Completed, disjoint offline checks: **1,151 + 7 + 8 = 1,166 passed**, **0 failed/
+errors/skipped**. The 1,151-case direct-related suite ran once after final fixes
+in **184.46s**; the real fixed-five handoff/missing/tampered evidence cases passed
+7 in **295.80s**; representative native continuation/content-filter cases passed
+8 in **39.29s**. These are three invocations, not one combined run. The expanded
+1,476-case attempt timed out at 900 seconds and is **not** a full green result;
+other interrupted/development failures are retained, not counted as passes.
+
+Existing cost/grade schema files and all sealed plans/caps/price records remain
+unchanged. New evidence is `native-runner-evidence-v1`; old records are not
+retrospectively verified. Active source-profile mismatches increase from one
+at the base to seven, and the new helper needs a reviewed source pin. Grader
+source identity also changes: follow-up registration/seal review is required,
+not bypassed. Ubuntu 22.04-to-24.04 migration and pilot Actions wiring are not
+part of this change. Evidence is local metadata, not remote attestation.
+
+No model, credential-value lookup, token issuance, Azure request, dispatch,
+push or PR for this branch. SDK/CLI 0.147.0 types came from an existing isolated
+environment; no CLI was launched. Evidence and detailed invocation history:
+`/tmp/p5-native-runner-receipt.6RBA4c/`. The interrupted synthetic workspace was
+moved there intact; test-only tmpfs storage was emptied, and its optional fixture
+override was removed from the final changes. See
+[runner admission](../../batch-runner/docs/native_runner_receipt_20261029.md).
+
 ## Grader USD guard: repair schema scope without turning money into marks
 
 On local branch `leader/grader-guard-scope-20261028`, based on

@@ -12,11 +12,14 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 import gpt56_pilot_usd_budget as usd
 import step8_grade as step8
 from core.cost_metering import CostRecorder
 from core.cost_receipts import CostReceiptLedger, STAGE_GRADING
 from core.grader import Grader
+from core import runner_environment
 from core.rubric_loader import RubricItem
 from . import test_grader as grading_fixture
 from . import test_step8_grade as step8_fixture
@@ -193,7 +196,8 @@ def test_step8_stops_with_receipt_and_without_an_unscored_task(monkeypatch, tmp_
         assert "budget-stop checkpoint failed: OSError" in stderr
     report = [json.loads(line) for line in stderr.splitlines() if line.startswith('{"actual_billing_hard_limit_verified"')][-1]
     assert report == {"status": "refused", "source": "grading", "reason": usd.CEILING,
-                      "actual_billing_hard_limit_verified": False}
+                      "actual_billing_hard_limit_verified": False,
+                      "runner_evidence": runner_environment.receipt("grading")}
     grades = list((tmp_path / "data/grades").glob("*.json"))
     if completed_tasks and not save_failure:
         assert len(grades) == 1

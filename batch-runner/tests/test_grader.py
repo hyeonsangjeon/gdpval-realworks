@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 from core.azure_ai_clients import AzureAIWorkload
 from core.grader import Grader, grader_transport_options
 from core.rubric_loader import RubricItem, TaskRubric
@@ -144,7 +146,9 @@ def test_grader_routes_typed_workload_and_closes_lease(tmp_path):
         client_factory=factory,
     )
 
-    assert grader.client is client
+    from core.runner_environment import GuardedGradingClient
+    assert type(grader.client) is GuardedGradingClient
+    assert grader.client._inner is client
     assert grader.runtime_fingerprint == "fingerprint"
     factory.create.assert_called_once_with(
         AzureAIWorkload.GRADER,

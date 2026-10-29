@@ -60,6 +60,7 @@ from core.codex_runtime_config import (
     resolve_run_root_base,
 )
 from core.cost_metering import CostRecorder
+from core import runner_environment
 from core.codex_task_deadline import (
     ATTEMPT_SECONDS, ATTEMPTS_EXHAUSTED, EXHAUSTED, STATE_REFUSED,
     CodexTaskDeadline, CodexTaskDeadlineStore,
@@ -1049,6 +1050,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         mint will reach the deployment and be refused there, and the refusal
         will describe the endpoint rather than the sign-in.
         """
+        self._runner_environment = runner_environment.require_execution(
+            getattr(self, "_runner_environment", None))
         pilot_session = getattr(self, "pilot_wire_receipts", None)
         if (getattr(self, "run_id", None) == PilotInputCapture.RUN_ID
                 or pilot_session is not None or pilot_wire_observer is not None):
@@ -1398,13 +1401,28 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         run_id: Optional[str] = None, condition_name: Optional[str] = None,
         task_id: Optional[str] = None,
     ) -> dict:
+        try:
+            self._runner_environment = runner_environment.require_execution()
+        except runner_environment.ExecutionEnvironmentRefused as error:
+            result = self._failure(error.code, category=error.code)
+            result["runner_evidence"] = runner_environment.receipt("inference", error.observation)
+            return result
         observation = getattr(self, "observation_control", None)
         arguments = dict(task_prompt=task_prompt, model=model, reference_files=reference_files,
                          occupation=occupation, experiment_prompt=experiment_prompt,
                          perception_text=perception_text, run_id=run_id,
                          condition_name=condition_name, task_id=task_id)
         if observation is None:
-            return self._run(**arguments)
+            result = self._run(**arguments)
+            # Registered results are already sealed with this field. Never
+            # mutate a private-result hash after its owner has accepted it.
+            evidence = runner_environment.receipt("inference", self._runner_environment)
+            if "runner_evidence" not in result:
+                result["runner_evidence"] = evidence
+            elif result["runner_evidence"] != evidence:
+                raise runner_environment.ExecutionEnvironmentRefused(
+                    runner_environment.CHANGED, runner_environment.observe())
+            return result
         from core.time_budget_observation_deadline import CLEANUP_UNCONFIRMED, TIMEOUT
 
         observation.claim(run_id=self.run_id if run_id is None else run_id,
@@ -1420,6 +1438,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             observation.finish_cleanup(True)
             self.last_observation_deadline = observation.as_record()
             if result is not None:
+                result["runner_evidence"] = runner_environment.receipt("inference", self._runner_environment)
                 result["time_budget_observation"] = self.last_observation_deadline
                 if observation.terminal_reason == TIMEOUT:
                     result.update(success=False, error=TIMEOUT, error_category=TIMEOUT)
@@ -1616,6 +1635,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         turn_id=outcome.turn_id,
                     )
                 result: dict[str, Any] = {
+                    "runner_evidence": runner_environment.receipt("inference", self._runner_environment),
                     "success": outcome.success,
                     "text": outcome.text,
                     "files": outcome.files,
@@ -1772,6 +1792,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     codex = self.open_runtime(
                         workspace, pilot_wire_observer=pilot_wire_observer,
                     )
+            except runner_environment.ExecutionEnvironmentRefused as exc:
+                return CodexRunOutcome(success=False, text="", error=exc.code, error_category=exc.code)
             except (CodexRuntimeUnavailable, CodexProviderConfigurationError) as exc:
                 return CodexRunOutcome(
                     success=False,
