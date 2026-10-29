@@ -56,6 +56,15 @@ the two exact execution assertions and `CODEX_SANDBOX_MUST_RUN=1` remain gates;
 no skip or failure is converted to success. Keep the new prepared-host receipt
 as a separate artifact, not a replacement for the historical survey.
 
+Hosted run 40919077805 (image `20261026.354.1`) showed the targeted bwrap
+profile succeeded: initial namespace exit 1 became 0 without a sysctl write.
+The standalone Codex probe nevertheless exited 101. Run 40922263095's bounded
+failure facts identified a Rust panic and missing executable, with no model
+call. The pinned 0.147.0 parser selects the OS itself and treats `linux` as the
+command; its source tests use `codex sandbox -- <command>`. Remove that stray
+argument, retain all namespace/exact-marker gates, and rerun the hosted proof.
+This syntax correction does not introduce a legacy sandbox fallback.
+
 ## Official OpenAI documentation checked
 
 - [CLI Linux sandbox](https://developers.openai.com/codex/cli/reference/): the

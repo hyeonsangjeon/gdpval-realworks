@@ -91,7 +91,9 @@ def _cli_probe(binary, scratch):
         "XDG_STATE_HOME": str(paths["state"]), "TMPDIR": str(paths["tmp"])}
     # sandbox is a local command runner, not `exec`, an app-server turn, or a
     # prompt. The command and empty state are fixed; no model request is used.
-    return _run([str(binary), "sandbox", "linux", "--", "/usr/bin/printf", SANDBOX_MARKER],
+    # 0.147.0 selects the OS itself. A literal `linux` is treated as the
+    # executable, not a subcommand, and panics with ENOENT on the hosted image.
+    return _run([str(binary), "sandbox", "--", "/usr/bin/printf", SANDBOX_MARKER],
                 environment=environment, cwd=paths["home"])
 
 

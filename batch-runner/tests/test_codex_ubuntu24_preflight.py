@@ -53,7 +53,7 @@ def fake_host(native_hosted_runner, monkeypatch, tmp_path):
             number = sum("--unshare-user" in prior for prior, _ in calls)
             code = state["initial"] if number == 1 else state["final"]
         else:
-            assert argv == ["/synthetic/codex", "sandbox", "linux", "--", "/usr/bin/printf", preflight.SANDBOX_MARKER]
+            assert argv == ["/synthetic/codex", "sandbox", "--", "/usr/bin/printf", preflight.SANDBOX_MARKER]
             environment = kwargs["environment"]
             assert set(environment) == {"PATH", "LANG", "HOME", "CODEX_HOME", "XDG_CONFIG_HOME",
                 "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "TMPDIR"}
