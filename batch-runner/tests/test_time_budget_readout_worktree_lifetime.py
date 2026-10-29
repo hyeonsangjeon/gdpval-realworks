@@ -20,6 +20,7 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
         f"import sys\nsys.path[:0] = {[str(root), str(root / 'tests')]!r}\n" + dedent('''\
         import json
         from pathlib import Path
+        import shutil
         import subprocess
         import time
         from types import SimpleNamespace
@@ -59,7 +60,6 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
         @pytest.mark.parametrize("phase", ["passed", "reuse"])
         def test_time_budget_worktree_registration_reuse(source_repository, tmp_path, monkeypatch, phase):
             repository = source_repository
-            root = tmp_path / "runner-temp" / readout.subject.SOURCE_BASENAME
             if phase == "passed":
                 source = readout.source.__wrapped__(repository, tmp_path, monkeypatch)
                 record(passed_tmp_path=str(tmp_path), passed_root=str(source.root))
@@ -67,9 +67,19 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
                 return
 
             data = json.loads(RECEIPT.read_text())
-            assert str(tmp_path) == data["passed_tmp_path"] and str(root) == data["passed_root"]
+            # pytest <9.2 hands this case the passed case's removed directory again; pytest 9.2 numbers a
+            # fresh one. Either way, exercise the stale registration on the passed case's exact path.
+            reused = Path(data["passed_tmp_path"])
+            pytest_reused = str(tmp_path) == str(reused)
+            if not pytest_reused:
+                assert not reused.exists()
+                reused.mkdir()
+            tmp_path = reused
+            root = tmp_path / "runner-temp" / readout.subject.SOURCE_BASENAME
+            assert str(root) == data["passed_root"]
             assert not root.exists()
-            record(same_path_reused=True, passed_directory_removed=True)
+            record(same_path_reused=True, passed_directory_removed=True,
+                   same_path_source="pytest" if pytest_reused else "recreated")
             deadline = time.monotonic() + 30
             before = readout._git(repository.workspace, "worktree", "list", "--porcelain", deadline=deadline)
             assert "worktree " + str(root) + "\\n" in before
@@ -113,6 +123,8 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
             }
             record(corrected_fixture_calls=calls, registrations_after=after, checks=checks)
             assert all(checks.values()), checks
+            if not pytest_reused:
+                shutil.rmtree(reused)  # What tmp_path_retention_policy=failed does to a passed case's directory.
         '''), encoding="utf-8")
     junit = owned / "child-junit.xml"
     command = [sys.executable, "-m", "pytest", "-q", "--tb=short", "-o", "tmp_path_retention_policy=failed",

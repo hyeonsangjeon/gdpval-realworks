@@ -876,7 +876,8 @@ def test_time_budget_native_uncertainty_readout(case, transport, monkeypatch, ca
     assert all(call.method == "GET" and call.headers["accept-encoding"] == "identity"
                and 0 < call.extensions["timeout"]["read"] <= 30 for call in transport.calls)
     if scenario == "cumulative_bound":
-        assert second.extensions["timeout"]["read"] == 25
+        # The fake clock starts at the real monotonic value, so 60 - 35 is float arithmetic, not exactly 25.
+        assert second.extensions["timeout"]["read"] == pytest.approx(25)
     value = json.loads(case.source.destination.read_bytes())
     subject.validate_envelope(value, _context(case))
     assert json.loads(output.out) == value and value["verified_private"] is True
