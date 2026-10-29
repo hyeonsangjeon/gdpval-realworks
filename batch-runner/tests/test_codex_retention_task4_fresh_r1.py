@@ -166,7 +166,7 @@ def _source_tree(destination):
     assert frozen != REAL_ROOT
     roles.update(path.relative_to(frozen).as_posix() for path in (frozen / "batch-runner/core").rglob("*.py"))
     for role in sorted(roles):
-        source = frozen if role.startswith("batch-runner/core/") else REAL_ROOT
+        source = frozen if role.startswith("batch-runner/core/") or role == "batch-runner/step8_grade.py" else REAL_ROOT
         _write(destination / role, preparation._read(source / role, "synthetic_source_copy"))
     (destination / "batch-runner/workspace").mkdir(exist_ok=True)
     (destination / "data").mkdir(exist_ok=True)

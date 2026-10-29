@@ -1,5 +1,17 @@
 # Latest task result
 
+## Historical source-bound fixture separation, 2026-10-29
+
+CI at `9087c2c6e` found additional exact historical dependency pins and fixture
+origin assumptions. Restore the budget-output helper to its sealed bytes as
+well; all three historical readers remain unchanged. Old-study unit transports
+explicitly use the historical input envelope, while current-format output must
+still be refused by that reader. No saved record is stripped or rewritten.
+Grading fixtures use the identical executor code with their checked synthetic
+controller source origin; current-tree reuse is explicitly tested as refused.
+New pilot receipt/admission behavior and every original seal/cap remain intact.
+Related tests and final CI are still pending for this follow-up.
+
 ## Preserve the historical reader seal, 2026-10-29
 
 The retention follow-up reached **209 passed / 1 failed / 1 skipped**; its

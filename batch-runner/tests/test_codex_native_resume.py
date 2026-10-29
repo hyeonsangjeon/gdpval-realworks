@@ -1582,7 +1582,7 @@ def test_native_resume_content_filter_is_terminal_across_restart(host, monkeypat
 
 @pytest.mark.parametrize("stale", [False, True], ids=["current", "pre_resume"])
 def test_native_resume_active_grader_template_source_bindings(
-        stale, historical_comparison_source, historical_foundry_source, monkeypatch):
+        stale, historical_comparison_source, historical_foundry_source, frozen_ghcp_gate, monkeypatch):
     frozen_source = historical_comparison_source
     assert frozen_source == historical_foundry_source
     # The actual pre-resume identities are populated from the immutable baseline,
@@ -1617,14 +1617,17 @@ def test_native_resume_active_grader_template_source_bindings(
     # The current runner-receipt source is deliberately outside the old seal.
     assert ghcp_gate.inspect_plan(ghcp_gate.load_plan())["configuration_valid"] is False
     assert (frozen_source / ghcp_gate.PLAN_PATH).read_bytes() == ghcp_gate.PLAN.read_bytes()
-    monkeypatch.setattr(ghcp_gate, "ROOT", frozen_source)
-    gate_plan = ghcp_gate.load_plan()
+    # Read the old registration with its actual immutable reader, not the
+    # current source-profile-aware reader under a spoofed historical root.
+    legacy_gate = frozen_ghcp_gate
+    assert (legacy_gate.ROOT / legacy_gate.PLAN_PATH).read_bytes() == (frozen_source / ghcp_gate.PLAN_PATH).read_bytes()
+    gate_plan = legacy_gate.load_plan()
     reference_source = "batch-runner/core/reference_integrity.py"
     current_reference = hashlib.sha256((frozen_source / reference_source).read_bytes()).hexdigest()
     assert gate_plan["source_pins"][reference_source] == ghcp_gate.PINNED_SOURCES[reference_source] == current_reference
     if stale:
         gate_plan["source_pins"][reference_source] = "13198897c189a9276494b78ea3359fc2e623211ab2f32554b81ab9b12d9cf19e"
-    gate_report = ghcp_gate.inspect_plan(gate_plan)
+    gate_report = legacy_gate.inspect_plan(gate_plan)
     assert gate_report["configuration_valid"] is not stale
     assert all(gate_report[flag] is False for flag in ghcp_gate.FALSE_FLAGS)
     assert gate_report["launch_blockers"] == list(ghcp_gate.LAUNCH_BLOCKERS)

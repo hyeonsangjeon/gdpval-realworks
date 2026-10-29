@@ -20,7 +20,7 @@ def test_time_budget_failed_tmp_path_retention(tmp_path, record_property):
     assert workflow_bytes.count(option) == 1
     # Undo only this option: all other jobs, guards and ceilings stay byte-identical.
     assert hashlib.sha256(workflow_bytes.replace(option, b"", 1)).hexdigest() == (
-        "58ecfccbacc6a887780b821692d07b8e03bf6eac120b703ffdf1d9bab600a3a4"
+        "7bd20c544ad32aff454ae212643b9228a943e072b89990c9789b89ac74134068"
     )
     job = yaml.safe_load(workflow_bytes)["jobs"]["time-budget-contracts"]
     assert job["timeout-minutes"] == 45

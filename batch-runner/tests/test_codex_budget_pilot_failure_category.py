@@ -34,6 +34,21 @@ PRIVATE = "hf_SYNTHETIC_DIAGNOSTIC_SECRET /private/native/auth.json https://priv
 UNCHANGED = object()
 
 
+def historical_native_envelope(result):
+    """Explicit fake pre-runner-receipt transport shape for closed studies.
+
+    This is only test input to the real Step2 writer, not a projection applied
+    to saved results. Production always keeps its new receipt. A separate
+    modern-envelope case requires the immutable historical reader to refuse.
+    """
+    value = dict(result)
+    evidence = value.pop("runner_evidence", None)
+    if evidence is not None:
+        runner_environment.validate_receipt(evidence)
+        assert evidence["stage"] == "inference"
+    return value
+
+
 @pytest.fixture(autouse=True)
 def no_runtime_auth_or_publication(monkeypatch):
     from huggingface_hub import HfApi
@@ -157,7 +172,7 @@ class DiagnosticChildren(CICellChildren):
                     raw.pop("error_category", None)
                 elif self.category is not UNCHANGED:
                     raw["error_category"] = self.category
-                return raw
+                return historical_native_envelope(raw)
 
             upload = cwd / "workspace/upload"
             row = step2._execute_single_task(

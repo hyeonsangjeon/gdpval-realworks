@@ -1,4 +1,4 @@
-"""Step2's real no-QA writer through private retention and grading inputs.
+"""Step2's real writer with historical synthetic native transport envelopes.
 
 Original-input provenance, source/host capability, native turns and HF are
 synthetic. Serialization, deadlines, receipts, byte/identity/privacy checks,
@@ -37,6 +37,7 @@ from core.needs_files import NeedsFilesManifest
 from core.result_fingerprint import inference_result_fingerprint, validate_inference_result_fingerprint
 from core.source_identity import source_task_projection_sha256
 from .test_codex_budget_pilot_ci import CICellChildren
+from .test_codex_budget_pilot_failure_category import historical_native_envelope
 from .test_codex_budget_pilot_epoch02 import compiled  # noqa: F401 -- genuine compiler cache only
 from .test_codex_budget_pilot_epoch03_gate import GateHF
 from .test_codex_budget_pilot_retention import (
@@ -129,7 +130,10 @@ class WriterChildren(CICellChildren):
 
         def execute(**options):
             options.pop("verbose")
-            return runner.run(**options)
+            raw = runner.run(**options)
+            if self.damage in {"modern_runner", "runner_digest", "runner_stage"}:
+                return raw
+            return historical_native_envelope(raw)
 
         return SimpleNamespace(runner=runner, execute=execute, close=runner.close)
 
@@ -287,7 +291,7 @@ def _grade_inputs(s, terminal, monkeypatch, damage):
     "missing_history", "missing_attempts", "score", "unknown", "nested_secret", "raw_messages", "originals",
     "result_bytes", "deliverable_bytes", "ledger_bytes", "source", "receipt", "cleanup",
     "failed_withheld", "publication_lost", "grade_bytes", "grade_identity",
-    "runner_digest", "runner_stage",
+    "modern_runner", "runner_digest", "runner_stage",
 ])
 def test_success_writer_retention_contract(success_case, monkeypatch, capsys, damage):
     s = success_case
@@ -324,10 +328,7 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
         raw = json.loads(s.transport.writer_bytes)
         assert set(raw) <= output.RESULT_FIELDS
         output._safe_record(raw)
-        runner_record = raw["results"][0]["observability"]["runner_evidence"]
-        runner_environment.validate_receipt(runner_record)
-        assert runner_record["stage"] == "inference"
-        assert runner_record["observation"]["runner_name"] == "synthetic-native-runner"
+        assert "runner_evidence" not in raw["results"][0]["observability"]
         old_fields = output.ROW_FIELDS - REFLECTION
         # Exact locally reproduced paths; no claim about the missing live file.
         assert {"results[0]." + key for key in set(raw["results"][0]) - old_fields} == {
@@ -336,6 +337,14 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
             old_contract.setattr(output, "ROW_FIELDS", old_fields)
             with pytest.raises(output.OutputPublicationRefused, match="^unsafe_result_fields$"):
                 output.prepare(**options)
+        assert s.transport.result_bytes == s.transport.writer_bytes
+    if damage == "modern_runner":
+        # Current-format output is real, byte-preserved and explicitly NOT
+        # admitted by a closed historical reader. Never repin its dependency.
+        raw = json.loads(s.transport.writer_bytes)
+        evidence = raw["results"][0]["observability"]["runner_evidence"]
+        runner_environment.validate_receipt(evidence)
+        assert evidence["stage"] == "inference"
         assert s.transport.result_bytes == s.transport.writer_bytes
     if damage in {"result_bytes", "ledger_bytes", "deliverable_bytes"}:
         name = "result" if damage == "result_bytes" else "ledger"

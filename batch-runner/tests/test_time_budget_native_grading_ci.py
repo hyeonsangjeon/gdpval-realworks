@@ -29,6 +29,7 @@ from .test_time_budget_native_grading_execution import (
 )
 from .test_time_budget_native_grading_intake import TOKEN, PRIVATE, NAMES
 from .test_time_budget_first_v2_ci import PrivateStore, TOKEN as RPC_TOKEN
+from .test_time_budget_grading_preparation import _bind_grading_controller
 
 ROOT = Path(__file__).resolve().parents[2]
 _REAL_RUN, _REAL_POPEN = subprocess.run, subprocess.Popen
@@ -172,6 +173,7 @@ def hosted(case, offline, dual_roots, tmp_path, monkeypatch, record_property):
     roots = {key: temporary / basename for key, basename in subject.ROOT_NAMES.items()}
     # The imported controller stands in for the actual CLI loaded from linked C.
     monkeypatch.setattr(subject, "__file__", str(roots["controller_root"] / subject.HELPER))
+    _bind_grading_controller(monkeypatch, roots["controller_root"])
     propagated = dict(line.split("=", 1) for line in Path(environment["GITHUB_ENV"]).read_text().splitlines())
     assert propagated == {"AZURE_CONFIG_DIR": str(roots["login_root"])}
     assert roots["login_root"].stat().st_mode & 0o777 == 0o700 and list(roots["login_root"].iterdir()) == []

@@ -94,6 +94,10 @@ def dual_roots(tmp_path_factory):
     git("-C", str(substituted), "add", "--", role, *sorted(fixed_roles), prospective.REGISTRATION_PATH)
     git("-C", str(substituted), "commit", "-m", "test: coherent synthetic source substitution")
     replacement = git("-C", str(substituted), "rev-parse", "HEAD").decode().strip()
+    # Cross-root refusal cases must compare existing commits, not fail early
+    # because synthetic R objects were never in the original repository.
+    for name in ("frozen", "substitute"):
+        git("-C", str(roots[name]), "fetch", "--no-tags", "--", str(roots["runtime"]), runtime_sha)
     git("-C", str(roots["runtime"]), "tag", "-a", "synthetic-review-tag", "-m", "synthetic tag", runtime_sha)
     tag = git("-C", str(roots["runtime"]), "rev-parse", "synthetic-review-tag").decode().strip()
     return {**roots, "gitdirs": gitdirs, "runtime_sha": runtime_sha, "substitute_sha": replacement, "tag_sha": tag,
@@ -198,7 +202,7 @@ def test_current_source_cannot_reuse_the_old_time_budget_registration(dual_roots
 
 def test_time_budget_running_core_guard_rejects_drift(dual_roots, tmp_path):
     import shutil
-    from gpt54_prepared_input_attestation import ManifestRefused
+    from core.reference_integrity import ReferenceIntegrityError
 
     runtime = tmp_path / "independent-runtime"
     shutil.copytree(dual_roots["runtime"] / "batch-runner/core", runtime / "batch-runner/core")
@@ -207,7 +211,7 @@ def test_time_budget_running_core_guard_rejects_drift(dual_roots, tmp_path):
     prospective._require_running_observation_sources(runtime)
     changed = runtime / "batch-runner/core/codex_runner.py"
     changed.write_bytes(changed.read_bytes() + b"\n# synthetic runtime-source drift\n")
-    with pytest.raises(ManifestRefused):
+    with pytest.raises(ReferenceIntegrityError):
         prospective._require_running_observation_sources(runtime)
 
 

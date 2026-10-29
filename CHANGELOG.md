@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Preserve the generic historical budget-output helper's dependency seal too.
+  Legacy transport fixtures now explicitly supply their historical envelope;
+  a separate current-format case requires refusal without stripping saved
+  records or refreshing old reader hashes. Use coherent source origins for
+  historical grading fixtures, with a current-checkout refusal case, and fix
+  exact test-object, exception-type and workflow-digest expectations. These
+  changes do not alter active pilot receipts, model controls or caps.
+
 - Keep the closed historical retention reader/verifier byte-identical to their
   frozen identities; their unsupported new payloads must still refuse. Retain
   the validated runner-field fix only in the generic budget-pilot output
