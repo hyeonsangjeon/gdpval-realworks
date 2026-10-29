@@ -1,0 +1,346 @@
+name: Agentic Sandbox V2 - GHCP Sol fixed-five gate
+
+# Push is always model-free. Paid jobs require dispatch plus explicit opt-in
+# and owner-supplied authentication in the ghcp-sol-gate environment.
+on:
+  push:
+    branches: [leader/ghcp-sol-gate-actions-20261024]
+    paths:
+      - .github/workflows/agentic-v2-ghcp-sol-gate.yml
+      - batch-runner/ghcp*.py
+      - batch-runner/requirements-ghcp-sol-gate.txt
+      - batch-runner/tests/test_ghcp*.py
+      - batch-runner/tests/conftest.py
+      - batch-runner/tests/fixtures/ghcp*
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Keep true for model-free rehearsal; false also requires execute_paid
+        type: boolean
+        default: true
+        required: true
+      execute_paid:
+        description: Explicitly request the owner-approved fixed-five gate (never a smoke or 220 tasks)
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentic-v2-ghcp-sol-gate
+  cancel-in-progress: false
+
+jobs:
+  offline-ci:
+    name: Pinned CLI and offline gate tests (no model)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Refuse paid mode before checkout
+        env:
+          DRY_RUN: 'true'
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" != true ]]; then
+            echo "::error::Paid execution is not implemented or approved."
+            exit 2
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: "3.10"
+      - name: Verify and record the actual hosted runner
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ghcp-model-free"
+          python batch-runner/ghcp_sol_runner_environment.py > "$RUNNER_TEMP/ghcp-model-free/runner.json"
+      - name: Install only pinned model-free test dependencies
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+      - name: Install and verify Copilot CLI 1.0.103 without authentication
+        env:
+          PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          umask 077
+          cli_dir="$RUNNER_TEMP/ghcp-copilot-1.0.103"
+          mkdir -p "$cli_dir" "$RUNNER_TEMP/ghcp-cli-version-home"
+          curl --fail --silent --show-error --location --retry 2 --max-time 180 \
+            https://github.com/github/copilot-cli/releases/download/v1.0.103/copilot-linux-x64.tar.gz \
+            --output "$cli_dir/release.tar.gz"
+          printf '%s  %s\n' 9aeb4430e9ac9523546db07b227c7aba179a4710a55f9ac29ad143b0f9e1b325 "$cli_dir/release.tar.gz" | sha256sum --check --status
+          tar --extract --gzip --file "$cli_dir/release.tar.gz" --directory "$cli_dir" --no-same-owner --no-same-permissions
+          printf '%s  %s\n' f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d "$cli_dir/copilot" | sha256sum --check --status
+          timeout --signal=TERM --kill-after=5s 30s env -i PATH=/usr/bin:/bin LANG=C.UTF-8 \
+            HOME="$RUNNER_TEMP/ghcp-cli-version-home" COPILOT_AUTO_UPDATE=false \
+            "$cli_dir/copilot" --no-auto-update --disable-client-telemetry --version \
+            > "$RUNNER_TEMP/ghcp-model-free/copilot-version.txt"
+          "$PYTHON_EXECUTABLE" - <<'PY'
+          import os
+          from pathlib import Path
+          text = (Path(os.environ["RUNNER_TEMP"]) / "ghcp-model-free/copilot-version.txt").read_text().strip()
+          version = "GitHub Copilot CLI 1.0.103."
+          assert text.splitlines() in ([version], [version, "Run 'copilot update' to check for updates."]), "copilot_version_mismatch"
+          print("copilot_cli_version_verified=1.0.103; model_calls=0")
+          PY
+      - name: Run the whole offline gate suite once
+        env:
+          PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          timeout --signal=TERM --kill-after=5s 300s env -i \
+            PATH="$(dirname "$PYTHON_EXECUTABLE"):/usr/bin:/bin" LANG=C.UTF-8 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_LAZY_FETCH=1 \
+            "$PYTHON_EXECUTABLE" -m pytest -q -ra --tb=short --color=no -o console_output_style=classic \
+            -o addopts= -m 'not integration' -p no:cacheprovider \
+            --junitxml="$RUNNER_TEMP/ghcp-model-free/tests.junit.xml" \
+            --basetemp="$RUNNER_TEMP/ghcp-model-free-pytest" \
+            tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_vm_gate_contract.py \
+            tests/test_ghcp_vm_input_bundle.py tests/test_ghcp_sol_execution_adapter.py \
+            tests/test_ghcp_sol_copilot_smoke.py tests/test_ghcp_sol_runner_environment.py \
+            tests/test_ghcp_sol_grader_contract.py tests/test_ghcp_sol_paid_gate.py
+      - name: Fake-token projection only - never launch a CLI
+        env:
+          PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          env -i PATH=/usr/bin:/bin LANG=C.UTF-8 COPILOT_GITHUB_TOKEN=SYNTHETIC_CI_NOT_A_CREDENTIAL \
+            "$PYTHON_EXECUTABLE" - <<'PY'
+          import json, os, socket, subprocess
+          import ghcp_sol_execution_adapter as adapter
+          def forbidden(*args, **kwargs):
+              raise AssertionError("model_free_preflight_attempted_external_effect")
+          subprocess.Popen = socket.create_connection = socket.socket.connect = forbidden
+          assert adapter._selected_auth_environment("COPILOT_GITHUB_TOKEN") == {"COPILOT_GITHUB_TOKEN": "SYNTHETIC_CI_NOT_A_CREDENTIAL"}
+          del os.environ["COPILOT_GITHUB_TOKEN"]
+          try:
+              adapter._selected_auth_environment("COPILOT_GITHUB_TOKEN")
+          except adapter._Stop as error:
+              assert error.code == "auth_source_unavailable"
+          else:
+              raise AssertionError("missing_source_not_refused")
+          print(json.dumps({"fake_auth_preflight": "passed", "model_calls": 0, "auth_source": "COPILOT_GITHUB_TOKEN"}))
+          PY
+      - name: Keep model-free version, runner and test evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-sol-model-free-ci
+          path: |
+            ${{ runner.temp }}/ghcp-model-free/runner.json
+            ${{ runner.temp }}/ghcp-model-free/copilot-version.txt
+            ${{ runner.temp }}/ghcp-model-free/tests.junit.xml
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  grader-contract:
+    name: Step8 input layout and policy only (no judge)
+    needs: [task, paid-task]
+    if: ${{ always() && !cancelled() && needs.task.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Refuse paid mode before checkout
+        env:
+          DRY_RUN: 'true'
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" != true ]]; then
+            echo "::error::Paid execution is not implemented or approved."
+            exit 2
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: "3.10"
+      - name: Install pinned import-only contract dependencies
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+      - name: Read only this run's five nonsecret capture artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && 'ghcp-sol-paid-capture-*' || 'ghcp-sol-dry-capture-*' }}
+          path: ${{ runner.temp }}/ghcp-grader-captures
+          merge-multiple: false
+      - name: Convert empty captures and invoke Step8 input validators only
+        env:
+          PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
+          CAPTURE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && 'paid' || 'dry' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 120s env -i \
+            PATH="$(dirname "$PYTHON_EXECUTABLE"):/usr/bin:/bin" LANG=C.UTF-8 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+            "$PYTHON_EXECUTABLE" batch-runner/ghcp_sol_grader_contract.py \
+              --captures "$RUNNER_TEMP/ghcp-grader-captures" \
+              --output "$RUNNER_TEMP/ghcp-grader-contract" --mode "$CAPTURE_MODE"
+      - name: Keep input-layout checks and the empty manifest only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-sol-step8-input-contract
+          path: |
+            ${{ runner.temp }}/ghcp-grader-contract/grader-contract.json
+            ${{ runner.temp }}/ghcp-grader-contract/workspace/step2_inference_results.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  plan:
+    needs: offline-ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Refuse paid mode before checkout
+        env:
+          DRY_RUN: 'true'
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" != true ]]; then
+            echo "::error::Paid execution is not implemented or approved."
+            exit 2
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Derive the fixed public cohort without loading task inputs
+        id: plan
+        run: |
+          set -euo pipefail
+          matrix="$(python3 batch-runner/ghcp_sol_actions_gate.py --matrix)"
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+
+  task:
+    name: Dry capture - ${{ matrix.task_id }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Refuse paid mode before checkout
+        env:
+          DRY_RUN: 'true'
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" != true ]]; then
+            echo "::error::Paid execution is not implemented or approved."
+            exit 2
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Exercise the model-free capture path
+        env:
+          TASK_ID: ${{ matrix.task_id }}
+          DRY_RUN: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 60s \
+            python3 batch-runner/ghcp_sol_actions_gate.py \
+              --dry-run "$DRY_RUN" --task-id "$TASK_ID" \
+              --state-root "$RUNNER_TEMP/ghcp-sol-gate"
+      # Never upload the state directory, raw transcripts, inputs or outputs.
+      - name: Keep only the generated nonsecret capture envelope
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-sol-dry-capture-${{ matrix.task_id }}
+          path: ${{ runner.temp }}/ghcp-sol-gate/${{ matrix.task_id }}/capture.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  paid-task:
+    name: Paid task - ${{ matrix.task_id }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false }}
+    needs: plan
+    environment: ghcp-sol-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      # Stop queued tasks at the first missing-setting/auth/limit failure.
+      fail-fast: true
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      GHCP_PAID_EXECUTION: 'true'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+      - name: Verify the hosted runner before any input or CLI operation
+        run: python batch-runner/ghcp_sol_runner_environment.py
+      - name: Install pinned dependencies without credentials
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+      - name: Prepare only hash-pinned public original inputs without authentication
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 300s \
+            python batch-runner/ghcp_sol_paid_gate.py --prepare-inputs "$RUNNER_TEMP/ghcp-paid-inputs"
+      - name: Install the pinned CLI without launching it
+        run: |
+          set -euo pipefail
+          umask 077
+          cli_dir="$RUNNER_TEMP/ghcp-paid-cli"
+          mkdir -p "$cli_dir"
+          curl --fail --silent --show-error --location --max-time 180 \
+            https://github.com/github/copilot-cli/releases/download/v1.0.103/copilot-linux-x64.tar.gz \
+            --output "$cli_dir/release.tar.gz"
+          printf '%s  %s\n' 9aeb4430e9ac9523546db07b227c7aba179a4710a55f9ac29ad143b0f9e1b325 "$cli_dir/release.tar.gz" | sha256sum --check --status
+          tar --extract --gzip --file "$cli_dir/release.tar.gz" --directory "$cli_dir" --no-same-owner --no-same-permissions
+          printf '%s  %s\n' f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d "$cli_dir/copilot" | sha256sum --check --status
+      - name: Reject empty auth then supervise exactly one fixed task
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          TASK_ID: ${{ matrix.task_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 1230s \
+            python batch-runner/ghcp_sol_paid_gate.py --task-id "$TASK_ID" \
+              --copilot-bin "$RUNNER_TEMP/ghcp-paid-cli/copilot" \
+              --bundle "$RUNNER_TEMP/ghcp-paid-inputs/bundle" \
+              --state-root "$RUNNER_TEMP/ghcp-paid-state" --output "$RUNNER_TEMP/ghcp-paid-export"
+      - name: Retain only checked captures - never HOME config or raw state
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-sol-paid-capture-${{ matrix.task_id }}
+          path: ${{ runner.temp }}/ghcp-paid-export
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false

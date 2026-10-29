@@ -35,6 +35,22 @@ def native_hosted_runner(monkeypatch, tmp_path):
     return fields
 
 
+@pytest.fixture
+def github_hosted_ubuntu_2404(monkeypatch):
+    """Synthetic host metadata only; callers still whitelist fake processes."""
+    import ghcp_sol_runner_environment as environment
+
+    for name, value in {
+        "GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
+        "RUNNER_NAME": "GitHub Actions synthetic-only", "RUNNER_OS": "Linux",
+        "ImageOS": "ubuntu24", "ImageVersion": "20261029.1.0",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(environment, "_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"})
+    monkeypatch.setattr(environment.platform, "system", lambda: "Linux")
+    return environment.observe()
+
+
 @pytest.fixture(scope="session")
 def frozen_local_comparison_source(tmp_path_factory):
     """F882 supplies historical positive bytes, never the current runtime R."""

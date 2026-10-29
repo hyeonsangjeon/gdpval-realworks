@@ -603,6 +603,303 @@ entries land under a fresh dated heading the day they merge to `main`.
   direct consistency and prior-evidence preservation checks passed. No
   new-head review/CI approval, push, dispatch or Project update is claimed.
 
+- Repair PR #788's test-only CI failures: treat ENOENT/ESRCH as vanished known
+  child processes without swallowing other errors; explicitly reuse the
+  time-budget fixture's removed directory across pytest 9.1/9.2 numbering.
+  Preserve process cleanup, source/hash/branch and failed-worktree assertions.
+  Related pytest 9.2 checks: **806 passed, 0 failed/errors/skipped**; targeted
+  16-case checks also pass on 9.1.1. No production guard, cap or pin changed.
+
+- Restrict GHCP execution entrypoints to observed GitHub-hosted Ubuntu 24.04
+  runners, reject absent/conflicting host metadata before auth or launch, and
+  recheck it immediately before spawning. Record runner/OS/image metadata;
+  NAS/local directories are development and model-free dry-run only.
+- Add branch-only model-free Actions CI with Copilot CLI 1.0.103 archive/binary
+  hashes, isolated version-only invocation, the full offline gate suite and a
+  synthetic-token projection. No model call, secret injection or paid mode.
+- Document that the automatic Actions installation token is not established
+  as a supported Copilot credential; personal fine-grained PAT, OAuth and
+  user-to-server token options remain subject to owner selection.
+
+### Added
+
+- Add a dispatch-only GHCP fixed-five paid-task matrix behind the named
+  protected environment and one scoped secret reference; preserve model-free
+  push/PR behavior and refuse absent credentials before Copilot. Bind pinned
+  original input preparation and task commands to the existing supervisor,
+  and forward only checked captures to the unchanged Step8 policy/input path.
+  Live identity/served-setting refusals remain fail-closed; no judge/model call
+  or secret-value access occurred. Full offline suite: **729 passed, 0 failed/
+  errors/skipped**, **62.94s**. Document read-only dispatch-registration findings.
+
+- Connect all five GHCP dry-capture artifacts to an empty Step8 input layout
+  and unchanged pinned-policy/input validators in a hosted Ubuntu 24.04 job.
+  Refuse missing, malformed, extra, linked, changed or non-model-free inputs;
+  block grader/rubric-loader construction, network and process effects.
+  Retain only the nonsecret contract report and empty manifest. Explicitly
+  preserve live inference/full-220 identity refusals and `gate5_passed=false`;
+  no answer, grade, inference SHA, model call or secret supply is fabricated.
+  One full local fixture suite: **689 passed, 0 failed/errors/skipped**, **60.29s**.
+  Frozen Step8 sources, plans, templates and limits remain unchanged.
+
+- Add explicit owner-file authentication through `COPILOT_GITHUB_TOKEN_FILE`.
+  Require an owned, single-link regular 0600 file outside source/capture trees,
+  reject unsafe/missing/empty/drifted files, and forward only the value to the
+  child's `COPILOT_GITHUB_TOKEN`. Reuse source selection for externally supplied
+  gh OAuth; no fallback, token extraction, file copy or parent-env mutation.
+  Extend secret non-egress checks with 43 synthetic file-source cases. Full
+  gate suite: **543 passed, 0 failed/errors/skipped**, **57.18s** pytest,
+  exit 0; preserve the earlier interrupted 102-case progress-reporting diagnostic.
+  A model-free entitlement GET reports **yes / HTTP 200 / enterprise** for the
+  existing gh login, not served-setting or CLI execution proof. Add a five-step
+  owner PAT procedure. No real token file supplied, model/smoke/five-task run,
+  dispatch or PR; plans, limits, workflow and finite rights remain unchanged.
+
+- Resolve the gh token-type question using only the default-masked **`gho_`**
+  prefix: **OAuth**, a documented Copilot CLI supported type, not proof of
+  entitlement or isolated supply. Document three owner authentication choices
+  with operator/adapter responsibilities and risks. Related synthetic tests:
+  **23 passed, 0 failed, 38 deselected**. Documentation only; no credential
+  export/copy, model call, real smoke or five-task execution.
+
+- Record metadata-only GitHub/Copilot authentication availability and three
+  owner choices without retrieving or copying a credential. Reuse the fresh
+  directory environment for the generic fake-command path and add **45**
+  fixed-five mock preflight cases. Final full suite: **500 passed, 0 failed,
+  0 skipped**; retain the initial **455 passed / 45 failed** fixture-ID result.
+  No model call or live five-task wiring; settings proof, usage and authentication
+  selection remain unresolved. Plans, caps, workflow and finite rights are unchanged.
+
+- Require explicit, allowlisted authentication-environment selection for the
+  isolated Copilot CLI smoke. Record only `auth_source` names; refuse missing
+  sources before launch and reject selected-value echoes in pipe, receipt and
+  adapter-transcript paths without publishing the value. One combined offline
+  invocation passed **455 tests, 0 failed, 0 skipped**. All three supported
+  variables are absent from the current worker environment, so no new real
+  smoke was attempted. Stored-login type remains unknown; no credential lookup,
+  login, token creation or five-task execution. Prior receipts are preserved.
+
+- Bind a disabled-by-default, fixed **CONNECTED** smoke to installed Copilot
+  CLI **1.0.103**, with verified executable bytes and a fresh NAS work/HOME/
+  config/cache environment. Label the condition **GHCP Copilot CLI agent +
+  GPT-5.6 Sol**, not a VM or Codex-agent result. Keep **1,200 seconds / 64 turn
+  starts**, select **32 tool starts**, and refuse missing/mismatched metadata.
+  One combined **432-test** pass preceded the single real prompt, which reported
+  **No authentication information found** (CLI **1**, adapter **2**). No model,
+  effort or context value was observed; no prompt retry or five-task run followed.
+  Preserve the original receipt and correct its duration-only usage projection:
+  **`totalApiDurationMs=0`** is not token usage or zero cost. Final code passed a
+  separate combined **433 tests, 0 failed, 0 skipped** after the synthetic fix;
+  no second live smoke. See [current evidence](tasks/LATEST_TASK_RESULT/README.md).
+
+- Add a disabled-by-default GHCP process-adapter skeleton with an explicitly
+  supplied argv and a required, positive tool-call cap. Reuse the existing
+  **1200-second** and **64-turn** values without changing a plan or workflow.
+  Observe bounded JSONL start events, stop on an exceeded limit with fixed
+  reasons, signal the owned process group with TERM/KILL, reap its leader,
+  close stdout and retain private partial files with a safe local receipt.
+  No GHCP command or authentication route is bound. Event-based cancellation
+  is not pre-effect admission; settings remain settings only, unavailable
+  usage/cost stay null, and paid/retry authority stays false. One combined
+  offline invocation reports **295 passed, 0 failed, 0 skipped in 15.79s**,
+  wrapper **15.96s**, exit **0**: **231 unchanged** gate checks and **64 new**
+  fake-executable checks. The earlier 231-test proofs remain separate.
+  See the [adapter boundary](docs/ghcp-sol-actions-gate.md#disabled-process-adapter-2026-10-25-1035-kst)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md). Local commit only;
+  no network, model/GHCP execution, authentication, grading, dispatch or push.
+
+- Add a local-only GHCP GPT-5.6 Sol / Codex agent / Max / 1M Actions
+  gate draft under the existing Agentic Sandbox V2 workflow path: fixed
+  five-task matrix, one `ubuntu-24.04` job per task, and a model-free
+  plan/capture runner. Paid mode refuses before capture; no secrets, input
+  downloads or model/grader clients are wired. Only generated `capture.json`
+  metadata is artifact-eligible, never private inputs or raw streams.
+  Requested settings are not served evidence; dry-run served values are
+  `not available`. Local validation: **6 new contract tests passed**, **114
+  existing cohort/gate tests passed**, and **5 CLI dry-run captures** completed
+  with zero model/grader calls and no private input reads. See
+  [scope, survey and paid-run blockers](docs/ghcp-sol-actions-gate.md).
+  The subsequent local review and hardening are recorded below; no
+  specialist or launch approval is claimed. No push, workflow dispatch,
+  paid call or private handoff access was performed or authorized.
+
+### Changed
+
+- Record the owner's 2026-10-26 authorization for paid experimentation and
+  ordinary branch publication without converting the dry-only GHCP gate into
+  a runnable Codex route. Confirm that OpenAI's GPT-5.6 Sol specification
+  lists a **1,050,000-token context window**, not a GHCP applied-context
+  measurement. Preserve the missing command/authentication binding, null
+  tool-call/USD ceilings, capture and runtime-limit gates. A workflow metadata
+  GET returned **HTTP 404**; no dispatch or model call ran. Runtime, workflow,
+  registrations and tests are unchanged; the prior **313 passed, 0 failed,
+  0 skipped** result remains prior synthetic evidence, not a new test run.
+  See [the execution boundary](docs/ghcp-sol-actions-gate.md#owner-execution-request-and-publication-boundary-2026-10-26)
+  and [the current record](tasks/LATEST_TASK_RESULT/README.md).
+
+- Document where Copilot-backed Codex is offered using official GitHub,
+  VS Code and OpenAI sources and bounded installed help/version checks.
+  Distinguish cloud coding-agent sessions, `gh 2.98.0 agent-task`, Copilot
+  CLI's own harness and VS Code's extension/experimental Codex Agent Host.
+  The standalone host is documented; an approved unattended task-VM launch,
+  applied Sol/Max/1M proof, complete capture and fixed-limit mapping remain
+  unverified. Recommend preserving scope and holding execution; changing to
+  a Copilot CLI comparison or stopping the gate are owner decisions, not
+  grants. Reconfirm host Copilot **1.0.103 / 1.0.79**, separately from Desk
+  metadata **1.0.98** and unknown cross-version event equivalence. Preserve
+  the prior **313 passed, 0 failed, 0 skipped** proof at
+  `59c23a1446533cc988cf74840cd00eb1a23c3605`; no tests or collection reran.
+  Documentation-only checks and local commit, with no runtime/plan/cap/pin
+  changes, authentication, task/model execution, dispatch, grading or push.
+  See [route decisions and sources](docs/ghcp-sol-actions-gate.md#product-routes-and-scope-decision-2026-10-25-2145-kst)
+  and [the current record](tasks/LATEST_TASK_RESULT/README.md).
+
+- Trace the installed Copilot 1.0.79 JSONL writer: it excludes call usage,
+  context snapshots and model-change events, despite their presence in the
+  SDK schema. No Codex selector was found in the inspected installed
+  selectable interfaces. Desk 1.0.103 schema equivalence and applied Max/1M
+  remain unverified; propose 1.0.79 only as an offline reference, without
+  changing a pin. Parse the writer's separate CLI result envelope with strict
+  shape/session checks and safe allowlisted metadata. A zero result grants
+  neither completion nor settings authority and does not release process
+  supervision; nonzero results refuse with `cli_result_failed`. Add a filtered
+  synthetic stdout fixture and fourteen adapter cases. One combined offline
+  run on clean `59c23a1446533cc988cf74840cd00eb1a23c3605` reports **313 passed,
+  0 failed, 0 skipped in 16.50s**, wrapper **16.66s**, exit **0**, including
+  Auto/BYOK refusals. Keep the earlier **295 passed/4 failed** and separate
+  **4 passed** evidence distinct. No real CLI/help/authentication/network/model
+  invocation, plan/cap/collector/workflow change, dispatch, grading or push.
+  See the [installed harness/stdout audit](docs/ghcp-sol-actions-gate.md#installed-harness-and-stdout-audit-2026-10-25-1350-kst)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md). Local commit only;
+  actual VM/harness binding, complete event delivery and applied-settings
+  proof remain gates, not inferred authority.
+
+- Check installed Copilot/Codex help and packaged runtime schemas without
+  starting a session. Record host executable versions **1.0.103 / 1.0.79**
+  and Codex **0.144.5**, separately from package metadata and unverified VM
+  versions. Confirm JSONL/options and SDK event fields, not a GHCP-to-Codex
+  launch binding, applied Max/1M or complete delivery. Leave runtime parsers,
+  workflow, plans, caps and dependencies unchanged; add one eight-event
+  schema-validated synthetic fixture and four adapter cases. Combined proof:
+  **295 passed, 4 failed, 0 skipped in 15.60s**, wrapper **15.77s**, exit **1**.
+  Correct the fake-program argument index, then rerun only the four failures:
+  **4 passed in 0.30s**, wrapper **0.47s**, exit **0**. Do not pool these into
+  a 299-pass invocation or reuse the historical **295/15.79s** proof as new.
+  Preserve the failed launcher/help diagnostics and the lack of an audited
+  zero-background-network guarantee for initial help calls. No prompt,
+  authentication, model, dispatch, grading or push command was issued.
+  See the [installed CLI audit](docs/ghcp-sol-actions-gate.md#installed-cli-contract-audit-2026-10-25-1215-kst)
+  and [exact separate evidence](tasks/LATEST_TASK_RESULT/README.md).
+
+- Audit the GHCP Sol gate's actual execution path without widening its
+  contract. Both workflow jobs refuse paid mode; the task step launches only
+  the model-free capture, not a GHCP/Codex runtime. The existing **1200-second**
+  and **64-turn** guards therefore remain offline collection checks. No live
+  deadline, turn guard, process-tree cleanup or partial-output guarantee is
+  newly implemented or validated. Document countable tool events and
+  unselected **8/32 tool-call** candidates from separate local dispatchers;
+  the GHCP tool-call value stays undefined. One combined invocation on
+  `8d356e1c1dc13ae10193a045334c7e2ab089de35`, tree
+  `ad69ecf73a8fed221e2fcdf5272e8a7337196912`, reports **231 passed, 0 failed,
+  0 skipped in 11.36s**, wrapper **11.575s**, exit **0**, including Auto/BYOK
+  refusal. This is a fresh proof of the unchanged gate tests, not a live
+  execution or a pooled result with the earlier proofs. Only documentation
+  changes; no plan, cap, code, test, workflow, credential or permission change.
+  See the [execution-path audit](docs/ghcp-sol-actions-gate.md#execution-path-audit-2026-10-25-0240-kst)
+  and [exact evidence and remaining prerequisite](tasks/LATEST_TASK_RESULT/README.md).
+  A bound GHCP-to-Codex launch/event adapter is still required. Local commit
+  only; no push, dispatch, authentication, model call or grading.
+
+- Bound the GHCP Sol gate's offline event collector using the unchanged
+  Actions draft values of **1200 seconds** and **64 turn starts**. Stop at
+  the deadline or the 65th turn event with fixed reasons, close the explicit
+  input stream and restore the signal timer. Unsupported timer ownership,
+  unverified turn identities and cleanup failures refuse. Tool-call cap value
+  remains undefined; no value is invented. Missing usage/cost remain null
+  with explicit `not available` statuses, never zero or estimated charges.
+  **Live task limits and GHCP subprocess cleanup remain unverified**: this
+  route has no live adapter or child launcher, and paid authority stays false.
+  One combined offline invocation on clean source
+  `6ab43d4c7198e9e720fabeac5cb0d796b68cc5c7` (tree
+  `7ac1c0ff646ccbf78a8c9389c26425d4da98df4b`) reports **231 passed, 0 failed
+  in 10.66s**, wrapper **10.841s**, exit **0**: 25 new and 206 existing
+  checks. The prior 204-case and seven-case proofs below remain separate.
+  No workflow, plan, cap value, pin, dependency or permission changed.
+  See the [limit audit](docs/ghcp-sol-actions-gate.md#offline-capture-limits-2026-10-25-0015-kst)
+  and [source, log/JUnit hashes and remaining gates](tasks/LATEST_TASK_RESULT/README.md).
+  Delivery is local only; no push, dispatch, model call or grading occurred.
+
+- Add closed per-call session-event projection to the existing model-free
+  GHCP Sol Actions capture path. Record allowlisted model/effort and explicitly
+  labelled same-agent session context metadata; fail missing, mismatched or
+  inconsistent evidence with fixed reasons. Refuse Auto, BYOK and unverified
+  user/provider configuration before capture. Do not read credential values
+  or provider-registry contents. Actual served identity, Max and 1M remain
+  settings only; paid execution and retry authority remain false. At base
+  `31679f60d98f4718e04c7dc173c1c6b84d37640b` plus code patch SHA-256
+  `a427cab2939b9a416ca18224b1d10c5f5d5ebf76cbcb876193ce9323926cb555`,
+  **204 offline tests passed, 0 failed in 9.89s**, wrapper **10.084s**, exit
+  **0**. Subsequent source review closed a case where a sub-agent origin lacked
+  `agentId`; a separate seven-case proof reports **7 passed, 0 failed in 0.23s**,
+  wrapper **0.390s**, exit **0**, on final code patch SHA-256
+  `1f749b6e062b3d88500c45c4c9fad0f949f578fa7e3fef3c6ed875806819479c`.
+  Do not pool the two source-specific results. This is synthetic parser/capture
+  and existing gate-contract evidence, not actual GHCP output, native-request
+  completeness or a paid/live result.
+  No plan, cap, workflow, pin, dependency or permission changed. See the
+  [capture contract](docs/ghcp-sol-actions-gate.md#offline-per-call-capture-2026-10-24-2130)
+  and [exact proof and remaining gates](tasks/LATEST_TASK_RESULT/README.md).
+
+- Document the GHCP Sol gate's applied-model/Max/1M evidence and three
+  authentication drafts at audited source
+  `f205207bb73f123ed7ff858e0feefd35d23e53ab`. All three properties remain
+  settings only on the unimplemented GHCP-to-Codex path. Distinguish Copilot
+  per-call telemetry candidates from Codex thread configuration, context
+  metadata and provider capability advertising. Record conditional job-token,
+  personal-token and one-hour App-token options with disposal and exposure
+  limits; no permission, plan, cap, executable or workflow changes. No tests
+  were rerun and no model/authentication/paid operation occurred. The
+  [audit memo](docs/ghcp-sol-actions-gate.md#evidence-and-authentication-audit-2026-10-24)
+  and [current result](tasks/LATEST_TASK_RESULT/README.md) retain the
+  stop-before-spend, fixed-source review and owner publication gates.
+
+- Verify the GHCP Sol gate's previously SDK-blocked CI partition check at
+  local source `4e61a4bb20de67995d0684e051f1d3416eacea69`: install the
+  repository-pinned Codex SDK/CLI **0.147.0** in an isolated Python **3.10.12**
+  venv outside the checkout. The partition check passes (**1 passed**), as do
+  the backend job's repo-root script tests (**186 passed**). Its exact full
+  core partition reports **13,373 passed, 3 failed, 57 skipped, 46 deselected**.
+  All three failures reproduce at branch point
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`: inherited `GH_TOKEN` presence
+  and two missing-PyAV audio failures. Leave baseline behavior and all guards
+  unchanged; do not claim all touched CI jobs green or specialist/launch
+  approval. The prior result at local commit
+  `f205207bb73f123ed7ff858e0feefd35d23e53ab` retains exact commands, timings,
+  log hashes and host limits; the current result keeps that evidence separate
+  from the later documentation audit. No system
+  Python/user-checkout edit, model/GHCP call, GHCP auth, private download,
+  push, dispatch or paid execution occurred.
+
+### Fixed
+
+- Harden the local-only GHCP Sol gate after directly reviewing fixed HEAD
+  `f27cde892e144a242260e47a1c2b2e22e07abcf8` against merge-base
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`: independently refuse
+  nontrue `dry_run` values before checkout in the task job, in addition to
+  the existing planner and Python refusals. This closes a low-severity
+  defense-in-depth gap, not an observed paid-call bypass. Verification:
+  **313 targeted tests passed** (including **44 gate tests**) and **5/5**
+  actual capture-shell rehearsals passed locally with zero model/grader
+  calls and metadata-only envelopes. The **29 to 30** workflow inventory
+  change passes cross-workflow scans; the backend workflow hash is unchanged.
+  At that review, one CI partition test was unverified because local collection
+  lacked the declared `openai_codex` SDK; the follow-up local validation above
+  resolves that coverage gap without claiming the full CI gate is green.
+  Specialist reviews could not complete because of worker path/model
+  availability; exact-source approval and all paid-run blockers remain.
+  Only the registered feature worktree was changed, with no push, PR,
+  dispatch, private input access or paid execution.
+
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
   `b6702c679134f90b15a3f58fdacfbccd38522074`, after direct owner review
