@@ -51,7 +51,7 @@ class PilotCaptureSources:
     reviewed_source_sha: str
     as_of: str
     account_resource_id_file: Path
-    project_resource_id_file: Path
+    project_resource_id_file: Path | None
     deployment_resource_id_file: Path
 
     def _options(self) -> dict[str, Any]:
@@ -79,8 +79,12 @@ def _sources(sources: PilotCaptureSources, dataset_root: Path, config_path: Path
     candidate_path = _path(_root(sources.deployment_binding), deployment.CANDIDATE_PATH)
     if config_path is not None:
         _require(inputs._absolute(config_path) == candidate_path, "pilot_candidate_role_mismatch")
-    plan_data = _read_bytes(pilot.PLAN)
-    current_plan = yaml.safe_load(plan_data)
+    receipt = deployment.evidence.verify_foundry_evidence(
+        bundle_root=sources.evidence_bundle, reviewed_source_sha=sources.reviewed_source_sha, as_of=sources.as_of,
+    )
+    current_plan, plan_data, _ = pilot.source_plan_snapshot(
+        expected_plan_sha256=receipt.as_dict()["plan_sha256"], reviewed_source_sha=sources.reviewed_source_sha,
+    )
     if plan is not None:
         _require(_bytes(plan) == _bytes(current_plan), "pilot_active_plan_mismatch")
     # This verifier explicitly invokes all four preceding real verifiers and
@@ -124,6 +128,9 @@ def _workspace(workspace: Path, sources: PilotCaptureSources) -> Path:
     _require(type(sources) is PilotCaptureSources, "pilot_capture_sources_required")
     root = _root(workspace)
     for name, value in vars(sources).items():
+        if name == "project_resource_id_file" and value is None:
+            # _sources verifies route applicability before any capture write.
+            continue
         if name not in ("reviewed_source_sha", "as_of"):
             _require(not inputs._overlap(root, inputs._absolute(value)), "pilot_capture_source_overlap")
     return root
@@ -191,7 +198,10 @@ def _capture(data: bytes, *, sources: PilotCaptureSources, dataset_root: Path,
     _require(deployment.verify_pilot_deployment_binding(
         plan, bundle_root=sources.deployment_binding, **sources._options(),
     ) == bound, "pilot_upstream_changed_during_capture")
-    _read_bytes(pilot.PLAN, **_digest(plan_data))
+    _, current_plan_data, _ = pilot.source_plan_snapshot(
+        expected_plan_sha256=pilot.seal(plan), reviewed_source_sha=sources.reviewed_source_sha,
+    )
+    _require(current_plan_data == plan_data, "pilot_active_plan_changed_during_capture")
     return result
 
 

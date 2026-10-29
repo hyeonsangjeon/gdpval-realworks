@@ -179,7 +179,7 @@ def compile_pilot_identity(
 ) -> PilotIdentityPlan:
     """Read pinned local contracts; return canonical recipes without executing."""
     try:
-        active, _ = evidence._active_plan()
+        active, _ = evidence._active_plan(plan_sha256=pilot.seal(plan), reviewed_source_sha=reviewed_source_sha)
         _require(_bytes(plan) == _bytes(active), "active_contract_mismatch")
         plan = active
         catalog_role = pilot.ENVELOPE + "gdpval_task_catalog.json"
@@ -226,14 +226,15 @@ def compile_pilot_identity(
         linkage = _evidence_link(plan, evidence_bundle, reviewed_source_sha, as_of)
         document = {
             "plan_version": "foundry-pilot-dispatch-grading-identity-v1", "evidence_boundary": BOUNDARY,
-            "contract_path": pilot.ACTIVE_PLAN, "contract_sha256": pilot.seal(plan),
+            "contract_path": (pilot.ACTIVE_PLAN if pilot.seal(plan) == pilot.seal(pilot.load_plan(pilot.ROOT / pilot.ACTIVE_PLAN))
+                              else pilot.SOURCE_PROFILE), "contract_sha256": pilot.seal(plan),
             "contract_base_sha": plan["base_sha"],
             "compiler_source_base_sha": plan["dispatch_grading_identity"]["source_base_sha"],
             "run_id": plan["pilot"]["run_id"], "source_pins": plan["source_pins"],
             "dataset": plan["dataset"], "dispatch": dispatch, "grading": grading,
             "evidence_linkage": linkage, "launch_allowed": False, "full_220_allowed": False,
         }
-        current, _ = evidence._active_plan()
+        current, _ = evidence._active_plan(plan_sha256=pilot.seal(plan), reviewed_source_sha=reviewed_source_sha)
         _require(_bytes(current) == _bytes(plan), "contract_changed_during_compile")
         return PilotIdentityPlan(_canonical_json(document))
     except PilotIdentityRefused:
