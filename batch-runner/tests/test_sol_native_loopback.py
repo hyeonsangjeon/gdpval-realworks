@@ -6,6 +6,7 @@ served-model/capability evidence. NAS runs must not select this integration.
 
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -43,6 +44,33 @@ def _scripted_response():
                     + json.dumps(event).encode() + b"\n\n" for event in events)
 
 
+def _input_shape(value):
+    """Only schema labels and value types, never text, references or payloads."""
+    def label(raw):
+        return raw if type(raw) is str and re.fullmatch(r"[a-z_]{1,48}", raw) else None
+    result = {"container": type(value).__name__}
+    if type(value) is not list:
+        return result
+    result["items"] = []
+    for item in value[:32]:
+        if type(item) is not dict:
+            result["items"].append({"container": type(item).__name__})
+            continue
+        content = item.get("content")
+        row = {"type": label(item.get("type")), "role": label(item.get("role")),
+               "content_container": type(content).__name__,
+               "opaque_fields_present": [key for key in (
+                   "encrypted_content", "image_url", "file_id", "file_data", "file_url", "audio")
+                   if item.get(key) is not None]}
+        if type(content) is list:
+            row["parts"] = [{"container": type(part).__name__,
+                              "type": label(part.get("type")) if type(part) is dict else None,
+                              "text_container": type(part.get("text")).__name__ if type(part) is dict else None}
+                             for part in content[:32]]
+        result["items"].append(row)
+    return result
+
+
 def test_real_pinned_sol_diagnostic_passes_unchanged_token_precheck(monkeypatch, tmp_path):
     # Actual runner admission, never the synthetic native_hosted_runner fixture.
     host = runner_environment.require_execution()
@@ -68,6 +96,7 @@ def test_real_pinned_sol_diagnostic_passes_unchanged_token_precheck(monkeypatch,
             document = json.loads(body)
             tools = document.get("tools", [])
             shape = {"bytes": len(body), "text_input": wire._text_input(document.get("input")),
+                     "input_shape": _input_shape(document.get("input")),
                      "tool_count": len(tools), "local_tools_only": all(
                          tool.get("type") in {"function", "custom"} for tool in tools),
                      "sol_requested": document.get("model") == MODEL,
