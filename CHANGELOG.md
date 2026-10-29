@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Migrate the native connection diagnostic and Codex-only batch path to
+  GitHub-hosted Ubuntu 24.04, tightening hosted runner admission without
+  changing explicitly approved Azure VM admission. Require a binary-scoped
+  AppArmor userns preparation and same-job bubblewrap/pinned-CLI marker probes
+  before Azure credentials; never clear a sysctl or replace an existing
+  profile. Preserve refusal reports and historical unprepared host readings.
+  Related offline checks: **428 passed, 0 failed/errors/skipped**, one invocation
+  in **22.02s**. Model/limits/seals unchanged; this branch is local only and
+  hosted compatibility remains unmeasured. See
+  [24.04 migration](batch-runner/docs/native_ubuntu24_migration_20261029.md).
+
 - Add fail-closed native runner admission and hash-bound image/OS/architecture/
   run evidence to diagnostic, inference and grading paths on a separate local
   branch. Require metadata before model calls; preserve stop/cleanup without

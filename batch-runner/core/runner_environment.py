@@ -1,7 +1,8 @@
 """Credential-free execution-host admission and hash-bound runner receipts.
 
-Reuse GHCP's allowlisted labels plus actual OS-release check. Native workflows
-still use both Ubuntu 22.04 and 24.04: changing their images is a separate task.
+Reuse GHCP's allowlisted labels plus actual OS-release check. GitHub-hosted
+execution is pinned to Ubuntu 24.04; an explicitly approved Azure VM keeps its
+separate admission rule. Sandbox readiness must also pass in the calling job.
 Labels/DMI are operational evidence, not cryptographic host attestation.
 """
 
@@ -17,7 +18,8 @@ from pathlib import Path
 REFUSED = "execution_environment_refused"
 CHANGED = "execution_environment_changed"
 STOPS = frozenset({REFUSED, CHANGED})
-UBUNTU_IMAGES = {"22.04": "ubuntu22", "24.04": "ubuntu24"}
+UBUNTU_IMAGES = {"24.04": "ubuntu24"}
+AZURE_UBUNTU_VERSIONS = frozenset({"22.04", "24.04"})
 ARCHITECTURES = {"x86_64": "X64", "aarch64": "ARM64"}
 
 
@@ -58,11 +60,12 @@ def observe():
         value["platform_system"] = _text(platform.system())
         value["platform_machine"] = _text(platform.machine())
         ubuntu = (value["platform_system"] == "Linux" and value["os_id"] == "ubuntu"
-                  and value["os_version_id"] in UBUNTU_IMAGES
+                  and value["os_version_id"] in AZURE_UBUNTU_VERSIONS
                   and value["platform_machine"] in ARCHITECTURES)
         value["github_hosted"] = bool(value["github_actions"] == "true"
                                        and value["runner_environment"] == "github-hosted")
-        hosted = bool(ubuntu and value["github_hosted"] and value["runner_os"] == "Linux"
+        hosted = bool(ubuntu and value["os_version_id"] in UBUNTU_IMAGES
+                      and value["github_hosted"] and value["runner_os"] == "Linux"
                       and value["runner_arch"] == ARCHITECTURES[value["platform_machine"]]
                       and value["image_os"] == UBUNTU_IMAGES[value["os_version_id"]]
                       and value["image_version"] and value["runner_name"]

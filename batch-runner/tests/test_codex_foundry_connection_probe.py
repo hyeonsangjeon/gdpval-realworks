@@ -1258,13 +1258,9 @@ def test_the_send_needs_the_confirmation_and_not_only_the_input():
 
 
 def test_the_workflow_runs_on_the_host_where_the_sandbox_starts():
-    """24.04 restricts unprivileged user namespaces and Codex's sandbox dies.
-
-    A turn that died there would look like the deployment refusing when it was
-    the runner, and it would have cost a request to learn nothing.
-    """
+    """24.04 is the selected target; its pre-call sandbox proof is mandatory."""
     _text, parsed = _workflow()
-    assert parsed["jobs"]["diagnose"]["runs-on"] == "ubuntu-22.04"
+    assert parsed["jobs"]["diagnose"]["runs-on"] == "ubuntu-24.04"
 
 
 def test_the_python_matches_the_one_the_licence_check_pins():
@@ -2111,7 +2107,7 @@ def test_native_only_retains_ref_identity_runtime_timeout_and_publication_gates(
     }
     job = parsed["jobs"]["diagnose"]
     assert job["if"] == "github.ref == 'refs/heads/main'"
-    assert job["runs-on"] == "ubuntu-22.04"
+    assert job["runs-on"] == "ubuntu-24.04"
     assert job["timeout-minutes"] == 20
     assert job["env"]["EXPECTED_HOST_FINGERPRINT"] == PINNED
     steps = _steps()

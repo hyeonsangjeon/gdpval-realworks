@@ -19,7 +19,7 @@ def native_hosted_runner(monkeypatch, tmp_path):
     from core import runner_environment as host
     fields = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
               "RUNNER_NAME": "synthetic-native-runner", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
-              "ImageOS": "ubuntu22", "ImageVersion": "20261026.354.1",
+              "ImageOS": "ubuntu24", "ImageVersion": "20261026.354.1",
               "GITHUB_RUN_ID": "123456789", "GITHUB_RUN_ATTEMPT": "1"}
     for name, value in fields.items():
         monkeypatch.setenv(name, value)
@@ -29,7 +29,7 @@ def native_hosted_runner(monkeypatch, tmp_path):
     monkeypatch.setenv("TMPDIR", str(tmp_path / "os-temp"))
     for name in ("NATIVE_AZURE_VM_APPROVAL", "NATIVE_AZURE_VM_APPROVAL_SHA256", "NATIVE_AZURE_VM_ID"):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(host.platform, "freedesktop_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"})
+    monkeypatch.setattr(host.platform, "freedesktop_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"})
     monkeypatch.setattr(host.platform, "system", lambda: "Linux")
     monkeypatch.setattr(host.platform, "machine", lambda: "x86_64")
     return fields

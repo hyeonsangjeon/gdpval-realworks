@@ -25,9 +25,9 @@ def main():
     # and subprocess audit denial below remains active; no real runner is used.
     os.environ.update({"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
         "RUNNER_NAME": "synthetic-grader-replay", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
-        "ImageOS": "ubuntu22", "ImageVersion": "20261026.354.1",
+        "ImageOS": "ubuntu24", "ImageVersion": "20261026.354.1",
         "GITHUB_RUN_ID": "123456789", "GITHUB_RUN_ATTEMPT": "1"})
-    platform.freedesktop_os_release = lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"}
+    platform.freedesktop_os_release = lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"}
     platform.system = lambda: "Linux"
     platform.machine = lambda: "x86_64"
 

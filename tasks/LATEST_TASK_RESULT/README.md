@@ -1,5 +1,36 @@
 # Latest task result
 
+## Native Ubuntu 24.04 migration, 2026-10-29
+
+On local `leader/runner-receipt-20261029`, based on `3f31968e5`, migrate the
+connection diagnostic and Codex-only batch runner from 22.04 to explicit
+GitHub-hosted 24.04. The admission rule rejects hosted 22.04; the independently
+approved Azure VM rule is preserved. No native model/grade request, credential
+lookup, Azure call, dispatch, push or PR was performed for this branch.
+
+Before Azure credentials, require the pinned runtime and root-owned system
+bwrap; if needed, add only its fixed AppArmor `userns` profile. Never clear a
+sysctl, overwrite a profile or select a weaker sandbox backend. Both the full
+bwrap namespace probe and the pinned CLI sandbox's exact local command marker
+must pass. Missing dependencies, invalid runner metadata, failed/timed-out
+probes, drift or an unwritable receipt stop before model calls. Reports keep
+runner evidence and bounded nonsecret probe facts, not raw child output.
+
+One final related invocation: **428 passed / 0 failed/errors/skipped**, **22.02s**,
+exit **0**. Includes new denial/marker fixtures and existing grader parity,
+host/receipt, diagnostic, model-control-byte and workspace contracts. The
+development 48-pass run and later 16/1-failure runs are preserved separately,
+not pooled. New-file tracking and synthetic test environment setup were fixed;
+no assertion or production refusal was weakened.
+
+The historical host observations are unchanged; the new prepared condition is
+explicitly **not yet measured on Actions**. AppArmor attachment and pinned-CLI
+compatibility need a model-free hosted check after publication approval.
+Existing sealed plans/caps/prices/schema files remain unchanged; source review
+and registration remain required, not bypassed. See the
+[file inventory, sources and design boundary](../../batch-runner/docs/native_ubuntu24_migration_20261029.md).
+Logs/JUnit: `/tmp/p5-native-ubuntu24.zLRltk/verified.{log,xml}`.
+
 ## Native runner admission and receipts, 2026-10-29
 
 On `leader/runner-receipt-20261029`, based on `cf1401e1c`, bind diagnostic,

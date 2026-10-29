@@ -19,7 +19,7 @@ import step2_run_inference as step2
 from .test_gpt56_pilot_provider_observation import UPSTREAM, _upstream, _post, loopback_only
 
 
-@pytest.mark.parametrize("version,image", [("22.04", "ubuntu22"), ("24.04", "ubuntu24")])
+@pytest.mark.parametrize("version,image", [("24.04", "ubuntu24")])
 @pytest.mark.parametrize("machine,architecture", [("x86_64", "X64"), ("aarch64", "ARM64")])
 def test_hosted_ubuntu_metadata_is_preserved(native_hosted_runner, monkeypatch, version, image, machine, architecture):
     monkeypatch.setenv("ImageOS", image)
@@ -38,7 +38,7 @@ def test_hosted_ubuntu_metadata_is_preserved(native_hosted_runner, monkeypatch, 
 
 @pytest.mark.parametrize("name,value", [
     ("GITHUB_ACTIONS", None), ("GITHUB_ACTIONS", "false"), ("RUNNER_ENVIRONMENT", "self-hosted"),
-    ("RUNNER_OS", "Windows"), ("RUNNER_ARCH", "ARM64"), ("ImageOS", "ubuntu24"),
+    ("RUNNER_OS", "Windows"), ("RUNNER_ARCH", "ARM64"), ("ImageOS", "ubuntu22"),
     ("ImageVersion", None), ("ImageVersion", "not available"), ("RUNNER_NAME", None),
     ("GITHUB_RUN_ID", "0"), ("GITHUB_RUN_ID", None), ("GITHUB_RUN_ATTEMPT", "0"),
 ])
@@ -55,6 +55,14 @@ def test_absent_inconsistent_or_self_hosted_metadata_refuses(native_hosted_runne
 def test_labels_do_not_override_actual_os(native_hosted_runner, monkeypatch):
     monkeypatch.setattr(host.platform, "freedesktop_os_release", lambda: {"ID": "debian", "VERSION_ID": "12"})
     assert host.observe()["eligible_for_execution"] is False
+
+
+@pytest.mark.parametrize("image", ["ubuntu22", "ubuntu24"])
+def test_hosted_2204_is_no_longer_an_execution_target(native_hosted_runner, monkeypatch, image):
+    monkeypatch.setenv("ImageOS", image)
+    monkeypatch.setattr(host.platform, "freedesktop_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"})
+    with pytest.raises(host.ExecutionEnvironmentRefused, match="^execution_environment_refused$"):
+        host.require_execution()
 
 
 @pytest.mark.parametrize("case", ["missing_marker", "missing_approval", "wrong_vm", "valid"])

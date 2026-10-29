@@ -126,13 +126,11 @@ jobs:
     # branch that is asking to be trusted.
     if: github.ref == 'refs/heads/main'
     name: Ask the deployment one question
-    # ubuntu-22.04 rather than 24.04, and for a specific reason: 24.04 ships
-    # kernel.apparmor_restrict_unprivileged_userns=1 and Codex's sandbox will
-    # not start there (docs/codex_sandbox_hosts.json). A turn that died in the
-    # sandbox would answer nothing about the deployment while looking like a
-    # failure of it. This prompt asks for no command, so the sandbox may never
-    # be entered — but "may" is not a thing to run a paid request on.
-    runs-on: ubuntu-22.04
+    # The owner selected hosted 24.04. The historical unprepared-host failure
+    # in docs/codex_sandbox_hosts.json remains evidence, not a readiness pass.
+    # A binary-scoped AppArmor preparation and same-job local sandbox probes
+    # must pass below before Azure login, even when the prompt asks for no tool.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       PYTHONDONTWRITEBYTECODE: "1"
@@ -208,6 +206,22 @@ jobs:
         run: |
           set -euo pipefail
           python3 -c "from core.codex_runtime_config import require_pinned_runtime; print('pinned runtime:', require_pinned_runtime())"
+
+      - name: Refuse to continue unless the 24.04 host can isolate
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_codex_sandbox_host.py --out "$RUNNER_TEMP/codex-sandbox-preflight.json"
+          python3 scripts/diagnose_codex_sandbox_host.py
+
+      - name: Preserve pre-call sandbox evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-diagnostic-sandbox-preflight
+          path: ${{ runner.temp }}/codex-sandbox-preflight.json
+          if-no-files-found: error
+          retention-days: 7
 
       # The same pinned action, client id, tenant and subscription the paid
       # runs authenticate with. The token the probe sends is minted from this

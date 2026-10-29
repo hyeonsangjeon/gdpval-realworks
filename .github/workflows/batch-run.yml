@@ -309,20 +309,11 @@ jobs:
   batch-run:
     needs: inspect-mode
     if: needs.inspect-mode.result == 'success' && needs.inspect-mode.outputs.uses_agentic != 'true' && needs.inspect-mode.outputs.codex_blocked != 'true'
-    # Every other mode keeps the host it has always had. codex_foundry cannot,
-    # and the reason is measured rather than argued: batch-runner/docs/
-    # codex_sandbox_hosts.json records ubuntu-24.04 -- what `ubuntu-latest`
-    # resolves to -- as user_namespaces_restricted_by_security_policy, and
-    # ubuntu-22.04 as the one host where a command has actually run inside
-    # Codex's sandbox. Sending a Codex batch to `ubuntu-latest` would buy the
-    # turn and then fail at the agent's first command.
-    #
-    # Nothing is relaxed to earn this. 22.04's default posture simply predates
-    # kernel.apparmor_restrict_unprivileged_userns; no sysctl is written and no
-    # capability is added. It is also not permanent -- GitHub is retiring the
-    # image, and that record says so -- so this line is the current answer to
-    # "where can this run", not a claim that the question is closed.
-    runs-on: ${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' && 'ubuntu-22.04' || 'ubuntu-latest' }}
+    # Other modes keep their existing host. Codex is pinned to the owner's
+    # hosted 24.04 target, not a moving label. The historical baseline in
+    # batch-runner/docs/codex_sandbox_hosts.json is unchanged: this new prepared
+    # condition must prove readiness in this job before any Azure/model access.
+    runs-on: ${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     timeout-minutes: 360    # max 6 hours
     env:
       EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
@@ -757,6 +748,14 @@ jobs:
           fi
           echo "bwrap: $(command -v bwrap)  $(bwrap --version 2>&1 | head -1)"
 
+      # Check the version before any preparation or CLI probe.
+      - name: 'Codex: refuse to continue unless the pinned runtime is installed'
+        if: needs.inspect-mode.outputs.uses_codex_foundry == 'true'
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          python3 -c "from core.codex_runtime_config import require_pinned_runtime; print('pinned runtime:', require_pinned_runtime())"
+
       # Installed is not the same as working, and the difference is the whole
       # reason this step exists. The diagnostic exits 0 only when it watched a
       # command run inside the sandbox; every other verdict names the wall.
@@ -768,17 +767,17 @@ jobs:
         working-directory: batch-runner
         run: |
           set -euo pipefail
+          python3 scripts/prepare_codex_sandbox_host.py --out "$RUNNER_TEMP/codex-sandbox-preflight.json"
           python3 scripts/diagnose_codex_sandbox_host.py
 
-      # If pip left the pinned binary uninstalled, the run would reach step 2
-      # and report runtime_unavailable -- a true statement about this runner and
-      # nothing at all about the deployment. Stop here instead.
-      - name: 'Codex: refuse to continue unless the pinned runtime is installed'
-        if: needs.inspect-mode.outputs.uses_codex_foundry == 'true'
-        working-directory: batch-runner
-        run: |
-          set -euo pipefail
-          python3 -c "from core.codex_runtime_config import require_pinned_runtime; print('pinned runtime:', require_pinned_runtime())"
+      - name: 'Codex: preserve pre-call sandbox evidence'
+        if: always() && needs.inspect-mode.outputs.uses_codex_foundry == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-batch-sandbox-preflight
+          path: ${{ runner.temp }}/codex-sandbox-preflight.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Validate Azure OIDC identity before remote access
         env:
