@@ -231,6 +231,7 @@ def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch
 
     class FakeCodex:
         def __init__(self, config):
+            assert [item for item in config.config_overrides if item.startswith("web_search=")] == ['web_search="disabled"']
             self.config, self.closed = config, False
             runtimes.append(self)
 

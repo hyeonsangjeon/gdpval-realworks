@@ -662,7 +662,9 @@ def test_sol_diagnostic_requests_and_fingerprints_the_registered_max_1m_controls
     description = describe_settings(settings)
     assert description["requested_controls"] == {
         "reasoning_effort": "max", "model_context_window": 1_000_000,
+        "web_search": "disabled",
     }
+    assert request_plan(description)["tool_definitions_sent"] is None
     assert settings_fingerprint(description) != settings_fingerprint(
         describe_settings(_settings(model="gpt-5.6-sol")))
     # Requested controls do not fill any provider-response evidence.

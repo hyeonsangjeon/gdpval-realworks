@@ -2,7 +2,7 @@ name: Native pilot hosted runner check (model-free)
 
 on:
   push:
-    branches: [leader/runner-receipt-20261029]
+    branches: [leader/runner-receipt-20261029, fix/sol-native-smoke-no-web-20261029]
     paths:
       - batch-runner/**
       - .github/workflows/gpt56-native-runner-check.yml
@@ -13,6 +13,9 @@ on:
       - batch-runner/tests/test_codex_ubuntu24_preflight.py
       - batch-runner/tests/test_gpt56_runner_environment.py
       - batch-runner/tests/test_native_runner_workflow.py
+      - batch-runner/core/codex_runner.py
+      - batch-runner/scripts/diagnose_codex_foundry_connection.py
+      - batch-runner/tests/test_sol_native_loopback.py
       - .github/workflows/gpt56-native-runner-check.yml
 
 # This job can prove isolation, not infer or authenticate to a model provider.
@@ -71,11 +74,29 @@ jobs:
           set -euo pipefail
           python scripts/prepare_codex_sandbox_host.py \
             --out "$RUNNER_TEMP/native-sandbox-proof.json"
+      - name: Prove the real native request against a scripted loopback server
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 120s env -i \
+            PATH="$PATH" LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
+            ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            GDPVAL_NATIVE_LOOPBACK_PROOF=1 GDPVAL_NATIVE_LOOPBACK_REPORT="$RUNNER_TEMP/native-loopback-proof.json" \
+            python -m pytest -q -o addopts= -m integration -p no:cacheprovider \
+            --tb=short --basetemp="$RUNNER_TEMP/native-loopback-tests" \
+            --junitxml="$RUNNER_TEMP/native-loopback-tests.xml" tests/test_sol_native_loopback.py
       - name: Retain bounded runner and sandbox evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-sandbox-proof-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/native-sandbox-proof.json
+          path: |
+            ${{ runner.temp }}/native-sandbox-proof.json
+            ${{ runner.temp }}/native-loopback-proof.json
+            ${{ runner.temp }}/native-loopback-tests.xml
           if-no-files-found: error
           retention-days: 7

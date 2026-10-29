@@ -484,7 +484,7 @@ def request_plan(description: Mapping[str, Any] | None = None) -> dict[str, Any]
         configured = description.get("retries")
         if isinstance(configured, Mapping):
             retries = dict(configured)
-    return {
+    plan = {
         "prompt_id": PROMPT_ID,
         "prompt_sha256": hashlib.sha256(PROMPT.encode("utf-8")).hexdigest(),
         "prompt_characters": len(PROMPT),
@@ -521,6 +521,16 @@ def request_plan(description: Mapping[str, Any] | None = None) -> dict[str, Any]
             "tests/test_what_one_codex_turn_actually_sends.py"
         ),
     }
+    if description is not None and (description.get("requested_controls") or {}).get("web_search") == "disabled":
+        plan["tool_definitions_sent"] = None  # Do not reuse the default-ten inventory for this variant.
+        plan["tools_note"] = (
+            "Native local tool definitions may still be sent with tool_choice auto; "
+            "their exact count is not measured by this record. This CONNECTED-only "
+            "variant requests web_search=disabled through pinned Codex configuration. "
+            "The HTTP token precheck still rejects remote tool definitions, opaque "
+            "input and unknown usage. It does not change the five-task pilot plan."
+        )
+    return plan
 
 
 # ── The settings, described without naming the resource ─────────────────────
@@ -575,6 +585,8 @@ def describe_settings(settings: CodexProviderSettings) -> dict[str, Any]:
             "reasoning_effort": settings.reasoning_effort,
             "model_context_window": settings.model_context_window,
         }
+    if settings.model == "gpt-5.6-sol":
+        description.setdefault("requested_controls", {})["web_search"] = "disabled"
     return description
 
 

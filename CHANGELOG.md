@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Disable native web search only for the fixed Sol CONNECTED diagnostic and
+  keep its strict text/token/request/response-evidence checks unchanged. Add
+  an opt-in real Codex 0.147.0 loopback proof on hosted Ubuntu 24.04, with
+  fake authentication, scripted responses and bounded request-shape evidence.
+  Preserve prior registrations with a source-only successor. The earlier
+  paid-mode run 40960964194 forwarded zero upstream requests and did not
+  establish served settings or usage. Fetch historical Git objects in the
+  separate GHCP model-free CI job; no paid trigger, seal or budget changes.
+
 - Preserve the generic historical budget-output helper's dependency seal too.
   Legacy transport fixtures now explicitly supply their historical envelope;
   a separate current-format case requires refusal without stripping saved
