@@ -29,6 +29,30 @@ No input/output/request/time/USD ceiling, response-evidence requirement or
 server-hard-limit claim changes. The parser still rejects remote tools,
 opaque context, missing usage and unsupported output-limit contracts.
 
+## The actual pinned request's second format issue
+
+Hosted model-free runs 40964728825 and 40965182470 rejected before fake
+upstream forwarding. The second captured a 48,098-byte request containing a
+developer `additional_tools` input followed by text messages; the top-level
+tool list was empty. This is observed request structure, not model usage.
+
+Pinned source explains it: [client.rs](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/core/src/client.rs#L862)
+uses `AdditionalTools` for Responses-lite model metadata, and
+[models.rs](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/protocol/src/models.rs#L816)
+defines type/role/tools plus an optional ID. The
+[namespace schema](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/tools/src/responses_api.rs#L58)
+contains name/description/tools and only function/custom children.
+
+The precheck now recognizes this fully visible local-definition container:
+developer role only, no non-null ID or extra fields, and only function/custom
+tools (optionally in one exactly shaped namespace). Remote children, nested
+namespaces, opaque fields and malformed containers still refuse. The entire
+serialized body, including every definition byte, consumes the same input
+estimate; no tool definitions or token usage are silently discarded. Fixtures
+cover valid raw/namespaced definitions and eleven refusal/over-limit cases.
+This is a supported-format correction, not a bypass of the safety conditions
+or evidence that Foundry accepts the format.
+
 ## Model-free check before another paid attempt
 
 `tests/test_sol_native_loopback.py` requires explicit opt-in and actual hosted

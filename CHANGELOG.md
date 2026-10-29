@@ -13,6 +13,12 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Recognize Codex 0.147.0's observed Responses-lite `additional_tools` input
+  only for fully visible local definitions and an exact namespace wrapper.
+  Count every serialized byte and retain remote/opaque/oversized refusals;
+  add 13 positive/negative fixtures. Preserve the prior no-web registration
+  through another source-only successor. This does not prove Foundry support.
+
 - Disable native web search only for the fixed Sol CONNECTED diagnostic and
   keep its strict text/token/request/response-evidence checks unchanged. Add
   an opt-in real Codex 0.147.0 loopback proof on hosted Ubuntu 24.04, with

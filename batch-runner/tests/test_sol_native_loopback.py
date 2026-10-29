@@ -62,6 +62,12 @@ def _input_shape(value):
                "opaque_fields_present": [key for key in (
                    "encrypted_content", "image_url", "file_id", "file_data", "file_url", "audio")
                    if item.get(key) is not None]}
+        if item.get("type") == "additional_tools":
+            tools = item.get("tools")
+            row["local_definitions_only"] = wire._local_tool_definitions(tools, namespaces=True)
+            row["definition_count"] = len(tools) if type(tools) is list else None
+            row["definition_types"] = [label(tool.get("type")) if type(tool) is dict else None
+                                       for tool in tools[:32]] if type(tools) is list else []
         if type(content) is list:
             row["parts"] = [{"container": type(part).__name__,
                               "type": label(part.get("type")) if type(part) is dict else None,
