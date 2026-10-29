@@ -1,5 +1,38 @@
 # Latest task result
 
+## Native runner/migration fixed-HEAD review, 2026-10-29
+
+Review `3f31968e5` and `ff7ab8efb` above `cf1401e1c` on the same local
+`leader/runner-receipt-20261029` branch. Six loopback-only cases reproduced one
+admission gap: waiting, body preparation or connection setup could outlive the
+first runner check. Recheck before request reservation and before HTTP
+headers/body, and retain the actual environment refusal in the receipt.
+Already-spent connection/USD reservations remain conservative. Grading stops
+remain control signals, not `judge_error` or reduced denominators.
+
+Two disappearing sandbox-state fixtures keep ENOENT/ESRCH fail-closed; the
+native process scan already handles disappearance. Correct exact historical
+workflow/Step8/runner source-pin expectations, and make the synthetic native
+handoff test prove sealing before its deliberately missing wire receipt.
+Immutable sources/seals, prices, USD 200, model/limits and scoring are unchanged.
+
+Final validation completed 33 full modules in three disjoint offline groups:
+**305 + 161 + 1,892 = 2,358 passed / 0 failures/errors/skips**; one integration
+case excluded. Complete JUnit/module/unique-ID checking exited 0. Two temporary
+shell wrappers exited 2 after pytest completed because their running script
+had been edited; the paired reproduction and complete test outcomes are kept
+separate in the [review report](../../batch-runner/docs/native_runner_receipt_20261029.md).
+The interrupted initial run and preliminary expectation failures are retained
+separately, never pooled into the total. Evidence:
+`/ai-work/copilot/_tmp/native-runner-review-20261029.inlxfD/`.
+
+Latest fetched main `6efe99cbd40bb839037e7a20711a734e0a4ce002` is an ancestor
+of the reviewed head: no conflict at that snapshot. No rebase, merge, B push,
+PR, dispatch, secret-value query, model or Azure call. The PR body stays
+uncommitted under `batch-runner/workspace/review-drafts/`; publication approval,
+source re-registration, grader-seal decision and actual hosted sandbox proof
+remain outstanding.
+
 ## Native Ubuntu 24.04 migration, 2026-10-29
 
 On local `leader/runner-receipt-20261029`, based on `3f31968e5`, migrate the

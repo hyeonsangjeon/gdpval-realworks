@@ -13,6 +13,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Recheck native runner evidence after serialized request preparation and
+  after connection setup, before any HTTP headers/body can leave. Preserve
+  existing environment-stop cleanup and conservative USD reservations. Six
+  loopback regressions cover the previously open boundaries; two sandbox
+  fixtures keep disappearing probe state fail-closed. Correct exact legacy
+  source-drift expectations and the synthetic sealed-handoff fixture, without
+  changing seals, limits or scoring. Final disjoint verification: **2,358 passed,
+  0 failures/errors/skips**, 33 modules; one integration case excluded. Completed
+  JUnit coverage/unique-ID checking passed; two post-test temporary-shell errors
+  are recorded separately from testcase outcomes in
+  [the fixed-HEAD review](batch-runner/docs/native_runner_receipt_20261029.md).
+  This review stays local; hosted compatibility is not a fixture result.
+
 - Migrate the native connection diagnostic and Codex-only batch path to
   GitHub-hosted Ubuntu 24.04, tightening hosted runner admission without
   changing explicitly approved Azure VM admission. Require a binary-scoped

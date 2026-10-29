@@ -1115,6 +1115,9 @@ class _ProviderHTTPObservation:
                 if self.stop_reason is not None:
                     raise RuntimeError("stopped")
                 body = self._token_request(bytes(body), suffix)
+                # Lock waits and body reads can outlive the ingress check.
+                # Revalidate before reserving USD/a native forward.
+                runner_environment.require_execution(self.runner_observation)
                 if not self.closed:
                     reason = None
                     if self.budget is not None:
@@ -1138,6 +1141,9 @@ class _ProviderHTTPObservation:
                 self._close_stopped_runtime()
                 return
             connection.connect()
+            # Connection setup can also block. No HTTP headers/body may leave
+            # with stale runner evidence; keep any spent reservation fail-closed.
+            runner_environment.require_execution(self.runner_observation)
             upstream = connection.sock
             with self.lock:
                 self.remaining()
@@ -1225,6 +1231,7 @@ class _ProviderHTTPObservation:
             if self.stop_reason in _USD_STOPS:
                 self._close_stopped_runtime()
         except runner_environment.ExecutionEnvironmentRefused as error:
+            reason = error.code
             with self.lock:
                 self.blocked_requests += 1
                 self.request_stop(error.code, defer_cleanup=True)

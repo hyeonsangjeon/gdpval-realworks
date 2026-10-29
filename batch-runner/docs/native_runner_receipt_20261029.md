@@ -1,5 +1,82 @@
 # Native pilot runner admission and receipts — 2026-10-29
 
+## Post-migration fixed-HEAD review
+
+Review scope: `3f31968e5` and `ff7ab8efb` above `cf1401e1c`, including the
+Ubuntu 24.04 migration described in `native_ubuntu24_migration_20261029.md`.
+The original subtask record below is preserved at its historical scope.
+
+One execution-admission gap was reproduced on the fixed source: the native
+HTTP forwarder checked the host before its serialization lock/body read, but
+not after that wait/preparation or after connection setup. Six loopback-only
+fixtures changed runner/image evidence at these boundaries; the old source
+still sent the fake upstream HTTP request. Recheck after body validation before
+USD/forward reservation and after connection before HTTP headers/body. Refusal
+latches the existing `execution_environment_refused` or
+`execution_environment_changed` and closes the runtime. Any already-spent
+connection reservation remains conservative; no usage or refund is invented.
+
+The other reviewed execution paths retain their fail-closed checks: diagnostic
+and native runtime start, native HTTP admission, each grading/perception call,
+and the 24.04 pre-auth sandbox step. Host refusals still stop grading rather
+than produce `judge_error` or change a denominator. Native handoff evidence is
+still required before its private-result digest is sealed. Process disappearance
+is already handled by the existing native `/proc` walk; ENOENT/ESRCH in sandbox
+probe state explicitly refuse readiness, covered by two new fixtures.
+
+The broader tests exposed stale fixtures, not permission to edit seals:
+
+- Exact historical-source rejection lists omitted the changed `batch-run.yml`
+  and, in two consumers, `step8_grade.py`; add the missing paths, retaining
+  full equality and rejection assertions.
+- Foundry preflight expectations omitted the runner-receipt changes to
+  `native_result_host`, `core/grader` and `core/grade_payload`; add the exact
+  source-pin failures, without changing any registered digest.
+- One synthetic Step2 handoff omitted `runner_evidence` and let its negative
+  case fail too early. Supply the same observer's receipt and assert sealing
+  completed before deliberately removing the wire linkage.
+- Historical GHCP checks now first assert current-source refusal, then use the
+  actual immutable source context. Legacy fake-runner tests explicitly use the
+  existing synthetic hosted fixture and expect the additive runner receipt.
+
+The initial 31-module invocation exceeded its 90-minute test-process bound and
+was forcibly stopped after normal termination/interrupt did not stop it.
+Its log and synthetic files are retained, **not a completed/green result**.
+Final verification completed three disjoint groups of 33 complete modules:
+the same original scope plus two consumers of the corrected historical-source
+fixtures. **2,358 passed / 0 failures / 0 errors / 0 skips**; one integration
+case was deselected. The strict JUnit checker exited **0**, confirming all 33
+modules and 2,358 unique testcase IDs with no overlap or omitted module.
+
+| Group | Passed | Pytest elapsed seconds |
+| --- | ---: | ---: |
+| Native resume, historical comparison and budget | 305 | 1,434.39 |
+| Wire/native-result receipts | 161 | 2,987.39 |
+| Remaining runner, sandbox, grader and preflight contracts | 1,892 | 4,142.22 |
+
+These were separate invocations, partly concurrent; their elapsed times are
+not one wall-clock duration. The focused 77-case proof and all preliminary
+runs are excluded from this total.
+Logs/JUnit and a duplicate-ID/module-coverage check are under
+`/ai-work/copilot/_tmp/native-runner-review-20261029.inlxfD/`.
+
+Wire and contracts both have complete JUnit/final summaries, but their
+temporary shell wrappers subsequently exited 2: editing that running script to
+add a fresh scratch argument caused an EOF/quote error after the child command.
+A paired local control reproduced this without pytest; the unchanged script
+passes syntax checking and execution. This wrapper error is recorded separately,
+not called a green shell exit or a failed testcase. Final counts use complete
+JUnit reports with explicit module/ID verification, not partial progress output.
+
+No model, credential-value lookup, Azure call, dispatch or B push/PR occurs in
+this review. Model/limits/USD 200, original registrations, price/cap/grader
+seals and schema versions are unchanged. Source re-registration and the grader
+seal decision remain required. OpenAI Docs was used to confirm the local
+sandbox-command boundary; it does not establish pinned-CLI/AppArmor behavior
+on the current Actions image. That still needs a model-free hosted check.
+
+## Original runner-receipt subtask
+
 This is the leader's **runner-admission/receipt subtask only**, based on
 `cf1401e1cedc5e2e051ef38de46a2f90a34b370a`, in branch
 `leader/runner-receipt-20261029`. It does not migrate workflows from Ubuntu

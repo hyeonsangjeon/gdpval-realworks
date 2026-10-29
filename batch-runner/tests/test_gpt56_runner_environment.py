@@ -16,7 +16,7 @@ from scripts import diagnose_codex_foundry_connection as diagnostic
 import gpt56_pilot_wire_receipt as wire
 import step8_grade as step8
 import step2_run_inference as step2
-from .test_gpt56_pilot_provider_observation import UPSTREAM, _upstream, _post, loopback_only
+from .test_gpt56_pilot_provider_observation import UPSTREAM, _upstream, _post, _body, loopback_only
 
 
 @pytest.mark.parametrize("version,image", [("24.04", "ubuntu24")])
@@ -152,6 +152,58 @@ def test_upstream_guard_stops_before_a_model_request(native_hosted_runner, monke
         result = observer.summary()
     assert result["native_request_count"] == 0
     assert result["runtime_caps"]["stop_reason"] == host.REFUSED
+    assert result["native_request_blocked_count"] == 1
+
+
+@pytest.mark.parametrize("phase", ["serialized", "validated", "connected"])
+@pytest.mark.parametrize("change,reason", [("runner", host.REFUSED), ("image", host.CHANGED)])
+def test_queued_or_prepared_request_rechecks_host_before_http(
+    native_hosted_runner, monkeypatch, phase, change, reason,
+):
+    def drift():
+        monkeypatch.setenv("RUNNER_ENVIRONMENT" if change == "runner" else "ImageVersion",
+                           "self-hosted" if change == "runner" else "20261029.99.1")
+
+    with _upstream(monkeypatch, [{"body": _body(), "type": "application/json"}]) as (received, _):
+        observer = wire._ProviderHTTPObservation(UPSTREAM, 60)
+        if phase == "serialized":
+            original_lock = observer.request_lock
+            class DriftLock:
+                def acquire(self, **kwargs):
+                    acquired = original_lock.acquire(**kwargs)
+                    if acquired:
+                        drift()
+                    return acquired
+                def release(self):
+                    original_lock.release()
+            observer.request_lock = DriftLock()
+        elif phase == "validated":
+            original_validate = observer._token_request
+            def validate(*args):
+                result = original_validate(*args)
+                drift()
+                return result
+            monkeypatch.setattr(observer, "_token_request", validate)
+        else:
+            original_connection = wire.HTTPSConnection
+            def connect_with_drift(*args, **kwargs):
+                connection = original_connection(*args, **kwargs)
+                connect = connection.connect
+                def connected():
+                    connect()
+                    drift()
+                connection.connect = connected
+                return connection
+            monkeypatch.setattr(wire, "HTTPSConnection", connect_with_drift)
+        try:
+            code, _ = _post(observer.base_url)
+            assert code == 400 and received == []
+        finally:
+            observer.close()
+        result = observer.summary()
+    # A connection reservation is conservatively spent even without HTTP.
+    assert result["native_request_count"] == (1 if phase == "connected" else 0)
+    assert result["runtime_caps"]["stop_reason"] == reason
     assert result["native_request_blocked_count"] == 1
 
 

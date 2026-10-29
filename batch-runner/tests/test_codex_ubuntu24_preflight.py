@@ -128,6 +128,18 @@ def test_unknown_non_policy_failure_never_loads_a_profile(fake_host, monkeypatch
     assert not any(argv[0] == "/usr/bin/sudo" for argv, _ in calls)
 
 
+@pytest.mark.parametrize("error", [FileNotFoundError, ProcessLookupError])
+def test_disappearing_probe_state_cannot_become_ready(fake_host, monkeypatch, error):
+    _, calls, _ = fake_host
+    def gone():
+        raise error("synthetic probe state disappeared")
+    monkeypatch.setattr(preflight, "_restriction", gone)
+    record = preflight.prepare()
+    assert record["status"] == "refused"
+    assert record["detail"] == "sandbox_preflight_dependency_or_io_failure"
+    assert not any(argv[0] == "/usr/bin/sudo" or "sandbox" in argv for argv, _ in calls)
+
+
 def test_zero_cli_exit_without_command_marker_is_not_a_sandbox_proof(fake_host):
     state, _, _ = fake_host
     state["marker"] = "usage help text, not the payload"

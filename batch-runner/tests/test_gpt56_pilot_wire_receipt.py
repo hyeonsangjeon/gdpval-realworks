@@ -598,8 +598,11 @@ def test_native_result_host_step2_real_task_acceptance_precedes_file_acceptance(
         _turn(fake)
         files = host.collect_deliverables(witness, workspace)
         linkage = session.finish_task(observer, success=True, thread_id=fake.thread_id, turn_id=fake.turn_id)
-        result = {"success": True, "files": files, "text": "synthetic result", "pilot_wire_receipt": linkage}
+        from core import runner_environment
+        result = {"success": True, "files": files, "text": "synthetic result", "pilot_wire_receipt": linkage,
+                  "runner_evidence": runner_environment.receipt("inference", observer.runner_observation)}
         host.finish_task(witness, result=result)
+        events.append("sealed-private-result")
         if missing:
             del result["pilot_wire_receipt"]
         return result
@@ -626,11 +629,11 @@ def test_native_result_host_step2_real_task_acceptance_precedes_file_acceptance(
         with pytest.raises(wire.PilotWireReceiptRefused):
             step2._execute_single_task(task, condition, SimpleNamespace(execute=execute), "codex_foundry", None,
                                       REQUESTED["deployment"], **options)
-        assert events == ["synthetic-transport"]
+        assert events == ["synthetic-transport", "sealed-private-result"]
     else:
         step2._execute_single_task(task, condition, SimpleNamespace(execute=execute), "codex_foundry", None,
                                   REQUESTED["deployment"], **options)
-        assert events == ["synthetic-transport", "verified-receipt", "save"]
+        assert events == ["synthetic-transport", "sealed-private-result", "verified-receipt", "save"]
 
 
 @pytest.mark.parametrize("wrong_account", [False, True])

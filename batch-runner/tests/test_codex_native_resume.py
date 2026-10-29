@@ -396,7 +396,8 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
         with pytest.raises(comparison.DispatchPlanRefused) as changed_source:
             campaign.compile_pilot("offline-frozen-matrix", approved_sha)
         assert str(changed_source.value) == (
-            "comparison refused: source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
+            "comparison refused: source_pin:.github/workflows/batch-run.yml, "
+            "source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
             "source_pin:batch-runner/gpt54_codex_input_capture.py, "
             "source_pin:batch-runner/gpt54_v2_input_capture.py, "
             "source_pin:batch-runner/gpt54_run_config_bundle.py, "
@@ -1581,7 +1582,7 @@ def test_native_resume_content_filter_is_terminal_across_restart(host, monkeypat
 
 @pytest.mark.parametrize("stale", [False, True], ids=["current", "pre_resume"])
 def test_native_resume_active_grader_template_source_bindings(
-        stale, historical_comparison_source, historical_foundry_source):
+        stale, historical_comparison_source, historical_foundry_source, monkeypatch):
     frozen_source = historical_comparison_source
     assert frozen_source == historical_foundry_source
     # The actual pre-resume identities are populated from the immutable baseline,
@@ -1613,6 +1614,10 @@ def test_native_resume_active_grader_template_source_bindings(
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)
     assert hashlib.sha256((frozen_source / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
     assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == FROZEN_PILOT_WORKFLOW_SHA256
+    # The current runner-receipt source is deliberately outside the old seal.
+    assert ghcp_gate.inspect_plan(ghcp_gate.load_plan())["configuration_valid"] is False
+    assert (frozen_source / ghcp_gate.PLAN_PATH).read_bytes() == ghcp_gate.PLAN.read_bytes()
+    monkeypatch.setattr(ghcp_gate, "ROOT", frozen_source)
     gate_plan = ghcp_gate.load_plan()
     reference_source = "batch-runner/core/reference_integrity.py"
     current_reference = hashlib.sha256((frozen_source / reference_source).read_bytes()).hexdigest()
