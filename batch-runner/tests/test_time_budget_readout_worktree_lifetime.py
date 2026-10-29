@@ -60,7 +60,6 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
         @pytest.mark.parametrize("phase", ["passed", "reuse"])
         def test_time_budget_worktree_registration_reuse(source_repository, tmp_path, monkeypatch, phase):
             repository = source_repository
-            root = tmp_path / "runner-temp" / readout.subject.SOURCE_BASENAME
             if phase == "passed":
                 source = readout.source.__wrapped__(repository, tmp_path, monkeypatch)
                 record(passed_tmp_path=str(tmp_path), passed_root=str(source.root))
@@ -74,16 +73,18 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
             # pytest 9.2 counts allocations instead of reusing the lowest free
             # suffix. Deliberately exercise the same removed path on both
             # versions; do not turn this into a test of pytest's numbering.
-            if tmp_path != previous_tmp_path:
+            pytest_reused = tmp_path == previous_tmp_path
+            if not pytest_reused:
                 assert not previous_tmp_path.exists()
                 previous_tmp_path.mkdir(mode=0o700)
                 tmp_path = previous_tmp_path
-                root = tmp_path / "runner-temp" / readout.subject.SOURCE_BASENAME
+            root = tmp_path / "runner-temp" / readout.subject.SOURCE_BASENAME
             record(pytest_version=pytest.__version__, allocated_tmp_path=str(allocated_tmp_path),
                    explicit_path_reuse=allocated_tmp_path != tmp_path)
             assert str(tmp_path) == data["passed_tmp_path"] and str(root) == data["passed_root"]
             assert not root.exists()
-            record(same_path_reused=True, passed_directory_removed=True)
+            record(same_path_reused=True, passed_directory_removed=True,
+                   same_path_source="pytest" if pytest_reused else "recreated")
             deadline = time.monotonic() + 30
             before = readout._git(repository.workspace, "worktree", "list", "--porcelain", deadline=deadline)
             assert "worktree " + str(root) + "\\n" in before
