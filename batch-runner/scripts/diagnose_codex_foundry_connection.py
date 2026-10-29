@@ -1237,9 +1237,27 @@ def probe(
         observed["served_model_note"] = "provider response body only; missing fields are not_reported, never requested values"
         if record is not None:
             record["observed"].update(observed)
-            if record["verdict"] == VERDICT_CONNECTED and evidence["state"] != "observed":
+            # The real SDK receives our 502 when a successful provider reply
+            # lacks required evidence. Preserve the owned guard's cause, not
+            # an unrelated/unknown upstream failure. Never promote a failure
+            # to connected or infer fields from requested settings.
+            field_guard_refused = (
+                evidence["reason"] in {
+                    "served_model_unverified", "served_model_mismatch",
+                    "reasoning_effort_unverified", "reasoning_effort_mismatch",
+                    "context_window_unverified", "context_window_mismatch",
+                    "native_response_fields_inconsistent",
+                }
+                and ((observed.get("provider_transport") or {}).get("runtime_caps") or {}).get("stop_reason")
+                    == evidence["reason"]
+                and any(row["complete"] and 200 <= row["http_status"] < 300
+                        for row in evidence["responses"])
+            )
+            if evidence["state"] != "observed" and (record["verdict"] == VERDICT_CONNECTED or field_guard_refused):
                 record = _record(verdict=VERDICT_RESPONSE_EVIDENCE_REFUSED, description=description,
-                                 observed=observed, note=evidence["reason"])
+                                 observed=observed, note=evidence["reason"] + (
+                                     "; successful provider response withheld by the owned evidence guard"
+                                     if field_guard_refused else ""))
     if not cleaned:
         observed["error"] = {
             "stage": "cleanup",

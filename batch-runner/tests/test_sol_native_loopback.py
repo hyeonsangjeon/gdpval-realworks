@@ -25,13 +25,15 @@ pytestmark = [pytest.mark.integration, pytest.mark.skipif(
 )]
 
 
-def _scripted_response():
+def _scripted_response(*, report_context=True):
     response = {"object": "response", "id": "synthetic-response", "model": MODEL,
                 "model_version": "synthetic-test-version", "reasoning": {"effort": "max"},
                 "context_window": 1_000_000, "status": "completed",
                 "usage": {"input_tokens": 90, "output_tokens": 1, "total_tokens": 91,
                           "input_tokens_details": {"cached_tokens": 0},
                           "output_tokens_details": {"reasoning_tokens": 0}}}
+    if not report_context:
+        response.pop("context_window")
     message = {"type": "message", "id": "synthetic-message", "role": "assistant",
                "status": "completed", "content": [{"type": "output_text", "text": "CONNECTED"}]}
     events = [
@@ -129,11 +131,12 @@ def test_real_pinned_sol_diagnostic_passes_unchanged_token_precheck(monkeypatch,
 
     monkeypatch.setattr(wire._ProviderHTTPObservation, "_token_request", observe_precheck)
     monkeypatch.setattr(wire._ProviderHTTPObservation, "forward", observe_ingress)
-    with _upstream(monkeypatch, [{"body": _scripted_response(), "type": "text/event-stream"}]) as (received, _):
+    with _upstream(monkeypatch, [{"body": _scripted_response(), "type": "text/event-stream",
+                                 "headers": {"x-ratelimit-remaining-tokens": "0"}}]) as (received, _):
         record = diagnostic.probe(settings, timeout=30, response_artifact_parent=tmp_path)
     proof = {"schema": "sol_native_loopback/1", "evidence_type": "synthetic_model_free",
              "model_calls": 0, "fake_upstream_requests": len(received),
-             "ingress": ingress, "request_shapes": shapes, "verdict": record["verdict"],
+             "ingress": list(ingress), "request_shapes": list(shapes), "verdict": record["verdict"],
              "runner": host, "observed": record["observed"]}
     destination = os.environ.get("GDPVAL_NATIVE_LOOPBACK_REPORT")
     if destination:
@@ -149,4 +152,25 @@ def test_real_pinned_sol_diagnostic_passes_unchanged_token_precheck(monkeypatch,
     assert record["observed"]["provider_transport"]["native_request_count"] == 1
     assert record["observed"]["provider_transport"]["runtime_caps"]["stop_reason"] is None
     assert record["observed"]["provider_response_evidence"]["state"] == "observed"
+    assert not list((tmp_path / "isolated-runtimes").glob("**/workspace"))
+
+    # The observed live failure, replayed with NO provider/credential/model:
+    # HTTP 200 without context must produce an explicit evidence refusal,
+    # even when the real SDK sees the observer's 502 and reports turn failure.
+    refused_root = tmp_path / "missing-context"
+    refused_root.mkdir(mode=0o700)
+    with _upstream(monkeypatch, [{"body": _scripted_response(report_context=False),
+                                 "type": "text/event-stream",
+                                 "headers": {"x-ratelimit-remaining-tokens": "0"}}]) as (denied_received, _):
+        refused = diagnostic.probe(settings, timeout=30, response_artifact_parent=refused_root)
+    proof["missing_context_case"] = {"verdict": refused["verdict"],
+        "fake_upstream_requests": len(denied_received),
+        "state": refused["observed"]["provider_response_evidence"]["state"],
+        "stop_reason": refused["observed"]["provider_transport"]["runtime_caps"]["stop_reason"]}
+    if destination:
+        Path(destination).write_text(json.dumps(proof, indent=2) + "\n")
+    assert proof["missing_context_case"] == {
+        "verdict": diagnostic.VERDICT_RESPONSE_EVIDENCE_REFUSED, "fake_upstream_requests": 1,
+        "state": "unverified", "stop_reason": "context_window_unverified",
+    }, json.dumps(proof)
     assert not list((tmp_path / "isolated-runtimes").glob("**/workspace"))
