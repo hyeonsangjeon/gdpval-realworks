@@ -148,6 +148,24 @@ def test_zero_cli_exit_without_command_marker_is_not_a_sandbox_proof(fake_host):
     assert record["status"] == "refused" and record["detail"] == "pinned_codex_sandbox_probe_failed"
 
 
+def test_probe_failure_facts_are_a_closed_vocabulary_not_raw_output():
+    raw = ("thread 'main' panicked at /private/config/permissions.rs:123:9:\n"
+           "permission denied: ghp_fixture_token_value https://private.invalid/?key=secret\n"
+           "Authorization: Bearer fixture-private-error\n"
+           "/private/ghp_fixture_token_value.rs:999:1\n")
+    facts = preflight._probe_failure_facts(SimpleNamespace(stderr=raw))
+    assert facts == {"tags": ["configuration", "permission_denied", "permissions", "rust_panic"],
+                     "rust_locations": ["permissions.rs:123"]}
+    rendered = json.dumps(facts)
+    for private in ("ghp_fixture_token_value", "private.invalid", "Bearer", "fixture-private-error", "/private/"):
+        assert private not in rendered
+
+
+def test_unknown_probe_error_is_not_published_or_treated_as_readiness():
+    assert preflight._probe_failure_facts(SimpleNamespace(stderr="opaque-private-error")) == {
+        "tags": [], "rust_locations": []}
+
+
 @pytest.mark.parametrize("stage", ["version", "profile", "sandbox"])
 def test_timeout_refuses_before_any_model_path(fake_host, monkeypatch, stage):
     run = preflight._run

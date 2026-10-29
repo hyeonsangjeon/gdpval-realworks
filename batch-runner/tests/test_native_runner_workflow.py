@@ -28,7 +28,8 @@ def test_host_is_fixed_and_has_no_identity_or_secret_capability(document):
     assert job['timeout-minutes'] == '15'
     assert 'environment' not in job and 'permissions' not in job
     assert set(job['env']) == {'PYTHONDONTWRITEBYTECODE', 'HF_HUB_OFFLINE',
-                               'HF_DATASETS_OFFLINE', 'GDPVAL_CODEX_RUN_ROOT'}
+                               'HF_DATASETS_OFFLINE'}
+    assert all('runner.' not in value for value in job['env'].values())
     text = WORKFLOW.read_text()
     for forbidden in ('secrets.', 'id-token:', 'azure/login', '--send-request',
                       'step2_run_inference.py', 'step8_grade.py',
@@ -59,6 +60,8 @@ def test_closed_step_order_and_readiness_failure_cannot_be_ignored(document):
         'Retain bounded runner and sandbox evidence',
     ]
     assert "-m 'not integration'" in steps[3]['run']
+    assert steps[3]['env'] == {
+        'GDPVAL_CODEX_RUN_ROOT': '${{ runner.temp }}/native-offline-workspaces'}
     probe = steps[5]
     assert 'if' not in probe and 'continue-on-error' not in probe
     assert probe['working-directory'] == 'batch-runner'

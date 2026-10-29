@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -94,6 +95,32 @@ def _cli_probe(binary, scratch):
                 environment=environment, cwd=paths["home"])
 
 
+def _probe_failure_facts(completed):
+    """Fixed vocabulary and public Rust basenames, never raw child output."""
+    text = (completed.stderr or "")[:16_384].lower()
+    vocabulary = {
+        "rust_panic": ("panicked at",),
+        "permission_denied": ("operation not permitted", "permission denied"),
+        "permissions": ("permission",), "profile": ("profile",),
+        "bubblewrap": ("bubblewrap", "bwrap"),
+        "namespace": ("namespace", "unshare"),
+        "working_directory": ("working directory", "cwd"),
+        "configuration": ("configuration", "config"),
+        "unimplemented": ("not yet implemented", "unimplemented"),
+        "invalid_argument": ("invalid argument", "unexpected argument"),
+        "missing_file": ("no such file", "not found"),
+        "read_only": ("read-only", "read only"),
+    }
+    tags = sorted(key for key, words in vocabulary.items() if any(word in text for word in words))
+    # Never retain arbitrary paths, filenames, tokens, URLs or exception prose.
+    public_modules = {"main", "lib", "bwrap", "linux", "linux_sandbox", "sandbox",
+                      "permissions", "permission_profile", "config", "spawn", "seccomp", "landlock"}
+    locations = sorted({f"{name}.rs:{line}" for name, line in re.findall(
+        r"(?:^|[/\s])([a-z_]{1,40})\.rs:([0-9]{1,6})(?::[0-9]+)?", text)
+        if name in public_modules})
+    return {"tags": tags, "rust_locations": locations[:8]}
+
+
 def prepare():
     record = {"schema_version": "native-sandbox-preflight-v1", "status": "refused",
               "reason_code": REFUSED, "detail": None, "model_calls": 0,
@@ -143,6 +170,7 @@ def prepare():
         record["codex_probe_exit"] = completed.returncode
         record["codex_probe_marker_verified"] = completed.returncode == 0 and completed.stdout == SANDBOX_MARKER
         if not record["codex_probe_marker_verified"]:
+            record["codex_probe_failure_facts"] = _probe_failure_facts(completed)
             raise SandboxRefused("pinned_codex_sandbox_probe_failed")
         after = _restriction()
         record["apparmor_restriction_after"] = after
