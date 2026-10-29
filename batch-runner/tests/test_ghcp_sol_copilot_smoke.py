@@ -130,7 +130,7 @@ if mode != "missing_result":
 
 
 @pytest.fixture(autouse=True)
-def offline_only(tmp_path, monkeypatch):
+def offline_only(tmp_path, monkeypatch, github_hosted_ubuntu_2404):
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "synthetic-parent-home")
     for name in adapter.AUTH_ENV_NAMES:
         monkeypatch.delenv(name, raising=False)

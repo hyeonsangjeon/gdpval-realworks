@@ -1,5 +1,40 @@
 # Latest task result
 
+## GHCP hosted Ubuntu 24.04 admission and model-free CI, 2026-10-29
+
+The owner's 2026-10-29 09:20 host decision supersedes the NAS execution route
+recorded below. Every enabled adapter path now requires GitHub-hosted Linux,
+`ImageOS=ubuntu24`, actual Ubuntu `VERSION_ID=24.04`, and complete runner/image
+metadata. Refusal precedes auth, binary reads and task/process creation; a
+pre-spawn recheck catches drift. Receipts retain bounded host metadata while
+explicitly denying cryptographic-host and live model-setting attestation.
+
+One full model-free suite in a fresh minimal dependency environment passed
+**640 tests, 0 failures/errors/skips**, exit **0**, **58.08 seconds**. It includes
+the existing 543 cases and 97 additions: host rejection on the smoke/five task
+entries, OS/label disagreements, drift, development-only dry capture, workflow
+guards and version/fake-auth script checks. The separate focused 229-pass run
+is not pooled into this count. No installed CLI, real auth source or model was
+used locally. Evidence: `/tmp/p5-ghcp-actions-2404.mCx1ix/full.log` and
+`full.junit.xml`.
+
+Workflow lookup returned HTTP 404; the new trigger is limited to this branch's
+gate-related pushes. The workflow checks the real hosted runner, installs and
+hash-verifies Copilot CLI 1.0.103, invokes only its version command in a fresh
+empty-auth HOME, runs this suite once and performs fake-token projection only.
+Five subsequent captures remain empty/model-free. No secret reference, token
+issuance, installed-CLI prompt, paid gate, PR or merge is part of this route.
+Actions results belong to the source-specific run produced by the authorized
+normal push and are reported separately, not inferred from local tests.
+
+Official documentation distinguishes the accepted `GITHUB_TOKEN` variable name
+from the automatic Actions installation token; the latter's Copilot support is
+unverified, so it is not selected. A personal fine-grained PAT with Copilot
+Requests through a protected environment is a proposed supply option, not the
+only supported token type: OAuth and GitHub App user-to-server tokens are also
+documented. Owner choice and actual model authorization remain pending. Sources
+and a two-line owner-decision draft are in `docs/ghcp-sol-actions-gate.md`.
+
 ## GHCP owner-file injection and model-free entitlement check
 
 Existing stored gh login: **yes**, `GET /copilot_internal/user`, HTTP **200**,

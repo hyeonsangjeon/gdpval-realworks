@@ -16,6 +16,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from time import monotonic
 
+import ghcp_sol_runner_environment as runner_environment
+
 from core.execution_envelope_tasks import (
     CATALOG_PATH,
     TaskCatalog,
@@ -477,6 +479,7 @@ def capture_envelope(task_id: str, *, session_events: Iterable[dict] | None = No
     """Construct constants plus the closed event projection, never raw captures."""
     evidence = collect_session_events(session_events)
     failed = evidence["status"] == "failed"
+    runner = runner_environment.observe()
     return {
         "schema_version": "ghcp-sol-actions-dry-capture-v1",
         "task_id": task_id,
@@ -497,8 +500,10 @@ def capture_envelope(task_id: str, *, session_events: Iterable[dict] | None = No
             "codex_cli": "not available",
             "codex_sdk": "not available",
         },
-        "execution_target": "GitHub Actions standard runner ubuntu-24.04",
-        "target_observed": False,
+        "execution_target": runner_environment.EXECUTION_TARGET,
+        "runner_identity": runner,
+        "local_use_policy": "dry_run_and_development_only",
+        "target_observed": runner["eligible_for_execution"],
         "limits": {
             "proposed_paid_timeout_seconds_per_task": PROPOSED_TASK_TIMEOUT_SECONDS,
             "proposed_paid_max_turns_per_task": PROPOSED_TASK_MAX_TURNS,
@@ -527,7 +532,7 @@ def capture_envelope(task_id: str, *, session_events: Iterable[dict] | None = No
         "cost_status": "not available",
         "cost_reason": "native_ghcp_cost_not_collected",
         "grade": None,
-        "evidence_boundary": "local_plan_and_empty_capture_wiring_not_hosted_or_paid_execution",
+        "evidence_boundary": "model_free_capture_wiring_not_model_or_paid_execution",
     }
 
 

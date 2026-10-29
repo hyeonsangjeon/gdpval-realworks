@@ -11,6 +11,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Restrict GHCP execution entrypoints to observed GitHub-hosted Ubuntu 24.04
+  runners, reject absent/conflicting host metadata before auth or launch, and
+  recheck it immediately before spawning. Record runner/OS/image metadata;
+  NAS/local directories are development and model-free dry-run only.
+- Add branch-only model-free Actions CI with Copilot CLI 1.0.103 archive/binary
+  hashes, isolated version-only invocation, the full offline gate suite and a
+  synthetic-token projection. No model call, secret injection or paid mode.
+- Document that the automatic Actions installation token is not established
+  as a supported Copilot credential; personal fine-grained PAT, OAuth and
+  user-to-server token options remain subject to owner selection.
+
 ### Added
 
 - Add explicit owner-file authentication through `COPILOT_GITHUB_TOKEN_FILE`.

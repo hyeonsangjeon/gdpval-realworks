@@ -2,8 +2,9 @@
 
 The caller must supply an argv and an explicit tool-call cap. JSONL start
 notifications support cancellation after observation, not pre-effect admission.
-The existing workflow does not call this adapter. The fixed CONNECTED smoke
-uses a fresh NAS directory, not a VM, and never starts the five-task gate.
+All execution entrypoints require a GitHub-hosted Ubuntu 24.04 runner. NAS/local
+directories are development/dry-run only. The workflow uses fake-process tests,
+never the installed CLI smoke or the five-task model gate.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from pathlib import Path
 from time import monotonic
 
 import ghcp_sol_actions_gate as gate
+import ghcp_sol_runner_environment as runner_environment
 
 POLL_SECONDS = 0.05
 TERM_GRACE_SECONDS = 1.0
@@ -358,6 +360,8 @@ def _receipt(task_id):
         "stream_completeness_verified": False,
         "pre_effect_limits_verified": False,
         "evidence_level": "process_supervision_and_settings_only_not_live_ghcp_proof",
+        "execution_target": runner_environment.EXECUTION_TARGET,
+        "runner_identity": runner_environment.observe(),
     }
 
 
@@ -603,13 +607,13 @@ def run_task(
         receipt.update({
             "task_id": SMOKE_TASK_ID if task_id == SMOKE_TASK_ID else None,
             "row_name": SMOKE_ROW,
-            "execution_target": "NAS isolated directory (not a VM)",
+            "execution_target": runner_environment.EXECUTION_TARGET,
             "copilot_cli": {"version": COPILOT_CLI_VERSION, "sha256": COPILOT_CLI_SHA256},
             "requested": {"model": gate.SOL_MODEL, "reasoningEffort": "max",
                           "context": "long_context", "tokenLimit": 1_000_000},
             "settings_verification": "unverified", "observed_event_fields": [],
             "metadata_gate_passed": False, "five_task_gate_allowed": False,
-            "paid_smoke_authorized": execution_enabled is True,
+            "paid_smoke_authorized": execution_enabled is True and receipt["runner_identity"]["eligible_for_execution"],
             "full_220_allowed": False, "smoke_reply_exact": None,
             "diagnostic": {"status": "not available", "message": None,
                            "stderr_bytes": 0, "stderr_sha256": None},
@@ -623,6 +627,8 @@ def run_task(
     try:
         if execution_enabled is not True:
             raise _Stop("execution_disabled")
+        if not receipt["runner_identity"]["eligible_for_execution"]:
+            raise _Stop(runner_environment.REFUSAL)
         if execution_config is None or (type(execution_config) is dict
                                         and execution_config.get("tool_calls_per_task") is None):
             raise _Stop("tool_call_cap_missing")
@@ -690,6 +696,8 @@ def run_task(
             usage_file = private / "usage.json"
             transcript = (private / "transcript.jsonl").open("xb")
             command = _smoke_command(copilot_cli, config, usage_file)
+        if runner_environment.observe() != receipt["runner_identity"]:
+            raise _Stop("execution_environment_changed")
         started = monotonic()
         deadline = started + gate.PROPOSED_TASK_TIMEOUT_SECONDS
         try:

@@ -1,5 +1,94 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## Current host policy and model-free Actions route, 2026-10-29
+
+The owner's **2026-10-29 09:20** host decision supersedes every historical NAS
+execution approval below. **NAS/container directories are dry-run and development
+only**, not a smoke, model, grading or paid-gate host. The active target is a
+**GitHub-hosted `ubuntu-24.04` runner**. The old NAS route is not an approved
+fallback. No Azure VM route is enabled by this change.
+
+`ghcp_sol_runner_environment.py` reads only the allowlisted `GITHUB_ACTIONS`,
+`RUNNER_ENVIRONMENT`, `RUNNER_NAME`, `RUNNER_OS`, `ImageOS`, `ImageVersion`, and
+the actual OS release/platform. Execution requires literal `true`,
+`github-hosted`, Linux, `ubuntu24`, Ubuntu `VERSION_ID=24.04`, and valid nonempty
+runner/image identifiers. Missing or conflicting evidence refuses with
+`execution_environment_refused` before authentication, catalogue/binary reads,
+task-directory creation or subprocess launch. All `run_task` modes share the
+guard, including the separately bound CONNECTED smoke and fixed-task command
+path; there is no CLI bypass flag. A final snapshot mismatch before spawn
+refuses with `execution_environment_changed` and retains the refusal receipt.
+
+Both execution and dry-capture receipts contain runner name, OS, image version
+and the admission result. These are **locally observed runner metadata, not
+cryptographic host attestation or proof that Sol/Max/1M was served**. Unit tests
+inject synthetic hosted metadata and still whitelist only fake executables;
+their receipts are not observations of a real Actions host. The Actions job
+separately retains its actual `runner.json` before running those tests.
+
+### What the workflow can do
+
+The workflow lookup returned HTTP **404** on 2026-10-29. Its exact branch-only
+push trigger is `leader/ghcp-sol-gate-actions-20261024`, with gate-code/test/
+workflow path filters. It retains the explicit `dry_run=true` dispatch guard;
+push is always model-free. No PR trigger or paid mode was added.
+
+The first job requires Ubuntu 24.04, installs pinned test-only dependencies,
+downloads **Copilot CLI 1.0.103**, checks archive and executable SHA256, and runs
+**only `--version`** in a new HOME with an empty inherited environment and
+auto-update/telemetry disabled. The complete offline gate suite runs once under
+`env -i`. A separate synthetic-token projection checks supported-source routing
+and missing-source refusal with subprocess/network calls disabled; it never
+hands the fake value to the installed Copilot executable. Subsequent jobs
+exercise the fixed-five empty dry-capture path. No private task inputs, model
+requests, login, secret references, token issuance or actual five-task gate is
+part of this workflow. Captured usage/cost remain `not available`.
+
+The only retained CI artifacts are actual runner metadata, CLI version output,
+JUnit, and each task's nonsecret `capture.json`; no state directory or transcript
+is uploaded. CI has `contents: read` only and checkout credentials are not
+persisted. The CLI never inherits a job token. Limits remain 1,200 seconds,
+64 observed turns and the existing explicitly selected 32-tool smoke cap.
+
+Release source: [v1.0.103](https://github.com/github/copilot-cli/releases/tag/v1.0.103),
+public release API checked 2026-10-29. Linux x64 archive SHA256 is
+`9aeb4430e9ac9523546db07b227c7aba179a4710a55f9ac29ad143b0f9e1b325`;
+the existing executable pin remains
+`f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d`.
+
+Design boundary: the intervention is host admission/CI wiring, not a model or
+quality comparison. Cohort, requested model/settings and execution limits stay
+fixed. The classifier is tested against missing/spoofed labels, OS conflicts,
+self-hosted metadata and pre-spawn drift. Inputs/tokens are synthetic. A failed
+host, version or offline test blocks subsequent jobs; no model retry is made.
+Passing this rehearsal does not establish paid readiness, authentication,
+stream completeness or the live setting evidence still required by the gate.
+
+### Actions authentication: variable name is not token type
+
+Public documentation checked **2026-10-29**, without reading any token value or
+testing authentication/model endpoints:
+
+| Candidate | Documented contract | Decision for this card |
+| --- | --- | --- |
+| Automatic job `GITHUB_TOKEN` | An installation access token, scoped to the workflow repository; not a personal fine-grained PAT or user-to-server token | Copilot CLI's supported-token table does not establish support for this type or a Copilot entitlement. **Unverified; do not use for the model gate.** The accepted environment variable name alone is insufficient. |
+| Protected environment secret containing a personal fine-grained PAT | Personal-account owner, **Copilot Requests** account permission, finite expiry; explicitly inject as `COPILOT_GITHUB_TOKEN` only after owner selection | Recommended supply option for owner review; **not configured or supplied** here. Revoke the PAT after the approved window and remove the secret; deletion alone is not revocation. |
+| Other supported user tokens | OAuth (`gho_`) and GitHub App **user-to-server** (`ghu_`) are also documented; classic PAT (`ghp_`) is not | A fine-grained PAT is **not the only supported token type**. Alternatives still need owner-approved identity, secure supply, lifetime and entitlement; no source was selected or extracted. |
+
+Sources: [Copilot CLI authentication / supported token types](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli#supported-token-types),
+[environment-variable authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli#authenticating-with-environment-variables),
+[Actions GITHUB_TOKEN contract](https://docs.github.com/en/actions/concepts/security/github_token),
+[environment protection](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+The installation-token versus user-to-server distinction is intentional;
+neither the variable name nor a successful GitHub API request proves Copilot
+model access. This is a documentation conclusion, not a live authentication test.
+
+Owner decision draft (not an approval):
+> 보호 environment에 개인 소유·Copilot Requests 권한·만료일이 있는 fine-grained PAT를 공급하고, 승인된 작업에서만 `COPILOT_GITHUB_TOKEN`으로 주입하는 안을 선택합니다. 작업 뒤 PAT를 폐기하고 secret도 삭제합니다.
+> job별 `GITHUB_TOKEN` 경로는 Copilot 지원 근거가 확인될 때까지 보류합니다. 이번 성공은 model-free CI뿐이며 스모크·5문제·유료 실행 승인은 별도로 결정합니다.
+
+The earlier investigations and NAS outcomes below are historical records only.
+
 ## Owner-file authentication and entitlement, 2026-10-27
 
 | Existing gh login: general Copilot entitlement | Read-only endpoint | HTTP | Plan |

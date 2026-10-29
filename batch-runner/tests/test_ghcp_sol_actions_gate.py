@@ -5,6 +5,7 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 
@@ -139,21 +140,32 @@ def test_workflow_contract():
     path = Path(__file__).resolve().parents[2] / ".github/workflows/agentic-v2-ghcp-sol-gate.yml"
     text = path.read_text()
     workflow = yaml.load(text, Loader=yaml.BaseLoader)
-    assert list(workflow["on"]) == ["workflow_dispatch"]
+    assert set(workflow["on"]) == {"push", "workflow_dispatch"}
+    assert workflow["on"]["push"]["branches"] == ["leader/ghcp-sol-gate-actions-20261024"]
+    assert workflow["on"]["push"]["paths"] == [
+        ".github/workflows/agentic-v2-ghcp-sol-gate.yml", "batch-runner/ghcp*.py",
+        "batch-runner/requirements-ghcp-sol-gate.txt", "batch-runner/tests/test_ghcp*.py",
+        "batch-runner/tests/conftest.py", "batch-runner/tests/fixtures/ghcp*",
+    ]
     assert workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] == "true"
     assert workflow["permissions"] == {"contents": "read"}
     jobs = workflow["jobs"]
-    assert set(jobs) == {"plan", "task"}
-    for job in jobs.values():
+    assert set(jobs) == {"offline-ci", "plan", "task"}
+    assert jobs["plan"]["needs"] == "offline-ci"
+    for name, job in jobs.items():
         assert job["runs-on"] == "ubuntu-24.04"
-        assert job["timeout-minutes"] == "5"
+        assert job["timeout-minutes"] == ("15" if name == "offline-ci" else "5")
         assert "if" not in job and "continue-on-error" not in job
         guard = job["steps"][0]
         assert guard["name"] == "Refuse paid mode before checkout"
-        assert guard["env"] == {"DRY_RUN": "${{ inputs.dry_run }}"}
+        assert guard["env"] == {"DRY_RUN": "${{ github.event_name == 'push' && 'true' || inputs.dry_run }}"}
         assert guard == jobs["plan"]["steps"][0]
         for step in job["steps"]:
-            assert "if" not in step and "continue-on-error" not in step
+            assert "continue-on-error" not in step
+            if name == "offline-ci" and step.get("uses", "").startswith("actions/upload-artifact@"):
+                assert step["if"] == "always()"
+            else:
+                assert "if" not in step
             if step.get("uses", "").startswith("actions/checkout@"):
                 assert step["with"]["persist-credentials"] == "false"
     task = jobs["task"]
@@ -167,11 +179,74 @@ def test_workflow_contract():
     assert upload["include-hidden-files"] == "false"
     assert upload["if-no-files-found"] == "error"
     assert "60s" in task["steps"][-2]["run"]
-    for forbidden in ("secrets.", "id-token:", "/dev/kvm", "pip install", "azure/login", "hf download"):
+    ci = jobs["offline-ci"]
+    installer = next(step for step in ci["steps"] if step.get("name", "").startswith("Install and verify"))
+    assert "v1.0.103/copilot-linux-x64.tar.gz" in installer["run"]
+    assert "9aeb4430e9ac9523546db07b227c7aba179a4710a55f9ac29ad143b0f9e1b325" in installer["run"]
+    assert "f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d" in installer["run"]
+    assert "--no-auto-update --disable-client-telemetry --version" in installer["run"]
+    assert "env -i PATH=/usr/bin:/bin" in installer["run"]
+    testing = next(step for step in ci["steps"] if step.get("name") == "Run the whole offline gate suite once")
+    for target in ("actions_gate", "execution_adapter", "copilot_smoke", "runner_environment"):
+        assert f"tests/test_ghcp_sol_{target}.py" in testing["run"]
+    assert "tests/test_ghcp_vm_gate_contract.py" in testing["run"]
+    assert "tests/test_ghcp_vm_input_bundle.py" in testing["run"]
+    assert "env -i" in testing["run"] and "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in testing["run"]
+    for forbidden in ("secrets.", "id-token:", "/dev/kvm", "azure/login", "hf download",
+                      "--execute-smoke", "copilot -p", "run_copilot_smoke(", "--allow-all-tools"):
         assert forbidden not in text
+    installs = [step["run"] for step in ci["steps"] if "pip install" in step.get("run", "")]
+    assert installs == ["python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt"]
 
 
-@pytest.mark.parametrize("job_name", ["plan", "task"])
+def test_model_free_workflow_shells_parse_without_execution():
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/agentic-v2-ghcp-sol-gate.yml"
+    workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+    for job in workflow["jobs"].values():
+        for step in job["steps"]:
+            if "run" in step:
+                result = subprocess.run(["bash", "--noprofile", "--norc", "-n"],
+                                        input=step["run"], capture_output=True, text=True,
+                                        env={"PATH": os.defpath}, timeout=5)
+                assert result.returncode == 0, result.stderr
+
+
+def test_ci_fake_token_preflight_never_calls_a_runtime():
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.load((root / ".github/workflows/agentic-v2-ghcp-sol-gate.yml").read_text(), Loader=yaml.BaseLoader)
+    step = next(row for row in workflow["jobs"]["offline-ci"]["steps"]
+                if row.get("name") == "Fake-token projection only - never launch a CLI")
+    result = subprocess.run(["bash", "--noprofile", "--norc", "-c", step["run"]], cwd=root,
+                            env={"PATH": os.defpath, "PYTHON_EXECUTABLE": sys.executable},
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"fake_auth_preflight": "passed", "model_calls": 0,
+                                       "auth_source": "COPILOT_GITHUB_TOKEN"}
+    assert "SYNTHETIC_CI_NOT_A_CREDENTIAL" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("version,accepted", [
+    ("GitHub Copilot CLI 1.0.103.\nRun 'copilot update' to check for updates.\n", True),
+    ("GitHub Copilot CLI 1.0.103.\n", True),
+    ("GitHub Copilot CLI 1.0.104.\n", False),
+    ("GitHub Copilot CLI 1.0.103.\nUNEXPECTED_EXTRA_OUTPUT\n", False),
+])
+def test_ci_checks_the_retained_cli_version_format(tmp_path, version, accepted):
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.load((root / ".github/workflows/agentic-v2-ghcp-sol-gate.yml").read_text(), Loader=yaml.BaseLoader)
+    step = next(row for row in workflow["jobs"]["offline-ci"]["steps"]
+                if row.get("name", "").startswith("Install and verify Copilot CLI"))
+    check = step["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    (tmp_path / "ghcp-model-free").mkdir()
+    (tmp_path / "ghcp-model-free/copilot-version.txt").write_text(version)
+    result = subprocess.run([sys.executable, "-c", check], env={"PATH": os.defpath, "RUNNER_TEMP": str(tmp_path)},
+                            capture_output=True, text=True, timeout=10)
+    assert (result.returncode == 0) is accepted
+    if not accepted:
+        assert "copilot_version_mismatch" in result.stderr
+
+
+@pytest.mark.parametrize("job_name", ["offline-ci", "plan", "task"])
 @pytest.mark.parametrize("dry_run", [
     "true", "false", "", "True", "TRUE", "1", "0", " true", "true\n", "true false",
 ])
@@ -179,7 +254,7 @@ def test_each_job_guard_executes_fail_closed_before_checkout(job_name, dry_run, 
     path = Path(__file__).resolve().parents[2] / ".github/workflows/agentic-v2-ghcp-sol-gate.yml"
     workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
     guard = workflow["jobs"][job_name]["steps"][0]
-    assert guard.get("env") == {"DRY_RUN": "${{ inputs.dry_run }}"}
+    assert guard.get("env") == {"DRY_RUN": "${{ github.event_name == 'push' && 'true' || inputs.dry_run }}"}
     result = subprocess.run(
         ["bash", "--noprofile", "--norc", "-c", guard["run"]],
         cwd=tmp_path,

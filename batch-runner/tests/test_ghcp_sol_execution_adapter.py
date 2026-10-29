@@ -158,7 +158,7 @@ else:
 
 
 @pytest.fixture(autouse=True)
-def offline_only(tmp_path, monkeypatch):
+def offline_only(tmp_path, monkeypatch, github_hosted_ubuntu_2404):
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "synthetic-user")
 
     def forbidden(*args, **kwargs):
