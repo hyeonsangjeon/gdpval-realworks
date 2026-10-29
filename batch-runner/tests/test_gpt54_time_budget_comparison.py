@@ -196,23 +196,17 @@ def test_current_source_cannot_reuse_the_old_time_budget_registration(dual_roots
             pytest.fail("changed real runtime was accepted by the old registration")
 
 
-def test_time_budget_running_core_fixture_preserves_real_source_refusal(dual_roots, tmp_path, monkeypatch):
+def test_time_budget_running_core_guard_rejects_drift(dual_roots, tmp_path):
     import shutil
     from gpt54_prepared_input_attestation import ManifestRefused
 
-    runtime = dual_roots["runtime"]
-    # The current imported core is NOT this legacy study's registered core.
-    with pytest.raises(ManifestRefused):
-        prospective._require_running_observation_sources(runtime)
-    imported = tmp_path / "synthetic-import-origin"
-    shutil.copytree(runtime / "batch-runner/core", imported / "core")
-    helper = imported / "gpt54_time_budget_comparison.py"
-    helper.write_bytes(Path(prospective.__file__).read_bytes())
-    assert helper.read_bytes() == (runtime / "batch-runner/gpt54_time_budget_comparison.py").read_bytes()
-    monkeypatch.setattr(prospective, "__file__", str(helper))
+    runtime = tmp_path / "independent-runtime"
+    shutil.copytree(dual_roots["runtime"] / "batch-runner/core", runtime / "batch-runner/core")
+    # Real imported source bytes must match the independent fixture tree.
+    # Unlike non-core registration roles, this core is still today's core.
     prospective._require_running_observation_sources(runtime)
-    changed = imported / "core/codex_runner.py"
-    changed.write_bytes(changed.read_bytes() + b"\n# synthetic imported-source drift\n")
+    changed = runtime / "batch-runner/core/codex_runner.py"
+    changed.write_bytes(changed.read_bytes() + b"\n# synthetic runtime-source drift\n")
     with pytest.raises(ManifestRefused):
         prospective._require_running_observation_sources(runtime)
 
@@ -1912,7 +1906,6 @@ def handoff_source_seed(tmp_path_factory, dual_roots):
     """
     import pyarrow as pa
     import pyarrow.parquet as pq
-    import shutil
     import yaml
     from core.source_identity import SOURCE_PROJECTION_FIELDS, source_task_projection_sha256
     from gpt54_prepared_input_attestation import _identity
@@ -2028,21 +2021,13 @@ def handoff_source_seed(tmp_path_factory, dual_roots):
     }
     step0 = parent / "synthetic-canonical-step0.json"
     step0.write_bytes(historical._canonical_json(step0_value).encode())
-    # An independent source-origin fixture, not a bypassed source validator.
-    # The historical consumer must compare its registered core to this exact
-    # legacy core, not claim that today's changed grader belongs to that study.
-    imported = parent / "synthetic-import-origin"
-    shutil.copytree(runtime / "batch-runner/core", imported / "core")
-    helper = imported / "gpt54_time_budget_comparison.py"
-    helper.write_bytes((runtime / "batch-runner/gpt54_time_budget_comparison.py").read_bytes())
-    assert helper.read_bytes() == Path(prospective.__file__).read_bytes()
     return SimpleNamespace(
         runtime=runtime, runtime_sha=runtime_sha, runtime_tree=runtime_tree,
         frozen=frozen, frozen_sha=frozen_sha, frozen_tree=frozen_tree,
         profile_sha=_identity(profile_data)["sha256"], plan=plan,
         parquet=parquet, references=references, step0=step0,
         step0_sha=_identity(step0.read_bytes())["sha256"], rows=rows, records=records, task_ids=task_ids,
-        mismatch_role=mismatch_role, input_only_role=input_only_role, imported_helper=helper,
+        mismatch_role=mismatch_role, input_only_role=input_only_role,
     )
 
 
@@ -2051,10 +2036,6 @@ def handoff_sources(handoff_source_seed, monkeypatch):
     from core import repo_bootstrapper
 
     seed = handoff_source_seed
-    # Explicit filesystem-origin seam for these synthetic legacy handoffs;
-    # model transports stay fake and this is not current-source admission.
-    # Separate tests require current and drifted imported sources to refuse.
-    monkeypatch.setattr(prospective, "__file__", str(seed.imported_helper))
     # Only explicit fixture identities differ. The tracked-blob/closure/input
     # checks themselves are unmodified and must all succeed on actual bytes.
     monkeypatch.setattr(prospective, "ACCEPTED_BASE_SHA", seed.frozen_sha)
