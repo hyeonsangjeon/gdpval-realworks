@@ -73,3 +73,60 @@ model quality, actual billing or five-task completion. NAS does not run it.
 The source-only successor preserves every predecessor file, the frozen grader
 seal and all non-source plan fields. GHCP's separate model-free workflow also
 fetches full Git history so historical fixture commits are present on dispatch.
+
+## Paid response and the remaining 1M blocker
+
+After the hosted loopback proof passed, PR #791 merged normally as
+`f9fc251cb43fd24523111813816cd969509e5f15`. The owner-approved native-only
+[run 40967326333](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/40967326333)
+forwarded **one real request** and received a complete HTTP 200 response.
+The provider body reported `model=gpt-5.6-sol` and `reasoning.effort=max`.
+The terminal provider usage accounted by the proxy was **9,468 input tokens
+and 5 output tokens**. SDK usage was null because the proxy withheld the
+response for `context_window_unverified`; the SDK saw the proxy's 502, not
+an upstream 502. The top-level diagnostic verdict was `unclassified_failure`.
+Model version and context size were `not_reported`. No five-task run started.
+
+Artifact 12939480285 (`codex-foundry-connection`) holds the masked response:
+`codex-foundry-connection-responses/response-0001.json`, SHA256
+`ac5a26a68390f92339d47bf94942d0a36f186bbec13306b220f2dd05d0ae19c8`.
+The two paid-mode dispatches hold $14.40 of conservative reference reservations
+in total, not measured billing. The first dispatch forwarded zero requests.
+Neither reservation was silently released or merged into the pilot ledger;
+reconciliation remains required under the combined USD 200 owner ceiling.
+
+The hosted real CLI proof separately reported client `model_context_window`
+**258,400**, despite requesting 1,000,000. Pinned
+[Sol catalog metadata](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/models-manager/models.json#L4)
+sets both context_window and max_context_window to **272,000**.
+[The config override](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/models-manager/src/model_info.rs#L26)
+clamps the requested window to that catalog maximum. This is a client/catalog
+limitation, not evidence of the provider's maximum. Do not invent a larger
+catalog limit or describe these observations as a verified 1M benchmark.
+
+### Capture correction, without another paid retry
+
+The capture redactor treated token rate-limit headers as credentials and
+globally replaced numeric zeroes, damaging numeric JSON literals and the
+`x-ms-served-model` header. The old artifact and its hash are preserved; its
+damaged model version is not reconstructed or asserted as live evidence.
+This bug is separate from the missing context field: the in-memory parser
+also observed no context size before masking.
+
+Only named, typed quota headers are now recognized as non-secret metadata.
+[Public rate-limit documentation](https://developers.openai.com/api/docs/guides/rate-limits)
+identifies token quota counters/reset durations; the observed Azure renewal
+counter is handled under the same narrow numeric/duration grammar. Unknown
+header names/values still redact. Request credentials always enter the secret
+set, even when numeric or echoed in a quota field; rate-limit identity keys
+also redact. These counters are **not context-window evidence**. Fixtures and
+the hosted fake provider exercise zero counters without making another paid
+call or weakening any missing-context refusal.
+
+The diagnostic also labels a successful provider reply withheld by its own
+missing/mismatched-field guard as `response_evidence_unverified`, even
+when the SDK reports the resulting proxy error. It remains a failure, never
+`connected`. A separate SDK failure with otherwise valid response evidence is
+not reclassified. The hosted loopback proof covers both a complete synthetic
+response and a synthetic HTTP 200 response missing context; neither is a
+paid rerun or retroactive alteration of the saved live verdict.

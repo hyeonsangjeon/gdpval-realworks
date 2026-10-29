@@ -190,6 +190,65 @@ def test_response_versions_cannot_change_between_calls(monkeypatch, tmp_path):
     assert store.report()["reason"] == "native_response_fields_inconsistent"
 
 
+@pytest.mark.parametrize("kind", ["json", "sse"])
+def test_numeric_rate_headers_cannot_corrupt_response_numbers_or_model_version(monkeypatch, tmp_path, kind):
+    headers = {name: "0" for name in evidence._RATE_LIMIT_METADATA}
+    headers.update({"X-Ratelimit-Reset-Tokens": "6m0s", "x-ratelimit-key": "private-rate-id",
+                    "x-ms-served-model": "gpt-5.6-sol-2026-07-09"})
+    value = _response(metadata={"echo": "private-rate-id"}, max_output_tokens=10_000)
+    result, observer, store, body = _record(monkeypatch, tmp_path, value, kind=kind,
+                                           row_changes={"headers": headers})
+    assert result == (200, body)
+    report = store.report()
+    assert report["state"] == "observed" and report["served_model_version"] == "2026-07-09"
+    saved = json.loads((tmp_path / report["responses"][0]["artifact"]["path"]).read_bytes())
+    raw = saved["body_utf8"]
+    documents = ([json.loads(raw)] if kind == "json" else
+                 [json.loads(line[5:]) for line in raw.splitlines() if line.startswith("data:")])
+    final = documents[-1] if kind == "json" else documents[-1]["response"]
+    assert final["context_window"] == 1_000_000 and final["max_output_tokens"] == 10_000
+    assert final["model_version"] == "2026-07-09"
+    assert ["x-ms-served-model", "gpt-5.6-sol-2026-07-09"] in saved["headers"]
+    assert ["x-ratelimit-remaining-tokens", "0"] in saved["headers"]
+    assert ["X-Ratelimit-Reset-Tokens", "6m0s"] in saved["headers"]
+    assert ["x-ratelimit-key", "[REDACTED]"] in saved["headers"]
+    assert "private-rate-id" not in json.dumps(saved)
+    evidence.verify_artifact_bundle(tmp_path, report)
+
+
+@pytest.mark.parametrize("name,value", [
+    ("x-ratelimit-remaining-tokens", "fake-unshaped-counter-credential"),
+    ("x-ratelimit-reset-tokens", "Bearer fake-counter-credential"),
+    ("x-unknown-token-counter", "fake-unknown-counter-credential"),
+])
+def test_unknown_counter_values_or_names_still_redact(name, value, tmp_path):
+    store = evidence.NativeResponseArtifacts(tmp_path, "synthetic-responses")
+    artifact = store.begin(200, [(name, value)], [])
+    response = _response(metadata={"echo": value})
+    artifact.feed(json.dumps(response).encode())
+    assert artifact.finish(evidence.response_fields(response), complete=True) is None
+    store.seal(1, 1)
+    report = store.report()
+    saved = json.loads((tmp_path / report["responses"][0]["artifact"]["path"]).read_bytes())
+    assert [name, "[REDACTED]"] in saved["headers"]
+    assert value not in json.dumps(saved) + json.dumps(report)
+
+
+def test_numeric_known_auth_secret_is_not_exempted_as_a_public_counter(tmp_path):
+    token = "123456789"
+    store = evidence.NativeResponseArtifacts(tmp_path, "synthetic-responses")
+    artifact = store.begin(200, [("x-ratelimit-remaining-tokens", token)],
+                           [("Authorization", "Bearer " + token)])
+    response = _response(metadata={"echo": token})
+    artifact.feed(json.dumps(response).encode())
+    assert artifact.finish(evidence.response_fields(response), complete=True) is None
+    store.seal(1, 1)
+    report = store.report()
+    saved = (tmp_path / report["responses"][0]["artifact"]["path"]).read_text()
+    assert token not in saved + json.dumps(report)
+    assert ["x-ratelimit-remaining-tokens", "[REDACTED]"] in json.loads(saved)["headers"]
+
+
 def test_unmasked_arbitrary_token_cannot_enter_body_header_or_receipt(tmp_path):
     token = "fake-unshaped-auth-secret-1234567"
     store = evidence.NativeResponseArtifacts(tmp_path, "synthetic-responses")
@@ -209,7 +268,8 @@ def test_unmasked_arbitrary_token_cannot_enter_body_header_or_receipt(tmp_path):
 
 
 @pytest.mark.parametrize("case", ["valid", "missing-model", "mismatch", "save-failure", "missing-max", "missing-1m"])
-def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch, tmp_path, case):
+@pytest.mark.parametrize("sdk_status", ["completed", "failed"])
+def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch, tmp_path, case, sdk_status):
     import openai_codex
     from openai_codex.generated.v2_all import TurnCompletedNotification
     from .test_codex_foundry_connection_probe import _agent_message, _event, _turn, _probe
@@ -244,7 +304,8 @@ def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch
                 base_url = json.loads(override.split("=", 1)[1])
                 _post(base_url)
                 # Even an SDK that says completed cannot override missing HTTP evidence.
-                yield _event(TurnCompletedNotification(thread_id="thread-1", turn=_turn([_agent_message("CONNECTED")])))
+                yield _event(TurnCompletedNotification(thread_id="thread-1", turn=_turn(
+                    [_agent_message("CONNECTED")], status=sdk_status)))
             return SimpleNamespace(turn=lambda prompt: SimpleNamespace(id="turn-1", stream=stream))
 
     original_init = codex_runner.CodexAgentRunner.__init__
@@ -263,7 +324,10 @@ def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch
     assert record["schema"] == "codex_foundry_connection/4"
     diagnostic.verify_sol_diagnostic_reservation(tmp_path, record["settings"], record["observed"]["diagnostic_budget"])
     assert record["observed"]["provider_transport"]["native_request_count"] == 1
-    assert (record["verdict"] == diagnostic.VERDICT_CONNECTED) is (case == "valid")
+    expected_verdict = (diagnostic.VERDICT_CONNECTED if case == "valid" and sdk_status == "completed" else
+                        diagnostic.VERDICT_UNCLASSIFIED_FAILURE if sdk_status == "failed" and case in {"valid", "save-failure"}
+                        else diagnostic.VERDICT_RESPONSE_EVIDENCE_REFUSED)
+    assert record["verdict"] == expected_verdict
     proof = record["observed"]["provider_response_evidence"]
     assert proof["state"] == ("observed" if case == "valid" else "unverified")
     if case == "missing-model":

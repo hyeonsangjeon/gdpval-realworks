@@ -13,6 +13,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Record the actual Sol/Max native response from run 40967326333 (HTTP 200,
+  9,468 input / 5 output tokens), while retaining the missing-context refusal
+  and the pinned client's measured 258,400 context limit. Correct capture
+  redaction so typed rate-limit counters do not destroy numeric response
+  bytes; unknown values and known credentials still mask. Keep prior artifacts,
+  seals, USD 200 and model settings unchanged; no paid retry for this fix.
+
 - Recognize Codex 0.147.0's observed Responses-lite `additional_tools` input
   only for fully visible local definitions and an exact namespace wrapper.
   Count every serialized byte and retain remote/opaque/oversized refusals;

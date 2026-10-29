@@ -36,6 +36,19 @@ _SECRET_KEY = re.compile(
     r"(?:authorization|proxy.authorization|(?:x.)?api.key|cookie|set.cookie|"
     r"(?:access[-_]?|refresh[-_]?|id[-_]?)?token|client[-_]?secret|password|secret|credential)", re.I)
 _SECRET_HEADER = re.compile(r"authorization|api[-_]?key|token|cookie|secret|credential|password", re.I)
+# These response headers describe quotas, not authentication. A numeric zero
+# in a token counter must not become a global credential redaction that ruins
+# every zero in the response JSON/model identifier. Unknown names or values
+# still take the conservative secret path. Known request credentials always
+# remain in the redactor, including when echoed in one of these fields.
+_RATE_LIMIT_METADATA = frozenset({
+    "x-ratelimit-limit-tokens", "x-ratelimit-remaining-tokens", "x-ratelimit-reset-tokens",
+    "x-ratelimit-renewalperiod-tokens",
+    "x-ratelimit-limit-project-tokens", "x-ratelimit-remaining-project-tokens",
+    "x-ratelimit-reset-project-tokens",
+})
+_RATE_LIMIT_VALUE = re.compile(
+    r"(?:[0-9]{1,20}(?:\.[0-9]{1,6})?|(?:[0-9]{1,8}(?:\.[0-9]{1,6})?(?:ms|s|m|h|d)){1,6})\Z")
 _STRING = re.compile(r'"(?:[^"\\]|\\.)*"', re.S)
 _COLON = re.compile(r"\s*:\s*")
 _TOKEN = re.compile(r"\b(?:ey[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}(?:\.[A-Za-z0-9_-]+)?|"
@@ -43,6 +56,12 @@ _TOKEN = re.compile(r"\b(?:ey[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}(?:\.[A-Za-z0-9
 _BEARER = re.compile(r"\bBearer\s+[^\s\"'\\,;]+", re.I)
 _URL = re.compile(r"https?://[^\s\"'<>\\]+", re.I)
 _ATOM = re.compile(r"[A-Za-z0-9._:-]{1,128}\Z")
+
+
+def _secret_response_header(name, value):
+    if name.lower() in _RATE_LIMIT_METADATA and _RATE_LIMIT_VALUE.fullmatch(value):
+        return False
+    return bool(_SECRET_HEADER.search(name) or name.lower() == "x-ratelimit-key")
 
 
 def _bytes(value):
@@ -197,7 +216,7 @@ def verify_artifact_bundle(parent, evidence):
                     or _redact_body(raw["body_utf8"].encode(), ()) != raw["body_utf8"]):
                 raise ValueError("unsafe_artifact")
             for name, value in raw["headers"]:
-                if ((_SECRET_HEADER.search(name) and value != "[REDACTED]")
+                if ((_secret_response_header(name, value) and value != "[REDACTED]")
                         or _redact_text(value, ()) != value):
                     raise ValueError("unsafe_header")
             expected[path] = True
@@ -267,11 +286,14 @@ class NativeResponseArtifacts:
                 raise ResponseCaptureRefused(self.reason or "native_response_capture_incomplete")
             self.verify()
             secrets = set(value for value in private_values if value)
-            for name, value in [*request_headers, *headers]:
-                if _SECRET_HEADER.search(name) and value:
-                    secrets.add(value)
-                    if value.lower().startswith("bearer "):
-                        secrets.add(value[7:])
+            for group, is_response in ((request_headers, False), (headers, True)):
+                for name, value in group:
+                    sensitive = (_secret_response_header(name, value) if is_response
+                                 else _SECRET_HEADER.search(name))
+                    if sensitive and value:
+                        secrets.add(value)
+                        if value.lower().startswith("bearer "):
+                            secrets.add(value[7:])
             return _ResponseArtifact(self, status, headers, tuple(sorted(secrets, key=len, reverse=True)))
 
     def record(self, response, fields, *, complete):
@@ -280,7 +302,7 @@ class NativeResponseArtifacts:
                 return self.refuse("native_response_capture_incomplete")
             try:
                 self.verify()
-                headers = [[name, "[REDACTED]" if _SECRET_HEADER.search(name)
+                headers = [[name, "[REDACTED]" if _secret_response_header(name, value)
                             else _redact_text(value, response.secrets)] for name, value in response.headers]
                 raw = _redact_body(response.body, response.secrets)
                 # Never let an echoed credential become receipt metadata.
