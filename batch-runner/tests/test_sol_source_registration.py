@@ -331,7 +331,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     # The existing closure includes every core/*.py, including this change's
     # runner adapter. Update only the observed current hash, never the frozen
     # grader pin or its mandatory source-drift refusal.
-    assert measured_hashes == ["f64b9c394f04766ed3bb544a7e9cb963b7bf5d0885ace1f19bf5bc3563fc4bd5"]
+    assert measured_hashes == ["626866618f906ac66db91cfae5ab84786f032c98be049fbf30e7c4a5943ef78b"]
     assert profile["dispatch_grading_identity"]["grader_template_source_hash"] == (
         "47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf"
     )
