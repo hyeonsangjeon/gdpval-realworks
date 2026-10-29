@@ -563,8 +563,35 @@ def _not_running(pid):
         # Only known synthetic PIDs; a zombie has exited, but is not called reaped.
         state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
         return state in {"Z", "X"}
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
+        # ENOENT before open and ESRCH during read both mean this known child
+        # disappeared. Other OS errors and malformed state still fail the test.
         return True
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError, ProcessLookupError])
+def test_proc_disappearance_is_an_exited_child(monkeypatch, error):
+    def disappeared(path, *args, **kwargs):
+        assert path == Path("/proc/123456/stat")
+        raise error("synthetic process disappeared")
+    monkeypatch.setattr(Path, "read_text", disappeared)
+    assert _not_running(123456) is True
+
+
+@pytest.mark.parametrize("error", [PermissionError, OSError])
+def test_unknown_proc_read_failure_is_not_accepted_as_cleanup(monkeypatch, error):
+    def unavailable(*args, **kwargs):
+        raise error("synthetic unreadable process state")
+    monkeypatch.setattr(Path, "read_text", unavailable)
+    with pytest.raises(error):
+        _not_running(123456)
+
+
+@pytest.mark.parametrize("state,stopped", [("R", False), ("S", False), ("D", False),
+                                           ("T", False), ("Z", True), ("X", True)])
+def test_proc_state_still_requires_observed_exit(monkeypatch, state, stopped):
+    monkeypatch.setattr(Path, "read_text", lambda *a, **k: f"123456 (synthetic child) {state} 1 2 3")
+    assert _not_running(123456) is stopped
 
 
 @pytest.mark.parametrize("task_id", gate.TASK_IDS)

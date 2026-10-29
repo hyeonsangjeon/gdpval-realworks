@@ -13,6 +13,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Repair PR #788's test-only CI failures: treat ENOENT/ESRCH as vanished known
+  child processes without swallowing other errors; explicitly reuse the
+  time-budget fixture's removed directory across pytest 9.1/9.2 numbering.
+  Preserve process cleanup, source/hash/branch and failed-worktree assertions.
+  Related pytest 9.2 checks: **806 passed, 0 failed/errors/skipped**; targeted
+  16-case checks also pass on 9.1.1. No production guard, cap or pin changed.
+
 - Restrict GHCP execution entrypoints to observed GitHub-hosted Ubuntu 24.04
   runners, reject absent/conflicting host metadata before auth or launch, and
   recheck it immediately before spawning. Record runner/OS/image metadata;

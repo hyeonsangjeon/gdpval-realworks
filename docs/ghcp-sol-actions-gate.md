@@ -1,5 +1,36 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## First PR CI failures repaired, 2026-10-29
+
+PR #788's first Backend Tests run `40829408586` failed in two test observers,
+not a served-setting or workflow-hash comparison. The raw job logs were read;
+no model/credential query or paid run was used to diagnose them.
+
+- GHCP's known-child `/proc/<pid>/stat` reader caught ENOENT but not ESRCH
+  when a process disappeared during the read. Both disappearance exceptions
+  now count as exited. Permission/other OS errors still propagate, running
+  states still fail cleanup, and TERM/KILL/reaping assertions are unchanged.
+- The time-budget lifetime fixture assumed pytest would allocate a removed
+  `...0` path again. Backend CI installed **pytest 9.2.0**, whose per-prefix
+  counter allocates `...1`; the local/pinned gate environment was **9.1.1**.
+  Holding Git 2.34.1 fixed reproduced the CI failure with pytest 9.2.0 alone.
+  The fixture now explicitly recreates only its own removed prior directory
+  when needed. All same-path, prune-before-add, failed-worktree preservation,
+  source/tree/branch identity and final cleanup assertions remain in place.
+  Explicit cleanup occurs only after every check passes, retaining failures.
+  Child stdout/stderr is attached to the unchanged outer assertion for future
+  diagnostics. No dependency pin or production source was relaxed.
+
+One combined pytest 9.2.0 invocation: **806 passed / 0 failed/errors/skipped**,
+**96.70s** (two existing JUnit-property warnings). It includes every GHCP gate
+test plus time-budget readout, registration lifetime and temp-retention
+contracts. The 16 directly affected/negative cases also pass on pytest 9.1.1
+and 9.2.0; those repeated checks are not added to 806. The fresh 9.2.0 environment
+is isolated under `/ai-work/copilot/_tmp/ghcp-ci-repair-20261029.xHARGo/` and
+does not change the original environment. That directory retains both red
+and green receipts. Existing runtime limits, security checks, workflow,
+secrets policy, source pins and Draft status are unchanged.
+
 ## Dispatch-only paid task wiring, 2026-10-29
 
 The leader's current instruction implements the owner's fixed-five approval;

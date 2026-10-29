@@ -1,5 +1,27 @@
 # Latest task result
 
+## GHCP PR #788: two CI fixture failures repaired, 2026-10-29
+
+Read both failed jobs from Backend Tests run `40829408586`. The GHCP cleanup
+observer lacked `ProcessLookupError` handling when `/proc/<pid>/stat` vanished
+during a read. It now handles only that exception and `FileNotFoundError` as
+exited; permission errors, other OS errors and non-exited states still fail.
+Production process-group cleanup and its existing assertions are unchanged.
+
+The time-budget failure is **pytest 9.2.0 directory numbering**, not a workflow
+hash/file-count guard. Under the same Git 2.34.1, 9.1.1 passed and 9.2.0 reproduced
+the exact child `[reuse]` failure (`...1` versus `...0`). Explicitly reusing the
+fixture-owned removed directory now passes with all original preservation,
+prune/add, identity and cleanup assertions intact. Failures remain retained.
+
+Final combined relevant checks at pytest 9.2.0: **806 passed / 0 failed/errors/
+skipped**, **96.70s**, exit 0 (two existing JUnit warnings). Direct 16-case checks
+also pass on 9.1.1; do not pool those repeated cases into 806. Evidence, including
+red reproduction/child receipts: `/ai-work/copilot/_tmp/ghcp-ci-repair-20261029.xHARGo/`.
+The 9.2.0 environment is separate; existing pins, model/security/limit code and
+workflow remain unchanged. Only an ordinary branch push is authorized; no
+model, secret-value inspection, paid dispatch, merge or Draft release occurred.
+
 ## GHCP dispatch-only protected task wiring, 2026-10-29
 
 The new `paid-task` matrix is conditional on explicit workflow_dispatch,

@@ -20,6 +20,7 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
         f"import sys\nsys.path[:0] = {[str(root), str(root / 'tests')]!r}\n" + dedent('''\
         import json
         from pathlib import Path
+        import shutil
         import subprocess
         import time
         from types import SimpleNamespace
@@ -67,6 +68,19 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
                 return
 
             data = json.loads(RECEIPT.read_text())
+            allocated_tmp_path = tmp_path
+            previous_tmp_path = Path(data["passed_tmp_path"])
+            assert previous_tmp_path.parent == tmp_path.parent == repository.workspace.parent
+            # pytest 9.2 counts allocations instead of reusing the lowest free
+            # suffix. Deliberately exercise the same removed path on both
+            # versions; do not turn this into a test of pytest's numbering.
+            if tmp_path != previous_tmp_path:
+                assert not previous_tmp_path.exists()
+                previous_tmp_path.mkdir(mode=0o700)
+                tmp_path = previous_tmp_path
+                root = tmp_path / "runner-temp" / readout.subject.SOURCE_BASENAME
+            record(pytest_version=pytest.__version__, allocated_tmp_path=str(allocated_tmp_path),
+                   explicit_path_reuse=allocated_tmp_path != tmp_path)
             assert str(tmp_path) == data["passed_tmp_path"] and str(root) == data["passed_root"]
             assert not root.exists()
             record(same_path_reused=True, passed_directory_removed=True)
@@ -113,6 +127,13 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
             }
             record(corrected_fixture_calls=calls, registrations_after=after, checks=checks)
             assert all(checks.values()), checks
+            if allocated_tmp_path != tmp_path:
+                # Only after all checks pass: retain this directory on any
+                # failure, like pytest's failed-only policy for its own path.
+                assert tmp_path.parent == allocated_tmp_path.parent
+                assert tmp_path.name.startswith("test_time_budget_worktree_regi")
+                assert tmp_path.is_dir() and not tmp_path.is_symlink()
+                shutil.rmtree(tmp_path)
         '''), encoding="utf-8")
     junit = owned / "child-junit.xml"
     command = [sys.executable, "-m", "pytest", "-q", "--tb=short", "-o", "tmp_path_retention_policy=failed",
@@ -141,7 +162,7 @@ def test_time_budget_readout_worktree_registration_lifetime(tmp_path_factory, re
     assert receipt["child_cases"] == [
         {"name": "test_failed_worktree_is_retained", "status": "failed"},
         {"name": "test_time_budget_worktree_registration_reuse[passed]", "status": "passed"},
-        {"name": "test_time_budget_worktree_registration_reuse[reuse]", "status": "passed"}]
+        {"name": "test_time_budget_worktree_registration_reuse[reuse]", "status": "passed"}], result.stdout + result.stderr
     assert "intentional failed-worktree retention probe" in result.stdout
     assert receipt["stale_registration"]["exit_code"] == 128
     assert all(receipt["checks"].values())
