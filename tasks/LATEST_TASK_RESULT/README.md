@@ -1,5 +1,37 @@
 # Latest task result
 
+## GHCP model-free Step8 input bridge, 2026-10-29
+
+The workflow now connects its five empty dry captures to a fresh Step8 manifest
+and deliverable-directory layout on hosted Ubuntu 24.04. The new
+`grader-contract` job downloads only the current run's capture artifacts and
+uses the unchanged Step8 input readers and policy validators. Missing/malformed,
+extra, linked, changed or non-model-free captures refuse. Network, subprocess,
+provider-SDK, grader and rubric-loader effects are blocked during validation.
+No Step8 source, frozen plan/template, limit or real grading identity changed.
+
+The report separates `step8_layout_valid=true` and `grader_policy_valid=true`
+from **`ready_for_grading=false`, `gate5_passed=false`**. Dry rows stay pending;
+no answers, inference revision or grades are fabricated. Actual live identity
+checks still refuse missing inference identity and full-220 identity reuse.
+Real answers/rubric and a materialized five-task identity remain necessary for
+grading. This rehearsal neither runs nor authorizes a judge or model.
+
+One complete local fixture suite passed **689 tests, 0 failures/errors/skips**,
+exit **0**, **60.29 seconds**: previous 640 plus 39 bridge and 10 job-guard
+cases. Evidence: `/tmp/p5-ghcp-grader-contract.2zzJok/full.log` and
+`full.junit.xml`. Local tests use synthetic hosted metadata, not a NAS benchmark.
+The authorized normal push will produce the source-specific Actions run; its
+eight jobs and new `ghcp-sol-step8-input-contract` artifact are collected in the
+same evidence directory and reported separately after completion.
+
+Authentication recommendation is unchanged: a short-lived personal fine-grained
+PAT with Copilot Requests via a protected environment, subject to owner choice.
+OAuth and user-to-server tokens are also documented, whereas the automatic job
+installation token is not established as a Copilot credential. Official sources
+and the one-line decision draft are in `docs/ghcp-sol-actions-gate.md`.
+No secret reference, auth/model/judge request, paid dispatch, PR or merge occurs.
+
 ## GHCP hosted Ubuntu 24.04 admission and model-free CI, 2026-10-29
 
 The owner's 2026-10-29 09:20 host decision supersedes the NAS execution route

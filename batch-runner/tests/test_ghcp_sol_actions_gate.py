@@ -150,11 +150,11 @@ def test_workflow_contract():
     assert workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] == "true"
     assert workflow["permissions"] == {"contents": "read"}
     jobs = workflow["jobs"]
-    assert set(jobs) == {"offline-ci", "plan", "task"}
+    assert set(jobs) == {"offline-ci", "plan", "task", "grader-contract"}
     assert jobs["plan"]["needs"] == "offline-ci"
     for name, job in jobs.items():
         assert job["runs-on"] == "ubuntu-24.04"
-        assert job["timeout-minutes"] == ("15" if name == "offline-ci" else "5")
+        assert job["timeout-minutes"] == ("15" if name in {"offline-ci", "grader-contract"} else "5")
         assert "if" not in job and "continue-on-error" not in job
         guard = job["steps"][0]
         assert guard["name"] == "Refuse paid mode before checkout"
@@ -162,7 +162,7 @@ def test_workflow_contract():
         assert guard == jobs["plan"]["steps"][0]
         for step in job["steps"]:
             assert "continue-on-error" not in step
-            if name == "offline-ci" and step.get("uses", "").startswith("actions/upload-artifact@"):
+            if name in {"offline-ci", "grader-contract"} and step.get("uses", "").startswith("actions/upload-artifact@"):
                 assert step["if"] == "always()"
             else:
                 assert "if" not in step
@@ -187,7 +187,7 @@ def test_workflow_contract():
     assert "--no-auto-update --disable-client-telemetry --version" in installer["run"]
     assert "env -i PATH=/usr/bin:/bin" in installer["run"]
     testing = next(step for step in ci["steps"] if step.get("name") == "Run the whole offline gate suite once")
-    for target in ("actions_gate", "execution_adapter", "copilot_smoke", "runner_environment"):
+    for target in ("actions_gate", "execution_adapter", "copilot_smoke", "runner_environment", "grader_contract"):
         assert f"tests/test_ghcp_sol_{target}.py" in testing["run"]
     assert "tests/test_ghcp_vm_gate_contract.py" in testing["run"]
     assert "tests/test_ghcp_vm_input_bundle.py" in testing["run"]
@@ -197,6 +197,22 @@ def test_workflow_contract():
         assert forbidden not in text
     installs = [step["run"] for step in ci["steps"] if "pip install" in step.get("run", "")]
     assert installs == ["python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt"]
+    grader = jobs["grader-contract"]
+    assert grader["needs"] == "task"
+    download = next(step for step in grader["steps"] if step.get("uses", "").startswith("actions/download-artifact@"))
+    assert download["with"] == {"pattern": "ghcp-sol-dry-capture-*",
+                                "path": "${{ runner.temp }}/ghcp-grader-captures", "merge-multiple": "false"}
+    validation = next(step for step in grader["steps"] if step.get("name", "").startswith("Convert empty captures"))
+    assert "ghcp_sol_grader_contract.py" in validation["run"] and "env -i" in validation["run"]
+    assert "120s" in validation["run"] and "HF_HUB_OFFLINE=1" in validation["run"]
+    assert "step8_grade.py" not in validation["run"]
+    retained = grader["steps"][-1]["with"]
+    assert retained["name"] == "ghcp-sol-step8-input-contract"
+    assert retained["path"].splitlines() == [
+        "${{ runner.temp }}/ghcp-grader-contract/grader-contract.json",
+        "${{ runner.temp }}/ghcp-grader-contract/workspace/step2_inference_results.json",
+    ]
+    assert retained["include-hidden-files"] == "false" and retained["if-no-files-found"] == "error"
 
 
 def test_model_free_workflow_shells_parse_without_execution():
@@ -246,7 +262,7 @@ def test_ci_checks_the_retained_cli_version_format(tmp_path, version, accepted):
         assert "copilot_version_mismatch" in result.stderr
 
 
-@pytest.mark.parametrize("job_name", ["offline-ci", "plan", "task"])
+@pytest.mark.parametrize("job_name", ["offline-ci", "plan", "task", "grader-contract"])
 @pytest.mark.parametrize("dry_run", [
     "true", "false", "", "True", "TRUE", "1", "0", " true", "true\n", "true false",
 ])

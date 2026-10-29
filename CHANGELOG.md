@@ -26,6 +26,16 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Connect all five GHCP dry-capture artifacts to an empty Step8 input layout
+  and unchanged pinned-policy/input validators in a hosted Ubuntu 24.04 job.
+  Refuse missing, malformed, extra, linked, changed or non-model-free inputs;
+  block grader/rubric-loader construction, network and process effects.
+  Retain only the nonsecret contract report and empty manifest. Explicitly
+  preserve live inference/full-220 identity refusals and `gate5_passed=false`;
+  no answer, grade, inference SHA, model call or secret supply is fabricated.
+  One full local fixture suite: **689 passed, 0 failed/errors/skipped**, **60.29s**.
+  Frozen Step8 sources, plans, templates and limits remain unchanged.
+
 - Add explicit owner-file authentication through `COPILOT_GITHUB_TOKEN_FILE`.
   Require an owned, single-link regular 0600 file outside source/capture trees,
   reject unsafe/missing/empty/drifted files, and forward only the value to the

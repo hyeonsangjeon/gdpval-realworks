@@ -101,7 +101,8 @@ jobs:
             --basetemp="$RUNNER_TEMP/ghcp-model-free-pytest" \
             tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_vm_gate_contract.py \
             tests/test_ghcp_vm_input_bundle.py tests/test_ghcp_sol_execution_adapter.py \
-            tests/test_ghcp_sol_copilot_smoke.py tests/test_ghcp_sol_runner_environment.py
+            tests/test_ghcp_sol_copilot_smoke.py tests/test_ghcp_sol_runner_environment.py \
+            tests/test_ghcp_sol_grader_contract.py
       - name: Fake-token projection only - never launch a CLI
         env:
           PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
@@ -134,6 +135,64 @@ jobs:
             ${{ runner.temp }}/ghcp-model-free/runner.json
             ${{ runner.temp }}/ghcp-model-free/copilot-version.txt
             ${{ runner.temp }}/ghcp-model-free/tests.junit.xml
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  grader-contract:
+    name: Step8 input layout and policy only (no judge)
+    needs: task
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Refuse paid mode before checkout
+        env:
+          DRY_RUN: ${{ github.event_name == 'push' && 'true' || inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" != true ]]; then
+            echo "::error::Paid execution is not implemented or approved."
+            exit 2
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: "3.10"
+      - name: Install pinned import-only contract dependencies
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+      - name: Read only this run's five nonsecret capture artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: ghcp-sol-dry-capture-*
+          path: ${{ runner.temp }}/ghcp-grader-captures
+          merge-multiple: false
+      - name: Convert empty captures and invoke Step8 input validators only
+        env:
+          PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 120s env -i \
+            PATH="$(dirname "$PYTHON_EXECUTABLE"):/usr/bin:/bin" LANG=C.UTF-8 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+            "$PYTHON_EXECUTABLE" batch-runner/ghcp_sol_grader_contract.py \
+              --captures "$RUNNER_TEMP/ghcp-grader-captures" \
+              --output "$RUNNER_TEMP/ghcp-grader-contract"
+      - name: Keep input-layout checks and the empty manifest only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-sol-step8-input-contract
+          path: |
+            ${{ runner.temp }}/ghcp-grader-contract/grader-contract.json
+            ${{ runner.temp }}/ghcp-grader-contract/workspace/step2_inference_results.json
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: false

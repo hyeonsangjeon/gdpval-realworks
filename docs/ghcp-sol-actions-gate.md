@@ -1,5 +1,65 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## Model-free Step8 input bridge, 2026-10-29
+
+The `grader-contract` job follows all five dry-capture matrix jobs on the same
+GitHub-hosted `ubuntu-24.04` workflow run. It downloads only that run's five
+`ghcp-sol-dry-capture-*` artifacts and invokes
+`batch-runner/ghcp_sol_grader_contract.py` with an empty inherited environment,
+offline data settings, allowlisted runner metadata and a 120-second deadline.
+It does not invoke the installed Copilot CLI, a judge or `step8_grade.py`'s main
+entrypoint. No secret reference or new authentication source is introduced.
+
+The bridge requires exactly the fixed five capture files, with the existing dry
+schema, empty/nonprivate contents and eligible runner metadata. Missing, extra,
+malformed, linked, changed or non-model-free inputs refuse with exit **2** and
+a fixed reason. It writes an explicitly empty
+`workspace/step2_inference_results.json` and task directories under
+`workspace/upload/deliverable_files/`, then imports the **unchanged Step8**
+reader and validators. Checks cover the frozen GHCP grading policy/template,
+`validate_grading_config`, `load_local_inference_results`, `filter_tasks`,
+`validate_local_deliverables` and `resolve_deliverable_dir`. The Step8 source,
+template and input-manifest helper hashes are checked, including after use.
+Grader/rubric-loader construction, network, subprocess and provider-SDK effects
+are refused during validation; no rubric download or renderer runs.
+
+| Check | Model-free outcome | What it does not prove |
+| --- | --- | --- |
+| Five captures and Step8 filesystem/manifest layout | `step8_layout_valid=true` | Real answers, deliverable content or rubric bytes |
+| Existing pinned policy syntax | `grader_policy_valid=true` | A materialized five-task grading identity |
+| Live inference/full-220 identity validation | Expected refusals retained | A dry capture cannot reuse the full-220 rerun identity or invent an inference SHA |
+
+Success is **`model_free_layout_verified`**, not gate stage 5 passing:
+`ready_for_grading=false`, `gate5_passed=false`, `paid_execution_allowed=false`.
+All five manifest rows remain `pending`; inference identity, grade and usage are
+unset, with usage/cost status **`not available`**. The separate live blockers
+are real answers/rubric not captured, missing inference identity and the
+unmaterialized five-task grading identity. These are not hidden by the layout
+job's successful exit. Frozen plans, graders, templates and limits are unchanged.
+
+The job uploads only `grader-contract.json` and the empty manifest, with input
+and manifest SHA256s, actual runner metadata, checks and live refusals. It does
+not upload a private input, credential, transcript or score. The earlier CI
+artifact allowlist below is extended only by these two nonsecret files.
+
+Local fixture validation, one combined invocation: **689 passed, 0 failed,
+0 skipped**, **60.29 seconds**, exit **0** (previous 640 plus 39 bridge and 10
+new-job guard cases). This is offline synthetic evidence, not a NAS benchmark
+execution. Evidence: `/tmp/p5-ghcp-grader-contract.2zzJok/full.log` and
+`full.junit.xml`; the source-specific Actions result is collected after the
+authorized normal push, not inferred from local tests.
+
+Authentication recap: the job's automatic installation token is not documented
+as a supported Copilot CLI user token. A protected environment can instead hold
+a personal fine-grained PAT (**Copilot Requests** permission), OAuth or GitHub
+App user-to-server token; classic PAT is unsupported. See the official sources
+in [the authentication table](#actions-authentication-variable-name-is-not-token-type).
+Recommendation remains a short-lived personal fine-grained PAT, subject to owner
+selection; this model-free workflow supplies none of these tokens.
+
+One-line owner-decision draft, **not an approval**:
+> 보호 environment에 Copilot Requests 권한·만료가 있는 개인 fine-grained PAT를 공급하고 작업 후 폐기하며, 유료 실행은 별도 승인한다.
+
 ## Current host policy and model-free Actions route, 2026-10-29
 
 The owner's **2026-10-29 09:20** host decision supersedes every historical NAS
