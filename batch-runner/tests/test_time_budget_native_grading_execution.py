@@ -39,6 +39,9 @@ def offline(monkeypatch, handoff_sources, dual_roots):
     from core import azure_ai_clients, rubric_loader
     from core.time_budget_observation_deadline import TimeBudgetObservation
 
+    # Native preparation performs controller checks before it yields a handle,
+    # so bind the identical fixture controller before that first context too.
+    _bind_grading_controller(monkeypatch, dual_roots["runtime"])
     denied, prepared = [], []
 
     def forbidden(*args, **kwargs):
