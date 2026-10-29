@@ -1,0 +1,81 @@
+name: Native pilot hosted runner check (model-free)
+
+on:
+  push:
+    branches: [leader/runner-receipt-20261029]
+    paths:
+      - batch-runner/**
+      - .github/workflows/gpt56-native-runner-check.yml
+  pull_request:
+    paths:
+      - batch-runner/core/runner_environment.py
+      - batch-runner/scripts/prepare_codex_sandbox_host.py
+      - batch-runner/tests/test_codex_ubuntu24_preflight.py
+      - batch-runner/tests/test_gpt56_runner_environment.py
+      - batch-runner/tests/test_native_runner_workflow.py
+      - .github/workflows/gpt56-native-runner-check.yml
+
+# This job can prove isolation, not infer or authenticate to a model provider.
+# The separately approved paid pilot must still pass its own admission gates.
+permissions:
+  contents: read
+
+concurrency:
+  group: native-runner-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-runner-check:
+    name: Ubuntu 24.04 native sandbox proof (no model)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      HF_HUB_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10.12'
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+      - name: Install the registered dependencies
+        working-directory: batch-runner
+        run: python -m pip install -r requirements.txt
+      - name: Run offline admission contracts
+        working-directory: batch-runner
+        env:
+          GDPVAL_CODEX_RUN_ROOT: ${{ runner.temp }}/native-offline-workspaces
+        run: |
+          set -euo pipefail
+          python -m pytest -q -m 'not integration' \
+            tests/test_codex_ubuntu24_preflight.py \
+            tests/test_gpt56_runner_environment.py \
+            tests/test_native_runner_workflow.py
+      - name: Install system bubblewrap if absent
+        run: |
+          set -euo pipefail
+          if ! command -v bwrap > /dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq bubblewrap
+          fi
+      - name: Prove the pinned local sandbox without a model
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          python scripts/prepare_codex_sandbox_host.py \
+            --out "$RUNNER_TEMP/native-sandbox-proof.json"
+      - name: Retain bounded runner and sandbox evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-sandbox-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-sandbox-proof.json
+          if-no-files-found: error
+          retention-days: 7

@@ -72,7 +72,7 @@ def _failed_row(context):
                 kwargs.pop("verbose")
                 result = runner.run(**kwargs)
                 produced.append(result)
-                return result
+                return native.historical_native_envelope(result)
 
             try:
                 row = step2._execute_single_task(

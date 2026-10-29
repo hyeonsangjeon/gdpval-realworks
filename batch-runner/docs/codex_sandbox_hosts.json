@@ -25,6 +25,18 @@
     "than leaving it as a guess -- which is what the previous round of this work",
     "did, calling every bwrap error the same problem."
   ],
+  "execution_policy": {
+    "updated_on": "2026-10-29",
+    "decision": "Owner 2026-10-29 09:20: GitHub-hosted ubuntu-24.04 first; NAS is development/dry-run only.",
+    "github_hosted_runner": "ubuntu-24.04",
+    "preparation_script": "scripts/prepare_codex_sandbox_host.py",
+    "preparation": "Add a userns AppArmor profile for /usr/bin/bwrap only if the unprepared probe fails with the restriction enabled; never change a sysctl or replace a profile.",
+    "required_same_job_readiness": "ready",
+    "required_probes": ["bubblewrap_user_and_network_namespaces", "pinned_codex_sandbox_linux_marker"],
+    "prepared_host_observation": "not_yet_measured_on_Actions",
+    "historical_record_boundary": "The hosts below are unchanged unprepared observations, not approvals. Ubuntu 22.04 remains a historical survey control, not a native execution target.",
+    "azure_vm": "Explicit owner approval still required; this hosted-only preparation does not configure an Azure VM."
+  },
   "hosts": {
     "xenology-nas": {
       "readiness": "kernel_lacks_user_namespaces",

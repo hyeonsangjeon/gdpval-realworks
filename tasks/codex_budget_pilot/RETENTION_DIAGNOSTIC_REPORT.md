@@ -122,6 +122,93 @@ budget observation declares 4 without reading those bodies. The six failed
 cells declare no deliverables in their controls; neither that declaration nor
 a later RESULT-only read proves absence of all partial work.
 
+### Failure reasons by producer run
+
+Every failed cell records exit code 1 and confirmed cleanup. For each row below,
+both `terminal_details.detailed_failure` and the later budget observation's
+`unavailable.detailed_failure.value` are null. Their recorded missing reason is
+`not_recorded_in_terminal_controls`. This is missing cause evidence, not a
+diagnosis of timeout, rate limiting or exhausted budget.
+
+| Cell | Producer run | Recorded failure detail |
+| --- | --- | --- |
+| Task4 fresh/r1 | 36845127347 | Unknown: `not_recorded_in_terminal_controls` |
+| Task4 fresh/r2 | 36907894862 | Unknown: `not_recorded_in_terminal_controls` |
+| Task5 fresh/r1 | 37032230813 | Unknown: `not_recorded_in_terminal_controls` |
+| Task5 keep/r1 | 37066171719 | Unknown: `not_recorded_in_terminal_controls` |
+| Task5 keep/r2 | 37081963299 | Unknown: `not_recorded_in_terminal_controls` |
+| Task5 fresh/r2 | 37101934436 | Unknown: `not_recorded_in_terminal_controls` |
+
+Neither the zero-clamped remaining seconds nor recorded retry components fill
+these six missing causes. The two successful runs, 36696961231 and 36947454688,
+have no failed outcome to diagnose. No cell remains to be executed.
+
+### Five-category evidence audit, 2026-10-24
+
+**Criterion: closed with limitation, not an empirical five-way
+classification.** This local-only follow-up to
+`d8b91893071ed06ccd711acce8d9c019d9b66ed6` checks rate limit,
+communication failure, timeout, output-length limit and content filter for
+every cell, including possible recovered events in the two successes.
+No category is identifiable from the retained evidence for any cell.
+In the table, **not recorded applies separately to all five categories**;
+it does not mean that any category was absent.
+
+| Cell | Producer run | Outcome / exit | Five-category evidence |
+| --- | --- | --- | --- |
+| Task4 keep/r1 | 36696961231 | succeeded / 0 | not recorded; recovered events unknown |
+| Task4 fresh/r1 | 36845127347 | failed / 1 | not recorded |
+| Task4 fresh/r2 | 36907894862 | failed / 1 | not recorded |
+| Task4 keep/r2 | 36947454688 | succeeded / 0 | not recorded; recovered events unknown |
+| Task5 fresh/r1 | 37032230813 | failed / 1 | not recorded |
+| Task5 keep/r1 | 37066171719 | failed / 1 | not recorded |
+| Task5 keep/r2 | 37081963299 | failed / 1 | not recorded |
+| Task5 fresh/r2 | 37101934436 | failed / 1 | not recorded |
+
+Evidence inspected: all eight rows of the committed
+[readout](retention_diagnostic_readout.json), their producer/run/job bindings,
+terminal controls, intake/terminal receipts, RESULT-only budget receipts and
+snapshots, this report's provenance, and the historical source record named
+by the readout. Each failed row has
+`terminal_details.detailed_failure=null`; all eight budget receipts have
+`unavailable.detailed_failure={status: unavailable, value: null,
+reason: not_recorded_in_terminal_controls}`. The two successes have no
+`terminal_details` object. Cleanup and publication acknowledgment establish
+neither provider behavior nor the absence of a transient communication error.
+
+No matching raw producer job log, provider event stream or diagnostic payload
+was found in the inspected report worktree or repository workspace.
+Inspection of historical sibling worktrees outside this checkout was denied
+by the non-interactive access boundary; their contents are not claimed absent
+or inspected. No remote log/artifact download or new reader was attempted.
+The missing-data conclusion is bounded to accessible retained evidence, not
+an assertion that no fuller evidence ever existed.
+
+The following evidence would have been needed for **each** not-recorded row,
+bound to its producer run/job, cell and native turn/attempt:
+
+| Category | Missing discriminating field or log |
+| --- | --- |
+| Rate limit | Recorded `rate_limited` event with provider HTTP 429/error code or explicit rate-limit reason; retry/backoff counts alone are insufficient |
+| Communication failure | Recorded `transport_error` event or transport exception/stream-disconnect log; publication acknowledgment is a different boundary |
+| Timeout | Recorded timeout exception/category and timed operation, or an explicit deadline-exhaustion/kill event distinguishing native-turn, cumulative-budget and job timeout |
+| Output-length limit | Explicit provider finish/stop/incomplete reason identifying length/token exhaustion, or a complete bound reason supporting `output_limit_exceeded`; token totals alone are insufficient |
+| Content filter | Explicit provider `content_filter` finish/error reason or a bound `content_filtered` event; failed status alone is insufficient |
+
+For successes, an attempt/event history would also be needed to identify or
+exclude recovered occurrences. Zero-clamped budget remaining, positive
+remaining, waits, admissions and resumes cannot substitute for these fields.
+Source classifiers, synthetic fault-injection results and the separate
+exp035 observations show classification capability, not events in these eight
+cells. No grades, costs, outcomes or budget observations are changed.
+
+This closes the outstanding distinction criterion with its evidence limitation
+explicit, without claiming measured causes or a feedback benefit. There is no
+remaining execution or grading prerequisite and no additional paid work is
+authorized. Publishing and the leader's existing review/acceptance disposition,
+including acceptance of the inconclusive measurements and this limitation,
+remain outside this local task; no new-head review or CI approval is claimed.
+
 ## Eight recorded budget points
 
 These are stored inference-result snapshots, observed later through model-free
@@ -246,6 +333,57 @@ external-input blockers for their own work, not missing pilot or retention
 results. The leader owns acceptance against the original criteria and any future
 scope; neither a 30-task nor a 220-task expansion is authorized. This
 clarification authorizes no experiment or replay.
+
+## Remaining card criteria: existing evidence only
+
+The 2026-10-24 leader instruction withdraws the earlier decision to execute
+remaining paid cells. All eight cells already have terminal outcomes. This
+audit uses only committed evidence at `6efe99cbd40bb839037e7a20711a734e0a4ce002`;
+it adds no measurement, estimate, model call, dispatch or remote update.
+
+**(a) Per-condition measurement: inconclusive for the full criterion.**
+The retained-field portion is filled: the original report contains A/B/C
+outcomes and grades plus 24 epoch04 budget snapshots, and this report contains
+all eight KEEP/FRESH outcomes and budget snapshots, keyed by task and repeat.
+The six frozen epoch03 failures are separate outcomes, not six additional
+budget snapshots. Per-cell partial inference amounts, usage missingness and
+separate grade accounting are retained above and in the JSON.
+Exact uncapped elapsed time, all recovery/downtime, eligible recovery
+opportunities, realized retained-state exposure, six detailed failure causes
+and complete costs cannot be supplied from these records. Complete snapshot
+coverage therefore does not fully satisfy condition-level measurement or
+support a causal retention estimate. No missing value is imputed.
+
+**(b) C/B comparison report: filled descriptively; feedback benefit inconclusive.**
+Only the original A/B/C pilot contains C feedback. The later KEEP/FRESH
+diagnostic uses mechanical B recovery in both treatments and cannot substitute
+for C/B. The following values are copied from the original report's
+[outcome table](REPORT.md#epoch04-readout-results), with no new averages,
+score differences, estimates or regrading. Each numeric entry is a
+full-denominator percentage; null is an ungraded outcome, not zero.
+
+| Original task | B r1 / r2 full % | C r1 / r2 full % | Evidence boundary |
+| --- | --- | --- | --- |
+| T1 | null / null | null / null | All four are frozen epoch03 failures; no numeric comparison |
+| T2 | 95.38 / 95.38 | 94.70 / 94.17 | Each grade excludes 1 item / 1 maximum point; included/full denominators 65/66 |
+| T3 | 97.88 / 96.41 | 98.18 / 97.06 | No exclusions; two repeats of one task |
+| T4 | 53.84 / 53.84 | 51.88 / 51.70 | Each excludes 9 items / 11 maximum points; included/full denominators 45/56; excluded IDs/causes unread |
+| T5 | null / 28.44 | 8.23 / null | B1/C2 have no deliverable or numeric grade; B2/C1 grades have no exclusions |
+
+The original report also retains task/repeat-specific
+[budget observations](REPORT.md#budget-snapshot-availability): Task2 and Task3
+have zero confirmed resumes in both C repeats, while Task4 and Task5 record
+resumes in both B and C. These observations do not establish whether adaptive
+feedback helped. The six frozen T1 failures, only two repeats per condition,
+service/source variation, unread exclusions, unknown judge calibration and
+missing costs prevent a causal benefit or cost-efficiency conclusion.
+No C/B result is pooled across epochs or combined with KEEP/FRESH.
+
+An unqualified card-complete claim is not supported while (a) requires those
+unavailable measurements. The leader can close the finite execution/reporting
+scope only by explicitly accepting (a)'s inconclusive disposition and (b)'s
+descriptive comparison without an established benefit. This is not a checkbox
+or Project update. No additional paid run, replay or expansion is authorized.
 
 ## Final outcome and evidence boundaries
 
@@ -526,6 +664,14 @@ all ten checks and its consumed 17.09s proof are historical acceptance evidence,
 not validation of this consolidated revision. The [latest task record](../LATEST_TASK_RESULT/README.md)
 separates this report's local evidence checks from the consumed lifecycle,
 reader and earlier report proofs; none of those earlier proofs was repeated.
+
+### Historical report-finalization scope
+
+The next two paragraphs describe the earlier eight-budget-point finalization,
+not the 2026-10-24 document audit. This audit adds the failure-detail and
+remaining-criteria sections and a root README summary; the JSON, original pilot
+and all execution records remain unchanged. No new-head review or CI result
+is claimed for these local-only edits.
 
 This unit adds only the two successful-cell current observations to the JSON,
 updates the report and directly coupled evidence expectations, and records

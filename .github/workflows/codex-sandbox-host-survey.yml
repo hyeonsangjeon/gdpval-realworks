@@ -32,18 +32,17 @@ name: Codex Sandbox Host Survey
 # runner, so this result has an expiry date. The execution-host question is
 # deferred by it, not closed.
 #
-# The `prove-execution` job below is what turns that measurement into cover:
-# it runs the end-to-end file on the one ready host with
-# CODEX_SANDBOX_MUST_RUN=1, so the execution leg cannot silently stop being
-# exercised there.
+# The unprepared survey remains unchanged. The `prove-execution` job now uses
+# the owner's prepared Ubuntu 24.04 target: a separate condition, not a rewrite
+# of those historical observations. CODEX_SANDBOX_MUST_RUN=1 still prevents
+# skipped execution assertions from being mistaken for a proof.
 #
 # What this workflow does NOT do, deliberately:
 #
-#   * It changes no host setting. Nothing here writes a sysctl, loads or
-#     unloads an AppArmor profile, or installs a policy. Turning
-#     apparmor_restrict_unprivileged_userns off would make the tests pass by
-#     removing that protection from every process on the machine, which is not
-#     a fix, it is the absence of one.
+#   * The survey matrix changes no host setting. The separate prepared proof
+#     may load only the fixed binary-scoped bwrap userns profile through the
+#     reviewed preparer. No job writes a sysctl, replaces an existing profile
+#     or disables the system-wide AppArmor restriction.
 #   * It runs no privileged container and adds no capabilities. The container
 #     probe below is a plain `docker run` with no --privileged, no --cap-add
 #     and no --security-opt, spelled out in full so that the absence of those
@@ -259,24 +258,20 @@ jobs:
   # chain was verified end to end. `CODEX_SANDBOX_MUST_RUN=1` closes that by
   # mechanism rather than by promising to remember: here, a skip is a failure.
   #
-  # Nothing is relaxed to make this pass. ubuntu-22.04 is not configured to be
-  # permissive by anything below -- its default posture predates
-  # kernel.apparmor_restrict_unprivileged_userns, which is a fact about the
-  # image, not a favour anyone did it. No sysctl is written, no capability is
-  # added, no sandbox is disabled, and no network is opened. The model endpoint
-  # is a scripted server on 127.0.0.1 inside the test process, so this job
-  # spends nothing and references no secret.
+  # The owner-selected execution target is prepared Ubuntu 24.04. No sysctl is
+  # written, no capability is added, no sandbox is disabled, and no network is
+  # opened. Readiness comes from same-job probes, not the old unprepared record.
+  # The provider is a scripted server on 127.0.0.1 inside the test process:
+  # this job spends nothing and references no secret.
   #
   # When this job goes red, read it as one of three things, in this order:
-  #   1. the 22.04 image gained the restriction -- the project just lost its
-  #      only execution host, which is the loudest thing this repository could
-  #      currently be told;
+  #   1. the prepared 24.04 host failed its mandatory readiness probes;
   #   2. the two assertions were renamed or removed -- the pinned node IDs below
   #      stop that from passing silently;
   #   3. the run place actually broke.
   prove-execution:
-    name: Prove a command runs inside the sandbox (ubuntu-22.04)
-    runs-on: ubuntu-22.04
+    name: Prove a command runs inside the sandbox (prepared ubuntu-24.04)
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Check out
@@ -305,13 +300,14 @@ jobs:
         run: pip install -r requirements.txt
 
       # Gate one. The diagnostic exits 0 only when it watched bubblewrap run a
-      # command, so this step is what earns the right to set
-      # CODEX_SANDBOX_MUST_RUN below. If 22.04 ever gains the restriction, this
-      # is where the job stops, with the wall named.
+      # command. The pinned runtime, preparer and diagnostic all have to pass
+      # before CODEX_SANDBOX_MUST_RUN can demand execution assertions below.
       - name: Refuse to continue unless this host measures ready
         working-directory: batch-runner
         run: |
           set -euo pipefail
+          python3 -c "from core.codex_runtime_config import require_pinned_runtime; print('pinned runtime:', require_pinned_runtime())"
+          python3 scripts/prepare_codex_sandbox_host.py --out "$RUNNER_TEMP/prove-sandbox-preflight.json"
           python3 scripts/diagnose_codex_sandbox_host.py --out /tmp/prove-host.json
           echo "this host runs commands under bubblewrap; skips are now failures"
 
@@ -351,11 +347,22 @@ jobs:
           python3 -m pytest tests/test_codex_runtime_end_to_end.py \
             -m "not integration" --tb=short -q -rs
 
+      - name: Keep the prepared-host evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sandbox-prepared-ubuntu24-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/prove-sandbox-preflight.json
+            /tmp/prove-host.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Summary
         if: always()
         run: |
           {
-            echo "### Codex execution leg, on ubuntu-22.04"
+            echo "### Codex execution leg, on prepared ubuntu-24.04"
             echo ""
             echo "- host verdict: \`$(python3 -c "import json;print(json.load(open('/tmp/prove-host.json'))['readiness'])" 2>/dev/null || echo 'not measured')\`"
             echo "- \`CODEX_SANDBOX_MUST_RUN=1\`, so a skipped execution assertion fails this job"

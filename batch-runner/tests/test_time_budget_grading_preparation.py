@@ -393,9 +393,22 @@ def test_time_budget_f_grading_preparation_final_rereads(handoff_sources, tmp_pa
 
 # The executor tests use the accepted preparation and source fixtures above.
 # They do not invoke any prior selector, provider, grader or real owned child.
+def _bind_grading_controller(monkeypatch, controller_root):
+    """Explicit source-origin seam for a synthetic, genuinely checked C.
+
+    The executor code is identical; only its fixture filesystem origin differs.
+    Every Git/blob/input check still runs. This is not current-tree admission.
+    """
+    import gpt54_time_budget_grading_execution as execution
+    source = controller_root / execution.HELPER
+    assert source.read_bytes() == Path(execution.__file__).read_bytes()
+    monkeypatch.setattr(execution, "__file__", str(source))
+
+
 def _execution_case(seed, roots, tmp_path, monkeypatch, *, status="success"):
     from types import SimpleNamespace
     import gpt54_time_budget_grading_execution as execution
+    _bind_grading_controller(monkeypatch, roots["runtime"])
     from gpt54_disposable_checkout import _git
 
     # Raw host facts are explicitly synthetic, like the process below. Do not
@@ -451,6 +464,23 @@ def _execution_direction(plan, arguments):
     arguments["direction_file"].write_bytes(data)
     arguments["expected_direction_sha256"] = _identity(data)["sha256"]
     return document
+
+
+def test_unregistered_current_controller_cannot_reuse_historical_grade_plan(handoff_sources, dual_roots, tmp_path, monkeypatch):
+    import gpt54_time_budget_grading_execution as execution
+    from core.reference_integrity import ReferenceIntegrityError
+
+    arguments, _, _ = _execution_case(handoff_sources, dual_roots, tmp_path, monkeypatch)
+    with execution._checked_preparation(handoff_sources.plan, arguments) as checked:
+        assert checked
+    # The explicit fixture C is coherent. The real current checkout is not
+    # that historical source and must still fail before any grader effect.
+    current_source = Path(__file__).resolve().parents[2] / execution.HELPER
+    with monkeypatch.context() as current:
+        current.setattr(execution, "__file__", str(current_source))
+        with pytest.raises(ReferenceIntegrityError, match="reference file hash mismatch"):
+            with execution._checked_preparation(handoff_sources.plan, arguments):
+                pytest.fail("unregistered current controller was admitted")
 
 
 def _execution_transport(arguments, monkeypatch, *, mode="complete", after=None):

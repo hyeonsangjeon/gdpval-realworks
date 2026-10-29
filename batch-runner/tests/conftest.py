@@ -1,12 +1,65 @@
 """Immutable historical source bytes for explicitly requested legacy fixtures."""
 
 import io
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
 import tarfile
 
 import pytest
+
+
+@pytest.fixture
+def frozen_ghcp_gate(approved_pilot_source):
+    """Actually execute the immutable reader for historical positive fixtures."""
+    source = approved_pilot_source / "batch-runner/ghcp_vm_gate_preflight.py"
+    spec = importlib.util.spec_from_file_location("frozen_ghcp_vm_gate_fixture", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def native_hosted_runner(monkeypatch, tmp_path):
+    """Synthetic runner labels for existing fake-client/loopback-only tests.
+
+    The production admission function still runs. This is not a local launch
+    permission, and integration/live clients must not use this fixture.
+    """
+    from core import runner_environment as host
+    fields = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
+              "RUNNER_NAME": "synthetic-native-runner", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
+              "ImageOS": "ubuntu24", "ImageVersion": "20261026.354.1",
+              "GITHUB_RUN_ID": "123456789", "GITHUB_RUN_ATTEMPT": "1"}
+    for name, value in fields.items():
+        monkeypatch.setenv(name, value)
+    # env-i has no HOME; fake-runtime work must still stay outside its own
+    # temporary carve-out without consulting the developer's cache or login.
+    monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(tmp_path / "native-workspaces"))
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "os-temp"))
+    for name in ("NATIVE_AZURE_VM_APPROVAL", "NATIVE_AZURE_VM_APPROVAL_SHA256", "NATIVE_AZURE_VM_ID"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(host.platform, "freedesktop_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"})
+    monkeypatch.setattr(host.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(host.platform, "machine", lambda: "x86_64")
+    return fields
+
+
+@pytest.fixture
+def github_hosted_ubuntu_2404(monkeypatch):
+    """Synthetic host metadata only; callers still whitelist fake processes."""
+    import ghcp_sol_runner_environment as environment
+
+    for name, value in {
+        "GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
+        "RUNNER_NAME": "GitHub Actions synthetic-only", "RUNNER_OS": "Linux",
+        "ImageOS": "ubuntu24", "ImageVersion": "20261029.1.0",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(environment, "_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"})
+    monkeypatch.setattr(environment.platform, "system", lambda: "Linux")
+    return environment.observe()
 
 
 @pytest.fixture(scope="session")
@@ -84,6 +137,7 @@ def historical_comparison_source(approved_pilot_source, monkeypatch):
     current = comparison.inspect_plan(comparison.load_plan())
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
         "source_pin:batch-runner/gpt54_v2_input_capture.py",
@@ -91,6 +145,7 @@ def historical_comparison_source(approved_pilot_source, monkeypatch):
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/gpt54_workflow_gate.py",
+        "source_pin:batch-runner/step8_grade.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
@@ -126,6 +181,7 @@ def historical_budget_source(approved_pilot_source):
     current = comparison.inspect_plan(comparison.load_plan())
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
         "source_pin:batch-runner/gpt54_v2_input_capture.py",
@@ -133,6 +189,7 @@ def historical_budget_source(approved_pilot_source):
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/gpt54_workflow_gate.py",
+        "source_pin:batch-runner/step8_grade.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",

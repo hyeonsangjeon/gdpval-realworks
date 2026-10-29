@@ -8,6 +8,7 @@ import socket
 import subprocess
 import tempfile
 import time
+from copy import deepcopy
 from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -50,7 +51,7 @@ def _expected_provider():
 
 
 @pytest.fixture(autouse=True)
-def offline(monkeypatch, handoff_sources, dual_roots, observation_kernel):
+def offline(monkeypatch, handoff_sources, dual_roots, observation_kernel, request):
     """Keep all real guards; permit only read-only Git and scripted auth I/O."""
     import step8_grade
     from core import rubric_loader
@@ -73,8 +74,19 @@ def offline(monkeypatch, handoff_sources, dual_roots, observation_kernel):
         monkeypatch.setattr(constructor, "__init__", forbidden)
     monkeypatch.setattr(CodexClient, "start", forbidden)
     for key in tuple(os.environ):
-        if key.startswith(("AZURE_", "FOUNDRY_", "GITHUB_", "ACTIONS_", "HF_", "OPENAI_", "CODEX_")):
+        if key.startswith(("AZURE_", "FOUNDRY_", "GITHUB_", "ACTIONS_", "HF_", "OPENAI_", "CODEX_", "RUNNER_")):
             monkeypatch.delenv(key)
+    # Explicit synthetic host facts for the already stubbed SDK transport;
+    # never use the NAS environment as a successful execution-admission proof.
+    runner_fields = request.getfixturevalue("native_hosted_runner")
+    from core import runner_environment
+    synthetic_runner = runner_environment.observe()
+    assert synthetic_runner["eligible_for_execution"]
+    monkeypatch.setattr(runner_environment, "observe", lambda: deepcopy(synthetic_runner))
+    # This fixture's separate legacy boot/namespace identity is local, not an
+    # Actions job. Do not mix the native unit observation into that identity.
+    for name in runner_fields:
+        monkeypatch.delenv(name)
     for key in ("HF_HUB_OFFLINE", "HF_DATASETS_OFFLINE", "HF_HUB_DISABLE_TELEMETRY", "DO_NOT_TRACK"):
         monkeypatch.setenv(key, "1")
     monkeypatch.setenv(azure_ai_clients.ROUTE_PROFILE_ENV, "direct-v1")

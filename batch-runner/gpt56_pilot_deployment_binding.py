@@ -17,6 +17,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -37,6 +38,9 @@ READY_PATH = "pilot-deployment-binding-ready.json"
 RESERVATION_SUFFIX = ".pilot-deployment-binding-reservation.json"
 BOUNDARY = "offline_deployment_resource_binding_not_launch_or_execution"
 RESOURCE_ROLES = ("account", "project", "deployment")
+CONNECTION_REFERENCE_PATH = "batch-runner/experiments/execution_envelope/gpt56_sol_connection_reference_20261027.json"
+CONNECTION_REFERENCE_SHA256 = "293ee682d01cbb64ee2b330f603b49a90522f07429dcd3cf036070808c271b76"
+CONNECTION_BLOCKER = "foundry_account_project_deployment_identity_unverified"
 REMAINING_WORK = (
     "live_inference_identity_and_wire_unverified",
     "native_sandbox_and_result_bundle_host_unverified",
@@ -86,6 +90,104 @@ def _bytes(value: Any) -> bytes:
 
 def _digest(data: bytes) -> dict[str, Any]:
     return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+def retained_connection_observation(document: dict) -> dict:
+    """Project schema-3 observed fields only; requested values are not fallbacks.
+
+    This diagnostic retained app-server metadata, not a Responses HTTP body.
+    A usage window or reasoning-token count does not prove a server capability.
+    """
+    try:
+        _require(document["schema"] == "codex_foundry_connection/3", "connection_observation_schema_mismatch")
+        observed = document["observed"]
+        usage = observed.get("usage") or {}
+        total = usage.get("thread_total") or {}
+        result = {key: observed.get(key) for key in ("runtime_model", "runtime_model_provider", "served_model")}
+        _require(all(value is None or type(value) is str for value in result.values()),
+                 "connection_observation_type_mismatch")
+        result.update(served_model_version=None, reasoning_effort=None,
+                      model_context_window=usage.get("model_context_window"),
+                      context_source="codex_app_server_usage_not_provider_capacity",
+                      usage_source="sdk_reported_not_reconciled_billing", provider_response_body_retained=False)
+        for key in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_input_tokens", "reasoning_output_tokens"):
+            result[key] = total.get(key)
+        _require(all(result[key] is None or type(result[key]) is int and 0 <= result[key] < 2 ** 63
+                     for key in ("model_context_window", "input_tokens", "output_tokens", "cached_input_tokens",
+                                 "cache_write_input_tokens", "reasoning_output_tokens")), "connection_observation_type_mismatch")
+        return result
+    except PilotDeploymentBindingRefused:
+        raise
+    except Exception:
+        raise PilotDeploymentBindingRefused("connection_observation_refused") from None
+
+
+def approved_connection_reference() -> dict:
+    """Read the source-held owner selection and retained diagnostic projection.
+
+    The historical members were independently hashed before this reference was
+    sealed. It authorizes a configured route, not a fresh management or model fact.
+    """
+    try:
+        data = _read_bytes(_path(pilot.ROOT, CONNECTION_REFERENCE_PATH), sha256=CONNECTION_REFERENCE_SHA256)
+        _require(len(data) <= 65536, "connection_reference_oversize")
+        record = json.loads(data)
+        _require(record["record_version"] == "gpt56-approved-connection-reference-v1"
+                 and record["run_id"] == pilot.RUN_ID
+                 and record["approval_scope"] == "configured_direct_account_deployment_host_only"
+                 and record["clears_only"] == [CONNECTION_BLOCKER]
+                 and all(record[key] is False for key in ("served_model_verified", "reasoning_max_verified",
+                                                          "long_1m_verified", "launch_authority", "new_study_or_retry_right")),
+                 "connection_reference_scope_mismatch")
+        route, old = record["route"], record["retained_diagnostic"]
+        _require(route["profile"] == "direct-v1" and route["provider_id"] == "gdpval-foundry"
+                 and route["wire_api"] == "responses" and route["deployment"] == "gpt-5.6-sol"
+                 and route["sdk_version"] == pilot.PINNED_CODEX_SDK_VERSION
+                 and route["cli_version"] == pilot.PINNED_CODEX_CLI_VERSION
+                 and route["diagnostic_host_fingerprint"] == "sha256:" + route["host_sha256"][:16]
+                 and old["run_id"] == 39407062120 and old["artifact_id"] == 12257312458,
+                 "connection_reference_identity_mismatch")
+        return record
+    except PilotDeploymentBindingRefused:
+        raise
+    except Exception:
+        raise PilotDeploymentBindingRefused("connection_reference_refused") from None
+
+
+def connection_reference_receipt(record: dict) -> dict:
+    """A privacy-bounded reference, never a copy of the account/endpoint/auth."""
+    old = record["retained_diagnostic"]
+    return {"path": CONNECTION_REFERENCE_PATH, "sha256": CONNECTION_REFERENCE_SHA256,
+            "diagnostic_run_id": old["run_id"], "artifact_id": old["artifact_id"],
+            "diagnostic_result_sha256": old["result"]["sha256"],
+            "historical_observation": record["historical_observation"],
+            "evidence_boundary": "approved_configured_route_and_historical_connection_not_served_identity",
+            "served_model_verified": False, "reasoning_max_verified": False,
+            "long_1m_verified": False, "launch_authority": False}
+
+
+def bind_approved_connection(record: dict, provider, account: bytes, deployment: bytes) -> dict:
+    """Match the actual call target before SDK/auth/HTTP effects, with no lookup."""
+    try:
+        route = record["route"]
+        account_parts, deployment_parts = _resource_parts(account, "account"), _resource_parts(deployment, "deployment")
+        selection = lambda parts: hashlib.sha256(("/" + "/".join(parts)).casefold().encode("utf-8")).hexdigest()
+        endpoint = urlsplit(provider.endpoint)
+        _require(endpoint.scheme == "https" and endpoint.hostname and endpoint.port in (None, 443)
+                 and endpoint.username is None and endpoint.password is None and not endpoint.query and not endpoint.fragment
+                 and endpoint.path.rstrip("/") == route["endpoint_path"]
+                 and hashlib.sha256(endpoint.hostname.lower().encode("utf-8")).hexdigest() == route["host_sha256"]
+                 and selection(account_parts) == route["account_resource_id_sha256"]
+                 and selection(deployment_parts) == route["deployment_resource_id_sha256"]
+                 and deployment_parts[:8] == account_parts
+                 and deployment_parts[-1] == provider.model == route["deployment"]
+                 and provider.provider_id == route["provider_id"], "approved_connection_route_mismatch")
+        return {**connection_reference_receipt(record), "configured_route_matched": True,
+                "route_sha256": _digest(_bytes(route))["sha256"]}
+    except PilotDeploymentBindingRefused:
+        raise
+    except Exception:
+        raise PilotDeploymentBindingRefused("approved_connection_route_mismatch") from None
 
 
 def _resource_path(path: Path) -> Path:

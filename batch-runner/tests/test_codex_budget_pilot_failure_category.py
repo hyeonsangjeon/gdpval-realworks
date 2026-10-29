@@ -20,7 +20,7 @@ import codex_budget_pilot_ci as ci
 import codex_budget_pilot_output as output
 import step2_run_inference as step2
 import step8_grade
-from core import azure_ai_clients, codex_azure_token, codex_runner
+from core import azure_ai_clients, codex_azure_token, codex_runner, runner_environment
 from core.codex_runtime_config import CodexProviderSettings
 from core.cost_projection import project_cost_receipt
 from core.cost_receipts import BUCKET_PROBLEM_SOLVING, CostReceiptLedger, load_receipt_price_table
@@ -34,10 +34,45 @@ PRIVATE = "hf_SYNTHETIC_DIAGNOSTIC_SECRET /private/native/auth.json https://priv
 UNCHANGED = object()
 
 
+def historical_native_envelope(result):
+    """Explicit fake pre-runner-receipt transport shape for closed studies.
+
+    This is only test input to the real Step2 writer, not a projection applied
+    to saved results. Production always keeps its new receipt. A separate
+    modern-envelope case requires the immutable historical reader to refuse.
+    """
+    value = dict(result)
+    evidence = value.pop("runner_evidence", None)
+    if evidence is not None:
+        runner_environment.validate_receipt(evidence)
+        assert evidence["stage"] == "inference"
+    return value
+
+
 @pytest.fixture(autouse=True)
 def no_runtime_auth_or_publication(monkeypatch):
     from huggingface_hub import HfApi
     from huggingface_hub.utils import _auth, _headers
+
+    # This helper is also invoked directly by historical readout fixtures.
+    # Keep its one-argument interface and build explicit fake host facts here;
+    # do not require pytest to inject a fixture into a direct __wrapped__ call.
+    with monkeypatch.context() as host:
+        for name, value in {
+            "GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
+            "RUNNER_NAME": "synthetic-native-runner", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
+            "ImageOS": "ubuntu24", "ImageVersion": "20261026.354.1",
+            "GITHUB_RUN_ID": "123456789", "GITHUB_RUN_ATTEMPT": "1",
+        }.items():
+            host.setenv(name, value)
+        for name in ("NATIVE_AZURE_VM_APPROVAL", "NATIVE_AZURE_VM_APPROVAL_SHA256", "NATIVE_AZURE_VM_ID"):
+            host.delenv(name, raising=False)
+        host.setattr(runner_environment.platform, "freedesktop_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"})
+        host.setattr(runner_environment.platform, "system", lambda: "Linux")
+        host.setattr(runner_environment.platform, "machine", lambda: "x86_64")
+        synthetic_runner = runner_environment.observe()
+    assert synthetic_runner["eligible_for_execution"]
+    monkeypatch.setattr(runner_environment, "observe", lambda: copy.deepcopy(synthetic_runner))
 
     def forbidden(*args, **kwargs):
         pytest.fail("failure-category regression crossed a live boundary")
@@ -137,7 +172,7 @@ class DiagnosticChildren(CICellChildren):
                     raw.pop("error_category", None)
                 elif self.category is not UNCHANGED:
                     raw["error_category"] = self.category
-                return raw
+                return historical_native_envelope(raw)
 
             upload = cwd / "workspace/upload"
             row = step2._execute_single_task(

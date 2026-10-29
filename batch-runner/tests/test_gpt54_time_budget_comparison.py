@@ -45,10 +45,11 @@ def dual_roots(tmp_path_factory):
         return _REAL_RUN(["git", *command], check=True, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, env=environment, timeout=30).stdout
 
-    runtime_sha = git("-C", str(repository), "rev-parse", "HEAD").decode().strip()
+    original_sha = git("-C", str(repository), "rev-parse", "HEAD").decode().strip()
     roots = {}
     gitdirs = {}
-    for role, sha in (("runtime", runtime_sha), ("frozen", prospective.ACCEPTED_BASE_SHA), ("substitute", runtime_sha)):
+    for role, sha in (("runtime", original_sha), ("frozen", prospective.ACCEPTED_BASE_SHA),
+                      ("substitute", original_sha), ("unregistered", original_sha)):
         parent = tmp_path_factory.mktemp("deadline-" + role)
         root, owner = parent / "source", parent / "source-objects"
         git("clone", "--shared", "--no-checkout", "--", str(repository), str(owner))
@@ -61,6 +62,27 @@ def dual_roots(tmp_path_factory):
             source.extractall(root)
         roots[role] = root
         gitdirs[role] = Path(git("-C", str(root), "rev-parse", "--absolute-git-dir").decode().strip())
+    # A later pilot changes sources outside this older study's permitted delta.
+    # Build an explicit synthetic R: unchanged roles really come from frozen F,
+    # permitted runtime roles really come from the current source. Re-pin only
+    # these private test registrations, never the repository's sealed plan.
+    frozen_profile = historical.load_plan(roots["frozen"] / prospective.SOURCE_PROFILE)
+    fixed_roles = set(frozen_profile["source_pins"]) - prospective.CHANGED_RUNTIME_SOURCES
+    for name in ("runtime", "substitute"):
+        root = roots[name]
+        for role in fixed_roles:
+            (root / role).write_bytes((roots["frozen"] / role).read_bytes())
+        manifest = prospective.load_registration(root / prospective.REGISTRATION_PATH)
+        expected = dict(frozen_profile["source_pins"])
+        expected.update({role: hashlib.sha256((root / role).read_bytes()).hexdigest()
+                         for role in prospective.CHANGED_RUNTIME_SOURCES})
+        assert set(expected) == prospective.REQUIRED_SOURCES | prospective.RUNTIME_ADDITIONS
+        manifest["source_pins"] = expected
+        (root / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
+    git("-C", str(roots["runtime"]), "read-tree", original_sha)
+    git("-C", str(roots["runtime"]), "add", "--", *sorted(fixed_roles), prospective.REGISTRATION_PATH)
+    git("-C", str(roots["runtime"]), "commit", "-m", "test: bind synthetic runtime roles without renewing the study")
+    runtime_sha = git("-C", str(roots["runtime"]), "rev-parse", "HEAD").decode().strip()
     substituted = roots["substitute"]
     role = "batch-runner/core/codex_runner.py"
     changed = (substituted / role).read_bytes() + b"\n# synthetic coherent replacement\n"
@@ -68,13 +90,18 @@ def dual_roots(tmp_path_factory):
     manifest = prospective.load_registration(substituted / prospective.REGISTRATION_PATH)
     manifest["source_pins"][role] = hashlib.sha256(changed).hexdigest()
     (substituted / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
-    git("-C", str(substituted), "read-tree", runtime_sha)
-    git("-C", str(substituted), "add", "--", role, prospective.REGISTRATION_PATH)
+    git("-C", str(substituted), "read-tree", original_sha)
+    git("-C", str(substituted), "add", "--", role, *sorted(fixed_roles), prospective.REGISTRATION_PATH)
     git("-C", str(substituted), "commit", "-m", "test: coherent synthetic source substitution")
     replacement = git("-C", str(substituted), "rev-parse", "HEAD").decode().strip()
+    # Cross-root refusal cases must compare existing commits, not fail early
+    # because synthetic R objects were never in the original repository.
+    for name in ("frozen", "substitute"):
+        git("-C", str(roots[name]), "fetch", "--no-tags", "--", str(roots["runtime"]), runtime_sha)
     git("-C", str(roots["runtime"]), "tag", "-a", "synthetic-review-tag", "-m", "synthetic tag", runtime_sha)
     tag = git("-C", str(roots["runtime"]), "rev-parse", "synthetic-review-tag").decode().strip()
-    return {**roots, "gitdirs": gitdirs, "runtime_sha": runtime_sha, "substitute_sha": replacement, "tag_sha": tag}
+    return {**roots, "gitdirs": gitdirs, "runtime_sha": runtime_sha, "substitute_sha": replacement, "tag_sha": tag,
+            "original_sha": original_sha, "original_root": roots["unregistered"]}
 
 
 def _anchors(roots):
@@ -88,7 +115,16 @@ def _compile(plan, roots):
 
 @pytest.fixture(autouse=True)
 def model_free(monkeypatch, request, dual_roots):
+    # Select the explicit fixture registration for default test reads, while
+    # leaving the real parser, source validators and explicit paths unchanged.
+    read_registration = prospective.load_registration
+    fixture_plan = dual_roots["runtime"] / prospective.REGISTRATION_PATH
+    monkeypatch.setattr(prospective, "PLAN", fixture_plan)
+    monkeypatch.setattr(prospective, "load_registration",
+                        lambda path=None: read_registration(fixture_plan if path is None else path))
     consumer_case = "time_budget_handoff_consumer" in request.node.name
+    if consumer_case:
+        request.getfixturevalue("native_hosted_runner")
     handoff_case = "time_budget_observation_handoff" in request.node.name or consumer_case
     handoff = request.getfixturevalue("handoff_source_seed") if handoff_case else None
     deadline_case = "time_budget_observation_deadline" in request.node.name
@@ -124,7 +160,8 @@ def model_free(monkeypatch, request, dual_roots):
     def local_git(command, **kwargs):
         assert command[:2] == ["/usr/bin/git", "--no-replace-objects"]
         position = command.index("-C")
-        permitted = [dual_roots["runtime"], dual_roots["frozen"], dual_roots["substitute"], historical.ROOT]
+        permitted = [dual_roots["runtime"], dual_roots["frozen"], dual_roots["substitute"],
+                     dual_roots["unregistered"], historical.ROOT]
         if handoff is not None:
             permitted.extend((handoff.runtime, handoff.frozen))
         assert Path(command[position + 1]) in permitted
@@ -149,6 +186,33 @@ def model_free(monkeypatch, request, dual_roots):
         monkeypatch.setattr(TimeBudgetObservation, "__init__", forbidden)
     yield
     assert calls == []
+
+
+def test_current_source_cannot_reuse_the_old_time_budget_registration(dual_roots):
+    original = prospective.load_registration(dual_roots["original_root"] / prospective.REGISTRATION_PATH)
+    with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^runtime_source_roles$"):
+        with prospective._dual_root_sources(
+            original, runtime_root=dual_roots["original_root"],
+            expected_reviewed_source_sha=dual_roots["original_sha"],
+            frozen_grader_root=dual_roots["frozen"],
+            expected_grader_source_sha=prospective.ACCEPTED_BASE_SHA,
+        ):
+            pytest.fail("changed real runtime was accepted by the old registration")
+
+
+def test_time_budget_running_core_guard_rejects_drift(dual_roots, tmp_path):
+    import shutil
+    from core.reference_integrity import ReferenceIntegrityError
+
+    runtime = tmp_path / "independent-runtime"
+    shutil.copytree(dual_roots["runtime"] / "batch-runner/core", runtime / "batch-runner/core")
+    # Real imported source bytes must match the independent fixture tree.
+    # Unlike non-core registration roles, this core is still today's core.
+    prospective._require_running_observation_sources(runtime)
+    changed = runtime / "batch-runner/core/codex_runner.py"
+    changed.write_bytes(changed.read_bytes() + b"\n# synthetic runtime-source drift\n")
+    with pytest.raises(ReferenceIntegrityError):
+        prospective._require_running_observation_sources(runtime)
 
 
 def test_time_budget_registration_genuine_source_and_finite_scope(dual_roots):
@@ -405,14 +469,17 @@ def test_time_budget_registration_preserves_historical_and_default_refusals(monk
     report = historical.inspect_plan(historical.load_plan())
     assert report["configuration_valid"] is False
     assert report["configuration_problems"] == [
+        "source_pin:.github/workflows/batch-run.yml",
+        *[
         f"source_pin:batch-runner/{name}" for name in (
             "gpt54_prepared_input_attestation.py",
             "gpt54_codex_input_capture.py", "gpt54_v2_input_capture.py",
             "gpt54_run_config_bundle.py", "gpt54_run_input_bundle.py",
             "gpt54_disposable_checkout.py", "gpt54_workflow_gate.py",
+            "step8_grade.py",
             "core/agentic_v2_conversation_runner.py",
             "core/codex_runner.py", "step2_run_inference.py", "core/codex_task_deadline.py",
-        )
+        )],
     ]
     assert report["launch_allowed"] is report["full_220_allowed"] is False
     assert report["launch_blockers"] == list(historical.LAUNCH_BLOCKERS)
@@ -1858,9 +1925,10 @@ def handoff_source_seed(tmp_path_factory, dual_roots):
 
     def export(role, sha):
         root, owner = parent / role, parent / (role + "-objects")
-        git("clone", "--shared", "--no-checkout", "--", str(repository), str(owner))
+        source_repository = dual_roots["runtime"] if sha == dual_roots["runtime_sha"] else repository
+        git("clone", "--shared", "--no-checkout", "--", str(source_repository), str(owner))
         git("-C", str(owner), "worktree", "add", "--detach", "--no-checkout", str(root), sha)
-        archive = git("-C", str(repository), "archive", "--format=tar", sha, "batch-runner", ".github/workflows")
+        archive = git("-C", str(source_repository), "archive", "--format=tar", sha, "batch-runner", ".github/workflows")
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source:
             assert source.pax_headers["comment"] == sha
             assert all(not Path(member.name).is_absolute() and ".." not in Path(member.name).parts

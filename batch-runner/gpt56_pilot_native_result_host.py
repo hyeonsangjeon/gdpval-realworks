@@ -20,6 +20,7 @@ import gpt56_pilot_wire_receipt as wire
 from core.inference_manifest import bind_deliverable_file_records, canonical_deliverable_path
 from core.public_error import public_task_error_text
 from core.result_fingerprint import inference_result_fingerprint
+from core import runner_environment
 from gpt54_codex_input_capture import _write_no_clobber
 from gpt54_run_config_bundle import _held_parents, _path, _root
 from gpt54_v2_grading_input import _read_bytes
@@ -101,8 +102,10 @@ def _workspace_bytes(root: Path, relative: Path, identity: tuple[int, int], expe
 def _runner_digest(result: dict) -> str:
     """Hash the exact private handoff without ever publishing text or bytes."""
     _require(type(result) is dict and set(result) <= {
-        "success", "text", "files", "codex_diagnostics", "error", "error_category", "pilot_wire_receipt",
-    } and {"success", "text", "files", "pilot_wire_receipt"} <= set(result))
+        "success", "text", "files", "codex_diagnostics", "error", "error_category", "pilot_wire_receipt", "runner_evidence",
+    } and {"success", "text", "files", "pilot_wire_receipt", "runner_evidence"} <= set(result))
+    runner_environment.validate_receipt(result["runner_evidence"])
+    _require(result["runner_evidence"]["stage"] == "inference")
     _require(type(result["success"]) is bool and type(result["text"]) is str and type(result["files"]) is list)
     files = []
     for item in result["files"]:
@@ -317,6 +320,8 @@ class PilotNativeResultHostSession:
             attempt = self.wire.attempts[witness.task_id][witness.attempt]
             _require(result["pilot_wire_receipt"] == attempt["linkage"]
                      and result["success"] is attempt["success"] and not attempt["accepted"])
+            _require(result["runner_evidence"] == runner_environment.receipt(
+                "inference", witness.observer.runner_observation))
             witness.result_digest = _runner_digest(result)
             witness.result_fields = {
                 "content": _digest(_bytes(result["text"])),

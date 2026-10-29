@@ -125,6 +125,7 @@ def test_codex_requested_model_controls(
     step2_codex_constructor: CodeType,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    native_hosted_runner,
 ) -> None:
     """Default bytes stay fixed; explicit/invalid requests survive every hop."""
     monkeypatch.setattr(

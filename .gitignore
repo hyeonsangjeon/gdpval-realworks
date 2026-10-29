@@ -158,6 +158,7 @@ batch-runner/scripts/*
 # hiding them would leave that workflow calling files the checkout does not
 # have. Held by tests/test_codex_sandbox_host_diagnosis.py.
 !batch-runner/scripts/diagnose_codex_sandbox_host.py
+!batch-runner/scripts/prepare_codex_sandbox_host.py
 !batch-runner/scripts/check_recorded_sandbox_verdicts.py
 
 # The other half of the same question, and a different half entirely: whether

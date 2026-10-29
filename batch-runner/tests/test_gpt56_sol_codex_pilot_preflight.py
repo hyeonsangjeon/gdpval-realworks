@@ -84,11 +84,17 @@ def test_active_grader_template_source_foundry_preflight(
     assert current["configuration_problems"] == [
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/gpt56_pilot_wire_receipt.py",
+        "source_pin:batch-runner/gpt56_pilot_native_result_host.py",
+        "source_pin:batch-runner/gpt56_pilot_runtime_caps_usage.py",
         "source_pin:batch-runner/gpt56_sol_codex_pilot_preflight.py",
         "source_pin:batch-runner/gpt56_foundry_evidence_intake.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
         "source_pin:batch-runner/gpt54_run_config_bundle.py",
         "source_pin:batch-runner/gpt56_pilot_identity_plan.py",
+        "source_pin:batch-runner/step8_grade.py",
+        "source_pin:batch-runner/core/grader.py",
+        "source_pin:batch-runner/core/grade_payload.py",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt56_pilot_deployment_binding.py",
@@ -838,7 +844,9 @@ def test_runtime_caps_usage_publication_drift_quarantines_partials(runtime_caps_
 
 
 @pytest.mark.parametrize("kwargs", [{}, {"pilot_wire_receipts": None}])
-def test_runtime_caps_usage_legacy_absent_null_no_owner_and_unchanged_output(runtime_caps_usage_offline, kwargs):
+def test_runtime_caps_usage_legacy_absent_null_no_owner_and_unchanged_output(
+    runtime_caps_usage_offline, kwargs, native_hosted_runner,
+):
     wire_cases, caps = runtime_caps_usage_offline
     assert caps.runtime_caps_usage_for(None) is None
     runner = object.__new__(wire_cases.codex_runner.CodexAgentRunner)
@@ -847,10 +855,12 @@ def test_runtime_caps_usage_legacy_absent_null_no_owner_and_unchanged_output(run
     assert runner.pilot_wire_receipts is None
     runner.provider = SimpleNamespace(model="legacy")
     result = runner.run("text", model="different")
-    assert result == runner._failure(
+    from core import runner_environment
+    expected = runner._failure(
         "this Codex run place is configured for deployment 'legacy' and was asked for 'different'; "
         "refusing rather than calling a different model than the one the run will be recorded against",
         category="model_mismatch")
+    assert result == {**expected, "runner_evidence": runner_environment.receipt("inference")}
     assert "runtime_caps_usage" not in result
     fake = wire_cases._transport()
     wire_cases._start(fake)

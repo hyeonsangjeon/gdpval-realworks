@@ -113,6 +113,17 @@ It deliberately keeps four signals separate:
 | Self-QA | The generating model accepted or retried its own output | Independent quality |
 | External grading | A separate rubric-based evaluation was recorded | Universal human agreement |
 
+### Codex Foundry external-budget results
+
+The [eight-cell retention diagnostic](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md)
+has **8/8 recorded outcomes: 2 succeeded and 6 failed**. All eight retained
+budget snapshots are available. Detailed failure causes, complete costs and
+realized recovery exposure remain unavailable; failed grades are null, not zero.
+The report lists every producer run and the missing-cause evidence, and
+[disposes of the two remaining card criteria](tasks/codex_budget_pilot/RETENTION_DIAGNOSTIC_REPORT.md#remaining-card-criteria-existing-evidence-only).
+The separate [original A/B/C pilot](tasks/codex_budget_pilot/REPORT.md) does not
+establish a C-over-B benefit. No further paid execution is authorized.
+
 <p align="center">
   <a href="https://hyeonsangjeon.github.io/gdpval-realworks/">
     <img src="docs/images/dashboard-leaderboard.png" alt="GDPVal RealWorks dashboard with experiment rankings, KPI cards, and a sector heatmap" width="840" />

@@ -68,9 +68,12 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(
     current = preflight.inspect_plan(preflight.load_plan(root / _PROSPECTIVE_MANIFEST))
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
+        "source_pin:batch-runner/step8_grade.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
+        "source_pin:batch-runner/step2_run_inference.py",
     ]
     root = frozen_local_comparison_source
     assert (root / _PROSPECTIVE_MANIFEST).read_bytes() == tracked
@@ -144,11 +147,17 @@ def test_comparison_runtime_launch_boundary_current_source_bindings(
     assert current["configuration_problems"] == [
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
+        "source_pin:batch-runner/gpt56_pilot_wire_receipt.py",
+        "source_pin:batch-runner/gpt56_pilot_native_result_host.py",
+        "source_pin:batch-runner/gpt56_pilot_runtime_caps_usage.py",
         "source_pin:batch-runner/gpt56_sol_codex_pilot_preflight.py",
         "source_pin:batch-runner/gpt56_foundry_evidence_intake.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
         "source_pin:batch-runner/gpt54_run_config_bundle.py",
         "source_pin:batch-runner/gpt56_pilot_identity_plan.py",
+        "source_pin:batch-runner/step8_grade.py",
+        "source_pin:batch-runner/core/grader.py",
+        "source_pin:batch-runner/core/grade_payload.py",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt56_pilot_deployment_binding.py",

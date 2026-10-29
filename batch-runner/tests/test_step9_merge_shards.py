@@ -265,6 +265,68 @@ def merge(shards: list[dict], **kwargs) -> dict:
     return s9.merge_shard_payloads(shards, **kwargs)
 
 
+def test_merge_keeps_common_runner_evidence(small_reference_payload, native_hosted_runner, grade_schema):
+    from core import runner_environment
+    shards = make_shards(small_reference_payload, 2)
+    evidence = runner_environment.receipt("grading")
+    for shard in shards:
+        shard["runner_evidence"] = copy.deepcopy(evidence)
+    before = copy.deepcopy(shards)
+    result = merge(shards)
+    assert result["runner_evidence"] == evidence
+    assert [row["runner_evidence"] for row in result["shard_provenance"]] == [evidence, evidence]
+    assert shards == before
+    validate_grade_payload(result, grade_schema)
+
+
+def test_merge_keeps_distinct_runner_receipts_with_each_shard(small_reference_payload, native_hosted_runner, grade_schema):
+    from core import runner_environment
+    shards = make_shards(small_reference_payload, 2)
+    for index, shard in enumerate(shards):
+        observation = runner_environment.observe()
+        observation["runner_name"] = f"synthetic-shard-{index}"
+        shard["runner_evidence"] = runner_environment.receipt("grading", observation)
+    result = merge(shards)
+    assert "runner_evidence" not in result
+    assert [row["runner_evidence"] for row in result["shard_provenance"]] == [
+        shard["runner_evidence"] for shard in shards]
+    validate_grade_payload(result, grade_schema)
+
+
+def test_merge_cannot_fill_in_a_missing_runner_receipt(small_reference_payload, native_hosted_runner):
+    from core import runner_environment
+    shards = make_shards(small_reference_payload, 2)
+    shards[0]["runner_evidence"] = runner_environment.receipt("grading")
+    with pytest.raises(s9.ShardMergeError, match="runner evidence is missing from some shards"):
+        merge(shards)
+
+
+@pytest.mark.parametrize("change", ["missing", "digest", "stage", "index", "count", "common"])
+def test_merged_runner_receipts_are_validated(small_reference_payload, native_hosted_runner, grade_schema, change):
+    from core import runner_environment
+    shards = make_shards(small_reference_payload, 2)
+    for shard in shards:
+        shard["runner_evidence"] = runner_environment.receipt("grading")
+    result = merge(shards)
+    row = result["shard_provenance"][0]
+    if change == "missing":
+        del row["runner_evidence"]
+    elif change == "digest":
+        row["runner_evidence"] = {**row["runner_evidence"], "sha256": "0" * 64}
+    elif change == "stage":
+        row["runner_evidence"] = runner_environment.receipt("diagnostic")
+    elif change == "index":
+        row["index"] = 1
+    elif change == "count":
+        row["count"] = True
+    else:
+        observation = runner_environment.observe()
+        observation["runner_name"] = "different-common-host"
+        result["runner_evidence"] = runner_environment.receipt("grading", observation)
+    with pytest.raises(ValueError):
+        validate_grade_payload(result, grade_schema)
+
+
 # ---------------------------------------------------------------------------
 # fixture-integrity guards
 #

@@ -8,11 +8,14 @@ import os
 import socket
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 
 # Import real classes before guards; never replace a type with a function.
 import step8_grade as step8
@@ -163,7 +166,7 @@ class Runtime:
         monkeypatch.setattr(codex_runner.CodexAgentRunner, "open_runtime", open_runtime)
         monkeypatch.setattr(codex_runner.CodexAgentRunner, "start_thread", start_thread)
         monkeypatch.setattr(codex_runner, "_load_turn_collector", lambda: collect)
-        monkeypatch.setattr(codex_runner, "threading", SimpleNamespace(Thread=Worker))
+        monkeypatch.setattr(codex_runner, "threading", SimpleNamespace(Thread=Worker, Event=threading.Event))
 
     def turn(self, text):
         self.current = self.scripts.pop(0)

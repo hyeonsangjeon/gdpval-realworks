@@ -240,6 +240,7 @@ def boundary(s, capsys, monkeypatch, mode=None):
     captured = capsys.readouterr()
     for private in (TOKEN, s.api.repo, str(s.host), "DO NOT RETAIN", "synthetic-result.txt"):
         assert private not in captured.out + captured.err
+    s.retention_diagnostic = captured.err
     record = json.loads(captured.out) if captured.out else None
     if record:
         assert record["model_requested"] is record["grading_launched"] is record["grade_ready"] is False

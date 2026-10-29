@@ -9,12 +9,15 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 import yaml
 from openai_codex import ApprovalMode, Codex, Sandbox
 from openai_codex._sandbox import _sandbox_policy
@@ -144,7 +147,7 @@ class SDKTransport:
 
         monkeypatch.setattr(codex_runner.CodexWorkspace, "stage_references", stage)
         monkeypatch.setattr(codex_runner.CodexAgentRunner, "open_runtime", open_runtime)
-        monkeypatch.setattr(codex_runner, "threading", SimpleNamespace(Thread=Worker))
+        monkeypatch.setattr(codex_runner, "threading", SimpleNamespace(Thread=Worker, Event=threading.Event))
 
     def request(self, method, params, *, response_model):
         self.requests.append((method, params))
@@ -393,13 +396,15 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
         with pytest.raises(comparison.DispatchPlanRefused) as changed_source:
             campaign.compile_pilot("offline-frozen-matrix", approved_sha)
         assert str(changed_source.value) == (
-            "comparison refused: source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
+            "comparison refused: source_pin:.github/workflows/batch-run.yml, "
+            "source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
             "source_pin:batch-runner/gpt54_codex_input_capture.py, "
             "source_pin:batch-runner/gpt54_v2_input_capture.py, "
             "source_pin:batch-runner/gpt54_run_config_bundle.py, "
             "source_pin:batch-runner/gpt54_run_input_bundle.py, "
             "source_pin:batch-runner/gpt54_disposable_checkout.py, "
             "source_pin:batch-runner/gpt54_workflow_gate.py, "
+            "source_pin:batch-runner/step8_grade.py, "
             "source_pin:batch-runner/core/agentic_v2_conversation_runner.py, "
             "source_pin:batch-runner/core/codex_runner.py, "
             "source_pin:batch-runner/step2_run_inference.py, "
@@ -1577,7 +1582,7 @@ def test_native_resume_content_filter_is_terminal_across_restart(host, monkeypat
 
 @pytest.mark.parametrize("stale", [False, True], ids=["current", "pre_resume"])
 def test_native_resume_active_grader_template_source_bindings(
-        stale, historical_comparison_source, historical_foundry_source):
+        stale, historical_comparison_source, historical_foundry_source, frozen_ghcp_gate, monkeypatch):
     frozen_source = historical_comparison_source
     assert frozen_source == historical_foundry_source
     # The actual pre-resume identities are populated from the immutable baseline,
@@ -1609,13 +1614,20 @@ def test_native_resume_active_grader_template_source_bindings(
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)
     assert hashlib.sha256((frozen_source / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
     assert hashlib.sha256((frozen_source / WORKFLOW).read_bytes()).hexdigest() == FROZEN_PILOT_WORKFLOW_SHA256
-    gate_plan = ghcp_gate.load_plan()
+    # The current runner-receipt source is deliberately outside the old seal.
+    assert ghcp_gate.inspect_plan(ghcp_gate.load_plan())["configuration_valid"] is False
+    assert (frozen_source / ghcp_gate.PLAN_PATH).read_bytes() == ghcp_gate.PLAN.read_bytes()
+    # Read the old registration with its actual immutable reader, not the
+    # current source-profile-aware reader under a spoofed historical root.
+    legacy_gate = frozen_ghcp_gate
+    assert (legacy_gate.ROOT / legacy_gate.PLAN_PATH).read_bytes() == (frozen_source / ghcp_gate.PLAN_PATH).read_bytes()
+    gate_plan = legacy_gate.load_plan()
     reference_source = "batch-runner/core/reference_integrity.py"
     current_reference = hashlib.sha256((frozen_source / reference_source).read_bytes()).hexdigest()
     assert gate_plan["source_pins"][reference_source] == ghcp_gate.PINNED_SOURCES[reference_source] == current_reference
     if stale:
         gate_plan["source_pins"][reference_source] = "13198897c189a9276494b78ea3359fc2e623211ab2f32554b81ab9b12d9cf19e"
-    gate_report = ghcp_gate.inspect_plan(gate_plan)
+    gate_report = legacy_gate.inspect_plan(gate_plan)
     assert gate_report["configuration_valid"] is not stale
     assert all(gate_report[flag] is False for flag in ghcp_gate.FALSE_FLAGS)
     assert gate_report["launch_blockers"] == list(ghcp_gate.LAUNCH_BLOCKERS)

@@ -10,6 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 import gpt56_pilot_input_capture as capture
 import gpt56_pilot_wire_receipt as wire
 import gpt56_pilot_native_result_host as native
@@ -46,8 +48,19 @@ class Pipe:
         self.flushed += 1
 
 
-def _transport(observer=None, *, thread_id="thread-private", turn_id="turn-private", workspace=Path("/private/task-workspace")):
+def _transport(observer=None, *, thread_id="thread-private", turn_id="turn-private", workspace=Path("/private/task-workspace"),
+               with_response_evidence=True):
     observer = observer or wire._TransportObservation(deepcopy(REQUESTED))
+    # Session acceptance now needs a separate provider-response witness. This
+    # explicit synthetic HTTP artifact is NOT derived from the fake RPC stream.
+    # Lower-level transport-only fixtures still have no artifact owner.
+    if with_response_evidence and observer.response_artifacts is not None:
+        value = {"object": "response", "model": "gpt-5.6-sol", "model_version": "synthetic-version",
+                 "reasoning": {"effort": "max"}, "context_window": 1_000_000}
+        response = observer.response_artifacts.begin(200, [("Content-Type", "application/json")], [])
+        response.feed(wire._bytes(value))
+        assert response.finish(wire.response_capture.response_fields(value), complete=True) is None
+        observer.response_artifacts.seal(1, 1)
     if observer.task_text is None:
         observer.bind_task_text(PRIVATE_TEXT)
     observer.bind_runtime(workspace=workspace, developer_instructions="private developer text")
@@ -335,6 +348,51 @@ def test_each_current_upstream_drift_refuses_task_acceptance(case, change):
     assert not (session.root / wire.READY_PATH).exists()
 
 
+def test_success_without_provider_response_witness_cannot_publish(case):
+    session = _session(case)
+    observer = _begin(session, TASK_IDS[0])
+    fake = _transport(observer, with_response_evidence=False)
+    _start(fake)
+    _turn(fake)
+    with pytest.raises(wire.PilotWireReceiptRefused):
+        session.finish_task(observer, success=True, thread_id=fake.thread_id, turn_id=fake.turn_id)
+    assert session.files == {} and session.failed
+
+
+def test_saved_provider_response_drift_refuses_task_acceptance(case):
+    session = _session(case)
+    result = _task(session, TASK_IDS[0])
+    store = session.response_artifacts[0]
+    path = store.root / next(iter(store.files))
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(wire.PilotWireReceiptRefused):
+        session.accept_task(task_id=TASK_IDS[0], attempt_index=0, result=result)
+    assert not (session.root / wire.READY_PATH).exists()
+
+
+@pytest.mark.parametrize("next_task", [0, 1])
+def test_missing_response_evidence_keeps_failure_receipt_but_blocks_pilot_progress(case, next_task):
+    session = _session(case)
+    observer = _begin(session, TASK_IDS[0])
+    fake = _transport(observer, with_response_evidence=False)
+    _start(fake)
+    _turn(fake, success=False)
+    response = observer.response_artifacts.begin(200, [("Content-Type", "application/json")], [])
+    value = {"object": "response", "reasoning": {"effort": "max"}, "context_window": 1_000_000}
+    response.feed(wire._bytes(value))
+    assert response.finish(wire.response_capture.response_fields(value), complete=True) == "served_model_unverified"
+    observer.response_artifacts.seal(1, 1)
+    link = session.finish_task(observer, success=False, thread_id=fake.thread_id, turn_id=fake.turn_id)
+    receipt = json.loads((case.workspace / link["path"]).read_bytes())
+    assert receipt["success"] is False
+    assert receipt["transport"]["provider_observation"]["response_evidence"]["reason"] == "served_model_unverified"
+    session.accept_task(task_id=TASK_IDS[0], attempt_index=0, result={"success": False, "pilot_wire_receipt": link})
+    assert session.response_evidence_stop == "served_model_unverified"
+    with pytest.raises(wire.PilotWireReceiptRefused):
+        session.arm_task(TASK_IDS[next_task], 1 if next_task == 0 else 0)
+    assert len(session.files) == 1 and not session.active
+
+
 @pytest.mark.parametrize("change", ["missing", "digest", "request-digest", "attempt", "run", "upstream", "extra", "hardlink", "symlink", "reservation"])
 def test_disk_receipt_forgery_and_links_cannot_replace_owned_observation(case, change):
     session = _session(case)
@@ -458,10 +516,12 @@ def test_legacy_runner_absent_and_null_do_not_install_or_serialize_receipts(kwar
     runner.provider = SimpleNamespace(model="legacy")
     result = runner.run("text", model="different")
     assert "pilot_wire_receipt" not in result
-    assert result == runner._failure(
+    from core import runner_environment
+    expected = runner._failure(
         "this Codex run place is configured for deployment 'legacy' and was asked for 'different'; "
         "refusing rather than calling a different model than the one the run will be recorded against",
         category="model_mismatch")
+    assert result == {**expected, "runner_evidence": runner_environment.receipt("inference")}
 
 
 @pytest.mark.parametrize("boundary", ["constructor", "run", "open_runtime", "task-acceptance"])
@@ -538,8 +598,11 @@ def test_native_result_host_step2_real_task_acceptance_precedes_file_acceptance(
         _turn(fake)
         files = host.collect_deliverables(witness, workspace)
         linkage = session.finish_task(observer, success=True, thread_id=fake.thread_id, turn_id=fake.turn_id)
-        result = {"success": True, "files": files, "text": "synthetic result", "pilot_wire_receipt": linkage}
+        from core import runner_environment
+        result = {"success": True, "files": files, "text": "synthetic result", "pilot_wire_receipt": linkage,
+                  "runner_evidence": runner_environment.receipt("inference", observer.runner_observation)}
         host.finish_task(witness, result=result)
+        events.append("sealed-private-result")
         if missing:
             del result["pilot_wire_receipt"]
         return result
@@ -566,11 +629,11 @@ def test_native_result_host_step2_real_task_acceptance_precedes_file_acceptance(
         with pytest.raises(wire.PilotWireReceiptRefused):
             step2._execute_single_task(task, condition, SimpleNamespace(execute=execute), "codex_foundry", None,
                                       REQUESTED["deployment"], **options)
-        assert events == ["synthetic-transport"]
+        assert events == ["synthetic-transport", "sealed-private-result"]
     else:
         step2._execute_single_task(task, condition, SimpleNamespace(execute=execute), "codex_foundry", None,
                                   REQUESTED["deployment"], **options)
-        assert events == ["synthetic-transport", "verified-receipt", "save"]
+        assert events == ["synthetic-transport", "sealed-private-result", "verified-receipt", "save"]
 
 
 @pytest.mark.parametrize("wrong_account", [False, True])
@@ -670,7 +733,9 @@ def _native_finish(state, *, success=True, output=True, text=PRIVATE_TEXT):
     files = state.host.collect_deliverables(state.witness, state.workspace)
     linkage = state.host.wire.finish_task(state.observer, success=success,
                                          thread_id=state.fake.thread_id, turn_id=state.fake.turn_id)
-    result = {"success": success, "files": files, "text": text if success else "", "pilot_wire_receipt": linkage}
+    from core import runner_environment
+    result = {"success": success, "files": files, "text": text if success else "", "pilot_wire_receipt": linkage,
+              "runner_evidence": runner_environment.receipt("inference", state.observer.runner_observation)}
     if not success:
         result.update(error="pilot_task_failed", error_category="timeout")
     state.host.finish_task(state.witness, result=result)
@@ -805,7 +870,8 @@ def test_native_result_host_current_upstream_and_wire_bytes_required(case, damag
     assert host.failed and host.wire.failed and not (host.root / native.READY_PATH).exists()
 
 
-@pytest.mark.parametrize("damage", ["text", "file", "name", "wire", "missing-wire", "attempt", "task", "extra"])
+@pytest.mark.parametrize("damage", ["text", "file", "name", "wire", "missing-wire", "attempt", "task", "extra",
+                                  "missing-runner", "runner-drift"])
 def test_native_result_host_rejects_forged_or_mismatched_runner_handoff(case, damage):
     host = native.PilotNativeResultHostSession(_session(case))
     state = _native_start(case, host)
@@ -825,6 +891,10 @@ def test_native_result_host_rejects_forged_or_mismatched_runner_handoff(case, da
         attempt = 1
     elif damage == "task":
         task = TASK_IDS[1]
+    elif damage == "missing-runner":
+        del result["runner_evidence"]
+    elif damage == "runner-drift":
+        result["runner_evidence"]["observation"]["run_attempt"] = "2"
     else:
         result["command"] = PRIVATE_TEXT
     with pytest.raises(native.PilotNativeResultHostRefused):
@@ -944,7 +1014,9 @@ def test_native_result_host_post_collection_drift_is_refused_before_cleanup(case
         state.workspace.codex_home.rename(state.workspace.root / "displaced-runtime")
         state.workspace.codex_home.mkdir()
     with pytest.raises(native.PilotNativeResultHostRefused):
-        host.finish_task(state.witness, result={"success": True, "text": "", "files": files, "pilot_wire_receipt": link})
+        from core import runner_environment
+        host.finish_task(state.witness, result={"success": True, "text": "", "files": files, "pilot_wire_receipt": link,
+            "runner_evidence": runner_environment.receipt("inference", state.observer.runner_observation)})
 
 
 @pytest.mark.parametrize("damage", ["missing-witness", "duplicate-collect", "duplicate-finish", "duplicate-accept", "different-session"])

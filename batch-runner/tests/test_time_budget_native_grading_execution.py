@@ -26,7 +26,7 @@ from .test_time_budget_native_grading_intake import (
     TOKEN, PRIVATE, NAMES, case, dual_roots, handoff_source_seed, handoff_sources,
 )
 from .test_time_budget_grading_preparation import (
-    _execution_case, _execution_cli, _execution_direction, _execution_transport,
+    _execution_case, _execution_cli, _execution_direction, _execution_transport, _bind_grading_controller,
 )
 
 intake, preparation = subject.native_intake, subject.preparation
@@ -39,6 +39,9 @@ def offline(monkeypatch, handoff_sources, dual_roots):
     from core import azure_ai_clients, rubric_loader
     from core.time_budget_observation_deadline import TimeBudgetObservation
 
+    # Native preparation performs controller checks before it yields a handle,
+    # so bind the identical fixture controller before that first context too.
+    _bind_grading_controller(monkeypatch, dual_roots["runtime"])
     denied, prepared = [], []
 
     def forbidden(*args, **kwargs):
@@ -144,6 +147,7 @@ def _retained_transport(case, monkeypatch, *, wrong_revision=False):
 
 def _arguments(case, native, tmp_path, monkeypatch):
     arguments = subject._native_arguments(native)
+    _bind_grading_controller(monkeypatch, arguments["controller_root"])
     assert asdict(arguments["observation"]) == case.marker["observation"]
     assert arguments["expected_input_binding"] == case.marker["inputs"]
     store = tmp_path / "once-only-local-store"

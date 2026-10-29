@@ -1,0 +1,157 @@
+# Proposal only: no runtime reads this file and no execution right is granted.
+# Do not edit the sealed registration to make this proposal look enforced.
+status: draft_not_approved_or_enforced
+source_head: 2bc77ad14cf7205694d11aa5909a9ea67cbb2891
+registered_plan: batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot_source_20261023.yaml
+launch_enabled: false
+task_count: 5
+attempts_per_task: 4
+infrastructure_retries_per_task: 3
+request_max_retries: 0
+stream_max_retries: 0
+resume_max_rounds: 0
+self_qa_enabled: false
+
+# Native calls mean model requests within a turn, NOT ledger "model_calls".
+# 32 = ceil(300000 / 9444). This is a provisional planning heuristic using
+# the archived connection-run input, NOT a measured task call count.
+# Agent requests vary in size; token limits do not imply a native call limit.
+# A separately enforceable native counter is still required.
+per_attempt:
+  native_model_calls: 32
+  logical_turns: 1
+  input_tokens: 300000
+  output_tokens: 10000
+  wall_clock_seconds: 1800
+
+# All attempts consume the same task/pilot budget, including failures,
+# interrupted calls, retries, and usage of uncertain reachability.
+per_task:
+  native_model_calls: 128
+  logical_turns: 4
+  input_tokens: 1200000
+  output_tokens: 40000
+  retry_wait_seconds: 420
+  wall_clock_seconds: 7620
+
+per_pilot:
+  native_model_calls: 640
+  logical_turns: 20
+  input_tokens: 6000000
+  output_tokens: 200000
+  retry_wait_seconds: 2100
+  wall_clock_seconds: 38100
+
+cost:
+  approved_maximum_usd: null # owner decision
+
+evidence:
+  historical_usage:
+    path: batch-runner/tests/fixtures/run_record/step2_inference_results.json
+    ledger: batch-runner/tests/fixtures/run_record/cost_ledger_condition_a.jsonl
+    run_id: exp033_codex_foundry_fixed5:34528903950:1
+    model: gpt-5.4
+    tasks: 5
+    recorded_turns: 9
+    input_tokens: 595243
+    output_tokens: 22253
+    maximum_task_input_tokens: 289404
+    maximum_task_output_tokens: 8381
+    maximum_task_id: 2ea2e5b5-257f-42e6-a7dc-93763f28b19d
+    boundary: partial_app_server_usage_not_native_request_counts_or_sol_forecast
+  diagnostic:
+    run_id: '39407062120'
+    artifact_id: '12257312458'
+    artifact_name: codex-foundry-connection
+    archive_sha256: 5d1a2540f0ba1291093b231d0e12e489ca197c32683aee521fb1622893600841
+    connection_json_sha256: f3e9705bc1a2f934e3c5523638a127fc464bbc9be267e3bf09a38c525b7c6913
+    plan_json_sha256: 79145baff122ee14341d9c4930e668ddb26869a1461bbb0e0c8a0e76655e8ada
+    verdict: connected
+    requested_deployment: gpt-5.6-sol
+    served_model: null
+    served_model_version: null
+    endpoint_kind: direct-v1
+    endpoint_host_fingerprint: sha256:69057d59166a82e3
+    endpoint_path: /openai/v1/
+    provider_id: gdpval-foundry
+    account_resource_id: null
+    project_resource_id: null
+    deployment_resource_id: null
+    pinned_sdk_version: 0.147.0
+    pinned_cli_version: 0.147.0
+    installed_sdk_version: 0.147.0
+    installed_cli_version: 0.147.0
+    input_tokens: 9444
+    output_tokens: 5
+    source: sha256_verified_actions_archive_2026_10_24
+    archive_available_locally: true
+    boundary: archived_requested_settings_and_connection_usage_not_served_identity_or_task_usage
+  derivation:
+    input_tokens_per_attempt: round_289404_up_to_next_100000
+    output_tokens_per_attempt: round_8381_up_to_next_10000
+    native_calls_per_attempt: ceil_300000_divided_by_archived_9444_provisional_only
+    logical_turns_per_attempt: registered_plan_limits_logical_turns_per_attempt
+    attempts_per_task: registered_plan_infrastructure_retries_3_plus_initial_attempt
+    timeout_per_attempt: registered_plan_limits_timeout_seconds_per_attempt_1800
+    retry_wait: batch-runner/step2_run_inference.py_INFRA_RETRY_BACKOFF_SECONDS_60_120_240
+    task_totals: per_attempt_times_4_with_420_seconds_retry_wait
+    pilot_totals: per_task_times_registered_task_count_5
+  accounting:
+    input_includes_cached_tokens: true
+    output_includes_reasoning_tokens: true
+    add_cached_or_reasoning_subcounts_again: false
+    wall_clock_scope: serial_inference_attempts_and_retry_wait_not_preparation_or_grading
+
+deployment_check:
+  requested_name: gpt-5.6-sol
+  plan_identity_model: gpt-5.6-sol
+  plan_grading_judge_model: gpt-5.6-sol
+  plan_foundry_identity_deployment: null
+  preflight_expected_model: gpt-5.6-sol
+  preflight_expected_deployment: null
+  generated_runtime_template_deployment: null
+  baseline_condition_a_deployment: gpt-5.4
+  baseline_codex_model: gpt-5.4
+  diagnostic_workflow_input: required_string_without_default
+  batch_run_workflow_deployment: condition_a_model_deployment_from_selected_experiment
+  archived_diagnostic_input: gpt-5.6-sol
+  comparison:
+    cap_requested_name: match
+    source_registration_model: match
+    source_registration_deployment: unbound_null
+    preflight_expected_model: match
+    preflight_expected_deployment: unbound_null
+    generated_runtime_template: unbound_null_not_runnable
+    diagnostic_workflow: explicit_required_input_no_default_matches_archived_settings
+    batch_run_workflow: explicit_selected_experiment_no_default_not_a_pilot_dispatcher
+    baseline_condition_a_deployment: mismatch_historical_baseline_only
+    baseline_codex_model: mismatch_historical_baseline_only
+    codex_sdk_and_cli_versions: match
+  baseline_deployment_reachable_by_pilot_fallback: false
+  fallback_trace:
+    - evidence: batch-runner/experiments/exp035_codex_foundry_full220.yaml:584,622
+      finding: historical_baseline_contains_gpt_5_4_in_both_deployment_fields
+    - evidence: batch-runner/gpt56_sol_codex_pilot_preflight.py:381,403-445,471-504
+      finding: baseline_supplies_prompt_limits_output_only_not_model_or_deployment
+    - evidence: batch-runner/gpt56_pilot_config_bundle.py:90-114
+      finding: runtime_template_requires_null_deployment_and_execution_and_is_not_runnable
+    - evidence: batch-runner/gpt56_sol_codex_pilot_preflight.py:795-811
+      finding: omitted_binding_keeps_blockers_partial_binding_refuses_no_baseline_fallback
+    - evidence: batch-runner/gpt56_pilot_deployment_binding.py:184-236
+      finding: required_explicit_resource_files_are_hash_matched_to_identity_evidence
+    - evidence: batch-runner/gpt56_pilot_deployment_binding.py:126-165
+      finding: fresh_candidate_uses_resource_deployment_suffix_for_both_model_fields_not_baseline
+    - evidence: .github/workflows/batch-run.yml:8-11,605-622
+      finding: generic_batch_requires_selected_experiment_and_nonempty_azure_deployment_no_pilot_default
+    - evidence: .github/workflows/codex-foundry-connection-diagnostic.yml:82-85,251-255
+      finding: diagnostic_requires_explicit_deployment_without_default_and_forwards_it
+  result: archived_requested_name_matches_model_labels_baseline_mismatch_is_not_a_pilot_fallback
+  boundary: offline_archive_and_source_inspection_not_live_deployment_or_served_identity_verification
+
+remaining_work:
+  - Owner approval of proposed noncurrency caps and the USD cap.
+  - Independent native-call measurement and hard enforcement before sending.
+  - Task/pilot cumulative enforcement including partial and uncertain usage.
+  - Bind externally verified deployment and served model/version, Max and Long.
+  - Preserve frozen grader identity and complete existing live evidence gates.
+  - Bind final execution source to independent review before any paid launch.

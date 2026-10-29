@@ -281,6 +281,76 @@ def test_verified_explicit_consumption_clears_only_deployment_and_hides_ids(seal
     assert DEPLOYMENT_NAME.encode() not in encoded and all(raw not in encoded for raw in RAW_IDS)
 
 
+@pytest.mark.parametrize("drift", [
+    "none", "evidence", "identity", "config", "input", "input_identity",
+    "identity_evidence", "source", "link_time", "missing", "null", "malformed",
+])
+def test_preflight_deployment_requires_same_reported_upstreams(sealed, monkeypatch, drift):
+    """Real validators, with an earlier gate snapshot changed at the handoff.
+
+    This is synthetic inter-gate drift, not a claim that disk publication or
+    a provider changed. The successful path uses no substituted verdict.
+    """
+    original_input = pilot._inspect_plan_with_input
+    original_verify = binding.verify_pilot_deployment_binding
+    earlier, checked = [], []
+    fields = {
+        "evidence": ("evidence_gate", "consumed_bundle_sha256"),
+        "identity": ("identity_plan_gate", "consumed_plan_sha256"),
+        "config": ("input_bundle_gate", "config_bundle_sha256"),
+        "input": ("input_bundle_gate", "consumed_bundle_sha256"),
+        "input_identity": ("input_bundle_gate", "identity_plan_sha256"),
+        "identity_evidence": ("identity_plan_gate", "evidence_linkage", "ready_bundle_sha256"),
+        "source": ("identity_plan_gate", "evidence_linkage", "reviewed_source_sha"),
+        "link_time": ("identity_plan_gate", "evidence_linkage", "as_of"),
+        "missing": ("input_bundle_gate", "consumed_bundle_sha256"),
+        "null": ("input_bundle_gate", "config_bundle_sha256"),
+        "malformed": ("input_bundle_gate", "config_bundle_sha256"),
+    }
+
+    def input_snapshot(*args, **kwargs):
+        result = original_input(*args, **kwargs)
+        if kwargs.get("input_bundle") is not None:
+            assert result["input_bundle_gate"]["input_bundle_complete"] is True
+            earlier.append(list(result["launch_blockers"]))
+            if drift != "none":
+                path = fields[drift]
+                parent = result
+                for key in path[:-1]:
+                    parent = parent[key]
+                if drift == "missing":
+                    del parent[path[-1]]
+                else:
+                    parent[path[-1]] = {"null": None, "malformed": False,
+                                       "source": "0" * 40, "link_time": "2000-01-01T00:00:00Z"}.get(drift, "0" * 64)
+        return result
+
+    def verify(*args, **kwargs):
+        result = original_verify(*args, **kwargs)
+        checked.append(result.sha256)
+        return result
+
+    before = _tree(sealed.parent)
+    monkeypatch.setattr(pilot, "_inspect_plan_with_input", input_snapshot)
+    monkeypatch.setattr(binding, "verify_pilot_deployment_binding", verify)
+    result = pilot.inspect_plan(sealed.plan, deployment_binding=sealed.root, **sealed.options)
+    assert len(earlier) == len(checked) == 1
+    gate = result["deployment_binding_gate"]
+    if drift == "none":
+        assert gate["deployment_binding_complete"] is True and gate["cleared_blockers"] == [BLOCKER]
+        assert result["launch_blockers"] == [name for name in earlier[0] if name != BLOCKER]
+    else:
+        assert gate["deployment_binding_complete"] is False and gate["cleared_blockers"] == []
+        assert gate["refusal_code"] == pilot.DEPLOYMENT_REFUSAL
+        assert gate["consumed_bundle_sha256"] is gate["candidate_config_sha256"] is None
+        assert result["launch_blockers"] == earlier[0]
+    assert result["launch_allowed"] is result["full_220_allowed"] is False
+    encoded = _json(result)
+    assert PRIVATE.encode() not in encoded and str(sealed.parent).encode() not in encoded
+    assert all(raw not in encoded for raw in RAW_IDS)
+    assert _tree(sealed.parent) == before
+
+
 @pytest.mark.parametrize("missing", ["evidence_bundle", "identity_bundle", "config_bundle", "input_bundle",
                                      "reviewed_source_sha", "as_of", "deployment_binding",
                                      "account_resource_id_file", "project_resource_id_file", "deployment_resource_id_file"])

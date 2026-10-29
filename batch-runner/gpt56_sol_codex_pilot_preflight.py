@@ -46,7 +46,27 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261023.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_paid_diagnostic.yaml"
+SOURCE_PROFILE_RUNNER = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_runner_receipt.yaml"
+SOURCE_PROFILE_RUNNER_SHA256 = "d01dcb4d47c3b913647a0ca56740532ed40f072976226a703e491ee3c510155d"
+SOURCE_PROFILE_RESPONSE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_response_capture.yaml"
+SOURCE_PROFILE_RESPONSE_SHA256 = "768adaed42d65233986447810dd5a8646306b3e44f42bf7feb2037042b9c1446"
+SOURCE_PROFILE_CONNECTION = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_connection.yaml"
+SOURCE_PROFILE_CONNECTION_SHA256 = "84b74f81bddb623d6b0cc34e0cff4b90696f8016890e119de8febaa4990092aa"
+SOURCE_PROFILE_USD200 = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_usd200.yaml"
+SOURCE_PROFILE_USD200_SHA256 = "d05363c8745245c8279fb9b30404e88922b79b26e874ed3d97a2c0444de9715d"
+SOURCE_PROFILE_SHARED = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_shared_usd.yaml"
+SOURCE_PROFILE_SHARED_SHA256 = "7619cd0c6baa35a8660c2e076ed171f271f6b4ad3c5de7115b19e7f2f30a7652"
+SOURCE_PROFILE_USD = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261027_usd_cap.yaml"
+SOURCE_PROFILE_USD_SHA256 = "d2398e54ddad22bc42e6d47bce12ef3b3053f575f2ac5725e605dc3a516e3f29"
+SOURCE_PROFILE_TOKEN_PRECHECK = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261026_token_precheck.yaml"
+SOURCE_PROFILE_TOKEN_PRECHECK_SHA256 = "fbabe0aa40f6513bc77d86a29ae9ac9af35cfbd64b5b70fe3f6150aa0a6e1a44"
+SOURCE_PROFILE_BINDINGS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025_bindings.yaml"
+SOURCE_PROFILE_BINDINGS_SHA256 = "740ec085c047ad359b4c5e56a8bf5867ebc2cb6c229d479262d6815fbe8154cf"
+SOURCE_PROFILE_CAPS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261025.yaml"
+SOURCE_PROFILE_CAPS_SHA256 = "f88c850558674a4c3a89ae0840f23dc27402aefafe56f7323ba3d3b8ad33a3b2"
+SOURCE_PROFILE_PREVIOUS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261023.yaml"
+SOURCE_PROFILE_PREVIOUS_SHA256 = "506de35370ffe6d54e6decb2459a4f4abda47136d550c010086b0fffd5c1e482"
 FOUNDRY_PLAN_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 SOURCE_PROFILE_REFRESH = frozenset({
     "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
@@ -56,10 +76,42 @@ SOURCE_PROFILE_REFRESH = frozenset({
     "batch-runner/gpt54_prepared_input_attestation.py", "batch-runner/gpt54_run_input_bundle.py",
     "batch-runner/gpt56_pilot_identity_plan.py", "batch-runner/gpt56_pilot_deployment_binding.py",
     "batch-runner/gpt56_pilot_input_capture.py", "batch-runner/core/codex_task_deadline.py",
+    "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
+    "batch-runner/step8_grade.py",
+    "batch-runner/gpt56_pilot_native_result_host.py",
+    "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py",
+})
+# Exact source delta from 10-23. Historical plans/seals remain unchanged;
+# runtime/runner/merge helpers are also held as auxiliary reviewed blobs.
+SOURCE_PROFILE_DELTA = frozenset({
+    "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+    "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_runtime_caps_usage.py",
+    "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    "batch-runner/step8_grade.py",
+    "batch-runner/gpt56_pilot_deployment_binding.py",
+    "batch-runner/gpt56_pilot_native_result_host.py",
+    "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py",
 })
 SOURCE_PROFILE_AUXILIARY = {
     "batch-runner/gpt54_disposable_checkout.py":
         "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
+    ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml":
+        "a0f67d8845a165fd660c7600dbb3c233d07f9008e7efb44edb4054e3070cb9c6",
+    ENVELOPE + "model_price_table.json":
+        "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
+    "batch-runner/gpt56_pilot_usd_budget.py":
+        "d28dbe71db00d301e2dad54852515df15c254be09002fa43b16e2d0f2131048e",
+    "batch-runner/core/cost_metering.py":
+        "f2d63e7812bd8557232bc0a3bdc0deb76a3565a4d1398b1fb191008fa9aff888",
+    ENVELOPE + "gpt56_sol_connection_reference_20261027.json":
+        "293ee682d01cbb64ee2b330f603b49a90522f07429dcd3cf036070808c271b76",
+    "batch-runner/gpt56_native_response_capture.py": "1e3db1b4f6b956b24fd6b892118e0d4a2b491c23e3a52c8a1536849a6a36aca6",
+    "batch-runner/scripts/diagnose_codex_foundry_connection.py": "d3a657e9443917e2345e62a22e5ccd7518a4ff6c4c91206b1762dec91c53612b",
+    ".github/workflows/codex-foundry-connection-diagnostic.yml": "2b8f15dfe68ed0259ee2058f4c36fb6a5a051dec86bbb8b26a713602a5e0aa6b",
+    "batch-runner/core/runner_environment.py": "c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a",
+    "batch-runner/scripts/prepare_codex_sandbox_host.py": "6324b206656abf609af6c6d4f8a1c93c68a0c3d48e53aef0d35955630b66825a",
+    "batch-runner/step9_merge_shards.py": "9079fd701fbc7e4cca65fbcc1705f03891e4e13be3a4fb9145a2bb17b1352872",
+    ".github/workflows/batch-run.yml": "06519bc2abb0f69fe688cd864dadb536e907a433e2726c5bf60c1115c5c220bb",
 }
 PLAN = ROOT / ACTIVE_PLAN
 RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
@@ -282,6 +334,38 @@ def source_plan_snapshot(
         require(hashlib.sha256(original_data).hexdigest() == FOUNDRY_PLAN_SHA256)
         require(type(reviewed_source_sha) is str
                 and re.fullmatch(r"[0-9a-f]{40}", reviewed_source_sha) is not None)
+        previous_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_PREVIOUS),
+                                    sha256=SOURCE_PROFILE_PREVIOUS_SHA256)
+        require(len(previous_data) <= 65536)
+        previous = yaml.safe_load(previous_data)
+        caps_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_CAPS), sha256=SOURCE_PROFILE_CAPS_SHA256)
+        require(len(caps_data) <= 65536)
+        caps_profile = yaml.safe_load(caps_data)
+        bindings_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_BINDINGS), sha256=SOURCE_PROFILE_BINDINGS_SHA256)
+        require(len(bindings_data) <= 65536)
+        bindings_profile = yaml.safe_load(bindings_data)
+        token_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_TOKEN_PRECHECK),
+                                 sha256=SOURCE_PROFILE_TOKEN_PRECHECK_SHA256)
+        require(len(token_data) <= 65536)
+        token_profile = yaml.safe_load(token_data)
+        usd_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_USD), sha256=SOURCE_PROFILE_USD_SHA256)
+        require(len(usd_data) <= 65536)
+        usd_profile = yaml.safe_load(usd_data)
+        shared_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_SHARED), sha256=SOURCE_PROFILE_SHARED_SHA256)
+        require(len(shared_data) <= 65536)
+        shared_profile = yaml.safe_load(shared_data)
+        usd200_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_USD200), sha256=SOURCE_PROFILE_USD200_SHA256)
+        require(len(usd200_data) <= 65536)
+        usd200_profile = yaml.safe_load(usd200_data)
+        connection_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_CONNECTION), sha256=SOURCE_PROFILE_CONNECTION_SHA256)
+        require(len(connection_data) <= 65536)
+        connection_profile = yaml.safe_load(connection_data)
+        response_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_RESPONSE), sha256=SOURCE_PROFILE_RESPONSE_SHA256)
+        require(len(response_data) <= 65536)
+        response_profile = yaml.safe_load(response_data)
+        runner_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_RUNNER), sha256=SOURCE_PROFILE_RUNNER_SHA256)
+        require(len(runner_data) <= 65536)
+        runner_profile = yaml.safe_load(runner_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -295,12 +379,76 @@ def source_plan_snapshot(
                     for value in pins.values()))
         require({name for name, digest in pins.items()
                  if digest != original["source_pins"][name]} == SOURCE_PROFILE_REFRESH)
+        require({name for name, digest in pins.items()
+                 if digest != previous["source_pins"][name]} == SOURCE_PROFILE_DELTA)
+        require(seal({k: v for k, v in connection_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require(seal({k: v for k, v in response_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require(seal({k: v for k, v in runner_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in response_profile["source_pins"].items()
+                 if digest != connection_profile["source_pins"][name]}
+                == {"batch-runner/core/codex_runner.py", "batch-runner/gpt56_pilot_wire_receipt.py",
+                    "batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+        require({name for name, digest in runner_profile["source_pins"].items()
+                 if digest != response_profile["source_pins"][name]}
+                == {"batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+                    "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_native_result_host.py",
+                    "batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/step8_grade.py",
+                    "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py"})
+        require({name for name, digest in pins.items() if digest != runner_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+        require({name for name, digest in bindings_profile["source_pins"].items()
+                 if digest != caps_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+        require({name for name, digest in connection_profile["source_pins"].items()
+                 if digest != bindings_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
+        require(seal({k: v for k, v in token_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in token_profile["source_pins"].items()
+                 if digest != bindings_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
+        require({name for name, digest in connection_profile["source_pins"].items()
+                 if digest != token_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
+        require(seal({k: v for k, v in usd_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in usd_profile["source_pins"].items()
+                 if digest != token_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
+        require({name for name, digest in connection_profile["source_pins"].items() if digest != usd_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
+        require(seal({k: v for k, v in shared_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in shared_profile["source_pins"].items()
+                 if digest != usd_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/step8_grade.py"})
+        require({name for name, digest in usd200_profile["source_pins"].items() if digest != shared_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py"})
+        require({name for name, digest in connection_profile["source_pins"].items() if digest != shared_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
+        require(seal({k: v for k, v in usd200_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in connection_profile["source_pins"].items() if digest != usd200_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py", "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_pilot_deployment_binding.py"})
 
         # Reuse the existing sanitized, bounded, local-only Git implementation.
         # Archive reads Git objects, not LFS payloads; nothing is extracted.
         import gpt54_disposable_checkout as checkout
 
-        source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY}
+        source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY,
+                        SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256,
+                        SOURCE_PROFILE_CAPS: SOURCE_PROFILE_CAPS_SHA256,
+                        SOURCE_PROFILE_BINDINGS: SOURCE_PROFILE_BINDINGS_SHA256,
+                        SOURCE_PROFILE_TOKEN_PRECHECK: SOURCE_PROFILE_TOKEN_PRECHECK_SHA256,
+                        SOURCE_PROFILE_USD: SOURCE_PROFILE_USD_SHA256,
+                        SOURCE_PROFILE_SHARED: SOURCE_PROFILE_SHARED_SHA256,
+                        SOURCE_PROFILE_USD200: SOURCE_PROFILE_USD200_SHA256,
+                        SOURCE_PROFILE_CONNECTION: SOURCE_PROFILE_CONNECTION_SHA256,
+                        SOURCE_PROFILE_RESPONSE: SOURCE_PROFILE_RESPONSE_SHA256,
+                        SOURCE_PROFILE_RUNNER: SOURCE_PROFILE_RUNNER_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -324,11 +472,21 @@ def source_plan_snapshot(
                     blobs[member.name] = stream.read()
             require(set(blobs) == set(roles))
             require(blobs[ACTIVE_PLAN] == original_data and blobs[SOURCE_PROFILE] == profile_data)
+            require(blobs[SOURCE_PROFILE_PREVIOUS] == previous_data)
+            require(blobs[SOURCE_PROFILE_CAPS] == caps_data)
+            require(blobs[SOURCE_PROFILE_BINDINGS] == bindings_data)
+            require(blobs[SOURCE_PROFILE_TOKEN_PRECHECK] == token_data)
+            require(blobs[SOURCE_PROFILE_USD] == usd_data)
+            require(blobs[SOURCE_PROFILE_SHARED] == shared_data)
+            require(blobs[SOURCE_PROFILE_USD200] == usd200_data)
+            require(blobs[SOURCE_PROFILE_CONNECTION] == connection_data)
+            require(blobs[SOURCE_PROFILE_RESPONSE] == response_data)
+            require(blobs[SOURCE_PROFILE_RUNNER] == runner_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
                     require(role not in source_roles or digest == source_roles[role])
-                    _read_bytes(_path(ROOT, role), sha256=digest, size=len(data))
+                    require(_read_bytes(_path(ROOT, role), sha256=digest, size=len(data)) == data)
                     if role.endswith(".py"):
                         module = sys.modules.get(role.removeprefix("batch-runner/")[:-3].replace("/", "."))
                         if module is not None:
@@ -346,6 +504,26 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
+            "supersedes_profile": SOURCE_PROFILE_RUNNER,
+            "supersedes_profile_sha256": SOURCE_PROFILE_RUNNER_SHA256,
+            "source_change_reason": "bounded_paid_diagnostic_requested_controls_and_reservation",
+            "response_capture_readiness": {
+                "status": "next_call_capture_path_only", "live_evidence_observed": False,
+                "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
+                "cleared_blockers": [], "missing_response_field": "not_reported",
+                "provider_emits_required_fields_verified": False,
+            },
+            "monetary_decision": {
+                "record": ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml",
+                "sha256": SOURCE_PROFILE_AUXILIARY[ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml"],
+                "approved_maximum_usd": 200, "currency": "USD",
+                "approved_at_utc": "2026-10-27T01:56:00Z",
+                "approved_at_local": "2026-10-27T10:56:00+09:00",
+                "approval_source": "owner_card_record",
+                "scope": "five_task_pilot_inference_and_grading_combined",
+                "actual_billing_hard_limit_verified": False, "grading_ledger_connected": True,
+                "grading_price_contract_verified": False,
+            },
             "plan_sha256": seal(profile), "historical_plan_sha256": FOUNDRY_PLAN_SHA256,
             "run_id": RUN_ID, "launch_authority": False, "retry_authority": False,
         }
@@ -778,6 +956,32 @@ def _project_resource_required(plan: dict[str, Any]) -> bool:
     return plan.get("foundry_route", {}).get("route_profile") != "direct-v1"
 
 
+def _same_reported_upstreams(upstreams: dict[str, Any], result: dict[str, Any]) -> bool:
+    """Do not combine separately verified generations in one preflight report.
+
+    Real bundle verifiers still own schema, byte and freshness checks. These
+    comparisons additionally bind their output to the preceding gate results.
+    Missing or malformed metadata raises into the caller's closed refusal.
+    """
+    evidence = result["evidence_gate"]
+    identity = result["identity_plan_gate"]
+    inputs = result["input_bundle_gate"]
+    linkage = identity["evidence_linkage"]
+    pairs = (
+        (upstreams["evidence"]["ready_sha256"], evidence["consumed_bundle_sha256"]),
+        (upstreams["identity"]["plan_sha256"], identity["consumed_plan_sha256"]),
+        (upstreams["config"]["ready_sha256"], inputs["config_bundle_sha256"]),
+        (upstreams["input"]["ready_sha256"], inputs["consumed_bundle_sha256"]),
+        (inputs["identity_plan_sha256"], identity["consumed_plan_sha256"]),
+        (linkage["ready_bundle_sha256"], evidence["consumed_bundle_sha256"]),
+    )
+    return (all(type(expected) is str and re.fullmatch(r"[0-9a-f]{64}", expected)
+                and actual == expected for actual, expected in pairs)
+            and type(evidence["reviewed_source_sha"]) is str
+            and re.fullmatch(r"[0-9a-f]{40}", evidence["reviewed_source_sha"]) is not None
+            and linkage["reviewed_source_sha"] == evidence["reviewed_source_sha"])
+
+
 def _inspect_plan_with_deployment(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
@@ -810,6 +1014,9 @@ def _inspect_plan_with_deployment(
 
         verified = verify_pilot_deployment_binding(plan, bundle_root=deployment_binding, **options, **resource_files)
         document = verified.as_dict()
+        if (not _same_reported_upstreams(document["upstream_bundles"], result)
+                or seal(document["evidence_linkage"]) != seal(result["identity_plan_gate"]["evidence_linkage"])):
+            return _deployment_refusal(result)
         remaining = [name for name in result["launch_blockers"] if name not in DEPLOYMENT_BINDING_BLOCKERS]
         gate = {
             "deployment_binding_complete": True, "consumed_bundle_sha256": verified.sha256,
@@ -841,7 +1048,7 @@ def _capture_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
-def inspect_plan(
+def _inspect_plan_with_capture(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
     identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
@@ -869,6 +1076,13 @@ def inspect_plan(
         verified = verify_pilot_input_capture(
             PilotCaptureSources(**options), workspace=capture_workspace, dataset_root=input_bundle, plan=plan,
         )
+        deployment_sha256 = result["deployment_binding_gate"]["consumed_bundle_sha256"]
+        if (not _same_reported_upstreams(verified["upstream_bundles"], result)
+                or type(deployment_sha256) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", deployment_sha256) is None
+                or verified["upstream_bundles"]["deployment"]["ready"]["sha256"] != deployment_sha256
+                or verified["reviewed_source_sha"] != reviewed_source_sha):
+            return _capture_refusal(result)
         remaining = [name for name in result["launch_blockers"] if name not in CAPTURE_BLOCKERS]
         gate = {"capture_complete": True, "capture_sha256": verified["sha256"],
                 "reviewed_source_sha": verified["reviewed_source_sha"], "evaluated_at": as_of,
@@ -883,6 +1097,79 @@ def inspect_plan(
         return _capture_refusal(result)
 
 
+def _approved_connection_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
+    if result is None:
+        result = {"configuration_valid": False}
+    result.update(launch_allowed=False, full_220_allowed=False, launch_blockers=list(LAUNCH_BLOCKERS))
+    for value in result.values():
+        if type(value) is dict and "remaining_blockers" in value:
+            value["remaining_blockers"] = list(LAUNCH_BLOCKERS)
+    result["approved_connection_gate"] = {
+        "configured_route_bound": False, "cleared_blockers": [],
+        "remaining_blockers": list(LAUNCH_BLOCKERS), "refusal_code": "approved_connection_reference_refused",
+    }
+    return result
+
+
+def inspect_plan(
+    plan: dict[str, Any], *, evidence_bundle: Path | None = None,
+    reviewed_source_sha: str | None = None, as_of: str | None = None,
+    identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
+    deployment_binding: Path | None = None, account_resource_id_file: Path | None = None,
+    project_resource_id_file: Path | None = None, deployment_resource_id_file: Path | None = None,
+    capture_workspace: Path | None = None, retained_connection: Path | None = None,
+    retained_connection_source_sha: str | None = None,
+) -> dict[str, Any]:
+    """Optionally bind the approved historical target, never served capabilities.
+
+    The old complete evidence intake and absent-option behavior are unchanged.
+    A bad optional reference cannot clear an existing refusal or launch gate.
+    """
+    result = _inspect_plan_with_capture(
+        plan, evidence_bundle=evidence_bundle, reviewed_source_sha=reviewed_source_sha, as_of=as_of,
+        identity_bundle=identity_bundle, config_bundle=config_bundle, input_bundle=input_bundle,
+        deployment_binding=deployment_binding, account_resource_id_file=account_resource_id_file,
+        project_resource_id_file=project_resource_id_file, deployment_resource_id_file=deployment_resource_id_file,
+        capture_workspace=capture_workspace,
+    )
+    if retained_connection is None and retained_connection_source_sha is None:
+        return result
+    try:
+        import gpt56_pilot_deployment_binding as binding
+
+        if (not result["configuration_valid"] or retained_connection is None
+                or Path(os.path.abspath(retained_connection)) != ROOT / binding.CONNECTION_REFERENCE_PATH
+                or any(type(value) is dict and value.get("refusal_code") for value in result.values())):
+            raise ValueError
+        checked, _, source = source_plan_snapshot(expected_plan_sha256=seal(plan), reviewed_source_sha=retained_connection_source_sha)
+        if source is None or source["status"] != "source_verified" or seal(checked) != seal(plan):
+            raise ValueError
+        reference = binding.approved_connection_reference()
+        route = reference["route"]
+        if (plan["foundry_route"]["route_profile"] != route["profile"]
+                or plan["foundry_route"]["provider_id"] != route["provider_id"]
+                or plan["identity"]["model"] != route["deployment"]
+                or plan["identity"]["sdk_version"] != route["sdk_version"]
+                or plan["identity"]["cli_version"] != route["cli_version"]):
+            raise ValueError
+        remaining = [name for name in result["launch_blockers"] if name != binding.CONNECTION_BLOCKER]
+        cleared = [name for name in result["launch_blockers"] if name == binding.CONNECTION_BLOCKER]
+        gate = {**binding.connection_reference_receipt(reference), "configured_route_bound": True,
+                "reviewed_source_sha": retained_connection_source_sha,
+                "cleared_blockers": cleared, "remaining_blockers": remaining}
+        # Recheck source/record bytes after constructing the bounded report.
+        if source_plan_snapshot(expected_plan_sha256=seal(plan), reviewed_source_sha=retained_connection_source_sha)[2] != source:
+            raise ValueError
+        for value in result.values():
+            if type(value) is dict and "remaining_blockers" in value:
+                value["remaining_blockers"] = remaining
+        result["launch_blockers"] = remaining
+        result["approved_connection_gate"] = gate
+        return result
+    except Exception:
+        return _approved_connection_refusal(result)
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     evidence_requested = False
@@ -890,6 +1177,7 @@ def main(argv: list[str] | None = None) -> int:
     input_requested = False
     deployment_requested = False
     capture_requested = False
+    connection_requested = False
     source_requested = False
     source_report = None
     # A misspelled option can conceal which mode was intended. All argument
@@ -904,12 +1192,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input-bundle", type=Path, help="Published five-task local input bundle")
     parser.add_argument("--deployment-binding", type=Path, help="Published local deployment binding")
     parser.add_argument("--capture-workspace", type=Path, help="Local Step 1 prepared request capture (not launch approval)")
+    parser.add_argument("--retained-connection-reference", type=Path,
+                        help="Source-held approved connection reference (configured target only)")
     for role in ("account", "project", "deployment"):
         parser.add_argument("--" + role + "-resource-id-file", type=Path, help="Private local resource ID bytes")
     try:
         args = parser.parse_args(arguments)
-        source_requested = args.plan.absolute() == ROOT / SOURCE_PROFILE
+        source_requested = args.plan.absolute() in {
+            ROOT / SOURCE_PROFILE, ROOT / SOURCE_PROFILE_BINDINGS,
+            ROOT / SOURCE_PROFILE_CAPS, ROOT / SOURCE_PROFILE_PREVIOUS, ROOT / SOURCE_PROFILE_TOKEN_PRECHECK,
+            ROOT / SOURCE_PROFILE_USD, ROOT / SOURCE_PROFILE_SHARED, ROOT / SOURCE_PROFILE_USD200,
+            ROOT / SOURCE_PROFILE_CONNECTION, ROOT / SOURCE_PROFILE_RESPONSE, ROOT / SOURCE_PROFILE_RUNNER,
+        }
         capture_requested = args.capture_workspace is not None
+        connection_requested = args.retained_connection_reference is not None
         evidence_requested = any(value is not None for value in (
             args.evidence_bundle, args.reviewed_source_sha, args.as_of,
         ))
@@ -923,13 +1219,21 @@ def main(argv: list[str] | None = None) -> int:
             plan, _, source_report = source_plan_snapshot(
                 expected_plan_sha256=seal(plan), reviewed_source_sha=args.reviewed_source_sha,
             )
+        connection_only = connection_requested and source_requested and not any(value is not None for value in (
+            args.evidence_bundle, args.as_of, args.identity_bundle, args.config_bundle, args.input_bundle,
+            args.deployment_binding, args.capture_workspace, args.account_resource_id_file,
+            args.project_resource_id_file, args.deployment_resource_id_file,
+        ))
         result = inspect_plan(
             plan, evidence_bundle=args.evidence_bundle,
-            reviewed_source_sha=args.reviewed_source_sha, as_of=args.as_of, identity_bundle=args.identity_bundle,
+            reviewed_source_sha=None if connection_only else args.reviewed_source_sha,
+            as_of=args.as_of, identity_bundle=args.identity_bundle,
             config_bundle=args.config_bundle, input_bundle=args.input_bundle,
             deployment_binding=args.deployment_binding, account_resource_id_file=args.account_resource_id_file,
             project_resource_id_file=args.project_resource_id_file, deployment_resource_id_file=args.deployment_resource_id_file,
             capture_workspace=args.capture_workspace,
+            retained_connection=args.retained_connection_reference,
+            retained_connection_source_sha=args.reviewed_source_sha if connection_requested else None,
         )
     except Exception as error:
         if source_requested:
@@ -939,9 +1243,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if isinstance(error, _CLIArgumentsRefused):
             evidence_requested = True
-        if not (evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
+        if not (evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested or connection_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
             raise
-        result = _capture_refusal() if capture_requested else _deployment_refusal() if deployment_requested else _input_refusal() if input_requested else _identity_refusal() if identity_requested else _evidence_refusal() if evidence_requested else {
+        result = _capture_refusal() if capture_requested else _deployment_refusal() if deployment_requested else _input_refusal() if input_requested else _identity_refusal() if identity_requested else _approved_connection_refusal() if connection_requested else _evidence_refusal() if evidence_requested else {
             "configuration_valid": False,
             "launch_allowed": False,
             "full_220_allowed": False,
@@ -949,7 +1253,7 @@ def main(argv: list[str] | None = None) -> int:
         }
     if source_report is not None:
         result["source_registration"] = source_report
-    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested else json.dumps(result, indent=2, ensure_ascii=False))
+    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested or connection_requested else json.dumps(result, indent=2, ensure_ascii=False))
     return 2  # No paid pilot or 220-task run can be launched by this module.
 
 

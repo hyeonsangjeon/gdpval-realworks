@@ -1,4 +1,4 @@
-"""Step2's real no-QA writer through private retention and grading inputs.
+"""Step2's real writer with historical synthetic native transport envelopes.
 
 Original-input provenance, source/host capability, native turns and HF are
 synthetic. Serialization, deadlines, receipts, byte/identity/privacy checks,
@@ -31,12 +31,13 @@ import codex_budget_pilot_retention as retained
 import gpt54_v2_grading_input as primitives
 import step2_run_inference as step2
 import step8_grade
-from core import azure_ai_clients, codex_azure_token, codex_runner
+from core import azure_ai_clients, codex_azure_token, codex_runner, runner_environment
 from core.codex_task_deadline import CodexTaskDeadlineStore
 from core.needs_files import NeedsFilesManifest
 from core.result_fingerprint import inference_result_fingerprint, validate_inference_result_fingerprint
 from core.source_identity import source_task_projection_sha256
 from .test_codex_budget_pilot_ci import CICellChildren
+from .test_codex_budget_pilot_failure_category import historical_native_envelope
 from .test_codex_budget_pilot_epoch02 import compiled  # noqa: F401 -- genuine compiler cache only
 from .test_codex_budget_pilot_epoch03_gate import GateHF
 from .test_codex_budget_pilot_retention import (
@@ -50,9 +51,15 @@ REFLECTION = {"reflection_history", "reflection_attempts"}
 
 
 @pytest.fixture(autouse=True)
-def offline(monkeypatch, compiled):
+def offline(monkeypatch, compiled, native_hosted_runner):
     from huggingface_hub import HfApi
     from huggingface_hub.utils import _auth, _headers
+
+    # Freeze the explicit fake-native observation before the separate legacy
+    # controller fixture installs its immutable ubuntu22 descriptor.
+    synthetic_runner = runner_environment.observe()
+    assert synthetic_runner["eligible_for_execution"]
+    monkeypatch.setattr(runner_environment, "observe", lambda: copy.deepcopy(synthetic_runner))
 
     def forbidden(*args, **kwargs):
         pytest.fail("success-retention test crossed a live boundary")
@@ -86,6 +93,9 @@ class WriterChildren(CICellChildren):
         self.damage = None
         self.turns = 0
         self.child_log = io.StringIO()
+        self.synthetic_runner = runner_environment.observe()
+        assert self.synthetic_runner["eligible_for_execution"]
+        assert self.synthetic_runner["runner_name"] == "synthetic-native-runner"
 
     def _executor(self, **kwargs):
         assert kwargs["llm_client"] is None and kwargs["mode"] == "codex_foundry"
@@ -120,7 +130,10 @@ class WriterChildren(CICellChildren):
 
         def execute(**options):
             options.pop("verbose")
-            return runner.run(**options)
+            raw = runner.run(**options)
+            if self.damage in {"modern_runner", "runner_digest", "runner_stage"}:
+                return raw
+            return historical_native_envelope(raw)
 
         return SimpleNamespace(runner=runner, execute=execute, close=runner.close)
 
@@ -143,6 +156,9 @@ class WriterChildren(CICellChildren):
         with self.monkeypatch.context() as scoped, patch.dict(os.environ, options["env"], clear=True), \
                 contextlib.redirect_stdout(self.child_log), contextlib.redirect_stderr(self.child_log):
             # This is the fake child boundary, not a provider observation.
+            # The legacy child's scrubbed env has no hosted labels. Retain the
+            # explicit unit-fixture observation, never infer NAS admission.
+            scoped.setattr(runner_environment, "observe", lambda: copy.deepcopy(self.synthetic_runner))
             scoped.setenv("CODEX_FOUNDRY_CONNECTION_CONFIRMED", "1")
             scoped.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
             scoped.setenv("AZURE_OPENAI_V1_ENDPOINT", "https://synthetic.services.ai.azure.com/openai/v1/")
@@ -192,6 +208,11 @@ class WriterChildren(CICellChildren):
             row["messages"] = [PRIVATE]
         elif self.damage == "originals":
             payload["reference_files"] = [PRIVATE]
+        elif self.damage == "runner_digest":
+            row["observability"]["runner_evidence"]["sha256"] = "0" * 64
+        elif self.damage == "runner_stage":
+            observation = row["observability"]["runner_evidence"]["observation"]
+            row["observability"]["runner_evidence"] = runner_environment.receipt("grading", observation)
         elif self.damage == "source":
             payload["source"] = "synthetic-foreign/dataset"
         if pilot._canonical_json(payload) != pilot._canonical_json(json.loads(self.writer_bytes)):
@@ -270,6 +291,7 @@ def _grade_inputs(s, terminal, monkeypatch, damage):
     "missing_history", "missing_attempts", "score", "unknown", "nested_secret", "raw_messages", "originals",
     "result_bytes", "deliverable_bytes", "ledger_bytes", "source", "receipt", "cleanup",
     "failed_withheld", "publication_lost", "grade_bytes", "grade_identity",
+    "modern_runner", "runner_digest", "runner_stage",
 ])
 def test_success_writer_retention_contract(success_case, monkeypatch, capsys, damage):
     s = success_case
@@ -306,6 +328,7 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
         raw = json.loads(s.transport.writer_bytes)
         assert set(raw) <= output.RESULT_FIELDS
         output._safe_record(raw)
+        assert "runner_evidence" not in raw["results"][0]["observability"]
         old_fields = output.ROW_FIELDS - REFLECTION
         # Exact locally reproduced paths; no claim about the missing live file.
         assert {"results[0]." + key for key in set(raw["results"][0]) - old_fields} == {
@@ -314,6 +337,14 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
             old_contract.setattr(output, "ROW_FIELDS", old_fields)
             with pytest.raises(output.OutputPublicationRefused, match="^unsafe_result_fields$"):
                 output.prepare(**options)
+        assert s.transport.result_bytes == s.transport.writer_bytes
+    if damage == "modern_runner":
+        # Current-format output is real, byte-preserved and explicitly NOT
+        # admitted by a closed historical reader. Never repin its dependency.
+        raw = json.loads(s.transport.writer_bytes)
+        evidence = raw["results"][0]["observability"]["runner_evidence"]
+        runner_environment.validate_receipt(evidence)
+        assert evidence["stage"] == "inference"
         assert s.transport.result_bytes == s.transport.writer_bytes
     if damage in {"result_bytes", "ledger_bytes", "deliverable_bytes"}:
         name = "result" if damage == "result_bytes" else "ledger"
@@ -336,7 +367,7 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
     code, record = boundary(s, capsys, monkeypatch, "--retain")
     accepted = {"supported", "absent", "failed_withheld", "grade_bytes", "grade_identity"}
     if damage in accepted:
-        assert code == 0 and record["outcome"] == "acknowledged"
+        assert code == 0 and record["outcome"] == "acknowledged", (record, s.retention_diagnostic)
         receipt = retained._read(cell_root(s) / retained.TERMINAL_RECEIPT)
         assert receipt["terminal_commit"] == s.api.branches[retained.BRANCH]
         tree = s.api.trees[receipt["output_commit"]]

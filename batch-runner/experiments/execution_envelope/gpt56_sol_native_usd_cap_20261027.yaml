@@ -1,0 +1,41 @@
+# Owner monetary decision and conservative runtime estimate; not launch authority.
+# The old caps draft and every older source registration remain byte-identical.
+record_version: gpt56-native-usd-cap-v1
+run_id: gpt56_sol_foundry_codex_pilot5_v1
+source_head_before_change: 32c79f6774a9b4620c9fbf77f9756e32c30f6c0b
+supersedes_monetary_decision:
+  path: batch-runner/experiments/execution_envelope/gpt56_sol_native_usd_cap_20261027.yaml
+  git_commit: 32c79f6774a9b4620c9fbf77f9756e32c30f6c0b
+  sha256: df64cdb0d1e1f242b7500debbca2ca5dac0eab988783e2a03da80c57a940992f
+  field: cost.approved_maximum_usd
+  previous_value: 1000
+  approved_at_utc: '2026-10-26T23:09:00Z'
+  approval_source: owner_desk_message
+cost:
+  approved_maximum_usd: 200
+  currency: USD
+  scope: five_task_pilot_inference_and_grading_combined
+  approval_source: owner_card_record
+  approved_at_utc: '2026-10-27T01:56:00Z'
+  approved_at_local: '2026-10-27T10:56:00+09:00'
+  decision_summary: 'USD 200 combined inference and grading ceiling for the five-task pilot'
+pricing:
+  path: batch-runner/experiments/execution_envelope/model_price_table.json
+  sha256: b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e
+  model: gpt-5.6-sol
+  meter: long_context_standard_global
+  unit: USD_per_million_tokens
+  effective_tariff_verified: false
+  cached_input_discount: false
+  cache_write_reserve: one_write_per_full_input_token_or_larger_reported_counter
+enforcement:
+  scope: inference_modeled_input_output_and_cache_write_reserve
+  next_input_reserve: remaining_attempt_input_allowance_not_request_byte_estimate
+  next_output_reserve: request_max_output_tokens
+  missing_or_partial_usage: block_session_and_keep_pending_reservations
+  failure_or_unknown_reachability: block_session_and_keep_pending_reservations
+  grading_ledger_connected: false
+  actual_billing_hard_limit_verified: false
+  cache_write_reserve_is_observed_billing: false
+launch_enabled: false
+new_study_or_retry_right: false

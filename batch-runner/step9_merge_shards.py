@@ -1075,6 +1075,19 @@ def merge_shard_payloads(
         for rank, input_index in enumerate(shard_order)
     ]
 
+    # Runner observations belong to the producing shard, not the merge host.
+    # Preserve the common observation only when every shard agrees; otherwise
+    # keep the distinct receipts with their existing grade-file digest binding.
+    runner_present = ["runner_evidence" in shard for shard in shards]
+    if any(runner_present):
+        if not all(runner_present):
+            raise ShardMergeError("runner evidence is missing from some shards")
+        for entry, input_index in zip(merged["shard_provenance"], shard_order):
+            entry["runner_evidence"] = shards[input_index]["runner_evidence"]
+        common_runner = shards[shard_order[0]]["runner_evidence"]
+        if all(shard["runner_evidence"] == common_runner for shard in shards):
+            merged["runner_evidence"] = common_runner
+
     # Preserve field ordering close to step8's payload for readable diffs.
     merged = _ordered_payload(merged, reference)
 

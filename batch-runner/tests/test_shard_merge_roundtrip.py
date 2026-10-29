@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
 import step8_grade as s8
 import step9_merge_shards as s9
 from core.cost_receipts import verify_export

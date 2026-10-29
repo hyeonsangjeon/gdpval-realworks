@@ -1,35 +1,9 @@
-"""A Codex batch has to run somewhere a command can actually be sandboxed.
+"""A chosen image is not a sandbox-readiness measurement.
 
-``batch-run.yml`` has always run on ``ubuntu-latest``, and for every mode it
-had that was the right answer. For ``codex_foundry`` it is the wrong one, and
-the repository already held the measurement that says so:
-``docs/codex_sandbox_hosts.json`` records ``ubuntu-24.04`` -- what
-``ubuntu-latest`` resolves to -- as
-``user_namespaces_restricted_by_security_policy``, and ``ubuntu-22.04`` as the
-only host where a command has been observed running inside Codex's sandbox.
-
-The failure that would have caused is the expensive kind. Codex starts, the
-turn is sent, the input tokens are paid for, and the run dies at the agent's
-*first command* -- so the money is spent before anything is learned. Worse, the
-neighbouring failure is silent rather than loud: a sandbox that will not start
-and a sandbox nobody asked for look the same from outside if nothing checks.
-
-So three things are pinned here.
-
-**The host is chosen by the mode, and the choice tracks the measurement.** Not
-a hardcoded label that a later edit to the record would silently contradict --
-the test reads the record and requires the workflow to name the host it calls
-ready.
-
-**Installed is not working.** ``bwrap`` on the PATH says a package exists. The
-diagnostic exits zero only when it watched a command run inside the sandbox,
-and it runs here before the first Azure step, because a fact about the runner
-is worth nothing once a turn has been bought.
-
-**Nothing is relaxed to make any of it pass.** ubuntu-22.04 is more permissive
-than 24.04 out of the box; that is a property of the image, not a favour done
-to it here. The steps are checked for the absence of every shortcut that would
-have bought a pass by removing the isolation these runs exist to keep.
+The owner now requires hosted 24.04. Its historical unprepared failure remains
+in the host table, separate from the new binary-scoped preparation policy.
+Same-job probes must succeed before credentials; no sysctl, capability or
+sandbox-backend shortcut substitutes for executing an isolated command.
 """
 
 import json
@@ -47,13 +21,11 @@ BATCH_RUNNER = ROOT / "batch-runner"
 HOST_RECORD = BATCH_RUNNER / "docs" / "codex_sandbox_hosts.json"
 DIAGNOSTIC = BATCH_RUNNER / "scripts" / "diagnose_codex_sandbox_host.py"
 
-#: The three steps this change adds, in the order they must run: a host cannot
-#: be probed for bubblewrap before bubblewrap is installed, and neither answer
-#: matters if the pinned runtime is missing.
+#: Installation and pin verification precede the version-bound sandbox probe.
 HOST_STEPS = (
     "Codex: install bubblewrap",
-    "Codex: refuse to continue unless this host can isolate",
     "Codex: refuse to continue unless the pinned runtime is installed",
+    "Codex: refuse to continue unless this host can isolate",
 )
 
 #: Every one of these would turn a red host green by taking the isolation away.
@@ -98,33 +70,13 @@ def _named_step(batch_job, name):
     raise AssertionError(f"no step named {name!r} in the batch-run job")
 
 
-def _ready_github_hosted_runner(host_record):
-    """The runner label the record says a command has run inside.
-
-    Keyed off the record rather than written down again, so that re-measuring a
-    host to `ready` or losing one to a policy change lands on this test instead
-    of on a paid run.
-    """
-    ready = {
-        key.removesuffix("-host"): entry
-        for key, entry in host_record.items()
-        if entry["readiness"] == "ready" and key.startswith("ubuntu-")
-        and key.endswith("-host")
-    }
-    assert ready, (
-        "no GitHub-hosted runner is recorded ready in "
-        f"{HOST_RECORD.relative_to(ROOT)}; a Codex batch has nowhere to run "
-        "and the workflow should not be claiming otherwise"
-    )
-    assert len(ready) == 1, (
-        "more than one hosted runner is recorded ready, so which one the "
-        f"workflow should name is now a choice rather than the only option: {sorted(ready)}"
-    )
-    return next(iter(ready))
-
-
 def test_the_batch_job_picks_its_host_from_the_mode(batch_job, host_record):
-    runner = _ready_github_hosted_runner(host_record)
+    policy = json.loads(HOST_RECORD.read_text())["execution_policy"]
+    runner = policy["github_hosted_runner"]
+    assert runner == "ubuntu-24.04"
+    assert policy["required_same_job_readiness"] == "ready"
+    assert policy["prepared_host_observation"] == "not_yet_measured_on_Actions"
+    assert host_record[f"{runner}-host"]["readiness"] == "user_namespaces_restricted_by_security_policy"
     assert batch_job["runs-on"] == (
         "${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' "
         f"&& '{runner}' || 'ubuntu-latest' }}}}"
@@ -139,13 +91,11 @@ def test_every_other_mode_keeps_the_host_it_always_had(batch_job):
     assert "|| 'ubuntu-latest' }}" in batch_job["runs-on"]
 
 
-def test_the_host_the_workflow_avoids_is_the_one_measured_unable(host_record):
-    # `ubuntu-latest` is not a machine, it is a moving pointer, and the record
-    # says where it points today. If that stops being true -- if 24.04 is
-    # re-measured ready, or the pointer moves -- this fails and the conditional
-    # above gets to be revisited rather than quietly kept.
-    assert host_record["ubuntu-24.04-host"]["readiness"] != "ready"
+def test_preparation_does_not_rewrite_the_historical_unprepared_host(host_record):
+    assert host_record["ubuntu-24.04-host"]["readiness"] == "user_namespaces_restricted_by_security_policy"
     assert "ubuntu-latest" in host_record["ubuntu-24.04-host"]["os"]
+    assert host_record["ubuntu-24.04-host"]["measured_by"] == "codex-sandbox-host-survey.yml, run 34202380505"
+    assert host_record["ubuntu-22.04-host"]["readiness"] == "ready"
 
 
 def test_the_host_steps_run_only_for_this_mode(batch_job):
@@ -208,7 +158,8 @@ def test_the_install_carries_the_same_stall_guard_as_its_neighbour(batch_job):
 
 
 def test_installed_is_not_accepted_as_working(batch_job):
-    probe = _named_step(batch_job, HOST_STEPS[1])
+    probe = _named_step(batch_job, HOST_STEPS[2])
+    assert probe["run"].index("scripts/prepare_codex_sandbox_host.py") < probe["run"].index("scripts/diagnose_codex_sandbox_host.py")
     assert "scripts/diagnose_codex_sandbox_host.py" in probe["run"]
     assert probe["working-directory"] == "batch-runner"
     # The survey workflow reads this diagnostic's verdict and carries on;
@@ -220,7 +171,7 @@ def test_installed_is_not_accepted_as_working(batch_job):
 
 
 def test_the_pinned_runtime_is_required_rather_than_hoped_for(batch_job):
-    step = _named_step(batch_job, HOST_STEPS[2])
+    step = _named_step(batch_job, HOST_STEPS[1])
     assert "require_pinned_runtime" in step["run"]
     assert step["working-directory"] == "batch-runner"
 

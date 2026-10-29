@@ -11,7 +11,433 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Preserve the generic historical budget-output helper's dependency seal too.
+  Legacy transport fixtures now explicitly supply their historical envelope;
+  a separate current-format case requires refusal without stripping saved
+  records or refreshing old reader hashes. Use coherent source origins for
+  historical grading fixtures, with a current-checkout refusal case, and fix
+  exact test-object, exception-type and workflow-digest expectations. These
+  changes do not alter active pilot receipts, model controls or caps.
+
+- Keep the closed historical retention reader/verifier byte-identical to their
+  frozen identities; their unsupported new payloads must still refuse. Retain
+  the validated runner-field fix only in the generic budget-pilot output
+  reader. The follow-up suite reached 209 passes/1 skip before its exact frozen
+  reader identity assertion caught the over-broad compatibility edit. Restore
+  the original bytes instead of refreshing that seal or weakening the assertion.
+
+- Preserve optional, hash/stage-validated inference runner evidence when the
+  three retention readers reconstruct Step2 observability. Previously the
+  writer emitted it but the readers omitted it and refused the same bytes.
+  Add corrupted-digest/wrong-stage cases and explicit fake-host observations
+  to the old model-free writer fixtures; update exact legacy source refusals.
+  No historical record, seal, score, model, cap or actual host-admission rule
+  changes. The integrated gate/source/diagnostic suite at `74a03d7ea` passed
+  1,110 tests; these additional retention regressions are checked separately.
+
+- Integrate the reviewed Task4, Task5 documentation and GHCP gate branches
+  without enabling paid push/PR triggers. Require explicit Max/1M in the Sol
+  connection probe and persist its full-attempt USD 7.20 reference reservation
+  before authentication, with a second publication hash check. It is not a
+  benchmark task or an effective billing guarantee; pilot ledger reconciliation
+  remains mandatory. Preserve prior source seals through a new source-only
+  successor. No paid send is claimed by this commit.
+
+- Preserve native grading runner receipts through shard merging and validate
+  their per-shard bindings. Repair legacy offline fixtures using explicit
+  historical source origins, while retaining current-source refusal tests.
+  Route all 20 gpt56 modules through CI exactly once and register a source-only
+  2026-10-29 successor (58 pins; no original seal, model or limit changes).
+  Hosted sandbox proof passed in Actions 40924442821 at `62b29f343`, with zero
+  model calls. PR #785 merged under the owner's publishing/PR approval;
+  remaining integration checks and paid execution are still pending.
+
+- Publish the native runner stack as Draft PR #789 under the owner's new
+  publication and bounded-paid-run approval. Add a secret-free Ubuntu 24.04
+  readiness workflow that runs only offline tests and the pinned local sandbox
+  marker; retain the paid path's admission gates. Carry over the verified
+  pytest 9.2 worktree-fixture repair without relaxing assertions. See
+  [Actions progress](batch-runner/docs/native_pilot_actions_progress_20261029.md).
+  Move the scripted-provider execution proof to prepared 24.04 while preserving
+  both historical unprepared survey legs. Related offline checks: 198 passed;
+  broader publication CI repair remains in progress.
+
+- Recheck native runner evidence after serialized request preparation and
+  after connection setup, before any HTTP headers/body can leave. Preserve
+  existing environment-stop cleanup and conservative USD reservations. Six
+  loopback regressions cover the previously open boundaries; two sandbox
+  fixtures keep disappearing probe state fail-closed. Correct exact legacy
+  source-drift expectations and the synthetic sealed-handoff fixture, without
+  changing seals, limits or scoring. Final disjoint verification: **2,358 passed,
+  0 failures/errors/skips**, 33 modules; one integration case excluded. Completed
+  JUnit coverage/unique-ID checking passed; two post-test temporary-shell errors
+  are recorded separately from testcase outcomes in
+  [the fixed-HEAD review](batch-runner/docs/native_runner_receipt_20261029.md).
+  This review stays local; hosted compatibility is not a fixture result.
+
+- Migrate the native connection diagnostic and Codex-only batch path to
+  GitHub-hosted Ubuntu 24.04, tightening hosted runner admission without
+  changing explicitly approved Azure VM admission. Require a binary-scoped
+  AppArmor userns preparation and same-job bubblewrap/pinned-CLI marker probes
+  before Azure credentials; never clear a sysctl or replace an existing
+  profile. Preserve refusal reports and historical unprepared host readings.
+  Related offline checks: **428 passed, 0 failed/errors/skipped**, one invocation
+  in **22.02s**. Model/limits/seals unchanged; this branch is local only and
+  hosted compatibility remains unmeasured. See
+  [24.04 migration](batch-runner/docs/native_ubuntu24_migration_20261029.md).
+
+- Add fail-closed native runner admission and hash-bound image/OS/architecture/
+  run evidence to diagnostic, inference and grading paths on a separate local
+  branch. Require metadata before model calls; preserve stop/cleanup without
+  converting host refusal into a judge verdict. Bind runner evidence before
+  native private-result sealing and retain it in Step2/grade payloads. Completed
+  disjoint offline checks: **1,151 + 7 + 8 = 1,166 passed, 0 failed/errors/skipped**;
+  the expanded 1,476-case timeout is not reported as passed. No model/auth/Azure
+  call, workflow migration, dispatch, push or PR. Sealed values remain unchanged;
+  seven active source pins now differ and require subsequent review/registration.
+  See [runner admission and evidence](batch-runner/docs/native_runner_receipt_20261029.md).
+
+- Fix the native pilot grader's USD-guard schema and stop scope on the separate
+  local `leader/grader-guard-scope-20261028` branch. Validate Responses function
+  parameters as literal/local JSON Schema while retaining full byte reservation
+  and existing opaque-input/amount refusals. Keep financial stop signals out of
+  rubric verdicts; Step8 emits the fixed refusal, preserves completed partial
+  tasks, exports receipts/closes the judge and exits 4 without a paid resume.
+  One related offline invocation passes **598 tests, 0 failures/errors/skips**,
+  **88.98s**, including output parity with frozen source `8ac891e3e` under fixed
+  synthetic inputs/replies/prices. Preserve USD 200, price/cap/source seals,
+  prompts/rubrics/scoring and the original caps worktree. No model, dispatch,
+  paid run, push or PR; this is not successor-seal or launch approval. See
+  [grader guard scope](batch-runner/docs/gpt56_grader_guard_scope.md).
+
+- Capture prospective native Sol response bodies/headers in secret-redacted,
+  no-clobber artifacts and bind their SHA256 plus response-only identity/effort/
+  context fields to diagnostic and pilot receipts. Missing evidence refuses
+  CLI delivery/`connected` and subsequent pilot tasks; stalled artifact writes
+  cannot hold SDK deadline cleanup or later upgrade a closed receipt. Add
+  receipt-bound artifact verification to the existing diagnostic upload guard.
+  Preserve predecessor registrations, original diagnostic, USD 200 combined
+  scope, caps, prices, frozen grader and finite rights. One related invocation
+  at `7b2cd13d6ae23a7f65f4f481636976da436a1e42` passes **618 cases, 0 failed/errors/
+  skipped**, **700.09s** pytest / **700.676s** wrapper. Keep preliminary proofs
+  separate. Plan-only remains **exit 2**, `source_verified → inspect_plan`,
+  **0 newly cleared / 10 retained / 0 new**; capture readiness is not live proof.
+  Offline validation; no model, authentication/management call, dispatch, push,
+  PR or merge. See the [response-capture report](batch-runner/docs/gpt56_native_response_capture.md).
+
+- Bind the approved native pilot account/deployment/host to retained run
+  **39407062120** / artifact **12257312458**, without publishing private route
+  bytes. Match the actual call target before observer/SDK effects, retain the
+  existing raw-byte guards, and carry the pinned reference in owned receipts.
+  A new source-only registration preserves all predecessor seals and non-source
+  plan values, adds held reference checks, and changes only three source pins.
+  Explicit source/reference preflight reaches `source_verified` / `inspect_plan`,
+  **exit 2**, **1 cleared / 10 retained / 0 new**, with launch disabled. Retained
+  served-model/Max/1M fields do not verify those capabilities. Public Sol
+  Standard Global tier rates were recorded, but missing tier/cache mapping
+  keeps effective grading prices unverified and the existing refusal intact.
+  Preserve USD 200 combined scope, original diagnostic members, price table,
+  frozen grader and finite rights. At code
+  `6c907d789bed4628d46173c72e27f92f8e15a68c`, one related offline invocation passes
+  **379 unique cases, 0 failed/errors/skipped**, **638.81s** pytest / **639.388s**
+  wrapper, exit **0**, including 24 new connection cases. Keep the preliminary
+  24-case and historical 961-case proofs separate; no full-project/integration
+  claim. Public unauthenticated pricing
+  GETs and local work only; no model/management/auth/dispatch/push/PR/merge.
+  See [LATEST](tasks/LATEST_TASK_RESULT/README.md) and the
+  [eleven-item report](batch-runner/docs/gpt56_native_retained_identity_and_pricing.md).
+
+- Apply the owner's **2026-10-27 10:56 KST (01:56Z)** decision lowering the same
+  five-task inference-plus-grading ceiling to **USD 200**. Preserve all sealed
+  registrations, native token/request/deadline limits, reservation rules, prices
+  and frozen grader configuration. The named monetary companion preserves the
+  superseded decision's commit/path/hash; a new source profile binds the changed
+  amount code and refuses old ledger/receipt identities without resetting them.
+  Sixteen synthetic scenarios replay the card's reported cost ranges: maximum
+  settled-plus-pending exposure **$129.00096**, including the explicit cache-write
+  stress. A separate full-cap stress refuses grading request three before
+  **$191.40192 + $23.70096 = $215.10288** could be reserved. These are monetary
+  simulations, not current Sol usage or a verified tariff; Sol grading remains
+  deliberately unpriced/refused. Record each of the eleven retained preflight
+  requirements and its free local versus owner/external evidence dependency.
+  Final validation at `5b3c25885fd9e4debbdd9c4f0ff6b3e5d1047838`: **961 passed,
+  0 failed/errors/skipped** (296 native + 383 grading + 282 contracts), retaining
+  the old 214 contract deselections. All 943 previous cases remain after seven
+  currency-boundary parameter translations; 18 new cases are added. No earlier
+  or preliminary proof is pooled into this result. Plan-only reaches
+  `source_verified` / `inspect_plan`, **exit 2 / 1.964s**, **0 cleared / 11 retained /
+  0 new** blockers. Local commits only; no model/Azure call, dispatch, push, PR or
+  merge. See [LATEST](tasks/LATEST_TASK_RESULT/README.md) for proof and limitations.
+- Connect native inference and Step 8 grading to one persistent, atomic
+  **USD 1,000** reservation ledger under the existing pilot capture workspace.
+  Reserve before provider calls, settle complete usage once, and consume unknown
+  reservations across process restart without refilling study/attempt rights.
+  Current Sol grading remains refused because the pinned price table deliberately
+  leaves it unpriced; synthetic tariff fixtures are not real price approval.
+  Preserve old sealed plans/caps, the owner decision, price table and grader
+  config. Bind the actual shared helper and metering source through a new
+  source-only profile and the grader closure; do not waive its frozen-source
+  refusal. Keep actual-billing flags false and unsupported request paths refused.
+  Validation at `979082af62c5a546e95cd7a15d4531e479165006`: **943 passed,
+  0 failed/errors/skipped** across disjoint native (278), grading (383) and
+  contract (282) groups; all original 506 case identities are included. Keep the
+  established 214 contract deselections and earlier failed/stopped diagnostics
+  separate; this is not full-project-suite coverage. Plan-only reaches
+  `source_verified`/`inspect_plan`, **exit 2 / 1.915s**, with **11 blockers retained**.
+  Local commits only, no model/Azure call, paid run, dispatch, push, PR or merge.
+  See [LATEST](tasks/LATEST_TASK_RESULT/README.md) for entrypoints, limits and proof.
+- Record the owner's **2026-10-26 23:09Z USD 1,000** combined five-task
+  inference/grading decision in a new pinned monetary companion; keep every
+  sealed plan/caps null and prior source seal unchanged. Add one shared,
+  in-process inference USD estimate ledger with pre-upstream reservation,
+  complete-usage settlement, unknown-usage refusal and existing owned cleanup.
+  Reference prices and cache-write reserves are not verified billing; grading
+  remains disconnected, `actual_billing_hard_limit_verified=false` and actual
+  combined USD stays null. Refresh two pins in a new 58-role source profile;
+  strengthen returned-byte checks without weakening admission or token refusals.
+  At code `01001d4448eba62e254d7a6ae570222cdbc673a2`, disjoint offline bundles
+  report **224 + 282 = 506 passed, 0 failed/errors/skipped; 214 deselected**.
+  Preserve earlier failures/interruption separately. Plan-only reaches
+  `source_verified`/`inspect_plan`, **exit 2 / 1.691s**, **0 cleared / 11 retained /
+  0 new** launch blockers. The amount choice is no longer pending, but combined
+  billing protection remains open. See [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  and the [updated cost report](batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md).
+  Local commits only; no model, paid run, grading, token issuance, dispatch,
+  push, PR, merge or new retry right. The proposal entry below is historical.
+
+- Add an owner-only [five-task native pilot USD-ceiling proposal](batch-runner/docs/gpt56_native_pilot_cost_ceiling_proposal.md).
+  Preserve the **20-attempt / 6,000,000-input / 200,000-output** budget arithmetic,
+  separate **$69.00** solver and **$291.20** historical-allocation grading costs,
+  and label **$799.20** as a conditional cache-write stress reserve, not a bill
+  or an unconditional upper bound. Propose **$800 / $1,000 / $1,200** for owner
+  discussion only; actual tariff and extra charges remain unverified and the
+  approved USD cap remains null. No code/plan/grader change, execution or test replay.
+
+- Add prospective, fail-closed native-pilot token admission before upstream
+  connection/reservation. Compare a declared UTF-8 JSON byte-based input
+  estimate with the remaining **300,000-token** input allowance; require or
+  insert `max_output_tokens` within the remaining **10,000-token** output
+  allowance. Complete response usage is summed once, SDK totals are a floor,
+  and requests are serialized. Missing/partial/conflicting usage cannot reopen
+  a remainder. Reject unsupported/opaque inputs and preserve closed receipts
+  against late refusals. Both server-hard-limit flags remain **false**; this
+  heuristic is not a tokenizer or proven token upper bound. Preserve all
+  sealed plans/caps and add a source-only 10-26 successor with two changed pins.
+  At `48632cd7c0b687051816b53723592e43de4831e2`, disjoint offline groups report
+  **187 + 282 = 469 passed, 0 failed/errors/skipped**, with **214 deselected**.
+  Preserve the **600s/1200s** verification timeouts and the separate pre-fix
+  **1-failed** closed-receipt regression; neither is relabeled as a pass.
+  Plan-only preflight reaches `source_verified`/`inspect_plan`, exit **2**,
+  **1.710567s**, with **0 cleared / 11 retained / 0 new** launch blockers.
+  No model, paid execution, grading, dispatch, push or PR. See the
+  [client contract](batch-runner/docs/gpt56_native_hard_token_contract.md)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md).
+
+- Document the fixed Codex SDK/CLI **0.147.0** hard-token-cap investigation at
+  `af685f5c4a436a7f476a41c5cf4f44a702c0a67d`, tree
+  `96ca35aa8f8da94a5d6bf8c9ea5f33a3bb93494f`. **300,000 input / 10,000 output
+  tokens per attempt** remain client post-checks; generic Responses
+  `max_output_tokens` semantics do not establish the Codex-to-Foundry Sol path
+  or an attempt-wide sum. Preserve `token_hard_limit_enforced=false`, all
+  caps, sealed registrations and runtime bytes. The installed CLI generated
+  its experimental app-server schema offline under **TERM60s/KILL5s**,
+  **exit 0**, **0.041s** Bash wall time; schema generation is not a test or
+  provider observation. No pytest or preflight replay and no new JUnit.
+  Retain the prior **34-pass** proof and **exit 2 / inspect_plan** result at
+  `bbc12b694` separately from the **6002-pass** proof at `e0fa32ef3`.
+  The unchanged ledger remains **0 cleared / 11 retained / 0 new**, not a
+  fresh preflight verdict. The [contract report](batch-runner/docs/gpt56_native_hard_token_contract.md)
+  and [LATEST](tasks/LATEST_TASK_RESULT/README.md) record field/schema evidence,
+  hashes and the missing model-specific server/serializer contract. Deployment
+  quota controls remain owner/external. Only local documentation commits;
+  no runtime/plan/registration change, install, network/auth/model call,
+  dispatch, grading, push, PR or finite-right reset. Final-source review/CI,
+  environment approval and live-evidence gates remain.
+
+- Require the Foundry pilot preflight to match deployment evidence, identity,
+  configuration and input hashes to the preceding gate results, and to match
+  the capture's deployment digest and reviewed source. Retain the existing
+  closed refusal codes, real verifiers and all launch blockers. Add the
+  source-only `..._source_20261025_bindings.yaml` successor: **58 matching
+  hashes**, only the preflight hash changed from the sealed 10-25 profile;
+  preserve both 10-23 and 10-25 files, their exact seals, and every non-source
+  plan/cap value. At clean code `bbc12b69414ef90580711f1d40f42eb17778f479`, tree
+  `a50869a6105782fa871b004f9f0ce883ef7e9587`, the single targeted invocation
+  reported **34 passed, 0 failed, 0 errors, 0 skipped** in **124.63s**, outer
+  **125.042s**, exit **0**, under **TERM600s/KILL5s**. This comprises **24 new
+  synthetic cases** plus **10 directly related cases**, not a full-suite replay.
+  Preserve the pre-collection launcher exit **127** (`/usr/bin/time` absent;
+  pytest never started); Bash timing then collected **34 nodes** in **6.75s**,
+  outer **7.844s**, exit **0**. The **env -i / TERM120s/KILL5s** plan-only
+  preflight reached `source_verified` and `inspect_plan`, exit **2** in
+  **1.644s**, with **0 cleared / 11 retained / 0 new** launch blockers.
+  Two local integrity checks are covered; no actual deployment/input/capture
+  evidence or launch permission is inferred. The existing frozen-grader
+  source mismatch remains a required refusal, not a new waiver. Keep the
+  earlier **6002-pass** proof and review at `e0fa32ef3` separate and unchanged.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) separates locally closed checks,
+  post-merge review/CI, owner decisions, authorized preparation and live
+  evidence; it retains exact commands, hashes and the collection failure.
+  Final-head review/CI and all external evidence gates remain. Only local
+  commits; no model/auth/network, private-input preparation, dispatch, grading,
+  push, PR, workflow/dependency change or finite-right consumption/reset.
+
+- Record the fixed-source registration guard review and complete related
+  CI-derived offline selection at clean
+  `e0fa32ef30dea02da3ee918b40ae08e744d67e14`, tree
+  `b67cd5e4d4b956b07850addbfbd1954330d341a0`: **6002 passed, 0 failed,
+  0 errors, 0 skipped, 3 warnings** in **15178.96s**, wrapper **15180.42s**,
+  exit **0**. Preserve the first full-selection watchdog timeout separately:
+  **3600.02s**, exit **124**, no final pytest summary or JUnit. The successful
+  invocation used the same source, assertions and 67-module selection, with a
+  verification-only **TERM22500s/KILL5s** ceiling reflecting the combined CI
+  scope. No production deadline or cap changed. Retain the three reported
+  `record_property`/xunit2 warnings without suppression. The two-file
+  `9511b3d70..e0fa32ef3` review found **3 maintained / 4 strengthened /
+  0 weakened** condition rows: preserve caps seals and integer checks; add
+  predecessor/delta/held-blob checks and closed old-profile selection. No
+  production, test or expected-value correction was needed; only completion
+  records change. [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact
+  commands, source/tree, log/JUnit/file hashes, separate prior proofs and
+  unchanged **11** launch blockers (**0 cleared / 11 retained / 0 new**).
+  Final-head owner review and CI remain outstanding. No live/model call,
+  auth, external-network access, dispatch, grading, push, PR or finite-right
+  reset occurred.
+
+- Add the 2026-10-25 source-only successor for the same Foundry Sol pilot. Keep
+  the sealed 10-23 registration, original plan, caps draft and all thresholds
+  unchanged. Refresh the four caps source hashes plus the necessary selector
+  hash; require that exact delta and hold/recheck the predecessor's bytes.
+  Preserve the caps draft's old registration reference and all refusal guards.
+  At clean code `6fffb66a3bb43197bc5ccd7d5ac53bc9c864c577`, the related selection
+  reported **4 passed, 1 failed in 5.70s**, outer **6.10s**, exit **1**. Correct
+  only the stale observed grader-closure value in the failed test, not the
+  frozen grader or its refusal. At clean
+  `58a7f38abcc90dc63f490c444b5f83e7f05be82f`, only that node ran again:
+  **1 passed in 5.29s**, outer **5.64s**, exit **0**. Keep the proofs separate.
+  The new-profile plan-only command at that same HEAD reached `inspect_plan`
+  with **58 matching source hashes**, `source_verified` and valid configuration;
+  it exited **2** in **1.51s** because all **11** existing launch blockers remain
+  (**0 cleared / 11 retained / 0 new**). The preceding source-registration
+  refusal alone is cleared. All three commands used **TERM120s/KILL5s**,
+  `env -i` and offline settings. [LATEST](tasks/LATEST_TASK_RESULT/README.md)
+  records exact source/tree, profile/command/log/JUnit/patch hashes, the
+  immutable caps history and remaining review/CI/live gates. No network/model
+  call, auth, preparation, dispatch, grading, push, PR or finite-right reset.
+
+- Include synchronous SDK initialization in the local Foundry Sol pilot's
+  existing **1,800-second** observer deadline on supported main-thread hosts.
+  Keep the actual partially initialized SDK instance/process, interrupt its
+  initialize wait with `TimeoutError`, close sockets, and reap the child after
+  the SDK's existing TERM/KILL cleanup. The final wait is **1 second**, for
+  cleanup only; it never renews the attempt deadline. Refuse unsupported callers
+  and occupied alarms before auth. Preserve ordinary receipt correlation and
+  add only the witnessed pre-thread timeout scope, with null thread/turn/token
+  fields and the existing `native_attempt_deadline_exceeded` reason. No retry
+  allowance, plan value, pin or permission changes. Keep **32/128/640** native
+  forward caps and **300,000-input / 10,000-output-token** reported-overrun stops;
+  `token_hard_limit_enforced=false`. The **7343-byte** caps draft remains SHA256
+  `7c3c139bb96333e939b4dc43939c05c2f848313d907c8cade052afde18855fb6`.
+  The first combined invocation at clean `eb6bc6818249e3c7e12356df11e686218327c37d`,
+  tree `2c60e96f13b9b5f130bcfc13011c86affcb96e2c`, reported **126 passed,
+  1 failed, 0 skipped in 15.26s**, outer **15.808s**, exit **1**. Preserve that
+  socket-disconnect failure. Its fixture now catches only `RemoteDisconnected`
+  on deadline closure; exact **[60, 25]**, **2** forwards and refusal assertions
+  remain. At clean final code `ab72943aaa33e97620d33b36a7ac33f4c5c454a0`, tree
+  `f4f54873df89beaa476d4a9b5ef53531f96a1e7f`, the expanded combined bundle reported
+  **143 passed, 0 failed, 0 skipped in 20.13s**, outer **20.674s**, exit **0**.
+  Both used **TERM120s/KILL5s**, produced JUnit and had no warnings. The two
+  log/JUnit pairs are `81db7fac87f6527f48520414cce6520443f7b050a3e1dd9ed9032ee7e74d69f0` /
+  `5be99dd80c1980c6b1b4160eabe98b5b6aec1e0580079040727f78f0897b5351` and
+  `5ddd87ca82dbb89067f8d82c57c387e747e65de5aa097d7bee49f6ddae419f84` /
+  `4fad34f92f4a12c40609243de6d7fb2f70e70fbaa606aa50979e1948e37cdb0b`.
+  The **25904-byte** tested code patch is SHA256
+  `2afb2c62ad70d22bb18cf3b97a8b3de906d9c050368fad32ab90c8bb531ec778`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact commands, source/file
+  hashes and the separate earlier 114/11, unresolved-only 11 and late-usage 2
+  proofs via immutable history. Do not pool these populations. Input-token
+  prechecks were investigated only: no tokenizer is installed in the inspected
+  environment, and no Sol-specific error bound or hard pre-request ceiling was
+  established. No estimator was implemented. The SDK initialized synthetic
+  local children, not Rust Codex or a live provider; host/source admission,
+  provider behavior, universal process containment, hard token/spend bounds,
+  measured call headroom, served identity/Max/Long, frozen-source/judge gates
+  and final-source review/CI remain unverified. No push, dispatch, paid call or
+  grading; Task3 run `37756891578` remains uncertain, spent and nonretryable.
+
 ### Added
+
+- Add an attempt-owned loopback observer for the five-task Foundry Sol pilot.
+  Observe native HTTP forward attempts and allowlisted response-body `model`
+  through the existing wire receipt, runner and bounded Step 2 serialization.
+  Missing or conflicting evidence stays null with a closed reason; model
+  version, provider receipt, billing and native-cap enforcement are not inferred.
+  Preserve the checked HTTPS account, auth command, zero retries, sealed plans,
+  all caps, shared helper and execution rights. No bodies, headers or raw errors
+  enter the public summary. At clean code HEAD
+  `ae4b37da23518a7b0d9b0af567a43c81806e75f3`, tree
+  `e89dc33b38fb6e8eb74d9c96af16845148a0191a`, the new synthetic observer and
+  directly related contracts passed **81 tests, 0 failed in 3.99s**, exit **0**,
+  outer **4.518s**, under **TERM120s/KILL5s**. Preserve the initial missing-timer
+  collection-launcher exit **127** separately; no test body ran in that wrapper.
+  The initial **42472-byte** four-file code patch has SHA256
+  `2c8c38274c5927a520e339c8b12cb2be891acd2fdbd9a64b4418d9acd6c34041`.
+  A separate close regression then reported **1 failed in 2.21s**, outer
+  **2.594s**, exit **1**: incomplete local HTTP headers left an accepted socket
+  open after observer shutdown. Track inbound sockets at accept, close them
+  on shutdown, and freeze closed metadata. Only that node ran again at code
+  HEAD `f017607fb1ae0dbd334c9a2b6ae4ffaa847b45a3`, tree
+  `04e6e9f8ab27af6cee5ab27f0097738072d682d4`: **1 passed in 1.93s**, outer
+  **2.306s**, exit **0**, with the same finite wrapper. Keep these proofs
+  separate; the initial 81 nodes were not rerun for that socket correction.
+  The final **44416-byte** code
+  patch is SHA256 `f01ceaec550887cd77e8586e1b42933504e238cf923caf29de2256aca2a953a5`.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records the exact command, hashes,
+  source rationale and limitations. The SDK subprocess and upstream TLS were
+  replaced by offline fixtures; this does not validate real CLI/provider
+  streaming, served deployment/version, billing or headroom under the unchanged
+  draft 32-per-attempt cap. Final-source review/CI and existing live gates remain.
+  No Azure/model call, dispatch, grading, push or reset of consumed rights.
+
+- Document the pinned Codex SDK/CLI 0.147.0 served-identity boundary and exact
+  runner/receipt/persisted-result insertion points without fabricating a model
+  from runtime settings or adding an unpopulatable field. Deduplicate archived
+  exp033/exp034/exp035 lineages for the fixed five tasks: logical-turn max/median
+  is T1 4/4, T2 1/1, T3 1/1, T4 4/2 and T5 3/1.5. Separately retain longer
+  retention-cell T4 39/24.5 and T5 38/15.5; these are not per-attempt native
+  requests. Connection and earlier GPT-5.4 comparison evidence supplies no
+  native request count, so headroom under 32 remains unestablished. Preserve
+  the sealed plans and draft 32-per-attempt / 128-per-task caps. At inspected
+  head `75d6be526c971ab43332260b8d16d7befbadd2d7`, the completed focused offline
+  diagnostic/cost/transport selection passed **244 tests (15.06s)**; record
+  the separate interrupted broad run and corrected test-HOME failures in
+  LATEST, without counting them as a passing suite. No production changes,
+  independently reviewed execution head or launch approval; no Azure/model
+  calls, dispatch, grading or push.
+
+- Draft inert, evidence-cited native caps for the five-task Foundry Sol pilot
+  from inspected base `2bc77ad14cf7205694d11aa5909a9ea67cbb2891`, without
+  changing sealed plans, runtime enforcement or launch rights. Account for
+  all four attempts per task and keep the USD cap null as an owner decision.
+  The native-call number is explicitly a provisional heuristic, not measured
+  native usage. Verify artifact `12257312458` from run `39407062120` against
+  ZIP SHA256 `5d1a2540f0ba1291093b231d0e12e489ca197c32683aee521fb1622893600841`:
+  both archived JSON files request `gpt-5.6-sol`, matching the cap/registration
+  model labels and Codex SDK/CLI `0.147.0`. Actual pilot deployment bindings
+  remain null; served identity and raw resource IDs are absent from the archive.
+  Record file:line evidence that historical baseline `gpt-5.4` fields are not
+  inherited: omitted bindings retain blockers, templates are inert, and explicit
+  hash-bound resource IDs supply both candidate deployment fields without a
+  baseline fallback. Preserve sealed plans, workflows and existing checks.
+  At clean tested head `9a31015526c0577b69f6f56e7704fd379a31e270`,
+  cap/source-registration/preflight/template/deployment contracts passed
+  **408 tests, 0 failed (177.19s)** offline. This is not an independently
+  reviewed execution head. Native enforcement, owner approval, verified
+  resource/served identity, frozen-grader/live gates and independent
+  final-source review remain required. Only free artifact reads and local
+  operations; no Azure/model calls, workflow dispatches, grading or push.
 
 - Add a prospective source profile for the existing five-task Foundry Sol
   pilot, without changing its study, run identity, historical registrations,
@@ -47,6 +473,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   nonretryable; no prior receipt or finite right is reset.
 
 ### Fixed
+
+- Preserve a local native cap stop while the Sol pilot is waiting for a
+  `thread/start` or `turn/start` acknowledgement. Self-review of
+  `2bc77ad14..59eb1d4e8` found the two early returns replaced the deadline
+  reason with a generic start failure; the turn path could also abandon a
+  logical-call reservation despite a native forward. Keep
+  `native_attempt_deadline_exceeded`, the unknown reservation, closed-runtime
+  partial files and a guarded partial receipt with null unobserved IDs/usage.
+  Admit only the two actually flushed pending-start shapes after a witnessed
+  local stop and returned SDK close. Missing closure, mismatched responses and
+  fabricated success remain refused; no retry allowance is added.
+  The new reproducer against runtime `59eb1d4e8e561d53b041f12506812a616112c5cc`,
+  tree `15834afa26c16e3ab88b5fe53d77c3287c5c569f`, reported **0 passed, 2 failed,
+  0 skipped in 3.82s**, wrapper **4.549s**, exit **1**. At clean corrected code
+  `b436ba731ce7b25cf05b87c3776e2b467cb9e51c`, tree
+  `7c468bb1893ef7592cfbcbce6894e54fa8720b8f`, one combined invocation reported
+  **165 passed, 0 failed, 0 skipped in 24.53s**, wrapper **25.288s**, exit **0**.
+  Both used **TERM120s/KILL5s**, JUnit and a credential-free offline environment.
+  Preserve the failed reproducer and prior 126/1 and 143/0 proofs separately;
+  do not pool them. Reproducer log/JUnit SHA256:
+  `88594b77cc9d63a45a0c24aaabdf32589d54b1fe7371b284b73f1bcf9a8ac8af` /
+  `0b7899cbcea89b7a474830a0f787219686f99c1c4d1f090c88eece2ddc0f20ad`.
+  Combined log/JUnit SHA256:
+  `7bba10800937e49274d0412dcd37929e8fce258ac365ad9b4088c58537786e7c` /
+  `d02d76e9aa19bb9ee153fd0f64f0d07aa843aacb94478f721177246f8be8a272`.
+  The **17082-byte** correction patch is SHA256
+  `a6206cca254e89533535b3b7def9149c535b35f5cf836bcfc3540ab797fe8c33`.
+  The temporary-branch check confirmed caps already descends from specified
+  PR #785 head `2bc77ad14cf7205694d11aa5909a9ea67cbb2891`, with no conflicts;
+  only that verification branch was deleted. Both real branches were preserved.
+  [LATEST](tasks/LATEST_TASK_RESULT/README.md) records exact commands, source/file
+  hashes, tokenizer research and limits. Plans and **32/128/640** request caps,
+  **1,800 seconds**, and **300,000/10,000** reported-token stops are unchanged.
+  No verified Sol tokenizer/error bound supports a hard input-token precheck;
+  no estimator was implemented. This synthetic proof does not establish live
+  host/provider behavior, served identity/Max/Long, hard token/spend limits,
+  adequate headroom under 32 requests, or final-source review/CI. No paid call,
+  push, dispatch or grading. Task3 remains uncertain, spent and nonretryable.
 
 - Correct PR #785's stale expected refusal message in
   `test_active_grader_template_source_foundry_identity[stale_expected_hash]`.
@@ -107,6 +571,366 @@ entries land under a fresh dated heading the day they merge to `main`.
   Task3 run 3 stays uncertain and nonretryable. The
   [immutable prior result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f3e0710a34b839b904aea2e2b1a16fded24546cf/tasks/LATEST_TASK_RESULT/README.md)
   retains exact sources, separate proof limits, commands and log/JUnit hashes.
+
+### Added
+
+- Publish the fixed native Task4 control-reader candidate for model-free
+  preparation only: its workflow, reader and tests. The code-only diff against
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002` is exactly **65085 bytes**,
+  SHA256 `c425815593f26e73190923aac699b70140a7251246d3edaf930a44488ed44baf`,
+  independently reproduced from the candidate and staged publication patch.
+  Earlier passing tests and reviews are leader-reported, not rerun here;
+  no reviewed candidate commit SHA was supplied because it was unpublished.
+  Publication still requires owner review and PR CI. This is not a benchmark
+  observation or canonical Task4 result. No workflow dispatch, private Task4
+  read, model/grader call or merge is authorized or performed by publication.
+
+### Fixed
+
+- Align the two remaining Task4 time-budget guards with the existing backend
+  workflow: require exactly 13 unique comparison test files and refresh the
+  retention guard's exact workflow digest without weakening any assertion.
+  The requested guards plus related workflow hash/partition contracts passed
+  locally: **172 passed in 42.21s**, after restoring repository-pinned Codex
+  dependencies for child collection. New PR CI and owner review remain pending;
+  no workflow or production code changed and no experiment or private Task4
+  read ran.
+
+- Assign Task4's new GPT-5.4 control-reader test file to the backend
+  `comparison-contracts` job and exclude it from core `pytest`. Update the
+  13-file inventory, workflow hash and exact historical reconstruction without
+  weakening the partition guard. Reproduced `13 == 12`; all 1667 comparison
+  and related guard nodes passed across local runs (1592 initially, then 75
+  dependency-blocked nodes after restoring pinned Codex packages). New PR CI
+  and owner review remain pending; no experiment or private Task4 read ran.
+
+- Close the Codex Foundry five-category distinction criterion with limitation
+  in the existing diagnostic report, following local parent
+  `d8b91893071ed06ccd711acce8d9c019d9b66ed6`. All eight cells have
+  **not recorded** evidence for rate limit, communication failure, timeout,
+  output-length limit and content filter, including recovered events in the
+  two successes. Name the missing per-category fields/logs rather than infer
+  causes from budget counters. Historical sibling-worktree access was denied;
+  conclusions cover accessible retained evidence only. The same guarded offline
+  report selector passed **1 test in 2.65s**; eight-row consistency,
+  byte-preservation and `git diff --check` checks passed. Earlier report bytes,
+  readout, original pilot, grades, costs and snapshots are preserved. No
+  new-head review/CI approval, model call, dispatch, grading, remote read, push
+  or Project update is claimed. Publication and leader review/acceptance of
+  the documented limitations remain; no additional execution is required.
+
+- Audit the Codex Foundry external-budget documents against committed source
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`. The diagnostic already records
+  all eight producer outcomes, two succeeded and six failed; no stale six-of-eight
+  status was found in the checked result documents. Add the missing root README
+  summary, list each failed run's unknown detailed cause
+  (`not_recorded_in_terminal_controls`) and distinguish the report's historical
+  finalization scope from this audit. Existing JSON and original pilot bytes,
+  including all grades, costs and budget observations, remain unchanged.
+  Per-condition measurement is inconclusive beyond the retained fields;
+  the C/B report is filled with existing full-denominator grades, but feedback
+  benefit remains inconclusive. Do not infer missing measurements or authorize
+  further paid execution. The final existing offline report selector passed
+  **1 test in 1.62s** with credentials removed and external plugins disabled;
+  direct consistency and prior-evidence preservation checks passed. No
+  new-head review/CI approval, push, dispatch or Project update is claimed.
+
+- Repair PR #788's test-only CI failures: treat ENOENT/ESRCH as vanished known
+  child processes without swallowing other errors; explicitly reuse the
+  time-budget fixture's removed directory across pytest 9.1/9.2 numbering.
+  Preserve process cleanup, source/hash/branch and failed-worktree assertions.
+  Related pytest 9.2 checks: **806 passed, 0 failed/errors/skipped**; targeted
+  16-case checks also pass on 9.1.1. No production guard, cap or pin changed.
+
+- Restrict GHCP execution entrypoints to observed GitHub-hosted Ubuntu 24.04
+  runners, reject absent/conflicting host metadata before auth or launch, and
+  recheck it immediately before spawning. Record runner/OS/image metadata;
+  NAS/local directories are development and model-free dry-run only.
+- Add branch-only model-free Actions CI with Copilot CLI 1.0.103 archive/binary
+  hashes, isolated version-only invocation, the full offline gate suite and a
+  synthetic-token projection. No model call, secret injection or paid mode.
+- Document that the automatic Actions installation token is not established
+  as a supported Copilot credential; personal fine-grained PAT, OAuth and
+  user-to-server token options remain subject to owner selection.
+
+### Added
+
+- Add a dispatch-only GHCP fixed-five paid-task matrix behind the named
+  protected environment and one scoped secret reference; preserve model-free
+  push/PR behavior and refuse absent credentials before Copilot. Bind pinned
+  original input preparation and task commands to the existing supervisor,
+  and forward only checked captures to the unchanged Step8 policy/input path.
+  Live identity/served-setting refusals remain fail-closed; no judge/model call
+  or secret-value access occurred. Full offline suite: **729 passed, 0 failed/
+  errors/skipped**, **62.94s**. Document read-only dispatch-registration findings.
+
+- Connect all five GHCP dry-capture artifacts to an empty Step8 input layout
+  and unchanged pinned-policy/input validators in a hosted Ubuntu 24.04 job.
+  Refuse missing, malformed, extra, linked, changed or non-model-free inputs;
+  block grader/rubric-loader construction, network and process effects.
+  Retain only the nonsecret contract report and empty manifest. Explicitly
+  preserve live inference/full-220 identity refusals and `gate5_passed=false`;
+  no answer, grade, inference SHA, model call or secret supply is fabricated.
+  One full local fixture suite: **689 passed, 0 failed/errors/skipped**, **60.29s**.
+  Frozen Step8 sources, plans, templates and limits remain unchanged.
+
+- Add explicit owner-file authentication through `COPILOT_GITHUB_TOKEN_FILE`.
+  Require an owned, single-link regular 0600 file outside source/capture trees,
+  reject unsafe/missing/empty/drifted files, and forward only the value to the
+  child's `COPILOT_GITHUB_TOKEN`. Reuse source selection for externally supplied
+  gh OAuth; no fallback, token extraction, file copy or parent-env mutation.
+  Extend secret non-egress checks with 43 synthetic file-source cases. Full
+  gate suite: **543 passed, 0 failed/errors/skipped**, **57.18s** pytest,
+  exit 0; preserve the earlier interrupted 102-case progress-reporting diagnostic.
+  A model-free entitlement GET reports **yes / HTTP 200 / enterprise** for the
+  existing gh login, not served-setting or CLI execution proof. Add a five-step
+  owner PAT procedure. No real token file supplied, model/smoke/five-task run,
+  dispatch or PR; plans, limits, workflow and finite rights remain unchanged.
+
+- Resolve the gh token-type question using only the default-masked **`gho_`**
+  prefix: **OAuth**, a documented Copilot CLI supported type, not proof of
+  entitlement or isolated supply. Document three owner authentication choices
+  with operator/adapter responsibilities and risks. Related synthetic tests:
+  **23 passed, 0 failed, 38 deselected**. Documentation only; no credential
+  export/copy, model call, real smoke or five-task execution.
+
+- Record metadata-only GitHub/Copilot authentication availability and three
+  owner choices without retrieving or copying a credential. Reuse the fresh
+  directory environment for the generic fake-command path and add **45**
+  fixed-five mock preflight cases. Final full suite: **500 passed, 0 failed,
+  0 skipped**; retain the initial **455 passed / 45 failed** fixture-ID result.
+  No model call or live five-task wiring; settings proof, usage and authentication
+  selection remain unresolved. Plans, caps, workflow and finite rights are unchanged.
+
+- Require explicit, allowlisted authentication-environment selection for the
+  isolated Copilot CLI smoke. Record only `auth_source` names; refuse missing
+  sources before launch and reject selected-value echoes in pipe, receipt and
+  adapter-transcript paths without publishing the value. One combined offline
+  invocation passed **455 tests, 0 failed, 0 skipped**. All three supported
+  variables are absent from the current worker environment, so no new real
+  smoke was attempted. Stored-login type remains unknown; no credential lookup,
+  login, token creation or five-task execution. Prior receipts are preserved.
+
+- Bind a disabled-by-default, fixed **CONNECTED** smoke to installed Copilot
+  CLI **1.0.103**, with verified executable bytes and a fresh NAS work/HOME/
+  config/cache environment. Label the condition **GHCP Copilot CLI agent +
+  GPT-5.6 Sol**, not a VM or Codex-agent result. Keep **1,200 seconds / 64 turn
+  starts**, select **32 tool starts**, and refuse missing/mismatched metadata.
+  One combined **432-test** pass preceded the single real prompt, which reported
+  **No authentication information found** (CLI **1**, adapter **2**). No model,
+  effort or context value was observed; no prompt retry or five-task run followed.
+  Preserve the original receipt and correct its duration-only usage projection:
+  **`totalApiDurationMs=0`** is not token usage or zero cost. Final code passed a
+  separate combined **433 tests, 0 failed, 0 skipped** after the synthetic fix;
+  no second live smoke. See [current evidence](tasks/LATEST_TASK_RESULT/README.md).
+
+- Add a disabled-by-default GHCP process-adapter skeleton with an explicitly
+  supplied argv and a required, positive tool-call cap. Reuse the existing
+  **1200-second** and **64-turn** values without changing a plan or workflow.
+  Observe bounded JSONL start events, stop on an exceeded limit with fixed
+  reasons, signal the owned process group with TERM/KILL, reap its leader,
+  close stdout and retain private partial files with a safe local receipt.
+  No GHCP command or authentication route is bound. Event-based cancellation
+  is not pre-effect admission; settings remain settings only, unavailable
+  usage/cost stay null, and paid/retry authority stays false. One combined
+  offline invocation reports **295 passed, 0 failed, 0 skipped in 15.79s**,
+  wrapper **15.96s**, exit **0**: **231 unchanged** gate checks and **64 new**
+  fake-executable checks. The earlier 231-test proofs remain separate.
+  See the [adapter boundary](docs/ghcp-sol-actions-gate.md#disabled-process-adapter-2026-10-25-1035-kst)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md). Local commit only;
+  no network, model/GHCP execution, authentication, grading, dispatch or push.
+
+- Add a local-only GHCP GPT-5.6 Sol / Codex agent / Max / 1M Actions
+  gate draft under the existing Agentic Sandbox V2 workflow path: fixed
+  five-task matrix, one `ubuntu-24.04` job per task, and a model-free
+  plan/capture runner. Paid mode refuses before capture; no secrets, input
+  downloads or model/grader clients are wired. Only generated `capture.json`
+  metadata is artifact-eligible, never private inputs or raw streams.
+  Requested settings are not served evidence; dry-run served values are
+  `not available`. Local validation: **6 new contract tests passed**, **114
+  existing cohort/gate tests passed**, and **5 CLI dry-run captures** completed
+  with zero model/grader calls and no private input reads. See
+  [scope, survey and paid-run blockers](docs/ghcp-sol-actions-gate.md).
+  The subsequent local review and hardening are recorded below; no
+  specialist or launch approval is claimed. No push, workflow dispatch,
+  paid call or private handoff access was performed or authorized.
+
+### Changed
+
+- Record the owner's 2026-10-26 authorization for paid experimentation and
+  ordinary branch publication without converting the dry-only GHCP gate into
+  a runnable Codex route. Confirm that OpenAI's GPT-5.6 Sol specification
+  lists a **1,050,000-token context window**, not a GHCP applied-context
+  measurement. Preserve the missing command/authentication binding, null
+  tool-call/USD ceilings, capture and runtime-limit gates. A workflow metadata
+  GET returned **HTTP 404**; no dispatch or model call ran. Runtime, workflow,
+  registrations and tests are unchanged; the prior **313 passed, 0 failed,
+  0 skipped** result remains prior synthetic evidence, not a new test run.
+  See [the execution boundary](docs/ghcp-sol-actions-gate.md#owner-execution-request-and-publication-boundary-2026-10-26)
+  and [the current record](tasks/LATEST_TASK_RESULT/README.md).
+
+- Document where Copilot-backed Codex is offered using official GitHub,
+  VS Code and OpenAI sources and bounded installed help/version checks.
+  Distinguish cloud coding-agent sessions, `gh 2.98.0 agent-task`, Copilot
+  CLI's own harness and VS Code's extension/experimental Codex Agent Host.
+  The standalone host is documented; an approved unattended task-VM launch,
+  applied Sol/Max/1M proof, complete capture and fixed-limit mapping remain
+  unverified. Recommend preserving scope and holding execution; changing to
+  a Copilot CLI comparison or stopping the gate are owner decisions, not
+  grants. Reconfirm host Copilot **1.0.103 / 1.0.79**, separately from Desk
+  metadata **1.0.98** and unknown cross-version event equivalence. Preserve
+  the prior **313 passed, 0 failed, 0 skipped** proof at
+  `59c23a1446533cc988cf74840cd00eb1a23c3605`; no tests or collection reran.
+  Documentation-only checks and local commit, with no runtime/plan/cap/pin
+  changes, authentication, task/model execution, dispatch, grading or push.
+  See [route decisions and sources](docs/ghcp-sol-actions-gate.md#product-routes-and-scope-decision-2026-10-25-2145-kst)
+  and [the current record](tasks/LATEST_TASK_RESULT/README.md).
+
+- Trace the installed Copilot 1.0.79 JSONL writer: it excludes call usage,
+  context snapshots and model-change events, despite their presence in the
+  SDK schema. No Codex selector was found in the inspected installed
+  selectable interfaces. Desk 1.0.103 schema equivalence and applied Max/1M
+  remain unverified; propose 1.0.79 only as an offline reference, without
+  changing a pin. Parse the writer's separate CLI result envelope with strict
+  shape/session checks and safe allowlisted metadata. A zero result grants
+  neither completion nor settings authority and does not release process
+  supervision; nonzero results refuse with `cli_result_failed`. Add a filtered
+  synthetic stdout fixture and fourteen adapter cases. One combined offline
+  run on clean `59c23a1446533cc988cf74840cd00eb1a23c3605` reports **313 passed,
+  0 failed, 0 skipped in 16.50s**, wrapper **16.66s**, exit **0**, including
+  Auto/BYOK refusals. Keep the earlier **295 passed/4 failed** and separate
+  **4 passed** evidence distinct. No real CLI/help/authentication/network/model
+  invocation, plan/cap/collector/workflow change, dispatch, grading or push.
+  See the [installed harness/stdout audit](docs/ghcp-sol-actions-gate.md#installed-harness-and-stdout-audit-2026-10-25-1350-kst)
+  and [source and proof](tasks/LATEST_TASK_RESULT/README.md). Local commit only;
+  actual VM/harness binding, complete event delivery and applied-settings
+  proof remain gates, not inferred authority.
+
+- Check installed Copilot/Codex help and packaged runtime schemas without
+  starting a session. Record host executable versions **1.0.103 / 1.0.79**
+  and Codex **0.144.5**, separately from package metadata and unverified VM
+  versions. Confirm JSONL/options and SDK event fields, not a GHCP-to-Codex
+  launch binding, applied Max/1M or complete delivery. Leave runtime parsers,
+  workflow, plans, caps and dependencies unchanged; add one eight-event
+  schema-validated synthetic fixture and four adapter cases. Combined proof:
+  **295 passed, 4 failed, 0 skipped in 15.60s**, wrapper **15.77s**, exit **1**.
+  Correct the fake-program argument index, then rerun only the four failures:
+  **4 passed in 0.30s**, wrapper **0.47s**, exit **0**. Do not pool these into
+  a 299-pass invocation or reuse the historical **295/15.79s** proof as new.
+  Preserve the failed launcher/help diagnostics and the lack of an audited
+  zero-background-network guarantee for initial help calls. No prompt,
+  authentication, model, dispatch, grading or push command was issued.
+  See the [installed CLI audit](docs/ghcp-sol-actions-gate.md#installed-cli-contract-audit-2026-10-25-1215-kst)
+  and [exact separate evidence](tasks/LATEST_TASK_RESULT/README.md).
+
+- Audit the GHCP Sol gate's actual execution path without widening its
+  contract. Both workflow jobs refuse paid mode; the task step launches only
+  the model-free capture, not a GHCP/Codex runtime. The existing **1200-second**
+  and **64-turn** guards therefore remain offline collection checks. No live
+  deadline, turn guard, process-tree cleanup or partial-output guarantee is
+  newly implemented or validated. Document countable tool events and
+  unselected **8/32 tool-call** candidates from separate local dispatchers;
+  the GHCP tool-call value stays undefined. One combined invocation on
+  `8d356e1c1dc13ae10193a045334c7e2ab089de35`, tree
+  `ad69ecf73a8fed221e2fcdf5272e8a7337196912`, reports **231 passed, 0 failed,
+  0 skipped in 11.36s**, wrapper **11.575s**, exit **0**, including Auto/BYOK
+  refusal. This is a fresh proof of the unchanged gate tests, not a live
+  execution or a pooled result with the earlier proofs. Only documentation
+  changes; no plan, cap, code, test, workflow, credential or permission change.
+  See the [execution-path audit](docs/ghcp-sol-actions-gate.md#execution-path-audit-2026-10-25-0240-kst)
+  and [exact evidence and remaining prerequisite](tasks/LATEST_TASK_RESULT/README.md).
+  A bound GHCP-to-Codex launch/event adapter is still required. Local commit
+  only; no push, dispatch, authentication, model call or grading.
+
+- Bound the GHCP Sol gate's offline event collector using the unchanged
+  Actions draft values of **1200 seconds** and **64 turn starts**. Stop at
+  the deadline or the 65th turn event with fixed reasons, close the explicit
+  input stream and restore the signal timer. Unsupported timer ownership,
+  unverified turn identities and cleanup failures refuse. Tool-call cap value
+  remains undefined; no value is invented. Missing usage/cost remain null
+  with explicit `not available` statuses, never zero or estimated charges.
+  **Live task limits and GHCP subprocess cleanup remain unverified**: this
+  route has no live adapter or child launcher, and paid authority stays false.
+  One combined offline invocation on clean source
+  `6ab43d4c7198e9e720fabeac5cb0d796b68cc5c7` (tree
+  `7ac1c0ff646ccbf78a8c9389c26425d4da98df4b`) reports **231 passed, 0 failed
+  in 10.66s**, wrapper **10.841s**, exit **0**: 25 new and 206 existing
+  checks. The prior 204-case and seven-case proofs below remain separate.
+  No workflow, plan, cap value, pin, dependency or permission changed.
+  See the [limit audit](docs/ghcp-sol-actions-gate.md#offline-capture-limits-2026-10-25-0015-kst)
+  and [source, log/JUnit hashes and remaining gates](tasks/LATEST_TASK_RESULT/README.md).
+  Delivery is local only; no push, dispatch, model call or grading occurred.
+
+- Add closed per-call session-event projection to the existing model-free
+  GHCP Sol Actions capture path. Record allowlisted model/effort and explicitly
+  labelled same-agent session context metadata; fail missing, mismatched or
+  inconsistent evidence with fixed reasons. Refuse Auto, BYOK and unverified
+  user/provider configuration before capture. Do not read credential values
+  or provider-registry contents. Actual served identity, Max and 1M remain
+  settings only; paid execution and retry authority remain false. At base
+  `31679f60d98f4718e04c7dc173c1c6b84d37640b` plus code patch SHA-256
+  `a427cab2939b9a416ca18224b1d10c5f5d5ebf76cbcb876193ce9323926cb555`,
+  **204 offline tests passed, 0 failed in 9.89s**, wrapper **10.084s**, exit
+  **0**. Subsequent source review closed a case where a sub-agent origin lacked
+  `agentId`; a separate seven-case proof reports **7 passed, 0 failed in 0.23s**,
+  wrapper **0.390s**, exit **0**, on final code patch SHA-256
+  `1f749b6e062b3d88500c45c4c9fad0f949f578fa7e3fef3c6ed875806819479c`.
+  Do not pool the two source-specific results. This is synthetic parser/capture
+  and existing gate-contract evidence, not actual GHCP output, native-request
+  completeness or a paid/live result.
+  No plan, cap, workflow, pin, dependency or permission changed. See the
+  [capture contract](docs/ghcp-sol-actions-gate.md#offline-per-call-capture-2026-10-24-2130)
+  and [exact proof and remaining gates](tasks/LATEST_TASK_RESULT/README.md).
+
+- Document the GHCP Sol gate's applied-model/Max/1M evidence and three
+  authentication drafts at audited source
+  `f205207bb73f123ed7ff858e0feefd35d23e53ab`. All three properties remain
+  settings only on the unimplemented GHCP-to-Codex path. Distinguish Copilot
+  per-call telemetry candidates from Codex thread configuration, context
+  metadata and provider capability advertising. Record conditional job-token,
+  personal-token and one-hour App-token options with disposal and exposure
+  limits; no permission, plan, cap, executable or workflow changes. No tests
+  were rerun and no model/authentication/paid operation occurred. The
+  [audit memo](docs/ghcp-sol-actions-gate.md#evidence-and-authentication-audit-2026-10-24)
+  and [current result](tasks/LATEST_TASK_RESULT/README.md) retain the
+  stop-before-spend, fixed-source review and owner publication gates.
+
+- Verify the GHCP Sol gate's previously SDK-blocked CI partition check at
+  local source `4e61a4bb20de67995d0684e051f1d3416eacea69`: install the
+  repository-pinned Codex SDK/CLI **0.147.0** in an isolated Python **3.10.12**
+  venv outside the checkout. The partition check passes (**1 passed**), as do
+  the backend job's repo-root script tests (**186 passed**). Its exact full
+  core partition reports **13,373 passed, 3 failed, 57 skipped, 46 deselected**.
+  All three failures reproduce at branch point
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`: inherited `GH_TOKEN` presence
+  and two missing-PyAV audio failures. Leave baseline behavior and all guards
+  unchanged; do not claim all touched CI jobs green or specialist/launch
+  approval. The prior result at local commit
+  `f205207bb73f123ed7ff858e0feefd35d23e53ab` retains exact commands, timings,
+  log hashes and host limits; the current result keeps that evidence separate
+  from the later documentation audit. No system
+  Python/user-checkout edit, model/GHCP call, GHCP auth, private download,
+  push, dispatch or paid execution occurred.
+
+### Fixed
+
+- Harden the local-only GHCP Sol gate after directly reviewing fixed HEAD
+  `f27cde892e144a242260e47a1c2b2e22e07abcf8` against merge-base
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`: independently refuse
+  nontrue `dry_run` values before checkout in the task job, in addition to
+  the existing planner and Python refusals. This closes a low-severity
+  defense-in-depth gap, not an observed paid-call bypass. Verification:
+  **313 targeted tests passed** (including **44 gate tests**) and **5/5**
+  actual capture-shell rehearsals passed locally with zero model/grader
+  calls and metadata-only envelopes. The **29 to 30** workflow inventory
+  change passes cross-workflow scans; the backend workflow hash is unchanged.
+  At that review, one CI partition test was unverified because local collection
+  lacked the declared `openai_codex` SDK; the follow-up local validation above
+  resolves that coverage gap without claiming the full CI gate is green.
+  Specialist reviews could not complete because of worker path/model
+  availability; exact-source approval and all paid-run blockers remain.
+  Only the registered feature worktree was changed, with no push, PR,
+  dispatch, private input access or paid execution.
 
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree

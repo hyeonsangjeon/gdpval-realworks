@@ -22,7 +22,7 @@ HISTORICAL_SHA256 = "47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41
 FOUNDRY = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 FOUNDRY_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 WORKFLOW = ".github/workflows/backend-tests.yml"
-CURRENT_WORKFLOW_SHA256 = "01fe1494460ae36a6ded2caf3955b27ff9d922374b1ffbe3e91c4077d344d094"
+CURRENT_WORKFLOW_SHA256 = "a2e0e2fe0451b905ab7d2eddd163f9c87b25eede7a6f7e383cb42b3722687664"
 # approved_pilot_source archives this workflow from immutable commit
 # 8ac891e3e0e4752fe15a00139a2691ddf9df7dce. Pin that Git blob, not the
 # current workflow or the extracted fixture file being checked.
@@ -84,10 +84,16 @@ def offline_only(monkeypatch):
 
 
 @pytest.fixture
-def gate(offline_only):
+def gate(approved_pilot_source, frozen_ghcp_gate, offline_only):
     import ghcp_vm_gate_preflight
 
-    return ghcp_vm_gate_preflight
+    # Current source must still refuse this immutable historical registration.
+    current = ghcp_vm_gate_preflight.inspect_plan(ghcp_vm_gate_preflight.load_plan())
+    assert_refused(current)
+    assert (approved_pilot_source / ghcp_vm_gate_preflight.PLAN_PATH).read_bytes() == (
+        ROOT / ghcp_vm_gate_preflight.PLAN_PATH).read_bytes()
+    assert frozen_ghcp_gate.ROOT == approved_pilot_source
+    return frozen_ghcp_gate
 
 
 @pytest.fixture
@@ -485,10 +491,11 @@ def test_ghcp_vm_gate_contract_source_pin_set_is_closed(gate, plan):
 def test_ghcp_vm_gate_contract_bad_source_bytes_refused(gate, plan, tmp_path, monkeypatch):
     """Use fresh small source copies, never mutate a repository source."""
     source_root = tmp_path / "sources"
+    approved_source = gate.ROOT
     for relative in gate.REQUIRED_SOURCES:
         destination = source_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes((ROOT / relative).read_bytes())
+        destination.write_bytes((approved_source / relative).read_bytes())
     monkeypatch.setattr(gate, "ROOT", source_root)
     assert gate.inspect_plan(plan)["configuration_valid"] is True
     source = source_root / HISTORICAL

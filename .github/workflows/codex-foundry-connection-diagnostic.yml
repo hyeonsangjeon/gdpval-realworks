@@ -83,6 +83,11 @@ on:
         description: Deployment to call (required; there is no default)
         required: true
         type: string
+      expected_source_sha:
+        description: Exact reviewed main commit required for a paid Sol native diagnostic
+        required: false
+        default: ''
+        type: string
       native_only:
         description: >-
           Only plan or send the native turn; skip all legacy probes. Cannot be
@@ -126,13 +131,11 @@ jobs:
     # branch that is asking to be trusted.
     if: github.ref == 'refs/heads/main'
     name: Ask the deployment one question
-    # ubuntu-22.04 rather than 24.04, and for a specific reason: 24.04 ships
-    # kernel.apparmor_restrict_unprivileged_userns=1 and Codex's sandbox will
-    # not start there (docs/codex_sandbox_hosts.json). A turn that died in the
-    # sandbox would answer nothing about the deployment while looking like a
-    # failure of it. This prompt asks for no command, so the sandbox may never
-    # be entered — but "may" is not a thing to run a paid request on.
-    runs-on: ubuntu-22.04
+    # The owner selected hosted 24.04. The historical unprepared-host failure
+    # in docs/codex_sandbox_hosts.json remains evidence, not a readiness pass.
+    # A binary-scoped AppArmor preparation and same-job local sandbox probes
+    # must pass below before Azure login, even when the prompt asks for no tool.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       PYTHONDONTWRITEBYTECODE: "1"
@@ -172,6 +175,31 @@ jobs:
             exit 1
           fi
 
+      - name: Guard paid Sol source and native-only scope
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          NATIVE_ONLY: ${{ inputs.native_only }}
+          SEND_REQUEST: ${{ inputs.send_request }}
+          SEND_VALID_REQUEST: ${{ inputs.send_valid_request }}
+          SEND_CLOSING_SWEEP: ${{ inputs.send_closing_sweep }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+          ACTUAL_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOYMENT" != gpt-5.6-sol ]] || {
+            [[ "$SEND_REQUEST" != true && "$SEND_VALID_REQUEST" != true && "$SEND_CLOSING_SWEEP" != true ]];
+          }; then
+            exit 0
+          fi
+          if [[ "$NATIVE_ONLY" != true || "$SEND_REQUEST" != true || "$SEND_VALID_REQUEST" != false || "$SEND_CLOSING_SWEEP" != false ]]; then
+            echo '::error::Paid Sol diagnostics require the single native-only path.'
+            exit 2
+          fi
+          if [[ ! "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ || "$GITHUB_SHA" != "$EXPECTED_SOURCE_SHA" || "$ACTUAL_WORKFLOW_SHA" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo '::error::Paid Sol source is not the explicitly reviewed main commit.'
+            exit 2
+          fi
+
       - name: Check out
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -208,6 +236,22 @@ jobs:
         run: |
           set -euo pipefail
           python3 -c "from core.codex_runtime_config import require_pinned_runtime; print('pinned runtime:', require_pinned_runtime())"
+
+      - name: Refuse to continue unless the 24.04 host can isolate
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_codex_sandbox_host.py --out "$RUNNER_TEMP/codex-sandbox-preflight.json"
+          python3 scripts/diagnose_codex_sandbox_host.py
+
+      - name: Preserve pre-call sandbox evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-diagnostic-sandbox-preflight
+          path: ${{ runner.temp }}/codex-sandbox-preflight.json
+          if-no-files-found: error
+          retention-days: 7
 
       # The same pinned action, client id, tenant and subscription the paid
       # runs authenticate with. The token the probe sends is minted from this
@@ -700,10 +744,13 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json, os, re, sys
+          from pathlib import Path
           from urllib.parse import urlsplit
 
           leaked = []
           checked = 0
+          response_artifacts_checked = False
+          diagnostic_budget_checked = False
           endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "").strip()
           needles = []
           if endpoint:
@@ -810,12 +857,41 @@ jobs:
               elif schema.startswith("codex_foundry_connection/"):
                   if record["observed"]["tool_execution_observed"] is not False:
                       leaked.append(f"{path}: claims tool execution, which this probe cannot observe")
+                  evidence = record["observed"].get("provider_response_evidence")
+                  if evidence is not None:
+                      # No raw response is published without the receipt-bound
+                      # SHA256, safe file boundary and a second masking check.
+                      sys.path.insert(0, str(Path(scope_source).resolve().parents[1]))
+                      from gpt56_native_response_capture import verify_artifact_bundle
+                      try:
+                          verify_artifact_bundle(Path(path).parent, evidence)
+                          folder = Path(path).parent / "codex-foundry-connection-responses"
+                          listed = {Path(path).parent / row["artifact"]["path"] for row in evidence["responses"]}
+                          if folder.exists() and set(folder.iterdir()) != listed:
+                              raise ValueError("unlisted_response_artifact")
+                          response_artifacts_checked = True
+                      except Exception:
+                          leaked.append(f"{path}: response artifacts failed verification")
+                  budget = record["observed"].get("diagnostic_budget")
+                  if budget is not None:
+                      sys.path.insert(0, str(Path(scope_source).resolve().parents[1]))
+                      from scripts.diagnose_codex_foundry_connection import verify_sol_diagnostic_reservation
+                      try:
+                          verify_sol_diagnostic_reservation(Path(path).parent, record["settings"], budget)
+                          diagnostic_budget_checked = True
+                      except Exception:
+                          leaked.append(f"{path}: diagnostic reservation failed verification")
               else:
                   leaked.append(
                       f"{path}: schema {schema!r} has no check here, so nothing "
                       f"vouched for this record"
                   )
 
+          # `path` is the final (connection) record in the fixed list above.
+          if os.path.lexists(Path(path).parent / "codex-foundry-connection-responses") and not response_artifacts_checked:
+              leaked.append("response artifact directory has no verified connection receipt")
+          if os.path.lexists(Path(path).parent / "codex-foundry-sol-diagnostic-reservation.json") and not diagnostic_budget_checked:
+              leaked.append("diagnostic reservation has no verified connection receipt")
           if leaked:
               print("FATAL:")
               for item in sorted(set(leaked)):
@@ -852,6 +928,8 @@ jobs:
             /tmp/codex-foundry-valid-request.json
             /tmp/codex-foundry-closing-sweep.json
             /tmp/codex-foundry-connection.json
+            /tmp/codex-foundry-sol-diagnostic-reservation.json
+            /tmp/codex-foundry-connection-responses/*.json
           if-no-files-found: warn
           retention-days: 90
 

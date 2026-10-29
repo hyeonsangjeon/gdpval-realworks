@@ -69,6 +69,7 @@ def _originals(tmp_path, monkeypatch, approved_pilot_source):
     current = comparison.inspect_plan(comparison.load_plan())
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",
         "source_pin:batch-runner/gpt54_v2_input_capture.py",
@@ -76,6 +77,7 @@ def _originals(tmp_path, monkeypatch, approved_pilot_source):
         "source_pin:batch-runner/gpt54_run_input_bundle.py",
         "source_pin:batch-runner/gpt54_disposable_checkout.py",
         "source_pin:batch-runner/gpt54_workflow_gate.py",
+        "source_pin:batch-runner/step8_grade.py",
         "source_pin:batch-runner/core/agentic_v2_conversation_runner.py",
         "source_pin:batch-runner/core/codex_runner.py",
         "source_pin:batch-runner/step2_run_inference.py",
@@ -164,7 +166,7 @@ def _source_tree(destination):
     assert frozen != REAL_ROOT
     roles.update(path.relative_to(frozen).as_posix() for path in (frozen / "batch-runner/core").rglob("*.py"))
     for role in sorted(roles):
-        source = frozen if role.startswith("batch-runner/core/") else REAL_ROOT
+        source = frozen if role.startswith("batch-runner/core/") or role == "batch-runner/step8_grade.py" else REAL_ROOT
         _write(destination / role, preparation._read(source / role, "synthetic_source_copy"))
     (destination / "batch-runner/workspace").mkdir(exist_ok=True)
     (destination / "data").mkdir(exist_ok=True)

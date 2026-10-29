@@ -126,8 +126,6 @@ class _UsageObservation:
             _require(all(type(total.get(field)) is int for field in ("inputTokens", "outputTokens", "totalTokens")))
             turn_usage_delta(_totals(self.known), _totals(total))
             _require(total["totalTokens"] >= self.known["totalTokens"])
-            _require(total["inputTokens"] <= self.limits["input_tokens"]
-                     and total["outputTokens"] <= self.limits["output_tokens"])
             for field, value in usage.get("last", {}).items():
                 if value is not None and total.get(field) is not None:
                     _require(value <= total[field])
@@ -135,20 +133,37 @@ class _UsageObservation:
                 _require(type(usage["modelContextWindow"]) is int and usage["modelContextWindow"] == self.context)
             self.known.update({field: value for field, value in total.items() if value is not None})
             self.snapshots.append(_bytes(snapshot))
+            if self.observer.provider_capture is not None:
+                # Preserve the first over-limit sample and close the owned
+                # runtime. A threshold event is not malformed private input.
+                self.observer.provider_capture.report_usage(total)
+            else:
+                _require(total["inputTokens"] <= self.limits["input_tokens"]
+                         and total["outputTokens"] <= self.limits["output_tokens"])
 
     def _document(self, observer: wire._TransportObservation) -> dict:
-        _require(observer is self.observer and observer.installed and bool(self.snapshots)
+        stopped = observer.cap_stop_reason is not None
+        _require(observer is self.observer and (bool(self.snapshots) or stopped)
                  and self.snapshots == [_bytes(row) for row in observer.usage])
-        _require(set(observer.requests) in ({"thread/start", "turn/start"}, {"thread/start", "turn/start", "turn/interrupt"})
-                 and observer.responses == {row["request_id_sha256"] for row in observer.requests.values()})
-        rows = [observer.completion, *observer.usage]
+        if observer.startup_timed_out:
+            observer.require_startup_timeout()
+        elif stopped and observer.turn is None:
+            observer.require_pending_start_stop()
+        else:
+            _require(observer.installed
+                     and set(observer.requests) in ({"thread/start", "turn/start"}, {"thread/start", "turn/start", "turn/interrupt"})
+                     and observer.responses == {row["request_id_sha256"] for row in observer.requests.values()})
+        correlation = observer.terminal_correlation()
+        rows = [correlation, *observer.usage]
         _require(all(row["thread_id_sha256"] == observer.thread and row["turn_id_sha256"] == observer.turn for row in rows))
-        _require(observer.completion["status"] in ("completed", "failed", "interrupted"))
+        _require(correlation["status"] in ("completed", "failed", "interrupted")
+                 or stopped and correlation["status"] is None)
         return {"source": "app_server_thread_usage_not_provider_billing", "unit": "tokens",
                 "counter_semantics": "total_cumulative_per_thread_last_latest_model_request",
-                "correlation": observer.completion, "requests": observer.requests,
+                "correlation": correlation, "requests": observer.requests,
                 "snapshots": [json.loads(row) for row in self.snapshots],
-                "threshold_observation": "reported_input_and_output_within_reviewed_limits_not_native_enforcement"}
+                "threshold_observation": (observer.cap_stop_reason + "_usage_may_be_partial" if stopped else
+                                          "reported_input_and_output_within_reviewed_limits_not_native_enforcement")}
 
     def finish(self, observer: wire._TransportObservation) -> None:
         """Seal only the exact stream just validated by the live wire owner."""

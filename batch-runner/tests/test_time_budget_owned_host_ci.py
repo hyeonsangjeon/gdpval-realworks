@@ -233,7 +233,7 @@ def test_owned_host_ci_workflow_one_probe_and_exact_reconstruction():
     assert sum("python -m pytest" in step.get("run", "") for step in current_steps) == 1
     selected = contracts._pytest_target_arguments(contracts.shlex.split(current_steps[6]["run"].splitlines()[2])[3:])
     assert selected.count("tests/test_gpt54_time_budget_comparison.py") == 1
-    assert len(selected) == len(set(selected)) == 12
+    assert len(selected) == len(set(selected)) == 13
     assert contracts._pytest_target_arguments(["--junitxml", "report.xml", "-o", "junit_family=xunit1"]) == []
     for option in ("--junitxml", "-o"):
         with pytest.raises(AssertionError, match="missing pytest option value"):

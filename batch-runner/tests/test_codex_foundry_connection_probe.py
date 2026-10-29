@@ -26,6 +26,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 import yaml
 
 from scripts.diagnose_codex_foundry_connection import (
@@ -622,6 +624,49 @@ def test_the_endpoint_is_derived_from_the_project_endpoint_already_configured():
 def test_an_environment_that_describes_nothing_raises_rather_than_guessing():
     with pytest.raises(ValueError):
         settings_from_environment(DEPLOYMENT, {})
+
+
+@pytest.mark.parametrize("change,allowed", [
+    (None, True), ("missing", False), ("head", False), ("workflow", False),
+    ("legacy", False), ("valid-request", False), ("closing-sweep", False), ("plan-only", True),
+])
+def test_paid_sol_requires_reviewed_main_source_and_single_native_scope(change, allowed):
+    steps = _steps()
+    guard = steps["Guard paid Sol source and native-only scope"]
+    ordered = list(steps)
+    assert ordered.index("Guard paid Sol source and native-only scope") < ordered.index("Check out")
+    assert guard["env"]["EXPECTED_SOURCE_SHA"] == "${{ inputs.expected_source_sha }}"
+    assert guard["env"]["ACTUAL_WORKFLOW_SHA"] == "${{ github.workflow_sha }}"
+    environment = {"PATH": os.defpath, "DEPLOYMENT": "gpt-5.6-sol", "NATIVE_ONLY": "true",
+                   "SEND_REQUEST": "true", "SEND_VALID_REQUEST": "false", "SEND_CLOSING_SWEEP": "false",
+                   "EXPECTED_SOURCE_SHA": "a" * 40, "GITHUB_SHA": "a" * 40, "ACTUAL_WORKFLOW_SHA": "a" * 40}
+    if change == "missing": environment["EXPECTED_SOURCE_SHA"] = ""
+    elif change == "head": environment["GITHUB_SHA"] = "b" * 40
+    elif change == "workflow": environment["ACTUAL_WORKFLOW_SHA"] = "b" * 40
+    elif change == "legacy": environment["NATIVE_ONLY"] = "false"
+    elif change == "valid-request": environment["SEND_VALID_REQUEST"] = "true"
+    elif change == "closing-sweep": environment["SEND_CLOSING_SWEEP"] = "true"
+    elif change == "plan-only": environment.update(SEND_REQUEST="false", EXPECTED_SOURCE_SHA="")
+    result = subprocess.run(["/bin/bash", "--noprofile", "--norc", "-c", guard["run"]],
+                            env=environment, capture_output=True, text=True, timeout=5)
+    assert (result.returncode == 0) is allowed, result.stdout + result.stderr
+
+
+def test_sol_diagnostic_requests_and_fingerprints_the_registered_max_1m_controls():
+    settings = settings_from_environment("gpt-5.6-sol", {
+        "AZURE_AI_ROUTE_PROFILE": "direct-v1", "FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT,
+    })
+    assert settings.reasoning_effort == "max" and settings.model_context_window == 1_000_000
+    assert "model_reasoning_effort=\"max\"" in settings.config_overrides()
+    assert "model_context_window=1000000" in settings.config_overrides()
+    description = describe_settings(settings)
+    assert description["requested_controls"] == {
+        "reasoning_effort": "max", "model_context_window": 1_000_000,
+    }
+    assert settings_fingerprint(description) != settings_fingerprint(
+        describe_settings(_settings(model="gpt-5.6-sol")))
+    # Requested controls do not fill any provider-response evidence.
+    assert _empty_observation()["served_model"] is None
 
 
 # ── The command ─────────────────────────────────────────────────────────────
@@ -1256,13 +1301,9 @@ def test_the_send_needs_the_confirmation_and_not_only_the_input():
 
 
 def test_the_workflow_runs_on_the_host_where_the_sandbox_starts():
-    """24.04 restricts unprivileged user namespaces and Codex's sandbox dies.
-
-    A turn that died there would look like the deployment refusing when it was
-    the runner, and it would have cost a request to learn nothing.
-    """
+    """24.04 is the selected target; its pre-call sandbox proof is mandatory."""
     _text, parsed = _workflow()
-    assert parsed["jobs"]["diagnose"]["runs-on"] == "ubuntu-22.04"
+    assert parsed["jobs"]["diagnose"]["runs-on"] == "ubuntu-24.04"
 
 
 def test_the_python_matches_the_one_the_licence_check_pins():
@@ -1637,6 +1678,13 @@ def test_every_record_that_is_checked_is_also_uploaded_and_the_reverse():
             steps["Confirm the record names no resource and carries no token"]["run"],
         )
     )
+    # The reservation is a receipt-bound sidecar, not another probe schema.
+    # Require both its exact validator call and orphan refusal before adding
+    # it to the checked set; the real check is exercised with tampered files.
+    check = _redaction_check()
+    assert "verify_sol_diagnostic_reservation(Path(path).parent, record[\"settings\"], budget)" in check
+    assert '"codex-foundry-sol-diagnostic-reservation.json") and not diagnostic_budget_checked' in check
+    checked.add("/tmp/codex-foundry-sol-diagnostic-reservation.json")
     uploaded = set(
         re.findall(
             r"/tmp/codex-foundry-[a-z-]+\.json",
@@ -2109,7 +2157,7 @@ def test_native_only_retains_ref_identity_runtime_timeout_and_publication_gates(
     }
     job = parsed["jobs"]["diagnose"]
     assert job["if"] == "github.ref == 'refs/heads/main'"
-    assert job["runs-on"] == "ubuntu-22.04"
+    assert job["runs-on"] == "ubuntu-24.04"
     assert job["timeout-minutes"] == 20
     assert job["env"]["EXPECTED_HOST_FINGERPRINT"] == PINNED
     steps = _steps()
@@ -2168,7 +2216,7 @@ def test_native_only_retains_ref_identity_runtime_timeout_and_publication_gates(
             "plan", "readonly", "auth-discriminator", "transmission-sweep",
             "valid-request", "closing-sweep", "connection",
         )
-    ]
+    ] + ["/tmp/codex-foundry-sol-diagnostic-reservation.json", "/tmp/codex-foundry-connection-responses/*.json"]
     assert upload["with"]["retention-days"] == 90
     assert upload["with"]["if-no-files-found"] == "warn"
     assert "CODEX_HOME" not in upload["with"]["path"]

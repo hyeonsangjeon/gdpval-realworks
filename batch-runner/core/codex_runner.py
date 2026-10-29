@@ -36,6 +36,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -59,6 +60,7 @@ from core.codex_runtime_config import (
     resolve_run_root_base,
 )
 from core.cost_metering import CostRecorder
+from core import runner_environment
 from core.codex_task_deadline import (
     ATTEMPT_SECONDS, ATTEMPTS_EXHAUSTED, EXHAUSTED, STATE_REFUSED,
     CodexTaskDeadline, CodexTaskDeadlineStore,
@@ -1025,6 +1027,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
 
     def open_runtime(
         self, workspace: CodexWorkspace, *, pilot_wire_observer: Any | None = None,
+        native_response_observer: Any | None = None,
     ) -> Any:
         """Start the Codex client a run uses, against this provider.
 
@@ -1047,6 +1050,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         mint will reach the deployment and be refused there, and the refusal
         will describe the endpoint rather than the sign-in.
         """
+        self._runner_environment = runner_environment.require_execution(
+            getattr(self, "_runner_environment", None))
         pilot_session = getattr(self, "pilot_wire_receipts", None)
         if (getattr(self, "run_id", None) == PilotInputCapture.RUN_ID
                 or pilot_session is not None or pilot_wire_observer is not None):
@@ -1063,6 +1068,27 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             from gpt56_pilot_native_result_host import native_result_host_for
 
             native_result_host_for(pilot_session)
+            if (pilot_wire_observer.native_budget is not pilot_session.native_budget
+                    or pilot_session.active.get(pilot_wire_observer.native_budget_task) is not pilot_wire_observer):
+                raise PilotWireReceiptRefused() from None
+            pilot_wire_observer.require_startup_supervision()
+        if native_response_observer is not None:
+            from gpt56_pilot_wire_receipt import _TransportObservation, PilotWireReceiptRefused
+            from gpt56_native_response_capture import NativeResponseArtifacts
+
+            if (pilot_wire_observer is not None or pilot_session is not None
+                    or getattr(self, "run_id", None) == PilotInputCapture.RUN_ID
+                    or type(native_response_observer) is not _TransportObservation
+                    or type(native_response_observer.response_artifacts) is not NativeResponseArtifacts
+                    or native_response_observer.native_budget is not None
+                    or self.provider.model != "gpt-5.6-sol"
+                    or native_response_observer.requested["deployment"] != self.provider.model):
+                raise PilotWireReceiptRefused() from None
+            native_response_observer.response_artifacts.verify()
+            native_response_observer.require_startup_supervision()
+        # Both routes use the same owned HTTP observer and startup deadline.
+        # A diagnostic cannot use this parameter to impersonate a pilot session.
+        http_observer = pilot_wire_observer or native_response_observer
         self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
@@ -1073,23 +1099,60 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             raise CodexRuntimeUnavailable(
                 f"the pinned Codex SDK could not be imported ({exc})"
             ) from None
+        if http_observer is not None:
+            overrides = http_observer.configure_provider_observer(
+                self.provider, overrides, timeout=self.timeout,
+            )
         config = CodexConfig(
             codex_bin=self.codex_bin,
             config_overrides=tuple(overrides),
             env=environment,
             cwd=str(workspace.workspace),
         )
-        codex = Codex(config)
+        codex = None
+        try:
+            if http_observer is None:
+                codex = Codex(config)
+            else:
+                # Hold the same pinned SDK instance even when __init__ raises.
+                # No copied initializer, SDK-global patch, or worker survives.
+                codex = Codex.__new__(Codex)
+                with http_observer.supervise_provider_startup(codex):
+                    Codex.__init__(codex, config)
+        except BaseException:
+            # The SDK closes itself when initialization raises. If its return
+            # raced the deadline, the caller now owns the returned instance.
+            try:
+                if codex is not None and getattr(codex, "_client", None) is not None:
+                    codex.close()
+            finally:
+                if http_observer is not None:
+                    try:
+                        http_observer.close_startup_process()
+                    finally:
+                        http_observer.close_provider_observer()
+            raise
         if pilot_wire_observer is not None:
             try:
                 # Codex has already initialized. Only subsequent app-server
                 # traffic belongs to this task's observation interval.
                 install_runtime_observer(codex, pilot_wire_observer)
+                pilot_wire_observer.bind_provider_runtime(codex)
             except Exception:
                 try:
                     codex.close()
                 except Exception:
                     pass
+                pilot_wire_observer.close_provider_observer()
+                raise PilotWireReceiptRefused() from None
+        if native_response_observer is not None:
+            try:
+                native_response_observer.bind_connection_runtime(codex)
+            except Exception:
+                try:
+                    codex.close()
+                finally:
+                    native_response_observer.close_provider_observer()
                 raise PilotWireReceiptRefused() from None
         return codex
 
@@ -1338,13 +1401,28 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         run_id: Optional[str] = None, condition_name: Optional[str] = None,
         task_id: Optional[str] = None,
     ) -> dict:
+        try:
+            self._runner_environment = runner_environment.require_execution()
+        except runner_environment.ExecutionEnvironmentRefused as error:
+            result = self._failure(error.code, category=error.code)
+            result["runner_evidence"] = runner_environment.receipt("inference", error.observation)
+            return result
         observation = getattr(self, "observation_control", None)
         arguments = dict(task_prompt=task_prompt, model=model, reference_files=reference_files,
                          occupation=occupation, experiment_prompt=experiment_prompt,
                          perception_text=perception_text, run_id=run_id,
                          condition_name=condition_name, task_id=task_id)
         if observation is None:
-            return self._run(**arguments)
+            result = self._run(**arguments)
+            # Registered results are already sealed with this field. Never
+            # mutate a private-result hash after its owner has accepted it.
+            evidence = runner_environment.receipt("inference", self._runner_environment)
+            if "runner_evidence" not in result:
+                result["runner_evidence"] = evidence
+            elif result["runner_evidence"] != evidence:
+                raise runner_environment.ExecutionEnvironmentRefused(
+                    runner_environment.CHANGED, runner_environment.observe())
+            return result
         from core.time_budget_observation_deadline import CLEANUP_UNCONFIRMED, TIMEOUT
 
         observation.claim(run_id=self.run_id if run_id is None else run_id,
@@ -1360,6 +1438,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             observation.finish_cleanup(True)
             self.last_observation_deadline = observation.as_record()
             if result is not None:
+                result["runner_evidence"] = runner_environment.receipt("inference", self._runner_environment)
                 result["time_budget_observation"] = self.last_observation_deadline
                 if observation.terminal_reason == TIMEOUT:
                     result.update(success=False, error=TIMEOUT, error_category=TIMEOUT)
@@ -1556,6 +1635,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         turn_id=outcome.turn_id,
                     )
                 result: dict[str, Any] = {
+                    "runner_evidence": runner_environment.receipt("inference", self._runner_environment),
                     "success": outcome.success,
                     "text": outcome.text,
                     "files": outcome.files,
@@ -1587,6 +1667,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         result.update(success=False, error=STATE_REFUSED, error_category=STATE_REFUSED)
                 if pilot_session is not None:
                     result["pilot_wire_receipt"] = pilot_linkage
+                    result["codex_diagnostics"]["provider_observation"] = pilot_observer.provider_observation()
                     pilot_host.finish_task(pilot_host_witness, result=result)
             except TaskDeadlineRefused as exc:
                 return self._failure(str(exc), category=STATE_REFUSED)
@@ -1684,6 +1765,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             files = []
             observation.cleanup(lambda: files.extend(workspace.collect_deliverables()))
             return files
+
+        def stopped_pilot_start(thread=None):
+            # A local stop can interrupt thread/start or turn/start before its
+            # response supplies an ID. Preserve the reason and unknown ledger
+            # reservation; a lost acknowledgement cannot refund native work.
+            pilot_wire_observer.close_provider_observer()
+            pilot_wire_observer.close_provider_runtime()
+            reason = pilot_wire_observer.cap_stop_reason
+            return CodexRunOutcome(
+                success=False, text="", files=collect_files(), error=reason,
+                error_category=reason, thread_id=getattr(thread, "id", None),
+            )
+
         binds_native_state = task_deadline is not None and task_deadline.binds_native_state
         try:
             continuation = task_deadline.continuation() if binds_native_state else None
@@ -1698,6 +1792,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     codex = self.open_runtime(
                         workspace, pilot_wire_observer=pilot_wire_observer,
                     )
+            except runner_environment.ExecutionEnvironmentRefused as exc:
+                return CodexRunOutcome(success=False, text="", error=exc.code, error_category=exc.code)
             except (CodexRuntimeUnavailable, CodexProviderConfigurationError) as exc:
                 return CodexRunOutcome(
                     success=False,
@@ -1706,6 +1802,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     error_category="runtime_unavailable",
                 )
             except Exception as exc:  # noqa: BLE001
+                if pilot_wire_observer is not None and pilot_wire_observer.startup_timed_out:
+                    reason = pilot_wire_observer.cap_stop_reason
+                    return CodexRunOutcome(
+                        success=False, text="", error=reason, error_category=reason,
+                    )
                 return CodexRunOutcome(
                     success=False,
                     text="",
@@ -1746,6 +1847,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             except TaskDeadlineRefused:
                 raise
             except Exception as exc:  # noqa: BLE001
+                if pilot_wire_observer is not None and pilot_wire_observer.cap_stop_reason is not None:
+                    return stopped_pilot_start()
                 if binds_native_state:
                     raise TaskDeadlineRefused(
                         "native resume refused; retained binding was not replaced" if resumed else
@@ -1786,6 +1889,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 else:
                     turn_handle, observed = self._observation_turn(thread, turn_input, observation)
             except Exception as exc:  # noqa: BLE001
+                if pilot_wire_observer is not None and pilot_wire_observer.cap_stop_reason is not None:
+                    return stopped_pilot_start(thread)
                 category = "turn_start_failed"
                 if task_deadline is not None:
                     # A lost response does not prove the native request never
@@ -1809,7 +1914,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
 
             if observation is None:
                 observed = (
-                    self._await_turn(turn_handle)
+                    self._await_turn(turn_handle, **({"pilot_wire_observer": pilot_wire_observer}
+                                                     if pilot_wire_observer is not None else {}))
                     if task_deadline is None else
                     self._await_turn(turn_handle, task_deadline=task_deadline)
                 )
@@ -1869,6 +1975,21 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 return measured
 
             deadline_expired = task_deadline is not None and task_deadline.remaining_seconds() <= 0
+            if pilot_wire_observer is not None and pilot_wire_observer.cap_stop_reason is not None:
+                # A native admission, usage or deadline gate stopped this attempt.
+                # Join the process closure before collecting any partial files,
+                # even if the SDK races the local stop with a completed turn.
+                pilot_wire_observer.close_provider_observer()
+                pilot_wire_observer.close_provider_runtime()
+                measured = _settle_what_was_measured()
+                return CodexRunOutcome(
+                    success=False, text="", files=collect_files(),
+                    error=pilot_wire_observer.cap_stop_reason,
+                    error_category=pilot_wire_observer.cap_stop_reason,
+                    usage_delta=measured, items_seen=observed.items_seen,
+                    thread_id=getattr(thread, "id", None),
+                    turn_id=getattr(turn_handle, "id", None),
+                )
             if timed_out or deadline_expired:
                 # The turn was sent and the model may well have answered, so
                 # the reservation is never abandoned. What the stream managed
@@ -1951,9 +2072,14 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 close_observation_runtime()
             elif codex is not None:
                 try:
-                    codex.close()
+                    if pilot_wire_observer is None:
+                        codex.close()
+                    else:
+                        pilot_wire_observer.close_provider_runtime()
                 except Exception:  # noqa: BLE001 - closing must not mask a result
                     pass
+            if pilot_wire_observer is not None:
+                pilot_wire_observer.close_provider_observer()
             swept = () if observation is not None else sweep_orphans(before_pids)
             if swept:
                 self.last_swept_pids = swept
@@ -1993,7 +2119,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
 
     def _await_turn(
         self, turn_handle: Any, *, task_deadline: CodexTaskDeadline | None = None,
-        observation_control=None, observed=None,
+        observation_control=None, observed=None, pilot_wire_observer=None,
     ) -> TurnObservation:
         """Consume a turn under a wall clock; interrupt it if it overruns.
 
@@ -2045,6 +2171,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 pass
             return TurnObservation(timed_out=True)
         collector = _load_turn_collector()
+        capture = pilot_wire_observer.provider_capture if pilot_wire_observer is not None else None
+        if capture is not None:
+            # Use the remaining attempt deadline, never a fresh per-turn clock.
+            timeout = max(0, min(timeout, capture.deadline - time.monotonic()))
+        completed = threading.Event()
 
         def _consume() -> None:
             try:
@@ -2061,11 +2192,27 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     stream.close()
             except BaseException as exc:  # noqa: BLE001
                 observed.failure = str(exc)
+            finally:
+                completed.set()
+                if capture is not None:
+                    capture.wakeup.set()
 
         worker = threading.Thread(
             target=_consume, name="codex-turn", daemon=True
         )
         worker.start()
+        if capture is not None:
+            capture.wakeup.wait(timeout)
+            if (not completed.is_set() or time.monotonic() >= capture.deadline) and pilot_wire_observer.cap_stop_reason is None:
+                from gpt56_pilot_wire_receipt import NATIVE_DEADLINE_EXCEEDED
+
+                capture.request_stop(NATIVE_DEADLINE_EXCEEDED)
+            if pilot_wire_observer.cap_stop_reason is not None:
+                pilot_wire_observer.close_provider_observer()
+                pilot_wire_observer.close_provider_runtime()
+                worker.join(timeout=1)
+                observed.result = None
+            return observed
         worker.join(timeout)
 
         if worker.is_alive():

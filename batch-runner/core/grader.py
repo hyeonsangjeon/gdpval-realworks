@@ -366,6 +366,8 @@ class Grader:
                 **transport,
             )
             client = self._managed_client.client
+        from core.runner_environment import GuardedGradingClient
+        client = GuardedGradingClient(client)
         self.client = client
 
         # Per-task cost receipts (task 0828). Metering is opt-in: with no

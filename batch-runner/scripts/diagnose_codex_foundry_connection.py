@@ -79,7 +79,9 @@ import re
 import sys
 import threading
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from enum import Enum
+from pathlib import Path
 from time import monotonic
 from typing import Any, Callable, Iterable, Iterator
 
@@ -131,6 +133,9 @@ from core.codex_runtime_config import (  # noqa: E402
 #: The two are not comparable, which is the whole reason this string exists.
 #: ``observed.final_response_source`` is new in /3.
 SCHEMA = "codex_foundry_connection/3"
+# Prospective Sol HTTP evidence; historical /3 receipts are never rewritten.
+RESPONSE_CAPTURE_SCHEMA = "codex_foundry_connection/4"
+from core import runner_environment
 
 # ── The verdict vocabulary ──────────────────────────────────────────────────
 #
@@ -185,6 +190,10 @@ VERDICT_NOT_SENT = "not_sent"
 #: A failure the structured error did not explain. Deliberately last, and
 #: deliberately not a synonym for any of the above.
 VERDICT_UNCLASSIFIED_FAILURE = "unclassified_failure"
+VERDICT_RESPONSE_EVIDENCE_REFUSED = "response_evidence_unverified"
+VERDICT_ENVIRONMENT_REFUSED = runner_environment.REFUSED
+VERDICT_DIAGNOSTIC_BUDGET_REFUSED = "diagnostic_budget_refused"
+SOL_DIAGNOSTIC_RESERVATION = "codex-foundry-sol-diagnostic-reservation.json"
 
 VERDICTS: tuple[str, ...] = (
     VERDICT_CONNECTED,
@@ -205,6 +214,9 @@ VERDICTS: tuple[str, ...] = (
     VERDICT_SETTINGS_INCOMPLETE,
     VERDICT_NOT_SENT,
     VERDICT_UNCLASSIFIED_FAILURE,
+    VERDICT_RESPONSE_EVIDENCE_REFUSED,
+    VERDICT_ENVIRONMENT_REFUSED,
+    VERDICT_DIAGNOSTIC_BUDGET_REFUSED,
 )
 
 #: Verdicts that mean a request reached the provider and was answered by it,
@@ -523,7 +535,7 @@ def describe_settings(settings: CodexProviderSettings) -> dict[str, Any]:
     """
     classified = classify_endpoint(settings.endpoint)
     path = "/" + settings.endpoint.split("://", 1)[-1].split("/", 1)[-1]
-    return {
+    description = {
         "endpoint_kind": classified.kind.value,
         "endpoint_host_fingerprint": host_fingerprint(settings.endpoint),
         "endpoint_path": path if path != "/" + settings.endpoint else "/",
@@ -558,6 +570,12 @@ def describe_settings(settings: CodexProviderSettings) -> dict[str, Any]:
             PINNED_CODEX_CLI_DISTRIBUTION: installed_cli_version(),
         },
     }
+    if settings.reasoning_effort is not None or settings.model_context_window is not None:
+        description["requested_controls"] = {
+            "reasoning_effort": settings.reasoning_effort,
+            "model_context_window": settings.model_context_window,
+        }
+    return description
 
 
 def settings_fingerprint(description: Mapping[str, Any]) -> str:
@@ -595,9 +613,62 @@ def settings_from_environment(
             "the environment describes no direct /openai/v1/ endpoint, and the "
             "legacy dated route is a different contract rather than a fallback"
         )
-    return CodexProviderSettings(
-        endpoint=route.direct_v1.url, model=deployment.strip()
-    )
+    controls = ({"reasoning_effort": "max", "model_context_window": 1_000_000}
+                if deployment.strip() == "gpt-5.6-sol" else {})
+    return CodexProviderSettings(endpoint=route.direct_v1.url, model=deployment.strip(), **controls)
+
+
+def _sol_diagnostic_budget(description):
+    """Reserve one full bounded attempt, not a fictional five-task result.
+
+    This conservative reference amount must be carried into any later pilot
+    accounting. It is not the effective Foundry tariff or a paid launch right.
+    No diagnostic request runs on the five task IDs or resets their ledger.
+    """
+    from gpt56_pilot_wire_receipt import _native_caps, _native_usd_caps, USD_CAPS_SHA256, USD_PRICE_TABLE_SHA256
+
+    caps, contract = _native_caps()["per_attempt"], _native_usd_caps()
+    rates = contract["rates"]
+    reserve = (Decimal(caps["input_tokens"]) * (rates["input"] + rates["cache_write"])
+               + Decimal(caps["output_tokens"]) * rates["output"]) / Decimal(1_000_000)
+    if not Decimal(0) < reserve <= contract["maximum"]:
+        raise ValueError("usd_ceiling_exceeded")
+    return {
+        "record_version": "sol-native-diagnostic-reservation-v1",
+        "purpose": "one_connection_diagnostic_not_a_benchmark_task",
+        "currency": "USD", "owner_total_ceiling_usd": format(contract["maximum"], "f"),
+        "full_attempt_reference_reserve_usd": format(reserve, "f"),
+        "cap_record_sha256": USD_CAPS_SHA256, "price_table_sha256": USD_PRICE_TABLE_SHA256,
+        "settings_fingerprint": settings_fingerprint(description), "attempt_caps": caps,
+        "rate_basis": "published_Standard_Global_long_reference_not_verified_effective_tariff",
+        "cache_write_policy": "one_write_per_full_input_token_or_larger_reported_counter",
+        "shared_pilot_ledger_updated": False, "pilot_progression_allowed": False,
+        "requires_reconciliation_before_pilot": True, "actual_billing_hard_limit_verified": False,
+    }
+
+
+def _reserve_sol_diagnostic(parent, description):
+    from gpt54_codex_input_capture import _write_no_clobber
+
+    budget = _sol_diagnostic_budget(description)
+    raw = (json.dumps(budget, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _write_no_clobber(parent / SOL_DIAGNOSTIC_RESERVATION, raw)
+    return {**budget, "reservation_file": {
+        "path": SOL_DIAGNOSTIC_RESERVATION, "sha256": hashlib.sha256(raw).hexdigest(),
+    }}
+
+
+def verify_sol_diagnostic_reservation(parent, description, budget):
+    from gpt54_v2_grading_input import _read_bytes
+
+    expected = _sol_diagnostic_budget(description)
+    raw = (json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    bound = {**expected, "reservation_file": {
+        "path": SOL_DIAGNOSTIC_RESERVATION, "sha256": hashlib.sha256(raw).hexdigest(),
+    }}
+    if budget != bound or _read_bytes(parent / SOL_DIAGNOSTIC_RESERVATION,
+                                     sha256=bound["reservation_file"]["sha256"]) != raw:
+        raise ValueError("diagnostic_budget_unverified")
 
 
 # ── What a green verdict still does not buy ─────────────────────────────────
@@ -619,6 +690,7 @@ NOT_ESTABLISHED_BY_A_TEXT_TURN: tuple[str, ...] = (
 
 def _empty_observation() -> dict[str, Any]:
     return {
+        "runner_evidence": runner_environment.receipt("diagnostic"),
         "thread_started": False,
         "turn_sent": False,
         "turn_status": None,
@@ -660,7 +732,7 @@ def _record(
     if verdict not in VERDICTS:  # pragma: no cover - guarded by tests
         raise ValueError(f"{verdict!r} is not one of the fixed verdicts")
     return {
-        "schema": SCHEMA,
+        "schema": RESPONSE_CAPTURE_SCHEMA if "provider_response_evidence" in observed else SCHEMA,
         "verdict": verdict,
         "provider_answered": verdict in VERDICTS_THE_PROVIDER_ANSWERED,
         "note": note,
@@ -670,6 +742,7 @@ def _record(
         ),
         "request": request_plan(description),
         "observed": dict(observed),
+        "runner_evidence": observed.get("runner_evidence") or runner_environment.receipt("diagnostic"),
         "not_established": list(NOT_ESTABLISHED_BY_A_TEXT_TURN),
     }
 
@@ -840,6 +913,7 @@ def _observe_native_stream(handle: Any, timeout: float) -> tuple[Any, dict[str, 
 
 def _cleanup_native_session(
     codex: Any, workspace: Any, handle: Any, worker: Any, state: dict[str, Any] | None,
+    *, response_observer: Any = None,
 ) -> bool:
     """Attempt interruption and existing close/cleanup under one grace bound.
 
@@ -869,7 +943,10 @@ def _cleanup_native_session(
 
     def close_session() -> None:
         try:
-            if codex is not None:
+            if response_observer is not None:
+                response_observer.close_provider_observer()
+                response_observer.close_provider_runtime()
+            elif codex is not None:
                 codex.close()
         except Exception:  # noqa: BLE001
             failures.append(True)
@@ -899,6 +976,7 @@ def probe(
     *,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     redact: Callable[[Any], str | None] | None = None,
+    response_artifact_parent: Path | None = None,
 ) -> dict[str, Any]:
     """Send the one fixed turn and record what came back.
 
@@ -909,9 +987,43 @@ def probe(
     """
     from core.codex_runner import CodexAgentRunner, CodexWorkspace
 
-    redact = redact or build_redactor()
     description = describe_settings(settings)
     observed = _empty_observation()
+    try:
+        runner_environment.require_execution(observed["runner_evidence"]["observation"])
+    except runner_environment.ExecutionEnvironmentRefused as error:
+        return _record(verdict=VERDICT_ENVIRONMENT_REFUSED, description=description, observed=observed,
+                       note=error.code + "; no model request or authentication was started")
+    redact = redact or build_redactor()
+    response_observer = None
+    if settings.model == "gpt-5.6-sol":
+        from gpt56_native_response_capture import NativeResponseArtifacts, empty_evidence
+        from gpt56_pilot_wire_receipt import _TransportObservation
+
+        observed["provider_response_evidence"] = empty_evidence("native_response_artifact_failed")
+        for field in ("served_model", "served_model_version", "reasoning_effort", "context_tokens"):
+            observed[field] = "not_reported"
+        try:
+            if response_artifact_parent is None:
+                raise ValueError("a persistent artifact parent is required")
+            artifacts = NativeResponseArtifacts(response_artifact_parent, "codex-foundry-connection-responses")
+            response_observer = _TransportObservation({"provider_id": settings.provider_id,
+                "deployment": settings.model, "model": settings.model,
+                "reasoning_effort": "max", "context_tokens": 1_000_000})
+            response_observer.approved_base_url = settings.base_url
+            response_observer.response_artifacts = artifacts
+            observed["provider_response_evidence"] = empty_evidence()
+        except Exception:
+            return _record(verdict=VERDICT_RESPONSE_EVIDENCE_REFUSED, description=description,
+                           observed=observed, note="native_response_artifact_failed; nothing was sent")
+        if settings.reasoning_effort != "max" or settings.model_context_window != 1_000_000:
+            return _record(verdict=VERDICT_SETTINGS_INCOMPLETE, description=description,
+                           observed=observed, note="sol_requested_controls_unverified; nothing was sent")
+        try:
+            observed["diagnostic_budget"] = _reserve_sol_diagnostic(response_artifact_parent, description)
+        except Exception:
+            return _record(verdict=VERDICT_DIAGNOSTIC_BUDGET_REFUSED, description=description,
+                           observed=observed, note="diagnostic_budget_unverified; nothing was sent")
 
     try:
         runner = CodexAgentRunner(settings, timeout=timeout)
@@ -956,7 +1068,8 @@ def probe(
             )
 
         try:
-            codex = runner.open_runtime(workspace)
+            codex = (runner.open_runtime(workspace, native_response_observer=response_observer)
+                     if response_observer is not None else runner.open_runtime(workspace))
         except Exception as exc:  # noqa: BLE001
             observed["error"] = {"stage": "runtime", "message": redact(exc)}
             return _record(
@@ -1091,6 +1204,7 @@ def probe(
     finally:
         cleaned = _cleanup_native_session(
             codex, workspace, handle, stream_worker, stream_state,
+            **({"response_observer": response_observer} if response_observer is not None else {}),
         )
         if not cleaned and record is None:
             raise RuntimeError("native session cleanup failed") from None
@@ -1101,6 +1215,19 @@ def probe(
         observed["usage"] = stream_state["usage"]
         if record is not None:
             record["observed"]["usage"] = observed["usage"]
+    if response_observer is not None:
+        evidence = response_observer.response_artifacts.report()
+        if response_observer.provider_capture is not None:
+            observed["provider_transport"] = response_observer.provider_capture.summary()
+        observed["provider_response_evidence"] = evidence
+        for field in ("served_model", "served_model_version", "reasoning_effort", "context_tokens"):
+            observed[field] = evidence[field]
+        observed["served_model_note"] = "provider response body only; missing fields are not_reported, never requested values"
+        if record is not None:
+            record["observed"].update(observed)
+            if record["verdict"] == VERDICT_CONNECTED and evidence["state"] != "observed":
+                record = _record(verdict=VERDICT_RESPONSE_EVIDENCE_REFUSED, description=description,
+                                 observed=observed, note=evidence["reason"])
     if not cleaned:
         observed["error"] = {
             "stage": "cleanup",
@@ -2157,6 +2284,7 @@ def post_valid_request(
     at a time against a request that is known to be *served* rather than
     merely accepted.
     """
+    runner_environment.require_execution()
     import urllib.error
     import urllib.request
 
@@ -2719,6 +2847,8 @@ def _emit(record: Mapping[str, Any], out: str | None) -> None:
     happened -- and the difference between those two is the whole subject of
     this diagnostic.
     """
+    record = dict(record)
+    record["runner_evidence"] = (record.get("observed") or {}).get("runner_evidence") or runner_environment.receipt("diagnostic")
     text = json.dumps(record, indent=2, sort_keys=False)
     sys.stdout.write(text + "\n")
     if out:
@@ -2825,6 +2955,13 @@ def main(argv: list[str] | None = None) -> int:
             "records; run them separately"
         )
 
+    if args.send_request or args.valid_request or args.closing_sweep:
+        try:
+            runner_environment.require_execution()
+        except runner_environment.ExecutionEnvironmentRefused as error:
+            _emit(_record(verdict=VERDICT_ENVIRONMENT_REFUSED, description=None,
+                          observed=_empty_observation(), note=error.code), args.out)
+            return 2
     redact = build_redactor()
 
     try:
@@ -2911,7 +3048,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.send_request:
         _emit(_plan(description, settings), args.out)
         return 0
-    record = probe(settings, timeout=args.timeout, redact=redact)
+    options = ({"response_artifact_parent": Path(args.out).absolute().parent if args.out else None}
+               if settings.model == "gpt-5.6-sol" else {})
+    record = probe(settings, timeout=args.timeout, redact=redact, **options)
     _emit(record, args.out)
     return 0 if record["verdict"] == VERDICT_CONNECTED else 1
 
