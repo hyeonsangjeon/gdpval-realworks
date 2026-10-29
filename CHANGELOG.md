@@ -572,6 +572,37 @@ entries land under a fresh dated heading the day they merge to `main`.
   dependency-blocked nodes after restoring pinned Codex packages). New PR CI
   and owner review remain pending; no experiment or private Task4 read ran.
 
+- Close the Codex Foundry five-category distinction criterion with limitation
+  in the existing diagnostic report, following local parent
+  `d8b91893071ed06ccd711acce8d9c019d9b66ed6`. All eight cells have
+  **not recorded** evidence for rate limit, communication failure, timeout,
+  output-length limit and content filter, including recovered events in the
+  two successes. Name the missing per-category fields/logs rather than infer
+  causes from budget counters. Historical sibling-worktree access was denied;
+  conclusions cover accessible retained evidence only. The same guarded offline
+  report selector passed **1 test in 2.65s**; eight-row consistency,
+  byte-preservation and `git diff --check` checks passed. Earlier report bytes,
+  readout, original pilot, grades, costs and snapshots are preserved. No
+  new-head review/CI approval, model call, dispatch, grading, remote read, push
+  or Project update is claimed. Publication and leader review/acceptance of
+  the documented limitations remain; no additional execution is required.
+
+- Audit the Codex Foundry external-budget documents against committed source
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002`. The diagnostic already records
+  all eight producer outcomes, two succeeded and six failed; no stale six-of-eight
+  status was found in the checked result documents. Add the missing root README
+  summary, list each failed run's unknown detailed cause
+  (`not_recorded_in_terminal_controls`) and distinguish the report's historical
+  finalization scope from this audit. Existing JSON and original pilot bytes,
+  including all grades, costs and budget observations, remain unchanged.
+  Per-condition measurement is inconclusive beyond the retained fields;
+  the C/B report is filled with existing full-denominator grades, but feedback
+  benefit remains inconclusive. Do not infer missing measurements or authorize
+  further paid execution. The final existing offline report selector passed
+  **1 test in 1.62s** with credentials removed and external plugins disabled;
+  direct consistency and prior-evidence preservation checks passed. No
+  new-head review/CI approval, push, dispatch or Project update is claimed.
+
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
   `b6702c679134f90b15a3f58fdacfbccd38522074`, after direct owner review
