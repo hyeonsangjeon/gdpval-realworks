@@ -1,5 +1,17 @@
 # Latest task result
 
+## Native pilot publication and Actions preparation, 2026-10-29
+
+The owner now approves publication/CI and paid execution of the existing
+Foundry Sol five-task pilot, within the unchanged USD 200 combined ceiling.
+Pushed reviewed head `271093150` and opened Draft PR #789. Add a model-free,
+secret-free hosted Ubuntu 24.04 sandbox-readiness check and port the already
+verified pytest 9.2 worktree fixture repair. Original source/grader seals and
+fail-closed execution gates remain in force. No model execution is claimed.
+Related workflow/host/fixture checks: **198 passed, 0 failures/errors/skips**,
+24.02 seconds; broader PR CI repair is still in progress.
+See [current progress and measurement boundaries](../../batch-runner/docs/native_pilot_actions_progress_20261029.md).
+
 ## Native runner/migration fixed-HEAD review, 2026-10-29
 
 Review `3f31968e5` and `ff7ab8efb` above `cf1401e1c` on the same local

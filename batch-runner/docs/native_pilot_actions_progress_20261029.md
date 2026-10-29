@@ -1,0 +1,70 @@
+# Native five-task pilot: publication and Actions execution
+
+The owner approved publication/CI on 2026-10-29 and then explicitly requested
+paid execution without another paid-approval question. Scope remains Foundry
+`gpt-5.6-sol`, Codex SDK/CLI **0.147.0**, the registered five tasks, and the
+existing **USD 200 combined inference/grading ceiling**. NAS is development and
+offline testing only; execution belongs on GitHub-hosted **ubuntu-24.04**.
+
+The reviewed stack was pushed at `271093150` and published as Draft PR **#789**.
+The existing open PRs #785–#788 had successful required checks at inspection.
+This document does not claim that any model has run or that old source/grader
+seals have been renewed. Original registrations and caps remain unchanged.
+
+## Experiment-design record before any paid request
+
+| Field | Registered boundary |
+| --- | --- |
+| Purpose | Exercise the bounded five-task native pipeline and collect auditable output/cost evidence; this does not authorize 220 tasks or establish a model ranking. |
+| Runtime/condition | Foundry Sol via pinned native Codex, requested Max/1M, prepared hosted Ubuntu 24.04; not an OS-only or reasoning-only causal comparison. |
+| Inputs | The existing fixed task IDs and HF `openai/gdpval` revision `11e7900cdcac61bc4daf59e65feb238acda98fbf`; no task substitution or synthetic benchmark input. |
+| Judge | Existing Sol/Max grading contract, one pass per task. Synthetic frozen-source parity is not real five-task parity or independent human validation. |
+| Repetition | Existing infrastructure retry policy only; no new quality retry or variance estimate. |
+| Units | Provider token usage and separately labelled modeled USD; no claim that an estimate is an invoice. |
+| Stops | USD 200 combined, 1,800 seconds/attempt, registered request limits, input 300,000/output 10,000, unknown usage/evidence and invalid host remain fail-closed. |
+| Unverified | Fresh served model/Max/context evidence, effective Foundry tariff mapping, source/grader admission and final pilot wiring are not supplied by publication approval. |
+
+The experiment-design check keeps settings distinct from observed enforcement.
+The owner has now authorized the paid measurement; this is not a reason to
+invent absent evidence or change a rejected request into a passing gate.
+
+## Model-free hosted readiness
+
+`gpt56-native-runner-check.yml` runs on the publication branch/PR, with only
+`contents: read`, no secret reference and no Azure login or model request.
+It installs the registered runtime, runs offline contracts, and executes only
+the fixed local sandbox marker through the existing preparer on Actions.
+Readiness failure fails the job and retains the bounded runner/probe receipt.
+The job does not change the existing paid diagnostic's main-only admission.
+
+The already-reproduced pytest 9.2 worktree-numbering fixture repair from
+`97aba7b2c` is included unchanged on this branch. Exact path reuse, cleanup,
+identity and failure-retention assertions remain intact.
+
+One related offline invocation for these workflow/host/fixture changes passed
+**198 tests, 0 failures/errors/skips**, 24.02 seconds. The earlier 151-case run
+is separate, not added to this count. Logs/JUnit are in
+`/ai-work/copilot/_tmp/native-pilot-publish-20261029.ZBwoxY/publish-check.*`.
+This is not a full PR CI pass; the first CI run also exposed stale legacy
+source fixtures and metadata integration cases that remain under repair.
+
+The first PR CI also found the survey's end-to-end proof job still selected
+Ubuntu 22.04 and correctly hit `execution_environment_refused`. Move only that
+execution proof to prepared 24.04, keeping both unprepared survey legs and all
+historical host records unchanged. Mandatory preparation, namespace diagnosis,
+the two exact execution assertions and `CODEX_SANDBOX_MUST_RUN=1` remain gates;
+no skip or failure is converted to success. Keep the new prepared-host receipt
+as a separate artifact, not a replacement for the historical survey.
+
+## Official OpenAI documentation checked
+
+- [CLI Linux sandbox](https://developers.openai.com/codex/cli/reference/): the
+  local command uses bubblewrap/seccomp; this is not a model completion.
+- [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol): the
+  page reports Max support, a 1,050,000 context window and 128,000 maximum
+  output tokens. These model-level facts do not prove this Foundry deployment's
+  actual settings. The registered request remains **1,000,000**, not 1,050,000.
+
+OpenAI's listed price/long-context/cache-write rules are not substituted for
+the required Foundry tariff evidence. Tests and the forthcoming hosted sandbox
+receipt are not benchmark scores, served-model proof or billed-usage proof.

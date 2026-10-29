@@ -13,6 +13,16 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Publish the native runner stack as Draft PR #789 under the owner's new
+  publication and bounded-paid-run approval. Add a secret-free Ubuntu 24.04
+  readiness workflow that runs only offline tests and the pinned local sandbox
+  marker; retain the paid path's admission gates. Carry over the verified
+  pytest 9.2 worktree-fixture repair without relaxing assertions. See
+  [Actions progress](batch-runner/docs/native_pilot_actions_progress_20261029.md).
+  Move the scripted-provider execution proof to prepared 24.04 while preserving
+  both historical unprepared survey legs. Related offline checks: 198 passed;
+  broader publication CI repair remains in progress.
+
 - Recheck native runner evidence after serialized request preparation and
   after connection setup, before any HTTP headers/body can leave. Preserve
   existing environment-stop cleanup and conservative USD reservations. Six

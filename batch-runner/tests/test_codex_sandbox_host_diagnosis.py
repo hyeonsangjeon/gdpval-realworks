@@ -523,12 +523,9 @@ def test_every_host_the_survey_measures_has_a_record() -> None:
 
 
 def test_the_host_the_suite_demands_a_sandbox_from_is_one_it_measured_ready() -> None:
-    """`CODEX_SANDBOX_MUST_RUN=1` is only honest where the sandbox works.
+    """Demand execution only after this prepared 24.04 job proves readiness.
 
-    Setting it on a host that cannot sandbox would turn a true skip into a false
-    failure, which is the same crime as the one this whole line of work exists
-    to undo, pointed the other way. So the job that sets it must run on a host
-    the record calls `ready`.
+    The historical unprepared 24.04 failure is preserved, not relabelled ready.
     """
     workflow = survey_workflow()
     job = workflow["jobs"]["prove-execution"]
@@ -541,21 +538,28 @@ def test_the_host_the_suite_demands_a_sandbox_from_is_one_it_measured_ready() ->
     assert demanding, "no step demands the sandbox actually run"
 
     runner = job["runs-on"]
+    assert runner == "ubuntu-24.04"
     recorded = recorded_hosts().get(f"{runner}-host")
     assert recorded is not None, f"{runner} runs the demanding job and is unrecorded"
-    assert recorded["readiness"] == host.READY, (
-        f"{runner} is recorded as {recorded['readiness']!r}, so demanding that "
-        "the sandbox run there would fail the suite for a property of the machine"
-    )
+    assert recorded["readiness"] == "user_namespaces_restricted_by_security_policy"
+    preparation = [step for step in job["steps"]
+                   if "prepare_codex_sandbox_host.py" in (step.get("run") or "")]
+    assert len(preparation) == 1
+    gate = preparation[0]
+    assert "if" not in gate and not gate.get("continue-on-error")
+    command = gate["run"]
+    assert command.startswith("set -euo pipefail\n")
+    assert (command.index("require_pinned_runtime")
+            < command.index("prepare_codex_sandbox_host.py")
+            < command.index("diagnose_codex_sandbox_host.py"))
+    assert job["steps"].index(gate) < min(job["steps"].index(step) for step in demanding)
 
 
 def test_the_demanding_job_checks_readiness_before_it_demands_it() -> None:
     """The record can go stale; the host is asked again in the same job.
 
-    Without this the job would be trusting a JSON file about a machine that is
-    re-imaged on somebody else's schedule. With it, a 22.04 image that gains the
-    restriction stops at the diagnostic -- which names the wall -- instead of at
-    a pytest failure that would read as a broken run place.
+    The old unprepared record cannot authorize the prepared host. Both the
+    preparation and diagnostic must finish before execution is demanded.
     """
     job = survey_workflow()["jobs"]["prove-execution"]
     steps = job["steps"]
