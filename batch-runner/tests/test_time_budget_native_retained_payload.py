@@ -16,6 +16,7 @@ from gpt54_prepared_input_attestation import _identity
 from .test_time_budget_native_grading_intake import (
     NAMES, PRIVATE, TOKEN, case, dual_roots, handoff_source_seed, handoff_sources, offline,
 )
+from .test_time_budget_grading_preparation import _bind_grading_controller
 
 
 @pytest.mark.parametrize("scenario", [
@@ -24,6 +25,7 @@ from .test_time_budget_native_grading_intake import (
 ])
 def test_native_task3_retained_payload(case, offline, monkeypatch, capsys, record_property, scenario):
     """No successful intake/preparation verdict is mocked; no live IO is allowed."""
+    _bind_grading_controller(monkeypatch, case.paths["controller_root"])
     from huggingface_hub import constants, hf_hub_url, utils
     from huggingface_hub.utils import _http
 
