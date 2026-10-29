@@ -1,5 +1,72 @@
 # GHCP Copilot CLI agent + GPT-5.6 Sol
 
+## Dispatch-only paid task wiring, 2026-10-29
+
+The leader's current instruction implements the owner's fixed-five approval;
+**this change performs no paid execution**. Push still runs the model-free
+rehearsal only. The single `paid-task` job definition expands the fixed public
+five-task matrix, one hosted Ubuntu 24.04 job per task, only when the event is
+`workflow_dispatch`, `execute_paid=true` and `dry_run=false`. Both inputs have
+safe defaults. It uses `environment: ghcp-sol-gate`; the only secret expression
+in the workflow is `secrets.COPILOT_GITHUB_TOKEN` on that job's runtime step.
+All model-free steps remain credential-free even during a paid dispatch.
+
+The owner must configure the environment's protection/approval rules and
+supply the chosen credential; merely naming an environment does not protect
+it or create a credential. Missing/empty/whitespace-only credentials refuse
+before the supervisor, authentication or Copilot process. No store lookup,
+token creation, refresh, secret-value inspection or supply occurs in this work.
+Only first run-attempt execution is admitted; an Actions rerun is not an
+implicit model retry. The matrix runs serially with fail-fast, so the first
+failed setting/limit/auth check prevents queued tasks from starting.
+
+The preparation path downloads only `openai/gdpval` revision
+`11e7900cdcac61bc4daf59e65feb238acda98fbf`'s exact parquet and two reference
+files, without authentication, and invokes the unchanged sealed input-bundle
+materializer/verifier. Each task gets its own reference closure and the exact
+developer text followed by a newline and exact original prompt. No rubric or
+gold deliverable is staged for the model. The inert VM YAML remains a pinned
+**input/policy source**, not a rewritten launch approval or VM attestation.
+
+Copilot CLI 1.0.103 archive/binary hashes remain pinned. The new bound task path
+uses the existing fresh work/HOME/config/cache supervisor, 1,200-second and
+64-turn bounds, and the selected 32-tool cap. It requests Sol/Max/long_context,
+retains supervised JSONL/usage, and refuses missing or mismatched served fields;
+it does not infer 1M from the request. Tool approval is noninteractive but does
+not enable all-paths/all-URLs; the CLI flag requests exclusion of auth
+environment names from tools.
+This is observed-event cancellation, not server-side pre-effect admission or
+a guarantee against escaped process sessions/arbitrary credential encodings.
+
+Only checked output files, supervised transcript and receipt enter the paid
+artifact, never HOME/config/cache or raw state. Exact/JSON-escaped credential
+leaks, unsafe paths, missing deliverables, format/hash drift or oversized exports
+refuse. Export bounds (64 MiB/file, 128 MiB total, 256 files) are capture safety
+bounds, not changes to model/token limits. Source reference bytes are hashed;
+unchanged references are not mislabeled generated deliverables.
+
+The existing Step8 **contract-only** job selects paid artifacts only for the
+explicit paid dispatch, rechecks served-event evidence and output hashes, and
+converts outputs to the unchanged reader's layout. It does not fall back to dry
+artifacts when paid captures are missing. It still refuses to fabricate an
+inference revision or reuse the full-220 grading identity: `gate5_passed=false`
+and `ready_for_grading=false`. Actual rubric/identity materialization and a
+separately authorized judge path remain outside this input-validation job.
+
+### Dispatch registration check (read-only)
+
+On 2026-10-29 the repository reports default branch `main`. The contents API
+returns **404** for this workflow on `main`, **200** on the GHCP branch. The
+workflow API now returns **200**, ID **400083239**, state `active`; therefore
+the earlier lookup 404 cannot be attributed conclusively to a single cause.
+[GitHub's manual-run contract](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+still requires the dispatch workflow on the default branch. After owner-reviewed
+default-branch registration/merge and protected authentication supply, the
+operator can target this reviewed branch using:
+`gh workflow run 400083239 --ref leader/ghcp-sol-gate-actions-20261024 -f dry_run=false -f execute_paid=true`.
+This is an **unexecuted future command**. No dispatch, PR or merge was performed;
+no secret can be supplied by passing its value as a workflow input.
+
 ## Model-free Step8 input bridge, 2026-10-29
 
 The `grader-contract` job follows all five dry-capture matrix jobs on the same

@@ -26,6 +26,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a dispatch-only GHCP fixed-five paid-task matrix behind the named
+  protected environment and one scoped secret reference; preserve model-free
+  push/PR behavior and refuse absent credentials before Copilot. Bind pinned
+  original input preparation and task commands to the existing supervisor,
+  and forward only checked captures to the unchanged Step8 policy/input path.
+  Live identity/served-setting refusals remain fail-closed; no judge/model call
+  or secret-value access occurred. Full offline suite: **729 passed, 0 failed/
+  errors/skipped**, **62.94s**. Document read-only dispatch-registration findings.
+
 - Connect all five GHCP dry-capture artifacts to an empty Step8 input layout
   and unchanged pinned-policy/input validators in a hosted Ubuntu 24.04 job.
   Refuse missing, malformed, extra, linked, changed or non-model-free inputs;

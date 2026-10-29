@@ -1,5 +1,33 @@
 # Latest task result
 
+## GHCP dispatch-only protected task wiring, 2026-10-29
+
+The new `paid-task` matrix is conditional on explicit workflow_dispatch,
+`execute_paid=true` and `dry_run=false`, uses `environment: ghcp-sol-gate`,
+and references `COPILOT_GITHUB_TOKEN` only in its runtime step. Push/PR cannot
+enter it. Missing/blank auth refuses before Copilot; no credential was read or
+supplied here. Fixed five tasks use separate hosted Ubuntu 24.04 jobs, pinned
+original inputs and CLI, fresh task state, the existing 1,200-second/64-turn
+limits and 32-tool cap, with serial fail-fast scheduling and no rerun retry.
+Checked paid outputs connect to the existing model-free Step8 contract job;
+missing captures do not fall back to the dry artifacts. Actual judge execution
+and unmaterialized inference/grading identities are not fabricated or enabled.
+
+Final combined local offline suite: **729 passed, 0 failed/errors/skipped**,
+exit **0**, **62.94 seconds**. The initial focused suite found one new preparation
+bug (parquet incorrectly subjected to the reference-files-only path validator):
+242 passed / 1 failed, then corrected before the full run. Evidence:
+`/tmp/p5-ghcp-paid-wiring.JScehj/`. No model/secret-value access or dispatch.
+The authorized ordinary push's source-specific Actions result is collected
+separately; its paid job must be skipped and the eight model-free jobs succeed.
+
+Read-only registration checks: default branch `main`; workflow contents on
+main HTTP **404**, on this branch **200**; workflow API now **200**, active ID
+**400083239**. The earlier 404's exact cause is not established. Manual dispatch
+still requires default-branch registration, owner-protected authentication and
+an explicit `--ref`; the proposed command is documented but has not been run.
+No frozen Step8 source/template/plan/limit, PR or merge was changed.
+
 ## GHCP model-free Step8 input bridge, 2026-10-29
 
 The workflow now connects its five empty dry captures to a fresh Step8 manifest

@@ -150,15 +150,22 @@ def test_workflow_contract():
     assert workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] == "true"
     assert workflow["permissions"] == {"contents": "read"}
     jobs = workflow["jobs"]
-    assert set(jobs) == {"offline-ci", "plan", "task", "grader-contract"}
+    assert set(jobs) == {"offline-ci", "plan", "task", "grader-contract", "paid-task"}
     assert jobs["plan"]["needs"] == "offline-ci"
     for name, job in jobs.items():
+        if name == "paid-task":  # Dispatch/environment/secret contract tested separately.
+            continue
         assert job["runs-on"] == "ubuntu-24.04"
         assert job["timeout-minutes"] == ("15" if name in {"offline-ci", "grader-contract"} else "5")
-        assert "if" not in job and "continue-on-error" not in job
+        assert "continue-on-error" not in job
+        if name == "grader-contract":
+            assert job["if"] == "${{ always() && !cancelled() && needs.task.result == 'success' }}"
+        else:
+            assert "if" not in job
         guard = job["steps"][0]
         assert guard["name"] == "Refuse paid mode before checkout"
-        assert guard["env"] == {"DRY_RUN": "${{ github.event_name == 'push' && 'true' || inputs.dry_run }}"}
+        assert guard["env"] == {"DRY_RUN": "true"}
+        assert "secrets." not in yaml.dump(job)
         assert guard == jobs["plan"]["steps"][0]
         for step in job["steps"]:
             assert "continue-on-error" not in step
@@ -187,20 +194,20 @@ def test_workflow_contract():
     assert "--no-auto-update --disable-client-telemetry --version" in installer["run"]
     assert "env -i PATH=/usr/bin:/bin" in installer["run"]
     testing = next(step for step in ci["steps"] if step.get("name") == "Run the whole offline gate suite once")
-    for target in ("actions_gate", "execution_adapter", "copilot_smoke", "runner_environment", "grader_contract"):
+    for target in ("actions_gate", "execution_adapter", "copilot_smoke", "runner_environment", "grader_contract", "paid_gate"):
         assert f"tests/test_ghcp_sol_{target}.py" in testing["run"]
     assert "tests/test_ghcp_vm_gate_contract.py" in testing["run"]
     assert "tests/test_ghcp_vm_input_bundle.py" in testing["run"]
     assert "env -i" in testing["run"] and "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in testing["run"]
-    for forbidden in ("secrets.", "id-token:", "/dev/kvm", "azure/login", "hf download",
+    for forbidden in ("id-token:", "/dev/kvm", "azure/login", "hf download",
                       "--execute-smoke", "copilot -p", "run_copilot_smoke(", "--allow-all-tools"):
         assert forbidden not in text
     installs = [step["run"] for step in ci["steps"] if "pip install" in step.get("run", "")]
     assert installs == ["python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt"]
     grader = jobs["grader-contract"]
-    assert grader["needs"] == "task"
+    assert grader["needs"] == ["task", "paid-task"]
     download = next(step for step in grader["steps"] if step.get("uses", "").startswith("actions/download-artifact@"))
-    assert download["with"] == {"pattern": "ghcp-sol-dry-capture-*",
+    assert download["with"] == {"pattern": "${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && 'ghcp-sol-paid-capture-*' || 'ghcp-sol-dry-capture-*' }}",
                                 "path": "${{ runner.temp }}/ghcp-grader-captures", "merge-multiple": "false"}
     validation = next(step for step in grader["steps"] if step.get("name", "").startswith("Convert empty captures"))
     assert "ghcp_sol_grader_contract.py" in validation["run"] and "env -i" in validation["run"]
@@ -270,7 +277,7 @@ def test_each_job_guard_executes_fail_closed_before_checkout(job_name, dry_run, 
     path = Path(__file__).resolve().parents[2] / ".github/workflows/agentic-v2-ghcp-sol-gate.yml"
     workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
     guard = workflow["jobs"][job_name]["steps"][0]
-    assert guard.get("env") == {"DRY_RUN": "${{ github.event_name == 'push' && 'true' || inputs.dry_run }}"}
+    assert guard.get("env") == {"DRY_RUN": "true"}
     result = subprocess.run(
         ["bash", "--noprofile", "--norc", "-c", guard["run"]],
         cwd=tmp_path,

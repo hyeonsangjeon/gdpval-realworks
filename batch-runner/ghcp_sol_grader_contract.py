@@ -201,7 +201,9 @@ def _step8_checks(output, payload):
             for row in rows:
                 directory = Path(step8.resolve_deliverable_dir(row))
                 _require(directory == output / "workspace/upload/deliverable_files" / row["task_id"]
-                         and directory.is_dir() and not list(directory.iterdir()), "step8_deliverable_tree_mismatch")
+                         and directory.is_dir(), "step8_deliverable_tree_mismatch")
+                if payload["model_free"]:
+                    _require(not list(directory.iterdir()), "step8_deliverable_tree_mismatch")
             # These are expected refusals of LIVE grading, not a fabricated
             # inference SHA, a changed full-220 identity, or a passed grade.
             try:
@@ -230,7 +232,58 @@ def _step8_checks(output, payload):
     }
 
 
-def convert_and_validate(captures: Path, output: Path):
+def _paid_captures(directory):
+    from ghcp_sol_paid_gate import _read as read_paid, _identity, MAX_EXPORT_BYTES
+    _require(_path(directory).is_dir(), "paid_capture_bundle_missing")
+    _require({item.name for item in directory.iterdir()}
+             == {"ghcp-sol-paid-capture-" + task for task in capture.fixed_task_ids()}, "paid_capture_set_mismatch")
+    records, values, exported = [], {}, {}
+    for task_id in capture.TASK_IDS:
+        folder = _path(directory / ("ghcp-sol-paid-capture-" + task_id))
+        path = folder / "capture.json"
+        raw = _read(path, 8 * 1024 * 1024)
+        value = _json(raw)
+        receipt = value["execution_receipt"]
+        _require(value["schema_version"] == "ghcp-paid-capture-v1" and value["task_id"] == task_id
+                 and value["ready_for_contract"] is True and value["judge_calls"] == 0
+                 and receipt["task_id"] == task_id and receipt["exit_status"] == 0
+                 and receipt["settings_verification"] == "verified" and receipt["metadata_gate_passed"] is True
+                 and not receipt["reason_codes"] and receipt["subprocess_returncode"] == 0
+                 and receipt["runner_identity"]["eligible_for_execution"] is True,
+                 "paid_capture_unverified")
+        transcript = read_paid(folder / "transcript.jsonl", maximum=capture.MAX_EVENT_BYTES)
+        _require(_identity(transcript) == value["transcript"], "paid_capture_hash_mismatch")
+        events = [_json(line) for line in transcript.splitlines()]
+        projection = capture.collect_session_events(
+            (event for event in events if isinstance(event.get("data"), dict)), runtime_projection=True)
+        _require(projection["calls"] and not projection["reason_codes"]
+                 and all(call["verification"] == "verified" for call in projection["calls"]),
+                 "paid_capture_settings_unverified")
+        expected = {"capture.json", "transcript.jsonl"}
+        files, total = {}, len(transcript)
+        _require(type(value["output_files"]) is list and len(value["output_files"]) <= 256,
+                 "paid_capture_format_mismatch")
+        for item in value["output_files"]:
+            role = item["path"]
+            _require(type(role) is str and role and not Path(role).is_absolute()
+                     and all(part not in {"", ".", ".."} and not part.startswith(".")
+                             for part in role.split("/")) and role not in files, "paid_capture_path_refused")
+            data = read_paid(folder / "files" / role)
+            _require(_identity(data) == {key: item[key] for key in ("sha256", "size")}, "paid_capture_hash_mismatch")
+            total += len(data)
+            _require(total <= MAX_EXPORT_BYTES, "paid_capture_size_refused")
+            files[role] = data
+            expected.add("files/" + role)
+        _require({p.relative_to(folder).as_posix() for p in folder.rglob("*") if not p.is_dir()} == expected
+                 and not any(p.is_symlink() for p in folder.rglob("*")), "paid_capture_artifact_shape_mismatch")
+        _require(files or isinstance(value["deliverable_text"], str) and bool(value["deliverable_text"]),
+                 "paid_deliverable_missing")
+        records.append((task_id, path, raw))
+        values[task_id], exported[task_id] = value, files
+    return records, values, exported
+
+
+def convert_and_validate(captures: Path, output: Path, *, mode="dry"):
     report = {
         "schema_version": "ghcp-step8-model-free-contract-v1", "status": "refused", "exit_status": 2,
         "reason_codes": [], "runner_identity": environment.observe(), "capture_inputs": [],
@@ -242,6 +295,7 @@ def convert_and_validate(captures: Path, output: Path):
     }
     owned = False
     try:
+        _require(mode in {"dry", "paid"}, "grader_capture_mode_refused")
         _require(report["runner_identity"]["eligible_for_execution"], environment.REFUSAL)
         _path(captures)
         _path(output)
@@ -250,7 +304,11 @@ def convert_and_validate(captures: Path, output: Path):
         output.mkdir(mode=0o700)
         owned = True
         with _no_effects():
-            records = _captures(captures)
+            values, exported = {}, {}
+            if mode == "paid":
+                records, values, exported = _paid_captures(captures)
+            else:
+                records = _captures(captures)
             report["capture_inputs"] = [{"task_id": task_id, "sha256": hashlib.sha256(raw).hexdigest()}
                                         for task_id, _, raw in records]
             payload = {
@@ -263,6 +321,22 @@ def convert_and_validate(captures: Path, output: Path):
             }
             for task_id, _, _ in records:
                 (output / "workspace/upload/deliverable_files" / task_id).mkdir(parents=True, mode=0o700)
+            if mode == "paid":
+                payload.update(record_version="ghcp-step8-paid-input-v1", experiment_id="ghcp_sol_paid_input_contract",
+                               model_free=False, inference_performed=True)
+                for row in payload["results"]:
+                    task_id = row["task_id"]
+                    row.update(status="success", content=values[task_id]["deliverable_text"],
+                               deliverable_text=values[task_id]["deliverable_text"] or "",
+                               usage=values[task_id]["execution_receipt"]["usage"])
+                    for role, data in exported[task_id].items():
+                        name = f"deliverable_files/{task_id}/{role}"
+                        destination = output / "workspace/upload" / name
+                        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                        with destination.open("xb") as stream:
+                            stream.write(data)
+                        row["deliverable_files"].append(name)
+                    row["paid_capture_sha256"] = row.pop("dry_capture_sha256")
             with (output / MANIFEST).open("xb") as stream:
                 stream.write(_bytes(payload) + b"\n")
             report["contract_checks"] = _step8_checks(output, payload)
@@ -271,11 +345,18 @@ def convert_and_validate(captures: Path, output: Path):
             manifest = _read(output / MANIFEST)
             _require(manifest == _bytes(payload) + b"\n", "step8_manifest_changed")
             _require(environment.observe() == report["runner_identity"], "execution_environment_changed")
+            if mode == "paid":
+                _require(_paid_captures(captures) == (records, values, exported), "paid_capture_changed")
             report.update(status="model_free_layout_verified", exit_status=0, step8_layout_valid=True,
                           grader_policy_valid=True, task_count=5, manifest=MANIFEST,
                           manifest_sha256=hashlib.sha256(manifest).hexdigest(),
                           live_blockers=["real_answers_and_rubric_not_captured", "source_inference_identity_missing",
                                          "five_task_grading_identity_not_materialized"])
+            if mode == "paid":
+                report.update(status="paid_capture_layout_verified", capture_mode="paid",
+                    evidence_boundary="observed_capture_layout_and_policy_not_actual_grading",
+                    live_blockers=["rubric_bytes_not_loaded", "source_inference_identity_missing",
+                                   "five_task_grading_identity_not_materialized"])
     except Refused as error:
         report["reason_codes"] = [error.code]
     except EffectsRefused:
@@ -301,8 +382,9 @@ def main(argv=None):
     parser = _Parser(description=__doc__)
     parser.add_argument("--captures", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--mode", choices=("dry", "paid"), default="dry")
     args = parser.parse_args(argv)
-    report = convert_and_validate(args.captures, args.output)
+    report = convert_and_validate(args.captures, args.output, mode=args.mode)
     print(json.dumps(report, sort_keys=True, allow_nan=False))
     return report["exit_status"]
 

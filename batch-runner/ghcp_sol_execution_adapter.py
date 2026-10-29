@@ -1,10 +1,10 @@
-"""Disabled-by-default supervision plus a fixed, separately enabled CLI smoke.
+"""Disabled-by-default supervision, fixed smoke and dispatch-only fixed tasks.
 
 The caller must supply an argv and an explicit tool-call cap. JSONL start
 notifications support cancellation after observation, not pre-effect admission.
 All execution entrypoints require a GitHub-hosted Ubuntu 24.04 runner. NAS/local
-directories are development/dry-run only. The workflow uses fake-process tests,
-never the installed CLI smoke or the five-task model gate.
+directories are development/dry-run only. Push uses fake-process tests; a paid
+fixed-task binding separately requires explicit Actions dispatch and input pins.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ class _CredentialGuard:
     """Ephemeral exact/JSON-escaped matching, not a general secret-store reader."""
 
     def __init__(self, value):
-        if type(value) is not str or not value or len(value.encode("utf-8")) > 8192:
+        if type(value) is not str or not value.strip() or len(value.encode("utf-8")) > 8192:
             raise _Stop("auth_source_unavailable")
         self._forms = tuple(dict.fromkeys((
             value, json.dumps(value, ensure_ascii=True)[1:-1],
@@ -285,7 +285,7 @@ def _usage_file(path, credential_guard=None):
         return None, "refused"
 
 
-def _finish_smoke(receipt, usage_file, credential_guard=None):
+def _finish_smoke(receipt, usage_file, credential_guard=None, *, expect_smoke=True):
     calls = receipt["session_event_receipt"]["calls"]
     receipt["observed_event_fields"] = [call["observed_fields"] for call in calls]
     receipt["observed_context_fields"] = receipt["session_event_receipt"].get("context_observations", [])
@@ -302,7 +302,7 @@ def _finish_smoke(receipt, usage_file, credential_guard=None):
     receipt["usage_status"] = "reported_not_reconciled_billing" if receipt["usage"] else "not available"
     if not receipt["cli_result"]["observed"]:
         _reason(receipt, "cli_result_unverified")
-    if receipt["smoke_reply_exact"] is not True:
+    if expect_smoke and receipt["smoke_reply_exact"] is not True:
         _reason(receipt, "smoke_reply_unverified")
     receipt["settings_verification"] = (
         "verified" if calls and all(call.get("verification") == "verified" for call in calls)
@@ -591,6 +591,7 @@ def run_task(
     execution_enabled: bool = False, execution_config: dict | None = None,
     model: str = gate.SOL_MODEL, byok: bool = False, provider_config=None,
     copilot_cli: Path | None = None, auth_source: str | None = None,
+    task_bundle: Path | None = None,
 ) -> dict:
     """Supervise one explicitly enabled, fresh task; return a safe receipt.
 
@@ -601,6 +602,8 @@ def run_task(
     """
     receipt = _receipt(task_id)
     bound_cli = copilot_cli is not None
+    paid_task = task_bundle is not None
+    materials = None
     authentication = None
     credential_guard = None
     if bound_cli:
@@ -624,6 +627,9 @@ def run_task(
             "transcript_scope": "adapter_owned_bounded_stdout_not_all_cli_logs",
             "isolation": "fresh_work_home_config_cache_not_a_vm_or_security_sandbox",
         })
+        if paid_task:
+            receipt.update(task_id=task_id if task_id in gate.TASK_IDS else None,
+                           paid_smoke_authorized=False, paid_task_authorized=False)
     try:
         if execution_enabled is not True:
             raise _Stop("execution_disabled")
@@ -639,7 +645,12 @@ def run_task(
             raise _Stop("tool_call_cap_invalid")
         receipt["limits"]["max_tool_calls"] = cap
         gate.check_selection(model, byok=byok, provider_config=provider_config)
-        if bound_cli and (task_id != SMOKE_TASK_ID or command or cap != SMOKE_TOOL_CALL_CAP):
+        if paid_task:
+            from ghcp_sol_paid_gate import require_dispatch
+            require_dispatch()
+            if not bound_cli or command or task_id not in gate.fixed_task_ids() or cap != 32:
+                raise _Stop("copilot_paid_scope_refused")
+        if bound_cli and not paid_task and (task_id != SMOKE_TASK_ID or command or cap != SMOKE_TOOL_CALL_CAP):
             raise _Stop("copilot_smoke_scope_refused")
         if not bound_cli and task_id not in gate.fixed_task_ids():
             raise _Stop("execution_task_refused")
@@ -656,6 +667,11 @@ def run_task(
                     and _selected_auth_environment(auth_source, state_root=state_root) != authentication):
                 raise _Stop("auth_token_file_refused")
             receipt["ghcp_command_binding_verified"] = True
+            if paid_task:
+                from ghcp_sol_paid_gate import task_materials
+                materials = task_materials(task_bundle, task_id)
+                receipt["input_binding"] = materials["identity"]
+                receipt["paid_task_authorized"] = True
         if os.name != "posix" or any(not hasattr(os, name) for name in (
                 "killpg", "waitid", "WNOWAIT", "P_PID", "WEXITED", "WNOHANG")):
             raise _Stop("execution_platform_unsupported")
@@ -695,7 +711,14 @@ def run_task(
         if bound_cli:
             usage_file = private / "usage.json"
             transcript = (private / "transcript.jsonl").open("xb")
-            command = _smoke_command(copilot_cli, config, usage_file)
+            if paid_task:
+                from ghcp_sol_paid_gate import stage_task, task_command, task_materials
+                stage_task(work, materials)
+                if task_materials(task_bundle, task_id) != materials:
+                    raise _Stop("paid_input_changed")
+                command = task_command(copilot_cli, config, usage_file, materials["prompt"])
+            else:
+                command = _smoke_command(copilot_cli, config, usage_file)
         if runner_environment.observe() != receipt["runner_identity"]:
             raise _Stop("execution_environment_changed")
         started = monotonic()
@@ -743,7 +766,7 @@ def run_task(
             receipt["status"] = "failed"
         if bound_cli and usage_file is not None:
             try:
-                _finish_smoke(receipt, usage_file, credential_guard)
+                _finish_smoke(receipt, usage_file, credential_guard, expect_smoke=not paid_task)
             except _Stop as error:
                 _reason(receipt, error.code)
                 receipt["status"] = "failed"
