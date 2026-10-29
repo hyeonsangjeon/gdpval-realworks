@@ -540,6 +540,38 @@ entries land under a fresh dated heading the day they merge to `main`.
   [immutable prior result](https://github.com/hyeonsangjeon/gdpval-realworks/blob/f3e0710a34b839b904aea2e2b1a16fded24546cf/tasks/LATEST_TASK_RESULT/README.md)
   retains exact sources, separate proof limits, commands and log/JUnit hashes.
 
+### Added
+
+- Publish the fixed native Task4 control-reader candidate for model-free
+  preparation only: its workflow, reader and tests. The code-only diff against
+  `6efe99cbd40bb839037e7a20711a734e0a4ce002` is exactly **65085 bytes**,
+  SHA256 `c425815593f26e73190923aac699b70140a7251246d3edaf930a44488ed44baf`,
+  independently reproduced from the candidate and staged publication patch.
+  Earlier passing tests and reviews are leader-reported, not rerun here;
+  no reviewed candidate commit SHA was supplied because it was unpublished.
+  Publication still requires owner review and PR CI. This is not a benchmark
+  observation or canonical Task4 result. No workflow dispatch, private Task4
+  read, model/grader call or merge is authorized or performed by publication.
+
+### Fixed
+
+- Align the two remaining Task4 time-budget guards with the existing backend
+  workflow: require exactly 13 unique comparison test files and refresh the
+  retention guard's exact workflow digest without weakening any assertion.
+  The requested guards plus related workflow hash/partition contracts passed
+  locally: **172 passed in 42.21s**, after restoring repository-pinned Codex
+  dependencies for child collection. New PR CI and owner review remain pending;
+  no workflow or production code changed and no experiment or private Task4
+  read ran.
+
+- Assign Task4's new GPT-5.4 control-reader test file to the backend
+  `comparison-contracts` job and exclude it from core `pytest`. Update the
+  13-file inventory, workflow hash and exact historical reconstruction without
+  weakening the partition guard. Reproduced `13 == 12`; all 1667 comparison
+  and related guard nodes passed across local runs (1592 initially, then 75
+  dependency-blocked nodes after restoring pinned Codex packages). New PR CI
+  and owner review remain pending; no experiment or private Task4 read ran.
+
 - Accept retained-payload source HEAD
   `2d6fc1ce47f35e429040f08ea715c6f263c861d5`, tree
   `b6702c679134f90b15a3f58fdacfbccd38522074`, after direct owner review

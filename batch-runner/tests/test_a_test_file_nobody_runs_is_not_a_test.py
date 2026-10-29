@@ -420,19 +420,25 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     # First validate and undo only the new time-budget job and ignore token.
     # Captured before editing workflow bytes 19cd9099ad1e60865111d789207bd09fc8302095be7012eea75703c9490da09d.
     # Restore the old budget command and remove its readout job, then undo only
-    # PR749's two explicit time-budget test-inventory additions and the exact
+    # PR749's and Task4's explicit time-budget test-inventory additions and the exact
     # owned-host JUnit/receipt additions checked above. Every other pre-existing
     # job, trigger, permission and guard must match the captured baseline,
     # including the reviewed complete gpt56 partition (20 modules, not 9).
     previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(workflow))
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
-    time_budget_test = "tests/test_gpt54_time_budget_comparison.py"
-    assert text.count(time_budget_test) == 2
     for job_name, step_name, token in (
-        ("pytest", "Run tests", "--ignore=" + time_budget_test),
-        ("comparison-contracts", "Run comparison contracts", time_budget_test),
+        (job_name, step_name, prefix + test_path)
+        for test_path in (
+            "tests/test_gpt54_time_budget_comparison.py",
+            "tests/test_gpt54_time_budget_v2_task4_control_readout.py",
+        )
+        for job_name, step_name, prefix in (
+            ("pytest", "Run tests", "--ignore="),
+            ("comparison-contracts", "Run comparison contracts", ""),
+        )
     ):
+        assert text.count(token.removeprefix("--ignore=")) == 2
         steps = [step for step in previous["jobs"][job_name]["steps"]
                  if step.get("name") == step_name]
         assert len(steps) == 1
@@ -687,7 +693,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt56_*.py")
     )
-    assert len(comparison_files) == 12 and len(pilot_files) == 20
+    assert len(comparison_files) == 13 and len(pilot_files) == 20
     wire_file = "tests/test_gpt56_pilot_wire_receipt.py"
     pilot_preflight_file = "tests/test_gpt56_sol_codex_pilot_preflight.py"
     publication_functions = (
