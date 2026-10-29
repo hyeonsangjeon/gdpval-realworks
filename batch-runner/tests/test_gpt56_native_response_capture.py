@@ -260,6 +260,8 @@ def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch
         record = diagnostic.probe(settings, timeout=30, response_artifact_parent=tmp_path)
         assert len(received) == 1
     assert record["schema"] == "codex_foundry_connection/4"
+    diagnostic.verify_sol_diagnostic_reservation(tmp_path, record["settings"], record["observed"]["diagnostic_budget"])
+    assert record["observed"]["provider_transport"]["native_request_count"] == 1
     assert (record["verdict"] == diagnostic.VERDICT_CONNECTED) is (case == "valid")
     proof = record["observed"]["provider_response_evidence"]
     assert proof["state"] == ("observed" if case == "valid" else "unverified")
@@ -279,6 +281,71 @@ def test_sol_diagnostic_requires_artifact_destination_before_any_effect(monkeypa
     assert result["verdict"] == diagnostic.VERDICT_RESPONSE_EVIDENCE_REFUSED
     assert result["observed"]["provider_response_evidence"]["reason"] == "native_response_artifact_failed"
     assert result["observed"]["turn_sent"] is False
+
+
+@pytest.mark.parametrize("controls", [{}, {"reasoning_effort": "max"}, {"model_context_window": 1_000_000}])
+def test_sol_diagnostic_rejects_missing_requested_controls_before_auth(monkeypatch, tmp_path, controls):
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid requested controls reached the runtime")
+    monkeypatch.setattr(codex_runner.CodexAgentRunner, "__init__", forbidden)
+    settings = CodexProviderSettings(endpoint=UPSTREAM, model=MODEL, **controls)
+    result = diagnostic.probe(settings, response_artifact_parent=tmp_path)
+    assert result["verdict"] == diagnostic.VERDICT_SETTINGS_INCOMPLETE
+    assert result["observed"]["turn_sent"] is False
+    assert not (tmp_path / diagnostic.SOL_DIAGNOSTIC_RESERVATION).exists()
+
+
+def test_sol_diagnostic_budget_is_conservative_bound_and_cannot_be_reused(tmp_path):
+    settings = CodexProviderSettings(endpoint=UPSTREAM, model=MODEL, reasoning_effort="max", model_context_window=1_000_000)
+    description = diagnostic.describe_settings(settings)
+    budget = diagnostic._reserve_sol_diagnostic(tmp_path, description)
+    assert budget["full_attempt_reference_reserve_usd"] == "7.20"
+    assert budget["owner_total_ceiling_usd"] == "200"
+    assert budget["shared_pilot_ledger_updated"] is budget["pilot_progression_allowed"] is False
+    assert budget["requires_reconciliation_before_pilot"] is True
+    assert budget["actual_billing_hard_limit_verified"] is False
+    diagnostic.verify_sol_diagnostic_reservation(tmp_path, description, budget)
+    with pytest.raises(FileExistsError):
+        diagnostic._reserve_sol_diagnostic(tmp_path, description)
+    path = tmp_path / diagnostic.SOL_DIAGNOSTIC_RESERVATION
+    path.write_bytes(path.read_bytes() + b"\n")
+    from core.reference_integrity import ReferenceIntegrityError
+    with pytest.raises(ReferenceIntegrityError):
+        diagnostic.verify_sol_diagnostic_reservation(tmp_path, description, budget)
+
+
+@pytest.mark.parametrize("damage", [None, "sha-drift", "missing-receipt", "missing-file"])
+def test_workflow_rechecks_diagnostic_budget_sidecar(tmp_path, damage):
+    from .test_codex_foundry_connection_probe import _run_redaction_check
+
+    settings = CodexProviderSettings(endpoint=UPSTREAM, model=MODEL, reasoning_effort="max", model_context_window=1_000_000)
+    description = diagnostic.describe_settings(settings)
+    budget = diagnostic._reserve_sol_diagnostic(tmp_path, description)
+    record = {"schema": "codex_foundry_connection/4", "settings": description,
+              "observed": {"tool_execution_observed": False, "diagnostic_budget": budget}}
+    path = tmp_path / diagnostic.SOL_DIAGNOSTIC_RESERVATION
+    if damage == "sha-drift":
+        path.write_bytes(path.read_bytes() + b"\n")
+    elif damage == "missing-receipt":
+        del record["observed"]["diagnostic_budget"]
+    elif damage == "missing-file":
+        path.unlink()
+    result = _run_redaction_check(tmp_path, record)
+    assert (result.returncode == 0) is (damage is None), result.stdout + result.stderr
+
+
+def test_sol_diagnostic_over_cap_reservation_refuses_before_auth(monkeypatch, tmp_path):
+    from decimal import Decimal
+    def forbidden(*args, **kwargs):
+        pytest.fail("over-cap diagnostic reached the runtime")
+    monkeypatch.setattr(codex_runner.CodexAgentRunner, "__init__", forbidden)
+    contract = wire._native_usd_caps()
+    monkeypatch.setattr(wire, "_native_usd_caps", lambda: {**contract, "maximum": Decimal("1")})
+    settings = CodexProviderSettings(endpoint=UPSTREAM, model=MODEL, reasoning_effort="max", model_context_window=1_000_000)
+    result = diagnostic.probe(settings, response_artifact_parent=tmp_path)
+    assert result["verdict"] == diagnostic.VERDICT_DIAGNOSTIC_BUDGET_REFUSED
+    assert result["observed"]["turn_sent"] is False
+    assert not (tmp_path / diagnostic.SOL_DIAGNOSTIC_RESERVATION).exists()
 
 
 @pytest.mark.parametrize("field,value", [

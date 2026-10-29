@@ -79,6 +79,7 @@ import re
 import sys
 import threading
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from time import monotonic
@@ -191,6 +192,8 @@ VERDICT_NOT_SENT = "not_sent"
 VERDICT_UNCLASSIFIED_FAILURE = "unclassified_failure"
 VERDICT_RESPONSE_EVIDENCE_REFUSED = "response_evidence_unverified"
 VERDICT_ENVIRONMENT_REFUSED = runner_environment.REFUSED
+VERDICT_DIAGNOSTIC_BUDGET_REFUSED = "diagnostic_budget_refused"
+SOL_DIAGNOSTIC_RESERVATION = "codex-foundry-sol-diagnostic-reservation.json"
 
 VERDICTS: tuple[str, ...] = (
     VERDICT_CONNECTED,
@@ -213,6 +216,7 @@ VERDICTS: tuple[str, ...] = (
     VERDICT_UNCLASSIFIED_FAILURE,
     VERDICT_RESPONSE_EVIDENCE_REFUSED,
     VERDICT_ENVIRONMENT_REFUSED,
+    VERDICT_DIAGNOSTIC_BUDGET_REFUSED,
 )
 
 #: Verdicts that mean a request reached the provider and was answered by it,
@@ -531,7 +535,7 @@ def describe_settings(settings: CodexProviderSettings) -> dict[str, Any]:
     """
     classified = classify_endpoint(settings.endpoint)
     path = "/" + settings.endpoint.split("://", 1)[-1].split("/", 1)[-1]
-    return {
+    description = {
         "endpoint_kind": classified.kind.value,
         "endpoint_host_fingerprint": host_fingerprint(settings.endpoint),
         "endpoint_path": path if path != "/" + settings.endpoint else "/",
@@ -566,6 +570,12 @@ def describe_settings(settings: CodexProviderSettings) -> dict[str, Any]:
             PINNED_CODEX_CLI_DISTRIBUTION: installed_cli_version(),
         },
     }
+    if settings.reasoning_effort is not None or settings.model_context_window is not None:
+        description["requested_controls"] = {
+            "reasoning_effort": settings.reasoning_effort,
+            "model_context_window": settings.model_context_window,
+        }
+    return description
 
 
 def settings_fingerprint(description: Mapping[str, Any]) -> str:
@@ -603,9 +613,62 @@ def settings_from_environment(
             "the environment describes no direct /openai/v1/ endpoint, and the "
             "legacy dated route is a different contract rather than a fallback"
         )
-    return CodexProviderSettings(
-        endpoint=route.direct_v1.url, model=deployment.strip()
-    )
+    controls = ({"reasoning_effort": "max", "model_context_window": 1_000_000}
+                if deployment.strip() == "gpt-5.6-sol" else {})
+    return CodexProviderSettings(endpoint=route.direct_v1.url, model=deployment.strip(), **controls)
+
+
+def _sol_diagnostic_budget(description):
+    """Reserve one full bounded attempt, not a fictional five-task result.
+
+    This conservative reference amount must be carried into any later pilot
+    accounting. It is not the effective Foundry tariff or a paid launch right.
+    No diagnostic request runs on the five task IDs or resets their ledger.
+    """
+    from gpt56_pilot_wire_receipt import _native_caps, _native_usd_caps, USD_CAPS_SHA256, USD_PRICE_TABLE_SHA256
+
+    caps, contract = _native_caps()["per_attempt"], _native_usd_caps()
+    rates = contract["rates"]
+    reserve = (Decimal(caps["input_tokens"]) * (rates["input"] + rates["cache_write"])
+               + Decimal(caps["output_tokens"]) * rates["output"]) / Decimal(1_000_000)
+    if not Decimal(0) < reserve <= contract["maximum"]:
+        raise ValueError("usd_ceiling_exceeded")
+    return {
+        "record_version": "sol-native-diagnostic-reservation-v1",
+        "purpose": "one_connection_diagnostic_not_a_benchmark_task",
+        "currency": "USD", "owner_total_ceiling_usd": format(contract["maximum"], "f"),
+        "full_attempt_reference_reserve_usd": format(reserve, "f"),
+        "cap_record_sha256": USD_CAPS_SHA256, "price_table_sha256": USD_PRICE_TABLE_SHA256,
+        "settings_fingerprint": settings_fingerprint(description), "attempt_caps": caps,
+        "rate_basis": "published_Standard_Global_long_reference_not_verified_effective_tariff",
+        "cache_write_policy": "one_write_per_full_input_token_or_larger_reported_counter",
+        "shared_pilot_ledger_updated": False, "pilot_progression_allowed": False,
+        "requires_reconciliation_before_pilot": True, "actual_billing_hard_limit_verified": False,
+    }
+
+
+def _reserve_sol_diagnostic(parent, description):
+    from gpt54_codex_input_capture import _write_no_clobber
+
+    budget = _sol_diagnostic_budget(description)
+    raw = (json.dumps(budget, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _write_no_clobber(parent / SOL_DIAGNOSTIC_RESERVATION, raw)
+    return {**budget, "reservation_file": {
+        "path": SOL_DIAGNOSTIC_RESERVATION, "sha256": hashlib.sha256(raw).hexdigest(),
+    }}
+
+
+def verify_sol_diagnostic_reservation(parent, description, budget):
+    from gpt54_v2_grading_input import _read_bytes
+
+    expected = _sol_diagnostic_budget(description)
+    raw = (json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    bound = {**expected, "reservation_file": {
+        "path": SOL_DIAGNOSTIC_RESERVATION, "sha256": hashlib.sha256(raw).hexdigest(),
+    }}
+    if budget != bound or _read_bytes(parent / SOL_DIAGNOSTIC_RESERVATION,
+                                     sha256=bound["reservation_file"]["sha256"]) != raw:
+        raise ValueError("diagnostic_budget_unverified")
 
 
 # ── What a green verdict still does not buy ─────────────────────────────────
@@ -953,6 +1016,14 @@ def probe(
         except Exception:
             return _record(verdict=VERDICT_RESPONSE_EVIDENCE_REFUSED, description=description,
                            observed=observed, note="native_response_artifact_failed; nothing was sent")
+        if settings.reasoning_effort != "max" or settings.model_context_window != 1_000_000:
+            return _record(verdict=VERDICT_SETTINGS_INCOMPLETE, description=description,
+                           observed=observed, note="sol_requested_controls_unverified; nothing was sent")
+        try:
+            observed["diagnostic_budget"] = _reserve_sol_diagnostic(response_artifact_parent, description)
+        except Exception:
+            return _record(verdict=VERDICT_DIAGNOSTIC_BUDGET_REFUSED, description=description,
+                           observed=observed, note="diagnostic_budget_unverified; nothing was sent")
 
     try:
         runner = CodexAgentRunner(settings, timeout=timeout)
@@ -1146,6 +1217,8 @@ def probe(
             record["observed"]["usage"] = observed["usage"]
     if response_observer is not None:
         evidence = response_observer.response_artifacts.report()
+        if response_observer.provider_capture is not None:
+            observed["provider_transport"] = response_observer.provider_capture.summary()
         observed["provider_response_evidence"] = evidence
         for field in ("served_model", "served_model_version", "reasoning_effort", "context_tokens"):
             observed[field] = evidence[field]

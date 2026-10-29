@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Integrate the reviewed Task4, Task5 documentation and GHCP gate branches
+  without enabling paid push/PR triggers. Require explicit Max/1M in the Sol
+  connection probe and persist its full-attempt USD 7.20 reference reservation
+  before authentication, with a second publication hash check. It is not a
+  benchmark task or an effective billing guarantee; pilot ledger reconciliation
+  remains mandatory. Preserve prior source seals through a new source-only
+  successor. No paid send is claimed by this commit.
+
 - Preserve native grading runner receipts through shard merging and validate
   their per-shard bindings. Repair legacy offline fixtures using explicit
   historical source origins, while retaining current-source refusal tests.

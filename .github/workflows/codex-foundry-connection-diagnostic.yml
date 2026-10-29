@@ -720,6 +720,7 @@ jobs:
           leaked = []
           checked = 0
           response_artifacts_checked = False
+          diagnostic_budget_checked = False
           endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "").strip()
           needles = []
           if endpoint:
@@ -841,6 +842,15 @@ jobs:
                           response_artifacts_checked = True
                       except Exception:
                           leaked.append(f"{path}: response artifacts failed verification")
+                  budget = record["observed"].get("diagnostic_budget")
+                  if budget is not None:
+                      sys.path.insert(0, str(Path(scope_source).resolve().parents[1]))
+                      from scripts.diagnose_codex_foundry_connection import verify_sol_diagnostic_reservation
+                      try:
+                          verify_sol_diagnostic_reservation(Path(path).parent, record["settings"], budget)
+                          diagnostic_budget_checked = True
+                      except Exception:
+                          leaked.append(f"{path}: diagnostic reservation failed verification")
               else:
                   leaked.append(
                       f"{path}: schema {schema!r} has no check here, so nothing "
@@ -850,6 +860,8 @@ jobs:
           # `path` is the final (connection) record in the fixed list above.
           if os.path.lexists(Path(path).parent / "codex-foundry-connection-responses") and not response_artifacts_checked:
               leaked.append("response artifact directory has no verified connection receipt")
+          if os.path.lexists(Path(path).parent / "codex-foundry-sol-diagnostic-reservation.json") and not diagnostic_budget_checked:
+              leaked.append("diagnostic reservation has no verified connection receipt")
           if leaked:
               print("FATAL:")
               for item in sorted(set(leaked)):
@@ -886,6 +898,7 @@ jobs:
             /tmp/codex-foundry-valid-request.json
             /tmp/codex-foundry-closing-sweep.json
             /tmp/codex-foundry-connection.json
+            /tmp/codex-foundry-sol-diagnostic-reservation.json
             /tmp/codex-foundry-connection-responses/*.json
           if-no-files-found: warn
           retention-days: 90

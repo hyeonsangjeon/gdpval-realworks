@@ -1,5 +1,20 @@
 # Latest task result
 
+## Queued PR integration and paid-diagnostic preparation, 2026-10-29
+
+Under the owner's PR/CI and paid-run instructions, #785 is merged; the
+publication candidate incorporates the reviewed heads of #786–#788 for a
+combined CI check. No paid workflow runs on a push or PR. GHCP authentication
+is still absent by metadata-only inspection and is not substituted or created.
+
+Hosted sandbox proof 40924442821 succeeded with zero model calls. The Sol
+diagnostic now requests/fingerprints Max and 1,000,000 context, and writes a
+no-clobber USD 7.20 conservative full-attempt reference reservation before
+authentication. It remains separate from the five-task ledger and explicitly
+requires reconciliation before pilot progression. Actual tariff/served fields
+are not inferred. Prior seals, USD 200 and the five task IDs remain unchanged.
+Final integration tests/CI and paid dispatch are pending at this source commit.
+
 ## Native CI repair and hosted proof, 2026-10-29
 
 PR #785 merged as `0a15af39b3dddb8275a82be0b609303c4bdc570d` under the

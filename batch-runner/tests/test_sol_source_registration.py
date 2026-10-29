@@ -68,8 +68,21 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     response_path = root / pilot.SOURCE_PROFILE_RESPONSE
     response_bytes = response_path.read_bytes()
     response_profile = pilot.load_plan(response_path)
+    runner_path = root / pilot.SOURCE_PROFILE_RUNNER
+    runner_bytes = runner_path.read_bytes()
+    runner_profile = pilot.load_plan(runner_path)
     reference_path = root / binding.CONNECTION_REFERENCE_PATH
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261029_runner_receipt.yaml")
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261029_paid_diagnostic.yaml")
+    assert hashlib.sha256(runner_bytes).hexdigest() == pilot.SOURCE_PROFILE_RUNNER_SHA256 == (
+        "d01dcb4d47c3b913647a0ca56740532ed40f072976226a703e491ee3c510155d"
+    )
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != runner_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in runner_profile.items() if k != "source_pins"
+    }
     assert hashlib.sha256(response_bytes).hexdigest() == pilot.SOURCE_PROFILE_RESPONSE_SHA256 == (
         "768adaed42d65233986447810dd5a8646306b3e44f42bf7feb2037042b9c1446"
     )
@@ -193,8 +206,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/core/cost_metering.py": "f2d63e7812bd8557232bc0a3bdc0deb76a3565a4d1398b1fb191008fa9aff888",
         binding.CONNECTION_REFERENCE_PATH: binding.CONNECTION_REFERENCE_SHA256,
         "batch-runner/gpt56_native_response_capture.py": "1e3db1b4f6b956b24fd6b892118e0d4a2b491c23e3a52c8a1536849a6a36aca6",
-        "batch-runner/scripts/diagnose_codex_foundry_connection.py": "9ba187e79a0eff2fc3afb9e931af8aedf3b89ba574e5b112048aa954ee61efc2",
-        ".github/workflows/codex-foundry-connection-diagnostic.yml": "a89a6777cf82aee7703934eb4bf99c3f028213444738c1db75e60f642190df83",
+        "batch-runner/scripts/diagnose_codex_foundry_connection.py": "d3a657e9443917e2345e62a22e5ccd7518a4ff6c4c91206b1762dec91c53612b",
+        ".github/workflows/codex-foundry-connection-diagnostic.yml": "23a6182e0b4b03fb53102dad7455acb91b5ce5893afa403ad740877ad2897857",
         "batch-runner/core/runner_environment.py": "c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a",
         "batch-runner/scripts/prepare_codex_sandbox_host.py": "6324b206656abf609af6c6d4f8a1c93c68a0c3d48e53aef0d35955630b66825a",
         "batch-runner/step9_merge_shards.py": "9079fd701fbc7e4cca65fbcc1705f03891e4e13be3a4fb9145a2bb17b1352872",
@@ -259,9 +272,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_RESPONSE
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_RESPONSE_SHA256
-    assert report["source_change_reason"] == "reviewed_grader_guard_runner_admission_and_receipt_preservation"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_RUNNER
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_RUNNER_SHA256
+    assert report["source_change_reason"] == "bounded_paid_diagnostic_requested_controls_and_reservation"
     assert report["response_capture_readiness"] == {
         "status": "next_call_capture_path_only", "live_evidence_observed": False,
         "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],

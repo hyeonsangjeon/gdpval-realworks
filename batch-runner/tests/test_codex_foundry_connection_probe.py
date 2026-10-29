@@ -626,6 +626,23 @@ def test_an_environment_that_describes_nothing_raises_rather_than_guessing():
         settings_from_environment(DEPLOYMENT, {})
 
 
+def test_sol_diagnostic_requests_and_fingerprints_the_registered_max_1m_controls():
+    settings = settings_from_environment("gpt-5.6-sol", {
+        "AZURE_AI_ROUTE_PROFILE": "direct-v1", "FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT,
+    })
+    assert settings.reasoning_effort == "max" and settings.model_context_window == 1_000_000
+    assert "model_reasoning_effort=\"max\"" in settings.config_overrides()
+    assert "model_context_window=1000000" in settings.config_overrides()
+    description = describe_settings(settings)
+    assert description["requested_controls"] == {
+        "reasoning_effort": "max", "model_context_window": 1_000_000,
+    }
+    assert settings_fingerprint(description) != settings_fingerprint(
+        describe_settings(_settings(model="gpt-5.6-sol")))
+    # Requested controls do not fill any provider-response evidence.
+    assert _empty_observation()["served_model"] is None
+
+
 # ── The command ─────────────────────────────────────────────────────────────
 
 
@@ -1635,6 +1652,13 @@ def test_every_record_that_is_checked_is_also_uploaded_and_the_reverse():
             steps["Confirm the record names no resource and carries no token"]["run"],
         )
     )
+    # The reservation is a receipt-bound sidecar, not another probe schema.
+    # Require both its exact validator call and orphan refusal before adding
+    # it to the checked set; the real check is exercised with tampered files.
+    check = _redaction_check()
+    assert "verify_sol_diagnostic_reservation(Path(path).parent, record[\"settings\"], budget)" in check
+    assert '"codex-foundry-sol-diagnostic-reservation.json") and not diagnostic_budget_checked' in check
+    checked.add("/tmp/codex-foundry-sol-diagnostic-reservation.json")
     uploaded = set(
         re.findall(
             r"/tmp/codex-foundry-[a-z-]+\.json",
@@ -2166,7 +2190,7 @@ def test_native_only_retains_ref_identity_runtime_timeout_and_publication_gates(
             "plan", "readonly", "auth-discriminator", "transmission-sweep",
             "valid-request", "closing-sweep", "connection",
         )
-    ] + ["/tmp/codex-foundry-connection-responses/*.json"]
+    ] + ["/tmp/codex-foundry-sol-diagnostic-reservation.json", "/tmp/codex-foundry-connection-responses/*.json"]
     assert upload["with"]["retention-days"] == 90
     assert upload["with"]["if-no-files-found"] == "warn"
     assert "CODEX_HOME" not in upload["with"]["path"]

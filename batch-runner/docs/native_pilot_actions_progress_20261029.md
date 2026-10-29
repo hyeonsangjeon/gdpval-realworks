@@ -1,5 +1,37 @@
 # Native five-task pilot: publication and Actions execution
 
+## Current integration status
+
+PR #785 merged as `0a15af39b3dddb8275a82be0b609303c4bdc570d`. The publication
+candidate now also contains the exact reviewed heads of #786 (`96f7f056d`),
+#787 (`62735b89e`) and #788 (`97aba7b2c`), resolving overlapping progress
+records by retaining both histories and combining the exact CI inventories.
+Those three PRs are not yet merged into main; the integrated tree needs CI.
+The GHCP protected environment/token is absent in GitHub metadata (names only
+were read), so that paid gate is not dispatched or supplied another credential.
+
+Model-free Actions **40924442821** at `62b29f343` passed on hosted Ubuntu
+24.04, image **20261026.354.1**: bwrap and the pinned Codex marker both exited
+0. The bwrap-only AppArmor profile was added; the system-wide userns restriction
+remained enabled and no sysctl was written. Model calls: **0**.
+
+The prospective Sol connectivity request now explicitly sets and fingerprints
+Max / 1,000,000 context, as the pilot already requests. Missing controls refuse
+before authentication. The existing transport guards still bound the attempt
+to input 300,000 / output 10,000 and the configured deadline/request limits.
+Before a send, retain a no-clobber **USD 7.20 reference reservation**, including
+one cache write per maximum input token, checked against USD 200. This is not
+an invoice or verified tariff. Its receipt explicitly blocks pilot progression
+until the reservation is reconciled with the five-task shared ledger; it never
+pretends this CONNECTED probe is one of the benchmark tasks. The workflow
+rechecks the sidecar hash and withholds an unbound/tampered artifact.
+
+The new source-only successor preserves every predecessor and all non-source
+pilot settings. The original grader seal and response-evidence refusals remain.
+No paid send has occurred at the time of this source change.
+
+## Prior publication record
+
 The owner approved publication/CI on 2026-10-29 and then explicitly requested
 paid execution without another paid-approval question. Scope remains Foundry
 `gpt-5.6-sol`, Codex SDK/CLI **0.147.0**, the registered five tasks, and the
