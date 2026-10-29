@@ -35,11 +35,27 @@ UNCHANGED = object()
 
 
 @pytest.fixture(autouse=True)
-def no_runtime_auth_or_publication(monkeypatch, native_hosted_runner):
+def no_runtime_auth_or_publication(monkeypatch):
     from huggingface_hub import HfApi
     from huggingface_hub.utils import _auth, _headers
 
-    synthetic_runner = runner_environment.observe()
+    # This helper is also invoked directly by historical readout fixtures.
+    # Keep its one-argument interface and build explicit fake host facts here;
+    # do not require pytest to inject a fixture into a direct __wrapped__ call.
+    with monkeypatch.context() as host:
+        for name, value in {
+            "GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
+            "RUNNER_NAME": "synthetic-native-runner", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
+            "ImageOS": "ubuntu24", "ImageVersion": "20261026.354.1",
+            "GITHUB_RUN_ID": "123456789", "GITHUB_RUN_ATTEMPT": "1",
+        }.items():
+            host.setenv(name, value)
+        for name in ("NATIVE_AZURE_VM_APPROVAL", "NATIVE_AZURE_VM_APPROVAL_SHA256", "NATIVE_AZURE_VM_ID"):
+            host.delenv(name, raising=False)
+        host.setattr(runner_environment.platform, "freedesktop_os_release", lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"})
+        host.setattr(runner_environment.platform, "system", lambda: "Linux")
+        host.setattr(runner_environment.platform, "machine", lambda: "x86_64")
+        synthetic_runner = runner_environment.observe()
     assert synthetic_runner["eligible_for_execution"]
     monkeypatch.setattr(runner_environment, "observe", lambda: copy.deepcopy(synthetic_runner))
 
