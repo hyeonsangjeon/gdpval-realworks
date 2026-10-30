@@ -1,0 +1,148 @@
+name: Native pilot five-shard ledger handoff (model-free)
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/gpt56-pilot-ledger-*.yml
+      - batch-runner/gpt56_pilot_ledger_handoff.py
+      - batch-runner/gpt56_pilot_usd_budget.py
+      - batch-runner/core/runner_environment.py
+      - batch-runner/tests/test_pilot_shard_ledger_handoff.py
+      - batch-runner/tests/test_gpt56_pilot_shared_usd.py
+      - batch-runner/requirements-ghcp-sol-gate.txt
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        required: true
+        default: model-free
+        options: [model-free]
+
+# No provider SDK, environment secret, OIDC, model, grader or relay dispatch.
+# This workflow cannot authorize a paid pilot or renew the frozen grader seal.
+permissions:
+  contents: read
+
+concurrency:
+  group: pilot-ledger-model-free-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Refuse any non-model-free dispatch
+        env:
+          EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT" == pull_request || ( "$EVENT" == workflow_dispatch && "$MODE" == model-free ) ]]
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+      - name: Install pinned import-only test dependencies
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+      - name: Check handoff and original shared-USD refusal contracts offline
+        working-directory: batch-runner
+        env:
+          HF_HUB_OFFLINE: '1'
+          HF_DATASETS_OFFLINE: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 600s python -m pytest -q -ra -o addopts= -m 'not integration' -p no:cacheprovider \
+            --junitxml="$RUNNER_TEMP/pilot-ledger-tests.xml" \
+            tests/test_pilot_shard_ledger_handoff.py tests/test_gpt56_pilot_shared_usd.py \
+            tests/test_gpt56_pilot_usd_ceiling.py tests/test_gpt56_pilot_usd200.py
+      - name: Keep the offline test report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pilot-ledger-model-free-tests
+          path: ${{ runner.temp }}/pilot-ledger-tests.xml
+          if-no-files-found: error
+          retention-days: 7
+
+  shard_1:
+    needs: contracts
+    uses: ./.github/workflows/gpt56-pilot-ledger-shard.yml
+    with:
+      mode: model-free
+      shard_index: 0
+  shard_2:
+    needs: shard_1
+    uses: ./.github/workflows/gpt56-pilot-ledger-shard.yml
+    with:
+      mode: model-free
+      shard_index: 1
+      predecessor_artifact: ${{ needs.shard_1.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.shard_1.outputs.manifest_sha256 }}
+  shard_3:
+    needs: shard_2
+    uses: ./.github/workflows/gpt56-pilot-ledger-shard.yml
+    with:
+      mode: model-free
+      shard_index: 2
+      predecessor_artifact: ${{ needs.shard_2.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.shard_2.outputs.manifest_sha256 }}
+  shard_4:
+    needs: shard_3
+    uses: ./.github/workflows/gpt56-pilot-ledger-shard.yml
+    with:
+      mode: model-free
+      shard_index: 3
+      predecessor_artifact: ${{ needs.shard_3.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.shard_3.outputs.manifest_sha256 }}
+  shard_5:
+    needs: shard_4
+    uses: ./.github/workflows/gpt56-pilot-ledger-shard.yml
+    with:
+      mode: model-free
+      shard_index: 4
+      predecessor_artifact: ${{ needs.shard_4.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.shard_4.outputs.manifest_sha256 }}
+
+  verify:
+    needs: shard_5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+      - name: Install pinned import-only verification dependencies
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          artifact-ids: ${{ needs.shard_5.outputs.artifact_id }}
+          path: ${{ runner.temp }}/pilot-final-handoff
+          merge-multiple: true
+      - name: Verify all five jobs and the three money invariants (no judge)
+        env:
+          PREVIOUS_SHA: ${{ needs.shard_5.outputs.manifest_sha256 }}
+          PYTHONDONTWRITEBYTECODE: '1'
+          HF_HUB_OFFLINE: '1'
+          HF_DATASETS_OFFLINE: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=5s 120s python batch-runner/gpt56_pilot_ledger_handoff.py verify --mode model-free \
+            --predecessor "$RUNNER_TEMP/pilot-final-handoff" --expected-sha256 "$PREVIOUS_SHA" \
+            --workspace "$RUNNER_TEMP/pilot-ledger-audit" --output "$RUNNER_TEMP/pilot-ledger-proof.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pilot-ledger-model-free-proof
+          path: ${{ runner.temp }}/pilot-ledger-proof.json
+          if-no-files-found: error
+          retention-days: 7
