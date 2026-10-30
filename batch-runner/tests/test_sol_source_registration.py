@@ -80,8 +80,14 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     text_tools_path = root / pilot.SOURCE_PROFILE_TEXT_TOOLS
     text_tools_bytes = text_tools_path.read_bytes()
     text_tools_profile = pilot.load_plan(text_tools_path)
+    counters_path = root / pilot.SOURCE_PROFILE_CAPTURE_COUNTERS
+    counters_bytes = counters_path.read_bytes()
+    counters_profile = pilot.load_plan(counters_path)
     reference_path = root / binding.CONNECTION_REFERENCE_PATH
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261029_capture_counters.yaml")
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261030_list_prices.yaml")
+    assert hashlib.sha256(counters_bytes).hexdigest() == pilot.SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256 == (
+        "37a0be47d3cb82733e86e74a12fc4f1245f71b2c7699c03cebe5a4d277698535"
+    )
     assert hashlib.sha256(text_tools_bytes).hexdigest() == pilot.SOURCE_PROFILE_TEXT_TOOLS_SHA256 == (
         "31743281de00ae1543e9067ef082e4c1082c66e1da45f126b7c78c09a260abbd"
     )
@@ -106,9 +112,16 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             if digest != no_web_profile["source_pins"][name]} == {
         "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py",
     }
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in counters_profile["source_pins"].items()
             if digest != text_tools_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != counters_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
+    assert {k: v for k, v in profile.items() if k != "source_pins"} == {
+        k: v for k, v in counters_profile.items() if k != "source_pins"
     }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in text_tools_profile.items() if k != "source_pins"
@@ -241,7 +254,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt54_disposable_checkout.py": "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
         pilot.ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml": wire.USD_CAPS_SHA256,
         pilot.ENVELOPE + "model_price_table.json": wire.USD_PRICE_TABLE_SHA256,
-        "batch-runner/gpt56_pilot_usd_budget.py": "d28dbe71db00d301e2dad54852515df15c254be09002fa43b16e2d0f2131048e",
+        "batch-runner/gpt56_pilot_usd_budget.py": "ca6bca6ad483aeb80ffb427a2de71301fb18ee8b75c825b9586ff31bd5d9bb59",
         "batch-runner/core/cost_metering.py": "f2d63e7812bd8557232bc0a3bdc0deb76a3565a4d1398b1fb191008fa9aff888",
         binding.CONNECTION_REFERENCE_PATH: binding.CONNECTION_REFERENCE_SHA256,
         "batch-runner/gpt56_native_response_capture.py": "9dcc3c578ee459e722044e1afdb78a4aa0176a0c63572405a5e0cbb08ac9bfac",
@@ -311,9 +324,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_TEXT_TOOLS
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_TEXT_TOOLS_SHA256
-    assert report["source_change_reason"] == "preserve_typed_rate_counters_and_explicit_owned_evidence_refusal"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_CAPTURE_COUNTERS
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256
+    assert report["source_change_reason"] == "owner_list_prices_and_non_stopping_unknown_usage"
     assert report["response_capture_readiness"] == {
         "status": "next_call_capture_path_only", "live_evidence_observed": False,
         "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],

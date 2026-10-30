@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_capture_counters.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_list_prices.yaml"
+SOURCE_PROFILE_CAPTURE_COUNTERS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_capture_counters.yaml"
+SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256 = "37a0be47d3cb82733e86e74a12fc4f1245f71b2c7699c03cebe5a4d277698535"
 SOURCE_PROFILE_TEXT_TOOLS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_text_tools.yaml"
 SOURCE_PROFILE_TEXT_TOOLS_SHA256 = "31743281de00ae1543e9067ef082e4c1082c66e1da45f126b7c78c09a260abbd"
 SOURCE_PROFILE_NO_WEB = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_no_web_diagnostic.yaml"
@@ -106,7 +108,7 @@ SOURCE_PROFILE_AUXILIARY = {
     ENVELOPE + "model_price_table.json":
         "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
     "batch-runner/gpt56_pilot_usd_budget.py":
-        "d28dbe71db00d301e2dad54852515df15c254be09002fa43b16e2d0f2131048e",
+        "ca6bca6ad483aeb80ffb427a2de71301fb18ee8b75c825b9586ff31bd5d9bb59",
     "batch-runner/core/cost_metering.py":
         "f2d63e7812bd8557232bc0a3bdc0deb76a3565a4d1398b1fb191008fa9aff888",
     ENVELOPE + "gpt56_sol_connection_reference_20261027.json":
@@ -383,6 +385,10 @@ def source_plan_snapshot(
                                       sha256=SOURCE_PROFILE_TEXT_TOOLS_SHA256)
         require(len(text_tools_data) <= 65536)
         text_tools_profile = yaml.safe_load(text_tools_data)
+        counters_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_CAPTURE_COUNTERS),
+                                    sha256=SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256)
+        require(len(counters_data) <= 65536)
+        counters_profile = yaml.safe_load(counters_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -410,6 +416,8 @@ def source_plan_snapshot(
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
         require(seal({k: v for k, v in text_tools_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require(seal({k: v for k, v in counters_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
         require({name for name, digest in response_profile["source_pins"].items()
                  if digest != connection_profile["source_pins"][name]}
                 == {"batch-runner/core/codex_runner.py", "batch-runner/gpt56_pilot_wire_receipt.py",
@@ -429,8 +437,11 @@ def source_plan_snapshot(
         require({name for name, digest in text_tools_profile["source_pins"].items()
                  if digest != no_web_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py"})
-        require({name for name, digest in pins.items() if digest != text_tools_profile["source_pins"][name]}
+        require({name for name, digest in counters_profile["source_pins"].items()
+                 if digest != text_tools_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+        require({name for name, digest in pins.items() if digest != counters_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py"})
         require({name for name, digest in bindings_profile["source_pins"].items()
                  if digest != caps_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
@@ -483,7 +494,8 @@ def source_plan_snapshot(
                         SOURCE_PROFILE_RUNNER: SOURCE_PROFILE_RUNNER_SHA256,
                         SOURCE_PROFILE_PAID_DIAGNOSTIC: SOURCE_PROFILE_PAID_DIAGNOSTIC_SHA256,
                         SOURCE_PROFILE_NO_WEB: SOURCE_PROFILE_NO_WEB_SHA256,
-                        SOURCE_PROFILE_TEXT_TOOLS: SOURCE_PROFILE_TEXT_TOOLS_SHA256}
+                        SOURCE_PROFILE_TEXT_TOOLS: SOURCE_PROFILE_TEXT_TOOLS_SHA256,
+                        SOURCE_PROFILE_CAPTURE_COUNTERS: SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -520,6 +532,7 @@ def source_plan_snapshot(
             require(blobs[SOURCE_PROFILE_PAID_DIAGNOSTIC] == paid_data)
             require(blobs[SOURCE_PROFILE_NO_WEB] == no_web_data)
             require(blobs[SOURCE_PROFILE_TEXT_TOOLS] == text_tools_data)
+            require(blobs[SOURCE_PROFILE_CAPTURE_COUNTERS] == counters_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -542,9 +555,9 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_TEXT_TOOLS,
-            "supersedes_profile_sha256": SOURCE_PROFILE_TEXT_TOOLS_SHA256,
-            "source_change_reason": "preserve_typed_rate_counters_and_explicit_owned_evidence_refusal",
+            "supersedes_profile": SOURCE_PROFILE_CAPTURE_COUNTERS,
+            "supersedes_profile_sha256": SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256,
+            "source_change_reason": "owner_list_prices_and_non_stopping_unknown_usage",
             "response_capture_readiness": {
                 "status": "next_call_capture_path_only", "live_evidence_observed": False,
                 "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
@@ -1244,6 +1257,7 @@ def main(argv: list[str] | None = None) -> int:
             ROOT / SOURCE_PROFILE_PAID_DIAGNOSTIC,
             ROOT / SOURCE_PROFILE_NO_WEB,
             ROOT / SOURCE_PROFILE_TEXT_TOOLS,
+            ROOT / SOURCE_PROFILE_CAPTURE_COUNTERS,
         }
         capture_requested = args.capture_workspace is not None
         connection_requested = args.retained_connection_reference is not None
