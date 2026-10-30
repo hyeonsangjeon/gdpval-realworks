@@ -1931,6 +1931,11 @@ def test_time_budget_legacy_role_compatibility_disposable_profile(monkeypatch, c
 
 @pytest.fixture(scope="module")
 def handoff_source_seed(tmp_path_factory, dual_roots):
+    return _handoff_source_fixture(tmp_path_factory, dual_roots)
+
+
+def _handoff_source_fixture(tmp_path_factory, dual_roots, *,
+                            rubric_json='[{"criterion":"synthetic only; not a grade"}]'):
     """Explicit synthetic input declarations in genuine temporary R/F commits.
 
     Only dataset/catalog/envelope/profile metadata is changed in synthetic F;
@@ -1991,7 +1996,7 @@ def handoff_source_seed(tmp_path_factory, dual_roots):
         rows.append({
             "task_id": task_id, "prompt": prompt,
             "occupation": declaration["occupation"], "sector": declaration["sector"],
-            "rubric_json": '[{"criterion":"synthetic only; not a grade"}]',
+            "rubric_json": rubric_json,
             "rubric_pretty": "Synthetic grading metadata; not model input.\n",
             "reference_files": names, "reference_file_urls": [],
             "reference_file_hf_uris": [],

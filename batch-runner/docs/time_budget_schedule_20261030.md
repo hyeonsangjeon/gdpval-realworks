@@ -117,6 +117,9 @@ is monkeypatched and no private historic Task4 output is used.
 Recommendation 3 still needs a model-free end-to-end chain from these captures
 through frozen-F grading preparation/stub execution to `(task, repeat)` paired
 aggregation, retaining failed/missing outcomes and image/source identities.
+The subsequent local implementation is described in
+[`time_budget_paired_readout_20261030.md`](time_budget_paired_readout_20261030.md);
+the paragraph here records what remained at this schedule commit.
 The historical grading/readout controllers' fixed-cell assumptions must be
 checked before wiring all twenty cells; this change does not silently expand
 their authority. Real Ubuntu 24.04 sandbox/kernel proof, publication and live
