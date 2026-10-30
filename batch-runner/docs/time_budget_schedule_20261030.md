@@ -32,13 +32,76 @@ mint a second observation for a consumed cell. The existing digest-bound
 request's cell and immutable registration determine that ID; a caller-supplied
 ID is never independent authority.
 
-Both workflows still have exactly one `observation` job, a 45-minute job limit,
-and the **same** concurrency group with `cancel-in-progress: false`. Both early
+Both workflows still have exactly one `observation` job, now a 55-minute V2 /
+65-minute Codex outer job limit, and the **same** concurrency group with
+`cancel-in-progress: false`. Both early
 shell guards and Python controllers accept integer repeats 1–2 only. V2's
 underlying observation callable also accepts the registered second run.
 Actions queue ordering is not assumed: a queued wrong cell is refused by the
 durable order check. There is no automatic dispatch/credential acquisition in
 the scheduler. Independently approved, digest-bound requests remain required.
+
+## Outer-job timeout repair (2026-10-30)
+
+The immutable time-budget registration, not a workflow literal, owns generation
+`seconds_per_observation: 1200`, cleanup `local_cleanup_grace_seconds: 20` and
+`max_planned_host_lifecycle_seconds: 1220`. The earlier
+`gpt54_sandboxv2_codex_comparison.yaml` is also unchanged; it is not the separate
+time-budget policy. Neither model time, grading time, attempts, admission-window
+duration nor the study's settings change in this repair.
+
+The previous `jobs.observation.timeout-minutes: 45` cannot cover Codex's declared
+step timeouts plus the registered lifecycle. V2 also lacks the selected minimum
+operating reserve. Count every timed non-generation step, including retention
+and completion checks, even when conditional; count the model lifecycle from the
+registration exactly once. Reserve another **10 minutes** for the closed set of
+untimed checkout/bootstrap/Python setup/login/artifact operations. Round the
+result up to five-minute job increments, below the hosted six-hour maximum:
+
+| Job | Declared steps + registered lifecycle | Minimum with reserve | Old -> new job limit / actual headroom |
+| --- | --- | --- | --- |
+| V2 | 23m + 1220s = 43m20s | 53m20s | 45m -> 55m / 11m40s |
+| Codex | 30m + 1220s = 50m20s | 60m20s | 45m -> 65m / 14m40s |
+
+The reserve is an **operational allowance, not a proven maximum for each
+untimed action**, and does not guarantee runner/network speed or retention
+under platform termination. Actual hosted resource/cleanup proof remains open.
+This raises only the workflow job envelope; it does not extend the registered
+generation deadline, relax a refusal or authorize another observation.
+
+`tests/test_time_budget_workflow_timeouts.py` calculates that inequality from
+the actual YAML and original registration. It also rejects missing/dynamic/
+invalid timeouts, an over-six-hour job, missing/duplicate execution, an added
+unaccounted untimed step, growth in timed steps which exhausts the reserve,
+rounding 60m20s down to 60m, and a workflow-owned generation step deadline.
+The original two registration files are held to their full SHA256 values.
+
+The source-only successor advances exactly its two workflow helper hashes:
+
+- Codex `929c303cac32da46a9981ce592a61ced8bc35e66fea1110be42d4ef4898bf5fe`
+  -> `16202467dc87439223207e6bed9342349bc8377cfed3a2e4d5b7e548b9544270`.
+- V2 `009c19187486d985fbd56783ffa3515363a1385471ba8c16b9a49517895e96b8`
+  -> `59905fe19088209f3e983a16fa5a35f94c15f76edde44a356dab5170673e5432`.
+
+The reason is the reviewed job timeout/comment change above. Old hashes remain
+in the successor comments and this record. The original 42 pins, all other
+helper pins, source-delta inventory, exact-byte validation and independently
+reviewed runtime-commit guard remain intact. CI test jobs keep their existing
+45-minute limits; only the two observation jobs change.
+
+Consequently the successor file's whole SHA256 changes from
+`e151003ef1812d66c96d1e32038d9023ce3e957ef92c2b371f9773f8867d68e4` to
+`1e316eecccad614eba24034849a3bebf7bff549a59d7f6e127ac597192334dae`.
+The paired-readout test retains its exact-hash assertion with that new expected
+value; its original-registration, fixed grading scope and CI selection
+assertions are not relaxed.
+
+Final timeout-repair regression: **235 passed / 0 failed / 0 skipped** in
+393.14s, including the previous 187-case core set, 39 new static timeout cases,
+and nine existing workflow/controller cases. The pre-fix arithmetic reproduced
+two failures. The first full run caught one stale successor-hash expectation;
+the corrected entire selection passed, not just that one test. No actual hosted
+startup, model/judge call, private result read, push or dispatch was performed.
 
 ## Durable serial admission and capture
 

@@ -130,7 +130,7 @@ def test_native_envelope_cannot_erase_its_runner_version(synthetic_host):
 
 def test_codex_workflow_proves_sandbox_before_every_credential_boundary():
     job = yaml.safe_load((ROOT / native.WORKFLOW).read_text())["jobs"][native.JOB]
-    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 45
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 65
     steps = job["steps"]
     probe = next(step for step in steps if step.get("id") == "sandbox_check")
     assert "prepare_codex_sandbox_host.py" in probe["run"] and "set -euo pipefail" in probe["run"]

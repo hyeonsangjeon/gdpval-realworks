@@ -241,7 +241,8 @@ def test_workflows_are_one_job_with_same_serial_group_and_no_loop(plan):
         assert flow["concurrency"] == {"group": schedule.CONCURRENCY_GROUP, "cancel-in-progress": "false"}
         assert set(flow["jobs"]) == {"observation"}
         job = flow["jobs"]["observation"]
-        assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "45"
+        expected_minutes = "65" if "codex" in name else "55"
+        assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == expected_minutes
         assert "strategy" not in job
         assert sum(" execute " in step.get("run", "") for step in job["steps"]) == 1
         guard = job["steps"][0]["run"]

@@ -314,7 +314,7 @@ def _workflow_contract(case, layout, monkeypatch):
     assert set(workflow.get("on", workflow.get(True))) == {"workflow_dispatch"}
     assert workflow["permissions"] == {"contents": "read", "id-token": "write"}
     assert workflow["concurrency"] == {"group": "gpt54-time-budget-first-v2-observation", "cancel-in-progress": False}
-    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 45
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 65
     assert job["env"]["JE_ARROW_MALLOC_CONF"] == "background_thread:false"
     assert "GDPVAL_CODEX_RUN_ROOT" not in job["env"] and "AZURE_CONFIG_DIR" not in job["env"]
     env_bytes = layout.github_env.read_bytes()

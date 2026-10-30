@@ -384,8 +384,11 @@ def test_grade_readout_rejects_duplicates_drift_and_cross_cell_stubs(
 def test_offline_module_does_not_repin_or_expand_live_execution(handoff_sources):
     assert hashlib.sha256((ROOT / registration.REGISTRATION_PATH).read_bytes()).hexdigest() == (
         "e1d16d350aeb21af34104cede0d3acc0f6dc8db134338708e70168fbd9642699")
+    # 2026-10-30: only the two observation-workflow helper pins advance for
+    # 55m/65m outer jobs. Original registration, grading scope and guards stay.
+    # Prior successor digest: e151003ef1812d66c96d1e32038d9023ce3e957ef92c2b371f9773f8867d68e4.
     assert hashlib.sha256((ROOT / registration.SOURCE_FOLLOWUP_PATH).read_bytes()).hexdigest() == (
-        "e151003ef1812d66c96d1e32038d9023ce3e957ef92c2b371f9773f8867d68e4")
+        "1e316eecccad614eba24034849a3bebf7bff549a59d7f6e127ac597192334dae")
     assert subject.grading.FIRST_TASK == scheduling.TASK_IDS[0]
     assert subject.grading.NATIVE_TASK == scheduling.TASK_IDS[2]
     assert subject.grading.FIRST_RUN == "gpt54_time_budget_v1_v2_r1"

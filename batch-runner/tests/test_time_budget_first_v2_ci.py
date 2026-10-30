@@ -1313,7 +1313,7 @@ def test_time_budget_first_v2_ci_workflow_command_and_guard_contract():
     assert document["concurrency"] == {"group": "gpt54-time-budget-first-v2-observation", "cancel-in-progress": "false"}
     assert set(document["jobs"]) == {ci.JOB}
     job = document["jobs"][ci.JOB]
-    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "45"
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "55"
     steps = job["steps"]
     commands = "\n".join(step.get("run", "") for step in steps)
     gate = steps[0]["run"]

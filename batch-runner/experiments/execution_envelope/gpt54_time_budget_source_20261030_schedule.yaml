@@ -1,5 +1,5 @@
 # Source-only successor. The original 42-pin registration remains byte-identical.
-# No launch authority, new observation, model/effort/input/budget/grader change.
+# No launch authority, new observation, model/effort/input/generation/cleanup/grader change.
 format: gpt54-time-budget-source-successor-v1
 study_id: gpt54_sandboxv2_codex_time_budget_v1
 purpose: runtime_sources_only_no_condition_or_launch_change
@@ -27,8 +27,12 @@ changed_files:
     previous_sha256: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
     sha256: 0911eaff30b3c4cfbd6f3dfa0ced2b11319062a154a610dd5d9ddaf79215bf1c
 helper_pins:
-  .github/workflows/gpt54-time-budget-first-codex.yml: 929c303cac32da46a9981ce592a61ced8bc35e66fea1110be42d4ef4898bf5fe
-  .github/workflows/gpt54-time-budget-first-v2.yml: 009c19187486d985fbd56783ffa3515363a1385471ba8c16b9a49517895e96b8
+  # 2026-10-30 leader-directed outer-job timeout repair, not a model budget change.
+  # Codex previous: 929c303cac32da46a9981ce592a61ced8bc35e66fea1110be42d4ef4898bf5fe (45 -> 65m).
+  # V2 previous: 009c19187486d985fbd56783ffa3515363a1385471ba8c16b9a49517895e96b8 (45 -> 55m).
+  # Only these two helper pins advance; the original 42 pins/registration stay intact.
+  .github/workflows/gpt54-time-budget-first-codex.yml: 16202467dc87439223207e6bed9342349bc8377cfed3a2e4d5b7e548b9544270
+  .github/workflows/gpt54-time-budget-first-v2.yml: 59905fe19088209f3e983a16fa5a35f94c15f76edde44a356dab5170673e5432
   batch-runner/core/runner_environment.py: c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a
   batch-runner/gpt54_time_budget_codex_ci.py: 0e911e875cfd3a9d2760a3f74951a6c9d245737420e2ada15cef5ac2a00fc0b5
   batch-runner/gpt54_time_budget_schedule.py: e2f0b0903d349a07028b642f9d73921c2c95dbbfdadbf2ded28732d1138b1cbf

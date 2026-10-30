@@ -35,7 +35,10 @@ jobs:
   observation:
     if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # 30m declared non-generation steps + registered 1200s generation / 20s
+    # cleanup + >=10m checkout/setup/login/artifact reserve, rounded up to 5m.
+    # Only the outer job changes; registration still owns the model deadline.
+    timeout-minutes: 65
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       HF_HUB_OFFLINE: "1"
