@@ -370,14 +370,19 @@ def encode_frame(payload, opcode=1, mask=None):
 
 
 class WebSocket:
-    def __init__(self, port, deadline):
+    def __init__(self, port, deadline, *, connection_token=None):
+        # Optional local-transport credential, NOT the Copilot credential. The
+        # model-free probe never supplies it and keeps its RPC allowlist intact.
+        if connection_token is not None and not re.fullmatch(r"[0-9a-f]{64}", connection_token):
+            raise Refused("invalid_local_connection_token")
         self.deadline = deadline
         self.buffer = bytearray()
         self.total = 0
         self.socket = socket.create_connection(("127.0.0.1", port), timeout=5)
         try:
             nonce = base64.b64encode(os.urandom(16)).decode()
-            request = f"GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {nonce}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+            target = "/" if connection_token is None else "/?tkn=" + connection_token
+            request = f"GET {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {nonce}\r\nSec-WebSocket-Version: 13\r\n\r\n"
             self.socket.sendall(request.encode("ascii"))
             while b"\r\n\r\n" not in self.buffer:
                 self._receive()

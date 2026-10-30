@@ -40,7 +40,7 @@ jobs:
           cd batch-runner
           python -B -m pytest -q -o addopts= -p no:cacheprovider \
             --junitxml="$RUNNER_TEMP/ghcp-ahp/evidence/offline-tests.xml" \
-            tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py \
+            tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py tests/test_ghcp_ahp_connection.py \
             tests/test_ghcp_sol_runner_environment.py
       - name: Download and verify pinned public distributions without running them
         run: |

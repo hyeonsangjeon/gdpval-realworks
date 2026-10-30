@@ -52,8 +52,8 @@ class Limits:
 
     def __post_init__(self):
         # Tests may tighten the limits, never relax the fixed gate values.
-        if any(type(value) is not int or not 0 < value <= maximum for value, maximum in
-               ((self.turns, 64), (self.tool_calls, 32), (self.seconds, 1200))):
+        if any(type(value) is not int or not minimum <= value <= maximum for value, minimum, maximum in
+               ((self.turns, 1, 64), (self.tool_calls, 0, 32), (self.seconds, 1, 1200))):
             raise Refused("invalid_client_limits")
 
 
@@ -137,14 +137,16 @@ class SessionClient:
     """
 
     def __init__(self, transport, session, chat, *, authenticated=False,
-                 limits=Limits(), clock=time.monotonic, credential=None):
+                 limits=Limits(), clock=time.monotonic, credential=None, finish_admitted_turn=False):
         if (not isinstance(session, str) or not re.fullmatch(r"ahp-session:/[A-Za-z0-9-]+", session)
                 or not isinstance(chat, str) or not re.fullmatch(r"ahp-chat:/[A-Za-z0-9-]+", chat)
                 or type(authenticated) is not bool or type(limits) is not Limits
+                or type(finish_admitted_turn) is not bool
                 or (credential is not None and (not isinstance(credential, str) or not credential))):
             raise Refused("invalid_session_binding")
         self.transport, self.session, self.chat = transport, session, chat
         self.authenticated, self.limits, self.clock = authenticated, limits, clock
+        self.finish_admitted_turn = finish_admitted_turn
         self.started = clock()
         self.credential = credential
         self.lock = threading.RLock()
@@ -227,9 +229,10 @@ class SessionClient:
         if self.status == "open":
             if self.clock() - self.started >= self.limits.seconds:
                 self._stop("time_limit_reached")
-            elif len(self.turns) >= self.limits.turns:
+            elif (len(self.turns) > self.limits.turns
+                  or (len(self.turns) == self.limits.turns and not self.finish_admitted_turn)):
                 self._stop("turn_limit_reached")
-            elif len(self.tools) >= self.limits.tool_calls:
+            elif self.tools and len(self.tools) >= self.limits.tool_calls:
                 self._stop("tool_limit_reached")
         return self.status == "open"
 
@@ -244,6 +247,11 @@ class SessionClient:
                 return False
             if not self.authenticated:
                 self._stop("authentication_required")
+                return False
+            # A connection-only turn must finish before evidence can be checked.
+            # Draining that one admitted turn NEVER admits a second notification.
+            if len(self.turns) >= self.limits.turns:
+                self._stop("turn_limit_reached")
                 return False
             try:
                 turn_id = _identifier(turn_id)
