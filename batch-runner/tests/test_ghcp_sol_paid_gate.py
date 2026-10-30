@@ -144,6 +144,29 @@ def test_missing_or_empty_secret_refuses_before_cli(runtime, tmp_path, monkeypat
     assert not (tmp_path / "export-state").exists()
 
 
+@pytest.mark.parametrize("value", [None, "", " ", CANARY])
+def test_ahp_draft_never_starts_a_host_or_falls_back_to_copilot(runtime, tmp_path, monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("COPILOT_GITHUB_TOKEN")
+    else:
+        monkeypatch.setenv("COPILOT_GITHUB_TOKEN", value)
+    def forbidden(*args, **kwargs):
+        pytest.fail("AHP draft attempted a CLI, input load or real host")
+    monkeypatch.setattr(adapter, "run_task", forbidden)
+    monkeypatch.setattr(paid, "task_materials", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    record = paid.execute_task(gate.TASK_IDS[0], runtime, tmp_path / "absent-bundle",
+                               tmp_path / "absent-state", tmp_path / "export", execution_adapter="ahp-draft")
+    assert not record["ready_for_contract"]
+    expected = "ahp_paid_contract_unverified" if value == CANARY else "auth_source_unavailable"
+    assert record["reason_codes"] == [expected]
+    assert not (tmp_path / "absent-state").exists()
+    assert CANARY not in (tmp_path / "export/capture.json").read_text()
+    if value == CANARY:
+        assert record["execution_receipt"]["model_calls"] == 0
+        assert not record["execution_receipt"]["launch_allowed"]
+
+
 @pytest.mark.parametrize("name,value", [("GITHUB_EVENT_NAME", "push"), ("GITHUB_EVENT_NAME", "pull_request"),
     ("GHCP_PAID_EXECUTION", "false"), ("GITHUB_RUN_ATTEMPT", "2"), ("RUNNER_ENVIRONMENT", "self-hosted")])
 def test_unapproved_event_or_host_cannot_reach_auth(runtime, tmp_path, monkeypatch, name, value):

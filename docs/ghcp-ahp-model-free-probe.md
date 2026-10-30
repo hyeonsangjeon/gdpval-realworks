@@ -1,8 +1,9 @@
 # GHCP-backed Codex Agent Host: model-free hosted probe
 
-This is a new candidate-path probe, not the Copilot CLI default-agent gate and
-not a Sol benchmark. It changes no existing gate, seal, task input, pricing or
-paid workflow. The owner's 2026-10-29 execution policy is retained: NAS is for
+This is a candidate-path probe, not the Copilot CLI default-agent gate and
+not a Sol benchmark. Its follow-up adds a **refusing AHP draft choice** to the
+existing gate; no seal, task input, pricing or paid-run permission is changed.
+The owner's 2026-10-29 execution policy is retained: NAS is for
 source work and offline fixtures; actual Agent Host startup is Actions-only.
 
 ## Pins and execution boundary
@@ -51,7 +52,8 @@ do not transform a missing-provider/network error into an authentication error.
 
 Paths without the full prefix above are under `src/vs/platform/agentHost/`.
 The JSON evidence includes exact source hashes, line numbers, snippets and
-immutable GitHub links for all 18 citation groups, checked against the pinned
+immutable GitHub links for all 23 citation groups (18 original + 5 controller
+references), checked against the pinned
 source archive. See also the official [Agent Host architecture](https://code.visualstudio.com/docs/agents/concepts/agent-host)
 and [AHP repository](https://github.com/microsoft/agent-host-protocol).
 OpenAI's [IDE documentation](https://developers.openai.com/codex/ide/) alone
@@ -77,7 +79,7 @@ Offline tests replace all process/network effects. They cover workflow scope,
 redaction, archive limits, namespace admission, byte bindings, WebSocket framing,
 RPC allowlists, authentication/provider errors, and no implicit model retry:
 
-Local verification: **195 passed, 0 failed, 0 skipped** (114 new probe cases
+Initial probe verification: **195 passed, 0 failed, 0 skipped** (114 new probe cases
 plus 81 existing runner-admission cases). All 18 source-citation groups were
 also checked against the downloaded pinned source, with no binary execution.
 
@@ -89,3 +91,84 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q -o addopts= -p no:cacheprov
 Do not run `prepare`, `probe`, `code agent host`, or a Codex host locally to
 validate execution. The actual hosted result is collected after the single
 branch publication; it is deliberately not invented in this pre-run commit.
+
+## Client-side limit and capture follow-up (2026-10-30)
+
+The previous hosted probe [41049869887](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/41049869887)
+proved headless startup and Codex selection, then stopped at `-32007` (auth
+required). It did **not** prove intrinsic caps or a complete paid transcript.
+The new [controller](../batch-runner/ghcp_ahp_client.py) has only an injected
+I/O port, exercised by synthetic events; there is no installed live transport,
+host launcher, authentication RPC or model client in this follow-up.
+
+| Count/control | Admission and stop behavior | Worst-case boundary |
+| --- | --- | --- |
+| 64 AHP turns | Reserve each client turn before send, count unique observed turn IDs, serialize client work; at the limit close admission, cancel active turn(s), dispose session, terminate owned host. | **0** further client work notifications; **1** already-admitted client turn at most. AHP user turns are **not** internal model/premium requests. |
+| 32 tool calls | Count unique `(turnId, toolCallId)` from all tool lifecycle events and snapshots. At 32 close admission and cancel; retain late events and measured overshoot. | **0** further client work notifications; server-internal tool/model overshoot has **no finite proven bound**. Tool events can arrive after execution starts. |
+| 1,200 seconds | Monotonic check before every send/receive, separate deadline watchdog, **0.05s** receive polling target; **1s** control-send timeout per cancel/dispose and **4s** owned-host terminate timeout. | These are client timeout targets, **not** a proven wall-clock cancellation/billing ceiling; scheduling, transport and in-flight server work remain unbounded by this protocol evidence. |
+
+The pinned protocol explicitly permits a tool to enter `running` at
+`chat/toolCallReady` with `confirmed` already set:
+[actions.ts:174](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/common/state/protocol/channels-chat/actions.ts#L174).
+Client cancellation is the `dispatchAction` **notification** carrying
+`chat/turnCancelled`, not an invented request/response cancel RPC
+([actions.ts:443](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/common/state/protocol/channels-chat/actions.ts#L443),
+[commands.ts:689](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/common/state/protocol/common/commands.ts#L689)).
+`disposeSession` then cleans session resources; only the transport's owned-host
+termination acknowledgement permits output-file collection. Failed cancellation
+never reopens admission or triggers a retry. The counters are not a provider
+request counter, nor a premium-request/cost meter. This still does **not** pass
+the card's hard-cap execution condition.
+
+### Capture contract and deliberate refusals
+
+One exclusive `ghcp-ahp-client-v1` JSON contains all delivered, redacted wire
+frames (including identical replay and late frames), snapshots/history, joined
+text, tool lifecycle, tool inputs, terminal command/exit events, reported file
+edits, changed/generated workspace bytes (UTF-8 or base64), hashes, stop reason
+and cleanup status. File bytes are read only after host termination, without
+following links; unchanged input files can be excluded by their baseline hash.
+No raw transcript, HOME, token file or host cache is uploaded. Known credential
+and credential-shaped strings are masked; split text/terminal deltas are checked
+after joining. Binary credential exposure refuses export before base64 encoding.
+This is not a scanner for arbitrary encrypted/obfuscated secrets.
+
+`requested_model` is separate from `reported` and its provenance. Only retained
+historical `message.model` values can populate reported model/config; client
+requests/echoes, catalog entries and defaults cannot. This AHP selection record
+is **not** a provider-served-model attestation: `served_model` and model version
+remain `not_reported`. Absent effort/context also remain `not_reported`; no
+requested value is substituted. An explicit historical mismatch stops work.
+
+Scope is a fresh single chat. Reconnect, restored paginated history, extra
+chats/background work, queued messages, resume/steering and implicit tool
+approvals are not implemented. History needing `fetchTurns`, divergent replay,
+per-channel reordering, stream loss, malformed events, output overflow or
+unconfirmed host cleanup fails closed instead of claiming complete capture.
+`serverSeq` gaps alone are not loss: sequences also cover unsubscribed channels.
+`capture_boundary=all_delivered_frames_not_unseen_server_work` and
+`gate_ready=false` remain explicit even when the synthetic session completes.
+
+### Existing workflow option, not a second paid workflow
+
+The existing `agentic-v2-ghcp-sol-gate.yml` gains dispatch input
+`execution_adapter: copilot-cli | ahp-draft`; the legacy default is unchanged.
+Only its existing dispatch-only `paid-task` references the protected environment
+credential. AHP selection skips CLI/input installation, validates runner and
+fixed task, then refuses an absent/empty credential before any host/model call.
+Even with a credential, it writes `ahp_paid_contract_unverified` and exits 2:
+authentication alone does not solve native hard caps, actual Sol/Max/1M,
+or the live AHP transport/authentication mapping. No fallback to the default
+Copilot CLI agent is permitted for an AHP request. Do not dispatch this draft.
+
+The **existing** branch-push model-free probe also runs the collector tests and
+runner-admission tests. Its runtime RPC allowlist, isolated network, no-auth,
+zero-prompt boundary and hosted-only rule are unchanged. Synthetic cap/capture
+tests prove client wiring, not performance, provider enforcement or billing.
+
+Final local follow-up regression: **947 passed / 0 failed / 0 skipped** across
+`tests/test_ghcp*.py`, Python 3.10.12 / pytest 9.2.0, offline, **85.60s**.
+That includes **84** new controller cases and **4** paid-draft refusal cases.
+The existing push probe will run **279** cases (114 probe + 84 controller +
+81 runner), then repeat only its credential-free hosted discovery. Its result
+is collected after publication; this pre-run source does not claim it passed.
