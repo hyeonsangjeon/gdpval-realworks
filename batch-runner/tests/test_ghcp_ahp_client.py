@@ -97,6 +97,9 @@ def work_messages(port):
 @pytest.mark.parametrize("kind", ["zero", "negative", "bool", "float", "str", "relaxed"])
 def test_invalid_or_relaxed_limits_refuse(field, maximum, kind):
     value = {"zero": 0, "negative": -1, "bool": True, "float": 1.0, "str": "1", "relaxed": maximum + 1}[kind]
+    if field == "tool_calls" and kind == "zero":
+        assert client.Limits(tool_calls=0).tool_calls == 0
+        return
     with pytest.raises(client.Refused, match="invalid_client_limits"):
         client.Limits(**{field: value})
 
@@ -510,9 +513,10 @@ def test_existing_workflow_has_one_protected_dispatch_only_adapter_switch():
     assert choice == {"description": "AHP is a fail-closed draft until native hard caps and served settings are proved",
                       "type": "choice", "options": ["copilot-cli", "ahp-draft"], "default": "copilot-cli", "required": "true"}
     job = workflow["jobs"]["paid-task"]
-    assert job["if"] == "${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false }}"
+    assert "inputs.connection_only != true" in job["if"]
+    assert "needs.ahp-connection.outputs.verified == 'true'" in job["if"]
     assert job["environment"] == "ghcp-sol-gate" and job["runs-on"] == "ubuntu-24.04"
-    assert [name for name, body in workflow["jobs"].items() if "secrets." in yaml.dump(body)] == ["paid-task"]
+    assert [name for name, body in workflow["jobs"].items() if "secrets." in yaml.dump(body)] == ["ahp-connection", "paid-task"]
     steps = job["steps"]
     runtime = next(step for step in steps if "secrets." in yaml.dump(step))
     assert '--adapter "$GHCP_EXECUTION_ADAPTER"' in runtime["run"]

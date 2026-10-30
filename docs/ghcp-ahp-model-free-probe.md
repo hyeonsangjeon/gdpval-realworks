@@ -52,8 +52,8 @@ do not transform a missing-provider/network error into an authentication error.
 
 Paths without the full prefix above are under `src/vs/platform/agentHost/`.
 The JSON evidence includes exact source hashes, line numbers, snippets and
-immutable GitHub links for all 23 citation groups (18 original + 5 controller
-references), checked against the pinned
+immutable GitHub links for all 27 citation groups (18 original + 5 controller +
+4 connection references), checked against the pinned
 source archive. See also the official [Agent Host architecture](https://code.visualstudio.com/docs/agents/concepts/agent-host)
 and [AHP repository](https://github.com/microsoft/agent-host-protocol).
 OpenAI's [IDE documentation](https://developers.openai.com/codex/ide/) alone
@@ -97,9 +97,10 @@ branch publication; it is deliberately not invented in this pre-run commit.
 The previous hosted probe [41049869887](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/41049869887)
 proved headless startup and Codex selection, then stopped at `-32007` (auth
 required). It did **not** prove intrinsic caps or a complete paid transcript.
-The new [controller](../batch-runner/ghcp_ahp_client.py) has only an injected
-I/O port, exercised by synthetic events; there is no installed live transport,
-host launcher, authentication RPC or model client in this follow-up.
+That first [controller](../batch-runner/ghcp_ahp_client.py) used only an injected
+I/O port, exercised by synthetic events. The later connection-only section
+below adds a separate dispatch entry; the push probe still has no authenticated
+transport, authentication RPC or prompt path.
 
 | Count/control | Admission and stop behavior | Worst-case boundary |
 | --- | --- | --- |
@@ -153,13 +154,10 @@ unconfirmed host cleanup fails closed instead of claiming complete capture.
 
 The existing `agentic-v2-ghcp-sol-gate.yml` gains dispatch input
 `execution_adapter: copilot-cli | ahp-draft`; the legacy default is unchanged.
-Only its existing dispatch-only `paid-task` references the protected environment
-credential. AHP selection skips CLI/input installation, validates runner and
-fixed task, then refuses an absent/empty credential before any host/model call.
-Even with a credential, it writes `ahp_paid_contract_unverified` and exits 2:
-authentication alone does not solve native hard caps, actual Sol/Max/1M,
-or the live AHP transport/authentication mapping. No fallback to the default
-Copilot CLI agent is permitted for an AHP request. Do not dispatch this draft.
+The initial draft refused even with a credential. The connection-only follow-up
+below adds a single protected predecessor; an AHP task cannot skip it. The five
+tasks still require the unresolved hard-cap/harness decision. No fallback to the
+default Copilot CLI agent is permitted for an AHP request.
 
 The **existing** branch-push model-free probe also runs the collector tests and
 runner-admission tests. Its runtime RPC allowlist, isolated network, no-auth,
@@ -169,6 +167,79 @@ tests prove client wiring, not performance, provider enforcement or billing.
 Final local follow-up regression: **947 passed / 0 failed / 0 skipped** across
 `tests/test_ghcp*.py`, Python 3.10.12 / pytest 9.2.0, offline, **85.60s**.
 That includes **84** new controller cases and **4** paid-draft refusal cases.
-The existing push probe will run **279** cases (114 probe + 84 controller +
+That version's existing push probe ran **279** cases (114 probe + 84 controller +
 81 runner), then repeat only its credential-free hosted discovery. Its result
-is collected after publication; this pre-run source does not claim it passed.
+was collected after publication. These counts describe the preceding commit,
+not the connection-only follow-up's tests.
+
+## Connection-only prerequisite (2026-10-30)
+
+The intervention is **one AHP user turn**, not a five-task benchmark and not a
+promise of one provider/premium request. Its fixed prompt is
+`Reply with exactly CONNECTED. Do not use any tools.` Requested settings remain
+`@provider=vscode-proxy:gpt-5.6-sol`, `thinkingLevel=max`, `contextSize=1000000`.
+The decision is whether response-side evidence supports those fixed conditions;
+`CONNECTED` text alone cannot pass. No grader, benchmark input, scoring or seal
+is touched. Fixtures validate this decision logic, not real provider behavior.
+
+The existing gate workflow has one non-matrix `ahp-connection` job, only for
+explicit `workflow_dispatch`, `execute_paid=true`, `dry_run=false`,
+`execution_adapter=ahp-draft`. It and the existing task job are both protected
+by `environment: ghcp-sol-gate`; **only their runtime steps** reference the
+selected credential. All model-free jobs and the branch-push probe retain zero
+credential references. An empty credential produces `auth_source_unavailable`
+before host startup/authentication/model work. No alternate login is consulted.
+
+The client admits **1** turn, **0** tool approvals, and a **120s** monotonic
+deadline. It allows the admitted turn to complete (the ordinary 64-turn
+controller's stop-on-limit behavior is unchanged), refuses a second turn before
+send, and cancels/disposes/stops on the first observed tool, timeout, malformed
+event, stream loss or contradictory evidence. The read-only sandbox,
+`untrusted` approval policy, disabled web/network and empty client tools are
+requested restrictions, **not a native zero-tool guarantee**. The first server
+tool can already have started: observed overshoot can be **1 or more**, and
+provider-internal model/tool overshoot still has **no finite proven bound**.
+After closure the finite client bound is **0 new work notifications**, with at
+most **1 previously admitted turn**. Do not equate any of these units with bills.
+
+The transport authenticates only the Codex provider's advertised GitHub resource,
+creates a fresh session/chat, never resumes, retries or sends tool approvals,
+and uses the pinned host/SDK and an isolated HOME. The local WebSocket is bound
+to loopback with a random 0600 transport-token file (not the Copilot token).
+The Copilot credential is passed in memory by the authentication RPC, never in
+argv, transcript or artifact. The job's private PID namespace and outer 130s
+TERM/5s KILL guard bound cleanup operationally; they do not prove a 120s billing
+ceiling. Host logs, authentication state and raw workspace are never uploaded.
+
+`connection.json` separates `requested` and `observed` fields for served model,
+thinking level, context size and usage, and records runner/run/commit identity.
+Unreported values stay `not_reported`. It SHA256-binds `capture.json` (redacted
+events, counts, stop/cleanup state) and `handshake.json` (redacted discovery and
+auth exchange). An artifact/write/cleanup failure cannot yield `connected`.
+Contradictory or missing Sol/Max/1M evidence exits 2 and prevents all five task
+jobs. Missing usage remains explicit and is not invented or priced.
+
+Important pinned-source finding: `codexAgent.ts:3929` passes `session.model?.id`
+to `codexMapAppServerEvents.ts:514`, which copies it to `usage.model`. That is a
+selection echo, **not** a served-model attestation. The mapper forwards
+`usage._meta.modelContextWindow` from the SDK token-usage notification; it does
+not report the actual thinking level. Therefore the current live parser leaves
+served model and thinking level `not_reported` and **cannot admit the five tasks**.
+Synthetic pass fixtures inject a test-only response-evidence reader; the live
+parser explicitly ignores that metadata, and such receipts cannot be replayed
+as live admission. The four added immutable-source citations in the probe
+manifest bind these conclusions and the auth/local-transport protocol.
+
+The owner's first command, **only after supplying authentication and choosing
+to run this connection check**, is a draft (not executed during this work):
+
+```bash
+gh workflow run agentic-v2-ghcp-sol-gate.yml --repo hyeonsangjeon/gdpval-realworks --ref leader/ghcp-ahp-probe-20261030 -f dry_run=false -f execute_paid=true -f execution_adapter=ahp-draft -f connection_only=true
+```
+
+`connection_only=true` always skips the five tasks and Step8 contract job, even
+if the connection predicate passes. A later five-task dispatch requires both
+the predecessor's successful output and a same-run/attempt/commit receipt, plus
+the still-closed native hard-cap/harness gate. Authentication alone opens none
+of those conditions. No actual model call, credential lookup or dispatch is
+part of this change's offline/push verification.

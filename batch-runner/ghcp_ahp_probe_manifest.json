@@ -146,6 +146,26 @@
       "id": "terminal_command_capture",
       "path": "src/vs/platform/agentHost/common/state/protocol/channels-terminal/actions.ts",
       "anchors": ["interface TerminalCommandExecutedAction", "commandLine: string", "interface TerminalCommandFinishedAction"]
+    },
+    {
+      "id": "connection_authenticate_advertised_resource",
+      "path": "src/vs/platform/agentHost/common/state/protocol/common/commands.ts",
+      "anchors": ["interface AuthenticateParams", "protected-resource identifier the client has discovered", "token: string"]
+    },
+    {
+      "id": "connection_local_transport_token",
+      "path": "src/vs/platform/agentHost/node/webSocketTransport.ts",
+      "anchors": ["must include a valid token in the `tkn` query parameter", "searchParams.getAll(connectionTokenQueryName)"]
+    },
+    {
+      "id": "connection_usage_model_is_selection_not_served_attestation",
+      "path": "src/vs/platform/agentHost/node/codex/codexAgent.ts",
+      "anchors": ["mapTokenUsageUpdated(session.mapState, mapped, session.model?.id)"]
+    },
+    {
+      "id": "connection_context_and_token_usage_mapping",
+      "path": "src/vs/platform/agentHost/node/codex/codexMapAppServerEvents.ts",
+      "anchors": ["function mapTokenUsageUpdated", "...(modelId ? { model: modelId } : {})", "modelContextWindow: params.tokenUsage.modelContextWindow"]
     }
   ]
 }

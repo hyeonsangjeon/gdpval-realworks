@@ -30,6 +30,11 @@ on:
         options: [copilot-cli, ahp-draft]
         default: copilot-cli
         required: true
+      connection_only:
+        description: For ahp-draft, stop after one CONNECTED turn; never run the fixed five
+        type: boolean
+        default: false
+        required: true
 
 permissions:
   contents: read
@@ -117,7 +122,7 @@ jobs:
             tests/test_ghcp_vm_input_bundle.py tests/test_ghcp_sol_execution_adapter.py \
             tests/test_ghcp_sol_copilot_smoke.py tests/test_ghcp_sol_runner_environment.py \
             tests/test_ghcp_sol_grader_contract.py tests/test_ghcp_sol_paid_gate.py \
-            tests/test_ghcp_ahp_client.py
+            tests/test_ghcp_ahp_client.py tests/test_ghcp_ahp_connection.py
       - name: Fake-token projection only - never launch a CLI
         env:
           PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
@@ -157,7 +162,7 @@ jobs:
   grader-contract:
     name: Step8 input layout and policy only (no judge)
     needs: [task, paid-task]
-    if: ${{ always() && !cancelled() && needs.task.result == 'success' }}
+    if: ${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -288,10 +293,75 @@ jobs:
           retention-days: 7
           include-hidden-files: false
 
+  ahp-connection:
+    name: AHP connection only - one turn, zero tool approvals
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.execution_adapter == 'ahp-draft' }}
+    needs: plan
+    environment: ghcp-sol-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      verified: ${{ steps.connection.outputs.verified }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: '3.12.11'
+      - name: Install only the pinned YAML reader without credentials
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Verify the runner and prepare pinned public AHP bytes without execution
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_probe.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-connection-prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-connection-preparation"
+      - name: Reject empty auth before host startup and send only one connection turn
+        id: connection
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GHCP_PAID_EXECUTION: 'true'
+          GHCP_CONNECTION_ONLY: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          connection_uid="$(id -u)"
+          connection_gid="$(id -g)"
+          export GHCP_CONNECTION_OUTSIDE_PIDNS="$(readlink /proc/self/ns/pid)"
+          # Only named environment entries survive sudo; no token in argv/file.
+          # This dispatch-only PID namespace has outbound network; the free
+          # push probe retains its separate network-denied namespace/allowlist.
+          timeout --signal=TERM --kill-after=5s 130s \
+            sudo --preserve-env=COPILOT_GITHUB_TOKEN,GHCP_PAID_EXECUTION,GHCP_CONNECTION_ONLY,GHCP_CONNECTION_OUTSIDE_PIDNS,GITHUB_ACTIONS,GITHUB_EVENT_NAME,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,RUNNER_ENVIRONMENT,RUNNER_NAME,RUNNER_OS,RUNNER_ARCH,ImageOS,ImageVersion \
+            unshare --mount --pid --fork --mount-proc --kill-child=KILL \
+            /usr/bin/setpriv --reuid="$connection_uid" --regid="$connection_gid" --init-groups \
+              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_connection.py" \
+              --prepared "$RUNNER_TEMP/ghcp-connection-prepared" \
+              --evidence "$RUNNER_TEMP/ghcp-connection-preparation" \
+              --state "$RUNNER_TEMP/ghcp-connection-private" --output "$RUNNER_TEMP/ghcp-connection-export"
+          # Exit zero is possible only after all observed settings pass. Never
+          # use a request/config echo, a shell fallback, or continue-on-error.
+          printf 'verified=true\n' >> "$GITHUB_OUTPUT"
+      - name: Retain redacted connection receipt and capture only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-ahp-connection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ghcp-connection-export/*.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
   paid-task:
     name: Paid task - ${{ matrix.task_id }}
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false }}
-    needs: plan
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.connection_only != true && needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || (needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true')) }}
+    needs: [plan, ahp-connection]
     environment: ghcp-sol-gate
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -336,6 +406,12 @@ jobs:
           printf '%s  %s\n' 9aeb4430e9ac9523546db07b227c7aba179a4710a55f9ac29ad143b0f9e1b325 "$cli_dir/release.tar.gz" | sha256sum --check --status
           tar --extract --gzip --file "$cli_dir/release.tar.gz" --directory "$cli_dir" --no-same-owner --no-same-permissions
           printf '%s  %s\n' f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d "$cli_dir/copilot" | sha256sum --check --status
+      - name: Fetch this run's AHP connection evidence before task admission
+        if: inputs.execution_adapter == 'ahp-draft'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ghcp-ahp-connection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ghcp-connection-receipt
       - name: Reject empty auth then supervise exactly one fixed task
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -348,7 +424,8 @@ jobs:
               --adapter "$GHCP_EXECUTION_ADAPTER" \
               --copilot-bin "$RUNNER_TEMP/ghcp-paid-cli/copilot" \
               --bundle "$RUNNER_TEMP/ghcp-paid-inputs/bundle" \
-              --state-root "$RUNNER_TEMP/ghcp-paid-state" --output "$RUNNER_TEMP/ghcp-paid-export"
+              --state-root "$RUNNER_TEMP/ghcp-paid-state" --output "$RUNNER_TEMP/ghcp-paid-export" \
+              --connection-receipt "$RUNNER_TEMP/ghcp-connection-receipt/connection.json"
       - name: Retain only checked captures - never HOME config or raw state
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

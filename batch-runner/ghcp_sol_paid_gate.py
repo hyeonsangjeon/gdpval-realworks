@@ -195,7 +195,7 @@ def publish_capture(receipt, state, destination, guard):
     return record
 
 
-def execute_task(task_id, binary, bundle, state, output, *, execution_adapter="copilot-cli"):
+def execute_task(task_id, binary, bundle, state, output, *, execution_adapter="copilot-cli", connection_receipt=None):
     # Only this function consumes the opted-in environment value at runtime.
     # CI calls it with synthetic values only; push never enters the paid job.
     record = {"schema_version": "ghcp-paid-capture-v1", "task_id": task_id if task_id in gate.TASK_IDS else None,
@@ -217,6 +217,11 @@ def execute_task(task_id, binary, bundle, state, output, *, execution_adapter="c
         authentication = adapter._selected_auth_environment("COPILOT_GITHUB_TOKEN", state_root=state)
         guard = adapter._CredentialGuard(authentication["COPILOT_GITHUB_TOKEN"])
         if execution_adapter == "ahp-draft":
+            from ghcp_ahp_connection import Refused, require_verified_connection
+            try:
+                require_verified_connection(connection_receipt)
+            except Refused as error:
+                raise adapter._Stop(str(error)) from None
             # Auth alone cannot prove server-internal hard caps or Sol/Max/1M.
             # Do not launch a host, send authenticate/prompt, or fall back to CLI.
             from ghcp_ahp_client import draft_receipt
@@ -252,6 +257,7 @@ def main(argv=None):
     parser.add_argument("--state-root", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--adapter", choices=("copilot-cli", "ahp-draft"), default="copilot-cli")
+    parser.add_argument("--connection-receipt", type=Path)
     args = parser.parse_args(argv)
     if args.prepare_inputs:
         try:
@@ -264,7 +270,7 @@ def main(argv=None):
     if any(value is None for value in (args.task_id, args.copilot_bin, args.bundle, args.state_root, args.output)):
         parser.error("missing arguments")
     result = execute_task(args.task_id, args.copilot_bin, args.bundle, args.state_root, args.output,
-                          execution_adapter=args.adapter)
+                          execution_adapter=args.adapter, connection_receipt=args.connection_receipt)
     # Never print task text, raw transcripts, paths, or credentials to Actions logs.
     print(json.dumps({"ready_for_contract": result.get("ready_for_contract", False),
                       "reason_codes": result.get("reason_codes", result.get("execution_receipt", {}).get("reason_codes", []))}))

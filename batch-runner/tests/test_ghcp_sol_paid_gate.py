@@ -19,6 +19,9 @@ import ghcp_sol_paid_gate as paid
 ROOT = Path(__file__).resolve().parents[2]
 CANARY = "FAKE_PAID_AUTH_CANARY_97531_NOT_A_CREDENTIAL"
 CONDITION = "github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false"
+TASK_CONDITION = ("always() && !cancelled() && " + CONDITION + " && inputs.connection_only != true && "
+                  "needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || "
+                  "(needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true'))")
 
 
 def _workflow():
@@ -31,7 +34,7 @@ def _workflow():
 def test_paid_job_event_truth_table_from_yaml(event, enabled, dry):
     job = _workflow()["jobs"]["paid-task"]
     expression = job["if"].removeprefix("${{ ").removesuffix(" }}")
-    assert expression == CONDITION
+    assert expression == TASK_CONDITION
     # Only this exact three-clause expression is accepted; no general YAML eval.
     observed = all((event == "workflow_dispatch", enabled is True, dry is False))
     assert observed is (event == "workflow_dispatch" and enabled and not dry)
@@ -39,15 +42,15 @@ def test_paid_job_event_truth_table_from_yaml(event, enabled, dry):
         assert observed is False
 
 
-def test_single_secret_reference_only_in_protected_paid_runtime_step():
+def test_secret_references_only_in_protected_connection_and_task_runtime_steps():
     workflow = _workflow()
     assert workflow["on"]["workflow_dispatch"]["inputs"]["execute_paid"]["default"] == "false"
     jobs = workflow["jobs"]
     secret_jobs = [name for name, job in jobs.items() if "secrets." in yaml.dump(job)]
-    assert secret_jobs == ["paid-task"]
+    assert secret_jobs == ["ahp-connection", "paid-task"]
     job = jobs["paid-task"]
     assert job["environment"] == "ghcp-sol-gate" and job["runs-on"] == "ubuntu-24.04"
-    assert job["needs"] == "plan" and job["timeout-minutes"] == "25"
+    assert job["needs"] == ["plan", "ahp-connection"] and job["timeout-minutes"] == "25"
     assert job["strategy"] == {"fail-fast": "true", "max-parallel": "1",
                                "matrix": "${{ fromJSON(needs.plan.outputs.matrix) }}"}
     selected = [step for step in job["steps"] if "secrets." in yaml.dump(step)]
@@ -158,13 +161,12 @@ def test_ahp_draft_never_starts_a_host_or_falls_back_to_copilot(runtime, tmp_pat
     record = paid.execute_task(gate.TASK_IDS[0], runtime, tmp_path / "absent-bundle",
                                tmp_path / "absent-state", tmp_path / "export", execution_adapter="ahp-draft")
     assert not record["ready_for_contract"]
-    expected = "ahp_paid_contract_unverified" if value == CANARY else "auth_source_unavailable"
+    expected = "connection_verification_required" if value == CANARY else "auth_source_unavailable"
     assert record["reason_codes"] == [expected]
     assert not (tmp_path / "absent-state").exists()
     assert CANARY not in (tmp_path / "export/capture.json").read_text()
     if value == CANARY:
-        assert record["execution_receipt"]["model_calls"] == 0
-        assert not record["execution_receipt"]["launch_allowed"]
+        assert "execution_receipt" not in record  # No task adapter entered before connection admission.
 
 
 @pytest.mark.parametrize("name,value", [("GITHUB_EVENT_NAME", "push"), ("GITHUB_EVENT_NAME", "pull_request"),
