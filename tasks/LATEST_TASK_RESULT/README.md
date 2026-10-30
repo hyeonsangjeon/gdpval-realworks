@@ -1,5 +1,21 @@
 # Latest task result
 
+## GHCP Codex AHP hosted model-free probe prepared, 2026-10-30
+
+New branch `leader/ghcp-ahp-probe-20261030`, based on main `8f6d00fef`, contains
+a push-only Ubuntu 24.04 probe of pinned VS Code CLI/server 1.144.0 and the
+server-selected Codex SDK 0.163.0. No authentication source, prompt/turn RPC,
+NAS runtime execution, PR or dispatch is part of this task. Downloads are
+hash-checked; actual startup runs in an unprivileged loopback-only network/PID
+namespace with fresh child state. Record actual AHP errors without inventing
+an auth barrier when an empty session succeeds. Sol/Max/1M and native caps
+are not claimed from source settings. All 18 pinned-source citation groups
+were checked locally without running VS Code/Codex. Offline validation passed
+**195 / 0 failed / 0 skipped** (114 new probe cases and 81 existing runner
+guard cases). The Actions job reruns the 114 probe cases; its actual hosted
+result is collected after publication, not asserted by this commit.
+See [the probe contract](../../docs/ghcp-ahp-model-free-probe.md).
+
 ## Historical source-bound fixture separation, 2026-10-29
 
 CI at `9087c2c6e` found additional exact historical dependency pins and fixture

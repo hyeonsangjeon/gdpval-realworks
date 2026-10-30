@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add an isolated, branch-push-only Ubuntu 24.04 AHP capability probe using
+  pinned VS Code CLI/server 1.144.0 and its Codex SDK 0.163.0. Kernel-denied
+  external networking, an unprivileged PID namespace, fresh child state and
+  a five-method zero-prompt RPC allowlist keep this model-free. Retain
+  redacted JSON evidence and exact source citations; do not claim native
+  request caps, authenticated model availability or Sol/Max/1M application.
+  No existing paid workflow, authentication source or grader seal changes.
+
 - Let the Sol pilot's requested 1,000,000-token window reach Codex 0.147.0
   (owner decision 2026-10-30). Its bundled catalog caps gpt-5.6-sol at 272,000
   (258,400 usable), so the pilot's wire observer adds a held catalog that

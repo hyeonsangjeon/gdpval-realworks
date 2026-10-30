@@ -1,0 +1,126 @@
+{
+  "schema": "ghcp-ahp-model-free-probe-v1",
+  "vscode_version": "1.144.0",
+  "vscode_commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+  "codex_sdk_version": "0.163.0",
+  "protocol_versions": ["1.1.0", "1.0.0"],
+  "reviewed_at_utc": "2026-10-30",
+  "artifacts": {
+    "cli": {
+      "url": "https://vscode.download.prss.microsoft.com/dbazure/download/stable/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/vscode_cli_linux_x64_cli.tar.gz",
+      "sha256": "da9c2abefb5f8d77fdcdce3faea7a0e920663f0d1a92287b5922ecbba3c13544",
+      "maximum_bytes": 67108864,
+      "hash_source": "https://update.code.visualstudio.com/api/update/cli-linux-x64/stable/latest"
+    },
+    "server": {
+      "url": "https://vscode.download.prss.microsoft.com/dbazure/download/stable/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/vscode-server-linux-x64.tar.gz",
+      "sha256": "65a713d95bb598310ad86db4daea28f9c3f9687b59ee9e57b3e7060a810bf916",
+      "maximum_bytes": 335544320,
+      "hash_source": "https://update.code.visualstudio.com/api/update/server-linux-x64/stable/latest"
+    },
+    "codex_sdk": {
+      "url": "https://main.vscode-cdn.net/agent-sdk/codex/0.163.0/linux-x64.tgz",
+      "sha256": "201b83598aaa2764468788cff3ad450e81e5d1e2f00662be668f94d85e8de294",
+      "maximum_bytes": 268435456,
+      "hash_source": "Measured public archive; URL/version bound by the pinned server product.json agentSdks.codex"
+    },
+    "source": {
+      "url": "https://codeload.github.com/microsoft/vscode/tar.gz/2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+      "sha256": "cb7fb5b3b219585a63ec8e3dbc66bab135d2fe900b0541e73862da5302c24206",
+      "maximum_bytes": 100663296,
+      "hash_source": "Measured public source archive at the pinned release commit"
+    }
+  },
+  "citations": [
+    {
+      "id": "headless_cli_and_idle_not_deadline",
+      "path": "cli/src/commands/args.rs",
+      "anchors": ["pub foreground: bool", "pub without_connection_token: bool", "in-progress sessions", "pub idle_timeout: Option<u64>"]
+    },
+    {
+      "id": "pinned_server_cache_and_launcher",
+      "path": "cli/src/tunnels/agent_host.rs",
+      "anchors": ["cmd.arg(\"--agent-host-path\")", "for entry in self.cache.get()", "join(SERVER_FOLDER_NAME)"]
+    },
+    {
+      "id": "server_cache_index",
+      "path": "cli/src/download_cache.rs",
+      "anchors": ["PERSISTED_STATE_FILE_NAME: &str = \"lru.json\"", "state: PersistedState<Vec<String>>"]
+    },
+    {
+      "id": "codex_provider_registration",
+      "path": "src/vs/platform/agentHost/node/agentHostMain.ts",
+      "anchors": ["process.env[AgentHostCodexAgentEnabledEnvVar]", "createInstance(CodexAgent)"]
+    },
+    {
+      "id": "codex_enablement_and_sdk_location",
+      "path": "src/vs/platform/agentHost/common/agentService.ts",
+      "anchors": ["'VSCODE_AGENT_HOST_CODEX_AGENT_ENABLED'", "'VSCODE_AGENT_HOST_CODEX_SDK_ROOT'"]
+    },
+    {
+      "id": "initialize_and_snapshot_subscription",
+      "path": "src/vs/platform/agentHost/common/state/protocol/common/commands.ts",
+      "anchors": ["protocolVersions: string[]", "initialSubscriptions?: URI[]", "@method subscribe"]
+    },
+    {
+      "id": "protocol_version",
+      "path": "src/vs/platform/agentHost/common/state/protocol/version/registry.ts",
+      "anchors": ["PROTOCOL_VERSION = '1.1.0'", "SUPPORTED_PROTOCOL_VERSIONS"]
+    },
+    {
+      "id": "session_provider_and_history",
+      "path": "src/vs/platform/agentHost/common/state/protocol/channels-session/commands.ts",
+      "anchors": ["interface CreateSessionParams", "provider?: string", "@method fetchTurns"]
+    },
+    {
+      "id": "provider_configuration_discovery",
+      "path": "src/vs/platform/agentHost/common/state/protocol/channels-root/commands.ts",
+      "anchors": ["interface ResolveSessionConfigParams", "workingDirectory?: URI"]
+    },
+    {
+      "id": "authentication_error_not_a_model_reply",
+      "path": "src/vs/platform/agentHost/common/state/protocol/common/errors.ts",
+      "anchors": ["ProviderNotFound: -32002", "AuthRequired: -32007"]
+    },
+    {
+      "id": "model_selection_shape",
+      "path": "src/vs/platform/agentHost/common/state/protocol/channels-root/state.ts",
+      "anchors": ["interface ModelSelection", "config?: Record<string, JsonPrimitive>"]
+    },
+    {
+      "id": "copilot_codex_model_namespace",
+      "path": "src/vs/platform/agentHost/common/codexModelSelection.ts",
+      "anchors": ["CODEX_COPILOT_MODEL_PROVIDER = 'vscode-proxy'", "CODEX_MODEL_SELECTION_PREFIX = '@provider='"]
+    },
+    {
+      "id": "codex_model_mapping_and_advertised_context_guard",
+      "path": "src/vs/platform/agentHost/node/codex/codexAgent.ts",
+      "anchors": ["const CODEX_THINKING_LEVEL_KEY = 'thinkingLevel'", "properties[ContextSizeConfigKey] = contextSize", "offeredSizes?.includes(contextSize)", "model_context_window: contextSize", "Restored model '"]
+    },
+    {
+      "id": "max_effort_value",
+      "path": "src/vs/platform/agentHost/node/codex/codexSessionConfigKeys.ts",
+      "anchors": ["function narrowReasoningEffort", "case 'max':"]
+    },
+    {
+      "id": "numeric_context_parameter",
+      "path": "src/vs/platform/agentHost/common/agentModelConfiguration.ts",
+      "anchors": ["ContextSizeConfigKey = 'contextSize'"]
+    },
+    {
+      "id": "reviewed_codex_session_config_surface",
+      "path": "src/vs/platform/agentHost/common/codexSessionConfigKeys.ts",
+      "anchors": ["enum CodexSessionConfigKey", "ModelReasoningEffort = 'codex.modelReasoningEffort'", "ReasoningSummary = 'codex.reasoningSummary'"]
+    },
+    {
+      "id": "turn_and_tool_action_capture",
+      "path": "src/vs/platform/agentHost/common/state/protocol/channels-chat/actions.ts",
+      "anchors": ["interface ChatTurnStartedAction", "interface ChatToolCallStartAction", "interface ChatToolCallCompleteAction", "interface ChatTurnCompleteAction"]
+    },
+    {
+      "id": "session_creation_forwards_provider_without_prompt",
+      "path": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+      "anchors": ["createSession: async", "provider: params.provider", "config: this._config.sessionConfigAdapter"]
+    }
+  ]
+}
