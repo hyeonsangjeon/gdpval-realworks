@@ -121,6 +121,31 @@
       "id": "session_creation_forwards_provider_without_prompt",
       "path": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
       "anchors": ["createSession: async", "provider: params.provider", "config: this._config.sessionConfigAdapter"]
+    },
+    {
+      "id": "client_cancel_not_server_request_admission",
+      "path": "src/vs/platform/agentHost/common/state/protocol/channels-chat/actions.ts",
+      "anchors": ["interface ChatTurnCancelledAction", "directly to `running` if `confirmed` is set", "interface ChatPendingMessageSetAction"]
+    },
+    {
+      "id": "client_action_and_server_sequence_envelopes",
+      "path": "src/vs/platform/agentHost/common/state/protocol/common/actions.ts",
+      "anchors": ["interface ActionEnvelope", "readonly serverSeq: number", "readonly origin: ActionOrigin"]
+    },
+    {
+      "id": "dispatch_notification_not_rpc_response",
+      "path": "src/vs/platform/agentHost/common/state/protocol/common/commands.ts",
+      "anchors": ["interface DispatchActionParams", "clientSeq: number", "Fire-and-forget action dispatch"]
+    },
+    {
+      "id": "historical_model_and_terminal_file_capture",
+      "path": "src/vs/platform/agentHost/common/state/protocol/channels-chat/state.ts",
+      "anchors": ["For historic user/agent messages this records the model actually used", "kind: ResponsePartKind.ToolCall", "interface ToolResultFileEditContent", "interface ToolResultTerminalContent"]
+    },
+    {
+      "id": "terminal_command_capture",
+      "path": "src/vs/platform/agentHost/common/state/protocol/channels-terminal/actions.ts",
+      "anchors": ["interface TerminalCommandExecutedAction", "commandLine: string", "interface TerminalCommandFinishedAction"]
     }
   ]
 }

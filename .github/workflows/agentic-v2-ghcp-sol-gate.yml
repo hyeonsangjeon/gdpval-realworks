@@ -24,6 +24,12 @@ on:
         type: boolean
         default: false
         required: true
+      execution_adapter:
+        description: AHP is a fail-closed draft until native hard caps and served settings are proved
+        type: choice
+        options: [copilot-cli, ahp-draft]
+        default: copilot-cli
+        required: true
 
 permissions:
   contents: read
@@ -110,7 +116,8 @@ jobs:
             tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_vm_gate_contract.py \
             tests/test_ghcp_vm_input_bundle.py tests/test_ghcp_sol_execution_adapter.py \
             tests/test_ghcp_sol_copilot_smoke.py tests/test_ghcp_sol_runner_environment.py \
-            tests/test_ghcp_sol_grader_contract.py tests/test_ghcp_sol_paid_gate.py
+            tests/test_ghcp_sol_grader_contract.py tests/test_ghcp_sol_paid_gate.py \
+            tests/test_ghcp_ahp_client.py
       - name: Fake-token projection only - never launch a CLI
         env:
           PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
@@ -295,6 +302,7 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       GHCP_PAID_EXECUTION: 'true'
+      GHCP_EXECUTION_ADAPTER: ${{ inputs.execution_adapter || 'copilot-cli' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -309,12 +317,14 @@ jobs:
           PIP_CONFIG_FILE: /dev/null
         run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
       - name: Prepare only hash-pinned public original inputs without authentication
+        if: inputs.execution_adapter != 'ahp-draft'
         run: |
           set -euo pipefail
           umask 077
           timeout --signal=TERM --kill-after=5s 300s \
             python batch-runner/ghcp_sol_paid_gate.py --prepare-inputs "$RUNNER_TEMP/ghcp-paid-inputs"
       - name: Install the pinned CLI without launching it
+        if: inputs.execution_adapter != 'ahp-draft'
         run: |
           set -euo pipefail
           umask 077
@@ -335,6 +345,7 @@ jobs:
           umask 077
           timeout --signal=TERM --kill-after=5s 1230s \
             python batch-runner/ghcp_sol_paid_gate.py --task-id "$TASK_ID" \
+              --adapter "$GHCP_EXECUTION_ADAPTER" \
               --copilot-bin "$RUNNER_TEMP/ghcp-paid-cli/copilot" \
               --bundle "$RUNNER_TEMP/ghcp-paid-inputs/bundle" \
               --state-root "$RUNNER_TEMP/ghcp-paid-state" --output "$RUNNER_TEMP/ghcp-paid-export"
