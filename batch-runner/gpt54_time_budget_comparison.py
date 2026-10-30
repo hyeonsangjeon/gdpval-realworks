@@ -64,6 +64,18 @@ CHANGED_RUNTIME_SOURCES = RUNTIME_ADDITIONS | {
     "batch-runner/core/agentic_v2_conversation_runner.py",
 }
 REGISTRATION_PATH = ENVELOPE + "gpt54_sandboxv2_codex_time_budget_v1.yaml"
+SOURCE_FOLLOWUP_PATH = ENVELOPE + "gpt54_time_budget_source_20261030_schedule.yaml"
+PREDECESSOR_REGISTRATION_SHA256 = "e1d16d350aeb21af34104cede0d3acc0f6dc8db134338708e70168fbd9642699"
+FOLLOWUP_CHANGED_SOURCES = {
+    COMPILER, ".github/workflows/batch-run.yml", "batch-runner/step8_grade.py",
+    "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+}
+FOLLOWUP_HELPERS = {
+    "batch-runner/gpt54_time_budget_schedule.py", "batch-runner/gpt54_time_budget_v2_ci.py",
+    "batch-runner/gpt54_time_budget_codex_ci.py", "batch-runner/gpt54_time_budget_v2_observation.py",
+    ".github/workflows/gpt54-time-budget-first-v2.yml", ".github/workflows/gpt54-time-budget-first-codex.yml",
+    "batch-runner/core/runner_environment.py", "batch-runner/scripts/prepare_codex_sandbox_host.py",
+}
 RUN_ORDER = (
     ("sandbox_v2", "v2", 1),
     ("codex", "codex", 1),
@@ -407,6 +419,56 @@ def _frozen_roles() -> set[str]:
     }
 
 
+def _runtime_source_followup(root: Path, plan: dict) -> tuple[dict, dict]:
+    """Validate an additive source record, never re-pin the original plan.
+
+    The caller also holds this file, every effective source and all core
+    modules against its independent full runtime commit. Changing this record
+    alone therefore cannot authorize changed runtime bytes.
+    """
+    from gpt54_prepared_input_attestation import _identity, _read_bytes
+
+    raw = _regular_bytes(root / REGISTRATION_PATH)
+    _expect("successor_predecessor_bytes", hashlib.sha256(raw).hexdigest(), PREDECESSOR_REGISTRATION_SHA256)
+    _expect("successor_preserves_registration", plan, load_registration(root / REGISTRATION_PATH))
+    record = load_registration(root / SOURCE_FOLLOWUP_PATH)
+    _expect("successor_fields", sorted(record), sorted({
+        "format", "study_id", "purpose", "predecessor", "reviewed_base_commit", "changed_files", "helper_pins",
+    }))
+    _expect("successor_format", record["format"], "gpt54-time-budget-source-successor-v1")
+    _expect("successor_study", record["study_id"], STUDY_ID)
+    _expect("successor_purpose", record["purpose"], "runtime_sources_only_no_condition_or_launch_change")
+    _expect("successor_predecessor", record["predecessor"], {
+        "path": REGISTRATION_PATH, "sha256": PREDECESSOR_REGISTRATION_SHA256,
+        "source_pins_sha256": seal(plan["source_pins"]),
+    })
+    _expect("successor_base", record["reviewed_base_commit"], "64f2720605b6e494d324ff682046234fe8beebc5")
+    rows = record["changed_files"]
+    if type(rows) is not list or len(rows) != len(FOLLOWUP_CHANGED_SOURCES):
+        raise TimeBudgetRegistrationRefused("successor_changed_inventory")
+    _expect("successor_changed_inventory", [row["path"] for row in rows], sorted(FOLLOWUP_CHANGED_SOURCES))
+    pins = dict(plan["source_pins"])
+    for row in rows:
+        name = row["path"]
+        digest = hashlib.sha256(_regular_bytes(root / name)).hexdigest()
+        _expect("successor_changed_file", row, {
+            "path": name, "previous_sha256": pins[name], "sha256": digest,
+        })
+        if pins[name] == digest:
+            raise TimeBudgetRegistrationRefused("successor_delta_must_change_bytes")
+        pins[name] = digest
+    _expect("successor_helper_inventory", sorted(record["helper_pins"]), sorted(FOLLOWUP_HELPERS))
+    helpers = {name: _identity(_read_bytes(root / name, sha256=digest))
+               for name, digest in record["helper_pins"].items()}
+    # Exact pinned bytes for ALL 42 roles, not only the five named deltas.
+    files = {name: _identity(_read_bytes(root / name, sha256=digest)) for name, digest in sorted(pins.items())}
+    return pins, {"manifest_file": {"path": REGISTRATION_PATH, **_identity(raw)}, "source_files": files,
+                  "source_followup": {"path": SOURCE_FOLLOWUP_PATH,
+                                      **_identity(_regular_bytes(root / SOURCE_FOLLOWUP_PATH)),
+                                      "predecessor": record["predecessor"], "changed_files": rows,
+                                      "helper_files": helpers}}
+
+
 @contextmanager
 def _dual_root_sources(
     plan,
@@ -436,11 +498,13 @@ def _dual_root_sources(
         sorted(plan["source_pins"]),
         sorted(REQUIRED_SOURCES | RUNTIME_ADDITIONS),
     )
+    has_followup = os.path.lexists(runtime_root / SOURCE_FOLLOWUP_PATH)
     with (
         _reviewed_source(
             runtime_root,
             expected_reviewed_source_sha,
-            REQUIRED_SOURCES | RUNTIME_ADDITIONS | {REGISTRATION_PATH},
+            REQUIRED_SOURCES | RUNTIME_ADDITIONS | {REGISTRATION_PATH}
+            | ({SOURCE_FOLLOWUP_PATH} | FOLLOWUP_HELPERS if has_followup else set()),
         ) as (runtime, runtime_tree, _),
         _reviewed_source(
             frozen_grader_root,
@@ -466,9 +530,16 @@ def _dual_root_sources(
                 for name in CHANGED_RUNTIME_SOURCES
             }
         )
-        _expect("runtime_source_roles", plan["source_pins"], expected_pins)
         runtime_manifest = load_registration(runtime / REGISTRATION_PATH)
-        runtime_sources = _sources(runtime, runtime_manifest, REGISTRATION_PATH)
+        if has_followup:
+            effective_pins, runtime_sources = _runtime_source_followup(runtime, plan)
+            compiler_pin = plan["source_pins"][COMPILER]
+        else:
+            # Historical/synthetic R still needs every original equality.
+            _expect("runtime_source_roles", plan["source_pins"], expected_pins)
+            runtime_sources = _sources(runtime, runtime_manifest, REGISTRATION_PATH)
+            effective_pins = plan["source_pins"]
+            compiler_pin = hashlib.sha256(_regular_bytes(runtime / COMPILER)).hexdigest()
         _expect(
             "running_compiler_bytes",
             hashlib.sha256(_regular_bytes(runtime / COMPILER)).hexdigest(),
@@ -480,9 +551,7 @@ def _dual_root_sources(
             "source_profile": {"path": SOURCE_PROFILE, "sha256": SOURCE_PROFILE_SHA256},
             "registration_compiler": {
                 "path": COMPILER,
-                "sha256": hashlib.sha256(
-                    _regular_bytes(runtime / COMPILER)
-                ).hexdigest(),
+                "sha256": compiler_pin,
             },
             "runtime_role": "independently_reviewed_runtime_commit",
             "frozen_grader": {
@@ -558,7 +627,7 @@ def _dual_root_sources(
                 "execution_source": "frozen_source_only_not_runtime_root",
                 **frozen_sources,
             },
-            "validated_source_pins": plan["source_pins"],
+            "validated_source_pins": effective_pins,
             "source_profile_semantic_sha256": seal(profile),
             "private_originals_verified": False,
             "template_not_materialized_grader": True,

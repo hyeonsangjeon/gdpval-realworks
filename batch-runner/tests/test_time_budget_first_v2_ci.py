@@ -78,7 +78,8 @@ class PrivateStore:
 
     def hf_hub_download(self, **kwargs):
         self.record("immutable_control_readback", kwargs)
-        assert kwargs["filename"] in {self.claim, self.manifest}
+        assert kwargs["filename"] in {self.claim, self.manifest} or kwargs["filename"].endswith(
+            "/" + ci.schedule.CAPTURE_NAME)
         assert kwargs["force_download"] is True and kwargs["local_files_only"] is False
         target = Path(kwargs["cache_dir"]) / "control.json"
         target.write_bytes(self.trees[kwargs["revision"]][kwargs["filename"]])
@@ -93,7 +94,16 @@ class PrivateStore:
             assert type(operation) is CommitOperationAdd
             assert isinstance(operation.path_or_fileobj, io.BufferedIOBase)
             files[operation.path_in_repo] = operation.path_or_fileobj.read()
-        kind = "claim" if set(files) == {self.claim} else "output"
+        kind = "claim" if self.claim in files else "output"
+        if kind == "claim":
+            expected = {self.claim}
+            if self.claim.startswith("time-budget/"):
+                expected.add(self.claim.rsplit("/", 1)[0] + "/" + ci.schedule.CLAIM_NAME)
+            # This transport is also reused by the unchanged, distinct
+            # time-budget-grading/ namespace. It does not schedule generation.
+            assert set(files) == expected
+        else:
+            assert self.manifest in files
         self.commits.append(kind)
         if self.race or kwargs["parent_commit"] != self.head:
             raise ci.storage.OutputPublicationRefused("hf_http_failed", 409)
@@ -105,6 +115,29 @@ class PrivateStore:
         if self.lost == kind:
             raise ci.storage.OutputPublicationRefused("hf_transport_failed")
         return SimpleNamespace(oid=revision)
+
+    def seed_captured_before(self, plan, cell, source):
+        """Explicit synthetic predecessor metadata, not historical results.
+
+        No controller/validator verdict is monkeypatched. Byte objects and
+        writer metadata pass the same immutable transport validation as live
+        controls; these tiny records contain no original prompts or grades.
+        """
+        schedule = ci.schedule.build_schedule(plan)
+        selected = ci.schedule.select(schedule, cell)
+        for prior in schedule[:selected.sequence - 1]:
+            context = {"plan": plan, "cell": prior.cell, "request": {"source": source}}
+            claim = {"observation": prior.cell, "fixture": "synthetic_prior_claim"}
+            manifest = {"execution_receipt": {"outcome": "returned"}, "fixture": "synthetic_prior_capture"}
+            admission = {"claim": claim, "returned_commit": self.head}
+            payload = {"time_budget_observation": {"cleanup_complete": True, "host_reusable": True}}
+            files = {prior.prefix + "/admission.json": ci._encoded(claim),
+                     prior.prefix + "/output-manifest.json": ci._encoded(manifest),
+                     prior.prefix + "/" + ci.schedule.CLAIM_NAME: ci._encoded(ci.schedule.claim_record(context, claim)),
+                     prior.prefix + "/" + ci.schedule.CAPTURE_NAME:
+                         ci._encoded(ci.schedule.capture_record(context, admission, manifest, payload))}
+            self.trees[self.head].update(files)
+            self.writers[self.head].update({name: self.head for name in files})
 
 
 @pytest.fixture
@@ -324,8 +357,44 @@ def _assert_no_storage_tokens():
     assert not any(os.environ.get(key) for key in ci.TOKEN_KEYS)
 
 
+def test_time_budget_v2_repeat_two_bound_capture_roundtrip(case, monkeypatch):
+    item = ci.schedule.build_schedule(case.seed.plan)[15]
+    assert item.condition == "sandbox_v2" and item.repeat == 2 and item.abba_position == 4
+    case.request["cell"] = item.cell
+    case.request["storage"]["prefix"] = item.prefix
+    case.api = PrivateStore(prefix=item.prefix)
+    case.api.seed_captured_before(case.seed.plan, item.cell, case.request["source"])
+    _request_changed(case)
+    receipt = _prepare(case)
+    assert receipt["outcome"] == "acknowledged"
+    effects = _effects(case, monkeypatch, "success")
+    with ci.checked_request(**case.args) as context:
+        result = ci.execute(context)
+    assert result["returned"]["observation"]["repeat"] == 2 and len(effects.requests) == 2
+    monkeypatch.setenv("HF_TOKEN", TOKEN)
+    with ci.checked_request(**case.args) as context:
+        envelope = ci.retain(context)
+    assert envelope["repeat"] == 2 and envelope["status"] == "success"
+    captured = json.loads(case.api.trees[case.api.head][item.prefix + "/" + ci.schedule.CAPTURE_NAME])
+    assert captured["state"] == "captured" and captured["binding"]["observation_id"] == item.observation_id
+    assert case.api.commits == ["claim", "output"]
+
+
+def test_time_budget_v2_out_of_order_receipt_before_model(case):
+    item = ci.schedule.build_schedule(case.seed.plan)[1]
+    case.request["cell"] = item.cell
+    case.request["storage"]["prefix"] = item.prefix
+    case.api = PrivateStore(prefix=item.prefix)
+    _request_changed(case)
+    with pytest.raises(ci.FirstV2CIRefused, match="claim_unconfirmed_permanently_reserved"):
+        _prepare(case)
+    assert ci._read(case.root / "schedule-refusal.json") == {
+        "reason": "observation_out_of_order", "observation_id": item.observation_id}
+    assert case.api.commits == [] and not (case.root / "execution-reserved.json").exists()
+
+
 def test_time_budget_v2_selected_task_failure_retention(case, monkeypatch, capsys):
-    """Retain Task2's fresh safe failure without adopting synthetic old Task1 state."""
+    """Retain Task2's fresh failure after a synthetic confirmed Task1 capture."""
     import logging
 
     task1, task2 = case.seed.task_ids[:2]
@@ -334,18 +403,13 @@ def test_time_budget_v2_selected_task_failure_retention(case, monkeypatch, capsy
     old_prefix, selected_prefix = base + task1, base + task2
     constants = deepcopy((ci.CELL, ci.PREFIX, ci.CLAIM, ci.MANIFEST))
     assert ci.CELL["task_id"] == task1 and ci.PREFIX == old_prefix
-    # Invented test bytes only, never a read or reconstruction of live Task1.
-    old_objects = {
-        old_prefix + "/admission.json": b"Explicitly synthetic old permanent claim; never adopt.\n",
-        old_prefix + "/output-manifest.json": b"Explicitly synthetic old uncertainty; never rewrite.\n",
-    }
     case.request["cell"]["task_id"] = task2
     case.request["storage"]["prefix"] = selected_prefix
     expected_cell = deepcopy(case.request["cell"])
     case.api = PrivateStore(prefix=selected_prefix)
     original_head = case.api.head
-    case.api.trees[original_head] = dict(old_objects)
-    case.api.writers[original_head] = {name: original_head for name in old_objects}
+    case.api.seed_captured_before(case.seed.plan, case.request["cell"], case.request["source"])
+    old_objects = dict(case.api.trees[original_head])
     _request_changed(case)
 
     admission = _prepare(case)
@@ -361,7 +425,7 @@ def test_time_budget_v2_selected_task_failure_retention(case, monkeypatch, capsy
     assert _identity(ci._bytes(direction)) == claim["direction_identity"]
     claim_path, manifest_path = selected_prefix + "/admission.json", selected_prefix + "/output-manifest.json"
     claim_tree = deepcopy(case.api.trees[admission["returned_commit"]])
-    assert set(claim_tree) == {*old_objects, claim_path}
+    assert set(claim_tree) == {*old_objects, claim_path, selected_prefix + "/" + ci.schedule.CLAIM_NAME}
     assert {name: claim_tree[name] for name in old_objects} == old_objects
     remote_claim = claim_tree[claim_path]
     claim_bytes = (case.root / "claim-reserved.json").read_bytes()
@@ -458,13 +522,15 @@ def test_time_budget_v2_selected_task_failure_retention(case, monkeypatch, capsy
         assert manifest["claim_commit"] == admission["returned_commit"] and manifest["claim_identity"] == admission["claim_identity"]
         assert manifest["request_identity"] == _identity(ci._bytes(case.request))
         assert manifest["result"] == "unavailable_no_fabricated_study_row" and manifest["files"] == {}
-        assert set(tree) == {*old_objects, claim_path, manifest_path} and tree[claim_path] == remote_claim
+        assert set(tree) == {*old_objects, claim_path, manifest_path,
+                             selected_prefix + "/" + ci.schedule.CLAIM_NAME,
+                             selected_prefix + "/" + ci.schedule.CAPTURE_NAME} and tree[claim_path] == remote_claim
         assert {name: tree[name] for name in old_objects} == old_objects
         assert {name: case.api.writers[case.api.head][name] for name in old_objects} == {
             name: original_head for name in old_objects}
         assert case.api.trees[original_head] == old_objects and case.api.trees[admission["returned_commit"]] == claim_tree
         assert case.api.writers[case.api.head][claim_path] == admission["returned_commit"]
-        assert case.api.commits == ["claim", "output"] and case.api.calls.count("immutable_control_readback") == 2
+        assert case.api.commits == ["claim", "output"] and case.api.calls.count("immutable_control_readback") == 3
         assert (case.root / "claim-reserved.json").read_bytes() == claim_bytes
         assert reservation.read_bytes() == reserved_bytes and receipt_path.read_bytes() == receipt_bytes
         assert not (case.root / "result").exists() and formatted == []
@@ -503,6 +569,9 @@ def test_time_budget_v2_registered_task_selection(case, actions_layout, monkeypa
     case.api = PrivateStore(prefix=case.request["storage"]["prefix"])
     case.api.trees[case.api.head] = dict(old_objects)
     case.api.writers[case.api.head] = {name: case.api.head for name in old_objects}
+    if change != "old_task1_claim":
+        case.api.seed_captured_before(case.seed.plan, case.request["cell"], case.request["source"])
+        old_objects = dict(case.api.trees[case.api.head])
     original_head = case.api.head
     original_trees, original_writers = deepcopy(case.api.trees), deepcopy(case.api.writers)
     if change == "unregistered_task":
@@ -545,7 +614,7 @@ def test_time_budget_v2_registered_task_selection(case, actions_layout, monkeypa
         assert ci._read(case.root / "claim-receipt.json")["outcome"] == "unresolved"
         assert case.api.head == original_head and case.api.trees == original_trees
         assert case.api.writers == original_writers and case.api.commits == []
-        assert case.api.calls == ["metadata", "objects"]  # No old body read/adoption or new CAS.
+        assert case.api.calls == ["metadata", "objects", "objects"]  # Metadata only, no old body/CAS.
         with ci.checked_request(**case.args) as context, pytest.raises(
                 ci.FirstV2CIRefused, match="acknowledged_same_host_claim_required"):
             ci.execute(context)
@@ -571,7 +640,8 @@ def test_time_budget_v2_registered_task_selection(case, actions_layout, monkeypa
     assert receipt["outcome"] == "acknowledged" and case.api.commits == ["claim"]
     claim_tree = deepcopy(case.api.trees[case.api.head])
     assert {name: claim_tree[name] for name in old_objects} == old_objects
-    assert set(claim_tree) - set(old_objects) == {selected_prefix + "/admission.json"}
+    assert set(claim_tree) - set(old_objects) == {selected_prefix + "/admission.json",
+                                               selected_prefix + "/" + ci.schedule.CLAIM_NAME}
     direction = ci._read(case.root / "direction.json")
     assert json.loads(direction["execution_binding"]["observation_json"]) == marker["observation"]
     assert direction["host_sha256"] == claim["host"]["instance_sha256"]
@@ -1062,7 +1132,8 @@ def test_time_budget_first_v2_ci_private_failure_diagnostics(case, monkeypatch, 
         assert all(part.encode() not in tree[ci.MANIFEST] for part in
                    ("synthetic-token", "Authorization", "/private/prompt.json", "provider-body"))
         assert manifest["result"] == "unavailable_no_fabricated_study_row" and manifest["files"] == {}
-        assert set(tree) == {ci.CLAIM, ci.MANIFEST} and tree[ci.CLAIM] == remote_claim
+        assert set(tree) == {ci.CLAIM, ci.MANIFEST, ci.PREFIX + "/" + ci.schedule.CLAIM_NAME,
+                             ci.PREFIX + "/" + ci.schedule.CAPTURE_NAME} and tree[ci.CLAIM] == remote_claim
         assert case.api.commits == ["claim", "output"]
     finally:
         os.umask(previous_mask)
@@ -1220,7 +1291,8 @@ def test_time_budget_first_v2_ci_failure_stderr_event(case, monkeypatch, capsys,
         manifest = json.loads(tree[ci.MANIFEST])
         assert manifest["execution_receipt"] == failure_receipt
         assert manifest["result"] == "unavailable_no_fabricated_study_row" and manifest["files"] == {}
-        assert set(tree) == {ci.CLAIM, ci.MANIFEST} and tree[ci.CLAIM] == remote_claim
+        assert set(tree) == {ci.CLAIM, ci.MANIFEST, ci.PREFIX + "/" + ci.schedule.CLAIM_NAME,
+                             ci.PREFIX + "/" + ci.schedule.CAPTURE_NAME} and tree[ci.CLAIM] == remote_claim
         assert case.api.commits == ["claim", "output"] and formatted == []
         for data in [tree[ci.MANIFEST], ci._bytes(envelope), "".join(emissions).encode()]:
             assert all(part.encode() not in data for part in

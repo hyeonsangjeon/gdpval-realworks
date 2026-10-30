@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = "a" * 40
 
 
-def test_original_registration_and_its_four_refusals_are_not_resealed():
+def test_original_registration_is_preserved_and_five_deltas_are_explicit():
     path = ROOT / "batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_time_budget_v1.yaml"
     raw = path.read_bytes()
     assert hashlib.sha256(raw).hexdigest() == "e1d16d350aeb21af34104cede0d3acc0f6dc8db134338708e70168fbd9642699"
@@ -28,7 +28,8 @@ def test_original_registration_and_its_four_refusals_are_not_resealed():
     changed = {name for name, expected in pins.items()
                if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected}
     assert changed == {".github/workflows/batch-run.yml", "batch-runner/step8_grade.py",
-                       "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py"}
+                       "batch-runner/core/codex_runner.py", "batch-runner/step2_run_inference.py",
+                       "batch-runner/gpt54_time_budget_comparison.py"}
 
 
 @pytest.fixture

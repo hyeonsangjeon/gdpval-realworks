@@ -72,6 +72,8 @@ def dual_roots(tmp_path_factory):
     # commit. Commit their actual working bytes in the synthetic R, rather
     # than mislabelling them with the repository's older HEAD/tree identity.
     working_roles = {
+        prospective.COMPILER,
+        "batch-runner/gpt54_time_budget_schedule.py",
         ".github/workflows/gpt54-time-budget-first-v2.yml",
         ".github/workflows/gpt54-time-budget-first-codex.yml",
         "batch-runner/gpt54_time_budget_v2_ci.py",
@@ -85,15 +87,19 @@ def dual_roots(tmp_path_factory):
             (root / role).write_bytes((repository / role).read_bytes())
         for role in fixed_roles:
             (root / role).write_bytes((roots["frozen"] / role).read_bytes())
+        # These fixtures deliberately exercise the preserved historical
+        # registration path with synthetic inputs, not the real successor.
+        (root / prospective.SOURCE_FOLLOWUP_PATH).unlink(missing_ok=True)
         manifest = prospective.load_registration(root / prospective.REGISTRATION_PATH)
         expected = dict(frozen_profile["source_pins"])
         expected.update({role: hashlib.sha256((root / role).read_bytes()).hexdigest()
                          for role in prospective.CHANGED_RUNTIME_SOURCES})
         assert set(expected) == prospective.REQUIRED_SOURCES | prospective.RUNTIME_ADDITIONS
         manifest["source_pins"] = expected
+        manifest["source_basis"]["registration_compiler"]["sha256"] = expected[prospective.COMPILER]
         (root / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
     git("-C", str(roots["runtime"]), "read-tree", original_sha)
-    git("-C", str(roots["runtime"]), "add", "--", *sorted(fixed_roles | working_roles), prospective.REGISTRATION_PATH)
+    git("-C", str(roots["runtime"]), "add", "-A", "--", "batch-runner", ".github/workflows")
     git("-C", str(roots["runtime"]), "commit", "-m", "test: bind synthetic runtime roles without renewing the study")
     runtime_sha = git("-C", str(roots["runtime"]), "rev-parse", "HEAD").decode().strip()
     substituted = roots["substitute"]
@@ -104,7 +110,7 @@ def dual_roots(tmp_path_factory):
     manifest["source_pins"][role] = hashlib.sha256(changed).hexdigest()
     (substituted / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
     git("-C", str(substituted), "read-tree", original_sha)
-    git("-C", str(substituted), "add", "--", role, *sorted(fixed_roles | working_roles), prospective.REGISTRATION_PATH)
+    git("-C", str(substituted), "add", "-A", "--", "batch-runner", ".github/workflows")
     git("-C", str(substituted), "commit", "-m", "test: coherent synthetic source substitution")
     replacement = git("-C", str(substituted), "rev-parse", "HEAD").decode().strip()
     # Cross-root refusal cases must compare existing commits, not fail early
@@ -201,8 +207,17 @@ def model_free(monkeypatch, request, dual_roots):
     assert calls == []
 
 
-def test_current_source_cannot_reuse_the_old_time_budget_registration(dual_roots):
+def test_current_source_requires_explicit_successor_not_an_implicit_repin(dual_roots):
     original = prospective.load_registration(dual_roots["original_root"] / prospective.REGISTRATION_PATH)
+    if (dual_roots["original_root"] / prospective.SOURCE_FOLLOWUP_PATH).exists():
+        with prospective._dual_root_sources(
+            original, runtime_root=dual_roots["original_root"],
+            expected_reviewed_source_sha=dual_roots["original_sha"],
+            frozen_grader_root=dual_roots["frozen"], expected_grader_source_sha=prospective.ACCEPTED_BASE_SHA,
+        ) as (_, _, _, evidence):
+            assert evidence["runtime"]["source_followup"]["predecessor"]["sha256"] == (
+                prospective.PREDECESSOR_REGISTRATION_SHA256)
+        return
     with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^runtime_source_roles$"):
         with prospective._dual_root_sources(
             original, runtime_root=dual_roots["original_root"],
@@ -1470,7 +1485,8 @@ def test_time_budget_observation_deadline_v2_actual_factory(tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("case", ["success", "creation_timeout", "native_recovery", "late_success", "cleanup_expired"])
-def test_time_budget_observation_deadline_codex_actual_entry(tmp_path, monkeypatch, observation_kernel, case):
+def test_time_budget_observation_deadline_codex_actual_entry(
+        tmp_path, monkeypatch, observation_kernel, native_hosted_runner, case):
     import core.codex_runner as native
     from core.codex_runtime_config import LoopbackCodexProvider
     from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT, CLEANUP_UNCONFIRMED

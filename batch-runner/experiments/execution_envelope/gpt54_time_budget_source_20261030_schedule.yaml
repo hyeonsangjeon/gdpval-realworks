@@ -1,0 +1,37 @@
+# Source-only successor. The original 42-pin registration remains byte-identical.
+# No launch authority, new observation, model/effort/input/budget/grader change.
+format: gpt54-time-budget-source-successor-v1
+study_id: gpt54_sandboxv2_codex_time_budget_v1
+purpose: runtime_sources_only_no_condition_or_launch_change
+predecessor:
+  path: batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_time_budget_v1.yaml
+  sha256: e1d16d350aeb21af34104cede0d3acc0f6dc8db134338708e70168fbd9642699
+  source_pins_sha256: 88755d70e5e6285ca5f8f9e3931864be0079b37ed41c1f92d68cb90fcf5ac88d
+reviewed_base_commit: 64f2720605b6e494d324ff682046234fe8beebc5
+# Exactly the four reviewed pre-existing mismatches plus the compiler which
+# verifies this successor. Current Step8 is pinned but grading still uses F.
+changed_files:
+  - path: .github/workflows/batch-run.yml
+    previous_sha256: 47f006f69bc079c50e3fba5ec5a7afcee769478e9857dead9c2e0eee22d90c26
+    sha256: 06519bc2abb0f69fe688cd864dadb536e907a433e2726c5bf60c1115c5c220bb
+  - path: batch-runner/core/codex_runner.py
+    previous_sha256: b6765bef5c013b964e6133b6d915ab337e087b8130bc443938c4abb23cf8265c
+    sha256: b5f29c5aef7fc594ed3f042085a078e9e13c3f3754f5840c1df19bae75235c34
+  - path: batch-runner/gpt54_time_budget_comparison.py
+    previous_sha256: f4e41540a089e4ed164063bec60ce124a901eb5195065e456502e902814cd3a2
+    sha256: 657b75ba02e2301e6105f21d9f158dbf18bff457f0374a3b0943a5ecdabbbd0f
+  - path: batch-runner/step2_run_inference.py
+    previous_sha256: 9ae6e0c809be498fd96c25ad16b83302c567fe95bdd7dc587451c4029b8c24bc
+    sha256: fd84734568d1eec7198fc59717bfbb877c75fbf01760cdd48b17316fddc20d40
+  - path: batch-runner/step8_grade.py
+    previous_sha256: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
+    sha256: 0911eaff30b3c4cfbd6f3dfa0ced2b11319062a154a610dd5d9ddaf79215bf1c
+helper_pins:
+  .github/workflows/gpt54-time-budget-first-codex.yml: 929c303cac32da46a9981ce592a61ced8bc35e66fea1110be42d4ef4898bf5fe
+  .github/workflows/gpt54-time-budget-first-v2.yml: 009c19187486d985fbd56783ffa3515363a1385471ba8c16b9a49517895e96b8
+  batch-runner/core/runner_environment.py: c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a
+  batch-runner/gpt54_time_budget_codex_ci.py: 0e911e875cfd3a9d2760a3f74951a6c9d245737420e2ada15cef5ac2a00fc0b5
+  batch-runner/gpt54_time_budget_schedule.py: e2f0b0903d349a07028b642f9d73921c2c95dbbfdadbf2ded28732d1138b1cbf
+  batch-runner/gpt54_time_budget_v2_ci.py: fcfa16ee443ab661cfa6137b1ef9da20c2a2444798a6229f2ad8846c8d1834e6
+  batch-runner/gpt54_time_budget_v2_observation.py: c9b5d0461ce2c3706dd7cccc7c3d8862aed529a0777131ffaadee8dd568c2649
+  batch-runner/scripts/prepare_codex_sandbox_host.py: 6324b206656abf609af6c6d4f8a1c93c68a0c3d48e53aef0d35955630b66825a

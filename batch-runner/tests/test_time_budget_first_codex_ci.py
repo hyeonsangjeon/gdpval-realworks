@@ -259,8 +259,7 @@ def case(handoff_sources, actions_layout, monkeypatch):
         monkeypatch.setenv(key, value)
     store = PrivateStore(prefix=ci.PREFIX)
     prior = ci.shared.PREFIX + "/admission.json"
-    store.trees[store.head][prior] = b"Synthetic prior V2 claim; never adopted or mutated."
-    store.writers[store.head][prior] = store.head
+    store.seed_captured_before(seed.plan, ci.CELL, request["source"])
     value = SimpleNamespace(request=request, root=roots["state_root"], seed=seed, api=store,
                             downloads=[], corrupt_step0=False, prior=prior, prior_bytes=store.trees[store.head][prior])
     value.args = {"reviewed_source_sha": seed.runtime_sha, "reviewed_source_tree": seed.runtime_tree,
@@ -363,6 +362,37 @@ def _workflow_contract(case, layout, monkeypatch):
     assert layout.github_env.read_bytes() == env_bytes
     assert steps[-1]["with"] == {"name": "time-budget-first-codex-completion",
         "path": "${{ runner.temp }}/time-budget-first-codex/completion.json", "if-no-files-found": "error", "retention-days": 7}
+
+
+def test_time_budget_native_repeat_two_bound_capture_roundtrip(case, offline, monkeypatch):
+    item = ci.shared.schedule.build_schedule(case.seed.plan)[10]
+    assert item.condition == "codex" and item.repeat == 2 and item.abba_position == 3
+    case.request["cell"] = item.cell
+    case.request["storage"]["prefix"] = item.prefix
+    case.api.claim, case.api.manifest = item.prefix + "/admission.json", item.prefix + "/output-manifest.json"
+    case.api.seed_captured_before(case.seed.plan, item.cell, case.request["source"])
+    assert _invoke(case, monkeypatch, "prepare-and-claim") == 0
+    marker = ci._read(case.root / "preparation" / ci.registration.HANDOFF_READY)
+    spec = SimpleNamespace(arguments={"observation": deadline.ObservationIdentity(**marker["observation"])},
+                           marker=marker, consumed=case.root / ("preparation" + ci.registration.HANDOFF_CONSUMED_SUFFIX))
+    native = _native_transport(monkeypatch, spec, offline, outcome="success")
+    assert _invoke(case, monkeypatch, "execute") == 0 and native.requests
+    monkeypatch.setenv("HF_TOKEN", TOKEN)
+    assert _invoke(case, monkeypatch, "retain") == 0
+    envelope = ci._read(case.root / "completion.json")
+    assert envelope["repeat"] == 2 and envelope["status"] == "success"
+    record = json.loads(case.api.trees[case.api.head][item.prefix + "/" + ci.shared.schedule.CAPTURE_NAME])
+    assert record["state"] == "captured" and record["binding"]["observation_id"] == item.observation_id
+    assert case.api.commits == ["claim", "output"]
+
+
+def test_time_budget_native_cannot_overtake_v2_before_model(case, monkeypatch, offline):
+    case.api.trees[case.api.head] = {}
+    case.api.writers[case.api.head] = {}
+    assert _invoke(case, monkeypatch, "prepare-and-claim") == 2
+    assert ci._read(case.root / "schedule-refusal.json")["reason"] == "observation_out_of_order"
+    assert case.api.commits == offline.auth_calls == []
+    assert not (case.root / "execution-reserved.json").exists()
 
 
 @pytest.mark.parametrize("case_name", ["roundtrip", "failed", "source", "selection", "step0", "direction", "occupied", "uncertain"])
@@ -792,6 +822,8 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
         ci.MANIFEST: b"Synthetic old native uncertainty; never rewrite.\n",
     })
     case.api.writers[case.api.head].update({ci.CLAIM: case.api.head, ci.MANIFEST: case.api.head})
+    if not keep_task1:
+        case.api.seed_captured_before(case.seed.plan, selected, case.request["source"])
     original_head = case.api.head
     old_objects = dict(case.api.trees[original_head])
     original_trees, original_writers = deepcopy(case.api.trees), deepcopy(case.api.writers)
@@ -815,7 +847,7 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
     assert (guarded.returncode != 0) == (change in {"unregistered_task", "run", "condition", "repeat", "source"})
 
     if change in {"unregistered_task", "run", "condition", "repeat", "namespace", "source"}:
-        reason = ("registered_first_codex_task_required" if change == "unregistered_task" else
+        reason = ("registered_codex_task_required" if change == "unregistered_task" else
                   "private study storage mismatch" if change == "namespace" else
                   "request source mismatch" if change == "source" else "request cell mismatch")
         with pytest.raises(ValueError, match="^" + reason + "$"):
@@ -872,13 +904,13 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
             ci.prepare_and_claim(context)
         assert len(case.downloads) == 4
         assert ci._read(case.root / "claim-receipt.json")["outcome"] == "unresolved"
-        assert case.api.calls == ["metadata", "objects"]  # No old-object body read, adoption or CAS.
+        assert case.api.calls == ["metadata", "objects", "objects"]  # Metadata only; no old body/CAS.
         assert case.api.head == original_head and case.api.commits == offline.auth_calls == []
         assert case.api.trees == original_trees and case.api.writers == original_writers
         with ci.checked_request(**arguments) as context, pytest.raises(
                 ci.FirstCodexCIRefused, match="^execution_refused_or_uncertain$"):
             ci.execute(context)
-        assert case.api.calls == ["metadata", "objects"] and offline.auth_calls == []
+        assert case.api.calls == ["metadata", "objects", "objects"] and offline.auth_calls == []
         assert not (case.root / "execution-reserved.json").exists() and not (case.root / "result").exists()
         assert list((case.root / "observation").iterdir()) == []
         return
@@ -903,7 +935,7 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
     assert config["execution"]["resume_max_rounds"] == 0
     assert config["execution"]["timeout"] == 1200
     claim_tree = dict(case.api.trees[case.api.head])
-    assert set(claim_tree) - set(old_objects) == {claim_path}
+    assert set(claim_tree) - set(old_objects) == {claim_path, selected_prefix + "/" + ci.shared.schedule.CLAIM_NAME}
     assert {name: claim_tree[name] for name in old_objects} == old_objects
     direction_path = case.root / "direction.json"
     direction_bytes = direction_path.read_bytes()

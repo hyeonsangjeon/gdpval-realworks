@@ -370,7 +370,7 @@ def run_first_v2_observation(
     input_registration_root: Path, expected_input_source_sha: str, input_registration_path: str,
     dataset_parquet: Path, reference_root: Path, observation_directory: Path, destination: Path,
 ) -> dict:
-    """One nonrenewable registered first-run task, no outer retry or grading.
+    """One nonrenewable registered r1/r2 task, no outer retry or grading.
 
     Expected identities are caller authority, not values inferred from markers,
     direction bytes or HEAD. A new result destination and adjacent backend work
@@ -379,8 +379,10 @@ def run_first_v2_observation(
     returned terminal control remains uncertainty, not a fabricated study row.
     """
     _require(type(observation) is ObservationIdentity and observation.study_id == registration.STUDY_ID
-             and observation.run_id == RUN and observation.condition == "sandbox_v2"
-             and observation.repeat == 1, "first_registered_v2_cell_only")
+             and observation.condition == "sandbox_v2" and type(observation.repeat) is int
+             and observation.repeat in (1, 2)
+             and observation.run_id == f"gpt54_time_budget_v1_v2_r{observation.repeat}",
+             "registered_v2_cell_only")
     observation = ObservationIdentity(**asdict(observation))
     _same("independent runtime source", observation.reviewed_source_sha, expected_reviewed_source_sha)
     _same("independent frozen source", expected_grader_source_sha, registration.ACCEPTED_BASE_SHA)

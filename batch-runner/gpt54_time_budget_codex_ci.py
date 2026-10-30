@@ -1,6 +1,6 @@
-"""One independently directed registered native r1 observation, never a scheduler.
+"""One independently directed native r1/r2 observation in the shared ABBA order.
 
-Only one selected task in the fixed native r1 run can acquire its permanent
+Only the next selected task in the fixed schedule can acquire its permanent
 private claim. Originals and the full canonical Step0 come from the accepted
 input-only primitives; neither a local marker nor the closed pilot supplies authority.
 """
@@ -58,7 +58,7 @@ ROOT_NAMES = {"runtime_root": "time-budget-codex-runtime", "frozen_root": "time-
               "state_root": "time-budget-first-codex", "native_root": "time-budget-codex-native",
               "login_root": "time-budget-codex-azure-login"}
 SOURCE_ROLES = {
-    HELPER, WORKFLOW, observation.ENTRYPOINT, observation.host_identity.ENTRYPOINT, shared.HELPER,
+    HELPER, WORKFLOW, observation.ENTRYPOINT, observation.host_identity.ENTRYPOINT, shared.HELPER, shared.schedule.HELPER,
     "batch-runner/codex_ci_input_intake.py", "batch-runner/codex_ci_input_bundle.py",
     "batch-runner/codex_budget_pilot_output.py", "batch-runner/codex_budget_pilot_retention.py",
     "batch-runner/scripts/azure_oidc_identity_preflight.py", "batch-runner/requirements.txt",
@@ -81,12 +81,14 @@ def _bytes(value) -> bytes:
 
 
 def _selected_cell(compiled: registration.CompiledTimeBudgetRegistration, requested: dict) -> dict:
-    """Bind one requested task to the already source-verified native r1 run."""
-    runs = [run for run in compiled.runs if run.run_id == CELL["run_id"]
-            and run.condition == "codex" and run.repeat == 1]
+    """Bind one requested task to the source-verified native r1/r2 run."""
+    _require(type(requested) is dict and type(requested.get("repeat")) is int,
+             "registered_codex_task_required")
+    runs = [run for run in compiled.runs if run.run_id == requested.get("run_id")
+            and run.condition == "codex" and run.repeat in (1, 2)]
     _require(compiled.runtime_bound and len(runs) == 1 and type(requested) is dict
              and type(requested.get("task_id")) is str and requested["task_id"] in runs[0].task_ids,
-             "registered_first_codex_task_required")
+             "registered_codex_task_required")
     run = runs[0]
     cell = {"study_id": registration.STUDY_ID, "run_id": run.run_id, "condition": run.condition,
             "repeat": run.repeat, "task_id": requested["task_id"]}
@@ -221,6 +223,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         _same("reviewed runtime tree", tree, reviewed_source_tree)
         for role, module in (
             (HELPER, sys.modules[__name__]), (observation.ENTRYPOINT, observation), (shared.HELPER, shared),
+            (shared.schedule.HELPER, shared.schedule),
             (observation.host_identity.ENTRYPOINT, observation.host_identity),
             ("batch-runner/codex_ci_input_intake.py", intake), ("batch-runner/codex_ci_input_bundle.py", originals),
             ("batch-runner/codex_budget_pilot_output.py", storage),
@@ -389,6 +392,7 @@ def prepare_and_claim(context: dict) -> dict:
             _write(paths["direction"], direction)
             claim = _claim(context, rebuilt)
             _write(root / "claim-reserved.json", claim)
+            _write(root / shared.schedule.CLAIM_NAME, shared.schedule.claim_record(context, claim))
             reread()
         receipt = {"outcome": "unresolved", "claim": claim, "claim_identity": _identity(_encoded(claim)),
                    "returned_commit": None}
@@ -398,12 +402,18 @@ def prepare_and_claim(context: dict) -> dict:
             with _session(None) as (api, token, deadline):
                 parent = context["request"]["storage"]["expected_parent"]
                 _same("independent private parent", storage._metadata(api, TARGET, BRANCH, token, deadline)["sha"], parent)
-                _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
-                         paths=[prefix], token=token) == [], "observation_already_claimed_or_retained")
+                shared.schedule.require_next_remote(context, api, token, deadline,
+                    repository=TARGET, parent=parent, cache=cache)
                 receipt["returned_commit"] = _commit(api, token, deadline, cell=context["cell"], parent=parent,
-                    files={claim_path: _encoded(claim)}, control_path=claim_path, control=claim, cache=cache)
+                    files={claim_path: _encoded(claim), prefix + "/" + shared.schedule.CLAIM_NAME:
+                           _encoded(shared.schedule.claim_record(context, claim))},
+                    control_path=claim_path, control=claim, cache=cache)
                 receipt["outcome"] = "acknowledged"
-        except (Exception, KeyboardInterrupt):
+        except (Exception, KeyboardInterrupt) as error:
+            if isinstance(error, shared.schedule.ScheduleRefused) and str(error) in shared.schedule.REASONS:
+                _write(root / "schedule-refusal.json", {"reason": str(error),
+                    "observation_id": shared.schedule.select(shared.schedule.build_schedule(context["plan"]),
+                                                              context["cell"]).observation_id})
             _write(root / "claim-receipt.json", receipt)
             raise FirstCodexCIRefused("claim_unconfirmed_permanently_reserved") from None
         _write(root / "claim-receipt.json", receipt)
@@ -417,6 +427,8 @@ def _admission(context: dict, sources: ExitStack) -> tuple[dict, dict]:
     marker, _, _ = _reconstruct(context, sources)
     claim = _claim(context, marker)
     _same("same-host permanent claim", _read(paths["root"] / "claim-reserved.json"), claim)
+    _same("same-host schedule admission", _read(paths["root"] / shared.schedule.CLAIM_NAME),
+          shared.schedule.claim_record(context, claim))
     receipt = _read(paths["root"] / "claim-receipt.json")
     _require(type(receipt) is dict and set(receipt) == {"outcome", "claim", "claim_identity", "returned_commit"}
              and receipt["outcome"] == "acknowledged" and storage._hash(receipt["returned_commit"], 40)
@@ -564,7 +576,9 @@ def retain(context: dict) -> dict:
             _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
                      paths=[manifest_path, prefix + "/result"], token=token) == [], "output_already_retained")
             revision = _commit(api, token, deadline, cell=context["cell"], parent=parent,
-                files={manifest_path: _encoded(manifest), **{prefix + "/" + name: data for name, data in files.items()}},
+                files={manifest_path: _encoded(manifest), prefix + "/" + shared.schedule.CAPTURE_NAME:
+                       _encoded(shared.schedule.capture_record(context, admission, manifest, payload)),
+                       **{prefix + "/" + name: data for name, data in files.items()}},
                 control_path=manifest_path, control=manifest, cache=cache)
             _objects(api, TARGET, revision, [_object(claim_path, _encoded(admission["claim"]))], token, deadline, written_at=parent)
             outcome = "acknowledged"

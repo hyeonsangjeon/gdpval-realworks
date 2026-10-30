@@ -1,6 +1,7 @@
 """One directed Actions observation, with private, permanent cell admission.
 
-This controller has no scheduler, recovery, grading or storage setup operation.
+The shared ABBA scheduler admits only the next cell; this controller has no
+dispatch, recovery, grading or storage setup operation.
 The independently digest-bound dispatch request is authority; local preparations,
 remote receipts and host metadata are evidence, never independent permission.
 Only storage/process transports are test seams. No serialized callback is loaded.
@@ -23,6 +24,7 @@ from pathlib import Path
 import codex_budget_pilot_output as storage
 import codex_ci_input_intake as intake
 import gpt54_time_budget_comparison as registration
+import gpt54_time_budget_schedule as schedule
 import gpt54_time_budget_v2_observation as observation
 from codex_budget_pilot_retention import _control, _encoded, _object, _objects, _session
 from core.agentic_v2_preregistration import seal
@@ -69,7 +71,7 @@ MAX_INPUT_BYTES = 36 * 1024 * 1024
 TOKEN_KEYS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN",
               "ACTIONS_RUNTIME_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL")
 SOURCE_ROLES = {
-    HELPER, WORKFLOW, observation.ENTRYPOINT, "batch-runner/codex_ci_input_intake.py",
+    HELPER, WORKFLOW, observation.ENTRYPOINT, schedule.HELPER, "batch-runner/codex_ci_input_intake.py",
     "batch-runner/codex_budget_pilot_output.py", "batch-runner/codex_budget_pilot_retention.py",
     "batch-runner/gpt54_time_budget_grading_preparation.py",
     "batch-runner/scripts/azure_oidc_identity_preflight.py", "batch-runner/requirements.txt",
@@ -148,12 +150,14 @@ def _read(path: Path) -> dict:
 
 
 def _selected_cell(compiled: registration.CompiledTimeBudgetRegistration, requested: dict) -> dict:
-    """Bind one requested task to the already source-verified first V2 run."""
-    runs = [run for run in compiled.runs if run.run_id == observation.RUN
-            and run.condition == "sandbox_v2" and run.repeat == 1]
+    """Bind one requested task to the source-verified V2 r1/r2 run."""
+    _require(type(requested) is dict and type(requested.get("repeat")) is int,
+             "registered_v2_task_required")
+    runs = [run for run in compiled.runs if run.run_id == requested.get("run_id")
+            and run.condition == "sandbox_v2" and run.repeat in (1, 2)]
     _require(compiled.runtime_bound and len(runs) == 1 and type(requested) is dict
              and type(requested.get("task_id")) is str and requested["task_id"] in runs[0].task_ids,
-             "registered_first_v2_task_required")
+             "registered_v2_task_required")
     run = runs[0]
     cell = {"study_id": registration.STUDY_ID, "run_id": run.run_id, "condition": run.condition,
             "repeat": run.repeat, "task_id": requested["task_id"]}
@@ -306,6 +310,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         _same("reviewed runtime tree", tree, reviewed_source_tree)
         # Actual loaded controller/dependencies must be the reviewed R bytes.
         for name, module in ((HELPER, sys.modules[__name__]), (observation.ENTRYPOINT, observation),
+                             (schedule.HELPER, schedule),
                              ("batch-runner/codex_ci_input_intake.py", intake),
                              ("batch-runner/codex_budget_pilot_output.py", storage)):
             _read_bytes(Path(module.__file__), **identities[name])
@@ -471,6 +476,7 @@ def prepare_and_claim(context: dict) -> dict:
             _write(paths["direction"], direction)
             claim = _claim(context, rebuilt)
             _write(root / "claim-reserved.json", claim)
+            _write(root / schedule.CLAIM_NAME, schedule.claim_record(context, claim))
             reread()
         receipt = {"outcome": "unresolved", "claim": claim, "claim_identity": _identity(_encoded(claim)),
                    "returned_commit": None}
@@ -480,13 +486,19 @@ def prepare_and_claim(context: dict) -> dict:
             with _session(None) as (api, token, deadline):
                 parent = context["request"]["storage"]["expected_parent"]
                 _same("independent private parent", storage._metadata(api, TARGET, BRANCH, token, deadline)["sha"], parent)
-                _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
-                         paths=[prefix], token=token) == [], "observation_already_claimed_or_retained")
+                schedule.require_next_remote(context, api, token, deadline,
+                    repository=TARGET, parent=parent, cache=cache)
                 receipt["returned_commit"] = _commit(api, token, deadline, cell=context["cell"], parent=parent,
-                    files={claim_path: _encoded(claim)}, control_path=claim_path, control=claim, cache=cache)
+                    files={claim_path: _encoded(claim),
+                           prefix + "/" + schedule.CLAIM_NAME: _encoded(schedule.claim_record(context, claim))},
+                    control_path=claim_path, control=claim, cache=cache)
                 receipt["outcome"] = "acknowledged"
-        except (Exception, KeyboardInterrupt):
+        except (Exception, KeyboardInterrupt) as error:
             # No server-state adoption after a lost response, and no second CAS.
+            if isinstance(error, schedule.ScheduleRefused) and str(error) in schedule.REASONS:
+                _write(root / "schedule-refusal.json", {"reason": str(error),
+                    "observation_id": schedule.select(schedule.build_schedule(context["plan"]),
+                                                       context["cell"]).observation_id})
             _write(root / "claim-receipt.json", receipt)
             raise FirstV2CIRefused("claim_unconfirmed_permanently_reserved") from None
         _write(root / "claim-receipt.json", receipt)
@@ -500,6 +512,8 @@ def _admission(context: dict, sources: ExitStack) -> tuple[dict, dict]:
     marker, _, _ = _reconstruct(context, sources)
     claim = _claim(context, marker)
     _same("same-host permanent claim", _read(paths["root"] / "claim-reserved.json"), claim)
+    _same("same-host schedule admission", _read(paths["root"] / schedule.CLAIM_NAME),
+          schedule.claim_record(context, claim))
     receipt = _read(paths["root"] / "claim-receipt.json")
     _require(type(receipt) is dict and set(receipt) == {"outcome", "claim", "claim_identity", "returned_commit"}
              and receipt["outcome"] == "acknowledged" and storage._hash(receipt["returned_commit"], 40)
@@ -696,7 +710,9 @@ def retain(context: dict) -> dict:
             _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
                      paths=[manifest_path, prefix + "/result"], token=token) == [], "output_already_retained")
             revision = _commit(api, token, deadline, cell=context["cell"], parent=parent,
-                files={manifest_path: _encoded(manifest), **{prefix + "/" + name: data for name, data in files.items()}},
+                files={manifest_path: _encoded(manifest),
+                       prefix + "/" + schedule.CAPTURE_NAME: _encoded(schedule.capture_record(context, admission, manifest, payload)),
+                       **{prefix + "/" + name: data for name, data in files.items()}},
                 control_path=manifest_path, control=manifest, cache=cache)
             _objects(api, TARGET, revision, [_object(claim_path, _encoded(admission["claim"]))], token, deadline, written_at=parent)
             outcome = "acknowledged"
