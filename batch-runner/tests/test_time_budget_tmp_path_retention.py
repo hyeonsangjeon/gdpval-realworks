@@ -18,8 +18,19 @@ def test_time_budget_failed_tmp_path_retention(tmp_path, record_property):
     workflow_bytes = (root / ".github/workflows/backend-tests.yml").read_bytes()
     option = b" -o tmp_path_retention_policy=failed"
     assert workflow_bytes.count(option) == 1
-    # Undo only this option: all other jobs, guards and ceilings stay byte-identical.
+    # The current inventory includes #794's one core-ignore/one pilot selection.
+    # Undo only retention here; still pin every other workflow byte exactly.
     assert hashlib.sha256(workflow_bytes.replace(option, b"", 1)).hexdigest() == (
+        "46ba0b8fa9b31282e92f421d76170774b0f4756189cd264ab95b753f0a75eb8e"
+    )
+    # Preserve the earlier pin too: removing exactly those two allocation
+    # arguments must recover the pre-successor, pre-retention workflow bytes.
+    preceding = workflow_bytes
+    for token in (b" --ignore=tests/test_gpt56_grader_successor_seal.py ",
+                  b" tests/test_gpt56_grader_successor_seal.py "):
+        assert preceding.count(token) == 1
+        preceding = preceding.replace(token, b" ", 1)
+    assert hashlib.sha256(preceding.replace(option, b"", 1)).hexdigest() == (
         "7bd20c544ad32aff454ae212643b9228a943e072b89990c9789b89ac74134068"
     )
     job = yaml.safe_load(workflow_bytes)["jobs"]["time-budget-contracts"]

@@ -1,5 +1,121 @@
 # Latest task result
 
+## #794 subprocess-wait and retention-hash CI repair, 2026-10-30
+
+Backend Tests run 41056682245 failed for two different reasons. The intake
+workflow test hit CPython's bounded wait after pipe EOF but before waitpid
+reported child exit; the fixture's global sleep denial incorrectly caught that
+stdlib wait. Keep the five-second timeout and all global process/provider/sleep
+refusals, restoring a real wait primitive only inside subprocess's namespace
+for the explicitly allowed local shell. The three existing workflow cases now
+force that race. A new timeout case verifies the child is reaped and arbitrary
+processes/controller sleeps remain refused.
+
+The retention test still expected the workflow bytes from before #794's one
+core-ignore/one pilot-selection change. Check the new option-stripped hash
+`46ba0b8f…5eb8e` and also reconstruct the unchanged old `7bd20c54…34068` hash by
+removing exactly those two arguments. All actual tmp_path lifetime, exact argv,
+single-option and 45-minute job assertions remain. The workflow itself remains
+`75e6db77…ac65`; other current/historical hash guards, sealed sources and paid
+policies are unchanged. No new skip, xfail or narrowed test selection.
+
+Local reproduction: both exact CI assertions failed before the fix. Focused
+full modules (intake, retention, partition, GHCP workflow pin, successor seal):
+**237 passed / 0 failed / 0 skipped**. The pytest job's additional repo-root
+script suite: **186 passed / 0 failed / 0 skipped**.
+Both complete workflow selections were run without additional deselection:
+core **13,817 passed / 115 failed / 117 skipped**, with the workflow's 47
+integration deselections; time-budget **494 passed / 1 failed / 0 skipped**.
+Those are the original full-run outcomes, not an all-green local claim.
+
+Rechecking all 115 failed core nodes with corrected local tool/cache/temp
+settings passed 30. Installing the declared PyAV dependency in an isolated
+test environment passed the two remaining media cases. These 32 failures came
+from local setup (missing sbin/cache lookup, long Unix-socket paths, missing
+media dependencies), not changes to assertions. Remaining core cases are 82
+NAS runner-admission refusals and the source-only test's deliberate clean-Git
+requirement while this fix was uncommitted. Its clean-head recheck is recorded
+after committing, in the external handoff. The time-budget failure is the
+unchanged real-kernel positive: this NAS lacks /proc children and pidfd_open
+(ENOSYS); it reached no provider or generation. The original failed CI intake
+and retention tests pass in the complete runs. Existing host-capability/data
+skips were retained; no skip or xfail was added to make this repair pass.
+
+A separate, explicitly fake-client-only audio diagnostic passed all 14 cases
+with the existing synthetic hosted-runner fixture, confirming the distinction;
+it does not replace the unmodified full-job outcomes or prove NAS eligibility.
+Commands, JUnit, all original failures and rechecks are under
+`/ai-work/copilot/_tmp/p794-two-ci-jobs-20261030.jRg9EU/`.
+No live model/judge call, dispatch, force operation or merge. The normal branch
+push lets the unchanged Actions jobs perform the genuine hosted validation.
+
+## Successor grader contract CI ownership repair, 2026-10-30
+
+Run 41043462482's core job already passed the 21 successor-seal test cases,
+but the family partition guard still expected 20 gpt56 files. The new file
+was not explicitly owned by pilot-contracts. Add one core ignore and one
+pilot selection; the inventory is now 21 total / 19 general pilot files.
+Keep full node collection, disjoint coverage and exact commands. Four negative
+ownership mutations are refused. Undoing just those two workflow arguments
+recovers the preceding a2e0e2fe byte hash; the older canonical workflow hash,
+historical GHCP pin, grader seal, source profiles and paid policies are intact.
+Local partition guard, successor seal and dependent workflow-pin contracts:
+**154 passed / 0 failed / 0 skipped**. New CI follows the normal branch push;
+no model/judge call, dispatch, force push, Draft release or merge.
+Evidence: `/ai-work/copilot/_tmp/p5-grader-ci-partition-20261030.icNe56/`.
+
+## #794 follows merged pricing and long context, 2026-10-30
+
+Rebase onto `c6fcacaf1` after #795/#796. The active source chain is
+`capture_counters → list_prices → long_context → grader_seal`; the new last
+edge only changes the reader pin and approved grader identity. Both predecessor
+profiles and Claude's pricing/usage/catalog/response implementations remain
+byte-identical to main. The 099755b0 grader seal and 1a5841ee historical review
+manifest remain unchanged because the sealed closure did not change.
+
+The original manifest's refusal-policy statement describes its 0140b4c12
+review, not a rollback of owner decisions 2/3. Today's USD 200/integrity stops,
+list-price/unknown-usage accounting, held 1M catalog and not_reported behavior
+follow the merged, separately pinned helpers. Retain the old published PR head
+as an ancestry-only parent so publication can use a normal push after rebase.
+No paid/NAS benchmark, model/judge call, dispatch, PR merge or #793 operation.
+Current rebase verification: **520 distinct passed / 0 failed / 0 skipped**
+(36 source/seal/catalog, 286 policy/guard, 198 preflight; 143 deselected).
+One earlier synthetic worker timeout remains in its original log; the same
+test passed alone and in the full policy rerun without code/assertion changes.
+The real source-held-reference preflight verifies the source and successor
+seal, with valid configuration, but intentionally returns exit 2 and leaves
+launch false with ten upper-evidence blockers. Final clean-head proof and
+publication metadata: `/ai-work/copilot/_tmp/p5-grader-chain-20261030.vZvOhP/HANDOFF.md`.
+The following test totals are the original review, not a new execution claim.
+
+## Owner-reviewed successor grader seal, 2026-10-30
+
+Owner option A authorizes the reviewed `8ac891e3e` → `0140b4c12` successor,
+not a settings or refusal-policy change. Preserve the old `47effd1d…000fcf`
+seal; separately register `099755b0…003fd7` and all old/new source bytes.
+The delta is 11 files (9 modified, 2 added), classified conservatively as
+6 admission/input/score-path impacts and 5 outside the pilot's score path.
+The new source profile changes only the reader pin and grader-template hash.
+Sol/Max, prompt v2.2, rubric, five task IDs and combined USD 200 remain fixed.
+
+Full selected pilot-contracts/grading/source-proof invocation: **3,670 passed,
+13 failed, 0 skipped** (5702.66s). All failures were two existing scripted-test
+files lacking synthetic runner facts; the real guard correctly refused NAS.
+Add only the existing fake hosted-runner fixture and explicit network denial
+to those tests, leaving production and assertions unchanged. The complete
+grader/USD/runner/seal recheck then passed **869 / 0 failed / 0 skipped**
+(111.38s). Preflight: **198 passed / 0 failed / 0 skipped** (1111.95s), with
+143 external-live cases excluded by the CI selection. Latest result per unique
+testcase across these XML files: **3,881 passed / 0 failed / 0 skipped**, without
+double-counting reruns. Earlier failures are retained separately. Three
+synthetic reply cases agree old/new on requests, verdicts, denominators, scores
+and summary JSON; four scoring/judging functions also have identical ASTs. See
+[review and evidence boundaries](../../batch-runner/docs/gpt56_grader_successor_seal_20261030.md).
+Logs/JUnit: `/ai-work/copilot/_tmp/p5-grader-seal-20261030.dX3prg/`.
+No model/judge call, dispatch, secret access or merge. Claude's pricing/1M
+changes and PR #793 are untouched and can require another reviewed seal.
+
 ## Historical source-bound fixture separation, 2026-10-29
 
 CI at `9087c2c6e` found additional exact historical dependency pins and fixture
