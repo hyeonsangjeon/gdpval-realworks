@@ -13,6 +13,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add the owner-approved 2026-10-30 successor grader seal, preserving all prior
+  registrations. Bind both immutable source manifests and the exact 11-file
+  delta; opt in through a new source profile and unchanged strict Git/byte
+  guards. Keep Sol/Max, v2.2, rubric, five tasks, USD 200 and unknown-cost
+  refusals. Extend synthetic frozen-source equivalence and seal-tamper tests;
+  actual five-task scores/billing and the separately owned 1M/pricing changes
+  are not validated or implemented by this change.
+  The full run exposed 13 scripted-test host-admission refusals; supply explicit
+  synthetic runner facts and deny network in those two test files, preserving
+  real admission and all assertions. Grader/guard recheck: 869 passed; combined
+  latest results cover 3,881 distinct tests with no failures or skips.
+
 - Record the actual Sol/Max native response from run 40967326333 (HTTP 200,
   9,468 input / 5 output tokens), while retaining the missing-context refusal
   and the pinned client's measured 258,400 context limit. Correct capture

@@ -1,5 +1,32 @@
 # Latest task result
 
+## Owner-reviewed successor grader seal, 2026-10-30
+
+Owner option A authorizes the reviewed `8ac891e3e` → `0140b4c12` successor,
+not a settings or refusal-policy change. Preserve the old `47effd1d…000fcf`
+seal; separately register `099755b0…003fd7` and all old/new source bytes.
+The delta is 11 files (9 modified, 2 added), classified conservatively as
+6 admission/input/score-path impacts and 5 outside the pilot's score path.
+The new source profile changes only the reader pin and grader-template hash.
+Sol/Max, prompt v2.2, rubric, five task IDs and combined USD 200 remain fixed.
+
+Full selected pilot-contracts/grading/source-proof invocation: **3,670 passed,
+13 failed, 0 skipped** (5702.66s). All failures were two existing scripted-test
+files lacking synthetic runner facts; the real guard correctly refused NAS.
+Add only the existing fake hosted-runner fixture and explicit network denial
+to those tests, leaving production and assertions unchanged. The complete
+grader/USD/runner/seal recheck then passed **869 / 0 failed / 0 skipped**
+(111.38s). Preflight: **198 passed / 0 failed / 0 skipped** (1111.95s), with
+143 external-live cases excluded by the CI selection. Latest result per unique
+testcase across these XML files: **3,881 passed / 0 failed / 0 skipped**, without
+double-counting reruns. Earlier failures are retained separately. Three
+synthetic reply cases agree old/new on requests, verdicts, denominators, scores
+and summary JSON; four scoring/judging functions also have identical ASTs. See
+[review and evidence boundaries](../../batch-runner/docs/gpt56_grader_successor_seal_20261030.md).
+Logs/JUnit: `/ai-work/copilot/_tmp/p5-grader-seal-20261030.dX3prg/`.
+No model/judge call, dispatch, secret access or merge. Claude's pricing/1M
+changes and PR #793 are untouched and can require another reviewed seal.
+
 ## Historical source-bound fixture separation, 2026-10-29
 
 CI at `9087c2c6e` found additional exact historical dependency pins and fixture

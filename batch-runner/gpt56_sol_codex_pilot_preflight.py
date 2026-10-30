@@ -46,7 +46,11 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_capture_counters.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_grader_seal.yaml"
+SOURCE_PROFILE_COUNTERS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_capture_counters.yaml"
+SOURCE_PROFILE_COUNTERS_SHA256 = "37a0be47d3cb82733e86e74a12fc4f1245f71b2c7699c03cebe5a4d277698535"
+GRADER_SEAL_READER = "batch-runner/gpt56_pilot_grader_seal.py"
+GRADER_SEAL_READER_SHA256 = "22785d6e18ce6146808b89869ddf7e7c4b0ea4d0e96daa491e52b7a373dae314"
 SOURCE_PROFILE_TEXT_TOOLS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_text_tools.yaml"
 SOURCE_PROFILE_TEXT_TOOLS_SHA256 = "31743281de00ae1543e9067ef082e4c1082c66e1da45f126b7c78c09a260abbd"
 SOURCE_PROFILE_NO_WEB = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_no_web_diagnostic.yaml"
@@ -383,13 +387,28 @@ def source_plan_snapshot(
                                       sha256=SOURCE_PROFILE_TEXT_TOOLS_SHA256)
         require(len(text_tools_data) <= 65536)
         text_tools_profile = yaml.safe_load(text_tools_data)
+        counters_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_COUNTERS),
+                                    sha256=SOURCE_PROFILE_COUNTERS_SHA256)
+        require(len(counters_data) <= 65536)
+        counters_profile = yaml.safe_load(counters_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
         require(type(profile) is dict and set(profile) == set(original))
         require(seal(profile) == expected_plan_sha256)
+        # The sole non-source change is the explicitly approved successor
+        # grader identity. The original seal and every earlier profile remain.
+        from gpt56_pilot_grader_seal import GRADER_HASH, verify as verify_grader_seal
+        seal_report, seal_sources = verify_grader_seal(ROOT)
+        successor_contract = json.loads(json.dumps(original))
+        successor_contract["dispatch_grading_identity"]["grader_template_source_hash"] = GRADER_HASH
         require(seal({k: v for k, v in profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in successor_contract.items() if k != "source_pins"}))
+        require(seal({k: v for k, v in counters_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require({name for name, digest in profile["source_pins"].items()
+                 if digest != counters_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
         pins = profile["source_pins"]
         require(type(pins) is dict and set(pins) == REQUIRED_SOURCES)
         require(all(type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value)
@@ -429,7 +448,7 @@ def source_plan_snapshot(
         require({name for name, digest in text_tools_profile["source_pins"].items()
                  if digest != no_web_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py"})
-        require({name for name, digest in pins.items() if digest != text_tools_profile["source_pins"][name]}
+        require({name for name, digest in counters_profile["source_pins"].items() if digest != text_tools_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
         require({name for name, digest in bindings_profile["source_pins"].items()
                  if digest != caps_profile["source_pins"][name]}
@@ -470,7 +489,12 @@ def source_plan_snapshot(
         # Archive reads Git objects, not LFS payloads; nothing is extracted.
         import gpt54_disposable_checkout as checkout
 
-        source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY,
+        require(all(name not in pins or pins[name] == digest for name, digest in seal_sources.items()))
+        require(all(name not in SOURCE_PROFILE_AUXILIARY or SOURCE_PROFILE_AUXILIARY[name] == digest
+                    for name, digest in seal_sources.items()))
+        source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY, **seal_sources,
+                        GRADER_SEAL_READER: GRADER_SEAL_READER_SHA256,
+                        SOURCE_PROFILE_COUNTERS: SOURCE_PROFILE_COUNTERS_SHA256,
                         SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256,
                         SOURCE_PROFILE_CAPS: SOURCE_PROFILE_CAPS_SHA256,
                         SOURCE_PROFILE_BINDINGS: SOURCE_PROFILE_BINDINGS_SHA256,
@@ -520,6 +544,7 @@ def source_plan_snapshot(
             require(blobs[SOURCE_PROFILE_PAID_DIAGNOSTIC] == paid_data)
             require(blobs[SOURCE_PROFILE_NO_WEB] == no_web_data)
             require(blobs[SOURCE_PROFILE_TEXT_TOOLS] == text_tools_data)
+            require(blobs[SOURCE_PROFILE_COUNTERS] == counters_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -542,9 +567,10 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_TEXT_TOOLS,
-            "supersedes_profile_sha256": SOURCE_PROFILE_TEXT_TOOLS_SHA256,
-            "source_change_reason": "preserve_typed_rate_counters_and_explicit_owned_evidence_refusal",
+            "supersedes_profile": SOURCE_PROFILE_COUNTERS,
+            "supersedes_profile_sha256": SOURCE_PROFILE_COUNTERS_SHA256,
+            "grader_successor_seal": seal_report,
+            "source_change_reason": "owner_reviewed_successor_grader_seal_without_policy_change",
             "response_capture_readiness": {
                 "status": "next_call_capture_path_only", "live_evidence_observed": False,
                 "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
@@ -728,6 +754,19 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
             "billing_evidence": "provider_native_usage_without_invented_currency_conversion",
         },
     }
+    # A successor is opt-in and validates its separately pinned closure, not
+    # merely an arbitrary new value in a plan. All other expected fields stay.
+    from gpt56_pilot_grader_seal import GRADER_HASH, verify as verify_grader_seal
+    seal_problem = False
+    declared_grader = plan.get("dispatch_grading_identity")
+    if type(declared_grader) is dict and declared_grader.get("grader_template_source_hash") == GRADER_HASH:
+        try:
+            verify_grader_seal(ROOT)
+            expected["dispatch_grading_identity"] = {
+                **DISPATCH_GRADING_IDENTITY, "grader_template_source_hash": GRADER_HASH,
+            }
+        except Exception:
+            seal_problem = True
     # Canonical JSON comparison also distinguishes False from 0 and absence
     # from null. An added configuration field cannot silently become a waiver.
     problems = [
@@ -736,6 +775,8 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
     ]
     if set(plan) != set(expected) | {"source_pins"}:
         problems.append("plan_key_set")
+    if seal_problem:
+        problems.append("grader_successor_seal_refused")
     problems.extend(_registration_problems())
     pins = plan.get("source_pins")
     if not isinstance(pins, dict) or set(pins) != REQUIRED_SOURCES:
@@ -1244,6 +1285,7 @@ def main(argv: list[str] | None = None) -> int:
             ROOT / SOURCE_PROFILE_PAID_DIAGNOSTIC,
             ROOT / SOURCE_PROFILE_NO_WEB,
             ROOT / SOURCE_PROFILE_TEXT_TOOLS,
+            ROOT / SOURCE_PROFILE_COUNTERS,
         }
         capture_requested = args.capture_workspace is not None
         connection_requested = args.retained_connection_reference is not None
