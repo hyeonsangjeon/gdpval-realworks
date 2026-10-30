@@ -25,6 +25,7 @@ import gpt56_pilot_input_capture as capture
 import gpt56_pilot_deployment_binding as binding
 import gpt56_pilot_wire_receipt as wire
 import gpt56_native_response_capture as native_response
+import gpt56_pilot_grader_seal as grader_seal
 import gpt56_sol_codex_pilot_preflight as pilot
 import step8_grade as step8
 from core import azure_ai_clients, codex_azure_token
@@ -41,6 +42,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     profile_data = profile_path.read_bytes()
     profile = pilot.load_plan(profile_path)
     plan_sha = pilot.seal(profile)
+    successor_profile = profile
+    long_context_path = root / pilot.SOURCE_PROFILE_LONG_CONTEXT
+    long_context_bytes = long_context_path.read_bytes()
+    assert hashlib.sha256(long_context_bytes).hexdigest() == pilot.SOURCE_PROFILE_LONG_CONTEXT_SHA256
+    # Keep the complete historical chain/delta assertions against the actual
+    # immutable #796 profile. Only the explicitly reviewed grader successor differs.
+    profile = pilot.load_plan(long_context_path)
     previous_path = root / pilot.SOURCE_PROFILE_PREVIOUS
     previous_bytes = previous_path.read_bytes()
     previous = pilot.load_plan(previous_path)
@@ -87,7 +95,11 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     list_prices_bytes = list_prices_path.read_bytes()
     list_prices_profile = pilot.load_plan(list_prices_path)
     reference_path = root / binding.CONNECTION_REFERENCE_PATH
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261030_long_context.yaml")
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261030_grader_seal.yaml")
+    assert pilot.SOURCE_PROFILE_LONG_CONTEXT.endswith("_source_20261030_long_context.yaml")
+    assert pilot.SOURCE_PROFILE_LONG_CONTEXT_SHA256 == (
+        "0d957f81d2c6d82a79fa1db7ff86b21d3a6ec609011787585f93fca8b63f62b1"
+    )
     assert hashlib.sha256(list_prices_bytes).hexdigest() == pilot.SOURCE_PROFILE_LIST_PRICES_SHA256 == (
         "8975d4861d874358a7370104ff9832cef4f0d76878e9e9ebe9913df200088405"
     )
@@ -283,6 +295,16 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         k: v for k, v in original.items() if k != "source_pins"
     }
 
+    assert {name for name, digest in successor_profile["source_pins"].items()
+            if digest != profile["source_pins"][name]} == {
+        "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
+    expected_successor = deepcopy(profile)
+    expected_successor["dispatch_grading_identity"]["grader_template_source_hash"] = grader_seal.GRADER_HASH
+    expected_successor["source_pins"] = successor_profile["source_pins"]
+    assert successor_profile == expected_successor
+    profile = successor_profile
+
     forbidden_calls = []
 
     def forbidden(*args, **kwargs):
@@ -335,9 +357,10 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_LIST_PRICES
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_LIST_PRICES_SHA256
-    assert report["source_change_reason"] == "owner_codex_long_context_catalog_and_unreported_context_window"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_LONG_CONTEXT
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_LONG_CONTEXT_SHA256
+    assert report["source_change_reason"] == "owner_reviewed_successor_grader_seal_without_policy_change"
+    assert report["grader_successor_seal"]["grader_source_hash"] == grader_seal.GRADER_HASH
     assert report["response_capture_readiness"] == {
         "status": "next_call_capture_path_only", "live_evidence_observed": False,
         "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
@@ -391,8 +414,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         assert refused_connection["launch_blockers"] == list(pilot.LAUNCH_BLOCKERS)
         assert CANARY not in json.dumps(refused_connection)
 
-    # The actual compiler selects this source, then preserves the frozen
-    # grader's refusal. A new execution source cannot silently re-pin its judge.
+    # The old seal still refuses current bytes. The successor, and only the
+    # successor, binds the actual compiler's current grader identity.
     measured_hashes = []
     compute_hash = step8.compute_grader_source_hash
 
@@ -403,14 +426,19 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
 
     monkeypatch.setattr(step8, "compute_grader_source_hash", observed_hash)
     with pytest.raises(identity.PilotIdentityRefused, match="^grader_template_source_drift$"):
+        identity._grader_identity(pilot.load_plan(counters_path))
+    compiled_grader = identity._grader_identity(profile)
+    assert compiled_grader["template_source_hash"] == grader_seal.GRADER_HASH
+    # Source review is not a fabricated identity/reasoning/context/tariff
+    # evidence bundle. The real compiler passes the grader check and still
+    # requires that independently supplied complete upper bundle.
+    with pytest.raises(identity.PilotIdentityRefused, match="^complete_evidence_arguments_required$"):
         identity.compile_pilot_identity(profile, reviewed_source_sha=head)
-    # The existing closure includes every core/*.py, including this change's
-    # runner adapter. Update only the observed current hash, never the frozen
-    # grader pin or its mandatory source-drift refusal.
-    assert measured_hashes == ["099755b009e7563e5b3824ac34c1ab2cf5c83b3cdf4aba7886b50e1c28003fd7"]
+    assert measured_hashes and set(measured_hashes) == {grader_seal.GRADER_HASH}
     assert profile["dispatch_grading_identity"]["grader_template_source_hash"] == (
-        "47effd1db4c1de5ff7cf0473a034ece7748312e682597fb06ee480678e000fcf"
+        grader_seal.GRADER_HASH
     )
+    assert pilot.load_plan(counters_path)["dispatch_grading_identity"]["grader_template_source_hash"] == grader_seal.HISTORICAL_HASH
 
     legacy, legacy_bytes, legacy_report = pilot.source_plan_snapshot()
     assert legacy == original and legacy_bytes == (root / pilot.ACTIVE_PLAN).read_bytes()
@@ -443,6 +471,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     # Synthetic mutations do not alter any repository file or Git object.
     read_bytes = reader._read_bytes
     for predecessor_path in (previous_path, caps_path, token_path, shared_path, usd200_path, connection_path,
+                             counters_path, root / grader_seal.RECORD, root / pilot.GRADER_SEAL_READER,
                              root / "batch-runner/gpt56_native_response_capture.py",
                              wire._USD_CAPS_PATH, wire._USD_PRICE_PATH, reference_path):
         for missing in (False, True):
@@ -485,7 +514,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             with pytest.raises(pilot.PilotSourceRegistrationRefused):
                 pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(changed)})
 
-    for module in (evidence, binding, native_response):
+    for module in (evidence, binding, native_response, grader_seal):
         with monkeypatch.context() as patch:
             patch.setattr(module, "__file__", str(tmp_path / CANARY))
             with pytest.raises(pilot.PilotSourceRegistrationRefused):
@@ -538,6 +567,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
 
     for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD, pilot.SOURCE_PROFILE_SHARED,
                       pilot.SOURCE_PROFILE_USD200, pilot.SOURCE_PROFILE_CONNECTION, binding.CONNECTION_REFERENCE_PATH,
+                      pilot.SOURCE_PROFILE_CAPTURE_COUNTERS, pilot.SOURCE_PROFILE_LIST_PRICES,
+                      pilot.SOURCE_PROFILE_LONG_CONTEXT,
                       "batch-runner/gpt56_native_response_capture.py",
                       "batch-runner/scripts/diagnose_codex_foundry_connection.py",
                       ".github/workflows/codex-foundry-connection-diagnostic.yml",
@@ -547,7 +578,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         checks = []
         expected_reads = 3 if held_role in {pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD,
                                           pilot.SOURCE_PROFILE_SHARED, pilot.SOURCE_PROFILE_USD200,
-                                          pilot.SOURCE_PROFILE_CONNECTION} else 2
+                                          pilot.SOURCE_PROFILE_CONNECTION, pilot.SOURCE_PROFILE_CAPTURE_COUNTERS,
+                                          pilot.SOURCE_PROFILE_LIST_PRICES, pilot.SOURCE_PROFILE_LONG_CONTEXT} else 2
         def final_money_drift(path, **kwargs):
             if path == root / held_role:
                 checks.append(path)
@@ -591,7 +623,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert bound_completion["launch_blockers"] == remaining
     assert bound_completion["approved_connection_gate"] == connection_gate
     assert bound_completion["launch_allowed"] is bound_completion["full_220_allowed"] is False
-    for predecessor_path in (previous_path, caps_path, bindings_path):
+    for predecessor_path in (previous_path, caps_path, bindings_path, counters_path):
         assert pilot.main(["--plan", str(predecessor_path), "--reviewed-source-sha", head]) == 2
         previous_completion = json.loads(capsys.readouterr().out)
         assert previous_completion["source_registration"] == {

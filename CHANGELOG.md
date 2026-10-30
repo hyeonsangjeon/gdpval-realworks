@@ -30,6 +30,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   ceiling and ledger integrity checks still stop. Source-only successor; no
   paid call.
 
+- Add the owner-approved 2026-10-30 successor grader seal, preserving all prior
+  registrations. Bind both immutable source manifests and the exact 11-file
+  delta; opt in through a new source profile and unchanged strict Git/byte
+  guards. Keep Sol/Max, v2.2, rubric, five tasks and USD 200. Rebase #794 after
+  #795/#796 and chain its profile after long_context, preserving their list-price
+  booking, unknown-usage accounting and held 1M catalog without reimplementation.
+  The Step8/core seal and its historical review record are unchanged. Extend
+  synthetic frozen-source equivalence and seal-tamper tests; no live model proof.
+  The full run exposed 13 scripted-test host-admission refusals; supply explicit
+  synthetic runner facts and deny network in those two test files, preserving
+  real admission and all assertions. Grader/guard recheck: 869 passed; combined
+  latest results cover 3,881 distinct tests with no failures or skips.
+
 - Record the actual Sol/Max native response from run 40967326333 (HTTP 200,
   9,468 input / 5 output tokens), while retaining the missing-context refusal
   and the pinned client's measured 258,400 context limit. Correct capture

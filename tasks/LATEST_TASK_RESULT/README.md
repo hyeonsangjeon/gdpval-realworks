@@ -1,5 +1,50 @@
 # Latest task result
 
+## #794 follows merged pricing and long context, 2026-10-30
+
+Rebase onto `c6fcacaf1` after #795/#796. The active source chain is
+`capture_counters → list_prices → long_context → grader_seal`; the new last
+edge only changes the reader pin and approved grader identity. Both predecessor
+profiles and Claude's pricing/usage/catalog/response implementations remain
+byte-identical to main. The 099755b0 grader seal and 1a5841ee historical review
+manifest remain unchanged because the sealed closure did not change.
+
+The original manifest's refusal-policy statement describes its 0140b4c12
+review, not a rollback of owner decisions 2/3. Today's USD 200/integrity stops,
+list-price/unknown-usage accounting, held 1M catalog and not_reported behavior
+follow the merged, separately pinned helpers. Retain the old published PR head
+as an ancestry-only parent so publication can use a normal push after rebase.
+No paid/NAS benchmark, model/judge call, dispatch, PR merge or #793 operation.
+Current chain/seal/preflight verification is recorded in the new handoff;
+the following test totals are the original review, not a new execution claim.
+
+## Owner-reviewed successor grader seal, 2026-10-30
+
+Owner option A authorizes the reviewed `8ac891e3e` → `0140b4c12` successor,
+not a settings or refusal-policy change. Preserve the old `47effd1d…000fcf`
+seal; separately register `099755b0…003fd7` and all old/new source bytes.
+The delta is 11 files (9 modified, 2 added), classified conservatively as
+6 admission/input/score-path impacts and 5 outside the pilot's score path.
+The new source profile changes only the reader pin and grader-template hash.
+Sol/Max, prompt v2.2, rubric, five task IDs and combined USD 200 remain fixed.
+
+Full selected pilot-contracts/grading/source-proof invocation: **3,670 passed,
+13 failed, 0 skipped** (5702.66s). All failures were two existing scripted-test
+files lacking synthetic runner facts; the real guard correctly refused NAS.
+Add only the existing fake hosted-runner fixture and explicit network denial
+to those tests, leaving production and assertions unchanged. The complete
+grader/USD/runner/seal recheck then passed **869 / 0 failed / 0 skipped**
+(111.38s). Preflight: **198 passed / 0 failed / 0 skipped** (1111.95s), with
+143 external-live cases excluded by the CI selection. Latest result per unique
+testcase across these XML files: **3,881 passed / 0 failed / 0 skipped**, without
+double-counting reruns. Earlier failures are retained separately. Three
+synthetic reply cases agree old/new on requests, verdicts, denominators, scores
+and summary JSON; four scoring/judging functions also have identical ASTs. See
+[review and evidence boundaries](../../batch-runner/docs/gpt56_grader_successor_seal_20261030.md).
+Logs/JUnit: `/ai-work/copilot/_tmp/p5-grader-seal-20261030.dX3prg/`.
+No model/judge call, dispatch, secret access or merge. Claude's pricing/1M
+changes and PR #793 are untouched and can require another reviewed seal.
+
 ## Historical source-bound fixture separation, 2026-10-29
 
 CI at `9087c2c6e` found additional exact historical dependency pins and fixture
