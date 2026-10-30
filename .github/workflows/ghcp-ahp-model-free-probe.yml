@@ -1,0 +1,85 @@
+name: GHCP Codex AHP model-free probe
+
+on:
+  push:
+    branches: [leader/ghcp-ahp-probe-20261030]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcp-ahp-model-free-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Pinned AHP host and empty Codex session only
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-ahp-probe-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: '3.12.11'
+      - name: Install model-free test dependencies
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check pytest==9.1.1 PyYAML==6.0.3
+      - name: Offline safety and protocol fixtures
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ghcp-ahp/evidence"
+          cd batch-runner
+          python -B -m pytest -q -o addopts= -p no:cacheprovider \
+            --junitxml="$RUNNER_TEMP/ghcp-ahp/evidence/offline-tests.xml" \
+            tests/test_ghcp_ahp_probe.py
+      - name: Download and verify pinned public distributions without running them
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_probe.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-ahp/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-ahp/evidence"
+      - name: Headless AHP probe with no external network or inherited credentials
+        run: |
+          set -euo pipefail
+          umask 077
+          probe_uid="$(id -u)"
+          probe_gid="$(id -g)"
+          probe_netns="$(readlink /proc/self/ns/net)"
+          probe_pidns="$(readlink /proc/self/ns/pid)"
+          # Setup alone is privileged. The host runs without privileges, with
+          # only loopback, a fresh process namespace, and no prompt RPC.
+          timeout --signal=TERM --kill-after=10s 240s \
+            sudo unshare --mount --net --pid --fork --mount-proc --kill-child=KILL \
+            /bin/bash -c 'set -euo pipefail; ip link set lo up; exec "$@"' ahp-isolation \
+            /usr/bin/setpriv --reuid="$probe_uid" --regid="$probe_gid" --init-groups \
+              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+              GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+              RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
+              ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+              GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_probe.py" probe \
+              --prepared "$RUNNER_TEMP/ghcp-ahp/prepared" \
+              --evidence "$RUNNER_TEMP/ghcp-ahp/evidence" \
+              --outside-netns "$probe_netns" --outside-pidns "$probe_pidns"
+      - name: Retain only redacted JSON evidence and offline test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-ahp-model-free-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-ahp/evidence/*.json
+            ${{ runner.temp }}/ghcp-ahp/evidence/offline-tests.xml
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
