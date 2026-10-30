@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_list_prices.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_long_context.yaml"
+SOURCE_PROFILE_LIST_PRICES = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_list_prices.yaml"
+SOURCE_PROFILE_LIST_PRICES_SHA256 = "8975d4861d874358a7370104ff9832cef4f0d76878e9e9ebe9913df200088405"
 SOURCE_PROFILE_CAPTURE_COUNTERS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_capture_counters.yaml"
 SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256 = "37a0be47d3cb82733e86e74a12fc4f1245f71b2c7699c03cebe5a4d277698535"
 SOURCE_PROFILE_TEXT_TOOLS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_text_tools.yaml"
@@ -100,6 +102,13 @@ SOURCE_PROFILE_DELTA = frozenset({
     "batch-runner/gpt56_pilot_native_result_host.py",
     "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py",
 })
+#: Codex 0.147.0 ships gpt-5.6-sol at 272,000 tokens in its bundled models.json
+#: and clamps model_context_window to that maximum (258,400 usable at 95%).
+#: Above it, the wire observer also hands Codex this held catalog: the bundled
+#: one byte-for-byte except Sol's context_window/max_context_window (1,050,000)
+#: and 100% usable, so the requested 1,000,000 stays 1,000,000.
+CODEX_BUNDLED_SOL_CONTEXT_WINDOW = 272_000
+CODEX_LONG_CONTEXT_CATALOG = "batch-runner/codex_catalogs/codex-0.147.0-models-gpt56-sol-1m.json"
 SOURCE_PROFILE_AUXILIARY = {
     "batch-runner/gpt54_disposable_checkout.py":
         "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
@@ -113,7 +122,8 @@ SOURCE_PROFILE_AUXILIARY = {
         "f2d63e7812bd8557232bc0a3bdc0deb76a3565a4d1398b1fb191008fa9aff888",
     ENVELOPE + "gpt56_sol_connection_reference_20261027.json":
         "293ee682d01cbb64ee2b330f603b49a90522f07429dcd3cf036070808c271b76",
-    "batch-runner/gpt56_native_response_capture.py": "9dcc3c578ee459e722044e1afdb78a4aa0176a0c63572405a5e0cbb08ac9bfac",
+    "batch-runner/gpt56_native_response_capture.py": "40e24a58637d6ee2176129c3c10870e76a9f4a527ae4fb0d22e736ff58651637",
+    CODEX_LONG_CONTEXT_CATALOG: "41e884c807616100cc92c8b734337725d37ecd096586c598f3c389032e8db49e",
     "batch-runner/scripts/diagnose_codex_foundry_connection.py": "ad5717222091f38d38e734ac92cf7a68c20508cd2df64b3584939d28026eb2de",
     ".github/workflows/codex-foundry-connection-diagnostic.yml": "2b8f15dfe68ed0259ee2058f4c36fb6a5a051dec86bbb8b26a713602a5e0aa6b",
     "batch-runner/core/runner_environment.py": "c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a",
@@ -389,6 +399,10 @@ def source_plan_snapshot(
                                     sha256=SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256)
         require(len(counters_data) <= 65536)
         counters_profile = yaml.safe_load(counters_data)
+        list_prices_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_LIST_PRICES),
+                                       sha256=SOURCE_PROFILE_LIST_PRICES_SHA256)
+        require(len(list_prices_data) <= 65536)
+        list_prices_profile = yaml.safe_load(list_prices_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -418,6 +432,8 @@ def source_plan_snapshot(
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
         require(seal({k: v for k, v in counters_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
+        require(seal({k: v for k, v in list_prices_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in original.items() if k != "source_pins"}))
         require({name for name, digest in response_profile["source_pins"].items()
                  if digest != connection_profile["source_pins"][name]}
                 == {"batch-runner/core/codex_runner.py", "batch-runner/gpt56_pilot_wire_receipt.py",
@@ -440,7 +456,10 @@ def source_plan_snapshot(
         require({name for name, digest in counters_profile["source_pins"].items()
                  if digest != text_tools_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
-        require({name for name, digest in pins.items() if digest != counters_profile["source_pins"][name]}
+        require({name for name, digest in list_prices_profile["source_pins"].items()
+                 if digest != counters_profile["source_pins"][name]}
+                == {"batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+        require({name for name, digest in pins.items() if digest != list_prices_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py"})
         require({name for name, digest in bindings_profile["source_pins"].items()
                  if digest != caps_profile["source_pins"][name]}
@@ -495,7 +514,8 @@ def source_plan_snapshot(
                         SOURCE_PROFILE_PAID_DIAGNOSTIC: SOURCE_PROFILE_PAID_DIAGNOSTIC_SHA256,
                         SOURCE_PROFILE_NO_WEB: SOURCE_PROFILE_NO_WEB_SHA256,
                         SOURCE_PROFILE_TEXT_TOOLS: SOURCE_PROFILE_TEXT_TOOLS_SHA256,
-                        SOURCE_PROFILE_CAPTURE_COUNTERS: SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256}
+                        SOURCE_PROFILE_CAPTURE_COUNTERS: SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256,
+                        SOURCE_PROFILE_LIST_PRICES: SOURCE_PROFILE_LIST_PRICES_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -533,6 +553,7 @@ def source_plan_snapshot(
             require(blobs[SOURCE_PROFILE_NO_WEB] == no_web_data)
             require(blobs[SOURCE_PROFILE_TEXT_TOOLS] == text_tools_data)
             require(blobs[SOURCE_PROFILE_CAPTURE_COUNTERS] == counters_data)
+            require(blobs[SOURCE_PROFILE_LIST_PRICES] == list_prices_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -555,9 +576,9 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_CAPTURE_COUNTERS,
-            "supersedes_profile_sha256": SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256,
-            "source_change_reason": "owner_list_prices_and_non_stopping_unknown_usage",
+            "supersedes_profile": SOURCE_PROFILE_LIST_PRICES,
+            "supersedes_profile_sha256": SOURCE_PROFILE_LIST_PRICES_SHA256,
+            "source_change_reason": "owner_codex_long_context_catalog_and_unreported_context_window",
             "response_capture_readiness": {
                 "status": "next_call_capture_path_only", "live_evidence_observed": False,
                 "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
@@ -1258,6 +1279,7 @@ def main(argv: list[str] | None = None) -> int:
             ROOT / SOURCE_PROFILE_NO_WEB,
             ROOT / SOURCE_PROFILE_TEXT_TOOLS,
             ROOT / SOURCE_PROFILE_CAPTURE_COUNTERS,
+            ROOT / SOURCE_PROFILE_LIST_PRICES,
         }
         capture_requested = args.capture_workspace is not None
         connection_requested = args.retained_connection_reference is not None

@@ -13,6 +13,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Let the Sol pilot's requested 1,000,000-token window reach Codex 0.147.0
+  (owner decision 2026-10-30). Its bundled catalog caps gpt-5.6-sol at 272,000
+  (258,400 usable), so the pilot's wire observer adds a held catalog that
+  differs only in Sol's window fields. A provider response without a context
+  window is recorded as not_reported instead of stopping; a reported different
+  window still stops. Shared Codex config and other studies are unchanged.
+  Source-only successor; no paid call.
+
 - Book unsettled Sol pilot grading models at a published list price instead
   of refusing (owner decision 2026-10-30): gpt-5.6-sol at the pinned table's
   long-context Standard Global meter, gpt-audio-1.5 at a 40/80 USD per 1M
