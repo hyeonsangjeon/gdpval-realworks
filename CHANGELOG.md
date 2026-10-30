@@ -13,6 +13,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Assign the successor-grader contract file exclusively to Backend Tests'
+  pilot-contracts job and exclude it from core collection. Keep exact
+  inventory, actual node collection and disjoint coverage checks; reject
+  missing/duplicate ownership. Update only the current workflow byte pin,
+  reconstruct its unchanged predecessor and retain all historical seals.
+  Related partition/seal/workflow-pin tests: 154 passed, no failures or skips.
+
 - Let the Sol pilot's requested 1,000,000-token window reach Codex 0.147.0
   (owner decision 2026-10-30). Its bundled catalog caps gpt-5.6-sol at 272,000
   (258,400 usable), so the pilot's wire observer adds a held catalog that

@@ -1,5 +1,20 @@
 # Latest task result
 
+## Successor grader contract CI ownership repair, 2026-10-30
+
+Run 41043462482's core job already passed the 21 successor-seal test cases,
+but the family partition guard still expected 20 gpt56 files. The new file
+was not explicitly owned by pilot-contracts. Add one core ignore and one
+pilot selection; the inventory is now 21 total / 19 general pilot files.
+Keep full node collection, disjoint coverage and exact commands. Four negative
+ownership mutations are refused. Undoing just those two workflow arguments
+recovers the preceding a2e0e2fe byte hash; the older canonical workflow hash,
+historical GHCP pin, grader seal, source profiles and paid policies are intact.
+Local partition guard, successor seal and dependent workflow-pin contracts:
+**154 passed / 0 failed / 0 skipped**. New CI follows the normal branch push;
+no model/judge call, dispatch, force push, Draft release or merge.
+Evidence: `/ai-work/copilot/_tmp/p5-grader-ci-partition-20261030.icNe56/`.
+
 ## #794 follows merged pricing and long context, 2026-10-30
 
 Rebase onto `c6fcacaf1` after #795/#796. The active source chain is

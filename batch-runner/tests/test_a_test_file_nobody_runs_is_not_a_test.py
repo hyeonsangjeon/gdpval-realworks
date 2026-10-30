@@ -42,6 +42,8 @@ WORKFLOW = REPO_ROOT / ".github/workflows/backend-tests.yml"
 BUDGET_GLOB = "tests/test_codex_budget_pilot*.py"
 BUDGET_READOUT_GLOB = "tests/test_codex_budget_pilot*readout*.py"
 TIME_BUDGET_GLOB = "tests/test_time_budget_*.py"
+SUCCESSOR_GRADER_TEST = "tests/test_gpt56_grader_successor_seal.py"
+PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256 = "a2e0e2fe0451b905ab7d2eddd163f9c87b25eede7a6f7e383cb42b3722687664"
 TIME_BUDGET_RUN = (
     "cd batch-runner\n"
     f'python -m pytest -m "not integration" --tb=short -q -rs -o tmp_path_retention_policy=failed {TIME_BUDGET_GLOB}\n'
@@ -396,6 +398,65 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
     )
 
 
+def _without_successor_grader_partition(workflow):
+    """Validate the exact new file ownership before reconstructing old CI."""
+    previous = deepcopy(workflow)
+    assert sum(step.get("run", "").count(SUCCESSOR_GRADER_TEST)
+               for job in previous["jobs"].values() for step in job["steps"]) == 2
+    for job, step_name, prefix in (
+        ("pytest", "Run tests", "--ignore="),
+        ("pilot-contracts", "Run pilot contracts", ""),
+    ):
+        steps = [step for step in previous["jobs"][job]["steps"]
+                 if step.get("name") == step_name]
+        assert len(steps) == 1
+        run = steps[0]["run"]
+        lines = run.splitlines()
+        assert len(lines) == 2 and lines[0] == "cd batch-runner"
+        tokens = shlex.split(lines[1])
+        token = prefix + SUCCESSOR_GRADER_TEST
+        assert tokens[:3] == ["python", "-m", "pytest"]
+        assert tokens.count(token) == 1
+        literal = " " + token + " "
+        assert run.count(literal) == 1
+        steps[0]["run"] = run.replace(literal, " ", 1)
+    return previous
+
+
+def test_successor_grader_assignment_is_the_only_backend_workflow_delta():
+    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
+
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert hashlib.sha256(text.encode()).hexdigest() == CURRENT_WORKFLOW_SHA256
+    previous = _without_successor_grader_partition(yaml.safe_load(text))
+    for token in ("--ignore=" + SUCCESSOR_GRADER_TEST, SUCCESSOR_GRADER_TEST):
+        literal = " " + token + " "
+        assert text.count(literal) == 1
+        text = text.replace(literal, " ", 1)
+    # Keep the earlier byte pin, not just an updated current hash. No job,
+    # trigger, permission, marker or historical guard changes are admitted.
+    assert hashlib.sha256(text.encode()).hexdigest() == PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256
+    assert yaml.safe_load(text) == previous
+
+
+@pytest.mark.parametrize("mutation", ["core_duplicate", "pilot_missing", "pilot_duplicate", "extra_job"])
+def test_successor_grader_assignment_refuses_missing_or_duplicate_owners(mutation):
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    core = next(step for step in workflow["jobs"]["pytest"]["steps"] if step.get("name") == "Run tests")
+    pilot = next(step for step in workflow["jobs"]["pilot-contracts"]["steps"] if step.get("name") == "Run pilot contracts")
+    if mutation == "core_duplicate":
+        core["run"] = core["run"].replace(" --ignore=" + SUCCESSOR_GRADER_TEST + " ", " ", 1)
+    elif mutation == "pilot_missing":
+        pilot["run"] = pilot["run"].replace(" " + SUCCESSOR_GRADER_TEST + " ", " ", 1)
+    elif mutation == "pilot_duplicate":
+        pilot["run"] = pilot["run"].rstrip() + " " + SUCCESSOR_GRADER_TEST + "\n"
+    else:
+        workflow["jobs"]["comparison-contracts"]["steps"].append(
+            {"name": "duplicate owner", "run": "python -m pytest " + SUCCESSOR_GRADER_TEST})
+    with pytest.raises(AssertionError):
+        _without_successor_grader_partition(workflow)
+
+
 def test_budget_readout_partition_preserves_exact_commands_and_guards():
     """Inspect the split without importing, collecting or running its test files."""
     from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
@@ -417,14 +478,16 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     }
     assert "secrets." not in text and "id-token" not in text
 
-    # First validate and undo only the new time-budget job and ignore token.
+    # Validate and undo only the successor-grader inventory pair, then the
+    # new time-budget job and ignore token. Keep the older baseline unchanged.
     # Captured before editing workflow bytes 19cd9099ad1e60865111d789207bd09fc8302095be7012eea75703c9490da09d.
     # Restore the old budget command and remove its readout job, then undo only
     # PR749's and Task4's explicit time-budget test-inventory additions and the exact
     # owned-host JUnit/receipt additions checked above. Every other pre-existing
     # job, trigger, permission and guard must match the captured baseline,
     # including the reviewed complete gpt56 partition (20 modules, not 9).
-    previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(workflow))
+    previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(
+        _without_successor_grader_partition(workflow)))
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
     for job_name, step_name, token in (
@@ -693,7 +756,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt56_*.py")
     )
-    assert len(comparison_files) == 13 and len(pilot_files) == 20
+    assert len(comparison_files) == 13 and len(pilot_files) == 21
     wire_file = "tests/test_gpt56_pilot_wire_receipt.py"
     pilot_preflight_file = "tests/test_gpt56_sol_codex_pilot_preflight.py"
     publication_functions = (
@@ -706,7 +769,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert wire_file in pilot_files
     assert pilot_preflight_file in pilot_files
     general_pilot_files = [path for path in pilot_files if path not in {wire_file, pilot_preflight_file}]
-    assert len(general_pilot_files) == 18
+    assert len(general_pilot_files) == 19
     actual = sorted(comparison_files + pilot_files)
     assert argv[0][len(prefix):] == [
         *[f"--ignore={path}" for path in actual], f"--ignore-glob={budget_glob}",
@@ -726,6 +789,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert len(selected) == len(set(selected))
     assert len(pilot_selected) == len(set(pilot_selected))
     assert len(pilot_preflight_selected) == len(set(pilot_preflight_selected))
+    assert excluded.count(SUCCESSOR_GRADER_TEST) == pilot_selected.count(SUCCESSOR_GRADER_TEST) == 1
 
     pilot_sources = {path: (runner / path).read_text(encoding="utf-8") for path in pilot_files}
     assert {path for path, source in pilot_sources.items() if keyword in source.casefold()} == {
@@ -754,7 +818,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         # Collection runs imports/hooks but not fixtures or test bodies. Keep
         # it scoped to preflight or the exact moved files, with the same marker.
         targets = _pytest_target_arguments(arguments)
-        assert targets in ([pilot_preflight_file], budget_files, time_budget_files)
+        assert targets in ([pilot_preflight_file], budget_files, time_budget_files, [SUCCESSOR_GRADER_TEST])
         result = subprocess.run(
             [sys.executable, *prefix[1:], "--collect-only", "-p", "no:cacheprovider",
              "-o", "addopts=", "--color=no", *arguments],
@@ -802,6 +866,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert time_budget_nodes
     assert {node.split("::", 1)[0] for node in time_budget_nodes} == set(time_budget_files)
     assert time_budget_nodes.isdisjoint(budget_nodes | all_preflight_nodes)
+    successor_nodes = collect_partition_nodes([SUCCESSOR_GRADER_TEST])
+    assert successor_nodes.isdisjoint(time_budget_nodes | budget_nodes | all_preflight_nodes)
 
     discovery = ConfigParser()
     discovery.read(runner / "pytest.ini")
@@ -829,6 +895,16 @@ def test_backend_jobs_partition_the_comparison_contracts():
     reader_tests = budget_reader_files
     pilot_preflight_tests = {pilot_preflight_file}
     shared_wire_tests = {wire_file}
+    successor_owners = [name for name, files in (
+        ("pytest", core_tests), ("comparison-contracts", comparison_tests),
+        ("pilot-contracts", pilot_tests), ("budget-readout-contracts", reader_tests),
+        ("time-budget-contracts", time_budget_tests),
+        ("pilot-preflight-contracts", pilot_preflight_tests),
+        ("pilot-external-receipt-contracts", pilot_preflight_tests),
+        ("pilot-external-publication-contracts", pilot_preflight_tests),
+        ("wire-contracts", shared_wire_tests), ("native-host-contracts", shared_wire_tests),
+    ) if SUCCESSOR_GRADER_TEST in files]
+    assert successor_owners == ["pilot-contracts"]
     assert not core_tests & comparison_tests
     assert not core_tests & pilot_tests
     assert not comparison_tests & pilot_tests
