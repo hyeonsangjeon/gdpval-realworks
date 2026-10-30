@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Repair #794's two CI test failures without changing workflow or production
+  bytes. Keep the input-intake shell's five-second timeout while isolating only
+  the standard library subprocess wait from the fixture's global sleep denial;
+  force the EOF/waitpid race and verify timeout, reaping and continuing live-boundary
+  refusals. Pin the retention test's current derived workflow hash and also
+  reconstruct its unchanged pre-successor hash. Focused intake/retention/partition/
+  workflow-pin/seal validation: 237 passed. Full core/time-budget selections
+  and repo-root scripts ran without added exclusions; LATEST keeps the raw
+  outcomes, local setup corrections and remaining NAS/clean-head refusals
+  separate from genuine hosted CI proof. Production admission is not relaxed.
+
 - Assign the successor-grader contract file exclusively to Backend Tests'
   pilot-contracts job and exclude it from core collection. Keep exact
   inventory, actual node collection and disjoint coverage checks; reject

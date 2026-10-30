@@ -1,5 +1,54 @@
 # Latest task result
 
+## #794 subprocess-wait and retention-hash CI repair, 2026-10-30
+
+Backend Tests run 41056682245 failed for two different reasons. The intake
+workflow test hit CPython's bounded wait after pipe EOF but before waitpid
+reported child exit; the fixture's global sleep denial incorrectly caught that
+stdlib wait. Keep the five-second timeout and all global process/provider/sleep
+refusals, restoring a real wait primitive only inside subprocess's namespace
+for the explicitly allowed local shell. The three existing workflow cases now
+force that race. A new timeout case verifies the child is reaped and arbitrary
+processes/controller sleeps remain refused.
+
+The retention test still expected the workflow bytes from before #794's one
+core-ignore/one pilot-selection change. Check the new option-stripped hash
+`46ba0b8f…5eb8e` and also reconstruct the unchanged old `7bd20c54…34068` hash by
+removing exactly those two arguments. All actual tmp_path lifetime, exact argv,
+single-option and 45-minute job assertions remain. The workflow itself remains
+`75e6db77…ac65`; other current/historical hash guards, sealed sources and paid
+policies are unchanged. No new skip, xfail or narrowed test selection.
+
+Local reproduction: both exact CI assertions failed before the fix. Focused
+full modules (intake, retention, partition, GHCP workflow pin, successor seal):
+**237 passed / 0 failed / 0 skipped**. The pytest job's additional repo-root
+script suite: **186 passed / 0 failed / 0 skipped**.
+Both complete workflow selections were run without additional deselection:
+core **13,817 passed / 115 failed / 117 skipped**, with the workflow's 47
+integration deselections; time-budget **494 passed / 1 failed / 0 skipped**.
+Those are the original full-run outcomes, not an all-green local claim.
+
+Rechecking all 115 failed core nodes with corrected local tool/cache/temp
+settings passed 30. Installing the declared PyAV dependency in an isolated
+test environment passed the two remaining media cases. These 32 failures came
+from local setup (missing sbin/cache lookup, long Unix-socket paths, missing
+media dependencies), not changes to assertions. Remaining core cases are 82
+NAS runner-admission refusals and the source-only test's deliberate clean-Git
+requirement while this fix was uncommitted. Its clean-head recheck is recorded
+after committing, in the external handoff. The time-budget failure is the
+unchanged real-kernel positive: this NAS lacks /proc children and pidfd_open
+(ENOSYS); it reached no provider or generation. The original failed CI intake
+and retention tests pass in the complete runs. Existing host-capability/data
+skips were retained; no skip or xfail was added to make this repair pass.
+
+A separate, explicitly fake-client-only audio diagnostic passed all 14 cases
+with the existing synthetic hosted-runner fixture, confirming the distinction;
+it does not replace the unmodified full-job outcomes or prove NAS eligibility.
+Commands, JUnit, all original failures and rechecks are under
+`/ai-work/copilot/_tmp/p794-two-ci-jobs-20261030.jRg9EU/`.
+No live model/judge call, dispatch, force operation or merge. The normal branch
+push lets the unchanged Actions jobs perform the genuine hosted validation.
+
 ## Successor grader contract CI ownership repair, 2026-10-30
 
 Run 41043462482's core job already passed the 21 successor-seal test cases,
