@@ -34,7 +34,7 @@ concurrency:
 jobs:
   observation:
     if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       PYTHONDONTWRITEBYTECODE: "1"
@@ -133,6 +133,34 @@ jobs:
             --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$RUNNER_TEMP/time-budget-codex-runtime" \
             --frozen-root "$RUNNER_TEMP/time-budget-codex-frozen" --state-root "$RUNNER_TEMP/time-budget-first-codex" \
             --native-root "$GDPVAL_CODEX_RUN_ROOT"
+
+      - name: Install the system sandbox helper without credentials
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v bwrap > /dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq bubblewrap
+          fi
+
+      - name: Prove the pinned Codex sandbox before credentials or observation claim
+        id: sandbox_check
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/time-budget-codex-runtime/batch-runner/scripts/prepare_codex_sandbox_host.py" \
+            --out "$RUNNER_TEMP/time-budget-codex-sandbox-preflight.json"
+
+      - name: Retain the credential-free runner and sandbox proof
+        if: always() && steps.sandbox_check.outcome != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: time-budget-codex-sandbox-preflight
+          path: ${{ runner.temp }}/time-budget-codex-sandbox-preflight.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Verify original inputs and canonical Step0, prepare and permanently claim one native cell
         id: admission

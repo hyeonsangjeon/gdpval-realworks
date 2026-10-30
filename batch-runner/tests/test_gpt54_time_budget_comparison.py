@@ -68,8 +68,21 @@ def dual_roots(tmp_path_factory):
     # these private test registrations, never the repository's sealed plan.
     frozen_profile = historical.load_plan(roots["frozen"] / prospective.SOURCE_PROFILE)
     fixed_roles = set(frozen_profile["source_pins"]) - prospective.CHANGED_RUNTIME_SOURCES
+    # These source-bound helpers are under test before the branch's one final
+    # commit. Commit their actual working bytes in the synthetic R, rather
+    # than mislabelling them with the repository's older HEAD/tree identity.
+    working_roles = {
+        ".github/workflows/gpt54-time-budget-first-v2.yml",
+        ".github/workflows/gpt54-time-budget-first-codex.yml",
+        "batch-runner/gpt54_time_budget_v2_ci.py",
+        "batch-runner/gpt54_time_budget_codex_ci.py",
+        "batch-runner/gpt54_time_budget_v2_observation.py",
+        "batch-runner/gpt54_time_budget_result_readout.py",
+    }
     for name in ("runtime", "substitute"):
         root = roots[name]
+        for role in working_roles:
+            (root / role).write_bytes((repository / role).read_bytes())
         for role in fixed_roles:
             (root / role).write_bytes((roots["frozen"] / role).read_bytes())
         manifest = prospective.load_registration(root / prospective.REGISTRATION_PATH)
@@ -80,7 +93,7 @@ def dual_roots(tmp_path_factory):
         manifest["source_pins"] = expected
         (root / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
     git("-C", str(roots["runtime"]), "read-tree", original_sha)
-    git("-C", str(roots["runtime"]), "add", "--", *sorted(fixed_roles), prospective.REGISTRATION_PATH)
+    git("-C", str(roots["runtime"]), "add", "--", *sorted(fixed_roles | working_roles), prospective.REGISTRATION_PATH)
     git("-C", str(roots["runtime"]), "commit", "-m", "test: bind synthetic runtime roles without renewing the study")
     runtime_sha = git("-C", str(roots["runtime"]), "rev-parse", "HEAD").decode().strip()
     substituted = roots["substitute"]
@@ -91,7 +104,7 @@ def dual_roots(tmp_path_factory):
     manifest["source_pins"][role] = hashlib.sha256(changed).hexdigest()
     (substituted / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
     git("-C", str(substituted), "read-tree", original_sha)
-    git("-C", str(substituted), "add", "--", role, *sorted(fixed_roles), prospective.REGISTRATION_PATH)
+    git("-C", str(substituted), "add", "--", role, *sorted(fixed_roles | working_roles), prospective.REGISTRATION_PATH)
     git("-C", str(substituted), "commit", "-m", "test: coherent synthetic source substitution")
     replacement = git("-C", str(substituted), "rev-parse", "HEAD").decode().strip()
     # Cross-root refusal cases must compare existing commits, not fail early

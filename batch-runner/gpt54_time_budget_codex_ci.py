@@ -48,6 +48,7 @@ REPOSITORY, OWNER, JOB = shared.REPOSITORY, shared.OWNER, "observation"
 TARGET, TARGET_SHA256, BRANCH = shared.TARGET, shared.TARGET_SHA256, "main"
 REQUEST_VERSION = "gpt54-time-budget-first-codex-ci-request-v1"
 ENVELOPE_VERSION = "gpt54-time-budget-first-codex-ci-completion-v1"
+RUNNER_ENVELOPE_VERSION = "gpt54-time-budget-first-codex-ci-completion-v2"
 PURPOSE = "execute_and_privately_retain_first_codex_observation"
 # Legacy Task1 identities also serve the fixed historical uncertainty reader.
 CELL = {"study_id": registration.STUDY_ID, "run_id": "gpt54_time_budget_v1_codex_r1",
@@ -61,6 +62,7 @@ SOURCE_ROLES = {
     "batch-runner/codex_ci_input_intake.py", "batch-runner/codex_ci_input_bundle.py",
     "batch-runner/codex_budget_pilot_output.py", "batch-runner/codex_budget_pilot_retention.py",
     "batch-runner/scripts/azure_oidc_identity_preflight.py", "batch-runner/requirements.txt",
+    "batch-runner/core/runner_environment.py", "batch-runner/scripts/prepare_codex_sandbox_host.py",
 }
 _canonical_path, _write, _read = shared._canonical_path, shared._write, shared._read
 
@@ -155,7 +157,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
              "independent_dispatch_number_required")
     _same("intended Actions context", ci, {
         "repository": REPOSITORY, "workflow": WORKFLOW, "ref": "refs/heads/main", "actor": OWNER,
-        "job": JOB, "attempt": 1, "run_number": ci["run_number"], "runner": "ubuntu-22.04",
+        "job": JOB, "attempt": 1, "run_number": ci["run_number"], "runner": "ubuntu-24.04",
         "runner_os": "Linux", "runner_arch": "X64"})
     required = {
         "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_REF": "refs/heads/main",
@@ -163,7 +165,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_NUMBER": str(ci["run_number"]), "GITHUB_JOB": JOB,
         "GITHUB_SHA": reviewed_source_sha, "TIME_BUDGET_CODEX_WORKFLOW_SHA": reviewed_source_sha,
         "GITHUB_WORKFLOW_REF": REPOSITORY + "/" + WORKFLOW + "@refs/heads/main",
-        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu22",
+        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu24",
         "JE_ARROW_MALLOC_CONF": "background_thread:false",
     }
     _require(all(os.environ.get(key) == value for key, value in required.items()), "ci_source_cell_or_attempt_refused")
@@ -237,6 +239,8 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         step0, input_specs = _input_contract(plan, roots["frozen_root"])
         _same("independent full Step0 provenance", request["step0"], step0)
         host = observation.host_identity.execution_host_identity(reviewed_source_sha)
+        _same("live host policy", host["policy"], observation.host_identity.RUNNER_HOST_POLICY)
+        observation.host_identity.validate_runner_image(host["runner_image"])
         context = {"request": request, "request_identity": _identity(data), "plan": plan, "roots": roots,
                    "cell": cell, "host": host, "input_specs": input_specs,
                    "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
@@ -525,8 +529,9 @@ def _result_snapshot(context: dict, marker: dict):
 
 def validate_envelope(value: dict, *, expected_cell: dict | None = None) -> None:
     """Bind an independently expected cell; default only to the legacy Task1 reader."""
-    _same("native completion version", value["format"], ENVELOPE_VERSION)
-    shared.validate_envelope({**value, "format": shared.ENVELOPE_VERSION},
+    versions = {ENVELOPE_VERSION: shared.ENVELOPE_VERSION, RUNNER_ENVELOPE_VERSION: shared.RUNNER_ENVELOPE_VERSION}
+    _require(value.get("format") in versions, "native_completion_version")
+    shared.validate_envelope({**value, "format": versions[value["format"]]},
                              expected_cell=CELL if expected_cell is None else expected_cell)
     _same("native completion unavailable usage", value["usage"], None)
 
@@ -566,7 +571,8 @@ def retain(context: dict) -> dict:
     except (Exception, KeyboardInterrupt):
         revision = None  # No lost-response adoption, repeated CAS or new attempt.
     envelope = shared._envelope(context, admission, payload, commit=revision, outcome=outcome)
-    envelope["format"] = ENVELOPE_VERSION
+    envelope["format"] = (RUNNER_ENVELOPE_VERSION if envelope["format"] == shared.RUNNER_ENVELOPE_VERSION
+                          else ENVELOPE_VERSION)
     validate_envelope(envelope, expected_cell=context["cell"])
     _write(paths["root"] / "completion.json", envelope)
     _require(outcome == "acknowledged", "private_retention_unconfirmed")
@@ -597,7 +603,9 @@ def main(argv=None) -> int:
                 validate_envelope(value, expected_cell=context["cell"])
                 for name, expected in {"source": context["request"]["source"], "ci": context["ci"],
                                        "request_sha256": context["request_identity"]["sha256"],
-                                       "host_sha256": context["host"]["instance_sha256"]}.items():
+                                       "host_sha256": context["host"]["instance_sha256"],
+                                       "format": RUNNER_ENVELOPE_VERSION,
+                                       "runner_image": context["host"]["runner_image"]}.items():
                     _same("completion " + name, value[name], expected)
             elif operation != "validate-request":
                 result = {"prepare-and-claim": prepare_and_claim, "execute": execute, "retain": retain}[operation](context)

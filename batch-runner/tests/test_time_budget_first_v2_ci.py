@@ -148,7 +148,7 @@ def actions_layout(handoff_source_seed, tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, observation_kernel):
+def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, observation_kernel, request):
     import huggingface_hub
     from huggingface_hub import constants
     import step8_grade
@@ -187,6 +187,7 @@ def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, observatio
     for key in tuple(os.environ):
         if key.startswith(("AZURE_", "FOUNDRY_", "GITHUB_", "ACTIONS_", "HF_", "OPENAI_", "RUNNER_")):
             monkeypatch.delenv(key)
+    request.getfixturevalue("native_hosted_runner")
     # Ordinary OS metadata seam, not a successful host-validator replacement.
     original_open, original_stat = Path.open, Path.stat
 
@@ -206,6 +207,36 @@ def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, observatio
     assert forbidden_calls == []
 
 
+@pytest.mark.parametrize("change", ["request22", "image22", "self_hosted", "missing_image", "actual22", "image_drift"])
+def test_v2_ubuntu24_request_guard_before_input_and_storage(case, monkeypatch, change):
+    from core import runner_environment
+
+    arguments = dict(case.args)
+    if change == "request22":
+        case.request["ci"]["runner"] = "ubuntu-22.04"
+        arguments.update(request_json=ci._bytes(case.request).decode(),
+                         expected_request_sha256=_identity(ci._bytes(case.request))["sha256"])
+    elif change == "image22":
+        monkeypatch.setenv("ImageOS", "ubuntu22")
+    elif change == "self_hosted":
+        monkeypatch.setenv("RUNNER_ENVIRONMENT", "self-hosted")
+    elif change == "missing_image":
+        monkeypatch.delenv("ImageVersion")
+    elif change == "actual22":
+        monkeypatch.setattr(runner_environment.platform, "freedesktop_os_release",
+                            lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"})
+    reason = ("intended Actions context mismatch" if change == "request22" else
+              "ci_source_cell_or_attempt_refused" if change in {"image22", "self_hosted"} else
+              "final live host mismatch" if change == "image_drift" else "execution_environment_refused")
+    with pytest.raises((ValueError, runner_environment.ExecutionEnvironmentRefused), match="^" + reason + "$"):
+        with ci.checked_request(**arguments) as context:
+            assert change == "image_drift"
+            assert context["host"]["runner_image"]["image_os"] == "ubuntu24"
+            monkeypatch.setenv("ImageVersion", "20261030.999.1")
+    assert case.downloads == case.api.calls == case.api.commits == []
+    assert not case.root.exists()
+
+
 @pytest.fixture
 def case(handoff_sources, actions_layout, monkeypatch):
     seed = SimpleNamespace(**{**vars(handoff_sources), "runtime": actions_layout.runtime,
@@ -219,7 +250,7 @@ def case(handoff_sources, actions_layout, monkeypatch):
             "path": registration.SOURCE_PROFILE, "sha256": seed.profile_sha},
         "cell": dict(ci.CELL), "registration_sha256": seal(seed.plan), "dataset_sha256": seal(seed.plan["shared"]["dataset"]),
         "ci": {"repository": ci.REPOSITORY, "workflow": ci.WORKFLOW, "ref": "refs/heads/main", "actor": ci.OWNER,
-               "job": ci.JOB, "attempt": 1, "run_number": 7, "runner": "ubuntu-22.04", "runner_os": "Linux", "runner_arch": "X64"},
+               "job": ci.JOB, "attempt": 1, "run_number": 7, "runner": "ubuntu-24.04", "runner_os": "Linux", "runner_arch": "X64"},
         "paths": {"runtime_root": str(seed.runtime), "frozen_root": str(seed.frozen), "state_root": str(root)},
         "storage": {"repository_name_sha256": ci.TARGET_SHA256, "branch": ci.BRANCH, "prefix": ci.PREFIX, "expected_parent": "1" * 40},
         "not_before_unix": int(time.time()) - 10, "expires_unix": int(time.time()) + 1800,
@@ -230,7 +261,7 @@ def case(handoff_sources, actions_layout, monkeypatch):
         "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_NUMBER": "7", "GITHUB_JOB": ci.JOB,
         "GITHUB_SHA": seed.runtime_sha, "TIME_BUDGET_WORKFLOW_SHA": seed.runtime_sha,
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + ci.WORKFLOW + "@refs/heads/main",
-        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu22",
+        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu24",
         "GITHUB_RUN_ID": "7001", "RUNNER_NAME": "explicitly-synthetic-Actions-host",
         "GITHUB_WORKSPACE": str(actions_layout.bootstrap), "RUNNER_TEMP": str(actions_layout.runner_temp),
         "AZURE_AI_ROUTE_PROFILE": "direct-v1",
@@ -412,7 +443,8 @@ def test_time_budget_v2_selected_task_failure_retention(case, monkeypatch, capsy
         envelope = ci._read(case.root / "completion.json")
         ci.validate_envelope(envelope, expected_cell=expected_cell)
         assert envelope == {
-            "format": "gpt54-time-budget-first-v2-ci-completion-v1", **expected_cell,
+            "format": ci.RUNNER_ENVELOPE_VERSION, **expected_cell,
+            "runner_image": claim["host"]["runner_image"],
             "source": case.request["source"], "ci": claim["ci"],
             "request_sha256": case.args["expected_request_sha256"], "host_sha256": claim["host"]["instance_sha256"],
             "claim_commit": admission["returned_commit"], "output_commit": case.api.head,
@@ -1174,7 +1206,8 @@ def test_time_budget_first_v2_ci_failure_stderr_event(case, monkeypatch, capsys,
         envelope = ci._read(case.root / "completion.json")
         ci.validate_envelope(envelope, expected_cell=case.request["cell"])
         assert envelope == {
-            "format": "gpt54-time-budget-first-v2-ci-completion-v1", **ci.CELL,
+            "format": ci.RUNNER_ENVELOPE_VERSION, **ci.CELL,
+            "runner_image": admission["claim"]["host"]["runner_image"],
             "source": case.request["source"], "ci": admission["claim"]["ci"],
             "request_sha256": case.args["expected_request_sha256"],
             "host_sha256": admission["claim"]["host"]["instance_sha256"],
@@ -1208,7 +1241,7 @@ def test_time_budget_first_v2_ci_workflow_command_and_guard_contract():
     assert document["concurrency"] == {"group": "gpt54-time-budget-first-v2-observation", "cancel-in-progress": "false"}
     assert set(document["jobs"]) == {ci.JOB}
     job = document["jobs"][ci.JOB]
-    assert job["runs-on"] == "ubuntu-22.04" and job["timeout-minutes"] == "45"
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "45"
     steps = job["steps"]
     commands = "\n".join(step.get("run", "") for step in steps)
     gate = steps[0]["run"]

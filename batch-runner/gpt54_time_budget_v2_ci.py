@@ -50,6 +50,7 @@ RUNTIME_BASENAME = "time-budget-v2-runtime"
 FROZEN_BASENAME = "time-budget-v2-frozen"
 REQUEST_VERSION = "gpt54-time-budget-first-v2-ci-request-v1"
 ENVELOPE_VERSION = "gpt54-time-budget-first-v2-ci-completion-v1"
+RUNNER_ENVELOPE_VERSION = "gpt54-time-budget-first-v2-ci-completion-v2"
 FAILURE_EVENT_VERSION = "gpt54-time-budget-first-v2-ci-failure-v1"
 CODEX_FAILURE_EVENT_VERSION = "gpt54-time-budget-first-codex-ci-failure-v1"
 # Existing verified private target, not its closed pilot's admission authority.
@@ -72,6 +73,7 @@ SOURCE_ROLES = {
     "batch-runner/codex_budget_pilot_output.py", "batch-runner/codex_budget_pilot_retention.py",
     "batch-runner/gpt54_time_budget_grading_preparation.py",
     "batch-runner/scripts/azure_oidc_identity_preflight.py", "batch-runner/requirements.txt",
+    "batch-runner/core/runner_environment.py",
 }
 FAILURE_STAGES = frozenset({
     "claim_admission", "execution_consumption", "direction_binding",
@@ -249,7 +251,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
     _same("intended Actions context", ci, {
         "repository": REPOSITORY, "workflow": WORKFLOW, "ref": "refs/heads/main",
         "actor": OWNER, "job": JOB, "attempt": 1, "run_number": ci["run_number"],
-        "runner": "ubuntu-22.04", "runner_os": "Linux", "runner_arch": "X64",
+        "runner": "ubuntu-24.04", "runner_os": "Linux", "runner_arch": "X64",
     })
     required = {
         "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_REF": "refs/heads/main",
@@ -257,7 +259,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_NUMBER": str(ci["run_number"]), "GITHUB_JOB": JOB,
         "GITHUB_SHA": reviewed_source_sha, "TIME_BUDGET_WORKFLOW_SHA": reviewed_source_sha,
         "GITHUB_WORKFLOW_REF": REPOSITORY + "/" + WORKFLOW + "@refs/heads/main",
-        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu22",
+        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu24",
     }
     _require(all(os.environ.get(key) == value for key, value in required.items()), "ci_source_cell_or_attempt_refused")
     run_id = os.environ.get("GITHUB_RUN_ID", "")
@@ -319,6 +321,8 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
             roots["frozen_root"], registration.ACCEPTED_BASE_SHA, registration.SOURCE_PROFILE,
             plan["shared"]["dataset"]))
         host = observation.execution_host_identity(reviewed_source_sha)
+        _same("live host policy", host["policy"], observation.RUNNER_HOST_POLICY)
+        observation.validate_runner_image(host["runner_image"])
         context = {"request": request, "request_identity": _identity(data), "plan": plan, "roots": roots, "cell": cell,
                    "host": host, "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
         check_bootstrap_parents()
@@ -594,7 +598,12 @@ def _envelope(context: dict, claim: dict, payload: dict | None, *, commit: str |
     if not (type(usage) is dict and set(usage) == {"input_tokens", "output_tokens"}
             and all(type(value) is int and value >= 0 for value in usage.values())):
         usage = None
-    return {"format": ENVELOPE_VERSION, **context["cell"], "source": context["request"]["source"], "ci": context["ci"],
+    image = context["host"].get("runner_image")
+    if image is not None:
+        observation.validate_runner_image(image)
+    return {"format": RUNNER_ENVELOPE_VERSION if image is not None else ENVELOPE_VERSION,
+        **({"runner_image": image} if image is not None else {}),
+        **context["cell"], "source": context["request"]["source"], "ci": context["ci"],
         "request_sha256": context["request_identity"]["sha256"], "host_sha256": context["host"]["instance_sha256"],
         "claim_commit": claim["returned_commit"], "output_commit": commit, "retention": outcome,
         "result_identity": None if payload is None else _identity(_bytes(payload)),
@@ -609,12 +618,17 @@ def _envelope(context: dict, claim: dict, payload: dict | None, *, commit: str |
 def validate_envelope(value: dict, *, expected_cell: dict) -> None:
     """Exact metadata allowlist: never upload a raw receipt, exception or body."""
     _require(set(expected_cell) == {"study_id", "run_id", "condition", "repeat", "task_id"}, "completion_cell_schema")
-    fixed = {"format": ENVELOPE_VERSION, **expected_cell, "grading_performed": False, "retry_allowed": False,
+    version = value.get("format")
+    _require(version in {ENVELOPE_VERSION, RUNNER_ENVELOPE_VERSION}, "completion_version")
+    image_fields = {"runner_image"} if version == RUNNER_ENVELOPE_VERSION else set()
+    if image_fields:
+        observation.validate_runner_image(value.get("runner_image"))
+    fixed = {"format": version, **expected_cell, "grading_performed": False, "retry_allowed": False,
              "other_cells_executed": 0}
     _same("completion constants", {name: value[name] for name in fixed}, fixed)
     _require(set(value) == {*fixed, "source", "ci", "request_sha256", "host_sha256", "claim_commit",
         "output_commit", "retention", "result_identity", "result_fingerprint", "status", "usage",
-        "terminal_reason", "cleanup_complete", "host_reusable"}, "completion_schema")
+        "terminal_reason", "cleanup_complete", "host_reusable", *image_fields}, "completion_schema")
     _require(set(value["source"]) == {"sha", "tree"}
              and all(storage._hash(item, 40) for item in value["source"].values()), "completion_source")
     ci = value["ci"]
@@ -722,7 +736,9 @@ def main(argv=None) -> int:
                 validate_envelope(envelope, expected_cell=context["cell"])
                 for name, expected in {"source": context["request"]["source"], "ci": context["ci"],
                                        "request_sha256": context["request_identity"]["sha256"],
-                                       "host_sha256": context["host"]["instance_sha256"]}.items():
+                                       "host_sha256": context["host"]["instance_sha256"],
+                                       "format": RUNNER_ENVELOPE_VERSION,
+                                       "runner_image": context["host"]["runner_image"]}.items():
                     _same("completion " + name, envelope[name], expected)
             elif operation != "validate-request":
                 result = {"prepare-and-claim": prepare_and_claim, "execute": execute, "retain": retain}[operation](context)

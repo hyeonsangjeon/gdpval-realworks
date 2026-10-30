@@ -35,7 +35,7 @@ concurrency:
 jobs:
   observation:
     if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       PYTHONDONTWRITEBYTECODE: "1"
