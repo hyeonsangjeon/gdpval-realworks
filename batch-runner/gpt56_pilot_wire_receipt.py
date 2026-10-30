@@ -68,6 +68,10 @@ USD_PRICE_CONTRACT_UNVERIFIED = "usd_price_contract_unverified"
 USD_LEDGER_UNVERIFIED = "usd_ledger_unverified"
 _USD_STOPS = {USD_CEILING_EXCEEDED, USD_USAGE_UNVERIFIED,
               USD_RESERVATION_EXCEEDED, USD_PRICE_CONTRACT_UNVERIFIED, USD_LEDGER_UNVERIFIED}
+# Owner decision 2026-10-30 14:15: unknown usage keeps its reservation booked and
+# an overrun is booked as observed; neither stops the pilot. The ceiling and the
+# pinned cap/price integrity check still stop.
+_USD_NON_STOPPING = {USD_USAGE_UNVERIFIED, USD_RESERVATION_EXCEEDED}
 _TOKEN_PRECHECK_STOPS = {NATIVE_INPUT_PRECHECK_EXCEEDED, NATIVE_OUTPUT_PRECHECK_EXCEEDED,
                          NATIVE_TOKEN_REQUEST_UNVERIFIED, NATIVE_OUTPUT_LIMIT_UNAVAILABLE,
                          NATIVE_USAGE_UNVERIFIED}
@@ -186,7 +190,7 @@ class _PilotUsdLedger:
     """Attempt accounting, backed by durable admission in actual pilot sessions.
 
     Decimal reservations follow the existing agentic-budget convention. A
-    missing/failed response consumes its reservation and poisons the budget;
+    missing/failed response consumes its whole reservation (booked, not a stop);
     saved receipts cannot refill it. The no-file form is for isolated fixtures.
     """
 
@@ -240,6 +244,8 @@ class _PilotUsdLedger:
                     for attempt, amount, baseline in self.pending.values()), Decimal(0))
 
     def _stop(self, reason):
+        if reason in _USD_NON_STOPPING:
+            return self.reason
         if self.reason is None:
             self.reason = reason
         if self.shared is not None:
@@ -257,9 +263,10 @@ class _PilotUsdLedger:
                     self.require_current()
                 except Exception:
                     self._stop(USD_PRICE_CONTRACT_UNVERIFIED)
-            if self.reason is None and not all(type(value) is int and 0 <= value < 2 ** 63
-                                               for value in (inputs, outputs)):
-                self._stop(USD_USAGE_UNVERIFIED)
+            if not all(type(value) is int and 0 <= value < 2 ** 63 for value in (inputs, outputs)):
+                # Unknown request size: reserve the attempt's full token caps instead of refusing.
+                limits = _native_caps()["per_attempt"]
+                inputs, outputs = limits["input_tokens"], limits["output_tokens"]
             if self.reason is not None:
                 self.blocked += 1
                 return None, self.reason

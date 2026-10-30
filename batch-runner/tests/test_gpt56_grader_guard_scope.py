@@ -95,21 +95,35 @@ def test_real_tool_schema_does_not_change_verdict_or_denominator(admission, tmp_
         grader.close()
 
 
-@pytest.mark.parametrize("stop", ["ceiling", "missing_usage"])
-def test_money_stop_cannot_become_a_judge_error_or_excluded_score(admission, tmp_path, stop):
+def test_money_stop_cannot_become_a_judge_error_or_excluded_score(admission, tmp_path):
     ledger, recorder = admission
-    client = Client(usage=stop != "missing_usage")
-    if stop == "ceiling":
-        ledger.observe(ledger.begin("inference", TASKS[1]), Decimal(200), Decimal(0))
+    client = Client()
+    ledger.observe(ledger.begin("inference", TASKS[1]), Decimal(200), Decimal(0))
     grader, task, item, deliverable = make_grader(tmp_path, recorder, client)
     try:
         with recorder.attributed(task_id=task.task_id, stage=STAGE_GRADING):
-            with pytest.raises(usd.GradingUsdStopped, match=usd.CEILING if stop == "ceiling" else usd.UNKNOWN) as caught:
+            with pytest.raises(usd.GradingUsdStopped, match=usd.CEILING) as caught:
                 grader._judge(task, item, [deliverable])
         assert not isinstance(caught.value, Exception)
         assert caught.value.source == "grading"
-        assert len(client.calls) == int(stop == "missing_usage")
-        assert ledger.snapshot()["stop_reason"] == (usd.CEILING if stop == "ceiling" else usd.UNKNOWN)
+        assert len(client.calls) == 0
+        assert ledger.snapshot()["stop_reason"] == usd.CEILING
+    finally:
+        grader.close()
+
+
+def test_missing_judge_usage_is_booked_and_the_verdict_stands(admission, tmp_path):
+    # Owner decision 2026-10-30: unknown usage is booked at the reservation, not a stop.
+    ledger, recorder = admission
+    client = Client(usage=False)
+    grader, task, item, deliverable = make_grader(tmp_path, recorder, client)
+    try:
+        with recorder.attributed(task_id=task.task_id, stage=STAGE_GRADING):
+            judged, _, _ = grader._judge(task, item, [deliverable])
+        assert judged.verdict == "pass" and len(client.calls) == 1
+        snapshot = ledger.snapshot()
+        assert snapshot["stop_reason"] is None and snapshot["unknown_requests"] == 1
+        assert Decimal(snapshot["unknown_consumed_usd"]) > 0
     finally:
         grader.close()
 
@@ -128,23 +142,30 @@ def test_schema_metadata_is_counted_but_not_treated_as_runtime_input():
 
 @pytest.mark.parametrize("schema", [[], True, {"type": []}, {"type": ["object", "image"]},
                                     {"type": "string", "minLength": -1}, {"$ref": "https://example.invalid/schema"}])
-def test_invalid_or_external_tool_schema_remains_fail_closed(schema):
+def test_invalid_or_external_tool_schema_is_reserved_by_estimate(schema):
+    # The exact text bound still refuses these; the reservation falls back to an estimate.
+    request = schema_request(schema)
     with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
-        usd._request_allowance(schema_request(schema))
+        usd._exact_allowance(request)
+    inputs, outputs = usd._request_allowance(request)
+    assert inputs > 0 and outputs == request["max_output_tokens"]
 
 
 @pytest.mark.parametrize("field", ["input_image", "file_data", "previous_response_id", "extra_body"])
-def test_schema_exception_does_not_allow_opaque_inputs(field):
+def test_opaque_inputs_are_reserved_by_estimate(field):
     request = schema_request({"type": "object", "properties": {"scope": {"type": ["object", "null"]}}})
     request[field] = "unknown"
     with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
-        usd._request_allowance(request)
+        usd._exact_allowance(request)
+    inputs, outputs = usd._request_allowance(request)
+    assert inputs > 0 and outputs == request["max_output_tokens"]
 
 
 def test_schema_exception_is_not_available_in_message_payloads():
     request = {**_kwargs(), "input": [{"type": "function", "parameters": {"type": ["object", "null"]}}]}
     with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
-        usd._request_allowance(request)
+        usd._exact_allowance(request)
+    assert usd._request_allowance(request)[0] > 0  # Estimated instead of refused.
 
 
 def test_guarded_output_matches_actual_frozen_source(approved_pilot_source, tmp_path):
