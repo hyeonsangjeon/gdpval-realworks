@@ -13,6 +13,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Book unsettled Sol pilot grading models at a published list price instead
+  of refusing (owner decision 2026-10-30): gpt-5.6-sol at the pinned table's
+  long-context Standard Global meter, gpt-audio-1.5 at a 40/80 USD per 1M
+  stand-in. Unknown usage, overruns and unpriced replies keep their whole
+  reservation booked and no longer stop the shared or inference ledgers;
+  requests the exact bound cannot cover are reserved by estimate. The USD 200
+  ceiling and ledger integrity checks still stop. Source-only successor; no
+  paid call.
+
 - Record the actual Sol/Max native response from run 40967326333 (HTTP 200,
   9,468 input / 5 output tokens), while retaining the missing-context refusal
   and the pinned client's measured 258,400 context limit. Correct capture

@@ -156,11 +156,10 @@ def test_reference_drift_after_admission_is_refused_before_receipt(case, monkeyp
     assert session.files == {} and session.failed is True
 
 
-def test_public_reference_prices_do_not_waive_effective_grading_price_contract():
-    # Published tier-specific rates are not enough to pick an effective tier or
-    # to invent the missing provider cache-write mapping. Keep the real refusal.
-    with pytest.raises(usd.PilotUsdRefused, match=usd.UNPRICED):
-        usd.grading_prices(CONFIG)
+def test_public_reference_prices_are_the_grading_list_price():
+    # Owner decision 2026-10-30: no settled tariff is no longer a refusal. Sol is
+    # booked at the published long-context Standard Global meter (not a tariff).
+    assert usd.grading_prices(CONFIG)["gpt-5.6-sol"] == usd.SOL_LIST_USD_PER_MILLION
 
 
 def test_connection_cli_failure_never_echoes_a_private_path(capsys):
