@@ -15,8 +15,15 @@ list-price/unknown-usage accounting, held 1M catalog and not_reported behavior
 follow the merged, separately pinned helpers. Retain the old published PR head
 as an ancestry-only parent so publication can use a normal push after rebase.
 No paid/NAS benchmark, model/judge call, dispatch, PR merge or #793 operation.
-Current chain/seal/preflight verification is recorded in the new handoff;
-the following test totals are the original review, not a new execution claim.
+Current rebase verification: **520 distinct passed / 0 failed / 0 skipped**
+(36 source/seal/catalog, 286 policy/guard, 198 preflight; 143 deselected).
+One earlier synthetic worker timeout remains in its original log; the same
+test passed alone and in the full policy rerun without code/assertion changes.
+The real source-held-reference preflight verifies the source and successor
+seal, with valid configuration, but intentionally returns exit 2 and leaves
+launch false with ten upper-evidence blockers. Final clean-head proof and
+publication metadata: `/ai-work/copilot/_tmp/p5-grader-chain-20261030.vZvOhP/HANDOFF.md`.
+The following test totals are the original review, not a new execution claim.
 
 ## Owner-reviewed successor grader seal, 2026-10-30
 

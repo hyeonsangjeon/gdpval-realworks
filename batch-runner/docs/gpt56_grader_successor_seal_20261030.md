@@ -31,6 +31,27 @@ ancestry-connection commit after rebase. Publication is a normal fast-forward
 push; no source resolution is delegated to that connection commit. PR merge,
 workflow dispatch, model/judge calls and NAS benchmark execution are excluded.
 
+### Rebase validation
+
+At rebased source `63197f4c6fdf6084fcbc6aee453ed8114808572e`, the source-chain,
+seal and catalog tests passed **36/0/0**; the complete USD/ledger/grader/caps/
+response recheck passed **286/0/0**; the preflight CI selection passed
+**198/0/0** (143 external-live cases deselected, not skipped). This is
+**520 distinct passed, 0 failed, 0 skipped**, without adding duplicate reruns.
+
+The first parallel policy invocation had **63 passes and 1 failure**: a
+synthetic concurrency worker exceeded its 10-second coordinator wait. The
+identical test passed alone and in the full 286-case recheck without changes
+to its timeout, assertions or production code. Keep the first XML/log; the
+observed timeout does not establish why the coordinator was delayed.
+
+The actual model-free CLI with the existing source-held connection reference
+returned **exit 2**, `configuration_valid=true`, `source_verified` and
+`reviewed_successor_seal_verified`. `launch_allowed=false` and ten missing
+upper-evidence blockers remain; source verification is not live launch proof.
+Final clean-head proof and publication metadata are recorded in
+`/ai-work/copilot/_tmp/p5-grader-chain-20261030.vZvOhP/HANDOFF.md`.
+
 ## Identity and unchanged conditions
 
 - Frozen source: `8ac891e3e0e4752fe15a00139a2691ddf9df7dce`;
@@ -88,7 +109,7 @@ publication still requires its independent complete evidence bundle: without
 that bundle the compiler now reaches `complete_evidence_arguments_required`,
 not `grader_template_source_drift`. This requirement is not waived.
 
-## Offline equivalence and safety checks
+## Original review: offline equivalence and safety checks
 
 `tests/grader_guard_scope_probe.py` runs the same fake client/replies and fixed
 deliverable against the actual archived old source and the current source with

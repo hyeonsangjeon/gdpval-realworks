@@ -38,10 +38,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   booking, unknown-usage accounting and held 1M catalog without reimplementation.
   The Step8/core seal and its historical review record are unchanged. Extend
   synthetic frozen-source equivalence and seal-tamper tests; no live model proof.
-  The full run exposed 13 scripted-test host-admission refusals; supply explicit
+  The original review's full run exposed 13 scripted-test host-admission refusals; supply explicit
   synthetic runner facts and deny network in those two test files, preserving
   real admission and all assertions. Grader/guard recheck: 869 passed; combined
-  latest results cover 3,881 distinct tests with no failures or skips.
+  latest results covered 3,881 distinct tests with no failures or skips.
+  The new rebase validation covers 520 distinct cases: source/seal/catalog 36,
+  policy/guard 286 and preflight 198, all passing after one retained synthetic
+  coordinator-timeout rerun. The real source-only preflight verifies the chain
+  and successor seal but retains exit 2 and ten upper-evidence launch blockers.
 
 - Record the actual Sol/Max native response from run 40967326333 (HTTP 200,
   9,468 input / 5 output tokens), while retaining the missing-context refusal
