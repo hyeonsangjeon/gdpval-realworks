@@ -10,6 +10,7 @@ on:
       - batch-runner/tests/test_pilot_shard_ledger_handoff.py
       - batch-runner/tests/test_gpt56_pilot_shared_usd.py
       - batch-runner/requirements-ghcp-sol-gate.txt
+      - batch-runner/requirements-pilot-ledger-handoff.txt
   workflow_dispatch:
     inputs:
       mode:
@@ -48,7 +49,7 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install pinned import-only test dependencies
-        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-pilot-ledger-handoff.txt
       - name: Check handoff and original shared-USD refusal contracts offline
         working-directory: batch-runner
         env:

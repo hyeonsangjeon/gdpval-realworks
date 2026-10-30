@@ -376,6 +376,8 @@ def test_workflow_has_exact_linear_chain_and_only_model_free_dispatch():
     assert jobs["contracts"]["runs-on"] == jobs["verify"]["runs-on"] == "ubuntu-24.04"
     assert jobs["contracts"]["timeout-minutes"] == "15"
     assert jobs["verify"]["timeout-minutes"] == "10"
+    installation = next(step for step in jobs["contracts"]["steps"] if "pip install" in step.get("run", ""))
+    assert "-r batch-runner/requirements-pilot-ledger-handoff.txt" in installation["run"]
 
 
 def test_reusable_job_requires_exact_failure_and_immutable_predecessor():

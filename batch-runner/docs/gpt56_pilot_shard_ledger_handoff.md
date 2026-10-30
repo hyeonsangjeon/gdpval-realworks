@@ -119,3 +119,10 @@ wallet bundles, and `pilot-ledger-model-free-proof`. Retention is seven days.
 These are synthetic accounting/runner evidence, not benchmark answers or
 grading results. The final proof must pass all three assertions; a green
 artifact-upload step alone is insufficient.
+
+The contracts job uses `requirements-pilot-ledger-handoff.txt`, including the
+`datasets` import needed by the existing native-money fixtures. This is a
+separate pinned dependency closure: `datasets` requires an older compatible
+`fsspec` than the GHCP-only file. Neither that existing requirements file nor
+the sealed production requirements are changed. Shard workers and the final
+audit retain the smaller import-only GHCP dependency closure.

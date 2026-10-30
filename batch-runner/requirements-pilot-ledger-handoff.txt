@@ -1,0 +1,58 @@
+# Import-only offline ledger + existing native-money fixture closure.
+# No provider SDK, model download, renderer or native CLI is installed.
+# Kept separate: datasets 5.0.1 needs fsspec <= 2026.6.0; the GHCP-only
+# requirements pin a newer fsspec and must not be changed for this workflow.
+pytest==9.2.0
+PyYAML==6.0.3
+jsonschema==4.26.0
+pyarrow==25.0.1
+numpy==2.2.6
+attrs==26.1.0
+exceptiongroup==1.3.1
+iniconfig==2.3.1
+jsonschema-specifications==2025.9.1
+packaging==26.2
+pluggy==1.7.0
+Pygments==2.21.0
+referencing==0.37.0
+rpds-py==0.30.0
+tomli==2.5.0
+typing_extensions==4.16.0
+pandas==2.3.3
+huggingface_hub==1.24.0
+anyio==4.15.1
+certifi==2026.10.23
+click==8.5.0
+filelock==4.1.0
+fsspec==2026.6.0
+h11==0.16.0
+hf-xet==1.7.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.20
+python-dateutil==3.0.0
+pytz==2026.5
+six==1.17.0
+tqdm==4.70.1
+tzdata==2026.5
+datasets==5.0.1
+dill==0.4.1
+multiprocess==0.70.19
+xxhash==4.0.2
+requests==2.34.2
+aiohttp==3.14.5
+aiohappyeyeballs==2.7.1
+aiosignal==1.4.0
+async-timeout==5.0.1
+frozenlist==1.8.0
+multidict==7.1.0
+propcache==0.5.4
+yarl==1.25.1
+charset-normalizer==3.5.2
+urllib3==2.8.0
+# Existing Step2/authorization modules are imported by the offline USD tests.
+psutil==7.2.2
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.11
+ijson==3.6.0
