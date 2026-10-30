@@ -83,8 +83,14 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     counters_path = root / pilot.SOURCE_PROFILE_CAPTURE_COUNTERS
     counters_bytes = counters_path.read_bytes()
     counters_profile = pilot.load_plan(counters_path)
+    list_prices_path = root / pilot.SOURCE_PROFILE_LIST_PRICES
+    list_prices_bytes = list_prices_path.read_bytes()
+    list_prices_profile = pilot.load_plan(list_prices_path)
     reference_path = root / binding.CONNECTION_REFERENCE_PATH
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261030_list_prices.yaml")
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261030_long_context.yaml")
+    assert hashlib.sha256(list_prices_bytes).hexdigest() == pilot.SOURCE_PROFILE_LIST_PRICES_SHA256 == (
+        "8975d4861d874358a7370104ff9832cef4f0d76878e9e9ebe9913df200088405"
+    )
     assert hashlib.sha256(counters_bytes).hexdigest() == pilot.SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256 == (
         "37a0be47d3cb82733e86e74a12fc4f1245f71b2c7699c03cebe5a4d277698535"
     )
@@ -116,12 +122,16 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
             if digest != text_tools_profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py",
     }
-    assert {name for name, digest in profile["source_pins"].items()
+    assert {name for name, digest in list_prices_profile["source_pins"].items()
             if digest != counters_profile["source_pins"][name]} == {
         "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py",
     }
+    assert {name for name, digest in profile["source_pins"].items()
+            if digest != list_prices_profile["source_pins"][name]} == {
+        "batch-runner/gpt56_pilot_wire_receipt.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
-        k: v for k, v in counters_profile.items() if k != "source_pins"
+        k: v for k, v in list_prices_profile.items() if k != "source_pins"
     }
     assert {k: v for k, v in profile.items() if k != "source_pins"} == {
         k: v for k, v in text_tools_profile.items() if k != "source_pins"
@@ -257,7 +267,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         "batch-runner/gpt56_pilot_usd_budget.py": "ca6bca6ad483aeb80ffb427a2de71301fb18ee8b75c825b9586ff31bd5d9bb59",
         "batch-runner/core/cost_metering.py": "f2d63e7812bd8557232bc0a3bdc0deb76a3565a4d1398b1fb191008fa9aff888",
         binding.CONNECTION_REFERENCE_PATH: binding.CONNECTION_REFERENCE_SHA256,
-        "batch-runner/gpt56_native_response_capture.py": "9dcc3c578ee459e722044e1afdb78a4aa0176a0c63572405a5e0cbb08ac9bfac",
+        "batch-runner/gpt56_native_response_capture.py": "40e24a58637d6ee2176129c3c10870e76a9f4a527ae4fb0d22e736ff58651637",
+        pilot.CODEX_LONG_CONTEXT_CATALOG: "41e884c807616100cc92c8b734337725d37ecd096586c598f3c389032e8db49e",
         "batch-runner/scripts/diagnose_codex_foundry_connection.py": "ad5717222091f38d38e734ac92cf7a68c20508cd2df64b3584939d28026eb2de",
         ".github/workflows/codex-foundry-connection-diagnostic.yml": "2b8f15dfe68ed0259ee2058f4c36fb6a5a051dec86bbb8b26a713602a5e0aa6b",
         "batch-runner/core/runner_environment.py": "c63dab5c607e565f82429c310d8aa5f032390ad1160b62512182ee8586d0511a",
@@ -324,9 +335,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_CAPTURE_COUNTERS
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256
-    assert report["source_change_reason"] == "owner_list_prices_and_non_stopping_unknown_usage"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_LIST_PRICES
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_LIST_PRICES_SHA256
+    assert report["source_change_reason"] == "owner_codex_long_context_catalog_and_unreported_context_window"
     assert report["response_capture_readiness"] == {
         "status": "next_call_capture_path_only", "live_evidence_observed": False,
         "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],

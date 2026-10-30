@@ -104,6 +104,14 @@ clamps the requested window to that catalog maximum. This is a client/catalog
 limitation, not evidence of the provider's maximum. Do not invent a larger
 catalog limit or describe these observations as a verified 1M benchmark.
 
+**Owner decision 2026-10-30 (benchmark card, item 3).** The pilot now hands
+Codex a held catalog, `batch-runner/codex_catalogs/codex-0.147.0-models-gpt56-sol-1m.json`.
+It is the bundled `models.json` byte-for-byte except Sol's window fields
+(1,050,000, the Long-context maximum, 100% usable), so the requested 1,000,000
+reaches the client. The wire observer adds it only above 272,000 and refuses
+changed bytes. This is still a client setting: what the provider serves is
+observed per response, and the records above stay as they were.
+
 ### Capture correction, without another paid retry
 
 The capture redactor treated token rate-limit headers as credentials and
