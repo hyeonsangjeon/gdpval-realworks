@@ -124,25 +124,29 @@ def test_interrupted_job_replays_settlement_without_a_second_debit(lineage, tmp_
         assert db.execute("SELECT COUNT(*),COUNT(DISTINCT id) FROM reservations").fetchone() == (10, 10)
 
 
-@pytest.mark.parametrize("origin,expected", [("inference", "1"), ("grading", "5")])
-def test_unknown_reply_keeps_reserve_after_transfer_and_never_retries(lineage, tmp_path, monkeypatch, origin, expected):
+@pytest.mark.parametrize("origin", ["inference", "grading"])
+def test_unknown_reply_keeps_reserve_after_transfer_and_is_never_resent(lineage, tmp_path, monkeypatch, origin):
+    # Owner decision 2026-10-30: unknown usage is booked at its whole reservation
+    # and the wallet continues. The same request ID is never sent a second time.
     original = handoff._fake_transport
+    lost = []
     def lost_reply(scenario, task_id, role, amount):
-        if scenario == "continuity" and role == origin:
+        if scenario == "continuity" and role == origin and task_id == handoff.TASKS[0]:
+            lost.append(task_id)
             raise RuntimeError("synthetic lost reply")
         return original(scenario, task_id, role, amount)
     monkeypatch.setattr(handoff, "_fake_transport", lost_reply)
     previous, first, digest = _step(tmp_path, lineage, 0)
-    stopped = first["scenarios"]["continuity"]["snapshot"]
-    assert stopped["combined_modeled_usd"] == expected
-    assert stopped["stop_reason"] == usd.UNKNOWN and stopped["unknown_requests"] == 1
-    def never_resume_unknown(scenario, *args):
-        assert scenario != "continuity"
-        return original(scenario, *args)
-    monkeypatch.setattr(handoff, "_fake_transport", never_resume_unknown)
+    booked = first["scenarios"]["continuity"]["snapshot"]
+    assert booked["combined_modeled_usd"] == "5"
+    assert booked["stop_reason"] is None and booked["unknown_requests"] == 1
+    assert first["history"][-1]["scenarios"]["continuity"]["next_worker_allowed"] is True
     _, second, _ = _step(tmp_path, lineage, 1, previous, digest)
-    assert second["scenarios"]["continuity"]["snapshot"] == stopped
-    assert second["history"][-1]["scenarios"]["continuity"]["worker_started"] is False
+    assert lost == [handoff.TASKS[0]]
+    carried = second["scenarios"]["continuity"]["snapshot"]
+    assert carried["combined_modeled_usd"] == "10"
+    assert carried["stop_reason"] is None and carried["unknown_requests"] == 1
+    assert second["history"][-1]["scenarios"]["continuity"]["worker_started"] is True
 
 
 @pytest.mark.parametrize("index", [1, 2, 3, 4])

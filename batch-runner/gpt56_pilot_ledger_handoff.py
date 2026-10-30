@@ -287,7 +287,12 @@ def _request(ledger, lineage, scenario, index, origin, counters):
             (request_id,),
         ).fetchone()
     if row is not None:
-        _require(row["state"] == "settled" and row["origin"] == origin and row["task"] == task)
+        _require(row["origin"] == origin and row["task"] == task)
+        if row["state"] == "unknown":
+            # Owner decision 2026-10-30: the whole reservation stays booked and
+            # the wallet continues, but the same request is never sent again.
+            return
+        _require(row["state"] == "settled")
         _same([str(Decimal(row["settled_io"])), row["settled_cache"]], [str(amount), "0"])
         _require(ledger.settle(request_id, amount, Decimal(0)) is None)
         counters["replayed_settlements"] += 1
@@ -300,8 +305,9 @@ def _request(ledger, lineage, scenario, index, origin, counters):
         io, cache = _fake_transport(scenario, task, origin, amount)
         reason = ledger.settle(ticket, io, cache)
     except Exception:
+        # Unknown usage keeps its reservation as consumed spend; not a stop.
         ledger.abandon(account)
-        raise usd.PilotUsdRefused(usd.UNKNOWN, origin) from None
+        return
     if reason is not None:
         raise usd.PilotUsdRefused(reason, origin)
 
@@ -330,7 +336,7 @@ def _run_scenario(ledger, lineage, scenario, shard_index):
     counters["worker_started"] = True
     try:
         # Revisit earlier tasks using stable request IDs. Settled calls are
-        # idempotent; an unknown reservation never reaches this loop again.
+        # idempotent; an unknown reservation stays booked and is never re-sent.
         for index in range(shard_index + 1):
             _request(ledger, lineage, scenario, index, "inference", counters)
             if scenario == "interruption" and shard_index == index == 1:

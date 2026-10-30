@@ -29,10 +29,10 @@ costs, actual usage, bills or three allowances for the real experiment.
 | `ceiling` | $35 + $14 for each of the first four tasks | $196 carried forward; the predecessor refuses the next $5 reservation with `usd_ceiling_exceeded`; the next ceiling worker never starts. |
 | `interruption` | Same $1 + $4 as continuity | Second worker exits 75 after a durable partial settlement ($6); the next job replays that settlement without another request/debit; final $25 and exactly 10 distinct settled requests. |
 
-Unknown usage is separately tested offline: keep the full reservation consumed,
-carry `usd_usage_unverified`, and do not enter another fake transport. The
-existing production price admission is not patched or bypassed; synthetic
-tests use the ledger directly and cannot make an unpriced real judge admissible.
+Unknown usage is separately tested offline (owner decision 2026-10-30): the full
+reservation stays consumed, the wallet continues to the next worker, and the same
+request ID is never sent to the fake transport again. The production price
+admission is not patched or bypassed; synthetic tests use the ledger directly.
 
 ## Linear Actions path
 
@@ -75,7 +75,8 @@ rerun attempt, out-of-order stage, changed bytes, links, extra members, partial
 bundle and invented snapshot are refused. There is no "missing state → fresh
 USD 200" fallback. Restored database/identity files are single-link 0600 files
 inside a new 0700 directory. The old ledger's identity/schema/price guards run
-again before work. Stopped/unknown wallets remain stopped.
+again before work. Stopped wallets remain stopped. Unknown reservations stay booked
+and carried; they do not stop the wallet.
 
 Each fake request has a stable ID derived from its capture, task and origin.
 The original SQLite reservation/settlement methods perform admission. A settled
@@ -93,13 +94,12 @@ contract before this can become a paid execution route.
 
 If a runner dies before its updated wallet is uploaded, the next job must stop;
 it must not adopt an earlier wallet and send the request again. An exported
-unknown reservation also prevents continuation. No automatic artifact deletion,
-budget refill, compensating credit or paid retry is implemented.
+unknown reservation stays booked and is never re-sent. No automatic artifact
+deletion, budget refill, compensating credit or paid retry is implemented.
 
-The paid pilot still needs the grader-seal A/B/C decision, a supported/proven 1M
-route or a conditions decision, verified Foundry grading prices, diagnostic
-reservation reconciliation, and its actual input/deployment/request/result
-bindings. Passing this model-free workflow clears none of those launch checks.
+The paid pilot still needs the grader successor seal, the 1M client change,
+diagnostic reservation reconciliation, and its actual input/deployment/request/
+result bindings. Passing this model-free workflow clears none of those launch checks.
 
 ## Local checks and artifacts
 
