@@ -7,6 +7,7 @@ grader, input validator, source check or readout is replaced with a stub.
 
 from copy import deepcopy
 from dataclasses import asdict
+import fcntl
 import importlib
 import json
 import os
@@ -436,6 +437,95 @@ def test_direction_window_rechecked_after_final_runtime_check(
     if not admitted:
         assert outcome["grade_file"] is None and outcome["usage"]["available"] is False
         assert not (Path(grade["directory"]) / "grader-owner.json").exists()
+
+
+@pytest.mark.parametrize("context_finished_at,admitted", [
+    pytest.param(1000.999, True, id="just-before-expiry"),
+    pytest.param(1001, False, id="exact-expiry"),
+    pytest.param(1002, False, id="expired-during-context-io"),
+])
+def test_direction_window_checked_after_final_context_io(
+        case, monkeypatch, record_property, context_finished_at, admitted):
+    item, capture, prepared = _prepare(case)
+    clock = {"now": 1000}
+    monkeypatch.setattr(execution, "time", SimpleNamespace(time=lambda: clock["now"]))
+    runtime_checks, delayed_context, entry_times, refusals = [], [], [], []
+    actual_runtime = subject.require_runtime
+    actual_context = execution.execution_context_sha256
+    actual_direction = execution.require_execution_direction
+
+    def runtime_check(handle):
+        actual_runtime(handle)  # Keep the actual Docker/image/runner validator.
+        runtime_checks.append(clock["now"])
+
+    def context_check():
+        value = actual_context()  # Preserve real identity bytes and their digest.
+        if len(runtime_checks) == 3 and not delayed_context:
+            # Delay only the context I/O inside the final, post-lock checker.
+            clock["now"] = context_finished_at
+            delayed_context.append(context_finished_at)
+        return value
+
+    def direction_check(binding, **kwargs):
+        try:
+            return actual_direction(binding, **kwargs)
+        except execution.GradingExecutionRefused as error:
+            refusals.append(str(error))
+            raise
+
+    def direction(item, binding, path):
+        data = _encoded({"direction_version": execution.DIRECTION_VERSION,
+            "binding": binding.as_dict(), "not_before": 990, "expires_at": 1001})
+        path.write_bytes(data)
+        return _identity(data)["sha256"]
+
+    def owned_process(_transport, command, **kwargs):
+        entry_times.append(clock["now"])
+        # Existing in-process F entrypoint with fake provider, never a real child.
+        return case.process(command, **kwargs)
+
+    monkeypatch.setattr(subject, "require_runtime", runtime_check)
+    monkeypatch.setattr(execution, "execution_context_sha256", context_check)
+    monkeypatch.setattr(execution, "require_execution_direction", direction_check)
+    monkeypatch.setattr(execution.owned.LocalTransport, "process", owned_process)
+    case.pipeline.directions = direction
+    grade = case.pipeline.grade(case.seed.plan, item, prepared)
+    outcome = serial.document(Path(grade["directory"]) / execution.RESULT, grade["identity"])
+    readout = case.pipeline.readout(case.seed.plan, [{"capture": capture, "prepared": prepared, "grade": grade}])
+    record_property("context_io_boundary", json.dumps({"expires_at": 1001,
+        "context_finished_at": context_finished_at, "entry_times": entry_times,
+        "refusals": refusals, "actual_model_calls": 0, "actual_owned_children": 0}))
+    assert runtime_checks == [1000, 1000, 1000] and delayed_context == [context_finished_at]
+    assert entry_times == ([context_finished_at] if admitted else [])
+    assert refusals == ([] if admitted else ["direction_admission_window_refused"])
+    assert len(case.grade_calls) == int(admitted)
+    assert outcome["entry_invoked"] is admitted
+    assert outcome["exit_code"] == (0 if admitted else None)
+    assert outcome["terminal_reason"] == ("completed" if admitted else "cleanup_unconfirmed")
+    assert outcome["cleanup_confirmed"] is admitted
+    assert grade["continuation_allowed"] is admitted
+    assert outcome["retry_allowed"] is False
+    assert readout["observations"][0]["score_pct"] == (50 if admitted else None)
+    assert readout["mean_difference_denominator"] == 0  # No matching Codex side.
+    claim = Path(outcome["claim_file"]["path"])
+    before = claim.read_bytes()
+    assert list(case.pipeline.attempt_store.iterdir()) == [claim]
+    # A new open description can lock only if the executor released its lock.
+    lock = os.open(claim, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        os.close(lock)
+    if not admitted:
+        assert outcome["grade_file"] is None and outcome["usage"]["available"] is False
+        assert not (Path(grade["directory"]) / "grader-owner.json").exists()
+        # Restore a valid instant: expiry alone must not be what prevents retry.
+        clock["now"] = 1000
+        with pytest.raises(ValueError):
+            case.pipeline.grade(case.seed.plan, item, prepared)
+        assert entry_times == [] and case.grade_calls == []
+        assert claim.read_bytes() == before
+        assert list(case.pipeline.attempt_store.iterdir()) == [claim]
 
 
 @pytest.mark.parametrize("fault", ["timeout", "cancelled", "missing", "cleanup", "judge_error", "generation_timeout"])

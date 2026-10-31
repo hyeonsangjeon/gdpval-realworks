@@ -236,11 +236,12 @@ def require_execution_direction(binding: GradingExecutionBinding, *, direction_f
              "direction_schema_refused")
     _require(direction["direction_version"] == DIRECTION_VERSION and
              direction["binding"] == binding.as_dict(), "direction_binding_mismatch")
+    _require(binding.as_dict()["execution_context_sha256"] == execution_context_sha256(),
+             "actual_execution_context_mismatch")
+    # Check time last: filesystem-backed context I/O cannot extend approval.
     start, end = direction["not_before"], direction["expires_at"]
     _require(type(start) is int and type(end) is int and 0 <= start < end and
              start <= time.time() < end, "direction_admission_window_refused")
-    _require(binding.as_dict()["execution_context_sha256"] == execution_context_sha256(),
-             "actual_execution_context_mismatch")
 
 
 def _experiment(plan: dict, observation: ObservationIdentity, native_execution: dict | None = None) -> bytes:
