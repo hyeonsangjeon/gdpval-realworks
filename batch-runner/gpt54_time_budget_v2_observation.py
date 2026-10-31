@@ -483,12 +483,21 @@ def run_first_v2_observation(
         check_result_parent = held.enter_context(_held_parents(output.parent, (output.name, workspace.name, reservation.name)))
         publication = held.enter_context(_publication_parents(output.parent))
         dependencies = _V2Dependencies(workspace, publication)
+        direction_checks = 0
 
         def require_execution_direction(actual):
-            direction.require_execution_direction(actual)
+            nonlocal direction_checks
+            _require(direction_checks < 2, "direction_admission_repeated")
+            if direction_checks:
+                reread_consumed_handoff()
             check_direction_parent()
             check_result_parent()
-            absent(before_generation=True)
+            # The first call still forbids adoption of ANY workspace/claim.
+            # The final call only accepts this attempt's verified consumed
+            # handoff, with result/reservation still absent. Expiry is last.
+            absent(before_generation=direction_checks == 0)
+            direction_checks += 1
+            direction.require_execution_direction(actual)
 
         raw = registration.consume_observation_handoff(
             plan, **common, preparation_directory=paths["preparation"], expected_preparation_identity=expected,

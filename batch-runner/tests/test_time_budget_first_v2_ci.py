@@ -667,7 +667,7 @@ def test_time_budget_v2_registered_task_selection(case, actions_layout, monkeypa
     assert returned["returned"]["status"] == "success"
     assert len(effects.controls) == len(effects.runners) == 1
     assert effects.controls[0].identity == ObservationIdentity(**claim["observation"])
-    assert effects.events[:3] == ["direction", "admission", "backend_start"]
+    assert effects.events[:4] == ["direction", "admission", "final_direction", "backend_start"]
     assert effects.controls[0].first_start == 2600
     assert b"Synthetic handoff task 1:" in ci._bytes(effects.requests[0]["input"])
     assert b"Synthetic handoff task 0:" not in ci._bytes(effects.requests[0]["input"])
@@ -845,7 +845,7 @@ def test_time_budget_first_v2_ci_roundtrip(case, monkeypatch, outcome):
             returned = ci.execute(context)
         assert len(effects.controls) == 1 and len(effects.runners) == 1
         assert effects.controls[0].identity == ObservationIdentity(**claim["observation"])
-        assert effects.events[:3] == ["direction", "admission", "backend_start"]
+        assert effects.events[:4] == ["direction", "admission", "final_direction", "backend_start"]
         assert effects.controls[0].first_start == 2600
         assert returned["returned"]["status"] == ("error" if outcome in {"failed", "missing_usage"} else "success")
         assert effects.requests and all(item["model"] == "gpt-5.4" for item in effects.requests)

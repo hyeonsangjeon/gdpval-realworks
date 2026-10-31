@@ -79,6 +79,7 @@ def dual_roots(tmp_path_factory):
         "batch-runner/gpt54_time_budget_v2_ci.py",
         "batch-runner/gpt54_time_budget_codex_ci.py",
         "batch-runner/gpt54_time_budget_v2_observation.py",
+        "batch-runner/gpt54_time_budget_codex_observation.py",
         "batch-runner/gpt54_time_budget_result_readout.py",
         "batch-runner/gpt54_time_budget_grading_execution.py",
         "batch-runner/gpt54_time_budget_common_grading.py",
@@ -95,6 +96,7 @@ def dual_roots(tmp_path_factory):
         # These fixtures deliberately exercise the preserved historical
         # registration path with synthetic inputs, not the real successor.
         (root / prospective.SOURCE_FOLLOWUP_PATH).unlink(missing_ok=True)
+        (root / prospective.D3_SOURCE_FOLLOWUP_PATH).unlink(missing_ok=True)
         manifest = prospective.load_registration(root / prospective.REGISTRATION_PATH)
         expected = dict(frozen_profile["source_pins"])
         expected.update({role: hashlib.sha256((root / role).read_bytes()).hexdigest()
@@ -2704,6 +2706,148 @@ def _consumer_claim(arguments):
     return output.with_name(output.name + prospective.HANDOFF_CONSUMED_SUFFIX)
 
 
+def _d3_execution_window_probe(monkeypatch, case, entry, invoke, *, delay_at,
+                               finished_at=1001, clock_error=None, record_property):
+    """Keep real admission/ownership/cleanup; stop at the model-free run spy.
+
+    The two concrete callers use their existing wall clocks. Actual source,
+    direction, parent and durable-claim checks still execute; only elapsed time
+    and the generation entry (which must never run in this proof) are scripted.
+    """
+    import ghcp_vm_input_bundle as publication
+    import core.time_budget_observation_deadline as deadline
+
+    state = {"now": 1000, "bound": False, "callback": 0, "inside_callback": False,
+             "delayed": False, "clock_failed": False}
+    controls, entries, direction_checks = [], [], []
+    monotonic = _Clock()
+    original_init = deadline.TimeBudgetObservation.__init__
+    original_bind = prospective._bind_observation_runner
+    original_consume = prospective.consume_observation_handoff
+    original_write = publication._write_no_clobber
+    original_exists = os.path.lexists
+    original_check = entry._ExecutionDirection.require_execution_direction
+
+    class SyntheticRunEntry(Exception):
+        pass
+
+    def wall_time():
+        if clock_error is not None and state["bound"] and state["inside_callback"]:
+            state["clock_failed"] = True
+            raise clock_error("synthetic final approval clock failure")
+        return state["now"]
+
+    def delay():
+        state.update(now=finished_at, delayed=True)
+
+    def admit(control, directory, identity):
+        original_init(control, directory, identity, clock=monotonic)
+        controls.append(control)
+
+    def enter(**kwargs):
+        entries.append(state["now"])
+        raise SyntheticRunEntry("offline proof stops before generation")
+
+    def bind(*args, **kwargs):
+        runner, arguments = original_bind(*args, **kwargs)
+        monkeypatch.setattr(runner, "run", enter)
+        state["bound"] = True
+        if delay_at == "runner_preparation":
+            delay()
+        return runner, arguments
+
+    def consume(*args, **kwargs):
+        original_direction = kwargs["require_execution_direction"]
+
+        def direction(binding):
+            state["callback"] += 1
+            state["inside_callback"] = True
+            try:
+                return original_direction(binding)
+            finally:
+                state["inside_callback"] = False
+
+        return original_consume(*args, **{**kwargs, "require_execution_direction": direction})
+
+    def write(path, *args, **kwargs):
+        result = original_write(path, *args, **kwargs)
+        if Path(path) == case.consumed and delay_at == "claim_fsync":
+            delay()
+        return result
+
+    def exists(path):
+        result = original_exists(path)
+        if state["inside_callback"] and Path(path) == case.arguments["destination"]:
+            if ((delay_at == "initial_callback_io" and state["callback"] == 1)
+                    or (delay_at == "final_callback_io" and state["callback"] == 2)):
+                delay()  # A real path check returned, possibly after expiry.
+        return result
+
+    def check(checker, binding):
+        original_check(checker, binding)
+        direction_checks.append(state["now"])
+
+    monkeypatch.setattr(entry, "time", SimpleNamespace(time=wall_time))
+    monkeypatch.setattr(deadline.TimeBudgetObservation, "__init__", admit)
+    monkeypatch.setattr(prospective, "_bind_observation_runner", bind)
+    monkeypatch.setattr(prospective, "consume_observation_handoff", consume)
+    monkeypatch.setattr(publication, "_write_no_clobber", write)
+    monkeypatch.setattr(os.path, "lexists", exists)
+    monkeypatch.setattr(entry._ExecutionDirection, "require_execution_direction", check)
+    result = None
+    caught = None
+    try:
+        result = invoke()
+    except (ValueError, SyntheticRunEntry, RuntimeError, KeyboardInterrupt) as error:
+        caught = error
+    expected_entries = [finished_at] if clock_error is None and finished_at < 1001 else []
+    record_property("d3_window_proof", json.dumps({
+        "delay_at": delay_at, "finished_at": finished_at, "expires_at": 1001,
+        "run_entry_times": entries, "callback_count": state["callback"],
+        "clock_failed": state["clock_failed"], "actual_model_calls": 0,
+    }, sort_keys=True))
+    assert entries == expected_entries, "expired approval reached the downstream run boundary"
+    assert result is None and not case.arguments["destination"].exists()
+    if clock_error is not None:
+        assert state["clock_failed"] and isinstance(caught, clock_error)
+    else:
+        assert state["delayed"], "the selected I/O boundary must actually be exercised"
+        if expected_entries:
+            assert isinstance(caught, SyntheticRunEntry)
+            assert direction_checks[-1] == finished_at
+        else:
+            expected_reason = ("observation_handoff_consumption_refused" if delay_at == "initial_callback_io"
+                               else "direction_not_current")
+            assert isinstance(caught, ValueError) and str(caught) == expected_reason
+            if delay_at == "initial_callback_io":
+                assert str(caught.__context__) == "direction_not_current"
+    if delay_at == "initial_callback_io" and not expected_entries:
+        assert controls == [] and not case.consumed.exists()
+        return
+    assert len(controls) == 1 and case.consumed.is_file()
+    control = controls[0]
+    assert control._finished and control.terminal_reason == "failed" and control.cleanup_complete
+    assert control.first_start is None and control.as_record()["generation_elapsed_seconds"] is None
+    assert control.cleanup_deadline - control.terminal_at == 20
+    assert deadline.TimeBudgetObservation._process_owner is None
+    assert not (control.directory / "host-lease.json").exists()
+    admitted = control.directory / (control.identity.key + ".admitted.json")
+    assert json.loads(admitted.read_bytes()) == case.marker["observation"]
+    claim = case.consumed.read_bytes()
+    receipts = {path.name: path.read_bytes() for path in control.directory.iterdir()}
+    before = list(entries)
+    state["now"] = 1000  # Even a renewed window cannot reuse the consumed claim.
+    with pytest.raises(ValueError, match="already_consumed"):
+        invoke()
+    assert entries == before and len(controls) == 1 and case.consumed.read_bytes() == claim
+    assert {path.name: path.read_bytes() for path in control.directory.iterdir()} == receipts
+    with pytest.raises(deadline.ObservationDeadlineRefused):
+        original_init(object.__new__(deadline.TimeBudgetObservation), control.directory,
+                      control.identity, clock=monotonic)
+    assert deadline.TimeBudgetObservation._process_owner is None
+    assert {path.name: path.read_bytes() for path in control.directory.iterdir()} == receipts
+
+
 def _consumer_no_effects(monkeypatch, arguments):
     from core.time_budget_observation_deadline import TimeBudgetObservation
 
@@ -2776,8 +2920,6 @@ def test_time_budget_handoff_consumer_real_factory_binding(
         assert control.first_start is None
 
     def direction(binding):
-        assert not _consumer_claim(arguments).exists()
-        assert list(arguments["observation_directory"].iterdir()) == []
         assert binding == prospective.ObservationExecutionBinding(
             arguments["expected_preparation_identity"]["sha256"], arguments["expected_preparation_identity"]["size"],
             historical._canonical_json(marker["observation"]), seed.frozen_sha, seed.frozen_tree,
@@ -2786,6 +2928,13 @@ def test_time_budget_handoff_consumer_real_factory_binding(
         )
         with pytest.raises(FrozenInstanceError):
             binding.preparation_sha256 = "0" * 64
+        if controls:
+            assert len(controls) == 1 and _consumer_claim(arguments).is_file()
+            assert controls[0].first_start is None and controls[0].terminal_reason is None
+            events.append("final_direction")
+            return
+        assert not _consumer_claim(arguments).exists()
+        assert list(arguments["observation_directory"].iterdir()) == []
         events.append("direction")
         clock.advance(2000)
 

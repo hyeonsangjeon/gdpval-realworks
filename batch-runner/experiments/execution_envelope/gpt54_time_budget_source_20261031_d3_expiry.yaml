@@ -1,0 +1,25 @@
+# D3-only source successor, authorized by the leader on 2026-10-31 18:10.
+# Original registration and 20261030 schedule/timeout successor are untouched.
+# No change to model/effort/input/grading/ABBA schedule or the 1200s/20s budgets.
+# Codex's unpinned concrete callback has the same final-I/O ordering repair;
+# its exact bytes still require the independently reviewed runtime Git anchor.
+format: gpt54-time-budget-d3-source-successor-v1
+study_id: gpt54_sandboxv2_codex_time_budget_v1
+purpose: approval_expiry_only_no_study_or_launch_change
+predecessor:
+  path: batch-runner/experiments/execution_envelope/gpt54_time_budget_source_20261030_schedule.yaml
+  sha256: 1e316eecccad614eba24034849a3bebf7bff549a59d7f6e127ac597192334dae
+  source_pins_sha256: 8b1585243d726b52f130dbb38c250c7920ce79ad8c3a3cdb5617958414465a65
+  helper_pins_sha256: a3f799cd5dd6fcdd647bb4f5b4449839de1cb4d13eecfaaf74e90784ee2b7ba7
+reviewed_base_commit: e52bc24ca4120c6384b7a4d9d46ddad07fdabfec
+changed_files:
+  - path: batch-runner/gpt54_time_budget_comparison.py
+    pin_group: source_pins
+    previous_sha256: 657b75ba02e2301e6105f21d9f158dbf18bff457f0374a3b0943a5ecdabbbd0f
+    sha256: a17aa1db39b5ff65ab536531fc34d16fb5119cf3e5ccea684ebb0f4010a30934
+    reason: recheck_approval_expiry_after_all_runner_preparation
+  - path: batch-runner/gpt54_time_budget_v2_observation.py
+    pin_group: helper_pins
+    previous_sha256: c9b5d0461ce2c3706dd7cccc7c3d8862aed529a0777131ffaadee8dd568c2649
+    sha256: 740f974c03ddaa19561a61701196a3d4f7a44a42931f9b5b8769ff94ee1a14e7
+    reason: check_approval_expiry_after_initial_and_final_callback_io

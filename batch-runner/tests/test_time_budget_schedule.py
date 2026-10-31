@@ -263,10 +263,11 @@ def reviewed_sources(tmp_path_factory):
     git("clone", "--shared", "--", str(ROOT), str(owner))
     git("-C", str(owner), "worktree", "add", "--detach", str(runtime), "HEAD")
     git("-C", str(owner), "worktree", "add", "--detach", str(frozen), registration.ACCEPTED_BASE_SHA)
-    for name in registration.FOLLOWUP_HELPERS | {registration.COMPILER, registration.SOURCE_FOLLOWUP_PATH}:
+    for name in registration.FOLLOWUP_HELPERS | {
+            registration.COMPILER, registration.SOURCE_FOLLOWUP_PATH, registration.D3_SOURCE_FOLLOWUP_PATH}:
         shutil.copyfile(ROOT / name, runtime / name)
     git("-C", str(runtime), "add", "--", *sorted(registration.FOLLOWUP_HELPERS |
-        {registration.COMPILER, registration.SOURCE_FOLLOWUP_PATH}))
+        {registration.COMPILER, registration.SOURCE_FOLLOWUP_PATH, registration.D3_SOURCE_FOLLOWUP_PATH}))
     git("-C", str(runtime), "commit", "--allow-empty", "-m", "test: exact source-only schedule review fixture")
     return runtime, frozen, git("-C", str(runtime), "rev-parse", "HEAD")
 
@@ -282,9 +283,16 @@ def test_source_successor_compiles_without_changing_any_study_fact(plan, reviewe
     assert len(evidence["validated_source_pins"]) == 42
     assert evidence["frozen_grader"]["template_source_sha256"] == registration.FROZEN_TEMPLATE_SHA256
     followup = evidence["runtime"]["source_followup"]
-    assert followup["predecessor"]["sha256"] == registration.PREDECESSOR_REGISTRATION_SHA256
-    assert followup["sha256"] == hashlib.sha256((ROOT / registration.SOURCE_FOLLOWUP_PATH).read_bytes()).hexdigest()
-    assert {row["path"] for row in followup["changed_files"]} == registration.FOLLOWUP_CHANGED_SOURCES
+    assert followup["path"] == registration.D3_SOURCE_FOLLOWUP_PATH
+    assert followup["predecessor"]["sha256"] == registration.PREDECESSOR_SCHEDULE_SHA256
+    assert followup["sha256"] == hashlib.sha256((ROOT / registration.D3_SOURCE_FOLLOWUP_PATH).read_bytes()).hexdigest()
+    assert {row["path"] for row in followup["changed_files"]} == set(registration.D3_PIN_CHANGES)
+    history, = followup["source_history"]
+    assert history["path"] == registration.SOURCE_FOLLOWUP_PATH
+    assert history["predecessor"]["sha256"] == registration.PREDECESSOR_REGISTRATION_SHA256
+    assert history["sha256"] == hashlib.sha256((ROOT / registration.SOURCE_FOLLOWUP_PATH).read_bytes()).hexdigest()
+    assert {row["path"] for row in history["changed_files"]} == registration.FOLLOWUP_CHANGED_SOURCES
+    assert len(history["helper_pins"]) == len(followup["helper_files"]) == 8
     assert evidence["validated_source_pins"]["batch-runner/core/codex_runner.py"] == (
         "b5f29c5aef7fc594ed3f042085a078e9e13c3f3754f5840c1df19bae75235c34")
     intent = value["registered_intent"]
@@ -297,7 +305,7 @@ def test_source_successor_compiles_without_changing_any_study_fact(plan, reviewe
 def test_successor_cannot_waive_source_or_condition_guards(plan, tmp_path, case):
     root = tmp_path / "source"
     names = set(plan["source_pins"]) | registration.FOLLOWUP_HELPERS | {
-        registration.REGISTRATION_PATH, registration.SOURCE_FOLLOWUP_PATH}
+        registration.REGISTRATION_PATH, registration.SOURCE_FOLLOWUP_PATH, registration.D3_SOURCE_FOLLOWUP_PATH}
     for name in names:
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, root / name)
@@ -336,5 +344,93 @@ def test_successor_bytes_still_require_the_independent_git_anchor(plan, reviewed
         path.write_bytes(raw + b"\n# synthetic unreviewed successor change\n")
         with pytest.raises(registration.TimeBudgetRegistrationRefused, match="source_differs_from_reviewed_blob"):
             registration.compile_registration(plan, **args)
+    finally:
+        path.write_bytes(raw)
+
+
+def test_d3_successor_has_only_two_pin_deltas_and_keeps_both_predecessors(plan):
+    original = (ROOT / registration.REGISTRATION_PATH).read_bytes()
+    history = (ROOT / registration.SOURCE_FOLLOWUP_PATH).read_bytes()
+    assert hashlib.sha256(original).hexdigest() == registration.PREDECESSOR_REGISTRATION_SHA256
+    assert hashlib.sha256(history).hexdigest() == registration.PREDECESSOR_SCHEDULE_SHA256
+    record = registration.load_registration(ROOT / registration.SOURCE_FOLLOWUP_PATH)
+    previous = dict(plan["source_pins"])
+    for row in record["changed_files"]:
+        assert previous[row["path"]] == row["previous_sha256"]
+        previous[row["path"]] = row["sha256"]
+    pins, evidence = registration._runtime_source_followup(ROOT, plan)
+    helpers = {path: identity["sha256"] for path, identity in evidence["source_followup"]["helper_files"].items()}
+    assert len(pins) == len(previous) == 42 and len(helpers) == len(record["helper_pins"]) == 8
+    assert {path for path in pins if pins[path] != previous[path]} == {registration.COMPILER}
+    assert {path for path in helpers if helpers[path] != record["helper_pins"][path]} == {
+        "batch-runner/gpt54_time_budget_v2_observation.py"}
+    assert all(hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == digest
+               for path, digest in {**pins, **helpers}.items())
+    assert evidence["source_followup"]["predecessor"] == {
+        "path": registration.SOURCE_FOLLOWUP_PATH, "sha256": hashlib.sha256(history).hexdigest(),
+        "source_pins_sha256": seal(previous), "helper_pins_sha256": seal(record["helper_pins"])}
+
+
+@pytest.mark.parametrize("case", ["previous_hash", "missing_delta", "extra_delta", "new_hash", "wrong_group",
+    "wrong_reason", "wrong_predecessor", "wrong_pin_history", "wrong_helper_history", "wrong_base",
+    "extra_field", "changed_policy", "unlisted_source", "unlisted_helper", "predecessor_bytes", "missing_record"])
+def test_d3_successor_cannot_expand_or_waive_the_sealed_scope(plan, tmp_path, case):
+    root = tmp_path / "d3-source"
+    names = set(plan["source_pins"]) | registration.FOLLOWUP_HELPERS | {
+        registration.REGISTRATION_PATH, registration.SOURCE_FOLLOWUP_PATH, registration.D3_SOURCE_FOLLOWUP_PATH}
+    for name in names:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / name, root / name)
+    registration._runtime_source_followup(root, plan)  # Every negative begins from a valid chain.
+    path = root / registration.D3_SOURCE_FOLLOWUP_PATH
+    record = registration.load_registration(path)
+    if case == "previous_hash":
+        record["changed_files"][0]["previous_sha256"] = "0" * 64
+    elif case == "missing_delta":
+        record["changed_files"].pop()
+    elif case == "extra_delta":
+        record["changed_files"].append(record["changed_files"][0])
+    elif case == "new_hash":
+        record["changed_files"][1]["sha256"] = "0" * 64
+    elif case == "wrong_group":
+        record["changed_files"][1]["pin_group"] = "source_pins"
+    elif case == "wrong_reason":
+        record["changed_files"][0]["reason"] = "renew_model_budget"
+    elif case == "wrong_predecessor":
+        record["predecessor"]["sha256"] = "0" * 64
+    elif case == "wrong_pin_history":
+        record["predecessor"]["source_pins_sha256"] = "0" * 64
+    elif case == "wrong_helper_history":
+        record["predecessor"]["helper_pins_sha256"] = "0" * 64
+    elif case == "wrong_base":
+        record["reviewed_base_commit"] = "0" * 40
+    elif case == "extra_field":
+        record["waive_hash_checks"] = True
+    elif case == "changed_policy":
+        plan["generation_budget"]["seconds_per_observation"] = 999
+    elif case == "unlisted_source":
+        (root / "batch-runner/core/config.py").write_bytes(b"synthetic unauthorized source drift")
+    elif case == "unlisted_helper":
+        (root / schedule.HELPER).write_bytes(b"synthetic unauthorized schedule drift")
+    elif case == "predecessor_bytes":
+        previous = root / registration.SOURCE_FOLLOWUP_PATH
+        previous.write_bytes(previous.read_bytes() + b"\n# predecessor must remain byte-identical\n")
+    if case == "missing_record":
+        path.unlink()
+    else:
+        path.write_text(yaml.safe_dump(record))
+    with pytest.raises(ValueError):
+        registration._runtime_source_followup(root, plan)
+
+
+def test_d3_successor_bytes_require_the_independent_git_anchor(plan, reviewed_sources):
+    runtime, frozen, sha = reviewed_sources
+    path = runtime / registration.D3_SOURCE_FOLLOWUP_PATH
+    raw = path.read_bytes()
+    try:
+        path.write_bytes(raw + b"\n# synthetic unreviewed D3 change\n")
+        with pytest.raises(registration.TimeBudgetRegistrationRefused, match="source_differs_from_reviewed_blob"):
+            registration.compile_registration(plan, runtime_root=runtime, expected_reviewed_source_sha=sha,
+                frozen_grader_root=frozen, expected_grader_source_sha=registration.ACCEPTED_BASE_SHA)
     finally:
         path.write_bytes(raw)

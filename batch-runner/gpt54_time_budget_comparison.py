@@ -65,6 +65,8 @@ CHANGED_RUNTIME_SOURCES = RUNTIME_ADDITIONS | {
 }
 REGISTRATION_PATH = ENVELOPE + "gpt54_sandboxv2_codex_time_budget_v1.yaml"
 SOURCE_FOLLOWUP_PATH = ENVELOPE + "gpt54_time_budget_source_20261030_schedule.yaml"
+D3_SOURCE_FOLLOWUP_PATH = ENVELOPE + "gpt54_time_budget_source_20261031_d3_expiry.yaml"
+PREDECESSOR_SCHEDULE_SHA256 = "1e316eecccad614eba24034849a3bebf7bff549a59d7f6e127ac597192334dae"
 PREDECESSOR_REGISTRATION_SHA256 = "e1d16d350aeb21af34104cede0d3acc0f6dc8db134338708e70168fbd9642699"
 FOLLOWUP_CHANGED_SOURCES = {
     COMPILER, ".github/workflows/batch-run.yml", "batch-runner/step8_grade.py",
@@ -75,6 +77,11 @@ FOLLOWUP_HELPERS = {
     "batch-runner/gpt54_time_budget_codex_ci.py", "batch-runner/gpt54_time_budget_v2_observation.py",
     ".github/workflows/gpt54-time-budget-first-v2.yml", ".github/workflows/gpt54-time-budget-first-codex.yml",
     "batch-runner/core/runner_environment.py", "batch-runner/scripts/prepare_codex_sandbox_host.py",
+}
+D3_PIN_CHANGES = {
+    COMPILER: ("source_pins", "recheck_approval_expiry_after_all_runner_preparation"),
+    "batch-runner/gpt54_time_budget_v2_observation.py":
+        ("helper_pins", "check_approval_expiry_after_initial_and_final_callback_io"),
 }
 RUN_ORDER = (
     ("sandbox_v2", "v2", 1),
@@ -432,6 +439,11 @@ def _runtime_source_followup(root: Path, plan: dict) -> tuple[dict, dict]:
     _expect("successor_predecessor_bytes", hashlib.sha256(raw).hexdigest(), PREDECESSOR_REGISTRATION_SHA256)
     _expect("successor_preserves_registration", plan, load_registration(root / REGISTRATION_PATH))
     record = load_registration(root / SOURCE_FOLLOWUP_PATH)
+    has_d3 = os.path.lexists(root / D3_SOURCE_FOLLOWUP_PATH)
+    if has_d3:
+        # A successor never silently rewrites its predecessor's expectations.
+        _expect("d3_predecessor_bytes", hashlib.sha256(_regular_bytes(root / SOURCE_FOLLOWUP_PATH)).hexdigest(),
+                PREDECESSOR_SCHEDULE_SHA256)
     _expect("successor_fields", sorted(record), sorted({
         "format", "study_id", "purpose", "predecessor", "reviewed_base_commit", "changed_files", "helper_pins",
     }))
@@ -450,7 +462,9 @@ def _runtime_source_followup(root: Path, plan: dict) -> tuple[dict, dict]:
     pins = dict(plan["source_pins"])
     for row in rows:
         name = row["path"]
-        digest = hashlib.sha256(_regular_bytes(root / name)).hexdigest()
+        # The exact-byte predecessor above authenticates this one historical
+        # compiler digest. Its current bytes are checked against D3 below.
+        digest = row["sha256"] if has_d3 and name == COMPILER else hashlib.sha256(_regular_bytes(root / name)).hexdigest()
         _expect("successor_changed_file", row, {
             "path": name, "previous_sha256": pins[name], "sha256": digest,
         })
@@ -458,15 +472,48 @@ def _runtime_source_followup(root: Path, plan: dict) -> tuple[dict, dict]:
             raise TimeBudgetRegistrationRefused("successor_delta_must_change_bytes")
         pins[name] = digest
     _expect("successor_helper_inventory", sorted(record["helper_pins"]), sorted(FOLLOWUP_HELPERS))
+    helper_pins = dict(record["helper_pins"])
+    evidence = {"path": SOURCE_FOLLOWUP_PATH, **_identity(_regular_bytes(root / SOURCE_FOLLOWUP_PATH)),
+                "predecessor": record["predecessor"], "changed_files": rows}
+    if has_d3:
+        successor = load_registration(root / D3_SOURCE_FOLLOWUP_PATH)
+        _expect("d3_successor_fields", sorted(successor), sorted({
+            "format", "study_id", "purpose", "predecessor", "reviewed_base_commit", "changed_files",
+        }))
+        _expect("d3_successor_format", successor["format"], "gpt54-time-budget-d3-source-successor-v1")
+        _expect("d3_successor_study", successor["study_id"], STUDY_ID)
+        _expect("d3_successor_purpose", successor["purpose"], "approval_expiry_only_no_study_or_launch_change")
+        _expect("d3_successor_predecessor", successor["predecessor"], {
+            "path": SOURCE_FOLLOWUP_PATH, "sha256": PREDECESSOR_SCHEDULE_SHA256,
+            "source_pins_sha256": seal(pins), "helper_pins_sha256": seal(helper_pins),
+        })
+        _expect("d3_successor_base", successor["reviewed_base_commit"], "e52bc24ca4120c6384b7a4d9d46ddad07fdabfec")
+        changes = successor["changed_files"]
+        if type(changes) is not list or any(type(row) is not dict for row in changes):
+            raise TimeBudgetRegistrationRefused("d3_successor_changed_inventory")
+        _expect("d3_successor_changed_inventory", [row.get("path") for row in changes], sorted(D3_PIN_CHANGES))
+        for row in changes:
+            name = row["path"]
+            group, reason = D3_PIN_CHANGES[name]
+            selected = pins if group == "source_pins" else helper_pins
+            previous = selected[name]
+            digest = hashlib.sha256(_regular_bytes(root / name)).hexdigest()
+            _expect("d3_successor_changed_file", row, {
+                "path": name, "pin_group": group, "previous_sha256": previous, "sha256": digest,
+                "reason": reason,
+            })
+            if previous == digest:
+                raise TimeBudgetRegistrationRefused("d3_successor_delta_must_change_bytes")
+            selected[name] = digest
+        evidence = {"path": D3_SOURCE_FOLLOWUP_PATH, **_identity(_regular_bytes(root / D3_SOURCE_FOLLOWUP_PATH)),
+                    "predecessor": successor["predecessor"], "changed_files": changes,
+                    "source_history": [{**evidence, "helper_pins": record["helper_pins"]}]}
     helpers = {name: _identity(_read_bytes(root / name, sha256=digest))
-               for name, digest in record["helper_pins"].items()}
+               for name, digest in helper_pins.items()}
     # Exact pinned bytes for ALL 42 roles, not only the five named deltas.
     files = {name: _identity(_read_bytes(root / name, sha256=digest)) for name, digest in sorted(pins.items())}
     return pins, {"manifest_file": {"path": REGISTRATION_PATH, **_identity(raw)}, "source_files": files,
-                  "source_followup": {"path": SOURCE_FOLLOWUP_PATH,
-                                      **_identity(_regular_bytes(root / SOURCE_FOLLOWUP_PATH)),
-                                      "predecessor": record["predecessor"], "changed_files": rows,
-                                      "helper_files": helpers}}
+                  "source_followup": {**evidence, "helper_files": helpers}}
 
 
 @contextmanager
@@ -499,12 +546,16 @@ def _dual_root_sources(
         sorted(REQUIRED_SOURCES | RUNTIME_ADDITIONS),
     )
     has_followup = os.path.lexists(runtime_root / SOURCE_FOLLOWUP_PATH)
+    has_d3 = os.path.lexists(runtime_root / D3_SOURCE_FOLLOWUP_PATH)
+    if has_d3 and not has_followup:
+        raise TimeBudgetRegistrationRefused("d3_predecessor_required")
     with (
         _reviewed_source(
             runtime_root,
             expected_reviewed_source_sha,
             REQUIRED_SOURCES | RUNTIME_ADDITIONS | {REGISTRATION_PATH}
-            | ({SOURCE_FOLLOWUP_PATH} | FOLLOWUP_HELPERS if has_followup else set()),
+            | ({SOURCE_FOLLOWUP_PATH} | FOLLOWUP_HELPERS if has_followup else set())
+            | ({D3_SOURCE_FOLLOWUP_PATH} if has_d3 else set()),
         ) as (runtime, runtime_tree, _),
         _reviewed_source(
             frozen_grader_root,
@@ -1299,6 +1350,10 @@ def consume_observation_handoff(
     bytes or HEAD. Validation is read-only. The trusted direction checker is a
     callable dependency, not a serialized approval flag: it must check the full
     immutable binding against that separate direction and raise on refusal.
+    It is called twice: before any consumption/admission, then immediately
+    before runner.run after all preparation. Each invocation must finish its
+    I/O before checking expiry with the same existing admission clock. The
+    second check may validate this attempt's consumed claim, never adopt one.
     Returning anything other than None refuses. No production caller installs
     this checker here, and no CLI/workflow or existing launch gate is opened.
 
@@ -1445,6 +1500,11 @@ def consume_observation_handoff(
             v2_backend_factory=v2_backend_factory, v2_voice_for=v2_voice_for,
             codex_provider_for=codex_provider_for,
         )
+        # Source rereads, durable consumption and runner/provider preparation
+        # cannot renew an approval. Nothing fallible or I/O-bearing belongs
+        # between this final checker (whose clock read is last) and run().
+        if require_execution_direction(binding) is not None:
+            raise TimeBudgetConsumptionRefused("execution_direction_must_raise_or_return_none")
         result = runner.run(**arguments)
         if type(result) is not dict:
             raise TimeBudgetConsumptionRefused("observation_runner_result_required")

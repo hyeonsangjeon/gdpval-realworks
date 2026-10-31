@@ -525,5 +525,12 @@ def test_original_registration_and_all_successor_hash_expectations_stay_unchange
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == digest
     profile = yaml.safe_load((base / "gpt54_time_budget_source_20261030_schedule.yaml").read_bytes())
     assert len(profile["helper_pins"]) == 8
-    for path, digest in profile["helper_pins"].items():
+    # D3 is additive: the historical bytes above stay pinned; exactly its V2
+    # callback helper advances in the new independently source-bound record.
+    _, sources = registration._runtime_source_followup(registration.ROOT, registration.load_registration())
+    helpers = {path: identity["sha256"] for path, identity in sources["source_followup"]["helper_files"].items()}
+    assert set(helpers) == set(profile["helper_pins"])
+    assert {path for path in helpers if helpers[path] != profile["helper_pins"][path]} == {
+        "batch-runner/gpt54_time_budget_v2_observation.py"}
+    for path, digest in helpers.items():
         assert hashlib.sha256((registration.ROOT / path).read_bytes()).hexdigest() == digest
