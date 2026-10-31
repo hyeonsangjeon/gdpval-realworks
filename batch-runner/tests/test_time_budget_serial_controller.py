@@ -355,6 +355,139 @@ def test_bad_request_approval_is_rejected_before_gh(scenario, change):
     assert scenario.calls == []
 
 
+@pytest.mark.parametrize("delay_at", ["request_read", "run_list", "intent_fsync"])
+@pytest.mark.parametrize("io_finished_at,admitted", [
+    pytest.param(1000.999, True, id="just-before-expiry"),
+    pytest.param(1001, False, id="exact-expiry"),
+    pytest.param(1002, False, id="expired-during-io"),
+])
+def test_dispatch_window_rechecked_after_final_io(
+        scenario, monkeypatch, record_property, delay_at, io_finished_at, admitted):
+    scenario.now = 1000
+    controller = scenario.controller()
+    actual_request, actual_runs = controller.requests, controller.gh.runs
+    actual_write, actual_dispatch = controller.ledger.write, controller.gh.dispatch
+    issued, intents, entry_times = [], [], []
+
+    def request(item, previous):
+        value = json.loads(actual_request(item, previous).data)
+        value.update(not_before_unix=990, expires_unix=1001)
+        scenario.requests[item.sequence] = value
+        data = registration._canonical_json(value).encode()
+        # Explicit fixture issuer, never a production approval-generation path.
+        approved = serial.ApprovedRequest(data, _identity(data)["sha256"])
+        issued.append(approved)
+        if delay_at == "request_read":
+            scenario.now = io_finished_at
+        return approved
+
+    def runs(item):
+        found = actual_runs(item)  # Keep the actual gh argv/schema and fake transport.
+        if delay_at == "run_list":
+            scenario.now = io_finished_at
+        return found
+
+    def write(state):
+        actual_write(state)  # Preserve real write-ahead serialization/fsync.
+        if state["rows"][0]["state"] == "dispatch_intent":
+            intents.append(deepcopy(state["rows"][0]))
+            if delay_at == "intent_fsync":
+                scenario.now = io_finished_at
+
+    def dispatch(*args):
+        entry_times.append(scenario.now)
+        return actual_dispatch(*args)  # Scenario.execute is exclusively fake gh.
+
+    monkeypatch.setattr(controller, "requests", request)
+    monkeypatch.setattr(controller.gh, "runs", runs)
+    monkeypatch.setattr(controller.ledger, "write", write)
+    monkeypatch.setattr(controller.gh, "dispatch", dispatch)
+    result = controller.advance()
+    record_property("dispatch_window_boundary", json.dumps({"delay_at": delay_at,
+        "io_finished_at": io_finished_at, "expires_at": 1001, "entry_times": entry_times,
+        "actual_dispatches": 0, "actual_model_calls": 0}))
+    assert entry_times == ([io_finished_at] if admitted else [])
+    assert result == ("progress" if admitted else "stopped")
+    assert scenario.dispatched == ([scenario.order[0].observation_id] if admitted else [])
+    assert len(issued) == len(intents) == 1
+    expected_request = {"sha256": issued[0].sha256, "size": len(issued[0].data), "run_number": 1}
+    assert intents[0]["request"] == expected_request
+    state = controller.ledger.read()
+    assert state["rows"][0]["request"] == expected_request  # Never discard the consumed slot.
+    with controller.ledger.lock():  # New open description proves prior lock release.
+        pass
+    if not admitted:
+        assert state["stopped"]["reason"] == state["rows"][0]["issue"] == "request_window_invalid"
+        assert state["rows"][0]["state"] == "missing" and state["rows"][0]["score_pct"] is None
+        assert scenario.runs == {} and scenario.active is None
+        assert scenario.downloads == scenario.storage_reads == scenario.prepared == scenario.graded == []
+        readout = controller.readout()
+        assert readout["observations"][0]["score_pct"] is None
+        assert readout["mean_score_difference_pp"] is None and readout["complete_pairs"] == 0
+        before = controller.ledger.path.read_bytes()
+        # A current approval must not turn a stopped ledger into retry authority.
+        scenario.now = 1000
+        resumed = scenario.controller()
+        monkeypatch.setattr(resumed, "requests", request)
+        assert resumed.run() == "stopped"
+        assert len(issued) == 1 and scenario.dispatched == []
+        assert controller.ledger.path.read_bytes() == before
+
+
+@pytest.mark.parametrize("clock_error", [
+    pytest.param(RuntimeError, id="clock-error"),
+    pytest.param(KeyboardInterrupt, id="interrupted-clock"),
+])
+def test_dispatch_final_clock_error_retains_intent_without_retry(
+        scenario, monkeypatch, record_property, clock_error):
+    scenario.now = 1000
+    controller = scenario.controller()
+    actual_clock, actual_write = controller.clock, controller.ledger.write
+    phase = {"intent_saved": False, "clock_failed": False}
+
+    def write(state):
+        actual_write(state)
+        if state["rows"][0]["state"] == "dispatch_intent":
+            phase["intent_saved"] = True
+
+    def clock():
+        if phase["intent_saved"] and not phase["clock_failed"]:
+            phase["clock_failed"] = True
+            raise clock_error("synthetic final admission clock failure")
+        return actual_clock()  # Reuse the pre-existing injected test clock.
+
+    monkeypatch.setattr(controller.ledger, "write", write)
+    monkeypatch.setattr(controller, "clock", clock)
+    try:
+        result = controller.advance()
+    except KeyboardInterrupt:
+        result = "interrupted"
+    record_property("dispatch_clock_failure", json.dumps({"exception": clock_error.__name__,
+        **phase, "fake_dispatches": len(scenario.dispatched), "actual_dispatches": 0, "actual_model_calls": 0}))
+    assert scenario.dispatched == [] and phase == {"intent_saved": True, "clock_failed": True}
+    assert result == ("interrupted" if clock_error is KeyboardInterrupt else "waiting")
+    state = controller.ledger.read()
+    assert state["stopped"] is None and state["rows"][0]["state"] == "dispatch_intent"
+    assert state["rows"][0]["score_pct"] is None
+    before = controller.ledger.path.read_bytes()
+    with controller.ledger.lock():  # Exception/interrupt must close the original lock fd.
+        pass
+    resumed = scenario.controller()
+    assert resumed.advance() == "waiting"  # Discovery only, never re-dispatch.
+    assert controller.ledger.path.read_bytes() == before
+    scenario.now = state["rows"][0]["discovery_deadline"]
+    assert resumed.advance() == "stopped"
+    stopped = controller.ledger.read()
+    assert stopped["stopped"]["reason"] == "dispatch_confirmation_unknown"
+    assert stopped["rows"][0]["request"] == state["rows"][0]["request"]
+    assert stopped["rows"][0]["score_pct"] is None
+    before = controller.ledger.path.read_bytes()
+    scenario.now = 1000
+    assert scenario.controller().advance() == "stopped"
+    assert controller.ledger.path.read_bytes() == before
+    assert scenario.dispatched == scenario.downloads == scenario.storage_reads == scenario.prepared == scenario.graded == []
+
+
 @pytest.mark.parametrize("change", ["twenty_first", "out_of_order", "duplicate_binding", "checksum"])
 def test_ledger_corruption_is_not_execution_or_retry_authority(scenario, change):
     controller = scenario.controller()

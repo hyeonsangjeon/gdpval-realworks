@@ -320,6 +320,9 @@ class SerialController:
                 "run_number": request["ci"]["run_number"]}, discovery_deadline=now + DISCOVERY_SECONDS,
                 wait_deadline=now + WAIT_SECONDS)
             self.ledger.write(state)  # Write-ahead before a potentially paid side effect.
+            # Request/discovery I/O and intent fsync cannot extend approval.
+            require(request["not_before_unix"] <= self.clock() < request["expires_unix"],
+                    "request_window_invalid")
             try:
                 self.gh.dispatch(item, approved, self.source)
             except Exception:
