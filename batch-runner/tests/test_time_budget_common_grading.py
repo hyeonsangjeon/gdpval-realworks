@@ -370,6 +370,74 @@ def test_no_independent_direction_means_no_claim_or_model(case):
     assert case.grade_calls == [] and list(case.pipeline.attempt_store.iterdir()) == []
 
 
+@pytest.mark.parametrize("runtime_finished_at,admitted", [
+    pytest.param(1000.999, True, id="just-before-expiry"),
+    pytest.param(1002, False, id="expired-during-final-check"),
+    pytest.param(1001, False, id="exact-expiry"),
+])
+def test_direction_window_rechecked_after_final_runtime_check(
+        case, monkeypatch, record_property, runtime_finished_at, admitted):
+    item, capture, prepared = _prepare(case)
+    clock = {"now": 1000}
+    monkeypatch.setattr(execution, "time", SimpleNamespace(time=lambda: clock["now"]))
+    runtime_checks, entry_times, refusals = [], [], []
+    actual_runtime = subject.require_runtime
+    actual_direction = execution.require_execution_direction
+
+    def runtime_check(handle):
+        actual_runtime(handle)  # Keep the actual Docker/image/runner validator.
+        runtime_checks.append(clock["now"])
+        if len(runtime_checks) == 3:
+            # Only the last, post-claim runtime check consumes this fake time.
+            clock["now"] = runtime_finished_at
+
+    def direction_check(binding, **kwargs):
+        try:
+            return actual_direction(binding, **kwargs)
+        except execution.GradingExecutionRefused as error:
+            refusals.append(str(error))
+            raise
+
+    def direction(item, binding, path):
+        data = _encoded({"direction_version": execution.DIRECTION_VERSION,
+            "binding": binding.as_dict(), "not_before": 990, "expires_at": 1001})
+        path.write_bytes(data)
+        return _identity(data)["sha256"]
+
+    def owned_process(_transport, command, **kwargs):
+        entry_times.append(clock["now"])
+        # Existing in-process F entrypoint with fake provider, never a real child.
+        return case.process(command, **kwargs)
+
+    monkeypatch.setattr(subject, "require_runtime", runtime_check)
+    monkeypatch.setattr(execution, "require_execution_direction", direction_check)
+    monkeypatch.setattr(execution.owned.LocalTransport, "process", owned_process)
+    case.pipeline.directions = direction
+    grade = case.pipeline.grade(case.seed.plan, item, prepared)
+    outcome = serial.document(Path(grade["directory"]) / execution.RESULT, grade["identity"])
+    readout = case.pipeline.readout(case.seed.plan, [{"capture": capture, "prepared": prepared, "grade": grade}])
+    record_property("direction_boundary", json.dumps({"expires_at": 1001,
+        "runtime_finished_at": runtime_finished_at, "entry_times": entry_times,
+        "refusals": refusals, "actual_model_calls": 0, "actual_owned_children": 0}))
+    assert runtime_checks == [1000, 1000, 1000]
+    assert entry_times == ([runtime_finished_at] if admitted else [])
+    assert refusals == ([] if admitted else ["direction_admission_window_refused"])
+    assert len(case.grade_calls) == int(admitted)
+    assert outcome["entry_invoked"] is admitted
+    assert outcome["exit_code"] == (0 if admitted else None)
+    # No child means no owner/cleanup receipt; preserve the existing stop status.
+    assert outcome["terminal_reason"] == ("completed" if admitted else "cleanup_unconfirmed")
+    assert outcome["cleanup_confirmed"] is admitted
+    assert grade["continuation_allowed"] is admitted
+    assert len(list(case.pipeline.attempt_store.iterdir())) == 1
+    assert outcome["retry_allowed"] is False
+    assert readout["observations"][0]["score_pct"] == (50 if admitted else None)
+    assert readout["mean_difference_denominator"] == 0  # No matching Codex side.
+    if not admitted:
+        assert outcome["grade_file"] is None and outcome["usage"]["available"] is False
+        assert not (Path(grade["directory"]) / "grader-owner.json").exists()
+
+
 @pytest.mark.parametrize("fault", ["timeout", "cancelled", "missing", "cleanup", "judge_error", "generation_timeout"])
 def test_failed_or_interrupted_observation_is_null_never_imputed_zero(case, fault):
     if fault == "generation_timeout":

@@ -814,6 +814,9 @@ def _execute_observation_grading(
                 lock = os.open(claim, os.O_RDONLY | os.O_NOFOLLOW)
                 held.callback(os.close, lock)
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                # Runtime inspection and claim locking cannot extend approval.
+                # Re-read its exact bytes and strict expiry at the launch boundary.
+                require_execution_direction(binding, **direction)
                 outcome["entry_invoked"] = True
                 completed = owned.LocalTransport().process(command,
                     ownership=(destination / "grader-owner.json", owner_binding), cwd=checked["batch"],
