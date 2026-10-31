@@ -1,9 +1,8 @@
-"""Model-free synthetic capture -> frozen-F input -> paired grade readout.
+"""Read-only fixed-F paired readouts, with disjoint fixture and execution APIs.
 
-This deliberately has no live intake, dispatcher, grader callback or CLI. The
-caller supplies local fixture bytes and stub grade files. Existing preparation
-and grade validators run normally; no execution permission is issued. Published
-numbers are fixture wiring evidence, never model quality or billing evidence.
+No intake, dispatcher, grader callback or execution permission is issued here.
+The fixture API remains explicitly synthetic. The observation API requires
+retained, once-claimed Step8 execution receipts and refuses synthetic markers.
 """
 
 from __future__ import annotations
@@ -156,7 +155,7 @@ def prepare_fixture_captures(plan: dict, captures: list[FixtureCapture]) -> tupl
         raise PairedReadoutRefused("capture_preparation_refused") from None
 
 
-def _checked_preparation(prepared: PreparedFixture, item, plan: dict) -> dict:
+def _checked_preparation(prepared: PreparedFixture, item, plan: dict, *, synthetic=True) -> dict:
     marker = json.loads(_read_bytes(prepared.directory / preparation.READY,
                                    **grading._expected(prepared.marker_identity)), object_pairs_hook=_object)
     observation = ObservationIdentity(**marker["observation"])
@@ -173,7 +172,18 @@ def _checked_preparation(prepared: PreparedFixture, item, plan: dict) -> dict:
              for name, identity in marker["files"].items()}
     config = json.loads(files[preparation.CONFIG], object_pairs_hook=_object)
     result = json.loads(files[preparation.RESULT], object_pairs_hook=_object)
-    _require(result.get("fixture_evidence_kind") == EVIDENCE, "fixture_evidence_required")
+    if synthetic:
+        _require(result.get("fixture_evidence_kind") == EVIDENCE, "fixture_evidence_required")
+    else:
+        from gpt54_time_budget_common_grading import reject_synthetic
+        for value in (marker, config, result):
+            reject_synthetic(value)
+        preparation._validate_config(config, prepared.directory / "source")
+        _same(grading.step8.compute_grader_source_hash(prepared.directory / preparation.CONFIG, config,
+              batch_root=prepared.directory / "source/batch-runner"),
+              marker["grader"]["materialized_source_sha256"], "materialized_grader_changed")
+        _same(config["rubric"]["revision"], plan["shared"]["grading"]["rubric_revision"], "rubric_version_changed")
+        _same(config["prompt"]["version"], plan["shared"]["grading"]["prompt_version"], "prompt_version_changed")
     _same(_image(result), prepared.runner_image, "runner_image_mismatch")
     _same(result["time_budget_observation"]["identity"], marker["observation"], "capture_identity_mismatch")
     _same(_identity(files[preparation.RESULT]), marker["result_identity"], "capture_result_mismatch")
@@ -187,8 +197,8 @@ def _checked_preparation(prepared: PreparedFixture, item, plan: dict) -> dict:
             "rubric_item_ids": [row.rubric_item_id for row in task.rubric_items]}
 
 
-def _cell_result(item, checked: dict | None, stub: StubGrade | None) -> dict:
-    value = {"evidence_kind": EVIDENCE, "observation_id": item.observation_id, "sequence": item.sequence,
+def _cell_result(item, checked: dict | None, stub: StubGrade | None, *, evidence_kind=EVIDENCE) -> dict:
+    value = {"evidence_kind": evidence_kind, "observation_id": item.observation_id, "sequence": item.sequence,
              "abba_position": item.abba_position, "cell": item.cell,
              "capture_status": "missing", "terminal_reason": None, "grade_status": "missing",
              "missing_reasons": [], "score_pct": None, "reported_grade": None,
@@ -212,6 +222,9 @@ def _cell_result(item, checked: dict | None, stub: StubGrade | None) -> dict:
     data = _read_bytes(stub.path, **grading._expected(stub.identity, maximum=grading.MAX_GRADE_BYTES))
     _require(len(data) <= grading.MAX_GRADE_BYTES, "stub_grade_size_bound")
     validated, grade = grading._grade(stub.path, checked)  # Read/validate only, never execute.
+    if evidence_kind != EVIDENCE:
+        from gpt54_time_budget_common_grading import reject_synthetic
+        reject_synthetic(grade)
     _same(_identity(validated), _identity(data), "stub_grade_changed")
     value["grade_identity"] = _identity(data)
     value["grade_status"] = grade["run_status"]
@@ -237,6 +250,20 @@ def _cell_result(item, checked: dict | None, stub: StubGrade | None) -> dict:
         if not value["missing_reasons"]:
             value["score_pct"] = task["pct"]  # A genuine zero is retained, not imputed.
     return value
+
+
+def _pairs(observations, evidence_kind):
+    by_cell = {(value["cell"]["task_id"], value["cell"]["repeat"], value["cell"]["condition"]): value
+               for value in observations}
+    pairs = []
+    for task in TASK_IDS:
+        for repeat in (1, 2):
+            left, right = (by_cell[task, repeat, condition] for condition in ("sandbox_v2", "codex"))
+            complete = left["score_pct"] is not None and right["score_pct"] is not None
+            pairs.append({"evidence_kind": evidence_kind, "task_id": task, "repeat": repeat,
+                          "status": "complete" if complete else "missing", "sandbox_v2": left, "codex": right,
+                          "score_difference_pp": left["score_pct"] - right["score_pct"] if complete else None})
+    return pairs
 
 
 def aggregate_fixture_pairs(plan: dict, prepared: tuple[PreparedFixture, ...],
@@ -273,17 +300,7 @@ def aggregate_fixture_pairs(plan: dict, prepared: tuple[PreparedFixture, ...],
             grades_by_id[value.observation_id] = value
         observations = [_cell_result(item, checked_by_id.get(item.observation_id),
                                      grades_by_id.get(item.observation_id)) for item in order]
-        by_cell = {(value["cell"]["task_id"], value["cell"]["repeat"], value["cell"]["condition"]): value
-                   for value in observations}
-        pairs = []
-        for task in TASK_IDS:
-            for repeat in (1, 2):
-                left, right = (by_cell[task, repeat, condition] for condition in ("sandbox_v2", "codex"))
-                complete = left["score_pct"] is not None and right["score_pct"] is not None
-                pairs.append({"evidence_kind": EVIDENCE, "task_id": task, "repeat": repeat,
-                              "status": "complete" if complete else "missing",
-                              "sandbox_v2": left, "codex": right,
-                              "score_difference_pp": left["score_pct"] - right["score_pct"] if complete else None})
+        pairs = _pairs(observations, EVIDENCE)
         differences = [pair["score_difference_pp"] for pair in pairs if pair["status"] == "complete"]
         return {"format": FORMAT, "evidence_kind": EVIDENCE, "launch_allowed": False, "execution_enabled": False,
                 "registration_sha256": seal(plan), "schedule_sha256": order[0].binding(order)["schedule_sha256"],
@@ -302,3 +319,143 @@ def aggregate_fixture_pairs(plan: dict, prepared: tuple[PreparedFixture, ...],
         raise
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         raise PairedReadoutRefused("paired_readout_refused") from None
+
+
+@dataclass(frozen=True)
+class PreparedObservation:
+    binding: dict
+    directory: Path
+    marker_identity: dict
+    runner_image: dict
+
+
+@dataclass(frozen=True)
+class ExecutedGradeFile:
+    path: Path
+    identity: dict
+
+
+def _execution_grade(value, prepared, checked):
+    """Re-read the retained execution, claim, derived input and grade bytes."""
+    import gpt54_time_budget_common_grading as common
+    common.reject_synthetic(value)
+    _same(value["evidence_kind"], common.EVIDENCE, "execution_evidence_required")
+    _same(value["preparation_sha256"], prepared["marker_identity"]["sha256"], "grade_preparation_mismatch")
+    directory = Path(value["directory"])
+    outcome = grading._document(directory / grading.RESULT, value["identity"])[1]
+    common.reject_synthetic(outcome)
+    _same(outcome["execution_version"], "time-budget-first-f-grading-result-v1", "execution_schema_mismatch")
+    _same(outcome["retry_allowed"], False, "grading_retry_forbidden")
+    _same(value["continuation_allowed"], outcome["cleanup_confirmed"] is True and outcome["cancelled"] is False,
+          "grading_cleanup_mismatch")
+    _same(value["stop_reason"], "grading_cancelled" if outcome["cancelled"] else
+          None if outcome["cleanup_confirmed"] else "grading_cleanup_unconfirmed", "grading_stop_reason_mismatch")
+    binding = outcome["binding"]
+    capture = prepared["capture"]
+    _same(binding["observation"], checked["marker"]["observation"], "execution_observation_mismatch")
+    _same(binding["preparation_file"], prepared["marker_identity"], "execution_preparation_mismatch")
+    for key in ("inputs", "grader", "runtime_source", "frozen_grader_source", "result"):
+        _same(binding[key], checked["marker"][key], "execution_input_mismatch")
+    admission = binding["scheduled_admission"]
+    _same(admission["binding"], prepared["binding"], "execution_schedule_mismatch")
+    _same(admission["capture"], capture, "execution_capture_mismatch")
+    _same(admission["capture_sha256"], seal(capture), "execution_capture_mismatch")
+    runtime = admission["runtime"]
+    _same(runtime["image"], common.GRADING_IMAGE, "grading_image_mismatch")
+    _require(runtime["runner"]["github_hosted"] is True and runtime["runner"]["image_os"] == "ubuntu24"
+             and runtime["runner"]["os_version_id"] == "24.04", "grading_runner_mismatch")
+    _same(binding["external_grading_attempts"], 1, "grading_attempt_changed")
+    _same([binding["step8_seconds"], binding["child_seconds"]],
+          [grading.STEP8_SECONDS, grading.CHILD_SECONDS], "grading_budget_changed")
+    claim = outcome["claim_file"]
+    claimed = grading._document(Path(claim["path"]), {key: claim[key] for key in ("sha256", "size")})[1]
+    _same(claimed["binding"], binding, "grading_claim_mismatch")
+    _same(claimed["observation_key"], binding["registered_observation_key"], "grading_claim_mismatch")
+    _same([claimed["attempt"], claimed["state"]], [1, "consumed_before_child_never_reusable"], "grading_claim_mismatch")
+    # Current time is deliberately irrelevant to readout of an expired approval.
+    direction_path = Path(binding["paths"]["direction_file"])
+    direction = grading._document(direction_path, {"sha256": claimed["direction_sha256"],
+                                                  "size": direction_path.stat().st_size})[1]
+    _same(direction["binding"], binding, "grading_direction_mismatch")
+    _same(direction["direction_version"], grading.DIRECTION_VERSION, "grading_direction_mismatch")
+    source = Path(binding["paths"]["execution_input_directory"])
+    origin = binding["grading_input_origin"]
+    data = _read_bytes(source / preparation.RESULT, **origin["derived_result_identity"])
+    derived = json.loads(data, object_pairs_hook=_object)
+    expected = {**checked["result"], "source_repo_id": capture["storage"]["repository"],
+        "source_revision": capture["storage"]["revision"], "source_identity_document_sha256": seal(capture)}
+    expected["result_fingerprint"] = grading.inference_result_fingerprint(expected)
+    _same(derived, expected, "derived_grading_input_changed")
+    common.reject_synthetic(derived)
+    checked = {**checked, "result": derived}
+    grade = None
+    if outcome["grade_file"] is not None:
+        pointer = outcome["grade_file"]
+        _same(pointer["path"], "grade.json", "grade_path_mismatch")
+        grade = ExecutedGradeFile(directory / "grade.json", {key: pointer[key] for key in ("sha256", "size")})
+        _read_bytes(grade.path, **grade.identity)
+        _, payload = grading._grade(grade.path, checked)
+        common.reject_synthetic(payload)
+        _same(payload["renderer_fingerprint"], runtime["renderer"], "grading_renderer_mismatch")
+    for pointer in outcome["sidecar_files"]:
+        _read_bytes(_path(directory, pointer["path"]), **{key: pointer[key] for key in ("sha256", "size")})
+    return checked, grade, outcome, runtime
+
+
+def aggregate_observation_pairs(plan, prepared, executions):
+    """Non-synthetic 20 slots -> the same ten ABBA pairs; failure is null."""
+    import gpt54_time_budget_common_grading as common
+    try:
+        common.reject_synthetic([*prepared, *executions])
+        order = _schedule(plan)
+        _unique([row["binding"]["observation_id"] for row in prepared], "duplicate_observation")
+        _unique([row["observation_id"] for row in executions], "duplicate_grade")
+        indexed, checked_by_id, baseline = {}, {}, None
+        for row in prepared:
+            item, _ = common.checked_capture(plan, row["capture"])
+            _same(row["binding"], item.binding(order), "prepared_schedule_mismatch")
+            value = PreparedObservation(row["binding"], Path(row["directory"]), row["marker_identity"], row["runner_image"])
+            checked = _checked_preparation(value, item, plan, synthetic=False)
+            current = {"runner_image": value.runner_image, **{key: checked["marker"][key]
+                       for key in ("runtime_source", "frozen_grader_source", "config")},
+                       "grader_source_sha256": checked["marker"]["grader"]["materialized_source_sha256"]}
+            _same(current, baseline or current, "paired_environment_or_source_mismatch")
+            baseline = current
+            indexed[item.observation_id], checked_by_id[item.observation_id] = row, checked
+        executed = {}
+        grading_baseline = None
+        for row in executions:
+            oid = row["observation_id"]
+            _require(oid in {item.observation_id for item in order}, "observation_not_registered")
+            _require(oid in indexed, "grade_without_capture")
+            checked, grade, outcome, runtime = _execution_grade(row, indexed[oid], checked_by_id[oid])
+            current = {key: runtime[key] for key in ("image", "image_id", "renderer")}
+            _same(current, grading_baseline or current, "grading_environment_mixed")
+            grading_baseline = current
+            checked_by_id[oid], executed[oid] = checked, (grade, outcome)
+        observations = []
+        for item in order:
+            grade, outcome = executed.get(item.observation_id, (None, None))
+            value = _cell_result(item, checked_by_id.get(item.observation_id), grade, evidence_kind=common.EVIDENCE)
+            value["grading_terminal_reason"] = None if outcome is None else outcome["terminal_reason"]
+            if outcome is not None and (outcome["terminal_reason"] != "completed" or not outcome["cleanup_confirmed"]
+                    or not outcome["entry_invoked"] or outcome["exit_code"] != 0):
+                value["missing_reasons"].append("grading_execution_not_successful")
+                value["score_pct"] = None
+            observations.append(value)
+        pairs = _pairs(observations, common.EVIDENCE)
+        differences = [row["score_difference_pp"] for row in pairs if row["status"] == "complete"]
+        return {"format": "gpt54-time-budget-observation-paired-readout-v1", "evidence_kind": common.EVIDENCE,
+            "registration_sha256": seal(plan), "schedule_sha256": order[0].binding(order)["schedule_sha256"],
+            "launch_allowed": False, "execution_enabled": False, "expected_observations": 20,
+            "prepared_observations": len(prepared), "grading_executions": len(executions), "expected_pairs": 10,
+            "complete_pairs": len(differences), "missing_pairs": 10 - len(differences),
+            "score_difference_definition": "sandbox_v2_minus_codex_percentage_points",
+            "mean_difference_denominator": len(differences),
+            "mean_score_difference_pp": sum(differences) / len(differences) if differences else None,
+            "observations": observations, "pairs": pairs,
+            "measurement_boundary": "Recorded grade outcomes, not provider invoice or causal harness-only evidence."}
+    except PairedReadoutRefused:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise PairedReadoutRefused("observation_readout_refused") from None

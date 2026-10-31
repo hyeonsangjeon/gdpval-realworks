@@ -80,6 +80,11 @@ def dual_roots(tmp_path_factory):
         "batch-runner/gpt54_time_budget_codex_ci.py",
         "batch-runner/gpt54_time_budget_v2_observation.py",
         "batch-runner/gpt54_time_budget_result_readout.py",
+        "batch-runner/gpt54_time_budget_grading_execution.py",
+        "batch-runner/gpt54_time_budget_common_grading.py",
+        "batch-runner/gpt54_time_budget_serial_capture.py",
+        "batch-runner/gpt54_time_budget_serial_controller.py",
+        "batch-runner/gpt54_time_budget_paired_readout.py",
     }
     for name in ("runtime", "substitute"):
         root = roots[name]

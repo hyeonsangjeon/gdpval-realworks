@@ -1,10 +1,11 @@
 # Serial time-budget controller: model-free integration
 
-This change connects the registered twenty observation IDs to a durable serial
-dispatch/capture/F-input/stub-grade pipeline. It does **not** publish code,
-dispatch a workflow, authorize a paid run, read private Task4 results, or relax
-the existing live grader's cell-specific admission. The complete twenty-cell
-test is synthetic, not performance or billing evidence.
+The registered twenty observation IDs connect to durable serial dispatch,
+capture, frozen-F input admission, the actual F Step8 entrypoint, and ten paired
+readouts. The fixture API remains separate. This does **not** publish code,
+dispatch a workflow, authorize a paid run or read private Task4 results.
+Offline tests are unit fixtures, not performance, hosted execution or billing
+evidence; the existing V2-first/native-Task3 APIs keep their original scopes.
 
 ## Entry points and ports
 
@@ -94,22 +95,72 @@ paired readout, yielding ten `(task, repeat)` pairs. Missing/failed/partial
 results remain null, including a failed generation with an otherwise valid
 stub grade. Prepared inputs are not launch authority.
 
+## Scheduled common grading admission
+
+Use the programmatic adapter after independent execution approval:
+
+```python
+pipeline = CommonFrozenPipeline(
+    controller_root=reviewed_controller, controller_source_sha=controller_sha,
+    controller_source_tree=controller_tree, execution_root=grade_root,
+    attempt_store=private_once_store, directions=read_independent_direction,
+)
+```
+
+`gpt54_time_budget_common_grading.py` revalidates the serial completion, exact
+retained revision, claim, manifest, schedule ID, runner image and original
+payload/deliverable bytes. Its opaque preparation handle lives only inside the
+checked intake scope. The existing executor reconstructs every materialized F
+file, rubric snapshot, original input, config and helper-source identity. The
+unmodified F Step8 and F core run from that materialization, not current R.
+Controller helpers are bound to an independently reviewed controller commit and
+tree; none of the original 42 or successor 8 pin expectations are advanced.
+
+For both conditions a separate grading-only copy gains the authenticated
+retained repository/revision and capture-document digest. Its fingerprint is
+recomputed; original capture and prepared F bytes are never rewritten. These
+annotations do not replace task bodies, file inventories, rubric, prompt or
+judge settings. Serialized markers alone cannot recreate a closed intake.
+
+Before a model effect, the adapter requires GitHub-hosted Ubuntu 24.04 and
+Docker inspection of the current job container and image. Its immutable image
+is the same `ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04`
+used by the existing grade-run and native-Task3 workflows; the registration's
+grading contract refers to F, not a new image. Image ID/digest, renderer and
+runner/run metadata are bound into the independent direction and reread before
+claim/launch. Local/NAS execution, missing inspection or drift fails closed.
+These observations are operational evidence, not cryptographic attestation.
+
+Each direction binds the exact command, task, input hashes, F sources, image,
+execution context, paths and one local attempt-store inode. The supplier reads
+an independently issued `NN.direction.json` and `NN.direction.sha256`; it never
+calculates permission from the JSON. A durable, nonrenewable claim precedes the
+owned child. The existing 14,400s Step8 / 14,520s child grading envelope is kept;
+it is separate from unchanged 1,200s generation / 20s cleanup. There is no
+automatic retry, regrade or adoption after a lost grade acknowledgement.
+
+`aggregate_observation_pairs()` checks execution/direction/claim identities,
+the actual grade schema, task, rubric, judge identity, renderer and retained
+sidecars. It calls the same ten-pair arithmetic as the fixture reader, but
+rejects synthetic/stub markers in captures, preparations or grades. A failed
+generation, timeout, cancellation, missing grade, partial grade, judge error or
+reduced denominator stays missing/null. Cancellation or unconfirmed grader cleanup also stops
+the serial controller before its next dispatch; a known clean failed grade
+can be retained as null without a second attempt.
+
 ## What remains before a real twenty-observation run
 
-The original live executor still admits only V2-r1 Task1 or Codex-r1 Task3
-(`gpt54_time_budget_grading_execution.py`, `_checked_preparation`, lines 340/345).
-The existing paired readout explicitly requires fixture evidence. Neither guard
-was changed or relabeled. Consequently the supplied live pipeline refuses
-**before any gh command** (`common_live_grading_admission_not_implemented`).
-This is a remaining integration boundary, not a claim that the paid path is ready.
-
-A future reviewed launcher needs publication/paid approval, a live common-grading
-admission/executor and non-fixture readout, plus independently approved JIT
+A reviewed launcher still needs publication/paid approval, independently approved JIT
 requests and a credential-scoped private-store adapter (including separate Task4
 read authority). It also needs the actual Ubuntu 24.04 resource probe and CI.
-Those are not silently replaced by the synthetic twenty-cell test.
+In particular, Docker socket access, image inspection and owned-child
+cleanup in the pinned grading job container must be verified on Actions; the
+adapter refuses if unavailable. No claim is made that twenty serial operations
+fit one six-hour job or that a local ledger is a distributed once-only store.
+The caller must retain/handoff its evidence and once-store across job lifetimes.
+None of these hosted facts is replaced by a synthetic twenty-cell test.
 
-Only new controller/intake/test/document files are added. The original 42 pins,
+The original 42 pins,
 comparison registration, source successor, model/effort/input/grading contracts,
 generation/cleanup budgets, existing workflows and all hash expectations stay
 byte-identical. No hash update or source-guard exception is introduced.

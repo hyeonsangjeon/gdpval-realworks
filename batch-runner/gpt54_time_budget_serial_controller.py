@@ -271,6 +271,7 @@ class SerialController:
             from core.runner_environment import require_execution
             observed = require_execution()
             require(observed["github_hosted"] and observed["os_version_id"] == "24.04", "hosted_controller_required")
+            self.pipeline.admit()
 
     def _stop(self, state, row, reason):
         row.update(state="missing", issue=reason, score_pct=None)
@@ -376,6 +377,10 @@ class SerialController:
         row["state"] = "grade_intent"
         self.ledger.write(state)
         row["grade"] = self.pipeline.grade(self.plan, item, row["prepared"])
+        if row["grade"].get("continuation_allowed") is False:
+            reason = row["grade"].get("stop_reason")
+            require(reason in {"grading_cleanup_unconfirmed", "grading_cancelled"}, "grading_stop_reason_invalid")
+            return self._stop(state, row, reason)
         row["state"] = "complete"
         self.ledger.write(state)
         return "progress"

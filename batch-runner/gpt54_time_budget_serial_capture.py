@@ -1,9 +1,10 @@
-"""Pinned private capture -> common frozen-F inputs, with a fixture-only grader.
+"""Pinned private capture -> common frozen-F inputs.
 
 No HF client or grader is constructed here. The approved store owns hydration
 at the exact completion.output_commit. Its local bytes and original-input
 arguments are rechecked here; metadata alone never becomes a gradeable capture.
-The immutable live execution guard is still limited to its registered cells.
+Execution requires the separate scheduled admission in common_grading; this
+base queue and the explicit fixture subclass still cannot launch a judge.
 """
 
 from __future__ import annotations
@@ -87,7 +88,8 @@ class FrozenInputQueue:
         if self.synthetic:
             same(payload.get("fixture_evidence_kind"), paired.EVIDENCE, "fixture_capture_required")
         else:
-            require("fixture_evidence_kind" not in payload, "fixture_cannot_be_live")
+            from gpt54_time_budget_common_grading import reject_synthetic
+            reject_synthetic(payload)
         claim, manifest, recorded = (document(path) for path in (bundle.claim, bundle.manifest, bundle.schedule_capture))
         suffix = "v2" if item.condition == "sandbox_v2" else "codex"
         same(claim["format"], f"gpt54-time-budget-first-{suffix}-admission-v1", "claim_format_mismatch")
@@ -114,7 +116,11 @@ class FrozenInputQueue:
         for path, key, role in ((bundle.claim, "claim", "admission.json"), (bundle.manifest, "output", "output-manifest.json")):
             require(_read_bytes(path) == _encoded(document(path)), "noncanonical_storage_bytes")
             same(recorded[key], retained_object(item.prefix + "/" + role, _read_bytes(path)), "storage_object_changed")
+        if not self.synthetic:
+            for value in (envelope, claim, manifest, recorded):
+                reject_synthetic(value)
         return {"binding": item.binding(schedule.build_schedule(plan)), "arguments": encoded,
+                "completion": envelope,
                 "storage": {"repository": bundle.repository, "revision": bundle.revision},
                 "controls": [{"path": str(path), "identity": _identity(_read_bytes(path))}
                              for path in (bundle.claim, bundle.manifest, bundle.schedule_capture)],

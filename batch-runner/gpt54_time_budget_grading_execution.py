@@ -335,7 +335,15 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
     observation = a["observation"]
     _require(type(observation) is ObservationIdentity, "independent_observation_required")
     native = a.get("native_preparation")
-    if native is None:
+    scheduled = a.get("scheduled_preparation")
+    derived_input = native is not None or scheduled is not None
+    if scheduled is not None:
+        import gpt54_time_budget_common_grading as common
+        _require(native is None, "one_grading_intake_required")
+        common.check_arguments(scheduled, a, plan)
+        _require((a.get("step0_manifest") is not None) == (observation.condition == "codex"),
+                 "condition_specific_step0_required")
+    elif native is None:
         _require((observation.run_id, observation.condition, observation.repeat, observation.task_id) ==
                  (FIRST_RUN, "sandbox_v2", 1, FIRST_TASK), "first_registered_v2_observation_only")
         _require(a.get("step0_manifest") is None, "v2_step0_forbidden")
@@ -376,6 +384,8 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
                             "batch-runner/codex_budget_pilot.py", "batch-runner/step8_grade.py"})
         if native is not None:
             controller_roles |= native_intake.SOURCE_ROLES
+        if scheduled is not None:
+            controller_roles |= common.SOURCE_ROLES
         controller, controller_tree, controller_files = sources.enter_context(registration._reviewed_source(
             a["controller_root"], a["expected_controller_source_sha"], controller_roles))
         _same("controller tree", controller_tree, a["expected_controller_source_tree"])
@@ -387,7 +397,7 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
         def inputs() -> dict:
             snapshot, step0 = registration._observation_inputs(plan["shared"]["dataset"], catalog,
                 task_ids, parquet=a["dataset_parquet"], references=a["reference_root"], step0=a.get("step0_manifest"))
-            if native is not None:
+            if observation.condition == "codex":
                 original, _ = native_intake.native._input_contract(plan, a["frozen_grader_root"])
                 _same("original whole Step0", step0, original["identity"])
             value = preparation._inputs(plan, run, observation, input_source, snapshot, step0)
@@ -401,6 +411,8 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
         grading_result, origin = result, None
         if native is not None:
             grading_result, origin = _native_origin(native, a, plan, result, result_identity, fingerprint, sources)
+        if scheduled is not None:
+            grading_result, origin = common.grading_origin(scheduled, result, result_identity, fingerprint)
         # F Step8's real Track-2 contract, with no invented inference revision.
         repo_id, revision = step8.resolve_source_inference_identity(grading_result, "2.0")
         _same("canonical inference source", (grading_result.get("source_repo_id"), grading_result.get("source_revision")),
@@ -470,19 +482,24 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
                     (reservation.parent, (reservation.name,)),
                     (a["reference_root"], tuple(row["path"] for row in verified_inputs["reference_file_records"])),
                     (a["deliverables_root"], tuple(deliverables))]
-        if native is not None:
+        if observation.condition == "codex":
             step0_path = _absolute(a["step0_manifest"])
             external.append((step0_path.parent, (step0_path.name,)))
         checks = [sources.enter_context(_held_parents(root, roles)) for root, roles in external]
         execution_output, execution_files = output, files
         native_execution = None
-        if native is not None:
-            request, _, execution_output = _native_intake(native)
-            for source in map(Path, request["paths"].values()):
+        if derived_input:
+            if scheduled is not None:
+                execution_output, source_paths = common.execution_paths(scheduled)
+            else:
+                request, _, execution_output = _native_intake(native)
+                source_paths = map(Path, request["paths"].values())
+            for source in source_paths:
                 _require(not (execution_output.is_relative_to(source) or source.is_relative_to(execution_output)),
                          "native_grading_input_path_overlap")
-            native_config, _, _ = registration._observation_configuration(plan, run, observation.task_id, a["runtime_root"])
-            native_execution = native_config["execution"]
+            if observation.condition == "codex":
+                native_config, _, _ = registration._observation_configuration(plan, run, observation.task_id, a["runtime_root"])
+                native_execution = native_config["execution"]
             execution_files = {role: data for role, data in files.items() if role != preparation.READY}
             execution_files[preparation.RESULT] = _encoded(grading_result)
         experiment_role = "source/batch-runner/experiments/" + observation.run_id + ".yaml"
@@ -506,13 +523,14 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
                 check()
             if initial:
                 preparation._members(output, files, directories)
-            if installed and native is None:
+            if installed and not derived_input:
                 preparation._members(output, {**files, experiment_role: experiment}, directories)
 
         original_reread(initial=True)
-        if native is not None:
+        if derived_input:
             derived_reservation = execution_output.with_name(execution_output.name + NATIVE_INPUT_RESERVATION)
-            derived_reservation_data = _encoded({"format": "time-budget-native-task3-grading-input-v1", "origin": origin,
+            derived_reservation_data = _encoded({"format": ("time-budget-scheduled-grading-input-v1" if scheduled is not None
+                                                           else "time-budget-native-task3-grading-input-v1"), "origin": origin,
                 "files": {role: _identity(data) for role, data in sorted(execution_files.items())}})
             if materialize_native:
                 _publish_native_input(execution_output, execution_files, derived_reservation_data)
@@ -524,8 +542,11 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
 
         def reread(*, initial: bool = False, installed: bool = False) -> None:
             original_reread(initial=initial, installed=installed)
-            if native is not None:
-                _native_intake(native)  # A saved/closed handle cannot authorize a later attempt.
+            if derived_input:
+                if scheduled is not None:
+                    common.check_arguments(scheduled, a, plan)
+                else:
+                    _native_intake(native)  # A saved/closed handle cannot authorize a later attempt.
                 _read_bytes(derived_reservation, **_identity(derived_reservation_data))
                 for role, data in execution_files.items():
                     _read_bytes(_path(execution_output, role), **_identity(data))
@@ -549,6 +570,7 @@ def _checked_preparation(plan: dict, arguments: dict, *, materialize_native: boo
         yield {"marker": marker, "config": config, "files": files, "result": grading_result, "grade_path": grade,
             "experiment": experiment, "reread": reread, "batch": batch,
             "execution_directory": execution_output, "experiment_role": experiment_role, "origin": origin,
+            "scheduled_admission": common.admission_binding(scheduled) if scheduled is not None else None,
             "rubric_item_ids": [item.rubric_item_id for item in rubric_task.rubric_items],
             "controller": {"source_sha": a["expected_controller_source_sha"], "source_tree": controller_tree,
                            "helper": {"path": HELPER, **controller_files[HELPER]}}}
@@ -582,8 +604,11 @@ def _execution_binding(checked: dict, arguments: dict) -> GradingExecutionBindin
     }
     if checked["origin"] is not None:
         value["grading_input_origin"] = checked["origin"]
-        value["paths"].update(step0_manifest=str(a["step0_manifest"]),
-                              execution_input_directory=str(checked["execution_directory"]))
+        value["paths"]["execution_input_directory"] = str(checked["execution_directory"])
+        if a.get("step0_manifest") is not None:
+            value["paths"]["step0_manifest"] = str(a["step0_manifest"])
+    if checked.get("scheduled_admission") is not None:
+        value["scheduled_admission"] = checked["scheduled_admission"]
     return GradingExecutionBinding(_encoded(value).decode())
 
 
@@ -682,6 +707,7 @@ def _execute_observation_grading(
     direction_file: Path, expected_direction_sha256: str, expected_execution_context_sha256: str,
     attempt_store: Path, destination: Path,
     step0_manifest: Path | None = None, native_preparation: NativeGradingPreparation | None = None,
+    scheduled_preparation=None,
 ) -> dict:
     """Validate, durably consume and invoke the actual prepared F Step8 once.
 
@@ -700,11 +726,19 @@ def _execute_observation_grading(
                      "preparation_directory", "direction_file", "attempt_store", "destination"):
             arguments[name] = _absolute(arguments[name])
         extra_sources = []
-        if native_preparation is not None:
-            _require(step0_manifest is not None, "native_whole_step0_required")
-            arguments["step0_manifest"] = _absolute(step0_manifest)
-            _, _, execution_input = _native_intake(native_preparation)
-            extra_sources = [arguments["step0_manifest"], execution_input,
+        if native_preparation is not None or scheduled_preparation is not None:
+            if step0_manifest is not None:
+                arguments["step0_manifest"] = _absolute(step0_manifest)
+                extra_sources.append(arguments["step0_manifest"])
+            if scheduled_preparation is not None:
+                import gpt54_time_budget_common_grading as common
+                common.require_runtime(scheduled_preparation)
+                execution_input, controls = common.execution_paths(scheduled_preparation)
+                extra_sources.extend(controls)
+            else:
+                _require(step0_manifest is not None, "native_whole_step0_required")
+                _, _, execution_input = _native_intake(native_preparation)
+            extra_sources += [execution_input,
                              execution_input.with_name(execution_input.name + NATIVE_INPUT_RESERVATION)]
             _require(not any(os.environ.get(key) for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_TOKEN_PATH")),
                      "grading_storage_credentials_forbidden")
@@ -739,6 +773,8 @@ def _execute_observation_grading(
             direction = {"direction_file": arguments["direction_file"],
                          "expected_direction_sha256": expected_direction_sha256}
             require_execution_direction(binding, **direction)
+            if scheduled_preparation is not None:
+                common.require_runtime(scheduled_preparation)
             checked["reread"](initial=True)
             store_check()
             publication_check()
@@ -771,6 +807,8 @@ def _execute_observation_grading(
                 store_check()
                 _read_bytes(claim, **_identity(claim_data))
                 require_execution_direction(binding, **direction)
+                if scheduled_preparation is not None:
+                    common.require_runtime(scheduled_preparation)
                 owner_binding = {"plan_sha256": seal(binding_value), "cell_id": key,
                                  "stage": "time_budget_f_grading", "attempt": 1}
                 lock = os.open(claim, os.O_RDONLY | os.O_NOFOLLOW)
