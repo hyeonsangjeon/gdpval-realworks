@@ -285,9 +285,9 @@ def _workflow_startup_environment():
         Loader=yaml.BaseLoader,
     )["jobs"]["time-budget-contracts"]
     assert observation["runs-on"] == "ubuntu-24.04"
-    assert contracts["runs-on"] == "ubuntu-22.04"  # Offline contracts, not observations.
+    assert contracts["runs-on"] == "ubuntu-24.04"  # Offline contracts, not observations.
     assert observation["timeout-minutes"] == "55"  # Preparation/retention reserve, not more generation time.
-    assert contracts["timeout-minutes"] == "45"  # Offline CI test budget is unchanged.
+    assert contracts["timeout-minutes"] == "120"  # CI envelope only; no observation budget increase.
     expected = {
         "PYTHONDONTWRITEBYTECODE": "1", "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1",
         "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1", "OPENBLAS_NUM_THREADS": "1",

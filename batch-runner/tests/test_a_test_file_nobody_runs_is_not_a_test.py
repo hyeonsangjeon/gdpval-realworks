@@ -44,6 +44,10 @@ BUDGET_READOUT_GLOB = "tests/test_codex_budget_pilot*readout*.py"
 TIME_BUDGET_GLOB = "tests/test_time_budget_*.py"
 TIME_BUDGET_RUN = (
     "cd batch-runner\n"
+    f'python -m pytest -m "not integration" --tb=short -v -rs --durations=20 -o tmp_path_retention_policy=failed {TIME_BUDGET_GLOB}\n'
+)
+TIME_BUDGET_PRE_REPAIR_RUN = (
+    "cd batch-runner\n"
     f'python -m pytest -m "not integration" --tb=short -q -rs -o tmp_path_retention_policy=failed {TIME_BUDGET_GLOB}\n'
 )
 BUDGET_ORIGINAL_RUN = (
@@ -129,6 +133,23 @@ def _without_owned_host_ci_evidence(workflow):
     return previous
 
 
+def _without_pr797_ci_runtime_budget(workflow):
+    """Undo exactly the reviewed CI-only runner/envelope/logging changes."""
+    previous = deepcopy(workflow)
+    jobs = previous["jobs"]
+    family = jobs["time-budget-contracts"]
+    assert family["runs-on"] == jobs["comparison-contracts"]["runs-on"] == "ubuntu-24.04"
+    assert family["timeout-minutes"] == 120
+    assert family["steps"][-1] == {
+        "name": "Run time-budget contracts", "run": TIME_BUDGET_RUN,
+    }
+    family["runs-on"] = "ubuntu-22.04"
+    family["timeout-minutes"] = 45
+    family["steps"][-1]["run"] = TIME_BUDGET_PRE_REPAIR_RUN
+    jobs["comparison-contracts"]["runs-on"] = "ubuntu-latest"
+    return previous
+
+
 def _without_time_budget_contracts(workflow):
     """Validate the exact new partition before undoing it for the old hash."""
     previous = deepcopy(workflow)
@@ -138,7 +159,7 @@ def _without_time_budget_contracts(workflow):
     assert family["runs-on"] == "ubuntu-22.04"
     assert family["timeout-minutes"] == jobs["pytest"]["timeout-minutes"] == 45
     assert family["steps"] == jobs["budget-readout-contracts"]["steps"][:6] + [{
-        "name": "Run time-budget contracts", "run": TIME_BUDGET_RUN,
+        "name": "Run time-budget contracts", "run": TIME_BUDGET_PRE_REPAIR_RUN,
     }]
     steps = [step for step in jobs["pytest"]["steps"] if step["name"] == "Run tests"]
     assert len(steps) == 1
@@ -181,12 +202,12 @@ def _pytest_target_arguments(args: list[str]) -> list[str]:
         if token == "--":
             targets.extend(tokens)
             break
-        if token in {"-k", "-m", "-r", "-o", "--tb", "--ignore", "--ignore-glob", "--junitxml"}:
+        if token in {"-k", "-m", "-r", "-o", "--tb", "--ignore", "--ignore-glob", "--junitxml", "--durations"}:
             value = next(tokens, None)
             assert value is not None and not value.startswith("-"), "missing pytest option value"
         elif token in {"-q", "-v"}:
             continue
-        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=", "--ignore-glob=", "--junitxml=")):
+        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=", "--ignore-glob=", "--junitxml=", "--durations=")):
             # Short attached values (-rs/-kexpr) and long --option=value forms.
             continue
         else:
@@ -424,7 +445,8 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     # owned-host JUnit/receipt additions checked above. Every other pre-existing
     # job, trigger, permission and guard must match the captured baseline,
     # including the reviewed complete gpt56 partition (20 modules, not 9).
-    previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(workflow))
+    previous = _without_owned_host_ci_evidence(
+        _without_time_budget_contracts(_without_pr797_ci_runtime_budget(workflow)))
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
     for job_name, step_name, token in (
@@ -532,8 +554,10 @@ def test_backend_jobs_partition_the_comparison_contracts():
     for name, job in jobs.items():
         # No renamed check, matrix, dependencies, credentials or job-level skip.
         assert set(job) == {"runs-on", "timeout-minutes", "steps"}
-        assert job["runs-on"] == ("ubuntu-22.04" if name == "time-budget-contracts" else "ubuntu-latest")
-        assert job["timeout-minutes"] == (60 if name == "native-host-contracts" else 45)
+        assert job["runs-on"] == (
+            "ubuntu-24.04" if name in {"time-budget-contracts", "comparison-contracts"} else "ubuntu-latest")
+        assert job["timeout-minutes"] == (
+            120 if name == "time-budget-contracts" else 60 if name == "native-host-contracts" else 45)
 
     core = jobs["pytest"]["steps"]
     comparison = jobs["comparison-contracts"]["steps"]
@@ -637,7 +661,12 @@ def test_backend_jobs_partition_the_comparison_contracts():
     prefix = [
         "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs"
     ]
-    assert all(command[:len(prefix)] == prefix for command in argv)
+    time_budget_prefix = [
+        "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-v", "-rs", "--durations=20"
+    ]
+    assert len(argv) == 11
+    assert all(command[:len(prefix)] == prefix for command in argv[:10])
+    assert argv[10][:len(time_budget_prefix)] == time_budget_prefix
     excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]
                 if arg.startswith("--ignore=")]
     selected = argv[1][len(prefix):]
@@ -649,7 +678,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     native_selected = argv[7][len(prefix):]
     budget_selected = argv[8][len(prefix):]
     budget_readout_selected = argv[9][len(prefix):]
-    time_budget_selected = argv[10][len(prefix):]
+    time_budget_selected = argv[10][len(time_budget_prefix):]
     budget_glob = BUDGET_GLOB
     # shlex removes quotes: verify the actual shell expands only the target,
     # while pytest receives the core ignore glob literally.

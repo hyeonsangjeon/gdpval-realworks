@@ -22,7 +22,11 @@ HISTORICAL_SHA256 = "47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41
 FOUNDRY = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 FOUNDRY_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 WORKFLOW = ".github/workflows/backend-tests.yml"
-CURRENT_WORKFLOW_SHA256 = "a2e0e2fe0451b905ab7d2eddd163f9c87b25eede7a6f7e383cb42b3722687664"
+# PR797 CI-only successor: pin both affected jobs to Ubuntu 24.04 and allow
+# 120m with per-node timing logs for the expanded offline time-budget suite.
+# Prior workflow: a2e0e2fe0451b905ab7d2eddd163f9c87b25eede7a6f7e383cb42b3722687664.
+# The partition test reverses only this exact delta before checking old guards.
+CURRENT_WORKFLOW_SHA256 = "b16dc71d753217e1a59ef9149bd3a8a31d0c99bdb5b9d0c3467a976adf8d3613"
 # approved_pilot_source archives this workflow from immutable commit
 # 8ac891e3e0e4752fe15a00139a2691ddf9df7dce. Pin that Git blob, not the
 # current workflow or the extracted fixture file being checked.

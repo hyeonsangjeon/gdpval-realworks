@@ -176,3 +176,40 @@ def test_both_original_registrations_and_generation_cleanup_values_are_unchanged
         "cleanup_grace_recorded_separately": True, "max_planned_host_lifecycle_seconds": 1220,
         "remote_billing_bound": False, "server_side_cancellation_guaranteed": False,
     }
+
+
+def _offline_contract_budget(document):
+    """Planning headroom from PR797, not a bound on future test durations."""
+    for name in ("time-budget-contracts", "comparison-contracts"):
+        assert document["jobs"][name]["runs-on"] == "ubuntu-24.04", "fixed_contract_runner_required"
+    minutes = _positive_integer(document["jobs"]["time-budget-contracts"].get("timeout-minutes"),
+                                "finite_job_timeout_required")
+    assert minutes <= HOSTED_MAX_MINUTES, "hosted_job_limit_exceeded"
+    # Run 41700556354: 854 items; pytest start 19:11:41Z, last progress
+    # 19:53:59Z at 52%. The whole job expired at 45m, not a test watchdog.
+    elapsed_seconds, progress_percent = 42 * 60 + 18, 52
+    estimated_seconds = (elapsed_seconds * 100 + progress_percent - 1) // progress_percent
+    assert minutes * 60 >= estimated_seconds + OVERHEAD_SECONDS, "offline_contract_job_too_short"
+    return minutes
+
+
+def test_offline_contract_job_has_headroom_for_recorded_pr797_progress():
+    document = yaml.safe_load((ROOT / ".github/workflows/backend-tests.yml").read_text())
+    assert _offline_contract_budget(document) == 120
+
+
+@pytest.mark.parametrize("minutes", [45, 60, 90])
+def test_offline_contract_job_cannot_return_to_the_exhausted_envelope(minutes):
+    document = yaml.safe_load((ROOT / ".github/workflows/backend-tests.yml").read_text())
+    document["jobs"]["time-budget-contracts"]["timeout-minutes"] = minutes
+    with pytest.raises(AssertionError, match="offline_contract_job_too_short"):
+        _offline_contract_budget(document)
+
+
+@pytest.mark.parametrize("name", ["time-budget-contracts", "comparison-contracts"])
+@pytest.mark.parametrize("runner", ["ubuntu-latest", "ubuntu-22.04"])
+def test_affected_offline_contract_runners_cannot_drift(name, runner):
+    document = yaml.safe_load((ROOT / ".github/workflows/backend-tests.yml").read_text())
+    document["jobs"][name]["runs-on"] = runner
+    with pytest.raises(AssertionError, match="fixed_contract_runner_required"):
+        _offline_contract_budget(document)

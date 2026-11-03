@@ -18,16 +18,18 @@ def test_time_budget_failed_tmp_path_retention(tmp_path, record_property):
     workflow_bytes = (root / ".github/workflows/backend-tests.yml").read_bytes()
     option = b" -o tmp_path_retention_policy=failed"
     assert workflow_bytes.count(option) == 1
-    # Undo only this option: all other jobs, guards and ceilings stay byte-identical.
+    # Undo only this option; the current CI-only runner/envelope/logging change
+    # is also closed by the historical reconstruction in the partition guard.
+    # Prior stripped-workflow hash: 7bd20c544ad32aff454ae212643b9228a943e072b89990c9789b89ac74134068.
     assert hashlib.sha256(workflow_bytes.replace(option, b"", 1)).hexdigest() == (
-        "7bd20c544ad32aff454ae212643b9228a943e072b89990c9789b89ac74134068"
+        "dcb20f9a21302e9eac48f5628a518edfff3e48ade166a3c8c5e5f2957fb42064"
     )
     job = yaml.safe_load(workflow_bytes)["jobs"]["time-budget-contracts"]
-    assert job["timeout-minutes"] == 45
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 120
     run = next(step["run"] for step in job["steps"] if step["name"] == "Run time-budget contracts")
     assert run.splitlines()[0] == "cd batch-runner" and len(run.splitlines()) == 2
     argv = shlex.split(run.splitlines()[1])
-    assert argv == ["python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs",
+    assert argv == ["python", "-m", "pytest", "-m", "not integration", "--tb=short", "-v", "-rs", "--durations=20",
                     "-o", "tmp_path_retention_policy=failed", "tests/test_time_budget_*.py"]
 
     owned = tmp_path / "lifecycle"

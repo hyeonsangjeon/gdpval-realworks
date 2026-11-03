@@ -222,8 +222,17 @@ def test_current_source_requires_explicit_successor_not_an_implicit_repin(dual_r
             expected_reviewed_source_sha=dual_roots["original_sha"],
             frozen_grader_root=dual_roots["frozen"], expected_grader_source_sha=prospective.ACCEPTED_BASE_SHA,
         ) as (_, _, _, evidence):
-            assert evidence["runtime"]["source_followup"]["predecessor"]["sha256"] == (
-                prospective.PREDECESSOR_REGISTRATION_SHA256)
+            followup = evidence["runtime"]["source_followup"]
+            if (dual_roots["original_root"] / prospective.D3_SOURCE_FOLLOWUP_PATH).exists():
+                assert followup["path"] == prospective.D3_SOURCE_FOLLOWUP_PATH
+                assert followup["predecessor"]["path"] == prospective.SOURCE_FOLLOWUP_PATH
+                assert followup["predecessor"]["sha256"] == prospective.PREDECESSOR_SCHEDULE_SHA256
+                assert len(followup["source_history"]) == 1
+                followup = followup["source_history"][0]
+            # D3 extends, rather than replaces, schedule -> original registration.
+            assert followup["path"] == prospective.SOURCE_FOLLOWUP_PATH
+            assert followup["predecessor"]["path"] == prospective.REGISTRATION_PATH
+            assert followup["predecessor"]["sha256"] == prospective.PREDECESSOR_REGISTRATION_SHA256
         return
     with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^runtime_source_roles$"):
         with prospective._dual_root_sources(
