@@ -479,15 +479,21 @@ def validate_request(method, params, session, workspace):
 
 
 class Rpc:
-    def __init__(self, transport, session, workspace):
+    def __init__(self, transport, session, workspace, *, capability_only=False):
         parsed = urllib.parse.urlsplit(workspace)
         if not re.fullmatch(r"ahp-session:/[0-9a-f-]{36}", session) or parsed.scheme != "file" or parsed.netloc or not parsed.path.startswith("/") or parsed.query or parsed.fragment:
             raise Refused("unsafe_rpc_scope")
         self.transport, self.session, self.workspace = transport, session, workspace
+        if type(capability_only) is not bool:
+            raise Refused("invalid_capability_mode")
+        self.capability_only = capability_only
         self.sent = []
         self.received = []
 
     def request(self, method, params):
+        if self.capability_only and (method not in {"initialize", "resolveSessionConfig"}
+                                     or len(self.sent) >= 2):
+            raise Refused("zero_session_probe_rpc_refused")
         validate_request(method, params, self.session, self.workspace)
         if len(self.sent) >= MAX_RPCS:
             raise Refused("rpc_count_limit")
@@ -521,6 +527,8 @@ def exercise_rpc(rpc):
     if not isinstance(initialized, dict) or initialized.get("protocolVersion") not in {"1.1.0", "1.0.0"}:
         return results
     results["resolveSessionConfig"] = rpc.request("resolveSessionConfig", {"channel": ROOT_CHANNEL, "provider": "codex", "workingDirectory": rpc.workspace})
+    if rpc.capability_only:
+        return results
     results["createSession"] = rpc.request("createSession", {"channel": rpc.session, "provider": "codex", "workingDirectories": [rpc.workspace]})
     if "error" not in results["createSession"]:
         results["subscribe"] = rpc.request("subscribe", {"channel": rpc.session})
@@ -537,7 +545,7 @@ def classify_rpc(results):
             "evidence_boundary": "empty_session_only_not_authenticated_model_execution"}
 
 
-def run_probe(manifest, root, evidence, outside_netns, outside_pidns):
+def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False):
     identity = require_runner()
     isolation = require_isolation(outside_netns, outside_pidns)
     prepared, source_evidence = verify_prepared(manifest, root, evidence, identity)
@@ -549,7 +557,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns):
               "authentication_supplied": False, "credential_environment_inherited": False, "headless_started": False,
               "model_calls": 0, "model_call_evidence_boundary": "no_prompt_rpc_and_kernel_denied_external_egress_not_a_billing_receipt",
               "launch_allowed": False, "gate_ready": False, "served_model": "not_reported", "reasoning_effort": "not_reported", "context_window": "not_reported",
-              "probe_limits": {"wall_seconds": MAX_RUNTIME_SECONDS, "rpc_requests": MAX_RPCS, "prompt_turns": 0, "wire_bytes": MAX_WIRE_BYTES},
+              "capability_only": capability_only, "session_create_requests": 0,
+              "probe_limits": {"wall_seconds": MAX_RUNTIME_SECONDS, "rpc_requests": 2 if capability_only else MAX_RPCS, "prompt_turns": 0, "wire_bytes": MAX_WIRE_BYTES},
               "reason_codes": [], "status": "incomplete"}
     transport = process = rpc = None
     try:
@@ -567,6 +576,9 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns):
             record["cli_host_help"] = help_result
             if help_result["exit_code"] != 0 or any(flag not in help_result["stdout"] for flag in ("--foreground", "--new-instance", "--without-connection-token")):
                 raise Refused("headless_cli_contract_not_available")
+            if capability_only:
+                import ghcp_ahp_wire_capture as wire_capture
+                environment = wire_capture.install(root, scratch, environment, model_free=True)
             with socket.socket() as port_reservation:
                 port_reservation.bind(("127.0.0.1", 0))
                 port = port_reservation.getsockname()[1]
@@ -587,10 +599,12 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns):
                         time.sleep(0.1)
                 if transport is None:
                     raise Refused("agent_host_startup_deadline")
-                rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri())
+                rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri(), capability_only=capability_only)
                 results = exercise_rpc(rpc)
                 record["rpc_results"] = results
                 record["codex_session"] = classify_rpc(results)
+                if capability_only:
+                    record["codex_session"]["evidence_boundary"] = "capability_only_zero_session_requests"
                 record["headless_started"] = isinstance(results.get("initialize", {}).get("result"), dict) and results["initialize"]["result"].get("protocolVersion") in {"1.1.0", "1.0.0"}
                 record["status"] = "probe_completed" if record["headless_started"] else "protocol_initialization_refused"
             finally:
@@ -599,6 +613,10 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns):
                 process.stop()
                 record["host_process"] = process.record()
                 record["cleanup"] = "owned_process_group_stopped_pid_namespace_exit_cleans_detached_children"
+                if capability_only:
+                    record["wire_capture"] = wire_capture.export(scratch, evidence)
+                    if record["wire_capture"]["capture_status"] != "captured":
+                        raise Refused("wire_observer_not_started")
     except Exception as error:
         record["status"] = "probe_refused"
         record["reason_codes"].append(str(error) if isinstance(error, Refused) else type(error).__name__)
@@ -606,6 +624,7 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns):
         if rpc is not None:
             record["rpc_sent"] = rpc.sent
             record["rpc_received"] = rpc.received
+            record["session_create_requests"] = sum(row["method"] == "createSession" for row in rpc.sent)
         save_json(evidence / "probe.json", record)
     return 0 if record["status"] == "probe_completed" else 2
 
@@ -622,6 +641,7 @@ def main(argv=None):
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--outside-netns", default="")
     parser.add_argument("--outside-pidns", default="")
+    parser.add_argument("--capability-only", action="store_true", help="No createSession RPC; observe native/CAPI boundaries without model work")
     args = None
     admitted = False
     try:
@@ -634,7 +654,8 @@ def main(argv=None):
             prepare(manifest, args.prepared, args.evidence)
             print('{"status":"prepared","model_calls":0}')
             return 0
-        result = run_probe(manifest, args.prepared, args.evidence, args.outside_netns, args.outside_pidns)
+        options = {"capability_only": True} if args.capability_only else {}
+        result = run_probe(manifest, args.prepared, args.evidence, args.outside_netns, args.outside_pidns, **options)
         print(json.dumps({"probe_exit": result, "model_calls": 0, "launch_allowed": False}))
         return result
     except Exception as error:

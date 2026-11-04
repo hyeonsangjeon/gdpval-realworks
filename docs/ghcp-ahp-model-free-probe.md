@@ -30,13 +30,17 @@ source work and offline fixtures; actual Agent Host startup is Actions-only.
   transport token is disabled **only inside this private loopback space**;
   this is not permission to expose an unauthenticated host externally.
 
-The only outgoing AHP methods are `initialize`, `resolveSessionConfig`,
-`createSession` (`provider=codex`), `subscribe` and `disposeSession`, at most
-five requests. No `authenticate`, generic action dispatch, chat creation,
-initial message, prompt, turn or tool execution is permitted. An empty session
-may succeed before authentication: report that honestly, without claiming
-that a model can run. Record an actual `-32007` only if the host returns it;
-do not transform a missing-provider/network error into an authentication error.
+The current branch-push workflow explicitly selects `--capability-only`:
+only `initialize` and `resolveSessionConfig`, at most two requests, with
+**zero createSession requests**. No authentication, chat, prompt or turn is
+sent. A passive, hash-bound native/CAPI observer also refuses native session
+and turn creation and model HTTP requests before transmission in this mode.
+See [wire capture and evidence limits](ghcp-ahp-wire-capture.md).
+
+Historical runs used the original five-method empty-session probe, which is
+retained for historical fixture coverage but is no longer selected by the
+push workflow. Their actual `-32007` results must not be attributed to the
+new zero-session mode, which never reaches that authentication boundary.
 
 ## What the pinned source establishes
 

@@ -24,6 +24,7 @@ import uuid
 from ghcp_ahp_probe import (CapturedProcess, Refused, ROOT_CHANNEL, WebSocket, child_environment,
                             load_manifest, require_runner, save_json, verify_prepared)
 from ghcp_ahp_diagnostics import DiagnosticRedactor, NOT_REPORTED, advertised_models, policy_rejections
+import ghcp_ahp_wire_capture as wire_capture
 
 CONFIG = {"codex.approvalPolicy": "untrusted", "codex.sandboxMode": "read-only",
           "codex.networkAccessEnabled": False, "codex.webSearchMode": "disabled",
@@ -289,6 +290,8 @@ def open_connection_port(prepared, evidence, state, credential, *, capability_on
     # Disable optional host integrations in this fresh user's host config.
     save_json(state / "user-data/User/globalStorage/agent-host-config.json",
               {"githubMcpServerEnabled": False, "artifactTools": False, "mcpServers": {}})
+    environment = wire_capture.install(prepared, state, environment,
+                                       model_free=capability_only, credential=credential)
     local_token = secrets.token_hex(32)
     token_file = state / "local-transport-token"
     with os.fdopen(os.open(token_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as stream:

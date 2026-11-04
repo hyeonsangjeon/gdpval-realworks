@@ -238,6 +238,10 @@ def execute(prepared, evidence, state, output, *, open_port=None, capability_onl
                 advertised=handshake.get("advertised", advertised_models([])),
                 session_create_requests=handshake.get("session_create_requests", NOT_REPORTED),
                 policy_verified=handshake.get("policy_verified", False))
+            # A handshake proves this opener owned the fresh state directory.
+            # Never inspect a state path on missing-auth/pre-start refusal.
+            import ghcp_ahp_wire_capture as wire_capture
+            record["wire_capture"] = wire_capture.export(state, output, credential=credential)
     except Exception:
         record.update(status="refused", connection_verified=False,
                       reason_codes=[*record["reason_codes"], "connection_handshake_export_refused"])
