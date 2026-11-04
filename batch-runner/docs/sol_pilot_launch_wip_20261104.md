@@ -1,7 +1,8 @@
 # Sol five-task paid launch: route A, WIP
 
-**Not merge-ready or runnable.** This change prepares the real launch route,
-but it does not yet connect the owned Step 2/Step 8 consumers across jobs.
+**Not merge-ready or runnable as a paid workflow.** The one-task Step 2
+component now consumes verified inputs and a restored wallet, but the workflow
+does not yet connect five owned Step 2 outcomes to the Step 8 consumers.
 Even `execute_paid: true` stops with `sol_pilot_execution_bridge_incomplete`
 before authentication, model-client creation or a new monetary reservation.
 Do not remove that stop just to make a workflow green.
@@ -62,25 +63,89 @@ as a separate seal change, not hidden by this caller.
 
 The original provider observer remains unchanged: a mismatched served model
 stops; context `not_reported` is recorded and accepted under #796, while a
-different reported context stops. Tests exercise that real field classifier,
-but **do not claim the new unfinished worker is connected to it**.
+different reported context stops. The single-task worker now connects this
+observer, the held 1M catalog and the real shared ledger to the pinned SDK.
+Loopback tests prove the adapter wiring, not a live Foundry observation.
 
 The stage's 180-minute workflow ceiling is infrastructure headroom within the
 six-hour Actions limit, not a changed inference attempt budget. It still needs
 an end-to-end timing check with the completed bridge and grading preparation.
 
+## Single-task component (checklist 1 and 2)
+
+`gpt56_sol_pilot_inputs.prepare_input_bundle` reads the original pinned parquet
+and the exact two-reference closure. It verifies the five prompt/projection
+identities before writing byte-identical inputs, `sol-pilot-request-capture.json`
+and ready-last `sol-pilot-input-ready.json`. The verifier rechecks these bytes,
+the independent ready digest, all files/directories and link refusals. No saved
+JSON can manufacture an issued `VerifiedInputs` object.
+
+Capture explicitly separates **requested** Sol/Max/1M from **not yet observed**
+response fields. It is not an old complete evidence bundle, provider capability
+attestation, billing receipt or five-task live witness. The actual request body
+is produced by the unchanged renderer/SDK; the receipt binds its complete
+rendered message hash. The original renderer's outer whitespace stripping is
+unchanged, while source prompt hashes still cover the original raw strings.
+
+`gpt56_sol_pilot_single_task.run_single_task_shard` requires explicit opt-in and
+actual clean-source/main/host admission. It restores the predecessor through
+`PilotUsdLedger(..., create=False)` and checks the predecessor's identity and
+snapshot again in a new formal `SingleTaskWitness`. A fresh USD 200 ledger is
+refused even if the task IDs and capture hash match. Request counts are restored
+from **all** prior inference reservations, including unknown outcomes.
+
+The witness owns one claim, SDK process, thread, turn and registered task. It
+verifies exact Sol/Max/1M and zero retry settings before runtime effects. The
+production provider must be the exact existing `CodexProviderSettings`, bound
+to the approved account/deployment resource bytes by the unchanged reader.
+The test-only provider has no auth command and only a dummy credential; its
+outbound forwarding is replaced by a loopback HTTP server in the tests.
+
+The existing parent experiment ID remains
+`gpt56_sol_foundry_codex_pilot5_v1`. A derived **fragment execution ID** scopes
+the generic core workspace, not another experiment or complete pilot result.
+This is a new sibling witness and schema, not a partial/fabricated
+`PilotWireReceiptSession`, a forged `PilotCaptureSources`, or a monkeypatch of
+the old owner. The old full-five Step 2 and native-result-host guards still
+refuse missing sessions and these fragment receipts. Five-fragment admission
+to Step 8 is a separate unfinished item; no fragment may be graded as a full
+pilot or silently promoted to a successful five-task result.
+
+The pinned native core owns workspace/reference staging, rendering, SDK,
+file collection and cleanup. The wrapper calls unchanged
+`step2_run_inference._execute_single_task`, then the existing deliverable
+hash/public-row projection and real wallet exporter. `strict_inputs=True`
+accepts only the privately staged paths from actual reference verification.
+It is not used with the legacy whole-five owner.
+
+Outputs are `sol-single-task-claim.json`, `sol-single-task-result.json`, masked
+native response artifacts, `sol-single-task-witness.json` and a separate wallet
+checkpoint. Requested and observed fields stay separate; `fixture_transport`
+and `full_five_task_witness: false` cannot be mistaken for live full-pilot
+proof. Failed/mismatched responses retain the claim, result and money, publish
+a failed checkpoint and cannot feed another stage. Interrupted or incomplete
+publication leaves the workspace/ledger for diagnosis, without automatic retry.
+
+This component handles **solve stages 1–4 with a predecessor**. First-stage
+wallet/bootstrap and cross-workflow-run once-only ownership remain checklist 6.
+The workflow still invokes neither this component nor authentication: its
+source-owned `sol_pilot_execution_bridge_incomplete` refusal is unchanged.
+
+The official [app-server protocol](https://developers.openai.com/codex/app-server/)
+distinguishes `thread/start` from the generation boundary `turn/start`. Exact
+0.147.0 SDK calls/configuration here come from the repository's pinned native
+runner, not the current documentation's model examples. No model, effort,
+context, prompt or grader contract was migrated.
+
 ## Required before removing the WIP stop
 
-- [ ] Materialize the actual fixed parquet/reference/config/capture bundle on
-  Actions. Separate pre-send identity/input admission from observed model,
-  capability, wire/host and usage evidence as authorized for this pilot. Do not
-  fabricate a complete historical evidence bundle or label a fixture live.
-- [ ] Add the opted-in Step 2 single-task stage consumer. Currently
-  `PilotWireReceiptSession.__init__` creates a fresh ledger and
-  `finalize` requires all five tasks in one in-process live owner. The next
-  stage must reopen this same wallet without recreating or pretending to adopt
-  an old live witness. Do not bypass `PilotCaptureSources` or choose a different
-  experiment ID to evade that admission.
+- [x] Implement exact fixed-input and pre-send capture materialization, with
+  configured route checks separate from first-response evidence. The component
+  is tested with public registered bytes; Actions production wiring is still
+  blocked by the runtime/publication items below.
+- [x] Add a formal opted-in single-task Step 2 owner using the predecessor's
+  restored wallet. Preserve the full-five owner's admission instead of
+  manufacturing/adopting it. One-task loopback end-to-end regression passes.
 - [ ] Assemble the five genuine solve outcomes, per-stage live witness receipts
   and files for Step 8. A missing/error outcome remains missing/error, never a
   synthetic successful row or zero score. Preserve poisoned/failed receipts.
@@ -95,6 +160,7 @@ an end-to-end timing check with the completed bridge and grading preparation.
   reconcile prior diagnostic reservation obligations. The current-run chain,
   first-attempt guard and concurrency key do not prevent a later new run from
   requesting the same pilot again; no new USD 200 wallet may erase that debt.
+  This also owns stage 0 bootstrap; the new restoring consumer cannot create it.
 - [ ] Wire successful worker checkpoints and `manifest_sha256` outputs. The
   current workflow intentionally reaches no fake success/output substitute.
 - [ ] Prove the real adapter with fake *provider responses only*, including
@@ -109,16 +175,24 @@ an older checkpoint or an automatic repeat of a request with unknown outcome.
 
 ## Local verification
 
-All local tests use synthetic fixtures and the actual SQLite accounting code.
-Network connections and subprocesses are denied in the new test module; the
-existing response tests permit only their own local fake provider. This is not
-an executed benchmark, a served-model observation or a Foundry invoice.
+All provider responses and predecessor charges in local tests are synthetic.
+The input fixture is the **original public registered parquet and references**,
+not generated input or private Task4 results; its provenance/hashes are in
+`tests/fixtures/sol_pilot_inputs/README.md`. The single-task regression executes
+the real source/input admission, Step 2, core runner, pinned 0.147.0 SDK/CLI,
+provider guards, SQLite and checkpoint code. Only provider I/O and hosted OS
+labels are fixtures. Its fake model creates a small deliverable directly in the
+real workspace; no native sandbox command, benchmark or grading runs on NAS.
+The test refuses every non-loopback Python socket and uses no auth command.
+This proves wiring and refusal behavior, not live runner/served-model/billing
+evidence. The older launch-admission test still denies network and subprocesses.
 
 ```sh
 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 \
 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
 python -m pytest -q -ra -o addopts= -m 'not integration' -p no:cacheprovider \
-  tests/test_sol_pilot_launch.py tests/test_pilot_shard_ledger_handoff.py \
+  tests/test_sol_pilot_launch.py tests/test_sol_pilot_single_task.py \
+  tests/test_pilot_shard_ledger_handoff.py \
   tests/test_gpt56_pilot_shared_usd.py tests/test_gpt56_pilot_usd_ceiling.py \
   tests/test_gpt56_pilot_usd200.py tests/test_gpt56_native_response_capture.py \
   tests/test_gpt56_grader_successor_seal.py tests/test_gpt56_runner_environment.py
@@ -128,6 +202,11 @@ The new tests run in Backend Tests' default **`pytest`** job: their filename is
 not in its exclusions or another job's selection. Existing pilot/seal/money
 contracts remain in **`pilot-contracts`**, with the preflight/wire/host partitions
 unchanged. No workflow hash expectation, guard count, skip or xfail was edited.
+Run the real-source regression on a **clean committed candidate**, using a
+temporary directory outside the checkout and disabling bytecode/cache output;
+the existing clean-source guard is deliberately not mocked. The native test
+fixture sets an isolated per-test run root and temporary directory. No live
+authentication environment is needed or should be supplied.
 
 ## Eventual dispatch draft — NOT executed, currently refuses
 

@@ -34,11 +34,10 @@ SCHEMA = "sol-pilot-launch-admission-v1"
 # No CLI/env/manifest option may waive them. Remove each only with its real
 # consumer and non-model tests in the same reviewed source change.
 UNIMPLEMENTED_BRIDGE = (
-    "current_run_input_deployment_and_capture_materialization",
-    "step2_single_task_live_owner_with_restored_shared_wallet",
     "five_task_live_receipt_and_result_assembly_for_step8",
     "step8_local_shard_invocation_and_retained_grade_assembly",
     "durable_pilot_once_claim_and_prior_diagnostic_reconciliation",
+    "actions_input_runtime_and_worker_checkpoint_publication",
 )
 
 
