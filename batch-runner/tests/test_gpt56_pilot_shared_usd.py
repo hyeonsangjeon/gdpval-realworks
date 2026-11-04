@@ -117,7 +117,9 @@ def test_clean_reopen_and_idempotent_settlement_never_refill(tmp_path, origin):
 
 
 @pytest.mark.parametrize("origin", ["inference", "grading"])
-def test_unknown_usage_consumes_reservation_and_blocks_other_origin(tmp_path, origin):
+def test_unknown_usage_consumes_reservation_without_stopping(tmp_path, origin):
+    # Owner decision 2026-10-30: unknown usage keeps its whole reservation booked,
+    # but no longer stops either origin. Only the USD ceiling stops.
     first = _ledger(tmp_path, create=True)
     account = first.begin(origin, TASKS[0])
     first.reserve(account, Decimal(120))
@@ -126,14 +128,16 @@ def test_unknown_usage_consumes_reservation_and_blocks_other_origin(tmp_path, or
     snapshot = first.snapshot()
     assert snapshot["combined_modeled_usd"] == "120"
     assert snapshot["unknown_consumed_usd"] == "100"
-    assert snapshot["unknown_requests"] == 1 and snapshot["stop_reason"] == usd.UNKNOWN
+    assert snapshot["unknown_requests"] == 1 and snapshot["stop_reason"] is None
+    assert usd.checked_snapshot(snapshot)
     first.close()
     reopened = _ledger(tmp_path)
     try:
         other = reopened.begin("grading" if origin == "inference" else "inference", TASKS[1])
-        with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
-            reopened.reserve(other, Decimal(1))
-        assert reopened.snapshot()["combined_modeled_usd"] == "120"
+        reopened.reserve(other, Decimal(1))
+        with pytest.raises(usd.PilotUsdRefused, match=usd.CEILING):
+            reopened.reserve(reopened.begin("grading", TASKS[2]), Decimal(80))  # 120 + 1 + 80 > 200
+        assert reopened.snapshot()["combined_modeled_usd"] == "121"
     finally:
         reopened.close()
 
@@ -233,10 +237,11 @@ def test_process_restart_consumes_lost_reply_without_reset(tmp_path):
         try:
             snapshot = reopened.snapshot()
             assert snapshot["unknown_consumed_usd"] == "120"
-            assert snapshot["stop_reason"] == usd.UNKNOWN and snapshot["stop_source"] == "inference"
+            assert snapshot["stop_reason"] is None and snapshot["unknown_requests"] == 1
             account = reopened.begin("grading", TASKS[1])
-            with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
-                reopened.reserve(account, Decimal(1))
+            reopened.reserve(account, Decimal(1))  # The lost reply stays booked; work continues.
+            with pytest.raises(usd.PilotUsdRefused, match=usd.CEILING):
+                reopened.reserve(reopened.begin("grading", TASKS[2]), Decimal(80))
         finally:
             reopened.close()
     finally:
@@ -290,7 +295,7 @@ def test_actual_metered_client_reserves_before_call_and_settles(ledger, priced, 
 
 
 @pytest.mark.parametrize("bad", ["absent_usage", "partial_usage", "partial_response", "other_model", "exception", "no_output_limit"])
-def test_grading_unknown_never_egresses_a_followup(ledger, priced, tmp_path, bad):
+def test_grading_unknown_usage_is_booked_and_grading_continues(ledger, priced, tmp_path, bad):
     responses = {"absent_usage": _reply(usage=None), "partial_usage": _reply(usage={"input_tokens": 10}),
                  "partial_response": _reply(status="incomplete"), "other_model": _reply(model="gpt-5.6-sol-fast"),
                  "exception": RuntimeError("synthetic"), "no_output_limit": _reply()}
@@ -301,17 +306,21 @@ def test_grading_unknown_never_egresses_a_followup(ledger, priced, tmp_path, bad
     kwargs = _kwargs()
     if bad == "no_output_limit":
         del kwargs["max_output_tokens"]
+    unknown = bad in {"absent_usage", "partial_usage", "exception"}
     try:
         with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
-            with pytest.raises(RuntimeError if bad == "exception" else usd.GradingUsdStopped):
-                wrapped.responses.create(**kwargs)
-            with pytest.raises(usd.GradingUsdStopped):
-                wrapped.responses.create(**_kwargs())
-        assert client.calls == int(bad != "no_output_limit")
+            for _ in range(2):
+                if bad == "exception":
+                    with pytest.raises(RuntimeError):
+                        wrapped.responses.create(**kwargs)
+                else:
+                    wrapped.responses.create(**kwargs)
+        assert client.calls == 2
         snapshot = ledger.snapshot()
-        assert snapshot["stop_reason"] == usd.UNKNOWN
-        if bad != "no_output_limit":
-            assert Decimal(snapshot["unknown_consumed_usd"]) > 0
+        assert snapshot["stop_reason"] is None and snapshot["pending_requests"] == 0
+        assert snapshot["unknown_requests"] == (2 if unknown else 0)
+        assert (Decimal(snapshot["unknown_consumed_usd"]) > 0) is unknown
+        assert usd.checked_snapshot(snapshot)
     finally:
         audit.close()
 
@@ -354,20 +363,22 @@ def test_inference_spend_blocks_actual_grading_wrapper(ledger, priced, tmp_path)
 
 
 @pytest.mark.parametrize("retries", [None, True, 1, 2])
-def test_hidden_sdk_retries_cannot_bypass_grading_reservations(ledger, priced, tmp_path, retries):
+def test_sdk_retry_settings_no_longer_refuse_grading(ledger, priced, tmp_path, retries):
     audit = CostReceiptLedger(tmp_path / "audit.sqlite3", run_id="synthetic")
     recorder = CostRecorder(audit, usd_admission=priced)
     client = _FakeClient(_reply())
     client.max_retries = retries
     try:
-        with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
-            recorder.meter(client, provider="azure", model=MODEL)
-        assert client.calls == 0 and ledger.snapshot()["stop_source"] == "grading"
+        wrapped = recorder.meter(client, provider="azure", model=MODEL)
+        with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
+            assert wrapped.responses.create(**_kwargs()) == _reply()
+        snapshot = ledger.snapshot()
+        assert client.calls == 1 and snapshot["stop_reason"] is None and snapshot["pending_requests"] == 0
     finally:
         audit.close()
 
 
-def test_changed_transport_is_rechecked_before_each_grading_call(ledger, priced, tmp_path):
+def test_changed_retry_setting_after_metering_does_not_refuse(ledger, priced, tmp_path):
     audit = CostReceiptLedger(tmp_path / "audit.sqlite3", run_id="synthetic")
     recorder = CostRecorder(audit, usd_admission=priced)
     client = _FakeClient(_reply())
@@ -375,9 +386,9 @@ def test_changed_transport_is_rechecked_before_each_grading_call(ledger, priced,
     client.max_retries = 2
     try:
         with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
-            with pytest.raises(usd.GradingUsdStopped, match=usd.UNKNOWN):
-                wrapped.responses.create(**_kwargs())
-        assert client.calls == 0 and ledger.snapshot()["pending_requests"] == 0
+            assert wrapped.responses.create(**_kwargs()) == _reply()
+        snapshot = ledger.snapshot()
+        assert client.calls == 1 and snapshot["pending_requests"] == 0 and snapshot["stop_reason"] is None
     finally:
         audit.close()
 
@@ -385,18 +396,31 @@ def test_changed_transport_is_rechecked_before_each_grading_call(ledger, priced,
 @pytest.mark.parametrize("extra", [{"extra_body": {"max_output_tokens": 100000}},
                                    {"modalities": ["audio"]}, {"previous_response_id": "opaque"},
                                    {"stream": True}])
-def test_hidden_request_overrides_are_refused_before_any_call(ledger, priced, tmp_path, extra):
+def test_requests_the_exact_bound_cannot_cover_are_reserved_by_estimate(ledger, priced, tmp_path, extra):
     audit = CostReceiptLedger(tmp_path / "audit.sqlite3", run_id="synthetic")
     recorder = CostRecorder(audit, usd_admission=priced)
     client = _FakeClient(_reply())
     wrapped = recorder.meter(client, provider="azure", model=MODEL)
     try:
         with recorder.attributed(task_id=TASKS[0], stage=STAGE_GRADING):
-            with pytest.raises(usd.GradingUsdStopped, match=usd.UNKNOWN):
-                wrapped.responses.create(**{**_kwargs(), **extra})
-        assert client.calls == 0
+            wrapped.responses.create(**{**_kwargs(), **extra})
+        snapshot = ledger.snapshot()
+        assert client.calls == 1 and snapshot["stop_reason"] is None and snapshot["pending_requests"] == 0
     finally:
         audit.close()
+
+
+def test_media_requests_are_estimated_per_item_not_per_base64_byte():
+    image = {"model": MODEL, "max_output_tokens": 100, "input": [{"role": "user", "content": [
+        {"type": "input_text", "text": "describe"},
+        {"type": "input_image", "image_url": "data:image/png;base64," + "A" * 5_000_000}]}]}
+    inputs, outputs = usd._request_allowance(image)
+    assert usd.IMAGE_TOKEN_ALLOWANCE <= inputs < usd.IMAGE_TOKEN_ALLOWANCE + 1000 and outputs == 100
+    audio = {"model": "gpt-audio-1.5", "messages": [{"role": "user", "content": [
+        {"type": "input_audio", "input_audio": {"data": "A" * 1_000_000, "format": "wav"}}]}]}
+    inputs, outputs = usd._request_allowance(audio)
+    assert 1000 + 1_000_000 // usd.AUDIO_BASE64_BYTES_PER_TOKEN <= inputs < 12_000
+    assert outputs == usd.DEFAULT_OUTPUT_TOKEN_ALLOWANCE
 
 
 def test_sub_receipt_precision_cannot_round_a_request_inside_the_cap(ledger):
@@ -427,11 +451,11 @@ def test_conflicting_or_late_usage_cannot_reopen_consumed_reservation(ledger):
     account = ledger.begin("grading", TASKS[0])
     ticket = ledger.reserve(account, Decimal(200))
     assert ledger.settle(ticket, Decimal(100), Decimal(0)) is None
-    assert ledger.settle(ticket, Decimal(99), Decimal(0)) == usd.UNKNOWN
+    assert ledger.settle(ticket, Decimal(99), Decimal(0)) is None  # Ignored, not a refill and not a stop.
     assert ledger.snapshot()["combined_modeled_usd"] == "100"
     other = ledger.begin("inference", TASKS[1])
-    with pytest.raises(usd.PilotUsdRefused, match=usd.UNKNOWN):
-        ledger.reserve(other, Decimal(1))
+    ledger.reserve(other, Decimal(1))
+    assert ledger.snapshot()["combined_modeled_usd"] == "101"
 
 
 @pytest.mark.parametrize("mutation", [None, "foreign_binding", "capture_drift", "wrong_task_order"])
@@ -464,7 +488,7 @@ def test_grading_opens_only_the_inference_bound_existing_ledger(monkeypatch, led
 
 
 @pytest.mark.parametrize("bad", ["missing", "deliberate", "premise", "axes", "cache", "unit", "nan"])
-def test_grading_prices_must_be_exact_and_unambiguous(monkeypatch, bad):
+def test_unsettled_grading_prices_fall_back_to_the_list_price(monkeypatch, bad):
     document = deepcopy(PRICE_FIXTURE)
     entry = document["providers"]["azure:" + MODEL]
     if bad == "missing":
@@ -482,12 +506,25 @@ def test_grading_prices_must_be_exact_and_unambiguous(monkeypatch, bad):
     else:
         entry["input_usd_per_million"] = "NaN"
     monkeypatch.setattr(usd, "price_document", lambda: document)
-    with pytest.raises(usd.PilotUsdRefused, match=usd.UNPRICED):
-        usd.grading_prices(CONFIG)
+    assert usd.grading_prices(CONFIG) == {MODEL: usd.SOL_LIST_USD_PER_MILLION}
+
+
+def test_list_prices_match_the_pinned_published_meters_and_audio_stand_in():
+    meter = usd.price_document()["azure_published_meters"]["gpt-5.6-sol"][usd.LIST_PRICE_METER]
+    assert usd.SOL_LIST_USD_PER_MILLION == {name: Decimal(meter[name]) for name in ("input", "output", "cache_write")}
+    config = {**CONFIG, "judge": {**CONFIG["judge"], "perception": {
+        "visual": {"model": MODEL, "deployment": MODEL},
+        "audio": {"model": "gpt-audio-1.5", "deployment": "gpt-audio-1.5"}}}}
+    assert usd.grading_prices(config) == {MODEL: usd.SOL_LIST_USD_PER_MILLION,
+                                          "gpt-audio-1.5": usd.AUDIO_STAND_IN_USD_PER_MILLION}
+
+
+class _ReachedInputs(Exception):
+    pass
 
 
 @pytest.mark.parametrize("module_drift", [False, True])
-def test_real_step8_refuses_unpriced_sol_before_input_auth_or_client(monkeypatch, tmp_path, capsys, module_drift):
+def test_real_step8_prices_sol_at_list_price_and_still_refuses_module_drift(monkeypatch, tmp_path, capsys, module_drift):
     config = yaml.safe_load((Path(step8.__file__).parent / "grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml").read_bytes())
     config["config_name"] = CONFIG["config_name"]
     config.pop("rerun_identity")
@@ -497,16 +534,22 @@ def test_real_step8_refuses_unpriced_sol_before_input_auth_or_client(monkeypatch
                                                                     source="local", pilot_usd_workspace=None, dry_run=False))
     monkeypatch.setattr(step8, "load_experiment_yaml", lambda name: SimpleNamespace(experiment_id=usd.RUN_ID))
 
-    def never(*args, **kwargs):
-        pytest.fail("input/auth/client effect happened before price refusal")
+    def reached(*args, **kwargs):
+        raise _ReachedInputs()
 
-    monkeypatch.setattr(step8, "load_local_inference_results", never)
+    def never(*args, **kwargs):
+        pytest.fail("judge client constructed before inputs were read")
+
+    monkeypatch.setattr(step8, "load_local_inference_results", reached)
     monkeypatch.setattr(step8, "Grader", never)
-    if module_drift:
-        monkeypatch.setattr(usd, "__file__", str(tmp_path / "foreign_usd.py"))
+    if not module_drift:
+        with pytest.raises(_ReachedInputs):  # Price admission passed at list price.
+            step8.main()
+        return
+    monkeypatch.setattr(usd, "__file__", str(tmp_path / "foreign_usd.py"))
     assert step8.main() == 4
     result = json.loads(capsys.readouterr().err)
-    assert result == {"status": "refused", "source": "grading", "reason": usd.UNVERIFIED if module_drift else usd.UNPRICED,
+    assert result == {"status": "refused", "source": "grading", "reason": usd.UNVERIFIED,
                       "actual_billing_hard_limit_verified": False,
                       "runner_evidence": runner_environment.receipt("grading")}
 

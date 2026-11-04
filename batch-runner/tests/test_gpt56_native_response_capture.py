@@ -16,9 +16,10 @@ pytestmark = pytest.mark.usefixtures("native_hosted_runner")
 
 import gpt56_native_response_capture as evidence
 import gpt56_pilot_wire_receipt as wire
+import gpt56_sol_codex_pilot_preflight as pilot
 import step2_run_inference as step2
 from core import codex_runner
-from core.codex_runtime_config import CodexProviderSettings
+from core.codex_runtime_config import CodexProviderSettings, _toml_literal
 from scripts import diagnose_codex_foundry_connection as diagnostic
 from .test_gpt56_pilot_provider_observation import CANARY, MODEL, UPSTREAM, _body, _post, _upstream, loopback_only
 
@@ -100,11 +101,10 @@ def test_complete_raw_response_is_masked_durable_and_hash_bound(monkeypatch, tmp
     ({"model": "gpt-5.6-sol-2026-07-09"}, "served_model_mismatch"),
     ({"reasoning": {}}, "reasoning_effort_unverified"),
     ({"reasoning": {"effort": "high"}}, "reasoning_effort_mismatch"),
-    ({"context_window": None}, "context_window_unverified"),
     ({"context_window": 258400}, "context_window_mismatch"),
-    ({"context_window": "1000000"}, "context_window_unverified"),
-    ({"context_window": True}, "context_window_unverified"),
-    ({"modelContextWindow": 258400}, "context_window_unverified"),
+    ({"modelContextWindow": 258400}, "context_window_mismatch"),
+    ({"context_window": None, "modelContextWindow": 1_000_000, "tokenLimit": 258400},
+     "context_window_mismatch"),
 ])
 def test_missing_or_mismatched_response_fields_stop_before_cli_effect(monkeypatch, tmp_path, changes, reason):
     result, observer, store, body = _record(monkeypatch, tmp_path, _response(**changes))
@@ -115,6 +115,21 @@ def test_missing_or_mismatched_response_fields_stop_before_cli_effect(monkeypatc
     assert observer.stop_reason == reason
     assert observer.summary()["runtime_caps"]["stop_reason"] == reason
     assert store.rows[0]["artifact"]["sha256"] != evidence.NOT_REPORTED
+
+
+@pytest.mark.parametrize("changes", [
+    {"context_window": None}, {"context_window": "1000000"}, {"context_window": True}, {"context_window": 0},
+])
+def test_unreported_context_window_is_recorded_not_a_stop(monkeypatch, tmp_path, changes):
+    # Owner decision 2026-10-30: a Responses object carries no context window.
+    # Absent or unreadable is kept as not_reported; it is never filled from
+    # the request, SDK thread or app-server value.
+    result, observer, store, body = _record(monkeypatch, tmp_path, _response(**changes))
+    assert result == (200, body)
+    report = store.report()
+    assert store.reason is None and observer.stop_reason is None
+    assert report["context_tokens"] == evidence.NOT_REPORTED
+    assert store.rows[0]["fields"]["context_tokens"] == evidence.NOT_REPORTED
 
 
 def test_absent_version_is_not_inferred_from_alias_or_inventory(monkeypatch, tmp_path):
@@ -292,6 +307,9 @@ def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch
     class FakeCodex:
         def __init__(self, config):
             assert [item for item in config.config_overrides if item.startswith("web_search=")] == ['web_search="disabled"']
+            # The requested 1,000,000 reaches Codex with the held Sol catalog.
+            assert [item for item in config.config_overrides if item.startswith("model_catalog_json=")] == [
+                "model_catalog_json=" + _toml_literal(str(pilot.ROOT / pilot.CODEX_LONG_CONTEXT_CATALOG))]
             self.config, self.closed = config, False
             runtimes.append(self)
 
@@ -324,12 +342,17 @@ def test_real_diagnostic_and_runner_require_shared_response_evidence(monkeypatch
     assert record["schema"] == "codex_foundry_connection/4"
     diagnostic.verify_sol_diagnostic_reservation(tmp_path, record["settings"], record["observed"]["diagnostic_budget"])
     assert record["observed"]["provider_transport"]["native_request_count"] == 1
-    expected_verdict = (diagnostic.VERDICT_CONNECTED if case == "valid" and sdk_status == "completed" else
-                        diagnostic.VERDICT_UNCLASSIFIED_FAILURE if sdk_status == "failed" and case in {"valid", "save-failure"}
+    # Owner decision 2026-10-30: a response without a context window is
+    # recorded as not_reported and behaves like a valid one.
+    accepted = case in {"valid", "missing-1m"}
+    expected_verdict = (diagnostic.VERDICT_CONNECTED if accepted and sdk_status == "completed" else
+                        diagnostic.VERDICT_UNCLASSIFIED_FAILURE if sdk_status == "failed" and (accepted or case == "save-failure")
                         else diagnostic.VERDICT_RESPONSE_EVIDENCE_REFUSED)
     assert record["verdict"] == expected_verdict
     proof = record["observed"]["provider_response_evidence"]
-    assert proof["state"] == ("observed" if case == "valid" else "unverified")
+    assert proof["state"] == ("observed" if accepted else "unverified")
+    if case == "missing-1m":
+        assert proof["context_tokens"] == "not_reported"
     if case == "missing-model":
         assert record["observed"]["served_model"] == "not_reported"
     assert runtimes and all(runtime.closed for runtime in runtimes)

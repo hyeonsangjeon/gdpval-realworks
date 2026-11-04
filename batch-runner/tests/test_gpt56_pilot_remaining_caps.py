@@ -203,7 +203,7 @@ def test_attempt_deadline_uses_the_draft_not_a_larger_runner_timeout(monkeypatch
                                   wire.NATIVE_PILOT_CAP_EXCEEDED, wire.NATIVE_USAGE_UNVERIFIED,
                                   wire.NATIVE_INPUT_PRECHECK_EXCEEDED, wire.NATIVE_OUTPUT_PRECHECK_EXCEEDED,
                                   wire.NATIVE_TOKEN_REQUEST_UNVERIFIED, wire.NATIVE_OUTPUT_LIMIT_UNAVAILABLE,
-                                  *sorted(wire._USD_STOPS)])
+                                  *sorted(wire._USD_STOPS - wire._USD_NON_STOPPING)])
 def test_cap_stop_closes_real_sdk_child_before_receipt_and_rejects_raced_success(monkeypatch, tmp_path, capsys, reason):
     """Installed SDK.close on harmless child; provider, turns and host are synthetic."""
     from openai_codex.client import CodexClient, CodexConfig

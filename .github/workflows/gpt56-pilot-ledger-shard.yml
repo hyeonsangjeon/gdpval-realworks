@@ -1,0 +1,114 @@
+name: Native pilot ledger shard (model-free reusable job)
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        required: true
+      shard_index:
+        type: number
+        required: true
+      predecessor_artifact:
+        type: string
+        default: ''
+      predecessor_sha256:
+        type: string
+        default: ''
+    outputs:
+      artifact_id:
+        value: ${{ jobs.shard.outputs.artifact_id }}
+      manifest_sha256:
+        value: ${{ jobs.shard.outputs.manifest_sha256 }}
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      manifest_sha256: ${{ steps.worker.outputs.manifest_sha256 }}
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      HF_HUB_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+    steps:
+      - name: Admit only model-free first-attempt sequential arguments
+        env:
+          MODE: ${{ inputs.mode }}
+          SHARD_INDEX: ${{ inputs.shard_index }}
+          PREVIOUS_ARTIFACT: ${{ inputs.predecessor_artifact }}
+          PREVIOUS_SHA: ${{ inputs.predecessor_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$MODE" == model-free && "$SHARD_INDEX" =~ ^[0-4]$ && "$GITHUB_RUN_ATTEMPT" == 1 ]]
+          if [[ "$SHARD_INDEX" == 0 ]]; then
+            [[ -z "$PREVIOUS_ARTIFACT" && -z "$PREVIOUS_SHA" ]]
+          else
+            [[ "$PREVIOUS_ARTIFACT" =~ ^[1-9][0-9]*$ && "$PREVIOUS_SHA" =~ ^[0-9a-f]{64}$ ]]
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+      - name: Install pinned import-only dependencies (no model SDK)
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
+      - name: Download only the predecessor's immutable artifact ID
+        if: inputs.shard_index > 0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          artifact-ids: ${{ inputs.predecessor_artifact }}
+          path: ${{ runner.temp }}/pilot-predecessor
+          merge-multiple: true
+      - name: Resume the same synthetic ledgers (network and subprocesses denied)
+        id: worker
+        continue-on-error: true
+        env:
+          SHARD_INDEX: ${{ inputs.shard_index }}
+          PREVIOUS_SHA: ${{ inputs.predecessor_sha256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          args=(run-shard --mode model-free --shard-index "$SHARD_INDEX"
+                --workspace "$RUNNER_TEMP/pilot-shard-state" --output "$RUNNER_TEMP/pilot-handoff")
+          if [[ "$SHARD_INDEX" != 0 ]]; then
+            args+=(--predecessor "$RUNNER_TEMP/pilot-predecessor" --expected-sha256 "$PREVIOUS_SHA")
+          fi
+          if timeout --signal=TERM --kill-after=5s 120s python batch-runner/gpt56_pilot_ledger_handoff.py "${args[@]}"; then
+            worker_exit=0
+          else
+            worker_exit=$?
+          fi
+          printf 'worker_exit=%s\n' "$worker_exit" >> "$GITHUB_OUTPUT"
+          exit "$worker_exit"
+      - name: Accept exactly the planned post-settlement interruption, no other failure
+        id: checked
+        env:
+          SHARD_INDEX: ${{ inputs.shard_index }}
+          WORKER_EXIT: ${{ steps.worker.outputs.worker_exit }}
+          WORKER_OUTCOME: ${{ steps.worker.outcome }}
+          MANIFEST_SHA: ${{ steps.worker.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$MANIFEST_SHA" =~ ^[0-9a-f]{64}$ ]]
+          if [[ "$SHARD_INDEX" == 1 ]]; then
+            [[ "$WORKER_EXIT" == 75 && "$WORKER_OUTCOME" == failure ]]
+          else
+            [[ "$WORKER_EXIT" == 0 && "$WORKER_OUTCOME" == success ]]
+          fi
+          [[ -f "$RUNNER_TEMP/pilot-handoff/handoff.json" ]]
+          printf 'expected_worker_exit_verified=%s; model_calls=0; judge_calls=0\n' "$WORKER_EXIT"
+      - name: Publish only the bounded synthetic wallet bundle
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pilot-ledger-model-free-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.shard_index }}
+          path: ${{ runner.temp }}/pilot-handoff
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false

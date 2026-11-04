@@ -40,7 +40,7 @@
 | `served_model` | 최종 provider response 객체의 `model` | `not_reported`, `served_model_unverified` |
 | `served_model_version` | 같은 객체의 명시적인 `model_version` | `not_reported`; 모델 이름의 날짜나 소유자 inventory에서 추정하지 않는다. |
 | `reasoning_effort` | 같은 객체의 `reasoning.effort` | `not_reported`, `reasoning_effort_unverified` |
-| `context_tokens` | `context_window` / `model_context_window` / `context_window_tokens` / `tokenLimit` / `modelContextWindow`의 유효한 정수 | `not_reported`, `context_window_unverified` |
+| `context_tokens` | `context_window` / `model_context_window` / `context_window_tokens` / `tokenLimit` / `modelContextWindow`의 유효한 정수 | `not_reported`(기록만, 중단 아님 — 2026-10-30 소유자 결정). 서로 다른 값이 둘 이상이면 `context_window_mismatch` |
 
 위 context 경로는 **앞으로 받을 응답의 검사 계약**이다. 실제 Foundry가
 이 필드를 내보낸다는 근거가 아니다. 잘못된 타입과 서로 다른 context
@@ -48,6 +48,10 @@
 요청 설정, SDK thread 설정, rollout, app-server의 258400 표시에서
 응답 필드를 채우지 않는다. `observed`는 응답에 값이 있었다는 뜻이며
 실제 모델 내부 동작·Max 효과·1M 처리 능력의 독립 증명으로 승격하지 않는다.
+
+2026-10-30 소유자 결정(벤치마크 카드 3번): Responses 응답 객체에는 context
+window가 없다. 그래서 값이 없거나 읽을 수 없으면 `not_reported`로 남기고
+중단하지 않는다. 응답이 1,000,000이 아닌 값을 보고하면 여전히 중단한다.
 
 모델은 요청 배포 `gpt-5.6-sol`과 정확히 같아야 한다. Fast·날짜 별칭도
 조용히 같은 것으로 취급하지 않는다. effort는 `max`, context는 1,000,000을

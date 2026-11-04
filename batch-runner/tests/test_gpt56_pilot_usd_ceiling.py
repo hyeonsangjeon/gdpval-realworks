@@ -163,7 +163,9 @@ def test_one_ledger_spans_tasks_attempts_and_closed_receipts_stay_fixed(monkeypa
 
 
 @pytest.mark.parametrize("damage", ["missing", "partial", "malformed", "http_error", "truncated"])
-def test_unknown_response_keeps_reserve_and_blocks_next_task(monkeypatch, damage):
+def test_unknown_response_keeps_reserve_and_next_task_proceeds(monkeypatch, damage):
+    # Owner decision 2026-10-30: the unknown reply keeps its whole reservation
+    # booked, and the pilot is not stopped by it.
     row = _response()
     document = json.loads(row["body"])
     if damage == "missing":
@@ -178,7 +180,7 @@ def test_unknown_response_keeps_reserve_and_blocks_next_task(monkeypatch, damage
         row["missing"] = 8
     row["body"] = json.dumps(document).encode()
     budget = wire._NativeRequestBudget(TASKS)
-    with _upstream(monkeypatch, [row]) as (received, connections):
+    with _upstream(monkeypatch, [row, _response()]) as (received, connections):
         first = _capture(budget)
         try:
             _post(first.base_url)
@@ -187,35 +189,35 @@ def test_unknown_response_keeps_reserve_and_blocks_next_task(monkeypatch, damage
         first_result, first_money = _summary(first)
         next_task = _capture(budget, TASKS[1])
         try:
-            assert _post(next_task.base_url) == (400, b"")
+            assert _post(next_task.base_url)[0] == 200
         finally:
             next_task.close()
         _, later = _summary(next_task)
-    assert len(received) == len(connections) == 1
-    assert first_result["runtime_caps"]["stop_reason"] == wire.USD_USAGE_UNVERIFIED
+    assert len(received) == len(connections) == 2
+    assert first_result["runtime_caps"]["stop_reason"] not in wire._USD_STOPS
+    assert first_money["stop_reason"] is None and later["stop_reason"] is None
     assert first_money["pending_requests"] == later["pending_requests"] == 1
     assert Decimal(first_money["pending_reserve_usd"]) == Decimal("7.20")
-    assert later["stop_reason"] == wire.USD_USAGE_UNVERIFIED
     assert first_money["cache_write_tokens_observed"] is None
 
 
-def test_failed_connection_retains_money_and_never_opens_another_upstream(monkeypatch):
+def test_failed_connection_retains_money_and_next_task_may_try_again(monkeypatch):
     calls = []
     def fail(*_args, **_kwargs):
         calls.append(True)
         raise OSError(CANARY)
     monkeypatch.setattr(wire, "HTTPSConnection", fail)
     budget = wire._NativeRequestBudget(TASKS)
-    for task in TASKS[:2]:
+    for index, task in enumerate(TASKS[:2], start=1):
         capture = _capture(budget, task)
         try:
-            assert _post(capture.base_url)[0] == (502 if task == TASKS[0] else 400)
+            assert _post(capture.base_url)[0] == 502
         finally:
             capture.close()
         _, money = _summary(capture)
-        assert money["pending_requests"] == 1
-        assert Decimal(money["modeled_total_usd"]) == Decimal("7.20")
-    assert len(calls) == 1 and budget.total == 1
+        assert money["stop_reason"] is None and money["pending_requests"] == index
+        assert Decimal(money["modeled_total_usd"]) == Decimal("7.20") * index  # Each failure stays booked.
+    assert len(calls) == 2 and budget.total == 2
 
 
 def test_concurrent_last_usd_reservation_has_only_one_upstream(monkeypatch):
@@ -279,16 +281,16 @@ def test_money_projection_rejects_bad_fields_and_never_upgrades_authority(key, v
     assert not wire._checked_usd_summary(changed)
 
 
-def test_actual_usage_above_reserved_amount_stops_instead_of_resetting():
+def test_actual_usage_above_reserved_amount_is_booked_not_stopped():
     ledger = wire._PilotUsdLedger()
     attempt = ledger.begin(TASKS[0])
     reservation, reason = ledger.reserve(attempt, 1, 1)
     assert reason is None
-    assert ledger.finish(reservation, 2, 1) == wire.USD_RESERVATION_EXCEEDED
-    assert ledger.reserve(attempt, 1, 1)[1] == wire.USD_RESERVATION_EXCEEDED
+    assert ledger.finish(reservation, 2, 1) is None
     receipt = ledger.snapshot(attempt)
-    assert Decimal(receipt["modeled_accounted_usd"]) == Decimal("0.000090")
-    assert wire._checked_usd_summary(receipt)
+    assert Decimal(receipt["modeled_accounted_usd"]) == Decimal("0.000090")  # The overrun is booked as observed.
+    assert ledger.reserve(attempt, 1, 1)[1] is None
+    assert wire._checked_usd_summary(ledger.snapshot(attempt))
 
 
 @pytest.mark.parametrize("model", [None, "gpt-5.6-sol-fast", CANARY])
@@ -306,7 +308,7 @@ def test_unpriced_request_model_is_refused_before_any_upstream(monkeypatch, mode
     assert money["pending_requests"] == 0
 
 
-def test_fast_response_usage_cannot_be_settled_using_sol_reference_rates(monkeypatch):
+def test_fast_response_usage_keeps_its_reservation_instead_of_sol_reference_rates(monkeypatch):
     response = _response()
     document = json.loads(response["body"])
     document["model"] = "gpt-5.6-sol-fast"
@@ -321,5 +323,5 @@ def test_fast_response_usage_cannot_be_settled_using_sol_reference_rates(monkeyp
     result, money = _summary(capture)
     assert len(received) == 1
     assert result["served_model"] == "gpt-5.6-sol-fast"  # Observed, never substituted.
-    assert money["stop_reason"] == wire.USD_USAGE_UNVERIFIED
-    assert money["pending_requests"] == 1
+    assert money["stop_reason"] is None
+    assert money["pending_requests"] == 1  # Booked at its whole reservation, not repriced.

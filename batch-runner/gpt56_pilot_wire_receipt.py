@@ -68,6 +68,10 @@ USD_PRICE_CONTRACT_UNVERIFIED = "usd_price_contract_unverified"
 USD_LEDGER_UNVERIFIED = "usd_ledger_unverified"
 _USD_STOPS = {USD_CEILING_EXCEEDED, USD_USAGE_UNVERIFIED,
               USD_RESERVATION_EXCEEDED, USD_PRICE_CONTRACT_UNVERIFIED, USD_LEDGER_UNVERIFIED}
+# Owner decision 2026-10-30 14:15: unknown usage keeps its reservation booked and
+# an overrun is booked as observed; neither stops the pilot. The ceiling and the
+# pinned cap/price integrity check still stop.
+_USD_NON_STOPPING = {USD_USAGE_UNVERIFIED, USD_RESERVATION_EXCEEDED}
 _TOKEN_PRECHECK_STOPS = {NATIVE_INPUT_PRECHECK_EXCEEDED, NATIVE_OUTPUT_PRECHECK_EXCEEDED,
                          NATIVE_TOKEN_REQUEST_UNVERIFIED, NATIVE_OUTPUT_LIMIT_UNAVAILABLE,
                          NATIVE_USAGE_UNVERIFIED}
@@ -186,7 +190,7 @@ class _PilotUsdLedger:
     """Attempt accounting, backed by durable admission in actual pilot sessions.
 
     Decimal reservations follow the existing agentic-budget convention. A
-    missing/failed response consumes its reservation and poisons the budget;
+    missing/failed response consumes its whole reservation (booked, not a stop);
     saved receipts cannot refill it. The no-file form is for isolated fixtures.
     """
 
@@ -240,6 +244,8 @@ class _PilotUsdLedger:
                     for attempt, amount, baseline in self.pending.values()), Decimal(0))
 
     def _stop(self, reason):
+        if reason in _USD_NON_STOPPING:
+            return self.reason
         if self.reason is None:
             self.reason = reason
         if self.shared is not None:
@@ -257,9 +263,10 @@ class _PilotUsdLedger:
                     self.require_current()
                 except Exception:
                     self._stop(USD_PRICE_CONTRACT_UNVERIFIED)
-            if self.reason is None and not all(type(value) is int and 0 <= value < 2 ** 63
-                                               for value in (inputs, outputs)):
-                self._stop(USD_USAGE_UNVERIFIED)
+            if not all(type(value) is int and 0 <= value < 2 ** 63 for value in (inputs, outputs)):
+                # Unknown request size: reserve the attempt's full token caps instead of refusing.
+                limits = _native_caps()["per_attempt"]
+                inputs, outputs = limits["input_tokens"], limits["output_tokens"]
             if self.reason is not None:
                 self.blocked += 1
                 return None, self.reason
@@ -1431,6 +1438,33 @@ def _require(value: bool) -> None:
         raise PilotWireReceiptRefused()
 
 
+def _long_context_catalog(overrides) -> tuple[str, ...]:
+    """Hand Codex the held 1M Sol catalog when the run asks above its bundled maximum.
+
+    Codex 0.147.0's bundled models.json gives gpt-5.6-sol 272,000 tokens and
+    clamps ``model_context_window`` to it (258,400 usable at 95%). Owner
+    decision 2026-10-30: the pilot's 1,000,000 must reach Codex. The held
+    catalog is the bundled one except Sol's window fields; changed bytes refuse.
+    It is a client setting, not proof of what the provider serves.
+    """
+    from core.codex_runtime_config import _toml_literal
+
+    windows = [item for item in overrides if item.startswith("model_context_window=")]
+    _require(len(windows) <= 1 and not any(item.startswith("model_catalog_json=") for item in overrides))
+    if not windows:
+        return ()
+    match = re.fullmatch(r"model_context_window=([1-9][0-9]{0,18})", windows[0])
+    _require(match is not None)
+    if int(match.group(1)) <= pilot.CODEX_BUNDLED_SOL_CONTEXT_WINDOW:
+        return ()
+    path = pilot.ROOT / pilot.CODEX_LONG_CONTEXT_CATALOG
+    try:
+        _read_bytes(path, sha256=pilot.SOURCE_PROFILE_AUXILIARY[pilot.CODEX_LONG_CONTEXT_CATALOG])
+    except Exception:
+        raise PilotWireReceiptRefused() from None
+    return ("model_catalog_json=" + _toml_literal(str(path)),)
+
+
 @contextmanager
 def _closed():
     try:
@@ -1545,7 +1579,8 @@ class _TransportObservation:
                  and (self.startup_process is None or self.startup_process.poll() is not None))
 
     def configure_provider_observer(self, provider, overrides, *, timeout):
-        """Replace only this process's checked provider URL; never mutate settings."""
+        """Replace only this process's checked provider URL and add the held 1M
+        catalog when the window needs it; never mutate settings."""
         from core.codex_runtime_config import _toml_literal
 
         with self.guard():
@@ -1555,6 +1590,7 @@ class _TransportObservation:
             key = f"model_providers.{provider.provider_id}.base_url="
             expected = key + _toml_literal(provider.base_url)
             _require([item for item in overrides if item.startswith(key)] == [expected])
+            catalog = _long_context_catalog(overrides)
             try:
                 self.provider_capture = _ProviderHTTPObservation(provider.base_url, timeout,
                                                                  artifacts=self.response_artifacts)
@@ -1565,7 +1601,7 @@ class _TransportObservation:
             if self.native_budget is not None:
                 self.provider_capture.bind_budget(self.native_budget, self.native_budget_task)
             return tuple(key + _toml_literal(self.provider_capture.base_url) if item == expected else item
-                         for item in overrides)
+                         for item in overrides) + catalog
 
     def close_provider_observer(self):
         if self.provider_capture is not None:

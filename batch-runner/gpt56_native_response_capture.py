@@ -342,6 +342,14 @@ class NativeResponseArtifacts:
             ("context_tokens", self.required_context, "context_window_unverified", "context_window_mismatch"),
         ):
             if fields[key] == NOT_REPORTED:
+                if key == "context_tokens":
+                    # Owner decision 2026-10-30: a Responses object carries no
+                    # context window, so an absent or unreadable one is kept as
+                    # not_reported and does not stop. Two different reported
+                    # windows, or one other than 1,000,000, still stop.
+                    if len(set(fields["context_fields"].values())) > 1:
+                        return mismatch
+                    continue
                 return missing
             if fields[key] != expected:
                 return mismatch

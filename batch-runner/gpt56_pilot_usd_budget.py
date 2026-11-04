@@ -36,6 +36,25 @@ OVERRUN = "usd_reservation_exceeded"
 UNPRICED = "usd_price_contract_unverified"
 UNVERIFIED = "usd_ledger_unverified"
 STOPS = frozenset({CEILING, UNKNOWN, OVERRUN, UNPRICED, UNVERIFIED})
+# Owner decision 2026-10-30 14:15 (benchmark card): an unknown price or unknown
+# usage never refuses or stops the pilot. A request whose usage is unknown keeps
+# its whole reservation as consumed spend, an overrun is booked as observed, and
+# an unpriced model is booked at a published list price. Only the USD ceiling and
+# ledger integrity still stop. The names stay valid for ledgers written earlier.
+NON_STOPPING = frozenset({UNKNOWN, OVERRUN, UNPRICED})
+# Published list meters, not a verified tariff. 5.6-sol: the pinned table's own
+# long-context Standard Global meter (the higher of its two Global tiers); a test
+# keeps these numbers equal to azure_published_meters in model_price_table.json.
+LIST_PRICE_METER = "long_context_standard_global"
+SOL_LIST_USD_PER_MILLION = {"input": Decimal("10.00"), "output": Decimal("45.00"), "cache_write": Decimal("12.50")}
+# gpt-audio-1.5 has no Azure meter. Stand-in = the highest published audio-token
+# rate seen for it (Azure 2026-02-23 build, USD per 1M): above OpenAI's 32/64.
+AUDIO_STAND_IN_USD_PER_MILLION = {"input": Decimal("40"), "output": Decimal("80"), "cache_write": Decimal("0")}
+# Estimated allowance for requests the exact text bound cannot cover (images,
+# audio, no output limit). Reservation sizing only; settlement uses usage.
+IMAGE_TOKEN_ALLOWANCE = 8000
+AUDIO_BASE64_BYTES_PER_TOKEN = 100
+DEFAULT_OUTPUT_TOKEN_ALLOWANCE = 32768
 ORIGINS = frozenset({"inference", "grading"})
 APPROVED_MAXIMUM_USD = Decimal("200")  # Exact decision in the hash-pinned CAP_PATH.
 
@@ -240,6 +259,8 @@ class PilotUsdLedger:
 
     def _stop(self, reason, origin):
         _require(reason in STOPS and origin in ORIGINS)
+        if reason in NON_STOPPING:
+            return  # Booked (unknown/overrun keep their full amount), never a stop.
         self.connection.execute("UPDATE meta SET reason=COALESCE(reason,?), origin=COALESCE(origin,?) WHERE id=1",
                                 (reason, origin))
 
@@ -430,43 +451,52 @@ def checked_snapshot(raw):
             and values["combined_modeled_usd"] == total
             and values["remaining_modeled_usd"] == max(Decimal(0), APPROVED_MAXIMUM_USD - total)
             and (raw["stop_reason"] is not None or total <= APPROVED_MAXIMUM_USD)
-            and (raw["unknown_requests"] == 0 or raw["stop_reason"] is not None)
             and (raw["pending_requests"] != 0 or values["pending_usd"] == 0)
             and (raw["unknown_requests"] != 0 or values["unknown_consumed_usd"] == 0))
 
 
+def _list_rates(model):
+    """Published list price for a model without a settled contract; never a refusal."""
+    if type(model) is str and model.startswith("gpt-audio"):
+        return dict(AUDIO_STAND_IN_USD_PER_MILLION)
+    return dict(SOL_LIST_USD_PER_MILLION)
+
+
+def _settled_rates(document, model):
+    """The exact contract when the table settles every axis for this model, else None."""
+    key = "azure:" + model
+    entry = document.get("providers", {}).get(key)
+    if (key in document.get("models_deliberately_not_priced", {}) or type(entry) is not dict
+            or entry.get("currency") != "USD" or entry.get("unit") != "per 1,000,000 tokens"
+            or entry.get("reasoning_billed_as") != "output" or not entry.get("source")
+            or not entry.get("last_reviewed") or entry.get("premises") or entry.get("assumptions")
+            or document.get("pricing_axes", {}).get("axes_open")
+            or entry.get("cache_write_billed_as") not in {"none", "input_tokens"}):
+        return None
+    try:
+        rates = {"input": _money(entry["input_usd_per_million"]),
+                 "output": _money(entry["output_usd_per_million"]),
+                 "cache_write": _money(entry["cache_write_usd_per_million"])}
+        if ((entry["cache_write_billed_as"] == "none") != (rates["cache_write"] == 0)
+                or _money(entry["cached_input_usd_per_million"]) > rates["input"]):
+            return None
+    except (KeyError, PilotUsdRefused):
+        return None
+    return rates
+
+
 def grading_prices(config):
-    """An exact, settled pricing contract, never the native reference scenario."""
+    """Settled contract where one exists, else a published list price (owner decision 2026-10-30)."""
     document = price_document()
     judge = config.get("judge", {})
-    _require(judge.get("provider") == "azure_openai", UNPRICED)
-    slots = [judge, *judge.get("perception", {}).values()]
+    _require(type(judge) is dict)
     prices = {}
-    for slot in slots:
-        _require(type(slot) is dict, UNPRICED)
+    for slot in [judge, *(judge.get("perception") or {}).values()]:
+        _require(type(slot) is dict)
         model = slot.get("model")
-        _require(type(model) is str and model and slot.get("deployment", model) == model, UNPRICED)
-        key = "azure:" + model
-        _require(key not in document.get("models_deliberately_not_priced", {}), UNPRICED)
-        entry = document.get("providers", {}).get(key)
-        _require(type(entry) is dict and entry.get("currency") == "USD"
-                 and entry.get("unit") == "per 1,000,000 tokens"
-                 and entry.get("reasoning_billed_as") == "output"
-                 and entry.get("source") and entry.get("last_reviewed")
-                 and not entry.get("premises") and not entry.get("assumptions")
-                 and not document.get("pricing_axes", {}).get("axes_open"), UNPRICED)
-        write_kind = entry.get("cache_write_billed_as")
-        _require(write_kind in {"none", "input_tokens"}, UNPRICED)
-        try:
-            rates = {"input": _money(entry["input_usd_per_million"]),
-                     "output": _money(entry["output_usd_per_million"]),
-                     "cache_write": _money(entry["cache_write_usd_per_million"])}
-            _require((write_kind == "none") == (rates["cache_write"] == 0), UNPRICED)
-            _require(_money(entry["cached_input_usd_per_million"]) <= rates["input"], UNPRICED)
-        except (KeyError, PilotUsdRefused):
-            raise PilotUsdRefused(UNPRICED) from None
-        prices[model] = rates
-    _require(bool(prices), UNPRICED)
+        _require(type(model) is str and bool(model))
+        prices[model] = _settled_rates(document, model) or _list_rates(model)
+    _require(bool(prices))
     return prices
 
 
@@ -481,7 +511,52 @@ def _count(container, *names):
     return values[0]
 
 
+def _estimated_allowance(kwargs):
+    """Conservative reservation size for requests the exact bound refuses.
+
+    Media payloads are counted per item instead of per base64 byte, so one
+    image or recording cannot reserve the whole budget. Settlement still books
+    the reported usage; an unreported one keeps this whole reservation.
+    """
+    tokens = 0
+
+    def visit(value, key=None):
+        nonlocal tokens
+        if type(value) is dict:
+            kind = value.get("type") if type(value.get("type")) is str else None
+            if kind in {"input_image", "image_url", "image"} or key in {"image_url", "image"}:
+                tokens += IMAGE_TOKEN_ALLOWANCE
+                return
+            audio = value.get("input_audio") if type(value.get("input_audio")) is dict else None
+            if audio is not None or key == "input_audio":
+                data = (audio or value).get("data")
+                tokens += 1000 + (len(data) // AUDIO_BASE64_BYTES_PER_TOKEN if type(data) is str else 0)
+                return
+            for name, item in value.items():
+                visit(item, name)
+        elif type(value) in (list, tuple):
+            for item in value:
+                visit(item, key)
+        elif type(value) is str:
+            tokens += len(value.encode("utf-8", "replace"))
+        else:
+            tokens += len(str(value))
+
+    visit(kwargs if type(kwargs) is dict else {})
+    limits = [kwargs[name] for name in ("max_output_tokens", "max_completion_tokens", "max_tokens")
+              if type(kwargs) is dict and type(kwargs.get(name)) is int and 0 < kwargs[name] < 2 ** 31]
+    return max(1, tokens), (limits[0] if limits else DEFAULT_OUTPUT_TOKEN_ALLOWANCE)
+
+
 def _request_allowance(kwargs):
+    """Exact visible-text bound when it applies, else a conservative estimate (never a refusal)."""
+    try:
+        return _exact_allowance(kwargs)
+    except PilotUsdRefused:
+        return _estimated_allowance(kwargs)
+
+
+def _exact_allowance(kwargs):
     """Restricted visible-text client bound; not a model/server token theorem."""
     _require(type(kwargs) is dict and not kwargs.get("stream"), UNKNOWN)
     limits = [kwargs[key] for key in ("max_output_tokens", "max_completion_tokens", "max_tokens") if key in kwargs]
@@ -560,19 +635,15 @@ class GradingUsdAdmission:
             raise GradingUsdStopped(refused.code) from None
 
     def check_client(self, client):
-        # A wrapper around create() cannot settle invisible SDK retries. Do not
-        # change the frozen transport policy or pretend one reply covers them.
-        if type(getattr(client, "max_retries", None)) is not int or client.max_retries != 0:
-            self.ledger.refuse(UNKNOWN, "grading")
-            raise PilotUsdRefused(UNKNOWN)
+        # Owner decision 2026-10-30: SDK retries are allowed. Their invisible
+        # attempts are not booked separately; the reservation covers one.
+        return None
 
     def reserve(self, *, task_id, provider, kwargs):
         try:
-            _require(provider == "azure" and grading_prices(self.config) == self.prices, UNPRICED)
-            model = kwargs.get("model")
-            _require(model in self.prices, UNPRICED)
+            model = kwargs.get("model") if type(kwargs) is dict else None
+            rates = self.prices.get(model) or _list_rates(model)
             inputs, outputs = _request_allowance(kwargs)
-            rates = self.prices[model]
             amount = (Decimal(inputs) * (rates["input"] + rates["cache_write"])
                       + Decimal(outputs) * rates["output"]) / Decimal(1_000_000)
             account = self.ledger.begin("grading", task_id)
@@ -584,31 +655,23 @@ class GradingUsdAdmission:
 
     def finish(self, ticket, response):
         try:
-            _require(_value(response, "model") == ticket["model"], UNKNOWN)
-            status = _value(response, "status")
-            if status is None:
-                choices = _value(response, "choices")
-                _require(type(choices) is list and choices and all(_value(choice, "finish_reason") in {"stop", "tool_calls"} for choice in choices), UNKNOWN)
-            else:
-                _require(status == "completed", UNKNOWN)
             usage = _value(response, "usage")
             inputs = _count(usage, "input_tokens", "prompt_tokens")
             outputs = _count(usage, "output_tokens", "completion_tokens")
-            for name in ("input_tokens_details", "prompt_tokens_details"):
-                detail = _value(usage, name)
-                if _value(detail, "cached_tokens") is not None:
-                    _require(_count(detail, "cached_tokens") <= inputs, UNKNOWN)
-                _require(_value(detail, "audio_tokens") in (None, 0), UNKNOWN)
-            for name in ("output_tokens_details", "completion_tokens_details"):
-                _require(_value(_value(usage, name), "audio_tokens") in (None, 0), UNKNOWN)
             rates = ticket["rates"]
-            writes = _count(usage, "cache_write_input_tokens", "cache_creation_input_tokens") if rates["cache_write"] else 0
+            writes = 0
+            if rates["cache_write"]:
+                try:
+                    writes = _count(usage, "cache_write_input_tokens", "cache_creation_input_tokens")
+                except PilotUsdRefused:
+                    writes = inputs  # Unreported cache writes: book one write per input token.
             io = (Decimal(inputs) * rates["input"] + Decimal(outputs) * rates["output"]) / Decimal(1_000_000)
             cache = Decimal(writes) * rates["cache_write"] / Decimal(1_000_000)
-            reason = self.ledger.settle(ticket["reservation"], io, cache)
-        except BaseException:
+        except Exception:
+            # Unknown usage: the whole reservation stays booked; grading continues.
             self.ledger.abandon(ticket["account"])
-            raise PilotUsdRefused(UNKNOWN) from None
+            return
+        reason = self.ledger.settle(ticket["reservation"], io, cache)
         if reason is not None:
             raise PilotUsdRefused(reason)
 
@@ -631,7 +694,7 @@ def is_pilot_grading(*, experiment_id=None, config=None, inference=None, workspa
 
 def open_grading_admission(*, workspace, inference, task_ids, config):
     """Reopen the inference-bound financial file, not its live wire witness."""
-    grading_prices(config)  # No guess, no client construction, no fresh ledger.
+    grading_prices(config)  # List price where unsettled; no client construction, no fresh ledger.
     _require(config.get("config_name") == RUN_ID + "_v2_sol_max"
              and inference.get("experiment_id") == RUN_ID)
     _require(workspace is not None)
@@ -647,8 +710,8 @@ def open_grading_admission(*, workspace, inference, task_ids, config):
     try:
         _require(ledger.binding() == binding)
         snapshot = ledger.snapshot()
-        _require(snapshot["stop_reason"] is None and snapshot["pending_requests"] == 0
-                 and snapshot["unknown_requests"] == 0, snapshot["stop_reason"] or UNKNOWN)
+        _require(snapshot["stop_reason"] is None and snapshot["pending_requests"] == 0,
+                 snapshot["stop_reason"] or UNVERIFIED)
         return GradingUsdAdmission(ledger, config)
     except BaseException:
         ledger.close()

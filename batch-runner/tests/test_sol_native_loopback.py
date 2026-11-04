@@ -152,11 +152,14 @@ def test_real_pinned_sol_diagnostic_passes_unchanged_token_precheck(monkeypatch,
     assert record["observed"]["provider_transport"]["native_request_count"] == 1
     assert record["observed"]["provider_transport"]["runtime_caps"]["stop_reason"] is None
     assert record["observed"]["provider_response_evidence"]["state"] == "observed"
+    # Owner decision 2026-10-30: the held catalog lifts Codex 0.147.0's bundled
+    # 272,000 Sol maximum, so the app-server reports the requested window.
+    assert record["observed"]["usage"]["model_context_window"] == 1_000_000, json.dumps(proof)
     assert not list((tmp_path / "isolated-runtimes").glob("**/workspace"))
 
-    # The observed live failure, replayed with NO provider/credential/model:
-    # HTTP 200 without context must produce an explicit evidence refusal,
-    # even when the real SDK sees the observer's 502 and reports turn failure.
+    # The observed live response shape, replayed with NO provider/credential/
+    # model: HTTP 200 without a context window is recorded as not_reported and
+    # the turn completes (owner decision 2026-10-30), instead of a refusal.
     refused_root = tmp_path / "missing-context"
     refused_root.mkdir(mode=0o700)
     with _upstream(monkeypatch, [{"body": _scripted_response(report_context=False),
@@ -166,11 +169,12 @@ def test_real_pinned_sol_diagnostic_passes_unchanged_token_precheck(monkeypatch,
     proof["missing_context_case"] = {"verdict": refused["verdict"],
         "fake_upstream_requests": len(denied_received),
         "state": refused["observed"]["provider_response_evidence"]["state"],
+        "context_tokens": refused["observed"]["provider_response_evidence"]["context_tokens"],
         "stop_reason": refused["observed"]["provider_transport"]["runtime_caps"]["stop_reason"]}
     if destination:
         Path(destination).write_text(json.dumps(proof, indent=2) + "\n")
     assert proof["missing_context_case"] == {
-        "verdict": diagnostic.VERDICT_RESPONSE_EVIDENCE_REFUSED, "fake_upstream_requests": 1,
-        "state": "unverified", "stop_reason": "context_window_unverified",
+        "verdict": diagnostic.VERDICT_CONNECTED, "fake_upstream_requests": 1,
+        "state": "observed", "context_tokens": "not_reported", "stop_reason": None,
     }, json.dumps(proof)
     assert not list((tmp_path / "isolated-runtimes").glob("**/workspace"))

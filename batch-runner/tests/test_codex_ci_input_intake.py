@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import time
 from types import SimpleNamespace
 import urllib.error
 import urllib.request
@@ -30,6 +31,7 @@ from .test_codex_budget_pilot import REAL_POPEN, offline  # noqa: F401
 from .test_codex_ci_input_bundle import originals, reservation  # noqa: F401
 
 SHELL_RUN = subprocess.run
+SHELL_SLEEP = time.sleep
 SYNTHETIC_TOKEN = "synthetic_github_token_never_publish"
 SIGNED_TARGET = ("https://release-assets.githubusercontent.com/github-production-release-asset/123/"
                  "12345678-1234-1234-1234-123456789abc?sig=synthetic_private_signature")
@@ -510,8 +512,35 @@ def shell_block(text, *, monkeypatch, tmp_path, extra_env=None, prefix=""):
     }
     with monkeypatch.context() as scoped:
         scoped.setattr(subprocess, "Popen", REAL_POPEN)
+        # Popen's POSIX timed wait polls after EOF until waitpid reports exit.
+        # Give only the stdlib subprocess namespace its real wait primitive;
+        # do not restore time.sleep globally or weaken the dispatcher's guard.
+        scoped.setattr(subprocess, "time", SimpleNamespace(sleep=SHELL_SLEEP))
         return SHELL_RUN(["bash", "-c", prefix + "\n" + text], env=environment, cwd=tmp_path,
                          capture_output=True, text=True, timeout=5, check=False)
+
+
+def test_ci_input_intake_shell_wait_still_times_out_and_reaps(monkeypatch, tmp_path):
+    original_try_wait = REAL_POPEN._try_wait
+    waiting = set()
+
+    def exit_not_reported(child, flags):
+        if flags == os.WNOHANG:
+            waiting.add(child.pid)
+            return 0, 0
+        return original_try_wait(child, flags)
+
+    monkeypatch.setattr(REAL_POPEN, "_try_wait", exit_not_reported)
+    with pytest.raises(subprocess.TimeoutExpired) as refused:
+        shell_block(":", monkeypatch=monkeypatch, tmp_path=tmp_path)
+    assert 0 < refused.value.timeout <= 5  # The original hard parent timeout.
+    assert len(waiting) == 1
+    with pytest.raises(ChildProcessError):
+        os.waitpid(waiting.pop(), os.WNOHANG)  # The known local child was reaped.
+    with pytest.raises(AssertionError, match="dispatcher regression crossed a live boundary"):
+        time.sleep(0)
+    with pytest.raises(AssertionError, match="dispatcher regression crossed a live boundary"):
+        subprocess.Popen(["not-an-allowed-child"])
 
 
 @pytest.mark.parametrize("execute,input_check,allowed", [
@@ -545,7 +574,27 @@ python3() {{
   return {check_status}
 }}
 '''
+    # Deterministically exercise the CI race: EOF has arrived, but the child's
+    # first nonblocking waitpid has not yet reported exit. No real delay,
+    # provider or extra command is needed to reach CPython's bounded wait.
+    original_try_wait = REAL_POPEN._try_wait
+    waiting = []
+
+    def first_exit_not_ready(child, flags):
+        if flags == os.WNOHANG and child.pid not in waiting:
+            waiting.append(child.pid)
+            return 0, 0
+        return original_try_wait(child, flags)
+
+    monkeypatch.setattr(REAL_POPEN, "_try_wait", first_exit_not_ready)
     result = shell_block(step["run"], monkeypatch=monkeypatch, tmp_path=tmp_path, prefix=prefix)
+    assert len(waiting) == 1
+    # Waiting for an explicitly allowed local shell must not enable controller
+    # sleeps or arbitrary processes in the shared offline fixture.
+    with pytest.raises(AssertionError, match="dispatcher regression crossed a live boundary"):
+        time.sleep(0)
+    with pytest.raises(AssertionError, match="dispatcher regression crossed a live boundary"):
+        subprocess.Popen(["not-an-allowed-child"])
     output = tmp_path / "step-output"
     assert (result.returncode == 0) == (failure is None)
     assert output.exists() == (failure is None)
