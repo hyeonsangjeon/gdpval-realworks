@@ -566,6 +566,9 @@ def discovery_host(dispatch, monkeypatch):
         monkeypatch.setattr(transport, "require_namespace", lambda: None)
         monkeypatch.setattr(transport, "verify_prepared", lambda *args: None)
         monkeypatch.setattr(transport, "child_environment", lambda *args: {})
+        # Host launch is fake here; the separate wire-collector suite exercises
+        # archive verification and actual passive hooks on fake transports.
+        monkeypatch.setattr(transport.wire_capture, "install", lambda prepared, state, environment, **kwargs: environment)
         monkeypatch.setattr(transport.socket, "socket", Reservation)
         monkeypatch.setattr(transport, "CapturedProcess", lambda *args, **kwargs: process)
         monkeypatch.setattr(transport, "WebSocket", lambda *args, **kwargs: wire)
