@@ -217,6 +217,8 @@ def execute(prepared, evidence, state, output, *, open_port=None, capability_onl
                                              credential=credential, authenticated=True))
     except (Refused, adapter._Stop) as error:
         handshake = getattr(error, "handshake", None)
+        if isinstance(error, Refused) and hasattr(error, "native_binary_discovery"):
+            record["native_binary_discovery"] = error.native_binary_discovery
         code = error.code if isinstance(error, adapter._Stop) else str(error)
         code = code if re.fullmatch(r"[a-z_]{1,100}", code) else "connection_execution_refused"
         record.update(status="refused", connection_verified=False, reason_codes=[

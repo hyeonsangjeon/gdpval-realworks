@@ -4,8 +4,10 @@ import copy
 import io
 import json
 from pathlib import Path
+import runpy
 import subprocess
 import tarfile
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -137,6 +139,7 @@ def _archive(path, members):
         for name, content in members.items():
             entry = tarfile.TarInfo(name)
             entry.size = len(content)
+            entry.mode = 0o755 if content.startswith(b"\x7fELF") or Path(name).name == "codex" else 0o644
             archive.addfile(entry, io.BytesIO(content))
 
 
@@ -145,11 +148,21 @@ def prepared_fixture(tmp_path, monkeypatch):
     root = tmp_path / "prepared"
     downloads = root / "downloads"
     downloads.mkdir(parents=True)
-    native_name = "node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex/codex"
+    inventory = json.loads(FIXTURE.with_name("ghcp_codex_sdk_0163_inventory.json").read_text())
+    original = probe.load_manifest()
+    assert inventory["archive_sha256"] == original["artifacts"]["codex_sdk"]["sha256"]
+    native_name, = inventory["native_members"]
     native = root / "codex-sdk" / native_name
     native.parent.mkdir(parents=True)
-    native.write_bytes(b"not executable - offline fixture only")
-    _archive(downloads / "codex_sdk.tgz", {native_name: native.read_bytes()})
+    native.write_bytes(b"\x7fELFnot executable - offline fixture only")
+    native.chmod(0o755)
+    members = {native_name: native.read_bytes()}
+    for relative, metadata in {**inventory["packages"], **inventory["layouts"]}.items():
+        package = root / "codex-sdk" / relative
+        package.parent.mkdir(parents=True, exist_ok=True)
+        package.write_text(json.dumps(metadata))
+        members[relative] = package.read_bytes()
+    _archive(downloads / "codex_sdk.tgz", members)
     sources = {}
     for relative, anchor in wire.SOURCES.values():
         key = f"vscode-{wire.PIN}/{relative}"
@@ -176,6 +189,218 @@ def test_install_checks_archive_binary_and_pinned_source_without_executing_them(
     sources = json.loads((state / "wire/sources.json").read_text())
     assert len(sources["citations"]) == len(wire.SOURCES)
     assert all(wire.PIN in row["url"] and row["line"] > 0 for row in sources["citations"])
+
+
+def test_standalone_probe_and_imported_collector_share_refusal_type():
+    # Load definitions under a CLI-like second module name, without executing
+    # its __main__ entry or any host process on NAS.
+    standalone = runpy.run_path(str(ROOT / "batch-runner/ghcp_ahp_probe.py"), run_name="offline_cli_loading_fixture")
+    assert standalone["Refused"] is probe.Refused is wire.Refused
+
+
+def test_standalone_bootstrap_preserves_original_code_and_all_attempted_paths(tmp_path, monkeypatch):
+    standalone = runpy.run_path(str(ROOT / "batch-runner/ghcp_ahp_probe.py"), run_name="offline_cli_loading_fixture")
+    run = standalone["run_probe"]
+    scope = run.__globals__
+    manifest = probe.load_manifest()
+    monkeypatch.setitem(scope, "require_runner", lambda: {"synthetic": True})
+    monkeypatch.setitem(scope, "require_isolation", lambda *args: {"synthetic": True})
+    monkeypatch.setitem(scope, "verify_prepared", lambda *args: ({"artifacts": {}, "binary_sha256": {}, "source_evidence_sha256": "0" * 64}, {}))
+    monkeypatch.setitem(scope, "child_environment", lambda *args: {})
+    attempts = ["node_modules/@openai/codex-linux-x64/vendor/fixture/bin/codex",
+                "node_modules/@openai/codex-linux-x64/alternate/codex"]
+    def fake_process(command, *args, **kwargs):
+        assert command[1:] in (["--version"], ["agent", "host", "--help"])
+        text = (manifest["vscode_version"] + " " + manifest["vscode_commit"] if command[-1] == "--version"
+                else "--foreground --new-instance --without-connection-token")
+        return SimpleNamespace(finish=lambda: {"exit_code": 0, "stdout": text})
+    def refused_install(*args, **kwargs):
+        error = wire.Refused("wire_native_binary_not_found")
+        error.native_binary_discovery = {"attempted_candidates": [{"path": name, "status": "missing"} for name in attempts],
+                                         "search_complete": True}
+        raise error
+    monkeypatch.setitem(scope, "CapturedProcess", fake_process)
+    monkeypatch.setattr(wire, "install", refused_install)
+    output = tmp_path / "output"
+    assert run(manifest, tmp_path / "prepared", output, "fixture", "fixture", capability_only=True) == 2
+    receipt = json.loads((output / "probe.json").read_text())
+    assert receipt["reason_codes"] == ["wire_native_binary_not_found"]
+    assert [row["path"] for row in receipt["native_binary_discovery"]["attempted_candidates"]] == attempts
+    assert receipt["session_create_requests"] == receipt["model_calls"] == 0
+
+
+@pytest.mark.parametrize("code", ["wire_native_binary_not_found", "wire_sdk_metadata_drift", "wire_sdk_archive_drift"])
+def test_standalone_main_exports_original_refusal_code(tmp_path, monkeypatch, code):
+    standalone = runpy.run_path(str(ROOT / "batch-runner/ghcp_ahp_probe.py"), run_name="offline_cli_loading_fixture")
+    main = standalone["main"]
+    scope = main.__globals__
+    monkeypatch.setitem(scope, "require_runner", lambda: {"synthetic": True})
+    def refused(*args, **kwargs):
+        error = wire.Refused(code)
+        error.native_binary_discovery = {"attempted_candidates": [], "search_complete": False}
+        raise error
+    monkeypatch.setitem(scope, "run_probe", refused)
+    output = tmp_path / "output"
+    assert main(["probe", "--prepared", str(tmp_path / "prepared"), "--evidence", str(output), "--capability-only"]) == 2
+    receipt = json.loads((output / "failure-probe.json").read_text())
+    assert receipt["reason_code"] == code
+    assert receipt["native_binary_discovery"]["attempted_candidates"] == []
+
+
+def test_standalone_unknown_exception_never_exports_its_message(tmp_path, monkeypatch):
+    standalone = runpy.run_path(str(ROOT / "batch-runner/ghcp_ahp_probe.py"), run_name="offline_cli_loading_fixture")
+    main = standalone["main"]
+    monkeypatch.setitem(main.__globals__, "require_runner", lambda: {"synthetic": True})
+    def refused(*args, **kwargs):
+        raise RuntimeError("SYNTHETIC_PRIVATE_ERROR_DO_NOT_EXPORT")
+    monkeypatch.setitem(main.__globals__, "run_probe", refused)
+    output = tmp_path / "output"
+    assert main(["probe", "--prepared", str(tmp_path / "prepared"), "--evidence", str(output)]) == 2
+    text = (output / "failure-probe.json").read_text()
+    assert "SYNTHETIC_PRIVATE" not in text
+    assert json.loads(text)["reason_code"] == "RuntimeError"
+
+
+def _repack_sdk(root, manifest):
+    sdk = root / "codex-sdk"
+    members = {path.relative_to(sdk).as_posix(): path.read_bytes()
+               for path in sdk.rglob("*") if path.is_file() and not path.is_symlink()}
+    archive = root / "downloads/codex_sdk.tgz"
+    _archive(archive, members)
+    manifest["artifacts"]["codex_sdk"]["sha256"] = probe.digest(archive)
+
+
+@pytest.mark.parametrize("relative", ["native/bin/codex", "alternate/deep/codex", "vendor/old-layout/codex/codex"])
+def test_discovery_uses_package_inventory_not_a_vendor_suffix(prepared_fixture, relative):
+    root, _, native, manifest = prepared_fixture
+    destination = root / "codex-sdk/node_modules/@openai/codex-linux-x64" / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    native.rename(destination)
+    layout = next((root / "codex-sdk").rglob("codex-package.json"))
+    # Move the self-described layout alongside its entrypoint. No test creates
+    # or executes a real SDK. Both paths remain inside the declared package.
+    value = json.loads(layout.read_text())
+    layout.unlink()
+    value["entrypoint"] = destination.name
+    (destination.parent / "codex-package.json").write_text(json.dumps(value))
+    _repack_sdk(root, manifest)
+    found, sha, report = wire.discover_native_binary(root, manifest)
+    assert found == destination and sha == probe.digest(destination)
+    assert report["selected"] == destination.relative_to(root / "codex-sdk").as_posix()
+    assert report["search_complete"] is True
+
+
+def test_discovery_honors_verified_bin_declaration_without_assuming_the_basename(prepared_fixture):
+    root, _, native, manifest = prepared_fixture
+    package_root = root / "codex-sdk/node_modules/@openai/codex-linux-x64"
+    destination = package_root / "dist/native-runtime"
+    destination.parent.mkdir()
+    native.rename(destination)
+    next((root / "codex-sdk").rglob("codex-package.json")).unlink()
+    package = package_root / "package.json"
+    value = json.loads(package.read_text())
+    value["bin"] = {"codex": "dist/native-runtime"}
+    package.write_text(json.dumps(value))
+    _repack_sdk(root, manifest)
+    found, _, report = wire.discover_native_binary(root, manifest)
+    assert found == destination
+    assert report["attempted_candidates"][0]["sources"] == ["package_bin"]
+
+
+def test_missing_installed_binary_reports_archive_candidate(prepared_fixture):
+    root, _, native, manifest = prepared_fixture
+    relative = native.relative_to(root / "codex-sdk").as_posix()
+    native.unlink()  # Inert, test-owned ELF-prefixed bytes only.
+    with pytest.raises(wire.Refused, match="^wire_native_binary_not_found$") as error:
+        wire.discover_native_binary(root, manifest)
+    report = error.value.native_binary_discovery
+    assert report["attempted_candidates"] == [{"path": relative, "sources": ["native_package_entrypoint", "archive_inventory"], "status": "missing"}]
+    assert report["search_complete"] is True and report["selected"] is None
+
+
+def test_all_declared_missing_candidates_are_reported(prepared_fixture):
+    root, _, native, manifest = prepared_fixture
+    native.unlink()
+    next((root / "codex-sdk").rglob("codex-package.json")).unlink()
+    package = root / "codex-sdk/node_modules/@openai/codex-linux-x64/package.json"
+    value = json.loads(package.read_text())
+    value["bin"] = {"codex": "first/codex", "codex-alternate": "second/codex"}
+    package.write_text(json.dumps(value))
+    _repack_sdk(root, manifest)
+    with pytest.raises(wire.Refused, match="^wire_native_binary_not_found$") as error:
+        wire.discover_native_binary(root, manifest)
+    attempts = error.value.native_binary_discovery["attempted_candidates"]
+    assert [row["path"].split("codex-linux-x64/")[-1] for row in attempts] == ["first/codex", "second/codex"]
+    assert all(row["status"] == "missing" for row in attempts)
+
+
+def test_multiple_verified_native_candidates_refuse_instead_of_choosing_one(prepared_fixture):
+    root, _, native, manifest = prepared_fixture
+    other = native.parent.parent / "alternate/codex"
+    other.parent.mkdir()
+    other.write_bytes(native.read_bytes())
+    other.chmod(0o755)
+    _repack_sdk(root, manifest)
+    with pytest.raises(wire.Refused, match="^wire_native_binary_ambiguous$") as error:
+        wire.discover_native_binary(root, manifest)
+    assert len(error.value.native_binary_discovery["attempted_candidates"]) == 2
+    assert all(row["status"] == "verified_native" for row in error.value.native_binary_discovery["attempted_candidates"])
+
+
+@pytest.mark.parametrize("damage", ["metadata", "metadata_identity", "wrong_cpu", "non_elf", "non_executable", "unsigned_extra", "symlink"])
+def test_discovery_never_weakens_identity_platform_or_native_checks(prepared_fixture, damage):
+    root, _, native, manifest = prepared_fixture
+    package = root / "codex-sdk/node_modules/@openai/codex-linux-x64/package.json"
+    code = "wire_native_binary_not_found"
+    if damage in {"metadata", "metadata_identity", "wrong_cpu"}:
+        value = json.loads(package.read_text())
+        value["cpu" if damage == "wrong_cpu" else "version"] = ["arm64"] if damage == "wrong_cpu" else "0.999.0-linux-x64"
+        package.write_text(json.dumps(value))
+        if damage != "metadata": _repack_sdk(root, manifest)
+        if damage == "metadata": code = "wire_sdk_metadata_drift"
+        if damage == "metadata_identity": code = "wire_sdk_dependency_identity_refused"
+    if damage == "non_elf":
+        native.write_bytes(b"not a native executable")
+        _repack_sdk(root, manifest)
+    if damage == "non_executable": native.chmod(0o600)
+    if damage == "unsigned_extra":
+        other = native.parent.parent / "unsigned/codex"
+        other.parent.mkdir()
+        other.write_bytes(native.read_bytes())
+        other.chmod(0o755)
+        code = "wire_native_binary_drift"
+    if damage == "symlink":
+        other = native.parent / "other"
+        native.rename(other)
+        native.symlink_to(other)
+        code = "wire_native_binary_drift"
+    with pytest.raises(wire.Refused, match="^" + code + "$") as error:
+        wire.discover_native_binary(root, manifest)
+    assert error.value.native_binary_discovery["selected"] is None
+
+
+def test_real_pinned_binary_size_is_bound_by_archive_not_compressed_download_limit():
+    inventory = json.loads(FIXTURE.with_name("ghcp_codex_sdk_0163_inventory.json").read_text())
+    size, = inventory["native_member_sizes"].values()
+    assert size == 296865480 and size > 256 * 1024**2
+    assert wire._native_size_matches(size, size)
+    assert not wire._native_size_matches(size, size + 1)
+    assert not wire._native_size_matches(size, size - 1)
+    assert wire.MAX_ARCHIVE_EXPANSION_BYTES == probe.MAX_ARCHIVE_EXPANSION_BYTES == 2 * 1024**3
+    assert not wire._native_size_matches(0, 0)
+    assert not wire._native_size_matches(probe.MAX_ARCHIVE_EXPANSION_BYTES + 1, probe.MAX_ARCHIVE_EXPANSION_BYTES + 1)
+
+
+def test_declared_native_entrypoint_cannot_be_substituted_by_another_inventory_match(prepared_fixture):
+    root, _, native, manifest = prepared_fixture
+    other = native.parent / "moved/codex"
+    other.parent.mkdir()
+    native.rename(other)
+    _repack_sdk(root, manifest)
+    with pytest.raises(wire.Refused, match="^wire_native_entrypoint_missing$") as error:
+        wire.discover_native_binary(root, manifest)
+    assert len(error.value.native_binary_discovery["attempted_candidates"]) == 2
+    assert error.value.native_binary_discovery["selected"] is None
 
 
 @pytest.mark.parametrize("damage", ["binary", "archive", "source", "node_options", "symlink"])
