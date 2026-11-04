@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,19 @@ import pytest
 
 from core.deliverable_selector import AUDIO_EXTENSIONS, select_deliverables
 from core.media_types import GRADER_AUDIO_EXTENSIONS
+
+# Every provider here is ScriptedResponses/CountingVision. Exercise the real
+# admission check with explicit synthetic runner facts, never the NAS host.
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
+
+@pytest.fixture(autouse=True)
+def no_network_in_selector_fixtures(monkeypatch):
+    def refused(*args, **kwargs):
+        raise AssertionError("network forbidden in scripted grader selector tests")
+    monkeypatch.setattr(socket.socket, "connect", refused)
+    monkeypatch.setattr(socket, "create_connection", refused)
+    monkeypatch.setattr(socket, "getaddrinfo", refused)
 
 
 def _final(text: str) -> dict:

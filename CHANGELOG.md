@@ -13,6 +13,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Repair #794's two CI test failures without changing workflow or production
+  bytes. Keep the input-intake shell's five-second timeout while isolating only
+  the standard library subprocess wait from the fixture's global sleep denial;
+  force the EOF/waitpid race and verify timeout, reaping and continuing live-boundary
+  refusals. Pin the retention test's current derived workflow hash and also
+  reconstruct its unchanged pre-successor hash. Focused intake/retention/partition/
+  workflow-pin/seal validation: 237 passed. Full core/time-budget selections
+  and repo-root scripts ran without added exclusions; LATEST keeps the raw
+  outcomes, local setup corrections and remaining NAS/clean-head refusals
+  separate from genuine hosted CI proof. Production admission is not relaxed.
+
+- Assign the successor-grader contract file exclusively to Backend Tests'
+  pilot-contracts job and exclude it from core collection. Keep exact
+  inventory, actual node collection and disjoint coverage checks; reject
+  missing/duplicate ownership. Update only the current workflow byte pin,
+  reconstruct its unchanged predecessor and retain all historical seals.
+  Related partition/seal/workflow-pin tests: 154 passed, no failures or skips.
+
 - Let the Sol pilot's requested 1,000,000-token window reach Codex 0.147.0
   (owner decision 2026-10-30). Its bundled catalog caps gpt-5.6-sol at 272,000
   (258,400 usable), so the pilot's wire observer adds a held catalog that
@@ -29,6 +47,23 @@ entries land under a fresh dated heading the day they merge to `main`.
   requests the exact bound cannot cover are reserved by estimate. The USD 200
   ceiling and ledger integrity checks still stop. Source-only successor; no
   paid call.
+
+- Add the owner-approved 2026-10-30 successor grader seal, preserving all prior
+  registrations. Bind both immutable source manifests and the exact 11-file
+  delta; opt in through a new source profile and unchanged strict Git/byte
+  guards. Keep Sol/Max, v2.2, rubric, five tasks and USD 200. Rebase #794 after
+  #795/#796 and chain its profile after long_context, preserving their list-price
+  booking, unknown-usage accounting and held 1M catalog without reimplementation.
+  The Step8/core seal and its historical review record are unchanged. Extend
+  synthetic frozen-source equivalence and seal-tamper tests; no live model proof.
+  The original review's full run exposed 13 scripted-test host-admission refusals; supply explicit
+  synthetic runner facts and deny network in those two test files, preserving
+  real admission and all assertions. Grader/guard recheck: 869 passed; combined
+  latest results covered 3,881 distinct tests with no failures or skips.
+  The new rebase validation covers 520 distinct cases: source/seal/catalog 36,
+  policy/guard 286 and preflight 198, all passing after one retained synthetic
+  coordinator-timeout rerun. The real source-only preflight verifies the chain
+  and successor seal but retains exit 2 and ten upper-evidence launch blockers.
 
 - Record the actual Sol/Max native response from run 40967326333 (HTTP 200,
   9,468 input / 5 output tokens), while retaining the missing-context refusal

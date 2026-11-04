@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--batch", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--guarded", action="store_true")
+    parser.add_argument("--scenario", choices=("pass", "fail", "partial"), default="pass")
     args = parser.parse_args()
 
     # Both immutable and candidate probes use synthetic host metadata. Network
@@ -41,6 +42,8 @@ def main():
     from core.cost_metering import CostRecorder
     from core.cost_receipts import CostReceiptLedger, STAGE_GRADING
     from core.grader import Grader, ItemGrade
+    from core.codex_runner import CodexAgentRunner
+    from core.codex_task_deadline import CodexTaskDeadlineControl
     from core.rubric_loader import RubricItem, TaskRubric
     from tests.test_grader import _config, _Loader
 
@@ -66,7 +69,9 @@ def main():
             self.calls.append(kwargs)
             return SimpleNamespace(
                 model=model, status="completed", output=[],
-                output_text='{"verdict":"pass","partial_score":1.0,"evidence":"ok","confidence":0.8,"reasoning":"ok"}',
+                output_text=json.dumps({"verdict": args.scenario,
+                    "partial_score": {"pass": 1.0, "fail": 0.0, "partial": 0.4}[args.scenario],
+                    "evidence": "ok", "confidence": 0.8, "reasoning": "ok"}),
                 usage=SimpleNamespace(input_tokens=10, output_tokens=5,
                                       input_tokens_details=SimpleNamespace(cached_tokens=0)),
             )
@@ -108,10 +113,19 @@ def main():
                                       awarded_score=awarded, verdict=verdict, decided_by="judge",
                                       required=None, evidence="fixed")
                 rows.append(step8._task_to_dict(Grader._aggregate([synthetic], task), grading_wall_time_ms=0))
-        assert len(client.calls) == 1 and judged.verdict == "pass"
+        assert len(client.calls) == 1 and judged.verdict == args.scenario
         if money is not None:
             assert money.snapshot()["pending_requests"] == 0 and money.snapshot()["stop_reason"] is None
+        # Pure legacy input/control projections also cover the two inference
+        # files in the closure. This never constructs or starts a Codex client.
+        native_input = CodexAgentRunner.build_task_text(
+            object.__new__(CodexAgentRunner), task.prompt,
+            SimpleNamespace(staged_reference_names=("d.txt",)), occupation=task.occupation,
+        )
+        controls = [CodexTaskDeadlineControl(condition, repetition).as_dict()
+                    for condition in ("A", "B", "C") for repetition in (1, 2)]
         print(json.dumps({"scope": "synthetic_fixture_not_real_five_task_scores", "request": client.calls[0],
+                          "native_input": native_input, "legacy_deadline_controls": controls,
                           "judged": asdict(judged), "tasks": rows, "summary": step8._compute_summary(rows)},
                          sort_keys=True, ensure_ascii=False))
         grader.close()
