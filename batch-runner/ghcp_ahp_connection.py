@@ -16,6 +16,7 @@ import re
 import time
 
 from ghcp_ahp_client import Limits, NOT_REPORTED, SessionClient
+from ghcp_ahp_diagnostics import DiagnosticRedactor, advertised_models
 from ghcp_ahp_probe import DESIRED_MODEL, Refused, digest, require_runner, save_json, strict_json
 
 LIMITS = Limits(turns=1, tool_calls=0, seconds=120)
@@ -166,7 +167,7 @@ def _destination(path):
     path.mkdir(mode=0o700, parents=True)
 
 
-def execute(prepared, evidence, state, output, *, open_port=None):
+def execute(prepared, evidence, state, output, *, open_port=None, capability_only=False):
     """Protected dispatch only. Authentication admission precedes host startup.
 
     No fixture flag/environment bypass exists. Tests patch the injected port
@@ -175,12 +176,19 @@ def execute(prepared, evidence, state, output, *, open_port=None):
     import ghcp_sol_execution_adapter as adapter
     from ghcp_sol_paid_gate import require_dispatch
     record = {"schema_version": "ghcp-ahp-connection-v1", "status": "refused", "connection_verified": False,
-              "requested": copy.deepcopy(REQUESTED), "observed": empty_observed(), "limits": asdict(LIMITS),
-              "reason_codes": [], "gate_ready": False, "five_task_allowed": False, "client_turns_sent": 0}
-    guard = port = None
+              "requested": copy.deepcopy(REQUESTED), "observed": empty_observed(),
+              "limits": ({"turns": 0, "tool_calls": 0, "seconds": LIMITS.seconds,
+                          "session_create_requests": 0, "rpc_requests": 3}
+                         if capability_only is True else asdict(LIMITS)),
+              "reason_codes": [], "gate_ready": False, "five_task_allowed": False, "client_turns_sent": 0,
+              "capability_only": capability_only, "session_create_requests": 0, "refused_fields": [],
+              "advertised": advertised_models([])}
+    guard = port = redactor = handshake = None
     owned_output = False
     try:
         require_dispatch()
+        if type(capability_only) is not bool:
+            raise Refused("capability_mode_invalid")
         if os.environ.get("GHCP_CONNECTION_ONLY") != "true":
             raise Refused("connection_dispatch_required")
         identity = require_runner()
@@ -190,31 +198,52 @@ def execute(prepared, evidence, state, output, *, open_port=None):
         auth = adapter._selected_auth_environment("COPILOT_GITHUB_TOKEN", state_root=state)
         credential = auth["COPILOT_GITHUB_TOKEN"]
         guard = adapter._CredentialGuard(credential)
+        redactor = DiagnosticRedactor(credential)
         # No discovery, download, process or transport until auth is nonempty.
         if output.is_relative_to(state) or state.is_relative_to(output):
             raise Refused("connection_destination_refused")
         if open_port is None:
             from ghcp_ahp_connection_transport import open_connection_port
             open_port = open_connection_port
-        with open_port(prepared, evidence, state, credential) as port:
-            record.update(run_connection(port, port.session, port.chat, output,
-                                         credential=credential, authenticated=True))
-            record["client_turns_sent"] = port.turns_sent
-            # Handshake contains only redacted frames, never raw credentials or host logs.
-            save_json(output / "handshake.json", port.handshake_capture())
-            record["handshake_sha256"] = digest(output / "handshake.json")
-        guard.check(json.dumps(record, allow_nan=False).encode())
+        options = {"capability_only": True} if capability_only else {}
+        with open_port(prepared, evidence, state, credential, **options) as port:
+            if capability_only:
+                if (port.capability_only is not True or port.session_create_requests != 0
+                        or port.turns_sent != 0 or port.policy_verified is not True or port.rpc_id != 3):
+                    raise Refused("capability_only_transport_unverified")
+                record.update(status="capabilities_collected", capability_query_completed=True)
+            else:
+                record.update(run_connection(port, port.session, port.chat, output,
+                                             credential=credential, authenticated=True))
     except (Refused, adapter._Stop) as error:
+        handshake = getattr(error, "handshake", None)
         code = error.code if isinstance(error, adapter._Stop) else str(error)
         code = code if re.fullmatch(r"[a-z_]{1,100}", code) else "connection_execution_refused"
         record.update(status="refused", connection_verified=False, reason_codes=[
             code])
     except Exception:
         record.update(status="refused", connection_verified=False, reason_codes=["connection_execution_refused"])
-    if port is not None:
-        record["client_turns_sent"] = port.turns_sent
+    try:
+        if port is not None:
+            record["client_turns_sent"] = port.turns_sent
+            handshake = port.handshake_capture()
+        if handshake is not None:
+            # Includes __enter__ refusals, before createSession or any prompt.
+            # Validate redaction BEFORE opening the exclusive output file.
+            handshake = redactor.clean(handshake)
+            guard.check(json.dumps(handshake, allow_nan=False).encode())
+            save_json(output / "handshake.json", handshake)
+            record.update(handshake_sha256=digest(output / "handshake.json"),
+                refused_fields=handshake.get("refused_fields", []),
+                advertised=handshake.get("advertised", advertised_models([])),
+                session_create_requests=handshake.get("session_create_requests", NOT_REPORTED),
+                policy_verified=handshake.get("policy_verified", False))
+    except Exception:
+        record.update(status="refused", connection_verified=False,
+                      reason_codes=[*record["reason_codes"], "connection_handshake_export_refused"])
     if guard:
         try:
+            record = redactor.clean(record)
             guard.check(json.dumps(record, allow_nan=False).encode())
         except adapter._Stop:
             record = {"schema_version": "ghcp-ahp-connection-v1", "status": "refused",
@@ -256,10 +285,16 @@ def main(argv=None):
     parser = _Parser(description=__doc__)
     for name in ("prepared", "evidence", "state", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--capability-only", action="store_true",
+                        help="Only initialize/authenticate/resolveSessionConfig; no session or model request")
     args = parser.parse_args(argv)
-    result = execute(args.prepared, args.evidence, args.state, args.output)
-    print(json.dumps({key: result[key] for key in ("status", "connection_verified", "reason_codes")}))
-    return 0 if result["connection_verified"] else 2
+    result = execute(args.prepared, args.evidence, args.state, args.output, capability_only=args.capability_only)
+    print(json.dumps({key: result[key] for key in (
+        "status", "connection_verified", "reason_codes", "refused_fields", "client_turns_sent",
+        "session_create_requests", "capability_only") if key in result}, allow_nan=False))
+    return 0 if result["connection_verified"] or (
+        args.capability_only and result["status"] == "capabilities_collected"
+        and result.get("capability_query_completed") is True) else 2
 
 
 if __name__ == "__main__":

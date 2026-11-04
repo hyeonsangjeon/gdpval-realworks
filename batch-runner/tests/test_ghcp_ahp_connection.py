@@ -11,12 +11,14 @@ from pathlib import Path
 import socket
 import subprocess
 from types import SimpleNamespace
+from urllib.parse import quote
 
 import pytest
 import yaml
 
 import ghcp_ahp_connection as connection
 import ghcp_ahp_connection_transport as transport
+import ghcp_ahp_diagnostics as diagnostics
 import ghcp_ahp_probe as probe
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -255,7 +257,8 @@ def dispatch(monkeypatch, github_hosted_ubuntu_2404):
 
 
 @pytest.mark.parametrize("value", [None, "", " "])
-def test_runtime_missing_auth_refuses_before_opener_or_host(dispatch, monkeypatch, tmp_path, value):
+@pytest.mark.parametrize("capability_only", [False, True])
+def test_runtime_missing_auth_refuses_before_opener_or_host(dispatch, monkeypatch, tmp_path, value, capability_only):
     if value is None:
         monkeypatch.delenv("COPILOT_GITHUB_TOKEN")
     else:
@@ -263,7 +266,7 @@ def test_runtime_missing_auth_refuses_before_opener_or_host(dispatch, monkeypatc
     def forbidden(*args):
         pytest.fail("missing authentication reached transport")
     result = connection.execute(tmp_path / "prepared", tmp_path / "evidence", tmp_path / "state",
-                                tmp_path / "output", open_port=forbidden)
+                                tmp_path / "output", open_port=forbidden, capability_only=capability_only)
     assert result["reason_codes"] == ["auth_source_unavailable"]
     assert result["client_turns_sent"] == 0 and not (tmp_path / "state").exists()
     assert json.loads((tmp_path / "output/connection.json").read_text()) == result
@@ -363,14 +366,15 @@ def test_connection_job_is_single_protected_dispatch_only_and_task_waits_for_rec
 @pytest.mark.parametrize("event_name", ["push", "pull_request", "workflow_dispatch"])
 @pytest.mark.parametrize("paid,dry", [(False, False), (False, True), (True, True), (True, False)])
 @pytest.mark.parametrize("connection_only", [True, False])
+@pytest.mark.parametrize("capability_only", [True, False])
 @pytest.mark.parametrize("verified", [True, False])
-def test_ahp_dispatch_routing_truth_table(event_name, paid, dry, connection_only, verified):
+def test_ahp_dispatch_routing_truth_table(event_name, paid, dry, connection_only, capability_only, verified):
     admitted = event_name == "workflow_dispatch" and paid and not dry
     connect_job = admitted
-    task_job = admitted and not connection_only and verified
+    task_job = admitted and not connection_only and not capability_only and verified
     if event_name != "workflow_dispatch" or not paid or dry:
         assert not connect_job and not task_job
-    if connection_only or not verified:
+    if connection_only or capability_only or not verified:
         assert not task_job
     # Exact YAML terms are asserted above, not an unconstrained expression eval.
     assert "inputs.connection_only" not in workflow()["jobs"]["ahp-connection"]["if"]
@@ -503,3 +507,293 @@ def test_transport_token_is_on_loopback_upgrade_only_not_copilot_credential(monk
     assert peer.request.startswith(b"GET /?tkn=" + b"a" * 64 + b" HTTP/1.1\r\n")
     assert CANARY.encode() not in peer.request and calls == [("127.0.0.1", 1234)]
     ws.close()
+
+
+def _advertised_agent():
+    return {"provider": "codex", "protectedResources": [{"resource": transport.RESOURCE}],
+            "capabilities": {"multipleChats": {}}, "models": [{
+                "id": probe.DESIRED_MODEL["id"], "provider": "codex", "name": "Synthetic Sol",
+                "maxContextWindow": 1_000_000,
+                "configSchema": {"type": "object", "properties": {
+                    "thinkingLevel": {"type": "string", "enum": ["low", "high", "max"]},
+                    "contextSize": {"type": "number", "enum": [272000, 1_000_000]}}}}]}
+
+
+def _resolved_policy():
+    return {"schema": {"type": "object", "properties": {key: {} for key in transport.CONFIG}},
+            "values": copy.deepcopy(transport.CONFIG)}
+
+
+def _discovery_wire(resolved, *, error=None, update=False):
+    wire = Wire()
+    agent = _advertised_agent()
+    initial = {**agent, "models": []} if update else agent
+    wire.replies = [{"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "1.1.0",
+        "snapshots": [{"resource": probe.ROOT_CHANNEL, "state": {"agents": [initial]}}]}}]
+    if update:
+        wire.replies.append({"jsonrpc": "2.0", "method": "action", "params": {
+            "channel": probe.ROOT_CHANNEL, "action": {"type": "root/agentsChanged", "agents": [agent]}}})
+    wire.replies.append({"jsonrpc": "2.0", "id": 2, "result": {
+        "account": {"id": "SYNTHETIC_ACCOUNT_ID_123456789", "label": "person@example.invalid"},
+        "token": CANARY}})
+    wire.replies.append({"jsonrpc": "2.0", "id": 3,
+                         **({"error": error} if error else {"result": resolved})})
+    wire.closed = False
+    wire.socket = SimpleNamespace(shutdown=lambda how: None)
+    wire.close = lambda: setattr(wire, "closed", True)
+    return wire
+
+
+@pytest.fixture
+def discovery_host(dispatch, monkeypatch):
+    """Only the host/socket boundary is fake; real opener/RPC/admission/export run."""
+    def prepare(wire):
+        process = SimpleNamespace(stopped=False)
+        process.process = SimpleNamespace(poll=lambda: 0 if process.stopped else None)
+        process.check = lambda: None
+        process.stop = lambda: setattr(process, "stopped", True)
+
+        class Reservation:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def bind(self, address):
+                assert address == ("127.0.0.1", 0)
+            def getsockname(self):
+                return ("127.0.0.1", 1234)
+
+        monkeypatch.setattr(transport, "require_namespace", lambda: None)
+        monkeypatch.setattr(transport, "verify_prepared", lambda *args: None)
+        monkeypatch.setattr(transport, "child_environment", lambda *args: {})
+        monkeypatch.setattr(transport.socket, "socket", Reservation)
+        monkeypatch.setattr(transport, "CapturedProcess", lambda *args, **kwargs: process)
+        monkeypatch.setattr(transport, "WebSocket", lambda *args, **kwargs: wire)
+        monkeypatch.setattr(transport.secrets, "token_hex", lambda size: "a" * (size * 2))
+        monkeypatch.setattr(connection, "run_connection", lambda *args, **kwargs: pytest.fail("model turn reached"))
+        return process
+    return prepare
+
+
+@pytest.mark.parametrize("field", list(transport.CONFIG))
+@pytest.mark.parametrize("damage", ["missing_property", "missing_value", "mismatch", "null_value"])
+def test_every_policy_refusal_retains_the_field_requested_and_advertised_values(field, damage):
+    resolved = _resolved_policy()
+    if damage == "missing_property":
+        del resolved["schema"]["properties"][field]
+    elif damage == "missing_value":
+        del resolved["values"][field]
+    else:
+        resolved["values"][field] = "different" if damage == "mismatch" else None
+    port = transport.ConnectionPort(_discovery_wire(resolved), SimpleNamespace(), 999999999999, CANARY)
+    with pytest.raises(probe.Refused, match="^connection_requested_policy_unavailable$"):
+        port.initialize("file:///synthetic-empty")
+    rejection, = port.handshake_capture()["refused_fields"]
+    assert rejection["field"] == field and rejection["requested"] == transport.CONFIG[field]
+    assert rejection["advertised"]["schema_present"] is (damage != "missing_property")
+    assert rejection["advertised"]["resolved_value"] == resolved["values"].get(field, "not_reported")
+    assert [message["method"] for message in port.wire.sent] == ["initialize", "authenticate", "resolveSessionConfig"]
+    assert port.session_create_requests == port.turns_sent == 0 and port.reader is None
+
+
+@pytest.mark.parametrize("capability_only", [False, True])
+def test_pinned_visible_schema_refusal_saves_early_handshake_without_any_session(discovery_host, tmp_path, capability_only):
+    resolved = _resolved_policy()
+    # Pinned VS Code codexAgent.ts:534-539,9254-9280 exposes only the
+    # visible schema, even when requested internal values are preserved.
+    resolved["schema"]["properties"] = {key: {} for key in (
+        "mode", "codex.permissionsPreset", "permissions", "sensitiveEditLocations")}
+    wire = _discovery_wire(resolved)
+    process = discovery_host(wire)
+    result = connection.execute(*(tmp_path / name for name in ("prepared", "evidence", "state", "output")),
+                                capability_only=capability_only)
+    assert result["reason_codes"] == ["connection_requested_policy_unavailable"]
+    assert {item["field"] for item in result["refused_fields"]} == set(transport.CONFIG)
+    assert all(item["reasons"] == ["schema_property_not_advertised"] for item in result["refused_fields"])
+    handshake = tmp_path / "output/handshake.json"
+    assert result["handshake_sha256"] == probe.digest(handshake)
+    document = json.loads(handshake.read_text())
+    assert document["resolved_session_config"]["schema"] == resolved["schema"]
+    assert document["advertised"]["model_status"] == "advertised"
+    assert document["advertised"]["thinkingLevel"]["enum"] == ["low", "high", "max"]
+    assert document["advertised"]["contextSize"]["enum"] == [272000, 1_000_000]
+    assert result["observed"] == connection.empty_observed()
+    assert result["connection_verified"] is result["five_task_allowed"] is False
+    assert result["session_create_requests"] == result["client_turns_sent"] == 0
+    assert [message["method"] for message in wire.sent] == ["initialize", "authenticate", "resolveSessionConfig"]
+    assert wire.closed and process.stopped and not (tmp_path / "output/capture.json").exists()
+    exported = "".join(path.read_text() for path in (tmp_path / "output").glob("*.json"))
+    assert CANARY not in exported and "SYNTHETIC_ACCOUNT_ID_123456789" not in exported
+    assert "person@example.invalid" not in exported
+
+
+def test_capability_only_completes_three_rpcs_and_does_not_verify_served_settings(discovery_host, tmp_path):
+    wire = _discovery_wire(_resolved_policy(), update=True)
+    process = discovery_host(wire)
+    result = connection.execute(*(tmp_path / name for name in ("prepared", "evidence", "state", "output")),
+                                capability_only=True)
+    assert result["status"] == "capabilities_collected" and result["capability_query_completed"] is True
+    assert result["refused_fields"] == [] and result["policy_verified"] is True
+    assert result["connection_verified"] is result["five_task_allowed"] is result["gate_ready"] is False
+    assert result["client_turns_sent"] == result["session_create_requests"] == 0
+    assert result["limits"] == {"turns": 0, "tool_calls": 0, "seconds": 120, "session_create_requests": 0, "rpc_requests": 3}
+    assert result["observed"] == connection.empty_observed()
+    assert result["advertised"]["source"] == "root/agentsChanged.agents"
+    assert [message["method"] for message in wire.sent] == ["initialize", "authenticate", "resolveSessionConfig"]
+    assert process.stopped and wire.closed and not (tmp_path / "output/capture.json").exists()
+
+
+@pytest.mark.parametrize("method", ["createSession", "createChat", "subscribe", "disposeSession", "dispatchAction", "fetchTurns"])
+def test_capability_port_rejects_every_session_or_work_rpc_at_the_wire_boundary(method):
+    port = transport.ConnectionPort(Wire(), SimpleNamespace(), 999999999999, CANARY, capability_only=True)
+    with pytest.raises(probe.Refused, match="^capability_only_rpc_refused$"):
+        port.rpc(method, {})
+    assert port.rpc_id == port.session_create_requests == port.turns_sent == 0 and port.wire.sent == []
+
+
+@pytest.mark.parametrize("action", ["chat/turnStarted", "chat/turnCancelled", "chat/toolCallConfirmed"])
+def test_capability_port_cannot_send_model_tool_or_cancel_actions(action):
+    port = transport.ConnectionPort(Wire(), SimpleNamespace(), 999999999999, CANARY, capability_only=True)
+    with pytest.raises(probe.Refused, match="^capability_only_work_refused$"):
+        port.send({"method": "dispatchAction", "params": {"channel": CHAT, "action": {"type": action}}}, 1)
+    assert port.turns_sent == port.session_create_requests == 0 and port.wire.sent == []
+
+
+@pytest.mark.parametrize("error_code,reason", [(-32007, "authentication_required"), (-32000, "connection_rpc_error")])
+def test_server_rpc_error_is_not_misreported_as_a_client_policy_refusal(discovery_host, tmp_path, error_code, reason):
+    wire = _discovery_wire({}, error={"code": error_code, "message": CANARY})
+    discovery_host(wire)
+    result = connection.execute(*(tmp_path / name for name in ("prepared", "evidence", "state", "output")),
+                                capability_only=True)
+    assert result["reason_codes"] == [reason] and result["refused_fields"] == []
+    assert result["client_turns_sent"] == result["session_create_requests"] == 0
+    assert (tmp_path / "output/handshake.json").is_file()
+    assert CANARY not in (tmp_path / "output/handshake.json").read_text()
+
+
+def test_boolean_zero_cannot_masquerade_as_the_requested_false_policy():
+    resolved = _resolved_policy()
+    resolved["values"]["codex.networkAccessEnabled"] = 0
+    refusal, = diagnostics.policy_rejections(resolved, transport.CONFIG)
+    assert refusal["reasons"] == ["resolved_value_mismatch"]
+
+
+def test_handshake_redaction_covers_account_echoes_keys_and_credential_encodings():
+    credential = 'SYNTHETIC_AUTH_"\\ +/=@_987654_NOT_REAL'
+    account = "SYNTHETIC_PRIVATE_ACCOUNT_24680"
+    port = transport.ConnectionPort(Wire(), SimpleNamespace(), 999999999999, credential)
+    forms = [credential, quote(credential, safe=""), base64.b64encode(credential.encode()).decode()]
+    port._capture("server", {"result": {"echo": account, "unstructured": forms,
+                                        credential: "private key", "emailEcho": "person@example.invalid"}})
+    port._capture("server", {"result": {"account": {"id": account, "label": "person@example.invalid"}}})
+    data = json.dumps(port.handshake_capture())
+    assert all(value not in data for value in forms)
+    assert account not in data and "person@example.invalid" not in data
+
+
+@pytest.mark.parametrize("capability_only", [False, True])
+def test_policy_refusal_cli_logs_redacted_field_requested_and_advertised(discovery_host, tmp_path, capsys, capability_only):
+    resolved = _resolved_policy()
+    resolved["values"]["codex.modelReasoningEffort"] = CANARY
+    discovery_host(_discovery_wire(resolved))
+    args = [part for name in ("prepared", "evidence", "state", "output")
+            for part in ("--" + name, str(tmp_path / name))]
+    if capability_only:
+        args.append("--capability-only")
+    assert connection.main(args) == 2
+    logged = capsys.readouterr().out
+    result = json.loads(logged)
+    refusal, = result["refused_fields"]
+    assert refusal["field"] == "codex.modelReasoningEffort" and refusal["requested"] == "max"
+    assert refusal["advertised"]["resolved_value"] == "[REDACTED]"
+    assert CANARY not in logged and result["client_turns_sent"] == result["session_create_requests"] == 0
+
+
+def test_capability_workflow_cannot_publish_a_verified_connection_or_run_the_five():
+    value = workflow()
+    option = value["on"]["workflow_dispatch"]["inputs"]["capability_only"]
+    assert option["type"] == "boolean" and option["default"] == "false"
+    script = next(step["run"] for step in value["jobs"]["ahp-connection"]["steps"] if step.get("id") == "connection")
+    assert "[[ '${{ inputs.connection_only }}' == true ]]" in script
+    assert script.index("connection_args+=(--capability-only)") < script.index("sudo --preserve-env")
+    assert '"${connection_args[@]}"' in script and "printf 'verified=false\\n'" in script
+    for job in ("paid-task", "grader-contract"):
+        assert "inputs.capability_only != true" in value["jobs"][job]["if"]
+
+
+@pytest.mark.parametrize("method", ["authenticate", "resolveSessionConfig"])
+def test_capability_query_rejects_reordered_rpcs(method):
+    port = transport.ConnectionPort(Wire(), SimpleNamespace(), 999999999999, CANARY, capability_only=True)
+    with pytest.raises(probe.Refused, match="^capability_only_rpc_order_refused$"):
+        port.rpc(method, {})
+    assert port.wire.sent == []
+
+
+@pytest.mark.parametrize("field", ["model", "initialMessage", "action", "tools"])
+def test_capability_initialization_rejects_smuggled_work_parameters(field):
+    port = transport.ConnectionPort(Wire(), SimpleNamespace(), 999999999999, CANARY, capability_only=True)
+    params = {"channel": probe.ROOT_CHANNEL, "protocolVersions": ["1.1.0"], "clientId": "fixture",
+              "clientInfo": {"name": "ghcp-ahp-connection-only", "version": "1"},
+              "initialSubscriptions": [probe.ROOT_CHANNEL], "locale": "en-US", field: "forbidden"}
+    with pytest.raises(probe.Refused, match="^capability_only_rpc_parameters_refused$"):
+        port.rpc("initialize", params)
+    assert port.wire.sent == [] and port.turns_sent == port.session_create_requests == 0
+
+
+@pytest.mark.parametrize("resolved", [None, [], {}, {"schema": None}, {"schema": {"properties": []}, "values": None}])
+def test_malformed_policy_response_is_retained_and_refused_before_session(discovery_host, tmp_path, resolved):
+    wire = _discovery_wire(resolved)
+    discovery_host(wire)
+    result = connection.execute(*(tmp_path / name for name in ("prepared", "evidence", "state", "output")),
+                                capability_only=True)
+    assert result["reason_codes"] == ["connection_requested_policy_unavailable"]
+    assert len(result["refused_fields"]) == len(transport.CONFIG)
+    assert result["session_create_requests"] == result["client_turns_sent"] == 0
+    assert json.loads((tmp_path / "output/handshake.json").read_text())["resolved_session_config"] == resolved
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "true"])
+def test_capability_mode_type_cannot_bypass_pre_auth_admission(dispatch, monkeypatch, tmp_path, value):
+    import ghcp_sol_execution_adapter as adapter
+    monkeypatch.setattr(adapter, "_selected_auth_environment", lambda *a, **kw: pytest.fail("auth reached"))
+    result = connection.execute(*(tmp_path / name for name in ("prepared", "evidence", "state", "output")), capability_only=value)
+    assert result["reason_codes"] == ["capability_mode_invalid"]
+    assert not (tmp_path / "state").exists()
+
+
+def test_capability_export_failure_cannot_exit_as_success(discovery_host, monkeypatch, tmp_path, capsys):
+    discovery_host(_discovery_wire(_resolved_policy()))
+    real_save = connection.save_json
+    def save(path, value):
+        if path.name == "handshake.json":
+            raise OSError("synthetic output failure")
+        return real_save(path, value)
+    monkeypatch.setattr(connection, "save_json", save)
+    args = [part for name in ("prepared", "evidence", "state", "output") for part in ("--" + name, str(tmp_path / name))]
+    assert connection.main([*args, "--capability-only"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "refused" and result["connection_verified"] is False
+    assert "connection_handshake_export_refused" in result["reason_codes"]
+
+
+@pytest.mark.parametrize("key", ["account", "account_info", "userId", "userProfile", "tenant_id", "identity", "organization", "auth"])
+def test_identity_containers_are_masked_and_clean_prior_echoes(key):
+    redactor = diagnostics.DiagnosticRedactor(CANARY)
+    identifier = "SYNTHETIC_ACCOUNT_IDENTIFIER_123456789"
+    earlier = redactor.clean({"message": identifier})
+    redacted = redactor.clean({key: {"id": identifier, "name": "private@example.invalid"}})
+    result = redactor.clean([earlier, redacted])
+    assert identifier not in json.dumps(result) and "private@example.invalid" not in json.dumps(result)
+    assert redacted[key] == "[REDACTED]"
+
+
+@pytest.mark.parametrize("models,status", [(None, "not_reported"), ([], "absent"),
+    ([{"id": "different"}], "absent"), ([{"id": "[REDACTED]"}], "not_reported")])
+def test_catalog_absence_missing_and_redacted_values_are_not_confused(models, status):
+    agent = _advertised_agent()
+    agent["models"] = models
+    frame = {"direction": "server", "message": {"result": {"snapshots": [
+        {"resource": probe.ROOT_CHANNEL, "state": {"agents": [agent]}}]}}}
+    advertised = diagnostics.advertised_models([frame])
+    assert advertised["model_status"] == status
+    assert advertised["thinkingLevel"] == advertised["contextSize"] == advertised["maxContextWindow"] == "not_reported"

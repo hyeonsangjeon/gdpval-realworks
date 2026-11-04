@@ -159,7 +159,7 @@ def test_workflow_contract():
         assert job["timeout-minutes"] == ("15" if name in {"offline-ci", "grader-contract"} else "5")
         assert "continue-on-error" not in job
         if name == "grader-contract":
-            assert job["if"] == "${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true }}"
+            assert job["if"] == "${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true && inputs.capability_only != true }}"
         else:
             assert "if" not in job
         guard = job["steps"][0]

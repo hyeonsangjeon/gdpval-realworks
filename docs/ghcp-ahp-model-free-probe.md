@@ -243,3 +243,86 @@ the predecessor's successful output and a same-run/attempt/commit receipt, plus
 the still-closed native hard-cap/harness gate. Authentication alone opens none
 of those conditions. No actual model call, credential lookup or dispatch is
 part of this change's offline/push verification.
+
+## Pre-session policy diagnostics and capability-only mode (2026-11-04)
+
+Connection run **41873338947**, at source `1775857afbfd8`, stopped with
+`connection_requested_policy_unavailable` before `createSession` or a prompt.
+That reason is **our client-side fail-closed check**, not a server error code.
+The client requires each of these keys in `resolveSessionConfig.result.schema.properties`
+and an exactly matching resolved value in `result.values`:
+
+| Policy key | Requested value |
+| --- | --- |
+| `codex.approvalPolicy` | `untrusted` |
+| `codex.sandboxMode` | `read-only` |
+| `codex.networkAccessEnabled` | `false` |
+| `codex.webSearchMode` | `disabled` |
+| `codex.modelReasoningEffort` | `max` |
+
+The pinned VS Code source explains the incompatibility without another run:
+[codexAgent.ts:534](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/codex/codexAgent.ts#L534)
+defines a **visible** schema containing only mode, permissions preset,
+permissions and sensitive edit locations. Its
+[resolver at line 9254](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/codex/codexAgent.ts#L9254)
+returns that schema even when preserving internal configuration values.
+[AgentService at line 10204](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/agentService.ts#L10204)
+routes this pre-session request to that resolver; host additions are worktree
+metadata, not the five policy keys. Requiring the internal keys in the visible
+schema therefore refuses even an exact value echo. The original run did not
+retain its response, so this is a pinned-source explanation, not a recovered
+observation of that response.
+
+This is **not** proof that Sol or 1M is unavailable. Neither is inspected by
+this particular policy check. Sol-specific `thinkingLevel`/`contextSize`
+advertisements live in the model's `configSchema`, separately from session
+policy properties. Advertisements and resolved defaults never count as
+served-model, actual-thinking-level, context-usage or billing evidence.
+
+The follow-up preserves all five policy requirements and their refusal code.
+It also rejects numeric `0` masquerading as the requested boolean `false`.
+There is no preset substitution, schema-key exemption, settings echo promotion
+or relaxation of the existing five-task admission/served-attestation guard.
+
+### Evidence retained even when context-manager entry fails
+
+`handshake.json` now survives initialization/policy refusals before the opener
+yields. It includes redacted initialize/RPC frames, root model-catalog updates,
+agent capabilities, model reasoning/context schemas, resolved policy schema
+and values, per-field refusals, and client session/turn request counters.
+`connection.json` SHA256-binds that file and includes `advertised` separately
+from `observed`, plus each `refused_fields` entry's field, requested value,
+advertised schema/resolved value, and reason. CLI JSON logs print those same
+refusal entries without raw host logs. An export failure is itself a refusal.
+
+Credential values (including JSON/URL/base64 forms), credential-shaped text,
+structured account/user/tenant identifiers, email addresses and working paths
+are masked before export. Identifiers learned from a later auth reply also
+redact earlier echoes. This is not a claim to decrypt arbitrary obfuscation.
+Raw auth state, token files and host logs are not uploaded. Unknown fields
+remain `not_reported`; an absent visible property is not a false/default value.
+
+### Zero-session diagnostic branch in the existing workflow
+
+The existing workflow adds `capability_only` (default **false**). With
+`ahp-draft`, `connection_only=true` and the existing protected dispatch opt-in,
+the CLI receives `--capability-only`. Only three RPCs are allowed, in order:
+`initialize`, `authenticate`, `resolveSessionConfig`. Their parameter sets are
+restricted; session creation, subscriptions, model/tool actions and further
+RPCs are rejected at the wire boundary. No reader or inference session starts.
+Its limits are **0 sessions, 0 turns, 0 tool calls, 3 RPCs, 120 seconds**.
+The existing `execute_paid=true` input is still required to enter the protected
+workflow job; in capability-only mode it does not enable model work.
+
+A successful capability query is `capabilities_collected`, never `connected`;
+`connection_verified`, `five_task_allowed` and the workflow `verified` output
+remain false. Policy mismatch still exits 2 and preserves diagnostics. Both
+the paid task job and Step8 job explicitly exclude capability-only dispatches,
+including invalid adapter/connection-only combinations. Missing authentication
+still refuses before opening the host. The separate branch-push model-free
+probe and its no-auth/network-isolation/empty-session contract are unchanged.
+
+All new transport/admission/export paths are exercised with fake host and
+socket boundaries. They do not execute an Agent Host on NAS. The visible-schema
+incompatibility is established from the pinned source, so **no capability or
+connection dispatch is performed for this diagnostic change**.

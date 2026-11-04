@@ -35,6 +35,11 @@ on:
         type: boolean
         default: false
         required: true
+      capability_only:
+        description: With ahp-draft and connection_only, query capabilities only; no session or model turn
+        type: boolean
+        default: false
+        required: true
 
 permissions:
   contents: read
@@ -162,7 +167,7 @@ jobs:
   grader-contract:
     name: Step8 input layout and policy only (no judge)
     needs: [task, paid-task]
-    if: ${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true }}
+    if: ${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true && inputs.capability_only != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -321,7 +326,7 @@ jobs:
           python -B batch-runner/ghcp_ahp_probe.py prepare \
             --prepared "$RUNNER_TEMP/ghcp-connection-prepared" \
             --evidence "$RUNNER_TEMP/ghcp-connection-preparation"
-      - name: Reject empty auth before host startup and send only one connection turn
+      - name: Reject empty auth and query capabilities or send one connection turn
         id: connection
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -330,6 +335,11 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          connection_args=()
+          if [[ '${{ inputs.capability_only }}' == true ]]; then
+            [[ '${{ inputs.connection_only }}' == true ]]
+            connection_args+=(--capability-only)
+          fi
           connection_uid="$(id -u)"
           connection_gid="$(id -g)"
           export GHCP_CONNECTION_OUTSIDE_PIDNS="$(readlink /proc/self/ns/pid)"
@@ -344,10 +354,14 @@ jobs:
             '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_connection.py" \
               --prepared "$RUNNER_TEMP/ghcp-connection-prepared" \
               --evidence "$RUNNER_TEMP/ghcp-connection-preparation" \
-              --state "$RUNNER_TEMP/ghcp-connection-private" --output "$RUNNER_TEMP/ghcp-connection-export"
-          # Exit zero is possible only after all observed settings pass. Never
-          # use a request/config echo, a shell fallback, or continue-on-error.
-          printf 'verified=true\n' >> "$GITHUB_OUTPUT"
+              --state "$RUNNER_TEMP/ghcp-connection-private" --output "$RUNNER_TEMP/ghcp-connection-export" \
+              "${connection_args[@]}"
+          # Catalog/policy advertisements never verify a served connection.
+          if [[ '${{ inputs.capability_only }}' == true ]]; then
+            printf 'verified=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'verified=true\n' >> "$GITHUB_OUTPUT"
+          fi
       - name: Retain redacted connection receipt and capture only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -360,7 +374,7 @@ jobs:
 
   paid-task:
     name: Paid task - ${{ matrix.task_id }}
-    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.connection_only != true && needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || (needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true')) }}
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.connection_only != true && inputs.capability_only != true && needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || (needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true')) }}
     needs: [plan, ahp-connection]
     environment: ghcp-sol-gate
     runs-on: ubuntu-24.04

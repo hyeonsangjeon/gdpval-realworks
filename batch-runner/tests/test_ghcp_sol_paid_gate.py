@@ -19,7 +19,7 @@ import ghcp_sol_paid_gate as paid
 ROOT = Path(__file__).resolve().parents[2]
 CANARY = "FAKE_PAID_AUTH_CANARY_97531_NOT_A_CREDENTIAL"
 CONDITION = "github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false"
-TASK_CONDITION = ("always() && !cancelled() && " + CONDITION + " && inputs.connection_only != true && "
+TASK_CONDITION = ("always() && !cancelled() && " + CONDITION + " && inputs.connection_only != true && inputs.capability_only != true && "
                   "needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || "
                   "(needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true'))")
 

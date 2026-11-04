@@ -22,12 +22,22 @@ import time
 import uuid
 
 from ghcp_ahp_probe import (CapturedProcess, Refused, ROOT_CHANNEL, WebSocket, child_environment,
-                            load_manifest, redact, require_runner, save_json, verify_prepared)
+                            load_manifest, require_runner, save_json, verify_prepared)
+from ghcp_ahp_diagnostics import DiagnosticRedactor, NOT_REPORTED, advertised_models, policy_rejections
 
 CONFIG = {"codex.approvalPolicy": "untrusted", "codex.sandboxMode": "read-only",
           "codex.networkAccessEnabled": False, "codex.webSearchMode": "disabled",
           "codex.modelReasoningEffort": "max"}
 RESOURCE = "https://api.github.com"
+CAPABILITY_METHODS = frozenset({"initialize", "authenticate", "resolveSessionConfig"})
+
+
+class HandshakeRefused(Refused):
+    """Carry only redacted evidence out of a failed context-manager entry."""
+
+    def __init__(self, code, handshake):
+        super().__init__(code)
+        self.handshake = handshake
 
 
 def require_namespace():
@@ -42,14 +52,23 @@ def require_namespace():
 
 
 class ConnectionPort:
-    def __init__(self, wire, process, deadline, credential):
+    def __init__(self, wire, process, deadline, credential, *, capability_only=False):
+        if type(capability_only) is not bool:
+            raise Refused("capability_mode_invalid")
         self.wire, self.process, self.deadline, self.credential = wire, process, deadline, credential
+        self.capability_only = capability_only
+        self.redactor = DiagnosticRedactor(credential)
         self.session = "ahp-session:/" + str(uuid.uuid4())
         self.chat = None
         self.turns_sent = 0
         self.closed = False
         self.rpc_id = 0
         self.handshake = []
+        self.initialize_response = NOT_REPORTED
+        self.resolved_session_config = NOT_REPORTED
+        self.refused_fields = []
+        self.policy_verified = False
+        self.session_create_requests = 0
         self.events = queue.Queue(maxsize=256)
         self.reader = None
         self.failure = None
@@ -64,14 +83,7 @@ class ConnectionPort:
         return remaining
 
     def _safe(self, value):
-        if isinstance(value, dict):
-            return redact({self._safe(str(k)): self._safe(v) for k, v in value.items()})
-        if isinstance(value, list):
-            return [self._safe(v) for v in value]
-        if isinstance(value, str):
-            value = value.replace(self.credential, "[REDACTED]").replace(
-                json.dumps(self.credential)[1:-1], "[REDACTED]")
-        return redact(value)
+        return self.redactor.clean(value)
 
     def _capture(self, direction, message):
         # Keep no credential-bearing copy, even in the retained handshake list.
@@ -81,14 +93,37 @@ class ConnectionPort:
                 raise Refused("connection_handshake_size_limit")
 
     def rpc(self, method, params):
+        if self.capability_only and method not in CAPABILITY_METHODS:
+            raise Refused("capability_only_rpc_refused")
         if method not in {"initialize", "authenticate", "resolveSessionConfig", "createSession", "subscribe"}:
             raise Refused("connection_rpc_refused")
-        if self.turns_sent or self.rpc_id >= 6:
+        if self.turns_sent or self.rpc_id >= (3 if self.capability_only else 6):
             raise Refused("connection_rpc_limit")
+        if self.capability_only:
+            order = ("initialize", "authenticate", "resolveSessionConfig")
+            if method != order[self.rpc_id]:
+                raise Refused("capability_only_rpc_order_refused")
+            keys = {"initialize": {"channel", "protocolVersions", "clientId", "clientInfo", "initialSubscriptions", "locale"},
+                    "authenticate": {"channel", "resource", "token"},
+                    "resolveSessionConfig": {"channel", "provider", "workingDirectory", "config"}}
+            if type(params) is not dict or set(params) != keys[method] or params["channel"] != ROOT_CHANNEL:
+                raise Refused("capability_only_rpc_parameters_refused")
+            if method == "initialize" and (params["protocolVersions"] != ["1.1.0"]
+                    or params["initialSubscriptions"] != [ROOT_CHANNEL] or params["locale"] != "en-US"
+                    or params["clientInfo"] != {"name": "ghcp-ahp-connection-only", "version": "1"}):
+                raise Refused("capability_only_rpc_parameters_refused")
+            if method == "authenticate" and (params["resource"] != RESOURCE or params["token"] != self.credential):
+                raise Refused("capability_only_rpc_parameters_refused")
+            if method == "resolveSessionConfig" and (params["provider"] != "codex"
+                    or params["workingDirectory"] != self.workspace_uri
+                    or json.dumps(params["config"], sort_keys=True, allow_nan=False) != json.dumps(CONFIG, sort_keys=True)):
+                raise Refused("capability_only_rpc_parameters_refused")
         self._remaining()
         self.rpc_id += 1
         message = {"jsonrpc": "2.0", "id": self.rpc_id, "method": method, "params": params}
         self._capture("client", message)
+        if method == "createSession":
+            self.session_create_requests += 1  # Reserve even if the send fails.
         self.wire.send(message)
         for _ in range(256):
             self._remaining()
@@ -110,10 +145,12 @@ class ConnectionPort:
         raise Refused("connection_rpc_event_limit")
 
     def initialize(self, workspace):
+        self.workspace_uri = workspace
         client_id = str(uuid.uuid4())
         initialized = self.rpc("initialize", {"channel": ROOT_CHANNEL, "protocolVersions": ["1.1.0"],
             "clientId": client_id, "clientInfo": {"name": "ghcp-ahp-connection-only", "version": "1"},
             "initialSubscriptions": [ROOT_CHANNEL], "locale": "en-US"})
+        self.initialize_response = self._safe(initialized)
         if initialized.get("protocolVersion") != "1.1.0":
             raise Refused("connection_protocol_refused")
         roots = [s for s in initialized.get("snapshots", []) if s.get("resource") == ROOT_CHANNEL]
@@ -123,9 +160,13 @@ class ConnectionPort:
         self.rpc("authenticate", {"channel": ROOT_CHANNEL, "resource": RESOURCE, "token": self.credential})
         resolved = self.rpc("resolveSessionConfig", {"channel": ROOT_CHANNEL, "provider": "codex",
                             "workingDirectory": workspace, "config": copy.deepcopy(CONFIG)})
-        properties = resolved.get("schema", {}).get("properties", {})
-        if any(key not in properties or resolved.get("values", {}).get(key) != value for key, value in CONFIG.items()):
+        self.resolved_session_config = self._safe(resolved)
+        self.refused_fields = self._safe(policy_rejections(resolved, CONFIG))
+        if self.refused_fields:
             raise Refused("connection_requested_policy_unavailable")
+        self.policy_verified = True
+        if self.capability_only:
+            return  # No session, subscription, reader, turn or model request.
         # These are requested restrictions, NOT proof of a server-native 0-tool
         # budget. No active client tools/customizations/approvals are supplied.
         self.rpc("createSession", {"channel": self.session, "provider": "codex", "workingDirectories": [workspace],
@@ -171,6 +212,8 @@ class ConnectionPort:
         from ghcp_ahp_connection import PROMPT, TURN
         from ghcp_ahp_probe import DESIRED_MODEL
         with self.send_lock:
+            if self.capability_only:
+                raise Refused("capability_only_work_refused")
             if self.closed:
                 raise Refused("connection_closed")
             kind = message.get("params", {}).get("action", {}).get("type")
@@ -219,11 +262,17 @@ class ConnectionPort:
     def handshake_capture(self):
         with self.capture_lock:
             return self._safe({"schema_version": "ghcp-ahp-connection-handshake-v1", "frames": self.handshake,
-                               "requested_session_policy": CONFIG, "policy_is_native_zero_tool_proof": False})
+                "initialize_response": self.initialize_response,
+                "resolved_session_config": self.resolved_session_config,
+                "advertised": advertised_models(self.handshake), "refused_fields": self.refused_fields,
+                "requested_session_policy": CONFIG, "policy_verified": self.policy_verified,
+                "capability_only": self.capability_only, "client_turns_sent": self.turns_sent,
+                "session_create_requests": self.session_create_requests,
+                "policy_is_native_zero_tool_proof": False})
 
 
 @contextmanager
-def open_connection_port(prepared, evidence, state, credential):
+def open_connection_port(prepared, evidence, state, credential, *, capability_only=False):
     from ghcp_sol_paid_gate import require_dispatch
     require_dispatch()
     identity = require_runner()
@@ -268,8 +317,14 @@ def open_connection_port(prepared, evidence, state, credential):
                 time.sleep(0.05)
         if wire is None:
             raise Refused("connection_startup_deadline")
-        port = ConnectionPort(wire, process, deadline, credential)
-        port.initialize(workspace.as_uri())
+        port = ConnectionPort(wire, process, deadline, credential, capability_only=capability_only)
+        try:
+            port.initialize(workspace.as_uri())
+        except Exception as error:
+            code = str(error) if isinstance(error, Refused) else "connection_execution_refused"
+            # __enter__ has not yielded, so execute() cannot yet see the port.
+            # Preserve sanitized discovery evidence without exposing raw state.
+            raise HandshakeRefused(code, port.handshake_capture()) from None
         yield port
     finally:
         if port is not None:
