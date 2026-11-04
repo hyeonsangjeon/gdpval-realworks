@@ -17,6 +17,27 @@ SHA256-bound Node preload, `ghcp_ahp_wire_preload.cjs`, observes two boundaries:
 2. Agent Host's original `fetch` call for the GHCP Responses endpoint: request
    body and headers, response status/headers, original SSE events or JSON body.
 
+Native bootstrap discovery reads the installed wrapper's `optionalDependencies`
+and the bundled platform package's `os`/`cpu` and `codex-package.json` entrypoint.
+Package metadata and executable bytes must match the pinned SDK archive. The
+resolver also inventories installed/archive candidates, refuses ambiguity,
+missing declared entrypoints, symlinks, unsigned files and hash/size drift, and
+never runs a package launcher to discover a binary. `bootstrap.native_binary_discovery`
+records every attempted candidate and its status; a refusal carries the same
+record in `probe.json` (or the connection receipt) with its original reason code.
+
+The public 0.163.0 package declares `entrypoint: bin/codex`; its native ELF is
+296,865,480 bytes. The earlier `/codex/codex` and 256 MiB native-size assumptions
+were incorrect. Compressed download bounds and archive SHA256 stay unchanged;
+native bytes must have the verified archive's **exact** size and SHA256, within
+the existing **2 GiB whole-archive expansion limit**. Tests use an independently
+recorded public package inventory, not a path copied from the resolver.
+
+`ghcp_ahp_errors.Refused` is shared by the standalone CLI and imported modules.
+Loading the probe as `__main__` no longer creates a second exception type that
+hides a bootstrap code behind the generic class name `Refused`. Arbitrary
+exception messages are still not written to artifacts.
+
 The original native writes, response object, reader results, request arguments,
 body, headers and AbortSignal are forwarded. No extra fetch, native request,
 session or authentication call is added. Reads observe existing consumption;

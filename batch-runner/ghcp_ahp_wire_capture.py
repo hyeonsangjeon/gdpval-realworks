@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath
 import re
 import tarfile
 
 from ghcp_ahp_diagnostics import DiagnosticRedactor, NOT_REPORTED
-from ghcp_ahp_probe import DESIRED_MODEL, Refused, digest, load_manifest, save_json, strict_json
+from ghcp_ahp_probe import (DESIRED_MODEL, MAX_ARCHIVE_EXPANSION_BYTES, Refused,
+                            digest, load_manifest, save_json, strict_json)
 
 PRELOAD = Path(__file__).with_name("ghcp_ahp_wire_preload.cjs")
 PIN = "2c33b50b16c472efe58357d1d2a8a5414bc23fbf"
@@ -60,6 +62,207 @@ def source_evidence(archive, manifest):
             "codex_sdk_version": manifest["codex_sdk_version"], "citations": result}
 
 
+def discover_native_binary(prepared, manifest):
+    """Inspect installed package metadata/inventory; never execute a launcher.
+
+    The wrapper's optionalDependencies identify bundled platform packages.
+    Their verified os/cpu metadata select Linux x64; bin declarations and the
+    native layout entrypoints and inventories identify candidates without a vendor-layout
+    assumption. Exactly one executable, archive-identical native ELF is required.
+    """
+    sdk = prepared / "codex-sdk"
+    report = {"schema_version": "ghcp-ahp-native-discovery-v1", "stage": "archive_identity",
+              "sdk_version": manifest["codex_sdk_version"], "target": {"os": "linux", "cpu": "x64"},
+              "packages": [], "package_layouts": [], "attempted_candidates": [],
+              "search_complete": False, "selected": None}
+
+    def refuse(code):
+        error = Refused(code)
+        error.native_binary_discovery = report
+        raise error
+
+    def safe_path(name):
+        relative = PurePosixPath(name)
+        if relative.is_absolute() or ".." in relative.parts or "\\" in name or len(name) > 4096:
+            refuse("wire_sdk_path_refused")
+        return str(relative)
+
+    def linked(path):
+        return any(part.is_symlink() for part in (path, *path.parents))
+
+    def checksum(stream):
+        total = hashlib.sha256()
+        while part := stream.read(1024 * 1024):
+            total.update(part)
+        return total.hexdigest()
+
+    archive = prepared / "downloads/codex_sdk.tgz"
+    try:
+        if not archive.is_file() or linked(archive):
+            refuse("wire_sdk_archive_missing_or_unsafe")
+        if digest(archive) != manifest["artifacts"]["codex_sdk"]["sha256"]:
+            refuse("wire_sdk_archive_drift")
+        with tarfile.open(archive, "r:gz") as bundle:
+            members = {}
+            inventory = bundle.getmembers()
+            if len(inventory) > 100_000 or sum(item.size for item in inventory) > MAX_ARCHIVE_EXPANSION_BYTES:
+                refuse("archive_expansion_limit")
+            for member in inventory:
+                name = safe_path(member.name)
+                if name in members:
+                    refuse("wire_sdk_archive_duplicate_member")
+                members[name] = member
+
+            def metadata(name):
+                report["stage"] = "package_metadata"
+                path, member = sdk / name, members.get(name)
+                if (not path.is_file() or linked(path) or member is None or not member.isfile()
+                        or not 0 < member.size <= 1024 * 1024 or path.stat().st_size != member.size):
+                    refuse("wire_sdk_metadata_missing_or_unsafe")
+                content = path.read_bytes()
+                with bundle.extractfile(member) as source:
+                    if hashlib.sha256(content).hexdigest() != checksum(source):
+                        refuse("wire_sdk_metadata_drift")
+                try:
+                    value = strict_json(content.decode())
+                except (UnicodeError, json.JSONDecodeError):
+                    refuse("wire_sdk_metadata_invalid")
+                if not isinstance(value, dict):
+                    refuse("wire_sdk_metadata_invalid")
+                return value
+
+            wrapper = metadata("node_modules/@openai/codex/package.json")
+            dependencies = wrapper.get("optionalDependencies")
+            if (wrapper.get("name") != "@openai/codex" or wrapper.get("version") != manifest["codex_sdk_version"]
+                    or not isinstance(dependencies, dict) or not 0 < len(dependencies) <= 64):
+                refuse("wire_sdk_wrapper_identity_refused")
+            candidates, declared_entrypoints = {}, set()
+            for dependency, spec in sorted(dependencies.items()):
+                if not re.fullmatch(r"@openai/codex-[a-z0-9-]+", dependency) or not isinstance(spec, str):
+                    refuse("wire_sdk_dependency_refused")
+                prefix = "node_modules/" + dependency
+                name = prefix + "/package.json"
+                package = {"dependency": dependency, "metadata_path": name, "status": "not_bundled"}
+                report["packages"].append(package)
+                if name not in members and not (sdk / name).exists():
+                    continue
+                package["status"] = "metadata_pending"
+                value = metadata(name)
+                if not isinstance(value.get("name"), str) or not isinstance(value.get("version"), str):
+                    refuse("wire_sdk_metadata_invalid")
+                package.update(name=value.get("name"), version=value.get("version"), os=value.get("os"), cpu=value.get("cpu"))
+                if spec not in {value.get("version"), f"npm:{value.get('name')}@{value.get('version')}"}:
+                    refuse("wire_sdk_dependency_identity_refused")
+                if value.get("os") != ["linux"] or value.get("cpu") != ["x64"]:
+                    package["status"] = "other_platform"
+                    continue
+                package["status"] = "compatible"
+                report["stage"] = "candidate_inventory"
+
+                def candidate(relative, source):
+                    relative = safe_path(relative)
+                    if not relative.startswith(prefix + "/"):
+                        refuse("wire_sdk_path_refused")
+                    if relative not in candidates:
+                        candidates[relative] = {"path": relative, "sources": [], "status": "unexamined"}
+                        report["attempted_candidates"].append(candidates[relative])
+                    candidates[relative]["sources"].append(source)
+                    if len(candidates) > 128:
+                        refuse("wire_native_inventory_limit")
+
+                declared = value.get("bin", {})
+                if declared is not None and not isinstance(declared, (str, dict)):
+                    refuse("wire_sdk_bin_metadata_invalid")
+                declarations = [declared] if isinstance(declared, str) else list(declared.values()) if isinstance(declared, dict) else []
+                for target in declarations:
+                    if not isinstance(target, str):
+                        refuse("wire_sdk_bin_metadata_invalid")
+                    relative = str(PurePosixPath(prefix) / target)
+                    candidate(relative, "package_bin")
+                    declared_entrypoints.add(relative)
+                for name in sorted(members):
+                    if name.startswith(prefix + "/") and PurePosixPath(name).name == "codex-package.json":
+                        layout = metadata(name)
+                        report["stage"] = "native_entrypoint_metadata"
+                        if (type(layout.get("layoutVersion")) is not int or layout["layoutVersion"] != 1
+                                or layout.get("version") != manifest["codex_sdk_version"]
+                                or layout.get("variant") != "codex" or not isinstance(layout.get("entrypoint"), str)
+                                or not re.fullmatch(r"x86_64-[a-z0-9_]+-linux-(musl|gnu)", str(layout.get("target")))):
+                            refuse("wire_sdk_native_layout_refused")
+                        relative = str(PurePosixPath(name).parent / layout["entrypoint"])
+                        candidate(relative, "native_package_entrypoint")
+                        declared_entrypoints.add(relative)
+                        report["package_layouts"].append({"path": name, "version": layout["version"],
+                            "target": layout["target"], "entrypoint": layout["entrypoint"]})
+                # Installed paths are inspected without following directory links.
+                # Archive inventory also records paths whose extraction is missing.
+                visited = 0
+                for parent, directories, files in os.walk(sdk / prefix, followlinks=False):
+                    directories.sort()
+                    for filename in sorted(files):
+                        visited += 1
+                        if visited > 8192:
+                            refuse("wire_native_inventory_limit")
+                        if filename == "codex":
+                            candidate((Path(parent) / filename).relative_to(sdk).as_posix(), "installed_inventory")
+                for name in sorted(members):
+                    if name.startswith(prefix + "/") and PurePosixPath(name).name == "codex":
+                        candidate(name, "archive_inventory")
+
+            report["stage"] = "candidate_validation"
+            valid, fatal = [], False
+            for name, item in sorted(candidates.items()):
+                binary, member = sdk / name, members.get(name)
+                if linked(binary):
+                    item["status"], fatal = "unsafe_link", True
+                elif not binary.is_file():
+                    item["status"] = "missing"
+                elif member is None or not member.isfile():
+                    item["status"], fatal = "not_in_verified_archive", True
+                # Compressed download size is not an unpacked executable bound:
+                # the pinned 0.163.0 binary is 296,865,480 bytes. Its exact size
+                # and hash come from the verified archive; retain the existing
+                # 2 GiB whole-archive expansion limit above, unchanged.
+                elif not _native_size_matches(member.size, binary.stat().st_size):
+                    item["status"], fatal = "size_mismatch", True
+                elif not member.mode & 0o111 or not os.access(binary, os.X_OK):
+                    item["status"] = "not_executable"
+                else:
+                    with binary.open("rb") as stream:
+                        magic = stream.read(4)
+                    if magic != b"\x7fELF":
+                        item["status"] = "not_native_elf"
+                        continue
+                    with bundle.extractfile(member) as source:
+                        expected = checksum(source)
+                    if digest(binary) != expected:
+                        item["status"], fatal = "hash_mismatch", True
+                    else:
+                        item.update(status="verified_native", sha256=expected, size_bytes=member.size)
+                        valid.append((binary, expected, name))
+            report["search_complete"] = True
+            if fatal:
+                refuse("wire_native_binary_drift")
+            if not valid:
+                refuse("wire_native_binary_not_found")
+            if len(valid) != 1:
+                refuse("wire_native_binary_ambiguous")
+            binary, expected, selected = valid[0]
+            if declared_entrypoints and selected not in declared_entrypoints:
+                refuse("wire_native_entrypoint_missing")
+            report.update(stage="selected", selected=selected)
+            return binary, expected, report
+    except Refused as error:
+        error.native_binary_discovery = report
+        raise
+    except (OSError, tarfile.TarError):
+        refuse("wire_sdk_discovery_io_refused")
+
+
+def _native_size_matches(archive_size, installed_size):
+    return 0 < archive_size <= MAX_ARCHIVE_EXPANSION_BYTES and installed_size == archive_size
+
+
 def install(prepared, state, environment, *, model_free, credential=""):
     """Add a passive tee to the isolated host, never to the user's environment.
 
@@ -70,25 +273,7 @@ def install(prepared, state, environment, *, model_free, credential=""):
     if type(model_free) is not bool:
         raise Refused("wire_mode_refused")
     manifest = load_manifest()
-    archive = prepared / "downloads/codex_sdk.tgz"
-    if digest(archive) != manifest["artifacts"]["codex_sdk"]["sha256"]:
-        raise Refused("wire_sdk_archive_drift")
-    with tarfile.open(archive, "r:gz") as bundle:
-        members = [member for member in bundle.getmembers()
-                   if member.name.endswith("/codex/codex") and "/@openai/codex-linux-x64/" in "/" + member.name]
-        if len(members) != 1 or not members[0].isfile() or not 0 < members[0].size <= 256 * 1024 * 1024:
-            raise Refused("wire_native_binary_refused")
-        member = members[0]
-        relative = Path(member.name)
-        if relative.is_absolute() or ".." in relative.parts:
-            raise Refused("wire_native_binary_refused")
-        binary = prepared / "codex-sdk" / relative
-        expected = hashlib.sha256()
-        with bundle.extractfile(member) as stream:
-            while part := stream.read(1024 * 1024):
-                expected.update(part)
-        if binary.is_symlink() or digest(binary) != expected.hexdigest():
-            raise Refused("wire_native_binary_drift")
+    binary, expected, discovery = discover_native_binary(prepared, manifest)
     directory = state / "wire"
     if (not directory.is_absolute() or directory.exists()
             or any(parent.is_symlink() for parent in (directory, *directory.parents))):
@@ -97,14 +282,15 @@ def install(prepared, state, environment, *, model_free, credential=""):
     sources = source_evidence(prepared / "downloads/source.tgz", manifest)
     save_json(directory / "sources.json", sources)
     bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free,
-                 "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected.hexdigest(),
-                 "vscode_commit": PIN, "sdk_version": manifest["codex_sdk_version"]}
+                 "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected,
+                 "vscode_commit": PIN, "sdk_version": manifest["codex_sdk_version"],
+                 "native_binary_discovery": discovery}
     save_json(directory / "bootstrap.json", bootstrap)
     if "NODE_OPTIONS" in environment:
         raise Refused("wire_inherited_node_options_refused")
     return {**environment, "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
             "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "model-free" if model_free else "connection",
-            "GHCP_AHP_WIRE_NATIVE": str(binary.resolve()), "GHCP_AHP_WIRE_NATIVE_SHA256": expected.hexdigest(),
+            "GHCP_AHP_WIRE_NATIVE": str(binary.resolve()), "GHCP_AHP_WIRE_NATIVE_SHA256": expected,
             "GHCP_AHP_WIRE_BOOTSTRAP": str(prepared / "cli-data/servers" / ("Stable-" + PIN) / "server/out/bootstrap-fork.js"),
             "GHCP_AHP_WIRE_OBSERVER_SHA256": bootstrap["observer_sha256"],
             "GHCP_AHP_WIRE_SEEDS": json.dumps([credential] if credential else [])}

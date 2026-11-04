@@ -28,6 +28,7 @@ import urllib.request
 import uuid
 
 import ghcp_sol_runner_environment as runner
+from ghcp_ahp_errors import Refused
 
 MANIFEST = Path(__file__).with_name("ghcp_ahp_probe_manifest.json")
 ALLOWED_METHODS = frozenset({"initialize", "resolveSessionConfig", "createSession", "subscribe", "disposeSession"})
@@ -36,17 +37,13 @@ MAX_RUNTIME_SECONDS = 180
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 MAX_WIRE_BYTES = 8 * 1024 * 1024
 MAX_LOG_BYTES = 256 * 1024
+MAX_ARCHIVE_EXPANSION_BYTES = 2 * 1024**3
 ROOT_CHANNEL = "ahp-root://"
 DESIRED_MODEL = {"id": "@provider=vscode-proxy:gpt-5.6-sol", "config": {"thinkingLevel": "max", "contextSize": 1_000_000}}
 _SECRET_KEYS = {"token", "accesstoken", "refreshtoken", "idtoken", "connectiontoken", "authorization", "password", "secret", "apikey", "credential", "credentials"}
 _CREDENTIAL = re.compile(r"\b(?:github_pat_|gh[o_pusr]_|sk-)[A-Za-z0-9_-]{8,}|\bBearer\s+[^\s\"<>]+", re.I)
 _TOKEN_ASSIGNMENT = re.compile(r"((?:[?&]tkn=)|(?:\b(?:[a-z_]*(?:token|api_key|secret|password)|accessToken|refreshToken|idToken|connectionToken|apiKey)\b\s*[:=]\s*))[\"']?[^\s\"'&,<>]+", re.I)
 _AUTH_HEADER = re.compile(r"(\bauthorization\s*[:=]\s*)[^\r\n]+", re.I)
-
-
-class Refused(RuntimeError):
-    def __init__(self, code):
-        super().__init__(code if re.fullmatch(r"[a-z_]{1,80}", str(code)) else "internal_probe_refusal")
 
 
 def redact(value):
@@ -137,7 +134,7 @@ def extract_archive(path, destination):
         raise Refused("safe_tar_filter_unavailable")
     with tarfile.open(path, "r:gz") as archive:
         members = archive.getmembers()
-        if len(members) > 100_000 or sum(m.size for m in members) > 2 * 1024**3:
+        if len(members) > 100_000 or sum(m.size for m in members) > MAX_ARCHIVE_EXPANSION_BYTES:
             raise Refused("archive_expansion_limit")
         for member in members:
             checked_member(member.name)
@@ -620,6 +617,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
     except Exception as error:
         record["status"] = "probe_refused"
         record["reason_codes"].append(str(error) if isinstance(error, Refused) else type(error).__name__)
+        if isinstance(error, Refused) and hasattr(error, "native_binary_discovery"):
+            record["native_binary_discovery"] = redact(error.native_binary_discovery)
     finally:
         if rpc is not None:
             record["rpc_sent"] = rpc.sent
@@ -662,6 +661,8 @@ def main(argv=None):
         # Never echo arbitrary exception text, environment or credential material.
         code = str(error) if isinstance(error, Refused) else type(error).__name__
         failure = {"status": "refused", "reason_code": code, "model_calls": 0}
+        if isinstance(error, Refused) and hasattr(error, "native_binary_discovery"):
+            failure["native_binary_discovery"] = redact(error.native_binary_discovery)
         if admitted:
             save_json(args.evidence / ("failure-" + args.mode + ".json"), failure)
         print(json.dumps(failure))
