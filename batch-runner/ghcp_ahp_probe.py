@@ -477,7 +477,7 @@ def validate_request(method, params, session, workspace):
 
 
 class Rpc:
-    def __init__(self, transport, session, workspace, *, capability_only=False, session_policy=False, credential="", boundary_check=None):
+    def __init__(self, transport, session, workspace, *, capability_only=False, session_policy=False, credential="", boundary_check=None, require_mcp_disabled=False):
         parsed = urllib.parse.urlsplit(workspace)
         if not re.fullmatch(r"ahp-session:/[0-9a-f-]{36}", session) or parsed.scheme != "file" or parsed.netloc or not parsed.path.startswith("/") or parsed.query or parsed.fragment:
             raise Refused("unsafe_rpc_scope")
@@ -490,6 +490,7 @@ class Rpc:
             raise Refused("zero_turn_auth_requires_session_policy")
         self.credential = credential
         self.boundary_check = boundary_check
+        self.require_mcp_disabled = require_mcp_disabled
         self.mask = None
         if credential:
             from ghcp_ahp_diagnostics import DiagnosticRedactor
@@ -563,13 +564,15 @@ def classify_rpc(results):
 
 
 def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False, session_policy=False,
-              authenticated_zero_turn=False, credential=""):
+              authenticated_zero_turn=False, credential="", metadata_socket=None):
     if type(capability_only) is not bool or type(session_policy) is not bool or capability_only and session_policy:
         raise Refused("invalid_capability_mode")
     identity = require_runner()
     isolation = require_isolation(outside_netns, outside_pidns)
     if type(authenticated_zero_turn) is not bool or bool(credential) != authenticated_zero_turn:
         raise Refused("zero_turn_auth_mode_mismatch")
+    if metadata_socket is not None and not authenticated_zero_turn:
+        raise Refused("metadata_requires_authenticated_zero_turn")
     if authenticated_zero_turn:
         from ghcp_ahp_diagnostics import DiagnosticRedactor
         import ghcp_ahp_zero_turn as zero_turn
@@ -591,6 +594,7 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
               "launch_allowed": False, "gate_ready": False, "served_model": "not_reported", "reasoning_effort": "not_reported", "context_window": "not_reported",
               "capability_only": capability_only, "session_policy_probe": session_policy, "session_create_requests": 0,
               "authenticated_zero_turn": authenticated_zero_turn,
+              "metadata_reads": metadata_socket is not None,
               "backend_readiness": {"ready": False, "reason": "not_checked"},
               "probe_limits": {"wall_seconds": wall_seconds, "rpc_requests": 2 if capability_only else MAX_RPCS + authenticated_zero_turn, "prompt_turns": 0, "wire_bytes": MAX_WIRE_BYTES},
               "reason_codes": [], "status": "incomplete"}
@@ -599,6 +603,12 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
         with tempfile.TemporaryDirectory(prefix="ahp-") as temporary:
             scratch = Path(temporary)
             environment = child_environment(root, scratch)
+            if metadata_socket is not None:
+                # Pinned agentHostBootstrap.ts:136 + common/environmentService.ts:56.
+                # Supported root config disables MCP attachment, NOT auth discovery.
+                config = scratch / "server-data/data/User/globalStorage/agent-host-config.json"
+                save_json(config, {"githubMcpServerEnabled": False})
+                record["requested_root_config"] = {"githubMcpServerEnabled": False}
             workspace = scratch / "workspace"
             workspace.mkdir()
             cli = str(root / "cli/code")
@@ -619,6 +629,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 options = {"session_policy": True} if session_policy else {}
                 if authenticated_zero_turn:
                     options.update(credential=credential, authenticated_zero_turn=True)
+                    if metadata_socket is not None:
+                        options["metadata_socket"] = metadata_socket
                 environment = wire_capture.install(root, scratch, environment, model_free=True, **options)
                 if "--log" not in help_result["stdout"]:
                     raise Refused("backend_diagnostic_log_flag_unavailable")
@@ -658,7 +670,7 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                         raise Refused("agent_host_backend_not_ready")
                 rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri(),
                           capability_only=capability_only, session_policy=session_policy, credential=credential,
-                          boundary_check=watchdog.enforce if watchdog is not None else None)
+                          boundary_check=watchdog.enforce if watchdog is not None else None, require_mcp_disabled=metadata_socket is not None)
                 results = (thread_policy.exercise(rpc, lambda: thread_policy.await_native_thread(scratch, deadline))
                            if session_policy else exercise_rpc(rpc))
                 record["rpc_results"] = results
@@ -767,9 +779,11 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 "model_turn_start_requests": policy_record.get("model_turn_start_requests", "not_reported"),
                 "model_turn_events": policy_record.get("model_turn_events", "not_reported"),
                 "capi_requests": policy_record.get("capi_requests", "not_reported"),
+                "capi_count_scope": "inference_only_metadata_gets_separate", "metadata_reads": metadata_socket is not None,
                 "rpc_sent": record.get("rpc_sent", []), "rpc_results": record.get("rpc_results", {}),
                 "thread_policy": record.get("thread_policy"), "wire_capture": record.get("wire_capture"),
-                "limits": {"turns": 0, "capi_requests": 0, "sessions": 1, "native_threads": 1, "wall_seconds": 120}})
+                "limits": {"turns": 0, "capi_inference_requests": 0, "metadata_gets": 2 if metadata_socket is not None else 0,
+                           "sessions": 1, "native_threads": 1, "wall_seconds": 120}})
     return 0 if record["status"] == "probe_completed" else 2
 
 
@@ -785,6 +799,7 @@ def main(argv=None):
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--outside-netns", default="")
     parser.add_argument("--outside-pidns", default="")
+    parser.add_argument("--metadata-socket", type=Path)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--capability-only", action="store_true", help="No createSession RPC; observe native/CAPI boundaries without model work")
     modes.add_argument("--session-policy-probe", action="store_true", help="One exact Codex session; zero turns and zero outbound HTTP")
@@ -796,6 +811,8 @@ def main(argv=None):
         # NAS/local refusal happens before manifests, files, downloads or processes.
         require_runner()
         admitted = True
+        if args.metadata_socket is not None and not args.authenticated_zero_turn:
+            raise Refused("metadata_requires_authenticated_zero_turn")
         credential = ""
         if args.authenticated_zero_turn:
             import ghcp_ahp_zero_turn as zero_turn
@@ -812,6 +829,8 @@ def main(argv=None):
         options = ({"capability_only": True} if args.capability_only else
                    {"session_policy": True, "authenticated_zero_turn": True, "credential": credential} if args.authenticated_zero_turn else
                    {"session_policy": True} if args.session_policy_probe else {})
+        if args.metadata_socket is not None:
+            options["metadata_socket"] = args.metadata_socket
         result = run_probe(manifest, args.prepared, args.evidence, args.outside_netns, args.outside_pidns, **options)
         print(json.dumps({"probe_exit": result, "model_calls": 0, "launch_allowed": False}))
         return result

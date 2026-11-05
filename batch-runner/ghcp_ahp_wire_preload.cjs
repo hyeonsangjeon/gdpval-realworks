@@ -150,9 +150,11 @@ function checkAgentFork(modulePath, args, settings, options) {
 }
 
 function instrument({ spawn, fetch, fork }, options) {
+  const metadata = require('./ghcp_ahp_metadata_client.cjs');
   const { emit, nativeBinary, nativeSha256, modelFree, synthetic = false, seeds = [] } = options;
   const sessionOnly = options.sessionOnly === true;
   if (sessionOnly && modelFree !== true) fail('session_policy_mode_refused');
+  if (options.metadataRequest && (!sessionOnly || modelFree !== true)) fail('metadata_mode_refused');
   const mask = redactor(seeds);
   let sequence = 0, bytes = 0, ipcNumber = 0, httpNumber = 0;
   let threadRequestId, threadStream, ownedThread;
@@ -284,6 +286,19 @@ function instrument({ spawn, fetch, fork }, options) {
     return fork(modulePath, args, { ...settings, env, execArgv });
   }
   async function wrappedFetch(url, init) {
+    if (sessionOnly && options.metadataRequest) {
+      const location = metadata.coordinates(url, init);
+      let message;
+      try { message = metadata.request(url, init); }
+      catch { blocked('metadata_http', 'metadata_request_refused', { ...location, forwarded: false }); }
+      record('metadata_request', location);
+      let response;
+      try { response = await options.metadataRequest(message); }
+      catch { blocked('metadata_http', 'metadata_broker_refused', { ...location, forwarded: false }); }
+      record('metadata_response', { ...location, status: response.status, external_request: response.external_request });
+      if (response.status !== 200) blocked('metadata_http', 'metadata_status_refused', location);
+      return new Response(response.body, { status: response.status, headers: response.headers });
+    }
     // This mode has no HTTP allowance, including model catalogs/auth refresh.
     // Stop before parsing/calling fetch, not merely after a failed network call.
     if (sessionOnly) {
@@ -302,7 +317,7 @@ function instrument({ spawn, fetch, fork }, options) {
           destination = known.get(parsed.origin + parsed.pathname) || 'other_http';
         } catch { destination = 'invalid_url'; }
       }
-      blocked('capi_or_http', 'session_policy_http_refused', { destination, forwarded: false });
+      blocked('capi_or_http', 'session_policy_http_refused', { destination, ...metadata.coordinates(url, init), forwarded: false });
     }
     const address = new URL(typeof url === 'string' || url instanceof URL ? url : url.url);
     const isResponses = /\/(?:v1\/)?responses\/?$/.test(address.pathname);
@@ -388,6 +403,9 @@ function activate() {
   const seeds = parseJson(process.env.GHCP_AHP_WIRE_SEEDS || '[]');
   delete process.env.GHCP_AHP_WIRE_SEEDS;
   const nativeBinary = process.env.GHCP_AHP_WIRE_NATIVE;
+  const metadataSocket = process.env.GHCP_AHP_WIRE_METADATA_SOCKET;
+  if (metadataSocket && (mode !== 'session-only' || !path.isAbsolute(metadataSocket) || !fs.lstatSync(metadataSocket).isSocket())) fail('metadata_socket_refused');
+  if (crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'ghcp_ahp_metadata_client.cjs'))).digest('hex') !== process.env.GHCP_AHP_WIRE_METADATA_SHA256) fail('metadata_client_drift');
   const nativeSha256 = process.env.GHCP_AHP_WIRE_NATIVE_SHA256;
   const observerSha256 = crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex');
   if (observerSha256 !== process.env.GHCP_AHP_WIRE_OBSERVER_SHA256) fail('wire_observer_drift');
@@ -398,6 +416,7 @@ function activate() {
   const childProcess = require('node:child_process');
   const wrapped = instrument({ spawn: childProcess.spawn, fetch: globalThis.fetch, fork: childProcess.fork }, {
     emit: line => fs.writeSync(output, line), modelFree: mode !== 'connection', sessionOnly: mode === 'session-only', seeds,
+    metadataRequest: metadataSocket ? require('./ghcp_ahp_metadata_client.cjs').client(metadataSocket) : undefined,
     nativeBinary, nativeSha256, observerSha256, observerPath: __filename,
     forkContract, runtimeExecPath: process.execPath, parentArgv: process.argv, parentPid: process.pid,
     entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''),

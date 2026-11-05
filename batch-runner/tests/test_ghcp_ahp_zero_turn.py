@@ -282,7 +282,7 @@ def test_zero_turn_job_is_protected_and_tokens_are_never_in_commands_or_artifact
     value = workflow()
     assert value["on"]["workflow_dispatch"]["inputs"]["authenticated_zero_turn"] == {
         "type": "boolean", "default": "false", "required": "true",
-        "description": "Authenticate and create at most one session/thread; no turns, HTTP, fixed five or grader"}
+        "description": "One authenticated session/thread with bounded metadata GETs; no inference, fixed five or grader"}
     job = value["jobs"]["ahp-zero-turn"]
     assert job["environment"] == "ghcp-sol-gate" and job["runs-on"] == "ubuntu-24.04"
     assert job["needs"] == "offline-ci" and "strategy" not in job and "outputs" not in job
@@ -293,8 +293,8 @@ def test_zero_turn_job_is_protected_and_tokens_are_never_in_commands_or_artifact
     step = auth_steps[0]
     assert step["env"] == {"COPILOT_GITHUB_TOKEN": "${{ secrets.COPILOT_GITHUB_TOKEN }}",
         "GHCP_AUTHENTICATED_ZERO_TURN": "true", "GHCP_PAID_EXECUTION": "false", "GHCP_CONNECTION_ONLY": "false"}
-    for fragment in ("unshare --mount --net --pid", "--kill-child=KILL", "ip link set lo up",
-                     "--bounding-set=-all", "--no-new-privs", "--authenticated-zero-turn", "150s"):
+    # Namespace/privilege argv now live in the broker's exact launcher contract.
+    for fragment in ("ghcp_ahp_metadata_broker.py", "--prepared", "--evidence", "150s"):
         assert fragment in step["run"]
     assert "$COPILOT_GITHUB_TOKEN" not in step["run"]
     assert "ghcp_ahp_connection.py" not in step["run"] and "execute-paid" not in step["run"]

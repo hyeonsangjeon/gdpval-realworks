@@ -73,6 +73,10 @@ def exercise(rpc, observe=None):
     initialized = results["initialize"].get("result")
     if not isinstance(initialized, dict) or initialized.get("protocolVersion") not in {"1.1.0", "1.0.0"}:
         return results
+    if getattr(rpc, "require_mcp_disabled", False):
+        roots = [s for s in initialized.get("snapshots", []) if s.get("resource") == ROOT_CHANNEL]
+        if len(roots) != 1 or roots[0].get("state", {}).get("config", {}).get("values", {}).get("githubMcpServerEnabled") is not False:
+            raise Refused("metadata_mcp_disabled_not_reported")
     if getattr(rpc, "credential", ""):
         roots = [s for s in initialized.get("snapshots", []) if s.get("resource") == ROOT_CHANNEL]
         agents = [a for s in roots for a in s.get("state", {}).get("agents", []) if a.get("provider") == "codex"]
@@ -185,8 +189,10 @@ def assess(capture, results):
             "admission_allowed": created and live and not safety_violation and matches_all(observed),
             "reasons": reasons, "model_turn_start_requests": turn_requests, "model_turn_events": turn_events,
             "capi_requests": len(capture.get("capi_requests", [])),
+            "metadata_http": capture.get("metadata_http", []), "capi_count_scope": "inference_only_metadata_gets_separate",
             "evidence_boundary": "requested_vs_native_thread_report_vs_served_model_kept_separate",
-            "limits": {"ahp_sessions": 1, "native_threads": 1, "turns": 0, "capi_or_provider_http_requests": 0},
+            "limits": {"ahp_sessions": 1, "native_threads": 1, "turns": 0, "capi_inference_requests": 0,
+                       "metadata_gets": 2 if capture.get("bootstrap", {}).get("metadata_reads") else 0},
             "limitations": ["resolver_echo_is_not_applied", "process_config_is_not_thread_config",
                             "thread_model_is_not_served_model", "initial_effort_is_not_final_turn_effort",
                             "sdk_context_is_not_provider_capacity", "unreported_web_search_refuses_admission"]}
