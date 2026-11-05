@@ -214,10 +214,18 @@ def assess(capture, results):
 def export(evidence, results):
     capture = strict_json((evidence / "wire-capture.json").read_text())
     report = assess(capture, results)
+    provenance = None
+    if capture.get("patched_ghcp") is True:
+        import ghcp_ahp_patched_runtime as patched
+        provenance = patched.validate_provenance(capture)
+        report = patched.stamp(report, provenance)
     target = evidence / "thread-policy.json"
     save_json(target, report)
     if "management_initialize" in results:
-        save_json(evidence / "management-init.json", results["management_initialize"])
+        management = results["management_initialize"]
+        if provenance is not None:
+            management = patched.stamp(management, provenance)
+        save_json(evidence / "management-init.json", management)
     return {"path": target.name, "sha256": digest(target), "admission_allowed": report["admission_allowed"],
             "session_created": report["session_created"], "native_thread_responses": report["native_thread_responses"],
             "safety_violation": report["safety_violation"]}

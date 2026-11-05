@@ -573,9 +573,14 @@ def session_create_requests(rpc):
 
 
 def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False, session_policy=False,
-              authenticated_zero_turn=False, credential="", metadata_socket=None):
+              authenticated_zero_turn=False, credential="", metadata_socket=None, patched_request=None):
     if type(capability_only) is not bool or type(session_policy) is not bool or capability_only and session_policy:
         raise Refused("invalid_capability_mode")
+    if patched_request is not None:
+        import ghcp_ahp_patched_runtime as patched
+        if not session_policy or capability_only:
+            raise Refused("patched_runtime_requires_zero_turn_mode")
+        patched.require_activation()
     identity = require_runner()
     isolation = require_isolation(outside_netns, outside_pidns)
     if type(authenticated_zero_turn) is not bool or bool(credential) != authenticated_zero_turn:
@@ -640,6 +645,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     options.update(credential=credential, authenticated_zero_turn=True)
                     if metadata_socket is not None:
                         options["metadata_socket"] = metadata_socket
+                if patched_request is not None:
+                    options["patched_request"] = patched_request
                 environment = wire_capture.install(root, scratch, environment, model_free=True, **options)
                 if "--log" not in help_result["stdout"]:
                     raise Refused("backend_diagnostic_log_flag_unavailable")
@@ -677,6 +684,10 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     record["backend_readiness"] = backend_diagnostics.readiness(scratch)
                     if not record["backend_readiness"]["ready"]:
                         raise Refused("agent_host_backend_not_ready")
+                if patched_request is not None:
+                    # Loaded-byte evidence is mandatory BEFORE auth/session RPC.
+                    # Pre-copy hashes and successful bootstrap alone are insufficient.
+                    patched.verify_live_ready(scratch)
                 rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri(),
                           capability_only=capability_only, session_policy=session_policy, credential=credential,
                           boundary_check=watchdog.enforce if watchdog is not None else None, require_mcp_disabled=metadata_socket is not None)
@@ -750,6 +761,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                         environment=environment, vscode_commit=manifest["vscode_commit"], **diagnostic_auth))
                     record["host_process"] = retain_or_note(lambda: backend_diagnostics.DiagnosticRedactor(credential).clean(record.get("host_process")))
                     export_auth = {"credential": credential} if authenticated_zero_turn else {}
+                    if patched_request is not None:
+                        export_auth["patched_request"] = patched_request
                     record["wire_capture"] = retain_or_note(lambda: wire_capture.export(scratch, evidence, **export_auth))
                     if record["wire_capture"] is not None and record["wire_capture"]["capture_status"] != "captured":
                         secondary_errors.append(Refused("wire_observer_not_started"))
@@ -782,12 +795,20 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
         if mask is not None:
             mask.clean(record)
             record = mask.clean(record)
+        if patched_request is not None:
+            provenance = (record.get("wire_capture") or {}).get("patched_runtime")
+            if provenance is None or provenance.get("runtime_load_status") != "measured":
+                provenance = patched.refusal_fields(patched_request)
+                record["status"] = "probe_refused"
+                record["reason_codes"].append("patched_runtime_load_unmeasured_or_duplicate")
+            record = patched.stamp(record, provenance)
+            record["source_contract_scope"] = "upstream_only_overlay_identified_by_patched_receipt"
         save_json(evidence / "probe.json", record)
         if authenticated_zero_turn:
             policy_path = evidence / "thread-policy.json"
             policy_record = strict_json(policy_path.read_text()) if policy_path.is_file() else {}
             # Separate schema: never accepted as a paid connection receipt.
-            save_json(evidence / "handshake.json", {"schema": "ghcp-ahp-authenticated-zero-turn-v1",
+            handshake = {"schema": "ghcp-ahp-authenticated-zero-turn-v1",
                 "status": record["status"], "reason_codes": record["reason_codes"], "admission_allowed": False,
                 "runner": identity, "requested_policy": thread_policy.POLICY,
                 "auth_rpc_sent": any(row["method"] == "authenticate" for row in record.get("rpc_sent", [])),
@@ -803,7 +824,17 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 "rpc_sent": record.get("rpc_sent", []), "rpc_results": record.get("rpc_results", {}),
                 "thread_policy": record.get("thread_policy"), "wire_capture": record.get("wire_capture"),
                 "limits": {"turns": 0, "capi_inference_requests": 0, "metadata_gets": 2 if metadata_socket is not None else 0,
-                           "sessions": 1, "native_threads": 1, "wall_seconds": 120}})
+                           "sessions": 1, "native_threads": 1, "wall_seconds": 120}}
+            if patched_request is not None:
+                handshake = patched.stamp(handshake, provenance)
+            save_json(evidence / "handshake.json", handshake)
+        if patched_request is not None:
+            summary = patched.stamp({"schema": "ghcp-ahp-patched-summary-v1", "status": record["status"],
+                "probe_exit": 0 if record["status"] == "probe_completed" else 2,
+                "model_calls": 0, "launch_allowed": False, "reason_codes": record["reason_codes"]}, provenance)
+            save_json(evidence / "summary.json", summary)
+            if provenance["runtime_load_status"] == "measured":
+                patched.write_summary(evidence, handshake=authenticated_zero_turn, policy=session_policy)
     return 0 if record["status"] == "probe_completed" else 2
 
 
@@ -820,17 +851,29 @@ def main(argv=None):
     parser.add_argument("--outside-netns", default="")
     parser.add_argument("--outside-pidns", default="")
     parser.add_argument("--metadata-socket", type=Path)
+    parser.add_argument("--patched-build-receipt", type=Path, help="Preparation only; activation remains locked pending owner decision")
+    parser.add_argument("--patched-build-receipt-sha256")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--capability-only", action="store_true", help="No createSession RPC; observe native/CAPI boundaries without model work")
     modes.add_argument("--session-policy-probe", action="store_true", help="One exact Codex session; zero turns and zero outbound HTTP")
     modes.add_argument("--authenticated-zero-turn", action="store_true", help="Protected dispatch only: authenticate once, one session, no turns or HTTP")
     args = None
+    patched_request = None
     admitted = False
     try:
         args = parser.parse_args(argv)
+        if args.patched_build_receipt is not None or args.patched_build_receipt_sha256 is not None:
+            import ghcp_ahp_patched_runtime as patched
+            patched_request = {"path": args.patched_build_receipt, "sha256": args.patched_build_receipt_sha256}
+            if args.patched_build_receipt is None or args.patched_build_receipt_sha256 is None:
+                raise Refused("patched_build_request_refused")
         # NAS/local refusal happens before manifests, files, downloads or processes.
         require_runner()
         admitted = True
+        if patched_request is not None:
+            # Do not read credentials or launch even a zero-turn host before the
+            # pending owner decision. No flag/environment variable opens this.
+            patched.require_activation()
         if args.metadata_socket is not None and not args.authenticated_zero_turn:
             raise Refused("metadata_requires_authenticated_zero_turn")
         credential = ""
@@ -851,13 +894,19 @@ def main(argv=None):
                    {"session_policy": True} if args.session_policy_probe else {})
         if args.metadata_socket is not None:
             options["metadata_socket"] = args.metadata_socket
+        if patched_request is not None:
+            options["patched_request"] = patched_request
         result = run_probe(manifest, args.prepared, args.evidence, args.outside_netns, args.outside_pidns, **options)
-        print(json.dumps({"probe_exit": result, "model_calls": 0, "launch_allowed": False}))
+        summary = ({"probe_exit": result, "model_calls": 0, "launch_allowed": False} if patched_request is None else
+                   patched.verify_artifact_chain(args.evidence, handshake=args.authenticated_zero_turn, policy=True))
+        print(json.dumps(summary))
         return result
     except Exception as error:
         # Never echo arbitrary exception text, environment or credential material.
         code = str(error) if isinstance(error, Refused) else type(error).__name__
         failure = {"status": "refused", "reason_code": code, "model_calls": 0}
+        if patched_request is not None:
+            failure = patched.stamp(failure, patched.refusal_fields(patched_request))
         if isinstance(error, Refused) and hasattr(error, "native_binary_discovery"):
             failure["native_binary_discovery"] = redact(error.native_binary_discovery)
         if admitted:

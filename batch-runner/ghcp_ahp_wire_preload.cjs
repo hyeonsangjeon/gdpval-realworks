@@ -323,10 +323,19 @@ function instrument({ spawn, fetch, fork }, options) {
     }
     // VS Code intentionally strips NODE_OPTIONS from forks. Add only this
     // hash-bound observer as an explicit execArgv, never restore arbitrary options.
-    const env = { ...settings.env, GHCP_AHP_WIRE_SEEDS: JSON.stringify(seeds) };
+    const patchedEnvironment = options.patchedRuntime?.environment || {};
+    for (const key of ['GHCP_AHP_PATCHED_RUNTIME_CONTRACT', 'GHCP_AHP_PATCHED_RUNTIME_CONTRACT_SHA256']) {
+      if (settings.env[key] !== undefined && settings.env[key] !== patchedEnvironment[key]) fail('patched_runtime_fork_environment_refused');
+    }
+    const env = { ...settings.env, ...patchedEnvironment, GHCP_AHP_WIRE_SEEDS: JSON.stringify(seeds) };
     const execArgv = [...(settings.execArgv || []), '--require', options.observerPath];
     record('agent_fork_instrumented');
     const child = fork(modulePath, args, { ...settings, env, execArgv });
+    if (options.patchedRuntime) {
+      if (!Number.isInteger(child.pid) || child.pid <= 0) fail('patched_runtime_child_pid_unavailable');
+      record('patched_runtime_child', { child_pid: child.pid, parent_pid: options.parentPid,
+        runtime_contract_sha256: options.patchedRuntime.contractSha256 });
+    }
     // The local management bridge is attached only after the existing exact
     // path/argv/parent/pin checks above. Native packets are still untouched.
     if (sessionOnly && options.managementDirectory) {
@@ -463,6 +472,12 @@ function activate() {
   const forkEncoded = process.env.GHCP_AHP_WIRE_FORK_CONTRACT || '';
   if (crypto.createHash('sha256').update(forkEncoded).digest('hex') !== process.env.GHCP_AHP_WIRE_FORK_SHA256) fail('wire_fork_contract_drift');
   const forkContract = parseJson(forkEncoded);
+  const hasPatchedRuntime = Object.hasOwn(process.env, 'GHCP_AHP_PATCHED_RUNTIME_CONTRACT') ||
+    Object.hasOwn(process.env, 'GHCP_AHP_PATCHED_RUNTIME_CONTRACT_SHA256');
+  const patchedRuntime = hasPatchedRuntime ? require('./ghcp_ahp_patched_runtime.cjs').activate({
+    modelFree: mode !== 'connection', sessionOnly: mode === 'session-only',
+    entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''), forkContract,
+  }) : null;
   const managementSha256 = process.env.GHCP_AHP_WIRE_MANAGEMENT_SHA256;
   if (mode === 'session-only' && crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'ghcp_ahp_management_bridge.cjs'))).digest('hex') !== managementSha256) fail('management_bridge_drift');
   const output = fs.openSync(path.join(directory, `wire-${process.pid}.jsonl`), 'wx', 0o600);
@@ -471,7 +486,7 @@ function activate() {
     emit: line => fs.writeSync(output, line), modelFree: mode !== 'connection', sessionOnly: mode === 'session-only', seeds,
     metadataRequest: metadataSocket ? require('./ghcp_ahp_metadata_client.cjs').client(metadataSocket) : undefined,
     nativeBinary, nativeSha256, observerSha256, observerPath: __filename,
-    forkContract, runtimeExecPath: process.execPath, parentArgv: process.argv, parentPid: process.pid,
+    forkContract, runtimeExecPath: process.execPath, parentArgv: process.argv, parentPid: process.pid, patchedRuntime,
     managementDirectory: mode === 'session-only' ? directory : undefined, managementSha256,
     entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''),
     claimThread() {

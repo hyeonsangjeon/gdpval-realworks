@@ -329,7 +329,8 @@ def agent_fork_contract(prepared, state, manifest):
             "entrypoint": "vs/platform/agentHost/node/agentHostMain", "exec_argv": [], "telemetry": "off"}
 
 
-def install(prepared, state, environment, *, model_free, credential="", session_policy=False, authenticated_zero_turn=False, metadata_socket=None):
+def install(prepared, state, environment, *, model_free, credential="", session_policy=False, authenticated_zero_turn=False, metadata_socket=None,
+            patched_request=None):
     """Install the observer and optional narrow local initialization bridge.
 
     Native binary and source stay byte-identical to their original archives.
@@ -339,6 +340,8 @@ def install(prepared, state, environment, *, model_free, credential="", session_
     if (type(model_free) is not bool or type(session_policy) is not bool or type(authenticated_zero_turn) is not bool
             or session_policy and not model_free):
         raise Refused("wire_mode_refused")
+    if patched_request is not None and (not model_free or not session_policy):
+        raise Refused("patched_runtime_requires_zero_turn_mode")
     if authenticated_zero_turn:
         from ghcp_ahp_zero_turn import require_context, validate_credential
         require_context()
@@ -366,6 +369,10 @@ def install(prepared, state, environment, *, model_free, credential="", session_
     sources = source_evidence(prepared / "downloads/source.tgz", manifest)
     save_json(directory / "sources.json", sources)
     fork_contract = agent_fork_contract(prepared, state, manifest)
+    patched_environment = {}
+    if patched_request is not None:
+        import ghcp_ahp_patched_runtime as patched
+        patched_environment = patched.prepare_binding(prepared, state, patched_request, fork_contract)
     fork_encoded = json.dumps(fork_contract, sort_keys=True, separators=(",", ":"))
     bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free, "session_policy": session_policy,
                  "management_bridge_sha256": digest(MANAGEMENT_BRIDGE) if session_policy else None,
@@ -374,10 +381,12 @@ def install(prepared, state, environment, *, model_free, credential="", session_
                  "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected,
                  "vscode_commit": PIN, "sdk_version": manifest["codex_sdk_version"],
                  "native_binary_discovery": discovery, "agent_host_fork": fork_contract}
+    if patched_request is not None:
+        bootstrap.update(patched_runtime_requested=True, patched_build_receipt_sha256=patched_request["sha256"])
     save_json(directory / "bootstrap.json", bootstrap)
     if "NODE_OPTIONS" in environment:
         raise Refused("wire_inherited_node_options_refused")
-    return {**environment, **({"GHCP_AHP_WIRE_METADATA_SOCKET": str(metadata_socket)} if metadata_socket is not None else {}),
+    return {**environment, **patched_environment, **({"GHCP_AHP_WIRE_METADATA_SOCKET": str(metadata_socket)} if metadata_socket is not None else {}),
             **({"GHCP_AHP_WIRE_MANAGEMENT_SHA256": digest(MANAGEMENT_BRIDGE)} if session_policy else {}),
             "GHCP_AHP_WIRE_METADATA_SHA256": digest(METADATA_CLIENT), "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
             "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "session-only" if session_policy else "model-free" if model_free else "connection",
@@ -511,12 +520,18 @@ def analyze(records, *, synthetic):
     return result
 
 
-def export(state, destination, *, credential=""):
+def export(state, destination, *, credential="", patched_request=None):
     """Only export files owned by this invocation, after the host has stopped."""
     directory = state / "wire"
+    patched_provenance = None
     if not directory.exists():
         report = analyze([], synthetic=False)
         report["capture_status"] = "observer_not_started"
+        if patched_request is not None:
+            import ghcp_ahp_patched_runtime as patched
+            patched_provenance = patched.refusal_fields(patched_request)
+            report = patched.stamp(report, patched_provenance)
+            report["capture_errors"].append("patched_runtime_load_unmeasured_or_duplicate")
     else:
         if directory.is_symlink() or any(parent.is_symlink() for parent in directory.parents):
             raise Refused("wire_export_path_refused")
@@ -549,6 +564,20 @@ def export(state, destination, *, credential=""):
             raise Refused("wire_bootstrap_identity_refused")
         if any(row.get("kind") == "observer_installed" and row.get("observer_sha256") != expected for row in records):
             raise Refused("wire_observer_identity_refused")
+        patched_requested = report["bootstrap"].get("patched_runtime_requested", False)
+        if type(patched_requested) is not bool or patched_requested != (directory / "patched-runtime").exists():
+            raise Refused("patched_runtime_marker_drift")
+        if patched_request is not None and not patched_requested:
+            raise Refused("patched_runtime_marker_drift")
+        if patched_requested:
+            import ghcp_ahp_patched_runtime as patched
+            patched_provenance = patched.collect(state, destination, records)
+            if patched_provenance["build_receipt_sha256"] != report["bootstrap"].get("patched_build_receipt_sha256"):
+                raise Refused("patched_runtime_marker_drift")
+            if patched_request is not None and patched_provenance["build_receipt_sha256"] != patched_request.get("sha256"):
+                raise Refused("patched_runtime_marker_drift")
+            report = patched.stamp(report, patched_provenance)
+            report["source_contract_scope"] = "upstream_only_overlay_identified_by_patched_receipt"
     mask = DiagnosticRedactor(credential)
     # Learn later identifiers before cleaning earlier raw-text echoes.
     mask.clean(report)
@@ -556,4 +585,5 @@ def export(state, destination, *, credential=""):
     output = destination / "wire-capture.json"
     save_json(output, report)
     return {"path": output.name, "sha256": digest(output), "capture_status": report["capture_status"],
-            "synthetic": report["synthetic"], "admission_allowed": False}
+            "synthetic": report["synthetic"], "admission_allowed": False,
+            **({"patched_runtime": patched_provenance} if patched_provenance is not None else {})}
