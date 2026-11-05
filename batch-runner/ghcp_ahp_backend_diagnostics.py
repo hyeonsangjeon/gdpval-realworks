@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import stat
 
 from ghcp_ahp_diagnostics import DiagnosticRedactor
@@ -31,6 +32,51 @@ def _read(path, limit=MAX_FILE_BYTES):
             raise Refused("backend_diagnostic_nonregular_file")
         data = source.read(limit + 1)
     return data[:limit].decode("utf-8", errors="replace"), len(data) > limit
+
+
+def readiness(scratch):
+    """Require the real bound-listener signal, not the supervisor's banner.
+
+    Called after the lazy supervisor WebSocket handshake, before any AHP RPC.
+    This performs no connection, sleep, retry or authentication. A successful
+    HTTP upgrade by itself is insufficient (the upstream timeout opens its
+    readiness barrier even without a backend listener).
+    """
+    scratch = Path(scratch)
+    relative = "home/.vscode-server/cli/agent-host-stable.log"
+    result = {"ready": False, "reason": "ready_log_not_reported", "source_log": relative,
+              "socket_path": None, "evidence_boundary": "local_backend_listener_not_model_readiness"}
+    try:
+        log = scratch / relative
+        if any(parent.is_symlink() for parent in (log, *log.parents)):
+            result["reason"] = "ready_log_path_refused"
+            return result
+        text, truncated = _read(log)
+        text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+        if truncated:
+            result["reason"] = "ready_log_truncated"
+            return result
+        if "Server did not become ready within" in text:
+            result["reason"] = "supervisor_startup_timeout"
+            return result
+        bound = set(re.findall(r"\bAgent host server listening on ([^\r\n\s]+)\s*$", text, re.M))
+        registered = set(re.findall(r"Registered IPC channel 'agentHostProxy' \(upstream: ([^)\r\n]+)\)", text))
+        if len(bound) != 1 or len(registered) != 1 or bound != registered:
+            result["reason"] = "bound_listener_signal_missing_or_mismatched"
+            return result
+        target = Path(next(iter(bound)))
+        if (not target.is_absolute() or target.parent != scratch / "tmp"
+                or target.parent.resolve() != target.parent or str(target) != next(iter(bound))):
+            result["reason"] = "ready_socket_path_refused"
+            return result
+        result["socket_path"] = target.relative_to(scratch).as_posix()
+        if not stat.S_ISSOCK(target.lstat().st_mode):
+            result["reason"] = "ready_socket_not_bound"
+            return result
+        result.update(ready=True, reason="bound_listener_signal_and_exact_socket")
+    except (OSError, Refused, ValueError):
+        result["reason"] = "ready_evidence_unavailable"
+    return result
 
 
 def _tree(scratch):
@@ -56,7 +102,7 @@ def _tree(scratch):
                             pending.append(path)
                         elif kind == "file" and path.name in LOG_NAMES and len(logs) < MAX_LOG_FILES:
                             # Restrict content reads to known VS Code startup log roots.
-                            if relative.startswith(("home/.vscode-server/cli/", "server-data/logs/")):
+                            if relative.startswith(("home/.vscode-server/cli/", "server-data/logs/", "server-data/data/logs/")):
                                 content, cut = _read(path)
                                 logs.append({"path": relative, "content": content, "truncated": cut})
                     except (OSError, Refused) as error:

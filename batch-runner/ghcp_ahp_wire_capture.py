@@ -24,6 +24,9 @@ MAX_BYTES = 16 * 1024 * 1024
 FIELDS = ("model", "reasoning_effort", "context_window", "sandbox", "approval", "network", "web_search")
 SOURCES = {
     "agent_fork": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "VSCODE_ESM_ENTRYPOINT: 'vs/platform/agentHost/node/agentHostMain'"),
+    "agent_module": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "new Client(FileAccess.asFileUri('bootstrap-fork').fsPath, options)"),
+    "agent_arguments": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "'--logsPath', this._environmentService.logsHome"),
+    "agent_ready": ("src/vs/platform/agentHost/node/agentHostMain.ts", "console.log(`Agent host server listening on ${listenTarget}`)"),
     "fork_sanitizer": ("src/vs/base/parts/ipc/node/ipc.cp.ts", "removeDangerousEnvVariables(forkOpts.env)"),
     "ipc_start": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "child = spawn(binaryPath, args"),
     "native_config": ("src/vs/platform/agentHost/node/codex/protocol/generated/v2/ThreadSettings.ts", "export type ThreadSettings"),
@@ -263,6 +266,40 @@ def _native_size_matches(archive_size, installed_size):
     return 0 < archive_size <= MAX_ARCHIVE_EXPANSION_BYTES and installed_size == archive_size
 
 
+def agent_fork_contract(prepared, state, manifest):
+    """Bind exactly one extensionless Node request to its pinned on-disk file.
+
+    The supervisor's registry user-data-dir is NOT the server's data directory.
+    The pinned CLI forwards only server-data-dir; server.main.ts appends /data.
+    The single logs directory is resolved at fork time, not guessed from a clock.
+    """
+    archive_path = prepared / "downloads/server.tgz"
+    if digest(archive_path) != manifest["artifacts"]["server"]["sha256"]:
+        raise Refused("wire_server_archive_drift")
+    server = prepared / "cli-data/servers" / ("Stable-" + PIN) / "server"
+    files = {}
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for label, relative in (("node", "node"), ("module", "out/bootstrap-fork.js"), ("parent", "out/server-main.js")):
+            path = server / relative
+            if (not path.is_file() or any(parent.is_symlink() for parent in (path, *path.parents))):
+                raise Refused("wire_agent_fork_file_refused")
+            member = archive.getmember("vscode-server-linux-x64/" + relative)
+            if not member.isfile() or not 0 < member.size <= MAX_ARCHIVE_EXPANSION_BYTES or member.size != path.stat().st_size:
+                raise Refused("wire_agent_fork_file_refused")
+            expected = hashlib.sha256()
+            with archive.extractfile(member) as stream:
+                for part in iter(lambda: stream.read(1024 * 1024), b""):
+                    expected.update(part)
+            if digest(path) != expected.hexdigest():
+                raise Refused("wire_agent_fork_file_drift")
+            files[label] = {"path": str(path), "sha256": expected.hexdigest()}
+    return {"schema_version": "ghcp-ahp-agent-fork-v1", "vscode_commit": PIN,
+            "files": files, "module_request": str(server / "out/bootstrap-fork"),
+            "state_root": str(state), "data_path": str(state / "server-data/data"),
+            "logs_root": str(state / "server-data/data/logs"), "sdk_root": str(prepared / "codex-sdk"),
+            "entrypoint": "vs/platform/agentHost/node/agentHostMain", "exec_argv": [], "telemetry": "off"}
+
+
 def install(prepared, state, environment, *, model_free, credential=""):
     """Add a passive tee to the isolated host, never to the user's environment.
 
@@ -281,17 +318,20 @@ def install(prepared, state, environment, *, model_free, credential=""):
     directory.mkdir(mode=0o700)
     sources = source_evidence(prepared / "downloads/source.tgz", manifest)
     save_json(directory / "sources.json", sources)
+    fork_contract = agent_fork_contract(prepared, state, manifest)
+    fork_encoded = json.dumps(fork_contract, sort_keys=True, separators=(",", ":"))
     bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free,
                  "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected,
                  "vscode_commit": PIN, "sdk_version": manifest["codex_sdk_version"],
-                 "native_binary_discovery": discovery}
+                 "native_binary_discovery": discovery, "agent_host_fork": fork_contract}
     save_json(directory / "bootstrap.json", bootstrap)
     if "NODE_OPTIONS" in environment:
         raise Refused("wire_inherited_node_options_refused")
     return {**environment, "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
             "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "model-free" if model_free else "connection",
             "GHCP_AHP_WIRE_NATIVE": str(binary.resolve()), "GHCP_AHP_WIRE_NATIVE_SHA256": expected,
-            "GHCP_AHP_WIRE_BOOTSTRAP": str(prepared / "cli-data/servers" / ("Stable-" + PIN) / "server/out/bootstrap-fork.js"),
+            "GHCP_AHP_WIRE_FORK_CONTRACT": fork_encoded,
+            "GHCP_AHP_WIRE_FORK_SHA256": hashlib.sha256(fork_encoded.encode()).hexdigest(),
             "GHCP_AHP_WIRE_OBSERVER_SHA256": bootstrap["observer_sha256"],
             "GHCP_AHP_WIRE_SEEDS": json.dumps([credential] if credential else [])}
 

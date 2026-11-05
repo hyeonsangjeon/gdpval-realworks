@@ -401,6 +401,7 @@ def backend_probe_fixture(tmp_path, monkeypatch):
 
     manifest = probe.load_manifest()
     calls = {"commands": [], "stops": 0}
+    sockets = []
     monkeypatch.setattr(probe, "require_runner", lambda: {"synthetic": True})
     monkeypatch.setattr(probe, "require_isolation", lambda *args: {"synthetic": True})
     monkeypatch.setattr(probe, "verify_prepared", lambda *args: (
@@ -418,6 +419,9 @@ def backend_probe_fixture(tmp_path, monkeypatch):
                     else "--foreground --new-instance --without-connection-token --log")
             return SimpleNamespace(finish=lambda: {"exit_code": 0, "stdout": text})
         calls["scratch"] = Path(environment["HOME"]).parent
+        fixture_socket = synthetic_backend_signal(calls["scratch"], calls["readiness"])
+        if fixture_socket is not None:
+            sockets.append(fixture_socket)
         return SimpleNamespace(
             process=SimpleNamespace(pid=999999999, poll=lambda: None), check=lambda: None, stop=stop,
             record=lambda: {"command": command, "exit_code": -15 if calls["stops"] else None,
@@ -425,7 +429,8 @@ def backend_probe_fixture(tmp_path, monkeypatch):
 
     monkeypatch.setattr(probe, "CapturedProcess", fake_process)
 
-    def run(error=None):
+    def run(error=None, *, readiness="ready"):
+        calls["readiness"] = readiness
         def refused_transport(*args):
             if error is None:
                 transport = FakeTransport()
@@ -437,7 +442,88 @@ def backend_probe_fixture(tmp_path, monkeypatch):
         calls["exit_code"] = probe.run_probe(manifest, tmp_path / "prepared", output, "fixture", "fixture", capability_only=True)
         return json.loads((output / "probe.json").read_text()), calls, output
 
-    return run
+    try:
+        yield run
+    finally:
+        for fixture_socket in sockets:
+            fixture_socket.close()
+
+
+def synthetic_backend_signal(scratch, mode):
+    """Filesystem-only readiness evidence; no server or socket peer is run."""
+    folder = scratch / "tmp"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / "agent"
+    fixture_socket = None
+    if mode != "missing_socket":
+        fixture_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        fixture_socket.bind(str(target))
+    if mode == "missing_log":
+        return fixture_socket
+    log = scratch / "home/.vscode-server/cli/agent-host-stable.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"debug [2c33b50 stdout]: [AgentHostChannel] Registered IPC channel 'agentHostProxy' (upstream: {target})"]
+    if mode in {"ready", "missing_socket", "conflict", "truncated"}:
+        lines.append(f"debug [2c33b50 stdout]: Agent host server listening on {target}")
+    if mode == "wrong_socket":
+        lines.append(f"debug [2c33b50 stdout]: Agent host server listening on {folder / 'other'}")
+    if mode == "conflict":
+        lines.append(f"debug [2c33b50 stdout]: Agent host server listening on {folder / 'other'}")
+    if mode == "timeout":
+        lines.append("warn [2c33b50]: Server did not become ready within 30s")
+    lines.append("info [2c33b50]: Server ready")
+    if mode == "truncated":
+        lines.append("x" * (128 * 1024))
+    log.write_text("\n".join(lines) + "\n")
+    return fixture_socket
+
+
+def test_timeout_ready_banner_cannot_admit_fake_handshake(backend_probe_fixture, monkeypatch):
+    import ghcp_ahp_wire_capture as wire
+
+    monkeypatch.setattr(wire, "export", lambda *args: {"capture_status": "captured"})
+    receipt, calls, output = backend_probe_fixture(readiness="timeout")
+    assert calls["exit_code"] == 2
+    assert receipt["headless_started"] is False
+    assert receipt.get("rpc_sent", []) == []
+    assert receipt["reason_codes"][0] == "agent_host_backend_not_ready"
+
+
+@pytest.mark.parametrize("mode", ["banner_only", "missing_socket", "missing_log", "wrong_socket", "conflict", "truncated"])
+def test_missing_or_unbound_backend_readiness_blocks_before_first_rpc(backend_probe_fixture, monkeypatch, mode):
+    import ghcp_ahp_wire_capture as wire
+
+    monkeypatch.setattr(wire, "export", lambda *args: {"capture_status": "captured"})
+    receipt, calls, output = backend_probe_fixture(readiness=mode)
+    assert calls["exit_code"] == 2
+    assert receipt["backend_readiness"]["ready"] is False
+    assert receipt["reason_codes"] == ["agent_host_backend_not_ready"]
+    assert receipt.get("rpc_sent", []) == []
+    assert receipt["model_calls"] == receipt["session_create_requests"] == 0
+
+
+@pytest.mark.parametrize("damage", ["socket_symlink", "log_symlink", "outside_target", "late_ready"])
+def test_backend_readiness_never_follows_aliases_or_accepts_post_timeout_signal(tmp_path, damage):
+    import ghcp_ahp_backend_diagnostics as backend
+
+    scratch = tmp_path / "owned"
+    fixture_socket = synthetic_backend_signal(scratch, "ready")
+    try:
+        log = scratch / "home/.vscode-server/cli/agent-host-stable.log"
+        target = scratch / "tmp/agent"
+        if damage == "socket_symlink":
+            target.rename(scratch / "tmp/alias")
+            target.symlink_to(scratch / "tmp/alias")
+        elif damage == "log_symlink":
+            log.rename(log.with_name("alias"))
+            log.symlink_to(log.with_name("alias"))
+        elif damage == "outside_target":
+            log.write_text(log.read_text().replace(str(target), "/outside/invocation/socket"))
+        else:
+            log.write_text("Server did not become ready within 30s\n" + log.read_text())
+        assert backend.readiness(scratch)["ready"] is False
+    finally:
+        fixture_socket.close()
 
 
 @pytest.mark.parametrize("error,code", [

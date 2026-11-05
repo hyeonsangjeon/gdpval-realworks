@@ -1,6 +1,7 @@
 """Offline wire capture tests. Only fake Node transports, never a real host/SDK."""
 
 import copy
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -17,6 +18,7 @@ import ghcp_ahp_wire_capture as wire
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).with_name("fixtures") / "ghcp_ahp_wire_observer_fixture.cjs"
+FORK_FIXTURE = FIXTURE.with_name("ghcp_ahp_agent_fork_fixture.cjs")
 
 
 def run_fixture(case):
@@ -24,6 +26,22 @@ def run_fixture(case):
                              env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
     assert process.returncode == 0, process.stderr
     return json.loads(process.stdout)
+
+
+@pytest.mark.parametrize("case", ["valid", "module_js_alias", "module_other", "module_dotdot", "not_array",
+    "missing_arg", "extra_arg", "reordered", "logs_foreign", "data_foreign", "telemetry", "logs_ambiguous",
+    "logs_symlink", "exec_argv", "exec_path", "runtime_node", "entrypoint", "node_options", "socket_env",
+    "socket_foreign", "sdk_root", "module_drift", "node_drift", "parent_drift", "parent_path", "module_symlink",
+    "credential_args", "module_shadow"])
+def test_exact_pinned_agent_host_fork_contract_at_fake_process_boundary(case):
+    result = subprocess.run(["node", str(FORK_FIXTURE), case], capture_output=True, text=True, timeout=20,
+                            env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
+    assert result.returncode == 0, result.stderr
+    rows = json.loads(result.stdout)
+    assert all(row["synthetic"] is True for row in rows)
+    request, = [row for row in rows if row["kind"] == "agent_fork_attempt"]
+    assert (request["mismatches"] == []) == (case == "valid")
+    assert len([row for row in rows if row["kind"] == "agent_fork_instrumented"]) == (case == "valid")
 
 
 @pytest.mark.parametrize("case", ["match", "plain", "mismatch_model", "mismatch_effort", "missing", "echo_only",
@@ -168,8 +186,16 @@ def prepared_fixture(tmp_path, monkeypatch):
         key = f"vscode-{wire.PIN}/{relative}"
         sources[key] = sources.get(key, b"") + (anchor + "\n").encode()
     _archive(downloads / "source.tgz", sources)
+    server = root / "cli-data/servers" / ("Stable-" + wire.PIN) / "server"
+    server_members = {}
+    for relative in ("node", "out/bootstrap-fork.js", "out/server-main.js"):
+        path = server / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"inert fixture file; never execute " + relative.encode())
+        server_members["vscode-server-linux-x64/" + relative] = path.read_bytes()
+    _archive(downloads / "server.tgz", server_members)
     manifest = probe.load_manifest()
-    for kind in ("source", "codex_sdk"):
+    for kind in ("source", "codex_sdk", "server"):
         manifest["artifacts"][kind]["sha256"] = probe.digest(downloads / (kind + ".tgz"))
     monkeypatch.setattr(wire, "load_manifest", lambda: manifest)
     state = tmp_path / "state"
@@ -189,6 +215,39 @@ def test_install_checks_archive_binary_and_pinned_source_without_executing_them(
     sources = json.loads((state / "wire/sources.json").read_text())
     assert len(sources["citations"]) == len(wire.SOURCES)
     assert all(wire.PIN in row["url"] and row["line"] > 0 for row in sources["citations"])
+    contract = json.loads(env["GHCP_AHP_WIRE_FORK_CONTRACT"])
+    assert contract["module_request"].endswith("/out/bootstrap-fork")
+    assert contract["files"]["module"]["path"] == contract["module_request"] + ".js"
+    assert contract["data_path"] == str(state / "server-data/data")
+    assert contract["exec_argv"] == [] and contract["telemetry"] == "off"
+    assert env["GHCP_AHP_WIRE_FORK_SHA256"] == hashlib.sha256(env["GHCP_AHP_WIRE_FORK_CONTRACT"].encode()).hexdigest()
+
+
+@pytest.mark.parametrize("damage", ["archive", "missing", "module", "node", "parent", "symlink"])
+def test_agent_fork_contract_refuses_server_archive_or_installed_file_drift(prepared_fixture, damage):
+    root, state, _, manifest = prepared_fixture
+    server = root / "cli-data/servers" / ("Stable-" + wire.PIN) / "server"
+    module = server / "out/bootstrap-fork.js"
+    if damage == "archive":
+        (root / "downloads/server.tgz").write_bytes(b"not the pinned archive")
+    elif damage == "missing":
+        module.unlink()  # Inert, test-owned text only.
+    elif damage == "symlink":
+        module.rename(server / "out/foreign.js")
+        module.symlink_to(server / "out/foreign.js")
+    else:
+        relative = {"module": "out/bootstrap-fork.js", "node": "node", "parent": "out/server-main.js"}[damage]
+        (server / relative).write_bytes(b"changed inert file")
+    with pytest.raises(wire.Refused, match="^wire_(agent_fork_file|server_archive)_"):
+        wire.agent_fork_contract(root, state, manifest)
+
+
+def test_prior_fork_fixture_never_claims_an_unrecorded_request_was_observed():
+    fixture = json.loads(FIXTURE.with_name("ghcp_ahp_agent_fork_41941392305.json").read_text())
+    assert fixture["provenance"]["fork_request_recorded_in_that_run"] is False
+    assert fixture["provenance"]["kind"] == "pinned_source_reconstruction_with_observed_directory_values"
+    assert fixture["provenance"]["vscode_commit"] == wire.PIN
+    assert fixture["request"]["args"][2].endswith(fixture["observed_logs_directory"])
 
 
 def test_standalone_probe_and_imported_collector_share_refusal_type():

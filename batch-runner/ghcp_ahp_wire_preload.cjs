@@ -83,6 +83,72 @@ function frames(onFrame, delimiter) {
   };
 }
 
+function safeArguments(args) {
+  if (!Array.isArray(args)) return { shape: typeof args };
+  let privateNext = false;
+  return args.map(arg => {
+    if (privateNext) { privateNext = false; return '[REDACTED]'; }
+    if (typeof arg !== 'string') return { shape: typeof arg };
+    const [flag] = arg.split('=', 1);
+    if (flag.startsWith('--') && /token|secret|password|credential|api[-_]?key|auth|cookie/i.test(flag)) {
+      if (arg.includes('=')) return flag + '=[REDACTED]';
+      privateNext = true;
+    }
+    return arg;
+  });
+}
+
+function checkAgentFork(modulePath, args, settings, options) {
+  const contract = options.forkContract;
+  const mismatches = [], expected = {};
+  const same = (left, right) => Array.isArray(left) && Array.isArray(right) &&
+    left.length === right.length && left.every((value, index) => value === right[index]);
+  function check(condition, name) { if (!condition) mismatches.push(name); }
+  try {
+    if (contract?.schema_version !== 'ghcp-ahp-agent-fork-v1') throw new Error('contract');
+    Object.assign(expected, { module_path: contract.module_request, executable: contract.files.node.path,
+      entrypoint: contract.entrypoint, exec_argv: contract.exec_argv });
+    check(modulePath === contract.module_request, 'module_request');
+    check(options.runtimeExecPath === contract.files.node.path, 'runtime_executable');
+    check(options.parentArgv?.[1] === contract.files.parent.path, 'parent_script');
+    check(same(Object.keys(settings || {}).sort(), ['env', 'execArgv']), 'fork_option_keys');
+    check(same(settings?.execArgv, contract.exec_argv), 'exec_argv');
+    check(Boolean(options.observerPath) && path.isAbsolute(options.observerPath), 'observer_path');
+    for (const [label, file] of Object.entries(contract.files)) {
+      check(fs.lstatSync(file.path).isFile() && fs.realpathSync(file.path) === file.path &&
+        crypto.createHash('sha256').update(fs.readFileSync(file.path)).digest('hex') === file.sha256, `${label}_identity`);
+    }
+    check(typeof modulePath === 'string' && require.resolve(modulePath) === contract.files.module.path, 'module_resolution');
+    check(fs.realpathSync(contract.logs_root) === contract.logs_root, 'logs_root');
+    // Exactly one directory created by this invocation's pinned server. No glob,
+    // basename wildcard, caller-selected directory, or timestamp guess.
+    const directories = fs.readdirSync(contract.logs_root, { withFileTypes: true });
+    if (directories.length !== 1 || !directories[0].isDirectory()) throw new Error('logs');
+    const logs = path.join(contract.logs_root, directories[0].name);
+    check(fs.realpathSync(logs) === logs && fs.lstatSync(path.join(logs, 'remoteagent.log')).isFile(), 'logs_identity');
+    expected.args = ['--type=agentHost', '--logsPath', logs,
+      '--user-data-dir', contract.data_path, '--telemetry-level', contract.telemetry];
+    check(same(args, expected.args), 'argv_exact');
+    const parentArgs = options.parentArgv || [];
+    const indices = parentArgs.flatMap((value, index) => value === '--agent-host-path' ? [index] : []);
+    const socket = indices.length === 1 ? parentArgs[indices[0] + 1] : undefined;
+    expected.socket_path = socket;
+    check(typeof socket === 'string' && path.isAbsolute(socket) && path.normalize(socket) === socket &&
+      path.dirname(socket) === path.join(contract.state_root, 'tmp') &&
+      fs.realpathSync(path.dirname(socket)) === path.dirname(socket), 'parent_socket');
+    const env = settings?.env || {};
+    check(env.VSCODE_ESM_ENTRYPOINT === contract.entrypoint, 'entrypoint');
+    check(env.VSCODE_PIPE_LOGGING === 'true' && env.VSCODE_VERBOSE_LOGGING === 'true', 'ipc_logging');
+    check(env.VSCODE_PARENT_PID === String(options.parentPid), 'parent_pid');
+    check(env.VSCODE_AGENT_HOST_SOCKET_PATH === socket, 'socket_env');
+    check(env.VSCODE_AGENT_HOST_CODEX_SDK_ROOT === contract.sdk_root, 'sdk_root');
+    check(!Object.hasOwn(env, 'NODE_OPTIONS'), 'inherited_node_options');
+  } catch {
+    mismatches.push('contract_resolution');
+  }
+  return { expected, mismatches };
+}
+
 function instrument({ spawn, fetch, fork }, options) {
   const { emit, nativeBinary, nativeSha256, modelFree, synthetic = false, seeds = [] } = options;
   const mask = redactor(seeds);
@@ -152,8 +218,15 @@ function instrument({ spawn, fetch, fork }, options) {
     return child;
   }
   function wrappedFork(modulePath, args, settings) {
-    if (settings?.env?.VSCODE_ESM_ENTRYPOINT !== 'vs/platform/agentHost/node/agentHostMain') return fork(modulePath, args, settings);
-    if (!Array.isArray(args) || path.resolve(modulePath) !== options.bootstrapForkPath || !options.observerPath) fail('wire_agent_fork_refused');
+    const checked = checkAgentFork(modulePath, args, settings, options);
+    record('agent_fork_attempt', { module_path: typeof modulePath === 'string' ? modulePath : null,
+      executable: settings?.execPath || options.runtimeExecPath, args: safeArguments(args),
+      exec_argv: safeArguments(settings?.execArgv), entrypoint: settings?.env?.VSCODE_ESM_ENTRYPOINT,
+      ...checked });
+    if (checked.mismatches.length) {
+      record('blocked', { boundary: 'agent_host_fork', reason: 'wire_agent_fork_refused', mismatches: checked.mismatches });
+      fail('wire_agent_fork_refused');
+    }
     // VS Code intentionally strips NODE_OPTIONS from forks. Add only this
     // hash-bound observer as an explicit execArgv, never restore arbitrary options.
     const env = { ...settings.env, GHCP_AHP_WIRE_SEEDS: JSON.stringify(seeds) };
@@ -249,12 +322,15 @@ function activate() {
   const nativeSha256 = process.env.GHCP_AHP_WIRE_NATIVE_SHA256;
   const observerSha256 = crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex');
   if (observerSha256 !== process.env.GHCP_AHP_WIRE_OBSERVER_SHA256) fail('wire_observer_drift');
+  const forkEncoded = process.env.GHCP_AHP_WIRE_FORK_CONTRACT || '';
+  if (crypto.createHash('sha256').update(forkEncoded).digest('hex') !== process.env.GHCP_AHP_WIRE_FORK_SHA256) fail('wire_fork_contract_drift');
+  const forkContract = parseJson(forkEncoded);
   const output = fs.openSync(path.join(directory, `wire-${process.pid}.jsonl`), 'wx', 0o600);
   const childProcess = require('node:child_process');
   const wrapped = instrument({ spawn: childProcess.spawn, fetch: globalThis.fetch, fork: childProcess.fork }, {
     emit: line => fs.writeSync(output, line), modelFree: mode === 'model-free', seeds,
     nativeBinary, nativeSha256, observerSha256, observerPath: __filename,
-    bootstrapForkPath: process.env.GHCP_AHP_WIRE_BOOTSTRAP,
+    forkContract, runtimeExecPath: process.execPath, parentArgv: process.argv, parentPid: process.pid,
     entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''),
     verifyBinary(binary, expected) {
       if (crypto.createHash('sha256').update(fs.readFileSync(binary)).digest('hex') !== expected) fail('wire_native_binary_drift');
@@ -266,5 +342,5 @@ function activate() {
   globalThis.fetch = wrapped.fetch;
 }
 
-module.exports = { instrument, redactor, frames, READ_ONLY_RPC };
+module.exports = { instrument, redactor, frames, READ_ONLY_RPC, safeArguments };
 activate();
