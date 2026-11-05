@@ -1,6 +1,8 @@
 """Read-only broker contract fixtures: no external network, host or SDK."""
 
+import base64
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -36,6 +38,221 @@ def fake():
                 if url == broker.USER_URL else {'data': [{'id': 'gpt-5.6-sol'}]})
         return 200, {'content-type': 'application/json'}, json.dumps(body).encode()
     return broker.Broker(CANARY, fetch), calls
+
+
+@pytest.fixture
+def https_transport(monkeypatch):
+    state = SimpleNamespace(calls=[], closed=0, status=403, body=b'{}', headers={})
+
+    class Connection:
+        def __init__(self, host, port, *, timeout, context):
+            assert (host, port, timeout) == ('api.github.com', 443, 10)
+            assert context.check_hostname
+
+        def request(self, method, path, *, headers):
+            state.calls.append((method, path, dict(headers)))
+
+        def getresponse(self):
+            return SimpleNamespace(status=state.status, read=lambda limit: state.body,
+                                   getheader=lambda name, default=None: state.headers.get(name, default))
+
+        def close(self):
+            state.closed += 1
+
+    monkeypatch.setattr(broker.http.client, 'HTTPSConnection', Connection)
+    return state
+
+
+def test_https_transport_supplies_user_agent_without_changing_pinned_discovery_headers(https_transport):
+    # Pinned CopilotApiService discovery has no explicit User-Agent. Native
+    # fetch supplies one; Python http.client does not. No real HTTPS here.
+    headers = {**message()['headers'], 'x-github-api-version': '2025-04-01'}
+    before = dict(headers)
+    assert broker.https_get(broker.USER_URL, headers)[0] == 403
+    method, path, outgoing = https_transport.calls[0]
+    assert (method, path) == ('GET', '/copilot_internal/user')
+    assert outgoing == {**before, 'user-agent': 'gdpval-ghcp-ahp-metadata/1.0'}
+    assert headers == before and https_transport.closed == 1
+
+
+def test_https_transport_preserves_explicit_user_agent_and_editor_headers(https_transport):
+    headers = {**message()['headers'], 'user-agent': 'pinned-client-fixture/1.0',
+               'editor-version': 'vscode/1.144.0', 'editor-plugin-version': 'copilot-fixture/1.0'}
+    before = dict(headers)
+    broker.https_get(broker.USER_URL, headers)
+    assert https_transport.calls == [('GET', '/copilot_internal/user', before)]
+    assert headers == before and https_transport.closed == 1
+
+
+def test_https_transport_returns_only_selected_error_header_presence(https_transport):
+    https_transport.headers = {'content-type': 'application/json', 'x-accepted-github-permissions': 'copilot_requests=write',
+                               'x-github-sso': 'required; url=https://github.com/orgs/PRIVATE_FIXTURE/sso',
+                               'x-oauth-scopes': '', 'set-cookie': CANARY, 'authorization': CANARY}
+    status, headers, body = broker.https_get(broker.USER_URL, message()['headers'])
+    assert status == 403 and body == b'{}'
+    assert headers == {'content-type': 'application/json', 'diagnostic_header_presence': {
+        'x-accepted-github-permissions': True, 'x-github-sso': True,
+        'x-oauth-scopes': True, 'x-accepted-oauth-scopes': False}}
+    assert CANARY not in json.dumps(headers) and 'PRIVATE_FIXTURE' not in json.dumps(headers)
+
+
+def test_error_receipt_records_only_redacted_message_documentation_and_header_presence(https_transport):
+    encoded = base64.b64encode(CANARY.encode()).decode()
+    https_transport.body = json.dumps({'message': f'Denied for PRIVATE_FIXTURE: {CANARY} {encoded}',
+        'documentation_url': 'https://docs.github.com/rest/using-the-rest-api/troubleshooting-the-rest-api',
+        'login': 'PRIVATE_FIXTURE', 'token': CANARY, 'extra': 'not-for-audit'}).encode()
+    https_transport.headers = {'x-github-sso': 'required; url=https://github.com/orgs/PRIVATE_FIXTURE/sso'}
+    handler = broker.Broker(CANARY, broker.https_get)
+    assert handler.request(message())['status'] == 403
+    receipt = handler.receipt()
+    details = receipt['external_requests'][0]['error_diagnostic']
+    assert details == {'message': 'Denied for [REDACTED]: [REDACTED] [REDACTED]',
+        'documentation_url': 'https://docs.github.com/rest/using-the-rest-api/troubleshooting-the-rest-api',
+        'header_presence': {'x-accepted-github-permissions': False, 'x-github-sso': True,
+                            'x-oauth-scopes': False, 'x-accepted-oauth-scopes': False}}
+    exported = json.dumps(receipt)
+    for private in (CANARY, encoded, 'PRIVATE_FIXTURE', 'not-for-audit', 'body_base64'):
+        assert private not in exported
+    assert receipt['response_bodies_persisted'] is False
+    assert handler.failed and handler.request(message()) == {'error': 'metadata_closed'}
+    assert len(https_transport.calls) == 1 and receipt['inference_requests'] == 0
+
+
+@pytest.mark.parametrize('body', [b'<html>PRIVATE_FIXTURE</html>', b'{bad json', b'[]', b'null',
+                                 b'{"message":"one","message":"two"}', b'\xff'])
+def test_unparseable_error_body_does_not_replace_http_status_or_leak_body(https_transport, body):
+    https_transport.body = body
+    handler = broker.Broker(CANARY, broker.https_get)
+    assert handler.request(message())['status'] == 403
+    row = handler.receipt()['external_requests'][0]
+    assert row['status'] == 403 and row['error_diagnostic']['message'] == 'not_reported'
+    assert row['error_diagnostic']['documentation_url'] == 'not_reported'
+    assert 'PRIVATE_FIXTURE' not in json.dumps(row) and handler.failed
+    assert handler.request(message()) == {'error': 'metadata_closed'}
+    assert len(https_transport.calls) == 1
+
+
+@pytest.mark.parametrize('url', ['http://docs.github.com/rest', 'https://evil.invalid/docs',
+    'https://docs.github.com.evil.invalid/rest', 'https://docs.github.com:443/rest',
+    'https://private@docs.github.com/rest', 'https://docs.github.com/rest?token=private', None])
+def test_error_diagnostic_does_not_export_noncanonical_documentation_urls(https_transport, url):
+    https_transport.body = json.dumps({'message': 'Denied', 'documentation_url': url}).encode()
+    handler = broker.Broker(CANARY, broker.https_get)
+    assert handler.request(message())['status'] == 403
+    assert handler.receipt()['external_requests'][0]['error_diagnostic']['documentation_url'] == 'not_reported'
+
+
+def test_error_message_is_redacted_before_length_limit(https_transport):
+    https_transport.body = json.dumps({'message': 'x' * 1000 + CANARY + 'y' * 1000}).encode()
+    handler = broker.Broker(CANARY, broker.https_get)
+    handler.request(message())
+    text = handler.receipt()['external_requests'][0]['error_diagnostic']['message']
+    assert text == 'x' * 1000 + '[REDACTED]' + 'y' * 14
+    assert len(text) == 1024
+
+
+def test_missing_diagnostic_headers_are_unknown_not_absent():
+    handler = broker.Broker(CANARY, lambda *args: (403, {}, b'{"message":"Denied"}'))
+    assert handler.request(message())['status'] == 403
+    details = handler.receipt()['external_requests'][0]['error_diagnostic']
+    assert set(details['header_presence'].values()) == {'not_reported'}
+
+
+def local_handler(handler, frame, writer):
+    instance = object.__new__(broker.Handler)
+    instance.connection = SimpleNamespace(settimeout=lambda _: None,
+        getsockopt=lambda *args: broker.struct.pack('3i', 123, os.getuid(), os.getgid()))
+    instance.server = SimpleNamespace(broker=handler)
+    instance.rfile, instance.wfile = io.BytesIO(frame), writer
+    return instance
+
+
+def test_local_eof_is_distinct_from_malformed_frame_and_never_writes_or_fetches(fake):
+    handler, calls = fake
+    output = io.BytesIO()
+    local_handler(handler, b'', output).handle()
+    assert output.getvalue() == b'' and calls == []
+    assert handler.failed and handler.receipt()['denials'] == [{'reason': 'metadata_local_disconnected'}]
+    assert handler.request(message()) == {'error': 'metadata_closed'}
+    assert calls == []
+
+
+@pytest.mark.parametrize('error_type', [BrokenPipeError, ConnectionResetError])
+def test_local_write_disconnect_retains_original_403_and_never_retries(error_type, capsys):
+    calls = []
+    def fetch(*args):
+        calls.append(args)
+        return 403, {}, b'{"message":"Forbidden"}'
+    handler = broker.Broker(CANARY, fetch)
+    writes = []
+    def write(data):
+        writes.append(data)
+        raise error_type('synthetic peer cancelled')
+    instance = local_handler(handler, json.dumps(message()).encode() + b'\n', SimpleNamespace(write=write))
+    instance.handle()
+    assert len(calls) == len(writes) == 1
+    receipt = handler.receipt()
+    assert receipt['external_requests'][0]['status'] == 403
+    assert receipt['denials'] == [{'reason': 'metadata_local_disconnected'}]
+    assert handler.failed and handler.request(message()) == {'error': 'metadata_closed'}
+    assert len(calls) == 1 and capsys.readouterr() == ('', '')
+
+
+def test_local_read_reset_is_terminal_without_error_reply_or_network(fake):
+    handler, calls = fake
+    output = io.BytesIO()
+    instance = local_handler(handler, b'', output)
+    def reset(_):
+        raise ConnectionResetError('synthetic peer cancelled')
+    instance.rfile = SimpleNamespace(readline=reset)
+    instance.handle()
+    assert output.getvalue() == b'' and calls == []
+    assert handler.failed and handler.receipt()['denials'] == [{'reason': 'metadata_local_disconnected'}]
+
+
+def test_malformed_frame_stays_terminal_if_error_reply_hits_broken_pipe(fake):
+    handler, calls = fake
+    def broken_pipe(_):
+        raise BrokenPipeError('synthetic peer cancelled')
+    local_handler(handler, b'not-json\n', SimpleNamespace(write=broken_pipe)).handle()
+    assert calls == [] and handler.failed
+    assert handler.receipt()['denials'] == [{'reason': 'metadata_local_frame_refused'},
+                                          {'reason': 'metadata_local_disconnected'}]
+
+
+def test_real_unix_peer_cancellation_keeps_403_without_server_traceback(tmp_path, capsys):
+    started, release = threading.Event(), threading.Event()
+    calls = []
+    def fetch(*args):
+        calls.append(args)
+        started.set()
+        assert release.wait(3), 'fixture response was not released'
+        return 403, {}, b'{"message":"Forbidden"}'
+    handler = broker.Broker(CANARY, fetch)
+    path = tmp_path / 'cancelled.sock'
+    with broker.Server(str(path), broker.Handler) as server:
+        server.broker = handler
+        server.timeout = 3
+        worker = threading.Thread(target=server.handle_request, daemon=True)
+        worker.start()
+        try:
+            with socket.socket(socket.AF_UNIX) as client:
+                client.settimeout(3)
+                client.connect(str(path))
+                client.sendall(json.dumps(message()).encode() + b'\n')
+                assert started.wait(3)
+                client.shutdown(socket.SHUT_RDWR)
+            # The peer is closed before the HTTP response is released: no race
+            # or sleep to manufacture a BrokenPipe, and still only fake HTTPS.
+        finally:
+            release.set()
+            worker.join(timeout=3)
+    assert not worker.is_alive() and capsys.readouterr() == ('', '')
+    assert len(calls) == 1 and handler.failed
+    assert handler.receipt()['external_requests'][0]['status'] == 403
+    assert handler.receipt()['denials'] == [{'reason': 'metadata_local_disconnected'}]
+    assert handler.request(message()) == {'error': 'metadata_closed'}
+    assert len(calls) == 1
 
 
 def test_exact_discovery_then_bound_models_and_cached_replays_have_two_external_gets(fake):
