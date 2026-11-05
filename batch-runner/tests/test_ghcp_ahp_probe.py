@@ -197,6 +197,105 @@ def test_empty_session_success_has_five_safe_requests_and_no_prompt_or_auth():
         assert "model" not in request["params"] and "initialMessage" not in request["params"] and "prompt" not in request["params"]
 
 
+def policy_transport(creation=None):
+    import ghcp_ahp_thread_policy as policy
+    return FakeTransport({"resolveSessionConfig": {"result": {"schema": {"properties": {}},
+        "values": copy.deepcopy(policy.POLICY)}}, "createSession": creation or {"result": None}})
+
+
+def test_session_policy_exact_hidden_keys_use_config_and_model_uses_native_launch_not_guessed_ahp_field():
+    import ghcp_ahp_thread_policy as policy
+    from ghcp_ahp_connection_transport import CONFIG
+
+    transport = policy_transport()
+    rpc = probe.Rpc(transport, SESSION, WORKSPACE, session_policy=True)
+    observations = []
+    result = policy.exercise(rpc, lambda: observations.append(True) or {"status": "fixture_only"})
+    assert policy.POLICY == CONFIG
+    assert [row["method"] for row in rpc.sent] == list(policy.METHODS)
+    for row in rpc.sent[1:3]:
+        assert row["params"]["config"] == CONFIG
+        assert "codex.permissionsPreset" not in row["params"]["config"]
+    assert set(rpc.sent[2]["params"]) == {"channel", "provider", "workingDirectories", "config"}
+    assert 'model="gpt-5.6-sol"' in policy.NATIVE_ARGS
+    assert 'model_provider="vscode-proxy"' in policy.NATIVE_ARGS
+    assert 'model_reasoning_effort="max"' in policy.NATIVE_ARGS
+    assert "model_context_window=1000000" in policy.NATIVE_ARGS
+    assert observations == [True] and "disposeSession" in result
+    assert all(row["method"] not in {"dispatchAction", "authenticate", "turn/start"} for row in rpc.sent)
+
+
+def test_session_policy_upstream_auth_refusal_is_preserved_without_turn_or_retry():
+    import ghcp_ahp_thread_policy as policy
+
+    transport = policy_transport({"error": {"code": -32007, "message": "Authentication is required to use Codex"}})
+    rpc = probe.Rpc(transport, SESSION, WORKSPACE, session_policy=True)
+    def forbidden():
+        pytest.fail("must not observe/prewarm after a refused session creation")
+    result = policy.exercise(rpc, forbidden)
+    assert result["createSession"]["error"]["code"] == -32007
+    assert [row["method"] for row in rpc.sent] == list(policy.METHODS[:3])
+    with pytest.raises(probe.Refused, match="session_policy_rpc_order_refused"):
+        rpc.request("createSession", copy.deepcopy(rpc.sent[-1]["params"]))
+
+
+@pytest.mark.parametrize("field,bad", [("codex.approvalPolicy", "never"), ("codex.sandboxMode", "workspace-write"),
+    ("codex.networkAccessEnabled", 0), ("codex.webSearchMode", "cached"), ("codex.modelReasoningEffort", "xhigh"),
+    ("codex.permissionsPreset", "default"), ("approvalPolicy", "untrusted")])
+def test_session_policy_values_and_keys_cannot_be_substituted(field, bad):
+    import ghcp_ahp_thread_policy as policy
+
+    transport = policy_transport()
+    rpc = probe.Rpc(transport, SESSION, WORKSPACE, session_policy=True)
+    rpc.sent.append({"method": "initialize"})
+    params = {"channel": probe.ROOT_CHANNEL, "provider": "codex", "workingDirectory": WORKSPACE,
+              "config": {**policy.POLICY, field: bad}}
+    with pytest.raises(probe.Refused, match="session_policy_config_refused"):
+        rpc.request("resolveSessionConfig", params)
+    assert transport.sent == []
+
+
+@pytest.mark.parametrize("method", ["authenticate", "dispatchAction", "sendMessage", "turn/start", "thread/start", "createChat"])
+def test_session_policy_other_ahp_methods_never_reach_transport(method):
+    transport = policy_transport()
+    rpc = probe.Rpc(transport, SESSION, WORKSPACE, session_policy=True)
+    with pytest.raises(probe.Refused, match="session_policy_rpc_order_refused"):
+        rpc.request(method, {})
+    assert transport.sent == []
+
+
+def test_session_policy_rejects_an_unsupported_model_key_in_create_session():
+    import ghcp_ahp_thread_policy as policy
+
+    transport = policy_transport()
+    rpc = probe.Rpc(transport, SESSION, WORKSPACE, session_policy=True)
+    rpc.sent.extend([{"method": "initialize"}, {"method": "resolveSessionConfig"}])
+    with pytest.raises(probe.Refused, match="model_free_rpc_allowlist_refused"):
+        rpc.request("createSession", {"channel": SESSION, "provider": "codex", "workingDirectories": [WORKSPACE],
+            "config": policy.POLICY, "model": probe.DESIRED_MODEL})
+    assert transport.sent == []
+
+
+def test_session_policy_changed_resolver_echo_stops_before_creation():
+    import ghcp_ahp_thread_policy as policy
+
+    transport = policy_transport()
+    transport.overrides["resolveSessionConfig"]["result"]["values"]["codex.sandboxMode"] = "workspace-write"
+    rpc = probe.Rpc(transport, SESSION, WORKSPACE, session_policy=True)
+    with pytest.raises(probe.Refused, match="session_policy_resolver_changed_request"):
+        policy.exercise(rpc)
+    assert [row["method"] for row in transport.sent] == ["initialize", "resolveSessionConfig"]
+
+
+def test_session_policy_does_not_weaken_original_capability_only_or_default_allowlist():
+    with pytest.raises(probe.Refused, match="invalid_capability_mode"):
+        probe.Rpc(FakeTransport(), SESSION, WORKSPACE, capability_only=True, session_policy=True)
+    for options in ({"capability_only": True}, {}):
+        rpc = probe.Rpc(FakeTransport(), SESSION, WORKSPACE, **options)
+        with pytest.raises(probe.Refused):
+            rpc.request("createSession", {"channel": SESSION, "provider": "codex", "workingDirectories": [WORKSPACE], "config": {}})
+
+
 @pytest.mark.parametrize("code", [-32007, -32002, -32602, -32603])
 def test_auth_or_provider_errors_are_retained_without_login_or_model_retry(code):
     transport = FakeTransport({"createSession": {"error": {"code": code, "message": "synthetic refusal"}}})
@@ -429,17 +528,18 @@ def backend_probe_fixture(tmp_path, monkeypatch):
 
     monkeypatch.setattr(probe, "CapturedProcess", fake_process)
 
-    def run(error=None, *, readiness="ready"):
+    def run(error=None, *, readiness="ready", session_policy=False, session_reply=None):
         calls["readiness"] = readiness
         def refused_transport(*args):
             if error is None:
-                transport = FakeTransport()
+                transport = policy_transport(session_reply) if session_policy else FakeTransport()
                 transport.close = lambda: None
                 return transport
             raise error
         monkeypatch.setattr(probe, "WebSocket", refused_transport)
         output = tmp_path / "evidence"
-        calls["exit_code"] = probe.run_probe(manifest, tmp_path / "prepared", output, "fixture", "fixture", capability_only=True)
+        calls["exit_code"] = probe.run_probe(manifest, tmp_path / "prepared", output, "fixture", "fixture",
+            **({"session_policy": True} if session_policy else {"capability_only": True}))
         return json.loads((output / "probe.json").read_text()), calls, output
 
     try:
@@ -612,6 +712,35 @@ def test_successful_fake_observer_still_cannot_admit_paid_execution(backend_prob
     assert receipt["status"] == "probe_completed"
     assert receipt["launch_allowed"] is receipt["gate_ready"] is False
     assert receipt["session_create_requests"] == receipt["model_calls"] == 0
+
+
+@pytest.mark.parametrize("created,safety_violation", [(False, False), (True, False), (True, True)])
+def test_full_session_policy_probe_exports_refusal_or_native_missing_without_admission(backend_probe_fixture, monkeypatch, created, safety_violation):
+    import ghcp_ahp_wire_capture as wire
+    import ghcp_ahp_thread_policy as policy
+
+    def exported(state, output):
+        captured = wire.analyze([], synthetic=True)
+        captured.update(capture_status="captured", bootstrap={"session_policy": True})
+        if safety_violation:
+            captured["capture_errors"].append("session_policy_http_refused")
+        probe.save_json(output / "wire-capture.json", captured)
+        return {"capture_status": "captured", "synthetic": True}
+    monkeypatch.setattr(wire, "export", exported)
+    monkeypatch.setattr(policy, "await_native_thread", lambda *args: {"status": "fixture_no_thread", "replies": 0})
+    reply = {"result": None} if created else {"error": {"code": -32007, "message": "Authentication is required to use Codex"}}
+    receipt, calls, output = backend_probe_fixture(session_policy=True, session_reply=reply)
+    assert calls["exit_code"] == (2 if safety_violation else 0)
+    assert receipt["session_create_requests"] == 1 and receipt["model_calls"] == 0
+    assert [row["method"] for row in receipt["rpc_sent"]] == list(policy.METHODS if created else policy.METHODS[:3])
+    result = json.loads((output / "thread-policy.json").read_text())
+    assert result["session_created"] is created
+    assert result["native_thread_responses"] == 0 and result["admission_allowed"] is False
+    assert set(result["observed"].values()) == {"not_reported"}
+    assert receipt["thread_policy"]["sha256"] == probe.digest(output / "thread-policy.json")
+    if not created:
+        assert result["session_error"]["code"] == -32007
+    assert not calls["scratch"].exists()
 
 
 def test_spawn_failure_still_exports_diagnostics_without_inventing_a_process(backend_probe_fixture, monkeypatch):

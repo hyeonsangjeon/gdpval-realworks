@@ -151,8 +151,11 @@ function checkAgentFork(modulePath, args, settings, options) {
 
 function instrument({ spawn, fetch, fork }, options) {
   const { emit, nativeBinary, nativeSha256, modelFree, synthetic = false, seeds = [] } = options;
+  const sessionOnly = options.sessionOnly === true;
+  if (sessionOnly && modelFree !== true) fail('session_policy_mode_refused');
   const mask = redactor(seeds);
   let sequence = 0, bytes = 0, ipcNumber = 0, httpNumber = 0;
+  let threadRequestId, threadStream, ownedThread;
   function record(kind, fields = {}) {
     const safe = mask.clean({ sequence: ++sequence, kind, synthetic, ...fields });
     const line = JSON.stringify(safe) + '\n';
@@ -164,10 +167,40 @@ function instrument({ spawn, fetch, fork }, options) {
     mask.learn(value);
     record(kind, { ...fields, value, wire_text_redacted: mask.text(text) });
   }
-  function requestAllowed(message) {
+  function blocked(boundary, reason) {
+    record('blocked', { boundary, reason });
+    fail(reason);
+  }
+  function requestAllowed(message, stream) {
+    if (sessionOnly && message.method === 'thread/start') {
+      const p = message.params, config = p?.config;
+      const readOnly = p?.sandbox === 'read-only' && p?.permissions === undefined ||
+        p?.permissions === 'vscode-workspace-read-only' && p?.sandbox === undefined;
+      // The named permission is the pinned harness's own raw-axis translation,
+      // NOT a client-selected codex.permissionsPreset or proof of its effect.
+      if (!modelFree || !p || p.model !== 'gpt-5.6-sol' || p.modelProvider !== 'vscode-proxy' ||
+          p.approvalPolicy !== 'untrusted' || !readOnly || !config || config.web_search !== 'disabled' ||
+          p.allowProviderModelFallback !== undefined && p.allowProviderModelFallback !== false ||
+          config.model_context_window !== undefined && config.model_context_window !== 1000000 ||
+          config.model_reasoning_effort !== undefined && config.model_reasoning_effort !== 'max' ||
+          Object.keys(config.mcp_servers || {}).length !== 0 || !['string', 'number'].includes(typeof message.id) ||
+          Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error')) {
+        blocked('native_ipc', 'session_policy_thread_contract_refused');
+      }
+      if (threadRequestId !== undefined || !options.claimThread) blocked('native_ipc', 'session_policy_thread_limit');
+      try { options.claimThread(); } catch { blocked('native_ipc', 'session_policy_thread_limit'); }
+      threadRequestId = message.id; threadStream = stream;
+      return;
+    }
+    if (sessionOnly && ['thread/unsubscribe', 'thread/archive'].includes(message.method)) {
+      if (!ownedThread || stream !== threadStream || message.params?.threadId !== ownedThread ||
+          Object.keys(message.params).length !== 1 || Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error')) {
+        blocked('native_ipc', 'session_policy_foreign_cleanup_refused');
+      }
+      return;
+    }
     if (modelFree && (!READ_ONLY_RPC.has(message.method) || Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error'))) {
-      record('blocked', { boundary: 'native_ipc', reason: 'wire_model_free_rpc_refused' });
-      fail('wire_model_free_rpc_refused');
+      blocked('native_ipc', 'wire_model_free_rpc_refused');
     }
   }
   function wrappedSpawn(command, args, settings) {
@@ -175,24 +208,40 @@ function instrument({ spawn, fetch, fork }, options) {
       return spawn(command, args, settings);
     }
     if (options.verifyBinary) options.verifyBinary(nativeBinary, nativeSha256);
+    if (sessionOnly) {
+      const overrides = args.flatMap((arg, index) => arg === '-c' ? [args[index + 1]] : []);
+      for (const required of ['model="gpt-5.6-sol"', 'model_provider="vscode-proxy"',
+        'model_reasoning_effort="max"', 'model_context_window=1000000']) {
+        const key = required.split('=')[0];
+        const found = overrides.filter(value => typeof value === 'string' && value.split('=')[0].trim() === key);
+        if (found.length !== 1 || found[0] !== required) blocked('native_spawn', 'session_policy_launch_config_refused');
+      }
+    }
     const stream = `ipc-${++ipcNumber}`;
     // Do not leak diagnostic bootstrap data or recursively preload tool children.
     const env = { ...(settings?.env || process.env) };
     mask.learn({ apiKey: env.OPENAI_API_KEY });
     for (const key of Object.keys(env)) if (key.startsWith('GHCP_AHP_WIRE_') || key === 'NODE_OPTIONS') delete env[key];
     const child = spawn(command, args, { ...settings, env });
-    record('native_started', { stream, native_binary_sha256: nativeSha256 });
+    record('native_started', { stream, native_binary_sha256: nativeSha256, session_only: sessionOnly });
     const outgoing = frames(text => {
       const value = parseJson(text);
-      requestAllowed(value); // Before the original write, including batched lines.
+      requestAllowed(value, stream); // Before the original write, including batched lines.
       raw('ipc_request', { stream, delivery: 'attempted' }, value, text);
     }, /\r?\n/);
-    const incoming = frames(text => raw('ipc_response', { stream }, parseJson(text), text), /\r?\n/);
+    const incoming = frames(text => {
+      const value = parseJson(text);
+      if (sessionOnly && /^(?:turn\/|item\/)/.test(value.method || '')) blocked('native_event', 'session_policy_turn_or_tool_refused');
+      if (sessionOnly && value.id === threadRequestId && stream === threadStream && typeof value.result?.thread?.id === 'string') {
+        ownedThread = value.result.thread.id;
+      }
+      raw('ipc_response', { stream }, value, text);
+    }, /\r?\n/);
     const originalWrite = child.stdin.write;
     function inspectOutgoing(chunk) {
       // The pinned client writes complete newline-delimited messages. Never
       // forward a partial free-mode packet: a child could parse it on EOF.
-      if (modelFree && !Buffer.from(chunk).toString('utf8').endsWith('\n')) fail('wire_model_free_partial_rpc_refused');
+      if (modelFree && !Buffer.from(chunk).toString('utf8').endsWith('\n')) blocked('native_ipc', 'wire_model_free_partial_rpc_refused');
       outgoing.feed(chunk);
       if (modelFree) outgoing.end();
     }
@@ -235,6 +284,9 @@ function instrument({ spawn, fetch, fork }, options) {
     return fork(modulePath, args, { ...settings, env, execArgv });
   }
   async function wrappedFetch(url, init) {
+    // This mode has no HTTP allowance, including model catalogs/auth refresh.
+    // Stop before parsing/calling fetch, not merely after a failed network call.
+    if (sessionOnly) blocked('capi_or_http', 'session_policy_http_refused');
     const address = new URL(typeof url === 'string' || url instanceof URL ? url : url.url);
     const isResponses = /\/(?:v1\/)?responses\/?$/.test(address.pathname);
     const isModelRoute = isResponses || /\/chat\/completions\/?$/.test(address.pathname);
@@ -305,7 +357,7 @@ function instrument({ spawn, fetch, fork }, options) {
     record('capi_reader_instrumented', { stream });
     return response;
   }
-  record('observer_installed', { model_free: modelFree, native_binary_sha256: nativeSha256,
+  record('observer_installed', { model_free: modelFree, session_only: sessionOnly, native_binary_sha256: nativeSha256,
     entrypoint: options.entrypoint || 'fixture',
     hooks: ['native_spawn_stdio', 'capi_fetch_headers_body_stream'], observer_sha256: options.observerSha256 || 'fixture' });
   return { spawn: wrappedSpawn, fetch: wrappedFetch, fork: wrappedFork };
@@ -315,7 +367,7 @@ function activate() {
   const directory = process.env.GHCP_AHP_WIRE_DIR;
   if (!directory) return;
   const mode = process.env.GHCP_AHP_WIRE_MODE;
-  if (!path.isAbsolute(directory) || !['model-free', 'connection'].includes(mode)) fail('wire_bootstrap_refused');
+  if (!path.isAbsolute(directory) || !['model-free', 'connection', 'session-only'].includes(mode)) fail('wire_bootstrap_refused');
   const seeds = parseJson(process.env.GHCP_AHP_WIRE_SEEDS || '[]');
   delete process.env.GHCP_AHP_WIRE_SEEDS;
   const nativeBinary = process.env.GHCP_AHP_WIRE_NATIVE;
@@ -328,10 +380,15 @@ function activate() {
   const output = fs.openSync(path.join(directory, `wire-${process.pid}.jsonl`), 'wx', 0o600);
   const childProcess = require('node:child_process');
   const wrapped = instrument({ spawn: childProcess.spawn, fetch: globalThis.fetch, fork: childProcess.fork }, {
-    emit: line => fs.writeSync(output, line), modelFree: mode === 'model-free', seeds,
+    emit: line => fs.writeSync(output, line), modelFree: mode !== 'connection', sessionOnly: mode === 'session-only', seeds,
     nativeBinary, nativeSha256, observerSha256, observerPath: __filename,
     forkContract, runtimeExecPath: process.execPath, parentArgv: process.argv, parentPid: process.pid,
     entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''),
+    claimThread() {
+      // Shared across observer/native-process restarts. Never release/reuse it.
+      const claim = fs.openSync(path.join(directory, 'thread-start.claim'), 'wx', 0o600);
+      fs.closeSync(claim);
+    },
     verifyBinary(binary, expected) {
       if (crypto.createHash('sha256').update(fs.readFileSync(binary)).digest('hex') !== expected) fail('wire_native_binary_drift');
     },

@@ -19,6 +19,7 @@ import ghcp_ahp_wire_capture as wire
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).with_name("fixtures") / "ghcp_ahp_wire_observer_fixture.cjs"
 FORK_FIXTURE = FIXTURE.with_name("ghcp_ahp_agent_fork_fixture.cjs")
+POLICY_FIXTURE = FIXTURE.with_name("ghcp_ahp_thread_policy_fixture.cjs")
 
 
 def run_fixture(case):
@@ -26,6 +27,90 @@ def run_fixture(case):
                              env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
     assert process.returncode == 0, process.stderr
     return json.loads(process.stdout)
+
+
+def run_policy_fixture(case):
+    result = subprocess.run(["node", str(POLICY_FIXTURE), case], capture_output=True, text=True, timeout=20,
+                            env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize("case", ["valid", "http_response", "http_models", "http_auth", "http_local", "http_other",
+    "launch_wrong", "launch_duplicate", "bad_model", "bad_provider", "bad_approval", "bad_permissions",
+    "bad_web", "bad_context", "bad_effort", "bad_fallback", "bad_mcp", "bad_reply", "turn", "resume", "fork",
+    "exec", "reply", "partial", "batch", "end", "claim_used", "duplicate", "second_process", "incoming_turn",
+    "incoming_tool", "foreign_cleanup"])
+def test_session_policy_guards_stop_at_fake_native_or_http_boundary(case):
+    rows = run_policy_fixture(case)
+    assert all(row["synthetic"] is True for row in rows)
+    sent = [row["value"]["method"] for row in rows if row["kind"] == "ipc_request"]
+    assert set(sent) <= {"thread/start", "thread/unsubscribe"}
+    assert sent.count("thread/start") <= 1
+    assert not any(row["kind"] == "capi_request" for row in rows)
+    assert any(row["kind"] == "blocked" for row in rows) == (case != "valid")
+
+
+def test_session_policy_cannot_be_enabled_with_a_paid_observer_mode():
+    assert run_policy_fixture("mode_mismatch") == []
+
+
+def test_session_policy_native_reports_never_fill_missing_fields_from_echoes_or_process_config():
+    import ghcp_ahp_thread_policy as policy
+
+    rows = run_policy_fixture("valid")
+    rows.extend([
+        {"kind": "ipc_request", "value": {"id": 99, "method": "config/read"}},
+        {"kind": "ipc_response", "value": {"id": 99, "result": {"config": {
+            "web_search": "disabled", "model_context_window": 1000000, "model_reasoning_effort": "max"}}}},
+        {"kind": "ipc_response", "value": {"method": "thread/tokenUsage/updated", "params": {
+            "threadId": "foreign-thread", "tokenUsage": {"modelContextWindow": 1000000}}}},
+    ])
+    capture = wire.analyze(rows, synthetic=True)
+    result = policy.assess(capture, {"createSession": {"result": None},
+        "resolveSessionConfig": {"result": {"values": policy.POLICY}}})
+    assert result["session_created"] is True and result["native_thread_responses"] == 1
+    assert result["observed"]["model"] == "gpt-5.6-sol"
+    assert result["observed"]["reasoning_effort"] == "max"
+    assert result["observed"]["network"] is False
+    for key in ("context_window", "web_search", "served_model"):
+        assert result["observed"][key] == "not_reported"
+    assert result["admission_allowed"] is False
+    assert result["model_turn_start_requests"] == result["model_turn_events"] == result["capi_requests"] == 0
+
+
+@pytest.mark.parametrize("field", ["model", "model_provider", "reasoning_effort", "context_window", "approval", "sandbox", "network", "web_search", "served_model"])
+def test_session_policy_conjunction_requires_every_exact_typed_observation(field):
+    import ghcp_ahp_thread_policy as policy
+
+    observed = copy.deepcopy(policy.EXPECTED)
+    assert policy.matches_all(observed) is True
+    observed[field] = "not_reported"
+    assert policy.matches_all(observed) is False
+    observed[field] = None
+    assert policy.matches_all(observed) is False
+    del observed[field]
+    assert policy.matches_all(observed) is False
+
+
+@pytest.mark.parametrize("change", [{"network": 0}, {"context_window": "1000000"}, {"reasoning_effort": "xhigh"},
+                                    {"model": "gpt-5.6-sol-fast"}, {"model_provider": "openai"}])
+def test_session_policy_no_numeric_boolean_or_effort_alias_admission(change):
+    import ghcp_ahp_thread_policy as policy
+
+    assert policy.matches_all({**policy.EXPECTED, **change}) is False
+
+
+def test_session_policy_native_fallback_or_turn_is_not_hidden_by_matching_resolver_echo():
+    import ghcp_ahp_thread_policy as policy
+
+    capture = wire.analyze(run_policy_fixture("valid"), synthetic=True)
+    capture["native_applied_snapshots"][0]["values"]["model"] = "gpt-5.6-sol-fast"
+    capture["native_requests"].append({"request": {"method": "turn/start"}})
+    result = policy.assess(capture, {"resolveSessionConfig": {"result": {"values": policy.POLICY}}})
+    assert result["verdicts"]["model"] == "mismatch"
+    assert result["model_turn_start_requests"] == 1
+    assert result["safety_violation"] is True and result["admission_allowed"] is False
 
 
 @pytest.mark.parametrize("case", ["valid", "module_js_alias", "module_other", "module_dotdot", "not_array",
@@ -221,6 +306,32 @@ def test_install_checks_archive_binary_and_pinned_source_without_executing_them(
     assert contract["data_path"] == str(state / "server-data/data")
     assert contract["exec_argv"] == [] and contract["telemetry"] == "off"
     assert env["GHCP_AHP_WIRE_FORK_SHA256"] == hashlib.sha256(env["GHCP_AHP_WIRE_FORK_CONTRACT"].encode()).hexdigest()
+
+
+def test_session_policy_install_binds_the_exact_supported_native_configuration(prepared_fixture):
+    import ghcp_ahp_thread_policy as policy
+
+    root, state, _, _ = prepared_fixture
+    env = wire.install(root, state, {"VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS": json.dumps(policy.NATIVE_ARGS)},
+                       model_free=True, session_policy=True)
+    assert env["GHCP_AHP_WIRE_MODE"] == "session-only"
+    bootstrap = json.loads((state / "wire/bootstrap.json").read_text())
+    assert bootstrap["model_free"] is bootstrap["session_policy"] is True
+    assert json.loads(env["VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS"]) == policy.NATIVE_ARGS
+
+
+@pytest.mark.parametrize("damage", ["missing", "wrong_model", "credential", "paid_mode", "flag_type"])
+def test_session_policy_install_refuses_unbound_or_authenticated_environment(prepared_fixture, damage):
+    import ghcp_ahp_thread_policy as policy
+
+    root, state, _, _ = prepared_fixture
+    env = {"VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS": json.dumps(policy.NATIVE_ARGS)}
+    if damage == "missing": env.clear()
+    if damage == "wrong_model": env["VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS"] = '[]'
+    with pytest.raises(wire.Refused, match="wire_(session_policy_environment|mode)_refused"):
+        wire.install(root, state, env, model_free=damage != "paid_mode",
+                     credential="SYNTHETIC_DO_NOT_USE" if damage == "credential" else "",
+                     session_policy="true" if damage == "flag_type" else True)
 
 
 @pytest.mark.parametrize("damage", ["archive", "missing", "module", "node", "parent", "symlink"])
@@ -506,13 +617,13 @@ def test_export_integrity_refusals(prepared_fixture, tmp_path, damage):
     assert not (tmp_path / "export/wire-capture.json").exists()
 
 
-def test_push_workflow_is_zero_session_zero_secret_and_exports_both_real_empty_and_synthetic_evidence():
+def test_push_workflow_is_bounded_session_zero_secret_and_exports_real_and_synthetic_evidence():
     text = (ROOT / ".github/workflows/ghcp-ahp-model-free-probe.yml").read_text()
     workflow = yaml.load(text, Loader=yaml.BaseLoader)
     assert workflow["on"] == {"push": {"branches": ["leader/ghcp-ahp-probe-20261030"]}}
     assert workflow["jobs"]["probe"]["runs-on"] == "ubuntu-24.04"
     assert "secrets." not in text and "COPILOT_GITHUB_TOKEN" not in text
-    assert "--capability-only" in text and "wire-fixture.json" in text
+    assert "--session-policy-probe" in text and "wire-fixture.json" in text
     assert "test_ghcp_ahp_wire_capture.py" in text
     # No extra workflow or model-turn admission is introduced by this collector.
     import ghcp_ahp_connection_transport as transport

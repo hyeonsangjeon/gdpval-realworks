@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   probe:
-    name: Pinned AHP capabilities and passive wire collector - zero sessions
+    name: Pinned AHP session policy and native observer - zero turns and CAPI
     if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-ahp-probe-20261030'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -74,7 +74,7 @@ jobs:
             '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_probe.py" probe \
               --prepared "$RUNNER_TEMP/ghcp-ahp/prepared" \
               --evidence "$RUNNER_TEMP/ghcp-ahp/evidence" \
-              --outside-netns "$probe_netns" --outside-pidns "$probe_pidns" --capability-only
+              --outside-netns "$probe_netns" --outside-pidns "$probe_pidns" --session-policy-probe
       - name: Retain only redacted JSON evidence and offline test results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

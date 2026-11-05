@@ -68,10 +68,11 @@ streams, duplicates, unknown correspondence and failures cannot admit a run.
 The existing connection opener installs the observer only after its existing
 dispatch/runner/auth checks. A schema refusal still happens before createSession;
 its diagnostic export records the absence of native/provider evidence honestly.
-The separate push probe uses two AHP RPCs, no authentication, zero session-create
-requests and kernel-denied external egress. Its observer also blocks native
-session/turn RPCs and model HTTP routes. Partial native packets are refused
-before forwarding in model-free mode, including packets completed by EOF.
+The original `--capability-only` mode still uses two AHP RPCs and no session.
+The push probe now explicitly selects the bounded `--session-policy-probe`
+described below. Neither mode authenticates or inherits credentials, and both
+retain kernel-denied external egress. Partial native packets are refused before
+forwarding, including packets completed by EOF.
 
 ## Evidence classification
 
@@ -116,10 +117,11 @@ SDK protocol generated from Codex 0.163.0; no newer source is substituted.
 fork, fetch and streamed Response objects. Tests exercise one-byte splits,
 masking, byte/argument preservation, missing/mismatched/conflicting responses,
 header/usage echoes, non-success HTTP, incomplete streams, RPC correlation,
-SDK/observer/source drift and zero-session/model transmission guards.
+SDK/observer/source drift, the original zero-session mode and the bounded
+session-only mode's zero-turn/provider-HTTP guards.
 
 The push artifact includes `wire-fixture.json` (explicitly synthetic, five cases)
-and `wire-capture.json` (real model-free observer startup/capabilities, with
+and `wire-capture.json` (real model-free observer/session-attempt evidence, with
 unobserved applied/provider fields left missing). The latter must show the
 observer installed in the actual Agent Host child, not merely its parent.
 No fixture artifact is a live connection receipt or a paid launch permission.
@@ -193,11 +195,79 @@ expected fields and mismatch names, including on refusal; unknown credential
 flag values are redacted before persistence. Non-matching forks are not passed
 through. Model/HTTP guards and admission checks are not relaxed.
 
-After the lazy WebSocket handshake, the capability-only probe requires both
+After the lazy WebSocket handshake, both instrumented probe modes require
 the real [listener-bound signal:683–687](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/agentHostMain.ts#L683)
 and the exact registered Unix socket within this invocation. The supervisor's
 "Server ready" banner does not count. Missing, truncated, conflicting or
 post-timeout evidence refuses **before the first AHP RPC**, even if a transport
 handshake succeeds. No startup timeout increase, new readiness sleep, vendor
-patch, session or model request is added. `backend_readiness` records the
+patch, session or model request is added by this readiness check. `backend_readiness` records the
 decision; a positive result only proves the local listener, not model settings.
+
+## Bounded session-policy probe: request is not application
+
+`ghcp_ahp_thread_policy.py` sends the five exact internal Codex keys through
+`resolveSessionConfig.config` and `createSession.config`. The pinned resolver
+preserves these raw values even though the public schema does not advertise
+them. No alias, `codex.permissionsPreset`, unknown model field, or copied
+server-default preset is sent. The source path is:
+
+| Setting | Pinned consumer in `codexAgent.ts` | Native boundary / observation |
+| --- | --- | --- |
+| `codex.approvalPolicy=untrusted` | raw permission resolution at 2002; thread call at 6169 | `approvalPolicy`; SDK response `approvalPolicy` |
+| `codex.sandboxMode=read-only` | 2002, 2011; thread call at 6170 | harness-owned permission profile; SDK `sandbox` is checked, never inferred from its name |
+| `codex.networkAccessEnabled=false` | 2011–2015 | profile network setting; SDK `sandbox.networkAccess` |
+| `codex.webSearchMode=disabled` | 6128 | `thread/start.config.web_search`; no applied field in the pinned thread response |
+| `codex.modelReasoningEffort=max` | 1948–1954, 2035–2047 | final turn effort/collaboration settings; initial SDK effort is a separate observation |
+
+These are source-defined keys in
+[`common/codexSessionConfigKeys.ts:17`](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/common/codexSessionConfigKeys.ts#L17).
+The [resolver at 9254](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/codex/codexAgent.ts#L9254)
+preserves them; the [AHP creation handler at 2152](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/protocolServerHandler.ts#L2152)
+forwards `config`. **AHP `CreateSessionParams` has no `model` field.** Sending one
+would not select a model, so this client explicitly rejects that shape.
+
+Sol/Max/1M instead use the existing supported native-launch configuration:
+`model="gpt-5.6-sol"`, `model_provider="vscode-proxy"`,
+`model_reasoning_effort="max"`, `model_context_window=1000000`.
+[`agentService.ts:371`](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/common/agentService.ts#L371)
+defines the JSON argument environment; `codexAgent.ts:2682–2685` passes it to
+`buildCodexLaunchConfig`, and the generated native `Config.ts:28,33` defines
+these exact keys. These are **requests**, not evidence that a session selected
+Sol or that a provider supports 1M. The native guard rejects a different
+thread model/provider or an enabled fallback; it never substitutes a model.
+
+The AHP sequence has at most five requests: initialize, resolve, one creation,
+subscribe and dispose. A known upstream refusal is recorded verbatim without
+retrying or using a turn to force startup. A created session waits at most ten
+seconds (within the existing 180-second runtime limit) for prewarm evidence,
+then is disposed. `codexAgent.ts:6274–6305` shows that prewarm can create a
+thread without a message when its prerequisites are met; session creation alone
+does not prove a native thread exists.
+
+The dedicated `session-only` observer permits at most one exact `thread/start`
+and cleanup of that returned thread. A shared exclusive claim survives native
+or observer restarts. It rejects turn/resume/fork/command calls, foreign
+cleanup, model fallback, mismatched security inputs, and incoming turn/tool
+events before forwarding. It checks the four native launch overrides before
+spawning the SDK. It blocks **all fetch calls before the original function**,
+including catalog/auth HTTP; external egress remains kernel-denied. Local AHP
+WebSocket handshakes are not provider/CAPI calls. No credential is read or
+accepted by this mode.
+
+`thread-policy.json` separates requested policy/model, resolver/session result,
+native thread reports, report origins and missing/mismatched values.
+`admission_allowed` requires every typed requested value to match real,
+bound observer evidence, a successful session and no safety violation.
+Requests, schema advertisements, config echoes, process-wide `config/read`,
+foreign-thread reports and synthetic fixtures cannot fill missing applied
+values. Native model/provider are configured values, never served-model proof.
+The pinned thread schemas do not report applied web-search mode, and CAPI
+responses are deliberately absent here, so neither value is invented.
+
+**CI success means the diagnostic probe completed safely**, not that a session
+or native thread was created or that admission passed. Read `session_error`,
+`session_created`, `native_thread_responses` and `admission_allowed` together.
+Unexpected forbidden activity fails the probe. Authentication/catalog or
+missing-evidence refusals do not authorize a model turn. The existing paid
+connection schema/admission checks and dispatch workflow remain unchanged.
