@@ -105,7 +105,7 @@ def save_records(tree, records):
 
 
 @pytest.fixture
-def measured(tmp_path, node_copy):
+def measured_json(tmp_path, node_copy):
     tree = fixture_tree(tmp_path, node_copy)
     environment = bind(tree)
     result = run_loader(tree, environment)
@@ -120,6 +120,13 @@ def measured(tmp_path, node_copy):
         probe.save_json(evidence / name, patched.stamp({"schema": "fixture-" + name, "status": "fixture_load_verified",
             "synthetic": True, "probe_exit": 0, "launch_allowed": False, "admission_allowed": False, "model_calls": 0}, metadata))
     return tree, evidence, metadata, rows
+
+
+@pytest.fixture
+def measured(measured_json):
+    _, evidence, _, _ = measured_json
+    patched.write_summary(evidence, handshake=True, policy=True)
+    return measured_json
 
 
 def test_original_manifest_patch_and_owner_lock_are_exact():
@@ -233,8 +240,8 @@ def test_real_node_loaded_bytes_are_bound_through_result_receipt_and_summary(mea
     assert patched.verify_live_ready(tree["state"]) == metadata
 
 
-def test_human_summary_preserves_every_provenance_field_and_disabled_execution(measured):
-    _, evidence, metadata, _ = measured
+def test_human_summary_preserves_every_provenance_field_and_disabled_execution(measured_json):
+    _, evidence, metadata, _ = measured_json
     patched.write_summary(evidence, handshake=True, policy=True)
     text = (evidence / "summary.md").read_text()
     assert "not native-policy or served-model attestation" in text
@@ -243,8 +250,8 @@ def test_human_summary_preserves_every_provenance_field_and_disabled_execution(m
     assert "execution_allowed: `false`" in text
 
 
-def test_human_summary_cannot_render_a_dropped_receipt_marker(measured):
-    _, evidence, _, _ = measured
+def test_human_summary_cannot_render_a_dropped_receipt_marker(measured_json):
+    _, evidence, _, _ = measured_json
     receipt = evidence / "probe.json"
     value = json.loads(receipt.read_text())
     del value["load_evidence_sha256"]
