@@ -1,7 +1,8 @@
 """Two bounded metadata GETs outside an otherwise zero-egress Agent Host.
 
 No inference URL, token mint, proxy, redirect, retry, arbitrary host or body is
-supported. Response bodies and credentials stay in memory, never in the audit.
+supported. Full response bodies and credentials stay in memory. The audit keeps
+only selected, redacted error fields and the presence of diagnostic headers.
 """
 
 from __future__ import annotations
@@ -37,6 +38,8 @@ CAPI_ORIGINS = frozenset({"https://api.githubcopilot.com", "https://api.individu
                           "https://api.business.githubcopilot.com", "https://api.enterprise.githubcopilot.com"})
 MODELS_URLS = frozenset(origin + "/models" for origin in CAPI_ORIGINS)
 MAX_BODY = 2 * 1024 * 1024
+USER_AGENT = "gdpval-ghcp-ahp-metadata/1.0"
+DIAGNOSTIC_HEADERS = ("x-accepted-github-permissions", "x-github-sso", "x-oauth-scopes", "x-accepted-oauth-scopes")
 HEADERS = frozenset({"authorization", "accept", "content-type", "user-agent", "x-github-api-version", "editor-version",
     "editor-plugin-version", "copilot-integration-id", "openai-intent", "x-request-id", "vscode-sessionid",
     "vscode-machineid", "x-vscode-user-agent", "x-interaction-id", "x-initiator", "editor-device-id", "request-hmac"})
@@ -71,14 +74,47 @@ def https_get(url, headers):
     address = urlsplit(url)
     connection = http.client.HTTPSConnection(address.hostname, 443, timeout=10, context=ssl.create_default_context())
     try:
-        connection.request("GET", address.path, headers=headers)
+        # Native fetch supplies a default UA; http.client does not. GitHub
+        # requires one. Preserve all explicit client headers, including UA.
+        connection.request("GET", address.path, headers={"user-agent": USER_AGENT, **headers})
         response = connection.getresponse()
         body = response.read(MAX_BODY + 1)
         if len(body) > MAX_BODY:
             raise Refused("metadata_response_limit")
-        return response.status, {"content-type": response.getheader("content-type", "application/json")}, body
+        return response.status, {"content-type": response.getheader("content-type", "application/json"),
+            "diagnostic_header_presence": {name: response.getheader(name) is not None for name in DIAGNOSTIC_HEADERS}}, body
     finally:
         connection.close()
+
+
+def error_diagnostic(headers, body, credential):
+    """No full body, SSO URL, scopes, account identifier or credential export."""
+    from ghcp_ahp_diagnostics import DiagnosticRedactor
+    payload = {}
+    try:
+        value = strict_json(body.decode("utf-8"))
+        if isinstance(value, dict):
+            # Learn private identifiers from the whole envelope before selecting
+            # fields, and redact BEFORE truncation so no partial token escapes.
+            payload = DiagnosticRedactor(credential).clean(value)
+    except (ValueError, UnicodeError, RecursionError, Refused):
+        pass  # An unreadable diagnostic must not replace the original HTTP status.
+    message = payload.get("message")
+    documentation = payload.get("documentation_url")
+    try:
+        url = urlsplit(documentation) if type(documentation) is str else None
+        if (url is None or url.scheme != "https" or url.netloc != "docs.github.com" or url.query
+                or len(documentation) > 2048 or "[REDACTED]" in documentation
+                or any(ord(char) < 33 or ord(char) > 126 for char in documentation)):
+            documentation = "not_reported"
+    except ValueError:
+        documentation = "not_reported"
+    presence = headers.get("diagnostic_header_presence", {})
+    presence = presence if isinstance(presence, dict) else {}
+    return {"message": message[:1024] if type(message) is str else "not_reported",
+            "documentation_url": documentation,
+            "header_presence": {name: presence[name] if type(presence.get(name)) is bool else "not_reported"
+                                for name in DIAGNOSTIC_HEADERS}}
 
 
 class Broker:
@@ -126,6 +162,7 @@ class Broker:
                 row.update(status=status, delivery="response_received", response_bytes=len(body), response_sha256=hashlib.sha256(body).hexdigest())
                 if status != 200:
                     self.failed = True
+                    row["error_diagnostic"] = error_diagnostic(headers, body, self.credential)
                 if url == USER_URL and status == 200:
                     payload = strict_json(body.decode("utf-8"))
                     origin = payload.get("endpoints", {}).get("api")
@@ -155,6 +192,11 @@ class Broker:
 
 
 class Handler(socketserver.StreamRequestHandler):
+    def refuse_local(self, reason):
+        with self.server.broker.lock:
+            self.server.broker.failed = True
+            self.server.broker.denials.append({"reason": reason})
+
     def handle(self):
         self.connection.settimeout(15)
         peer = struct.unpack("3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
@@ -162,14 +204,23 @@ class Handler(socketserver.StreamRequestHandler):
             return
         try:
             raw = self.rfile.readline(65537)
+            if not raw:
+                self.refuse_local("metadata_local_disconnected")
+                return  # Cancellation/EOF is not a malformed request to reply to.
             if len(raw) > 65536 or not raw.endswith(b"\n"):
                 raise Refused("metadata_local_frame_refused")
             result = self.server.broker.request(strict_json(raw.decode()))
+        except (BrokenPipeError, ConnectionResetError):
+            self.refuse_local("metadata_local_disconnected")
+            return
         except Exception:
-            self.server.broker.failed = True
-            self.server.broker.denials.append({"reason": "metadata_local_frame_refused"})
+            self.refuse_local("metadata_local_frame_refused")
             result = {"error": "metadata_local_frame_refused"}
-        self.wfile.write(json.dumps(result, separators=(",", ":")).encode() + b"\n")
+        try:
+            self.wfile.write(json.dumps(result, separators=(",", ":")).encode() + b"\n")
+        except (BrokenPipeError, ConnectionResetError):
+            # Preserve the original HTTP receipt; never retry the write or fetch.
+            self.refuse_local("metadata_local_disconnected")
 
 
 class Server(socketserver.UnixStreamServer):
