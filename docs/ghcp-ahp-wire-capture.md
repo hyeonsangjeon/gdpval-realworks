@@ -309,7 +309,7 @@ preserves them; the [AHP creation handler at 2152](https://github.com/microsoft/
 forwards `config`. **AHP `CreateSessionParams` has no `model` field.** Sending one
 would not select a model, so this client explicitly rejects that shape.
 
-Sol/Max/1M instead use the existing supported native-launch configuration:
+The probe requests Sol/Max/1M through the existing supported native-launch configuration:
 `model="gpt-5.6-sol"`, `model_provider="vscode-proxy"`,
 `model_reasoning_effort="max"`, `model_context_window=1000000`.
 [`agentService.ts:371`](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/common/agentService.ts#L371)
@@ -318,6 +318,9 @@ defines the JSON argument environment; `codexAgent.ts:2682–2685` passes it to
 these exact keys. These are **requests**, not evidence that a session selected
 Sol or that a provider supports 1M. The native guard rejects a different
 thread model/provider or an enabled fallback; it never substitutes a model.
+Native launch defaults do **not** select AHP's per-chat catalog entry. See the
+[pinned thread-contract comparison and refusal diagnostics](ghcp-ahp-thread-contract.md)
+for the default-model risk observed after authentication became available.
 
 The AHP sequence has at most five requests: initialize, resolve, one creation,
 subscribe and dispose. A known upstream refusal is recorded verbatim without

@@ -149,6 +149,49 @@ function checkAgentFork(modulePath, args, settings, options) {
   return { expected, mismatches };
 }
 
+function diagnosticScalar(value) {
+  const type = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+  // Never truncate before redaction: a token prefix could otherwise survive.
+  // No nested prompt, path, tool body or MCP URL is included in this projection.
+  const safe = type === 'undefined' ? 'not_reported' : value === null ? null :
+    type === 'string' ? (value.length > 256 ? '[VALUE_TOO_LONG]' : value) :
+    ['boolean', 'number'].includes(type) ? value : '[NON_SCALAR]';
+  return { type, value: safe };
+}
+
+function threadContractDiagnostic(message, modelFree, readOnly) {
+  // Diagnostics only, called AFTER the unchanged refusal predicate fires.
+  // These comparisons neither authorize nor rewrite a native request.
+  const p = message.params, config = p?.config, rejections = [];
+  const check = (field, accepted, expected, actual) => {
+    if (!accepted) rejections.push({ field, expected, actual });
+  };
+  check('modelFree', modelFree, true, diagnosticScalar(modelFree));
+  check('params', Boolean(p), { truthy: true }, diagnosticScalar(p));
+  check('params.model', p?.model === 'gpt-5.6-sol', 'gpt-5.6-sol', diagnosticScalar(p?.model));
+  check('params.modelProvider', p?.modelProvider === 'vscode-proxy', 'vscode-proxy', diagnosticScalar(p?.modelProvider));
+  check('params.approvalPolicy', p?.approvalPolicy === 'untrusted', 'untrusted', diagnosticScalar(p?.approvalPolicy));
+  check('params.sandbox/permissions', readOnly, { one_of: [
+    { sandbox: 'read-only', permissions: 'absent' },
+    { sandbox: 'absent', permissions: 'vscode-workspace-read-only' },
+  ] }, { sandbox: diagnosticScalar(p?.sandbox), permissions: diagnosticScalar(p?.permissions) });
+  check('params.config', Boolean(config), { truthy: true }, diagnosticScalar(config));
+  check('params.config.web_search', config?.web_search === 'disabled', 'disabled', diagnosticScalar(config?.web_search));
+  check('params.allowProviderModelFallback', p?.allowProviderModelFallback === undefined || p.allowProviderModelFallback === false,
+    { absent_or: false }, diagnosticScalar(p?.allowProviderModelFallback));
+  check('params.config.model_context_window', config?.model_context_window === undefined || config.model_context_window === 1000000,
+    { absent_or: 1000000 }, diagnosticScalar(config?.model_context_window));
+  check('params.config.model_reasoning_effort', config?.model_reasoning_effort === undefined || config.model_reasoning_effort === 'max',
+    { absent_or: 'max' }, diagnosticScalar(config?.model_reasoning_effort));
+  const mcpEntries = Object.keys(config?.mcp_servers || {}).length;
+  check('params.config.mcp_servers', mcpEntries === 0, { entry_count: 0 },
+    { type: diagnosticScalar(config?.mcp_servers).type, entry_count: mcpEntries });
+  check('id.type', ['string', 'number'].includes(typeof message.id), ['string', 'number'], diagnosticScalar(message.id).type);
+  check('result', !Object.hasOwn(message, 'result'), { present: false }, { present: Object.hasOwn(message, 'result') });
+  check('error', !Object.hasOwn(message, 'error'), { present: false }, { present: Object.hasOwn(message, 'error') });
+  return { rejected_fields: rejections.map(row => row.field), rejections };
+}
+
 function instrument({ spawn, fetch, fork }, options) {
   const metadata = require('./ghcp_ahp_metadata_client.cjs');
   const { emit, nativeBinary, nativeSha256, modelFree, synthetic = false, seeds = [] } = options;
@@ -187,7 +230,7 @@ function instrument({ spawn, fetch, fork }, options) {
           config.model_reasoning_effort !== undefined && config.model_reasoning_effort !== 'max' ||
           Object.keys(config.mcp_servers || {}).length !== 0 || !['string', 'number'].includes(typeof message.id) ||
           Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error')) {
-        blocked('native_ipc', 'session_policy_thread_contract_refused');
+        blocked('native_ipc', 'session_policy_thread_contract_refused', threadContractDiagnostic(message, modelFree, readOnly));
       }
       if (threadRequestId !== undefined || !options.claimThread) blocked('native_ipc', 'session_policy_thread_limit');
       try { options.claimThread(); } catch { blocked('native_ipc', 'session_policy_thread_limit'); }
