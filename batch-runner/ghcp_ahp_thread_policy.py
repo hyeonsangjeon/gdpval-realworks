@@ -38,6 +38,9 @@ def same(left, right):
 def validate(method, params, rpc):
     credential = getattr(rpc, "credential", "")
     methods = AUTH_METHODS if credential else METHODS
+    managed = getattr(rpc, "management", None) is not None
+    if managed:
+        methods = tuple(item for item in methods if item != "createSession")
     if len(rpc.sent) >= len(methods) or method != methods[len(rpc.sent)]:
         raise Refused("session_policy_rpc_order_refused")
     if type(params) is not dict:
@@ -51,10 +54,11 @@ def validate(method, params, rpc):
         if not same(base.pop("config", None), POLICY):
             raise Refused("session_policy_config_refused")
     # CreateSessionParams has no model field. Never send an ignored/guessed
-    # model key: the source-supported native launch config carries it instead.
+    # AHP key; hosted probes use explicit local management plus native launch config.
     validate_request(method, base, rpc.session, rpc.workspace)
     if method in {"subscribe", "disposeSession"}:
-        creation = [row for row in rpc.received if row.get("id") == methods.index("createSession") + 1]
+        creation = ([getattr(rpc, "policy_results", {}).get("createSession", {})] if managed else
+                    [row for row in rpc.received if row.get("id") == methods.index("createSession") + 1])
         if len(creation) != 1 or "result" not in creation[0]:
             raise Refused("session_policy_creation_not_confirmed")
     if credential and method not in {"initialize", "authenticate"}:
@@ -94,8 +98,15 @@ def exercise(rpc, observe=None):
         raise Refused("session_policy_resolver_changed_request")
     # Keep only our five source-defined keys. Do not copy a preset, an unknown
     # key, or a server default back into the creation request.
-    results["createSession"] = rpc.request("createSession", {"channel": rpc.session, "provider": "codex",
-        "workingDirectories": [rpc.workspace], "config": copy.deepcopy(POLICY)})
+    management = getattr(rpc, "management", None)
+    if management is None:
+        # Retained generic AHP-only helper. The hosted session-policy entrypoint
+        # ALWAYS supplies its local bridge; bridge failures never fall back here.
+        results["createSession"] = rpc.request("createSession", {"channel": rpc.session, "provider": "codex",
+            "workingDirectories": [rpc.workspace], "config": copy.deepcopy(POLICY)})
+    else:
+        results["management_initialize"] = management.prepare(rpc.session, rpc.workspace, POLICY)
+        results["createSession"] = management.create()
     if "error" not in results["createSession"]:
         results["subscribe"] = rpc.request("subscribe", {"channel": rpc.session})
         try:
@@ -184,6 +195,8 @@ def assess(capture, results):
             "verdicts": {key: "matches" if same(observed[key], EXPECTED[key]) else
                          "not_reported" if observed[key] == NOT_REPORTED else "mismatch" for key in EXPECTED},
             "session_created": created, "session_error": creation.get("error"),
+            "management_initialize": results.get("management_initialize"),
+            "creation_transport": creation.get("transport", "ahp-websocket"),
             "native_thread_responses": len(starts), "native_wait": results.get("native_wait"),
             "synthetic": capture.get("synthetic", True), "safety_violation": safety_violation,
             "admission_allowed": created and live and not safety_violation and matches_all(observed),
@@ -203,6 +216,8 @@ def export(evidence, results):
     report = assess(capture, results)
     target = evidence / "thread-policy.json"
     save_json(target, report)
+    if "management_initialize" in results:
+        save_json(evidence / "management-init.json", results["management_initialize"])
     return {"path": target.name, "sha256": digest(target), "admission_allowed": report["admission_allowed"],
             "session_created": report["session_created"], "native_thread_responses": report["native_thread_responses"],
             "safety_violation": report["safety_violation"]}

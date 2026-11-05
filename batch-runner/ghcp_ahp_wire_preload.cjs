@@ -326,7 +326,15 @@ function instrument({ spawn, fetch, fork }, options) {
     const env = { ...settings.env, GHCP_AHP_WIRE_SEEDS: JSON.stringify(seeds) };
     const execArgv = [...(settings.execArgv || []), '--require', options.observerPath];
     record('agent_fork_instrumented');
-    return fork(modulePath, args, { ...settings, env, execArgv });
+    const child = fork(modulePath, args, { ...settings, env, execArgv });
+    // The local management bridge is attached only after the existing exact
+    // path/argv/parent/pin checks above. Native packets are still untouched.
+    if (sessionOnly && options.managementDirectory) {
+      require('./ghcp_ahp_management_bridge.cjs').start({ child, record,
+        directory: options.managementDirectory, stateRoot: options.forkContract.state_root,
+        bridgeSha256: options.managementSha256 });
+    }
+    return child;
   }
   async function wrappedFetch(url, init) {
     if (sessionOnly && options.metadataRequest) {
@@ -455,6 +463,8 @@ function activate() {
   const forkEncoded = process.env.GHCP_AHP_WIRE_FORK_CONTRACT || '';
   if (crypto.createHash('sha256').update(forkEncoded).digest('hex') !== process.env.GHCP_AHP_WIRE_FORK_SHA256) fail('wire_fork_contract_drift');
   const forkContract = parseJson(forkEncoded);
+  const managementSha256 = process.env.GHCP_AHP_WIRE_MANAGEMENT_SHA256;
+  if (mode === 'session-only' && crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'ghcp_ahp_management_bridge.cjs'))).digest('hex') !== managementSha256) fail('management_bridge_drift');
   const output = fs.openSync(path.join(directory, `wire-${process.pid}.jsonl`), 'wx', 0o600);
   const childProcess = require('node:child_process');
   const wrapped = instrument({ spawn: childProcess.spawn, fetch: globalThis.fetch, fork: childProcess.fork }, {
@@ -462,6 +472,7 @@ function activate() {
     metadataRequest: metadataSocket ? require('./ghcp_ahp_metadata_client.cjs').client(metadataSocket) : undefined,
     nativeBinary, nativeSha256, observerSha256, observerPath: __filename,
     forkContract, runtimeExecPath: process.execPath, parentArgv: process.argv, parentPid: process.pid,
+    managementDirectory: mode === 'session-only' ? directory : undefined, managementSha256,
     entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''),
     claimThread() {
       // Shared across observer/native-process restarts. Never release/reuse it.

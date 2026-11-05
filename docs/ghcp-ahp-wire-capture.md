@@ -53,8 +53,17 @@ false by the initial root snapshot before auth. It does NOT disable endpoint
 discovery in `CodexAgent.authenticate`; no such switch was found in the pinned
 authentication/model-refresh path. No new AHP action or guessed key is allowed.
 
-The allowed AHP sequence is initialize → authenticate → resolveSessionConfig →
-createSession → subscribe → disposeSession (at most six requests). Per-thread
+The hosted AHP sequence is initialize → authenticate → resolveSessionConfig →
+subscribe → disposeSession (at most five requests; unauthenticated push omits
+authenticate). Between resolve and subscribe, the private local management
+bridge performs configure → readback → one createSessionWithExtensions. It
+passes the source-defined initial model and unchanged raw policies, verifies
+the staged values plus the real resolver response before creation, and never
+falls back to the AHP create command after a bridge failure. See the
+[initialization contract and pinned prewarm risk](ghcp-ahp-thread-contract.md#local-management-initialization-no-new-external-network).
+It opens no external network route and does not change the native/turn/CAPI
+guards. `management-init.json` is request/resolver evidence, not applied proof.
+Per-thread
 reports alone populate `thread-policy.json` and `handshake.json.observed`;
 `wire-capture.json` retains their native provenance. Missing values remain
 `not_reported`. Echoes and `config/read` are not application or served-model
