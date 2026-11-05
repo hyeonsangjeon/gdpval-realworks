@@ -389,8 +389,8 @@ def stamp(document, provenance):
     return result
 
 
-def verify_artifact_chain(directory, *, handshake=False, policy=False):
-    """Reject dropped/changed labels in the result, receipt or stdout summary."""
+def _verify_json_chain(directory, *, handshake=False, policy=False):
+    """Validate producer inputs before the human summary exists."""
     directory = Path(directory)
     names = (["wire-capture.json", "probe.json", "summary.json"]
              + (["handshake.json"] if handshake else []) + (["thread-policy.json"] if policy else []))
@@ -417,9 +417,7 @@ def verify_artifact_chain(directory, *, handshake=False, policy=False):
     return documents[2]
 
 
-def render_summary(directory, *, handshake=False, policy=False):
-    """Human summary consumes the same verified artifacts, never loose labels."""
-    value = verify_artifact_chain(directory, handshake=handshake, policy=policy)
+def _summary_text(value):
     lines = ["Patched GHCP — loader evidence only; execution remains disabled.", "",
              "This is not native-policy or served-model attestation.", ""]
     for key in PROVENANCE_FIELDS:
@@ -427,8 +425,26 @@ def render_summary(directory, *, handshake=False, policy=False):
     return "\n".join(lines) + "\n"
 
 
+def verify_artifact_chain(directory, *, handshake=False, policy=False):
+    """Consumers require both persisted JSON and its exact Markdown projection.
+
+    Re-rendering a missing or altered summary would silently repair evidence.
+    Only the producer below may create it; consumers never fill omissions.
+    """
+    value = _verify_json_chain(directory, handshake=handshake, policy=policy)
+    if _read(Path(directory) / "summary.md") != _summary_text(value).encode():
+        raise Refused("patched_runtime_markdown_mismatch")
+    return value
+
+
+def render_summary(directory, *, handshake=False, policy=False):
+    """Producer only: render from verified JSON, not from unchecked labels."""
+    return _summary_text(_verify_json_chain(directory, handshake=handshake, policy=policy))
+
+
 def write_summary(directory, *, handshake=False, policy=False):
     _write(Path(directory) / "summary.md", render_summary(directory, handshake=handshake, policy=policy).encode())
+    verify_artifact_chain(directory, handshake=handshake, policy=policy)
 
 
 def main(argv=None):
