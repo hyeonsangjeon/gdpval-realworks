@@ -3900,6 +3900,7 @@ def test_every_grade_push_retries_instead_of_dying_on_a_shard_race():
     pull = 'git pull --rebase origin "${GITHUB_REF_NAME}"'
     sites = {
         "Commit grade result": "could not push the grade file",
+        "Commit combined solve+grade USD journal": "could not push the combined USD journal",
         "Merge shards into the final grade": "could not push the merged grade",
         "Commit analysis": "could not push the analysis",
     }

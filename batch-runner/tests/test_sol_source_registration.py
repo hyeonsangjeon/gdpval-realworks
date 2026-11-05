@@ -49,6 +49,13 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     # Keep the complete historical chain/delta assertions against the actual
     # immutable #796 profile. Only the explicitly reviewed grader successor differs.
     profile = pilot.load_plan(long_context_path)
+    # The 10-30 grader-seal profile keeps its bytes; the 11-05 batch-path
+    # successor changes only the step2 and preflight pins relative to it.
+    grader_seal_path = root / pilot.SOURCE_PROFILE_GRADER_SEAL
+    assert hashlib.sha256(grader_seal_path.read_bytes()).hexdigest() == pilot.SOURCE_PROFILE_GRADER_SEAL_SHA256 == (
+        "90a222ac56ed9276689b31f154fbfbdeb6d98decb614556abca131c22cc3cfc6"
+    )
+    grader_seal_profile = pilot.load_plan(grader_seal_path)
     previous_path = root / pilot.SOURCE_PROFILE_PREVIOUS
     previous_bytes = previous_path.read_bytes()
     previous = pilot.load_plan(previous_path)
@@ -95,7 +102,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     list_prices_bytes = list_prices_path.read_bytes()
     list_prices_profile = pilot.load_plan(list_prices_path)
     reference_path = root / binding.CONNECTION_REFERENCE_PATH
-    assert pilot.SOURCE_PROFILE.endswith("_source_20261030_grader_seal.yaml")
+    assert pilot.SOURCE_PROFILE.endswith("_source_20261105_batch_path.yaml")
+    assert pilot.SOURCE_PROFILE_GRADER_SEAL.endswith("_source_20261030_grader_seal.yaml")
     assert pilot.SOURCE_PROFILE_LONG_CONTEXT.endswith("_source_20261030_long_context.yaml")
     assert pilot.SOURCE_PROFILE_LONG_CONTEXT_SHA256 == (
         "0d957f81d2c6d82a79fa1db7ff86b21d3a6ec609011787585f93fca8b63f62b1"
@@ -295,14 +303,23 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         k: v for k, v in original.items() if k != "source_pins"
     }
 
-    assert {name for name, digest in successor_profile["source_pins"].items()
+    assert {name for name, digest in grader_seal_profile["source_pins"].items()
             if digest != profile["source_pins"][name]} == {
         "batch-runner/gpt56_sol_codex_pilot_preflight.py",
     }
-    expected_successor = deepcopy(profile)
-    expected_successor["dispatch_grading_identity"]["grader_template_source_hash"] = grader_seal.GRADER_HASH
+    expected_grader = deepcopy(profile)
+    expected_grader["dispatch_grading_identity"]["grader_template_source_hash"] = grader_seal.GRADER_HASH
+    expected_grader["source_pins"] = grader_seal_profile["source_pins"]
+    assert grader_seal_profile == expected_grader
+    assert {name for name, digest in successor_profile["source_pins"].items()
+            if digest != grader_seal_profile["source_pins"][name]} == pilot.SOURCE_PROFILE_BATCH_PATH_DELTA == {
+        "batch-runner/step2_run_inference.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    }
+    expected_successor = deepcopy(grader_seal_profile)
     expected_successor["source_pins"] = successor_profile["source_pins"]
     assert successor_profile == expected_successor
+    for name in pilot.SOURCE_PROFILE_BATCH_PATH_DELTA:
+        assert successor_profile["source_pins"][name] == hashlib.sha256((root / name).read_bytes()).hexdigest()
     profile = successor_profile
 
     forbidden_calls = []
@@ -357,9 +374,9 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert report["source_sha"] == head and len(report["source_tree"]) == 40
     assert report["plan_sha256"] == plan_sha and report["status"] == "source_verified"
     assert report["launch_authority"] is report["retry_authority"] is False
-    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_LONG_CONTEXT
-    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_LONG_CONTEXT_SHA256
-    assert report["source_change_reason"] == "owner_reviewed_successor_grader_seal_without_policy_change"
+    assert report["supersedes_profile"] == pilot.SOURCE_PROFILE_GRADER_SEAL
+    assert report["supersedes_profile_sha256"] == pilot.SOURCE_PROFILE_GRADER_SEAL_SHA256
+    assert report["source_change_reason"] == "owner_approved_sol_batch_step2_hook_without_pilot_policy_change"
     assert report["grader_successor_seal"]["grader_source_hash"] == grader_seal.GRADER_HASH
     assert report["response_capture_readiness"] == {
         "status": "next_call_capture_path_only", "live_evidence_observed": False,
@@ -467,11 +484,17 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(usd200_profile)})
     with pytest.raises(pilot.PilotSourceRegistrationRefused):
         pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(connection_profile)})
+    with pytest.raises(pilot.PilotSourceRegistrationRefused):
+        pilot.source_plan_snapshot(**{**options, "expected_plan_sha256": pilot.seal(grader_seal_profile)})
+    with pytest.raises(pilot.PilotSourceRegistrationRefused):
+        pilot.source_plan_snapshot(**{**options,
+                                      "expected_plan_sha256": pilot.seal(pilot.load_plan(long_context_path))})
 
     # Synthetic mutations do not alter any repository file or Git object.
     read_bytes = reader._read_bytes
     for predecessor_path in (previous_path, caps_path, token_path, shared_path, usd200_path, connection_path,
-                             counters_path, root / grader_seal.RECORD, root / pilot.GRADER_SEAL_READER,
+                             counters_path, grader_seal_path, root / grader_seal.RECORD,
+                             root / pilot.GRADER_SEAL_READER,
                              root / "batch-runner/gpt56_native_response_capture.py",
                              wire._USD_CAPS_PATH, wire._USD_PRICE_PATH, reference_path):
         for missing in (False, True):
@@ -568,7 +591,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     for held_role in (pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD, pilot.SOURCE_PROFILE_SHARED,
                       pilot.SOURCE_PROFILE_USD200, pilot.SOURCE_PROFILE_CONNECTION, binding.CONNECTION_REFERENCE_PATH,
                       pilot.SOURCE_PROFILE_CAPTURE_COUNTERS, pilot.SOURCE_PROFILE_LIST_PRICES,
-                      pilot.SOURCE_PROFILE_LONG_CONTEXT,
+                      pilot.SOURCE_PROFILE_LONG_CONTEXT, pilot.SOURCE_PROFILE_GRADER_SEAL,
                       "batch-runner/gpt56_native_response_capture.py",
                       "batch-runner/scripts/diagnose_codex_foundry_connection.py",
                       ".github/workflows/codex-foundry-connection-diagnostic.yml",
@@ -579,7 +602,8 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
         expected_reads = 3 if held_role in {pilot.SOURCE_PROFILE_TOKEN_PRECHECK, pilot.SOURCE_PROFILE_USD,
                                           pilot.SOURCE_PROFILE_SHARED, pilot.SOURCE_PROFILE_USD200,
                                           pilot.SOURCE_PROFILE_CONNECTION, pilot.SOURCE_PROFILE_CAPTURE_COUNTERS,
-                                          pilot.SOURCE_PROFILE_LIST_PRICES, pilot.SOURCE_PROFILE_LONG_CONTEXT} else 2
+                                          pilot.SOURCE_PROFILE_LIST_PRICES, pilot.SOURCE_PROFILE_LONG_CONTEXT,
+                                          pilot.SOURCE_PROFILE_GRADER_SEAL} else 2
         def final_money_drift(path, **kwargs):
             if path == root / held_role:
                 checks.append(path)
@@ -623,7 +647,7 @@ def test_sol_source_registration(tmp_path, monkeypatch, capsys):
     assert bound_completion["launch_blockers"] == remaining
     assert bound_completion["approved_connection_gate"] == connection_gate
     assert bound_completion["launch_allowed"] is bound_completion["full_220_allowed"] is False
-    for predecessor_path in (previous_path, caps_path, bindings_path, counters_path):
+    for predecessor_path in (previous_path, caps_path, bindings_path, counters_path, grader_seal_path):
         assert pilot.main(["--plan", str(predecessor_path), "--reviewed-source-sha", head]) == 2
         previous_completion = json.loads(capsys.readouterr().out)
         assert previous_completion["source_registration"] == {

@@ -1,0 +1,296 @@
+# Codex against Foundry — GPT-5.6 Sol on the fixed five
+# =====================================================
+#
+# exp033's five tasks in exp033's order, exp033's prompt byte for byte and
+# exp035's retry budget, with the model changed to the `gpt-5.6-sol`
+# deployment at reasoning effort `max` and a 1,000,000-token context window
+# requested. One fresh Codex session per task, as before. It runs through the
+# batch path that ran exp033-exp035 with gpt-5.4:
+# `.github/workflows/batch-run.yml` in `codex_foundry` mode. `grade-run.yml`
+# grades it with `grading_configs/exp036_v2_sol_max.yaml`, whose judge,
+# rubric, grader, tpm_guard, prompt and output blocks are exp035's v2.2 Sol
+# Max blocks, copied unchanged.
+#
+# This is not the paused gpt56 pilot. That pilot is the registered run
+# `gpt56_sol_foundry_codex_pilot5_v1` (`PilotInputCapture.RUN_ID`), with its
+# own input capture and workflows. `experiment.id` here is a different string,
+# so step 1 and step 2 take their generic `codex_foundry` path, and
+# `sol_batch_controls.py` adds the two things the generic path does not have:
+# the 1M catalog and the USD gate described below.
+#
+# The owner's conditions, 2026-11-05
+# ----------------------------------
+#
+#   1. 1M context. `execution.codex.model_context_window` asks for 1,000,000,
+#      and Codex 0.147.0's bundled catalog caps gpt-5.6-sol at 272,000
+#      (258,400 usable). The request reaches the client only with the held
+#      catalog `codex_catalogs/codex-0.147.0-models-gpt56-sol-1m.json` (#796).
+#      Step 1 carries a fixed list of `execution.codex` keys and the catalog
+#      is not one of them, so it cannot be named here: `sol_batch_controls.py`
+#      attaches it in step 2, for this experiment id only.
+#   2. USD 200 over solve and grade together, at list price on the
+#      `long_context_standard_global` meter with the cached-input discount
+#      (`model_price_table.json`, gpt-5.6-sol, USD per 1M tokens: input
+#      10.00, cached input 1.00, cache write 12.50, output 45.00). The solve
+#      side keeps 54 for grading and reserves 51 for each attempt, so no
+#      attempt starts once booked solve spend passes 95. The check runs
+#      between attempts, so one attempt may overshoot; the owner accepted
+#      that. A turn that ends unfinished (timeout, content stop, transport
+#      failure) also books the one request it may have left in flight, which
+#      Codex never reports: the last reported request's input and output
+#      plus 100,000 tokens of tool output, priced as a cold cache, plus
+#      128,000 output tokens; at most 29.385, the held catalog's whole
+#      1,050,000-token window uncached plus that output. Where this paragraph
+#      and the constants in `sol_batch_controls.py` differ, the constants are
+#      authoritative.
+#   3. Served model. Nothing checks it per request. Diagnostic run
+#      40967326333, whose one request came back reporting gpt-5.6-sol at
+#      reasoning effort max, and this run's own records stand in for that.
+#   4. Effort. `reasoning_effort: "max"` is written out because the 0.147.0
+#      catalog's default for gpt-5.6-sol is `low`.
+#   5. Office toolchain. `install_libreoffice: true` installs LibreOffice,
+#      Noto fonts, ffmpeg, poppler, tesseract and the rest of that step's
+#      packages. exp033-exp035 did not install it, so this is a deliberate
+#      difference from them.
+#   6. Success is not five of five. Two of these tasks have never succeeded
+#      on gpt-5.4; the next section has their record.
+#
+# Two of the five have never succeeded
+# ------------------------------------
+#
+# 02aa1805 and 0818571f failed in every gpt-5.4 run that had them. The
+# content filter did not stop them every time: each run ended them on either
+# the content filter or rate refusals, and not in a fixed pattern.
+#
+#   run                              02aa1805          0818571f
+#   exp033  34500590783              rate refusals     content filter
+#   exp033  34528903950              content filter    rate refusals
+#   exp034  34540053904              rate refusals     content filter
+#   exp035  lineage A, 34571840967   rate refusals     content filter
+#   exp035  lineage B, 34603033098   content filter    content filter
+#
+# The exp033 rows are from exp034's header and the exp034 row from exp035's.
+# The exp035 rows are docs/run_records/exp035_run*_partial/outcomes.json.
+# tests/fixtures/run_record/step2_inference_results.json is the step 2 record
+# of 34528903950. That run predates the `content_filtered` category, so it
+# files the two as `turn_failed` and `rate_limited`.
+#
+# Resume stays off
+# ----------------
+#
+# `resume_max_rounds: 0`, as in the Sol profile's `limits.resume_max_rounds`
+# (`experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`). The
+# USD reserve assumes at most four attempts per task, and a resume round would
+# give a task more. Content stops would not come back either way:
+# `NON_RESUMABLE_ERROR_CATEGORIES` in `step2_run_inference.py` keeps
+# `content_filtered` out of every resume round.
+#
+# The wall clock, fixed before the run
+# ------------------------------------
+#
+#   5 tasks x at most 4 attempts, 1800s each, one task at a time
+#   one task's worst case: 4 x 1800s, plus 60s + 120s + 240s of waiting
+#     between attempts, plus about a minute of session start-up per attempt,
+#     about 131 minutes
+#   step 2's watchdog is read only between tasks, so a task that starts just
+#     before 170 minutes runs to its end: 170 + 131 = 301 minutes, under step
+#     2a's own 350-minute cap
+#
+# What binds is the job's 360-minute cap (`timeout-minutes: 360` on the
+# batch-run job), because the final leg also runs everything after step 2:
+#
+#   setup, office toolchain included       about  15 minutes
+#   step 2 watchdog                               170
+#   one worst-case task started at 170     about 131
+#   steps 3 to 7                           about   5
+#   "Verify dispatched result PR checks"   up to  30
+#                                          about 351 of 360
+#
+# The dispatch passes `wall_timeout` 0, so this file's 170 is the watchdog,
+# and every relay leg is handed the same 0. A non-zero input wins over this
+# file: the input's default, 290, plus one worst-case task passes step 2a's
+# 350-minute cap, which kills the leg before it can upload a checkpoint. So
+# `sol_batch_controls.py` refuses any leg whose watchdog is not between 1 and
+# 170 minutes (`sol_batch_watchdog_drift`) before its first attempt.
+#
+# Relay legs
+# ----------
+#
+# `relay_max_runs: 3` allows leg zero and three relay legs. The per-turn cost
+# ledger is a SQLite file on the runner, and a relay leg restores only the
+# progress file and the deliverables, so a leg cannot read an earlier leg's
+# ledger. The USD gate seeds itself from the restored progress rows instead:
+# the Codex runner's result for each task carries the task's booked USD, step
+# 2 records it as `observability.budget_metrics.conservative_cost_usd`, and
+# that field survives the checkpoint.
+#
+# Two ways spend could still be lost, and what covers each:
+#
+#   - A leg re-run with GitHub's re-run button would restart from an older
+#     checkpoint. `sol_batch_controls.py` refuses any run attempt other than
+#     the first.
+#   - A fresh dispatch (relay_run 0) restores no rows, so it starts from
+#     `PRIOR_LINEAGE_SPEND_USD` alone and knows nothing of earlier lineages.
+#     Before ANY fresh exp036 dispatch that follows one which spent anything
+#     -- a leg died without a checkpoint, a relay leg failed before step 2,
+#     or the final leg ended red -- raise `PRIOR_LINEAGE_SPEND_USD` in
+#     `sol_batch_controls.py` by pull request, by that lineage's OWN spend.
+#     That is its last cumulative "[sol-batch] ... solve spend" figure (job
+#     log or batch-results artifact) minus the "prior lineages" figure it
+#     started from (the install banner and the "leg closed" line print it;
+#     the record summary has both as solve_spend_usd and
+#     prior_lineage_spend_usd), plus 2.00 if its final leg ran step 6's
+#     narrative. Every solve spend figure already includes the constant, so
+#     raising it by the whole figure counts earlier lineages twice. That
+#     includes lineages whose legs did upload a checkpoint. Relay legs run
+#     the first leg's `batch-runner/` tree, so only a fresh dispatch sees the
+#     raise.
+#   - To continue a lineage whose relay leg died before step 2, dispatch
+#     that leg again by hand with the same relay_run, relay_lineage_id and
+#     source_sha, wall_timeout 0 and codex_foundry_confirmed true, rather
+#     than starting a fresh lineage.
+#   - A row that reached Codex but lost its booking (an error after the
+#     runner returned) makes the next leg and the grade preflight refuse
+#     (`sol_batch_prior_spend_unaccounted`). Raising
+#     `PRIOR_LINEAGE_SPEND_USD` cannot clear it. To grade a published result
+#     with such a row, add `("<inference revision>", "<task id>"):
+#     Decimal("<booked>")` to `LOST_BOOKING_USD` in `sol_batch_controls.py`
+#     by pull request. <booked> is the sum of that task's "[sol-batch]
+#     <first 8 of task id> attempt N: booked X" amounts in the publishing
+#     leg's job log, or of booked_usd over its attempts in that leg's
+#     sol_batch_controls record. Grading runs from main, so that one PR
+#     unblocks it, and the entry applies to that revision only. A lineage
+#     refused at a relay leg cannot be continued this way (its legs run leg
+#     0's tree): count its own spend into `PRIOR_LINEAGE_SPEND_USD` and
+#     dispatch a fresh lineage.
+#
+# The dispatch
+# ------------
+#
+#   experiment_yaml           exp036_sol_fixed5
+#   codex_foundry_confirmed   true
+#   dry_run                   false
+#   wall_timeout              0, so this file's 170 is used
+#
+# Everything else stays at its leg-0 default. `dry_run: false` is what uploads
+# the result that grading downloads; `output.publish_to_hf` below does not
+# decide it.
+#
+# Dispatch exactly once. batch-run.yml has no concurrency group, so never
+# dispatch while another exp036 run is queued or running, and never retry a
+# `gh workflow run` that may already have succeeded: each lineage gets its own
+# full solve gate, and two of them can pass 200 before grading starts.
+#
+# Grading: never use GitHub's re-run button on the grade job
+# (`sol_batch_grading.py` refuses any run attempt but the first). If the
+# grade job dies or its "Commit combined solve+grade USD journal" step is red,
+# commit that run's journal from its cost-ledger artifact under
+# data/grades/_combined_usd/exp036_sol_fixed5/ before any new grade dispatch.
+#
+# On the final leg step 6 writes the narrative report with two GPT-5.6 Sol
+# Max calls, outside the solve ledger. `sol_batch_grading.py` counts them as a
+# fixed USD 2.00 inside the same 200.
+
+experiment:
+  id: "exp036_sol_fixed5"
+  name: "Codex command-line tool against Foundry — GPT-5.6 Sol, five tasks"
+  description: >-
+    GPT-5.6 Sol at Max with a 1M context request on exp033's five tasks, through
+    the batch path that ran exp033-exp035 with gpt-5.4. One fresh Codex session
+    per task; solve and grade together held to USD 200 at list price.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-11-05"
+
+control:
+  fixed:
+    - tasks
+    - prompt
+    - temperature
+    - self_qa
+    - retry_budget
+  changed:
+    - model
+    - reasoning_effort
+    - context_window
+    - execution_environment
+
+data:
+  # HyeonSang/<experiment.id>, as in exp033-exp035. Step 0 creates it, step 7
+  # uploads to it, and grade-run.yml downloads from it.
+  source: "HyeonSang/exp036_sol_fixed5"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+    # exp033's list, in exp033's order. Step 4 uploads in this order, so a
+    # grading config that pins these ids must list them the same way.
+    task_ids:
+      - "02aa1805-c658-4069-8a6a-02dec146063a"
+      - "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+      - "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+      - "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+      - "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+
+condition_a:
+  name: "Codex command-line tool, Foundry deployment"
+  model:
+    provider: "azure"
+    # Must equal execution.codex.model: CodexAgentRunner.run refuses a
+    # mismatch rather than calling one deployment and recording another.
+    deployment: "gpt-5.6-sol"
+    # Codex owns the request, so these are inherited defaults, not claims
+    # about what was sent. The effort it sends is the one execution.codex
+    # names.
+    temperature: 0.0
+    seed: 42
+    reasoning_effort: null
+  prompt:
+    # Byte-for-byte exp033's, exp034's and exp035's.
+    system: |
+      You are completing a professional work task. You have a terminal and a
+      working directory. Do the task and leave the finished deliverables in
+      the working directory as real files.
+    prefix: null
+    body: null
+    suffix: null
+  # Off, for the reason exp033 gives.
+  qa:
+    enabled: false
+    max_retries: 0
+    model: null
+    min_score: 6
+    prompt: ""
+
+execution:
+  mode: "codex_foundry"
+  codex:
+    endpoint_from_route: true
+    model: "gpt-5.6-sol"
+    # Owner conditions 4 and 1 in the header: effort, then window. Step 1
+    # carries both keys into the prepared file, and step 2 hands them to Codex.
+    reasoning_effort: "max"
+    model_context_window: 1000000
+    # Both 0 on purpose; retries live in max_retries below, where they are
+    # counted.
+    request_max_retries: 0
+    stream_max_retries: 0
+  # Wall clock for one turn. Unchanged from exp033-exp035.
+  timeout: 1800
+  # Attempts after an infrastructure failure, per task: four at most, as in
+  # exp035. The USD gate can refuse to start any of them.
+  max_retries: 3
+  # Off; see "Resume stays off" in the header.
+  resume_max_rounds: 0
+  # Owner condition 5 in the header.
+  install_libreoffice: true
+  # Step 2's watchdog in minutes, used because the dispatch passes
+  # wall_timeout 0. See the wall clock in the header.
+  wall_timeout: 170
+  # Leg zero plus three relay legs; see "Relay legs" in the header.
+  relay_max_runs: 3
+
+output:
+  # Nothing in codex_foundry mode reads this to decide an upload; the
+  # dispatch's dry_run: false does. Written true so the two agree.
+  publish_to_hf: true
+  submit_to_evals: false
