@@ -1,0 +1,110 @@
+name: GHCP patched-runtime model-free tests
+
+# Offline fixtures only: no installed host, SDK, source build or session launch.
+# Keep the original branch probe and its historical hash contracts untouched.
+on:
+  push:
+    branches: [leader/ghcp-patched-runtime-receipt-20261106]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcp-patched-runtime-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contracts:
+    name: Patched runtime - 1477 offline cases plus workflow guards
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - id: checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # existing v5.1.0 pin
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # existing v7.0.0 pin
+        with:
+          python-version: '3.12.11'
+      - id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # existing v7.0.0 pin
+        with:
+          node-version: '22.23.2' # match the local inert-loader fixture runtime
+          package-manager-cache: false
+      - id: dependencies
+        name: Install only offline test dependencies
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check pytest==9.1.1 PyYAML==6.0.3
+      - id: workflow_guards
+        name: Check this workflow's scope and result contract
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ghcp-patched-ci"
+          ci_tmp="$(mktemp -d /tmp/ghcp-ci.XXXXXX)"
+          env -i PATH="$PATH" LANG=C.UTF-8 \
+            PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+            '${{ steps.python.outputs.python-path }}' -B -m pytest -q -o addopts= -p no:cacheprovider \
+            --basetemp="$ci_tmp/guards" --junitxml="$RUNNER_TEMP/ghcp-patched-ci/workflow-guards.xml" \
+            tests/test_ghcp_ahp_patched_runtime_ci.py
+      - id: contracts
+        name: Run the unchanged 1477-case offline suite
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ghcp-patched-ci"
+          ci_tmp="$(mktemp -d /tmp/ghcp-ci.XXXXXX)"
+          env -i PATH="$PATH" LANG=C.UTF-8 \
+            PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+            '${{ steps.python.outputs.python-path }}' -B -m pytest -q -o addopts= -p no:cacheprovider \
+            --basetemp="$ci_tmp/contracts" --junitxml="$RUNNER_TEMP/ghcp-patched-ci/contracts.xml" \
+            tests/test_ghcp_ahp_patched_runtime.py \
+            tests/test_ghcp_ahp_patched_runtime_rejections.py \
+            tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_sol_paid_gate.py \
+            tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py \
+            tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py \
+            tests/test_ghcp_ahp_metadata_broker.py tests/test_ghcp_ahp_connection.py
+      - id: results
+        name: Require every expected case to pass without skips
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" LANG=C.UTF-8 RUNNER_TEMP="$RUNNER_TEMP" \
+            '${{ steps.python.outputs.python-path }}' -B - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          expected = {"contracts.xml": 1477, "workflow-guards.xml": 25}
+          directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
+          counts = {}
+          for name, total in expected.items():
+              cases = list(ET.parse(directory / name).getroot().iter("testcase"))
+              bad = {key: sum(case.find(key) is not None for case in cases) for key in ("failure", "error", "skipped")}
+              if len(cases) != total or any(bad.values()):
+                  raise SystemExit("junit_contract_refused:" + name)
+              counts[name] = {"passed": len(cases), "failed": 0, "errors": 0, "skipped": 0}
+          result = {"evidence_kind": "offline-tests-only", "execution_allowed": False, "counts": counts}
+          (directory / "test-counts.json").write_text(json.dumps(result, indent=2) + "\n")
+          print(json.dumps(result))
+          PY
+      - id: artifacts
+        name: Retain only JUnit and offline test counts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-runtime-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-patched-ci/contracts.xml
+            ${{ runner.temp }}/ghcp-patched-ci/workflow-guards.xml
+            ${{ runner.temp }}/ghcp-patched-ci/test-counts.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
