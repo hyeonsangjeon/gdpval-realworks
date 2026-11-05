@@ -5,6 +5,53 @@ This collector preserves the fixed Codex harness, GPT-5.6 Sol (not Fast), Max,
 replace `policy_rejections` or `require_verified_connection`. Even complete,
 matching synthetic evidence cannot open the connection or five-task gate.
 
+## Authenticated zero-turn dispatch
+
+The existing fixed-five workflow has a separate `authenticated_zero_turn`
+boolean input, default false. It requires `execution_adapter=ahp-draft`,
+`dry_run=true`, `execute_paid=false`, `connection_only=false` and
+`capability_only=false`. Only `ahp-zero-turn` uses the `ghcp-sol-gate`
+environment in this mode. The dry five, paid five, one-turn connection, cohort
+plan and grading jobs are skipped. The ordinary push probe stays unauthenticated.
+
+The authenticated job reads `COPILOT_GITHUB_TOKEN` only on the hosted runner,
+then removes it from the driver's environment. The value is not a command-line
+argument or file. The child receives only an in-memory observer redaction seed,
+removed before native spawn. AHP receives one exact `authenticate` request for
+`https://api.github.com`, after verifying Codex advertises that resource.
+The five source-defined policy keys and Sol/max/1M native launch settings are
+unchanged. No new alias, preset or fallback is accepted.
+
+This mode still uses a loopback-only kernel network namespace, an isolated PID
+namespace, dropped privileges, the strict session-only native observer and a
+120-second overall runtime deadline. Authentication does **not** permit token
+exchange, model catalogs or other HTTP: every Agent Host fetch is blocked before
+the original fetch is called. A watchdog stops the owned host on the first
+blocked boundary or turn/tool/CAPI event, including while authentication waits.
+The AHP client checks that watchdog before sending and after receiving each RPC.
+There is no retry or second session/thread. Cleanup is mandatory on every exit.
+
+The allowed AHP sequence is initialize → authenticate → resolveSessionConfig →
+createSession → subscribe → disposeSession (at most six requests). Per-thread
+reports alone populate `thread-policy.json` and `handshake.json.observed`;
+`wire-capture.json` retains their native provenance. Missing values remain
+`not_reported`. Echoes and `config/read` are not application or served-model
+proof. These diagnostic schemas cannot satisfy the paid connection receipt.
+
+Authentication itself may require HTTP. In the pinned harness,
+[codexAgent.ts:1634](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/codex/codexAgent.ts#L1634)
+resolves GitHub MCP configuration before storing the token and queuing model
+refresh. Such an attempt is recorded with a nonsecret destination category and
+`forwarded=false`, fails this zero-HTTP mode, and is not silently allowed just
+because it is not a model turn. Even a safe thread reply need not provide every
+applied field; admission stays closed for missing/mismatched values.
+
+The [official app-server lifecycle](https://developers.openai.com/codex/app-server/)
+distinguishes thread creation from `turn/start`. The pinned GHCP integration,
+not that general guide, determines this adapter's authentication and policy
+parameter paths. Offline tests cover both the real workflow routing expressions
+and real RPC/parser/export paths with only fake process, wire and provider data.
+
 ## Runtime collection
 
 `ghcp_ahp_wire_capture.py` verifies the original SDK archive, the extracted

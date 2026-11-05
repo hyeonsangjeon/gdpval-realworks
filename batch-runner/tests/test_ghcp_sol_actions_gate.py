@@ -150,16 +150,18 @@ def test_workflow_contract():
     assert workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] == "true"
     assert workflow["permissions"] == {"contents": "read"}
     jobs = workflow["jobs"]
-    assert set(jobs) == {"offline-ci", "plan", "task", "grader-contract", "ahp-connection", "paid-task"}
+    assert set(jobs) == {"offline-ci", "plan", "task", "grader-contract", "ahp-zero-turn", "ahp-connection", "paid-task"}
     assert jobs["plan"]["needs"] == "offline-ci"
     for name, job in jobs.items():
-        if name in {"paid-task", "ahp-connection"}:  # Protected dispatch contracts tested separately.
+        if name in {"paid-task", "ahp-connection", "ahp-zero-turn"}:  # Exact protected routing tested separately.
             continue
         assert job["runs-on"] == "ubuntu-24.04"
         assert job["timeout-minutes"] == ("15" if name in {"offline-ci", "grader-contract"} else "5")
         assert "continue-on-error" not in job
         if name == "grader-contract":
-            assert job["if"] == "${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true && inputs.capability_only != true }}"
+            assert job["if"] == "${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true && inputs.capability_only != true && inputs.authenticated_zero_turn != true }}"
+        elif name in {"plan", "task"}:
+            assert job["if"] == "inputs.authenticated_zero_turn != true"
         else:
             assert "if" not in job
         guard = job["steps"][0]

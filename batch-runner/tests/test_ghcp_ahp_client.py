@@ -516,7 +516,9 @@ def test_existing_workflow_has_one_protected_dispatch_only_adapter_switch():
     assert "inputs.connection_only != true" in job["if"]
     assert "needs.ahp-connection.outputs.verified == 'true'" in job["if"]
     assert job["environment"] == "ghcp-sol-gate" and job["runs-on"] == "ubuntu-24.04"
-    assert [name for name, body in workflow["jobs"].items() if "secrets." in yaml.dump(body)] == ["ahp-connection", "paid-task"]
+    # One new explicitly protected zero-turn boundary, never a paid fallback.
+    assert [name for name, body in workflow["jobs"].items() if "secrets." in yaml.dump(body)] == ["ahp-zero-turn", "ahp-connection", "paid-task"]
+    assert "inputs.authenticated_zero_turn != true" in job["if"]
     steps = job["steps"]
     runtime = next(step for step in steps if "secrets." in yaml.dump(step))
     assert '--adapter "$GHCP_EXECUTION_ADAPTER"' in runtime["run"]

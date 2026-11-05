@@ -26,6 +26,8 @@ EXPECTED = {"model": "gpt-5.6-sol", "model_provider": "vscode-proxy", "reasoning
 NOT_REPORTED = "not_reported"
 WAIT_SECONDS = 10
 METHODS = ("initialize", "resolveSessionConfig", "createSession", "subscribe", "disposeSession")
+AUTH_METHODS = ("initialize", "authenticate", *METHODS[1:])
+AUTH_RESOURCE = "https://api.github.com"
 
 
 def same(left, right):
@@ -34,11 +36,17 @@ def same(left, right):
 
 
 def validate(method, params, rpc):
-    if len(rpc.sent) >= len(METHODS) or method != METHODS[len(rpc.sent)]:
+    credential = getattr(rpc, "credential", "")
+    methods = AUTH_METHODS if credential else METHODS
+    if len(rpc.sent) >= len(methods) or method != methods[len(rpc.sent)]:
         raise Refused("session_policy_rpc_order_refused")
     if type(params) is not dict:
         raise Refused("session_policy_rpc_shape_refused")
     base = dict(params)
+    if method == "authenticate":
+        if not same(params, {"channel": ROOT_CHANNEL, "resource": AUTH_RESOURCE, "token": credential}):
+            raise Refused("zero_turn_auth_rpc_refused")
+        return
     if method in {"resolveSessionConfig", "createSession"}:
         if not same(base.pop("config", None), POLICY):
             raise Refused("session_policy_config_refused")
@@ -46,9 +54,13 @@ def validate(method, params, rpc):
     # model key: the source-supported native launch config carries it instead.
     validate_request(method, base, rpc.session, rpc.workspace)
     if method in {"subscribe", "disposeSession"}:
-        creation = [row for row in rpc.received if row.get("id") == 3]
+        creation = [row for row in rpc.received if row.get("id") == methods.index("createSession") + 1]
         if len(creation) != 1 or "result" not in creation[0]:
             raise Refused("session_policy_creation_not_confirmed")
+    if credential and method not in {"initialize", "authenticate"}:
+        authenticated = [row for row in rpc.received if row.get("id") == 2]
+        if len(authenticated) != 1 or "result" not in authenticated[0]:
+            raise Refused("zero_turn_auth_not_confirmed")
 
 
 def exercise(rpc, observe=None):
@@ -61,6 +73,15 @@ def exercise(rpc, observe=None):
     initialized = results["initialize"].get("result")
     if not isinstance(initialized, dict) or initialized.get("protocolVersion") not in {"1.1.0", "1.0.0"}:
         return results
+    if getattr(rpc, "credential", ""):
+        roots = [s for s in initialized.get("snapshots", []) if s.get("resource") == ROOT_CHANNEL]
+        agents = [a for s in roots for a in s.get("state", {}).get("agents", []) if a.get("provider") == "codex"]
+        if len(agents) != 1 or AUTH_RESOURCE not in {r.get("resource") for r in agents[0].get("protectedResources", [])}:
+            raise Refused("zero_turn_auth_resource_refused")
+        results["authenticate"] = rpc.request("authenticate", {"channel": ROOT_CHANNEL,
+            "resource": AUTH_RESOURCE, "token": rpc.credential})
+        if "error" in results["authenticate"]:
+            return results
     results["resolveSessionConfig"] = rpc.request("resolveSessionConfig", {"channel": ROOT_CHANNEL,
         "provider": "codex", "workingDirectory": rpc.workspace, "config": copy.deepcopy(POLICY)})
     resolved_result = results["resolveSessionConfig"].get("result")

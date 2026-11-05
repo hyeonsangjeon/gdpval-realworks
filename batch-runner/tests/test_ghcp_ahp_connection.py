@@ -339,7 +339,8 @@ def workflow():
 def test_connection_job_is_single_protected_dispatch_only_and_task_waits_for_receipt():
     value = workflow()
     job = value["jobs"]["ahp-connection"]
-    assert job["if"] == "${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.execution_adapter == 'ahp-draft' }}"
+    # The new mode must never enter the existing one-turn boundary.
+    assert job["if"] == "${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.execution_adapter == 'ahp-draft' && inputs.authenticated_zero_turn != true }}"
     assert job["environment"] == "ghcp-sol-gate" and job["runs-on"] == "ubuntu-24.04"
     assert "strategy" not in job and job["timeout-minutes"] == "10"
     assert job["outputs"] == {"verified": "${{ steps.connection.outputs.verified }}"}

@@ -1,6 +1,7 @@
-"""Pinned, credential-free AHP discovery. Real processes: hosted Ubuntu 24.04 only.
+"""Pinned AHP discovery. Real processes: hosted Ubuntu 24.04 only.
 
-No prompt/turn/authentication RPC exists in this driver. Runtime additionally
+No prompt/turn RPC exists. Authentication requires the protected zero-turn mode.
+The ordinary push path remains credential-free. Runtime additionally
 requires a loopback-only network namespace and an unprivileged PID-1 process.
 This is a capability probe, not a benchmark, billing meter or paid gate.
 """
@@ -476,7 +477,7 @@ def validate_request(method, params, session, workspace):
 
 
 class Rpc:
-    def __init__(self, transport, session, workspace, *, capability_only=False, session_policy=False):
+    def __init__(self, transport, session, workspace, *, capability_only=False, session_policy=False, credential="", boundary_check=None):
         parsed = urllib.parse.urlsplit(workspace)
         if not re.fullmatch(r"ahp-session:/[0-9a-f-]{36}", session) or parsed.scheme != "file" or parsed.netloc or not parsed.path.startswith("/") or parsed.query or parsed.fragment:
             raise Refused("unsafe_rpc_scope")
@@ -485,10 +486,22 @@ class Rpc:
             raise Refused("invalid_capability_mode")
         self.capability_only = capability_only
         self.session_policy = session_policy
+        if credential and not session_policy:
+            raise Refused("zero_turn_auth_requires_session_policy")
+        self.credential = credential
+        self.boundary_check = boundary_check
+        self.mask = None
+        if credential:
+            from ghcp_ahp_diagnostics import DiagnosticRedactor
+            from ghcp_ahp_zero_turn import validate_credential
+            validate_credential(credential)
+            self.mask = DiagnosticRedactor(credential)
         self.sent = []
         self.received = []
 
     def request(self, method, params):
+        if self.boundary_check is not None:
+            self.boundary_check()
         if self.capability_only and (method not in {"initialize", "resolveSessionConfig"}
                                      or len(self.sent) >= 2):
             raise Refused("zero_session_probe_rpc_refused")
@@ -497,18 +510,20 @@ class Rpc:
             thread_policy.validate(method, params, self)
         else:
             validate_request(method, params, self.session, self.workspace)
-        if len(self.sent) >= MAX_RPCS:
+        if len(self.sent) >= MAX_RPCS + bool(self.credential):
             raise Refused("rpc_count_limit")
         request = {"jsonrpc": "2.0", "id": len(self.sent) + 1, "method": method, "params": params}
-        self.sent.append(request)
+        self.sent.append(self.mask.clean(request) if self.mask else request)
         self.transport.send(request)
         while len(self.received) < 256:
             value = self.transport.receive()
+            if self.boundary_check is not None:
+                self.boundary_check()
             if not isinstance(value, dict) or value.get("jsonrpc") != "2.0":
                 raise Refused("invalid_rpc_response")
-            self.received.append(value)
+            self.received.append(self.mask.clean(value) if self.mask else value)
             serialized = json.dumps(value)
-            if re.search(r'"(?:type|method)"\s*:\s*"(?:chat/turnStarted|chat/toolCallStart|turn/start|sendMessage)"', serialized):
+            if re.search(r'"(?:type|method)"\s*:\s*"(?:chat/turn[^"\s]*|chat/toolCall[^"\s]*|turn/[^"\s]*|item/[^"\s]*|sendMessage)"', serialized):
                 raise Refused("unexpected_turn_or_tool_activity")
             if "id" in value:
                 if "method" in value:
@@ -517,7 +532,7 @@ class Rpc:
                     raise Refused("rpc_response_identity_mismatch")
                 if "error" in value and (not isinstance(value["error"], dict) or type(value["error"].get("code")) is not int or not isinstance(value["error"].get("message"), str)):
                     raise Refused("malformed_rpc_error")
-                return value
+                return self.mask.clean(value) if self.mask else value
         raise Refused("rpc_event_limit")
 
 
@@ -547,25 +562,39 @@ def classify_rpc(results):
             "evidence_boundary": "empty_session_only_not_authenticated_model_execution"}
 
 
-def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False, session_policy=False):
+def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False, session_policy=False,
+              authenticated_zero_turn=False, credential=""):
     if type(capability_only) is not bool or type(session_policy) is not bool or capability_only and session_policy:
         raise Refused("invalid_capability_mode")
     identity = require_runner()
     isolation = require_isolation(outside_netns, outside_pidns)
+    if type(authenticated_zero_turn) is not bool or bool(credential) != authenticated_zero_turn:
+        raise Refused("zero_turn_auth_mode_mismatch")
+    if authenticated_zero_turn:
+        from ghcp_ahp_diagnostics import DiagnosticRedactor
+        import ghcp_ahp_zero_turn as zero_turn
+        import ghcp_ahp_thread_policy as thread_policy
+        zero_turn.require_context()
+        zero_turn.validate_credential(credential)
+        if not session_policy or capability_only:
+            raise Refused("zero_turn_auth_requires_session_policy")
+    mask = DiagnosticRedactor(credential) if authenticated_zero_turn else None
     prepared, source_evidence = verify_prepared(manifest, root, evidence, identity)
-    deadline = time.monotonic() + MAX_RUNTIME_SECONDS
+    wall_seconds = 120 if authenticated_zero_turn else MAX_RUNTIME_SECONDS
+    deadline = time.monotonic() + wall_seconds
     record = {"schema": "ghcp-ahp-probe-receipt-v1", "runner": identity, "isolation": isolation,
               "vscode_version": manifest["vscode_version"], "vscode_commit": manifest["vscode_commit"], "codex_sdk_version": manifest["codex_sdk_version"],
               "artifacts": prepared["artifacts"], "binary_sha256": prepared["binary_sha256"],
               "source_contract": source_evidence, "source_evidence_sha256": prepared["source_evidence_sha256"],
-              "authentication_supplied": False, "credential_environment_inherited": False, "headless_started": False,
+              "authentication_supplied": authenticated_zero_turn, "credential_environment_inherited": False, "headless_started": False,
               "model_calls": 0, "model_call_evidence_boundary": "no_prompt_rpc_and_kernel_denied_external_egress_not_a_billing_receipt",
               "launch_allowed": False, "gate_ready": False, "served_model": "not_reported", "reasoning_effort": "not_reported", "context_window": "not_reported",
               "capability_only": capability_only, "session_policy_probe": session_policy, "session_create_requests": 0,
+              "authenticated_zero_turn": authenticated_zero_turn,
               "backend_readiness": {"ready": False, "reason": "not_checked"},
-              "probe_limits": {"wall_seconds": MAX_RUNTIME_SECONDS, "rpc_requests": 2 if capability_only else MAX_RPCS, "prompt_turns": 0, "wire_bytes": MAX_WIRE_BYTES},
+              "probe_limits": {"wall_seconds": wall_seconds, "rpc_requests": 2 if capability_only else MAX_RPCS + authenticated_zero_turn, "prompt_turns": 0, "wire_bytes": MAX_WIRE_BYTES},
               "reason_codes": [], "status": "incomplete"}
-    transport = process = rpc = None
+    transport = process = rpc = watchdog = None
     try:
         with tempfile.TemporaryDirectory(prefix="ahp-") as temporary:
             scratch = Path(temporary)
@@ -588,6 +617,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     import ghcp_ahp_thread_policy as thread_policy
                     environment["VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS"] = json.dumps(thread_policy.NATIVE_ARGS)
                 options = {"session_policy": True} if session_policy else {}
+                if authenticated_zero_turn:
+                    options.update(credential=credential, authenticated_zero_turn=True)
                 environment = wire_capture.install(root, scratch, environment, model_free=True, **options)
                 if "--log" not in help_result["stdout"]:
                     raise Refused("backend_diagnostic_log_flag_unavailable")
@@ -603,7 +634,12 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
             primary_error = None
             try:
                 process = CapturedProcess(command, environment, cwd=workspace)
+                if authenticated_zero_turn:
+                    watchdog = zero_turn.Watchdog(scratch, process.stop)
+                    watchdog.start()
                 while time.monotonic() < deadline:
+                    if watchdog is not None:
+                        watchdog.check()
                     process.check()
                     if process.process.poll() is not None:
                         raise Refused("agent_host_exited_before_handshake")
@@ -621,7 +657,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     if not record["backend_readiness"]["ready"]:
                         raise Refused("agent_host_backend_not_ready")
                 rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri(),
-                          capability_only=capability_only, session_policy=session_policy)
+                          capability_only=capability_only, session_policy=session_policy, credential=credential,
+                          boundary_check=watchdog.enforce if watchdog is not None else None)
                 results = (thread_policy.exercise(rpc, lambda: thread_policy.await_native_thread(scratch, deadline))
                            if session_policy else exercise_rpc(rpc))
                 record["rpc_results"] = results
@@ -630,11 +667,22 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     record["codex_session"]["evidence_boundary"] = "capability_only_zero_session_requests"
                 if session_policy:
                     record["codex_session"]["evidence_boundary"] = "one_session_request_zero_turns_not_admission"
+                if authenticated_zero_turn:
+                    record["codex_session"] = {"provider_requested": "codex",
+                        "authentication_rpc_succeeded": "result" in results.get("authenticate", {}),
+                        "session_created": "result" in results.get("createSession", {}),
+                        "evidence_boundary": "authenticated_session_only_not_model_or_gate_admission"}
+                    if "result" not in results.get("authenticate", {}):
+                        raise Refused("zero_turn_authentication_refused")
+                    if "result" not in results.get("createSession", {}):
+                        raise Refused("zero_turn_session_refused")
+                    if results.get("native_wait", {}).get("replies", 0) != 1:
+                        raise Refused("zero_turn_native_thread_not_reported")
                 record["headless_started"] = isinstance(results.get("initialize", {}).get("result"), dict) and results["initialize"]["result"].get("protocolVersion") in {"1.1.0", "1.0.0"}
                 record["status"] = "probe_completed" if record["headless_started"] else "protocol_initialization_refused"
             except Exception as error:
-                primary_error = error
-                raise
+                primary_error = Refused(watchdog.reason) if watchdog is not None and watchdog.reason else error
+                raise primary_error
             finally:
                 secondary_errors = []
 
@@ -644,6 +692,11 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     except Exception as error:
                         secondary_errors.append(error)
                         return None
+
+                if watchdog is not None:
+                    retain_or_note(watchdog.close)
+                    if watchdog.reason and primary_error is None:
+                        secondary_errors.append(Refused(watchdog.reason))
 
                 # Snapshot before TERM and before TemporaryDirectory removes the
                 # socket/log tree. Diagnostic failure must not skip cleanup or
@@ -663,16 +716,20 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     else "process_group_stop_unconfirmed_pid_namespace_exit_remains_cleanup_boundary")
                 if capability_only or session_policy:
                     after = retain_or_note(lambda: backend_diagnostics.snapshot(scratch, process))
+                    diagnostic_auth = {"credential": credential, "session_create_requests": sum(row["method"] == "createSession" for row in rpc.sent) if rpc else 0} if authenticated_zero_turn else {}
                     record["backend_startup"] = retain_or_note(lambda: backend_diagnostics.export(evidence, before=before, after=after,
                         primary_error_code=(str(primary_error) if isinstance(primary_error, Refused) else type(primary_error).__name__) if primary_error else None,
-                        environment=environment, vscode_commit=manifest["vscode_commit"]))
-                    record["host_process"] = retain_or_note(lambda: backend_diagnostics.DiagnosticRedactor("").clean(record.get("host_process")))
-                    record["wire_capture"] = retain_or_note(lambda: wire_capture.export(scratch, evidence))
+                        environment=environment, vscode_commit=manifest["vscode_commit"], **diagnostic_auth))
+                    record["host_process"] = retain_or_note(lambda: backend_diagnostics.DiagnosticRedactor(credential).clean(record.get("host_process")))
+                    export_auth = {"credential": credential} if authenticated_zero_turn else {}
+                    record["wire_capture"] = retain_or_note(lambda: wire_capture.export(scratch, evidence, **export_auth))
                     if record["wire_capture"] is not None and record["wire_capture"]["capture_status"] != "captured":
                         secondary_errors.append(Refused("wire_observer_not_started"))
                     if session_policy and record["wire_capture"] is not None:
                         if rpc is not None:
                             record["rpc_results"] = getattr(rpc, "policy_results", record.get("rpc_results", {}))
+                        initialized = record.get("rpc_results", {}).get("initialize", {}).get("result", {})
+                        record["headless_started"] = isinstance(initialized, dict) and initialized.get("protocolVersion") in {"1.1.0", "1.0.0"}
                         record["thread_policy"] = retain_or_note(lambda: thread_policy.export(evidence, record.get("rpc_results", {})))
                         if record["thread_policy"] is not None and record["thread_policy"]["safety_violation"]:
                             secondary_errors.append(Refused("session_policy_forbidden_activity"))
@@ -690,7 +747,29 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
             record["rpc_sent"] = rpc.sent
             record["rpc_received"] = rpc.received
             record["session_create_requests"] = sum(row["method"] == "createSession" for row in rpc.sent)
+        if mask is not None:
+            mask.clean(record)
+            record = mask.clean(record)
         save_json(evidence / "probe.json", record)
+        if authenticated_zero_turn:
+            policy_path = evidence / "thread-policy.json"
+            policy_record = strict_json(policy_path.read_text()) if policy_path.is_file() else {}
+            # Separate schema: never accepted as a paid connection receipt.
+            save_json(evidence / "handshake.json", {"schema": "ghcp-ahp-authenticated-zero-turn-v1",
+                "status": record["status"], "reason_codes": record["reason_codes"], "admission_allowed": False,
+                "runner": identity, "requested_policy": thread_policy.POLICY,
+                "auth_rpc_sent": any(row["method"] == "authenticate" for row in record.get("rpc_sent", [])),
+                "auth_rpc_succeeded": "result" in record.get("rpc_results", {}).get("authenticate", {}),
+                "requested_native_launch_args": thread_policy.NATIVE_ARGS,
+                "observed": policy_record.get("observed", dict.fromkeys(thread_policy.EXPECTED, "not_reported")),
+                "origins": policy_record.get("origins", {}), "verdicts": policy_record.get("verdicts", {}),
+                "session_created": policy_record.get("session_created", False),
+                "model_turn_start_requests": policy_record.get("model_turn_start_requests", "not_reported"),
+                "model_turn_events": policy_record.get("model_turn_events", "not_reported"),
+                "capi_requests": policy_record.get("capi_requests", "not_reported"),
+                "rpc_sent": record.get("rpc_sent", []), "rpc_results": record.get("rpc_results", {}),
+                "thread_policy": record.get("thread_policy"), "wire_capture": record.get("wire_capture"),
+                "limits": {"turns": 0, "capi_requests": 0, "sessions": 1, "native_threads": 1, "wall_seconds": 120}})
     return 0 if record["status"] == "probe_completed" else 2
 
 
@@ -709,6 +788,7 @@ def main(argv=None):
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--capability-only", action="store_true", help="No createSession RPC; observe native/CAPI boundaries without model work")
     modes.add_argument("--session-policy-probe", action="store_true", help="One exact Codex session; zero turns and zero outbound HTTP")
+    modes.add_argument("--authenticated-zero-turn", action="store_true", help="Protected dispatch only: authenticate once, one session, no turns or HTTP")
     args = None
     admitted = False
     try:
@@ -716,12 +796,21 @@ def main(argv=None):
         # NAS/local refusal happens before manifests, files, downloads or processes.
         require_runner()
         admitted = True
+        credential = ""
+        if args.authenticated_zero_turn:
+            import ghcp_ahp_zero_turn as zero_turn
+            zero_turn.require_context()
+            if args.mode != "probe":
+                raise Refused("zero_turn_probe_mode_required")
+            credential = os.environ.pop("COPILOT_GITHUB_TOKEN", "")
+            zero_turn.validate_credential(credential)
         manifest = load_manifest()
         if args.mode == "prepare":
             prepare(manifest, args.prepared, args.evidence)
             print('{"status":"prepared","model_calls":0}')
             return 0
         options = ({"capability_only": True} if args.capability_only else
+                   {"session_policy": True, "authenticated_zero_turn": True, "credential": credential} if args.authenticated_zero_turn else
                    {"session_policy": True} if args.session_policy_probe else {})
         result = run_probe(manifest, args.prepared, args.evidence, args.outside_netns, args.outside_pidns, **options)
         print(json.dumps({"probe_exit": result, "model_calls": 0, "launch_allowed": False}))
