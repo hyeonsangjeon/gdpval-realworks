@@ -99,6 +99,10 @@ REFUSED_REQUEST_USD = Decimal("7.20")
 #: Output allowance for the one request a turn that ended unfinished may still
 #: have had in flight; the same 128,000 as REFUSED_REQUEST_USD.
 IN_FLIGHT_OUTPUT_TOKENS = 128_000
+#: Tool output Codex may append between the last reported request and the one
+#: in flight: the held catalog truncates each output to 10,000 tokens and
+#: allows parallel tool calls, so this allows ten of them.
+IN_FLIGHT_TOOL_OUTPUT_TOKENS = 100_000
 #: Turn endings that leave no billed request in flight: a 429 is not billed,
 #: and a turn that never started sent nothing.
 _NOTHING_IN_FLIGHT = frozenset({"rate_limited", "turn_start_failed"})
@@ -111,10 +115,25 @@ NARRATIVE_ALLOWANCE_USD = Decimal("2.00")
 #: Everything earlier exp036 lineages spent; a fresh dispatch (relay_run 0)
 #: restores no rows and starts from this alone. Raise it by PR before ANY
 #: fresh exp036 dispatch that follows an exp036 dispatch which spent
-#: anything, by that lineage's last cumulative "[sol-batch] ... solve spend"
-#: line (job log or batch-results artifact), including lineages whose legs
-#: did upload a checkpoint.
+#: anything, including lineages whose legs did upload a checkpoint. Raise it
+#: by that lineage's OWN spend: its last cumulative "[sol-batch] ... solve
+#: spend" figure minus the prior-lineage figure it started from (the "leg
+#: closed" line and the install banner print it; record summary
+#: solve_spend_usd - prior_lineage_spend_usd), plus NARRATIVE_ALLOWANCE_USD
+#: if its final leg ran step 6. Every solve spend figure already includes
+#: this constant, so raising it by the whole figure counts it twice.
 PRIOR_LINEAGE_SPEND_USD = Decimal("0")
+#: Bookings step 2 lost from a published exp036 result, in USD, keyed by
+#: (HF inference revision, task id). Leave it empty unless a grade preflight
+#: refused with sol_batch_prior_spend_unaccounted: a task row reached Codex
+#: (its problem_solving_cost receipt counts model calls) but an error after
+#: the runner rebuilt it without its budget_metrics, and raising
+#: PRIOR_LINEAGE_SPEND_USD cannot clear that. Add the task's booking by PR:
+#: the sum of its "[sol-batch] <first 8 of task id> attempt N: booked X" in the
+#: publishing leg's job log (or of booked_usd over its attempts in that leg's
+#: sol_batch_controls record). Only the grade preflight reads it, for the
+#: revision it grades, so an entry never applies to another lineage.
+LOST_BOOKING_USD: Mapping[tuple[str, str], Decimal] = {}
 USD_CEILING_REACHED = "usd_ceiling_reached"
 WINDOW_MISMATCH = "sol_batch_context_window_mismatch"
 GATE_UNVERIFIED = "sol_batch_gate_unverified"
@@ -333,17 +352,21 @@ def fmt(amount: Decimal | int | float | str) -> str:
 
 
 def in_flight_bound_usd(last: Any, *, rates: SolRates) -> Decimal:
-    """What the one request an unfinished turn may still have had in flight can cost.
+    """The most the one request an unfinished turn may still have had in flight can cost.
 
     Codex reports usage only when a request completes, so a turn settled after
     a timeout, a content stop or a transport failure leaves out the request it
     was waiting on (codex_runner._settle_what_was_measured: "at least this
     much"). That request re-sends the last completed request's input and
-    output: it is priced as that input grown by that output, with the last
-    request's cached share, plus :data:`IN_FLIGHT_OUTPUT_TOKENS` of output.
-    Without a priceable last request it is the whole 1M window uncached plus
-    the same output, 28.26 at the list meter.
+    output plus whatever tool output Codex appended in between, and its cache
+    may have gone cold. It is priced as that input grown by that output and by
+    :data:`IN_FLIGHT_TOOL_OUTPUT_TOKENS`, capped at the held catalog's
+    :data:`CATALOG_SOL_MAX_CONTEXT_WINDOW`, all of it uncached, plus
+    :data:`IN_FLIGHT_OUTPUT_TOKENS` of output. Without a readable last request
+    it is that whole window uncached plus the same output, 29.385 at the list
+    meter, which is also the most it can ever be.
     """
+    grown = CATALOG_SOL_MAX_CONTEXT_WINDOW
     try:
         breakdown = read_breakdown(last) if last is not None else None
     except Exception:  # noqa: BLE001 - an unreadable count takes the window bound
@@ -352,15 +375,10 @@ def in_flight_bound_usd(last: Any, *, rates: SolRates) -> Decimal:
         inputs = _count(breakdown.input_tokens)
         outputs = _count(breakdown.output_tokens)
         cached = 0 if breakdown.cached_input_tokens is None else _count(breakdown.cached_input_tokens)
+        # Counts that cannot describe a request take the window bound.
         if inputs and outputs is not None and cached is not None and cached <= inputs:
-            grown = min(CONTEXT_WINDOW, inputs + outputs)
-            amount = list_price_usd(
-                input_tokens=grown, cached_input_tokens=min(cached, grown),
-                output_tokens=IN_FLIGHT_OUTPUT_TOKENS, rates=rates,
-            )
-            if amount is not None:
-                return amount
-    amount = list_price_usd(input_tokens=CONTEXT_WINDOW, cached_input_tokens=0,
+            grown = min(CATALOG_SOL_MAX_CONTEXT_WINDOW, inputs + outputs + IN_FLIGHT_TOOL_OUTPUT_TOKENS)
+    amount = list_price_usd(input_tokens=grown, cached_input_tokens=0,
                             output_tokens=IN_FLIGHT_OUTPUT_TOKENS, rates=rates)
     assert amount is not None
     return amount
@@ -424,7 +442,7 @@ def task_budget_metrics(amount: Decimal, complete: bool) -> dict[str, Any]:
 
 
 def _usd(value: Any) -> Decimal:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
         raise SolBatchControlsRefused("sol_batch_prior_spend_unaccounted")
     try:
         amount = Decimal(str(value))
@@ -453,13 +471,16 @@ def _made_no_codex_call(row: Mapping[str, Any], observability: Mapping[str, Any]
     return type(calls) is int and calls == 0
 
 
-def booked_from_rows(rows: Iterable[Any]) -> tuple[Decimal, list[str]]:
+def booked_from_rows(
+    rows: Iterable[Any], lost_bookings: Mapping[str, Any] | None = None,
+) -> tuple[Decimal, list[str]]:
     """Sum the USD earlier legs booked onto their task rows.
 
     A row without a booking counts as zero only when its solving receipt
-    shows no Codex call at all; any other such row refuses, because counting
-    it as zero would under-seed the gate. Pending rows are watchdog
-    placeholders for tasks that have not run.
+    shows no Codex call at all. Any other such row takes its amount from
+    ``lost_bookings`` (by task id), or refuses, because counting it as zero
+    would under-seed the gate. Pending rows are watchdog placeholders for
+    tasks that have not run.
     """
     total = Decimal(0)
     tasks: list[str] = []
@@ -474,13 +495,33 @@ def booked_from_rows(rows: Iterable[Any]) -> tuple[Decimal, list[str]]:
             total += _usd(metrics["conservative_cost_usd"])
             tasks.append(str(row.get("task_id")))
         elif not _made_no_codex_call(row, observability):
-            raise SolBatchControlsRefused("sol_batch_prior_spend_unaccounted")
+            task_id = row.get("task_id")
+            lost = (lost_bookings or {}).get(task_id) if isinstance(task_id, str) else None
+            if lost is None:
+                raise SolBatchControlsRefused("sol_batch_prior_spend_unaccounted")
+            total += _usd(lost)
+            tasks.append(task_id)
     return total, tasks
 
 
-def solve_spend_usd(rows: Iterable[Any]) -> Decimal:
-    """The lineage's solve spend from its published task rows; the grade side seeds from this."""
-    return PRIOR_LINEAGE_SPEND_USD + booked_from_rows(rows)[0]
+def lost_bookings_for(revision: Any) -> dict[str, Decimal]:
+    """:data:`LOST_BOOKING_USD`'s entries for one published inference revision, by task id."""
+    found: dict[str, Decimal] = {}
+    for key, amount in LOST_BOOKING_USD.items():
+        if not (isinstance(key, tuple) and len(key) == 2 and all(isinstance(part, str) for part in key)):
+            raise SolBatchControlsRefused("sol_batch_prior_spend_unaccounted")
+        if isinstance(revision, str) and key[0] == revision:
+            found[key[1]] = amount
+    return found
+
+
+def solve_spend_usd(rows: Iterable[Any], revision: str | None = None) -> Decimal:
+    """The lineage's solve spend from its published task rows; the grade side seeds from this.
+
+    ``revision`` is the published inference commit being graded; it selects
+    the :data:`LOST_BOOKING_USD` entries recorded for that result.
+    """
+    return PRIOR_LINEAGE_SPEND_USD + booked_from_rows(rows, lost_bookings_for(revision))[0]
 
 
 # -- the gate ---------------------------------------------------------------
@@ -745,7 +786,8 @@ class SolBatchSession:
             # Inline, because the leg can close mid-way through a progress line
             # (the wall-clock watchdog, or an error out of a task).
             _say(f"[sol-batch] leg closed: solve spend {money['solve_spend_usd']} "
-                 f"(prior legs {self.summary['prior_legs_spend_usd']}, this leg "
+                 f"(prior lineages {self.summary['prior_lineage_spend_usd']}, "
+                 f"prior legs {self.summary['prior_legs_spend_usd']}, this leg "
                  f"{money['this_leg_spend_usd']}); {money['remaining_under_ceiling_usd']} left under "
                  f"the {CEILING_USD} ceiling; {self.summary['attempts_admitted']} attempts "
                  f"admitted, {len(refused)} refused; window mismatch: "
@@ -1022,9 +1064,11 @@ def _install(
             "in_flight_rule": (
                 "a settled turn that did not finish, other than a rate refusal, also "
                 "books the request it may have left in flight: the last reported "
-                "request's input grown by its output, at its cached share, plus "
-                f"{IN_FLIGHT_OUTPUT_TOKENS} output tokens; without one, {CONTEXT_WINDOW} "
-                f"uncached input tokens plus {IN_FLIGHT_OUTPUT_TOKENS} output tokens"
+                f"request's input grown by its output and {IN_FLIGHT_TOOL_OUTPUT_TOKENS} "
+                f"tool-output tokens, capped at {CATALOG_SOL_MAX_CONTEXT_WINDOW}, all "
+                f"uncached, plus {IN_FLIGHT_OUTPUT_TOKENS} output tokens; without one, "
+                f"{CATALOG_SOL_MAX_CONTEXT_WINDOW} uncached input tokens plus "
+                f"{IN_FLIGHT_OUTPUT_TOKENS} output tokens"
             ),
             "prior_lineage_spend_usd": fmt(PRIOR_LINEAGE_SPEND_USD),
             "prior_legs_spend_usd": fmt(prior_legs_usd),
@@ -1061,7 +1105,7 @@ def _install(
     _say(f"[sol-batch] context window {CONTEXT_WINDOW:,} via held catalog {CATALOG_SHA256[:12]}")
     _say(f"[sol-batch] USD gate: {CEILING_USD} ceiling − {GRADING_RESERVE_USD} grading = "
          f"{SOLVE_BUDGET_USD} solve budget; {ATTEMPT_RESERVE_USD} reserve per attempt; attempts "
-         f"start while booked spend ≤ {SOLVE_BUDGET_USD - ATTEMPT_RESERVE_USD:.2f}; prior legs "
-         f"{fmt(prior_legs_usd)}")
+         f"start while booked spend ≤ {SOLVE_BUDGET_USD - ATTEMPT_RESERVE_USD:.2f}; prior lineages "
+         f"{fmt(PRIOR_LINEAGE_SPEND_USD)}; prior legs {fmt(prior_legs_usd)}")
     _say(f"[sol-batch] record: {session.record_path}")
     return session

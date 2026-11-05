@@ -591,7 +591,12 @@ def test_a_task_that_reached_codex_and_lost_its_booking_refuses(tmp_path):
     assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
 
 
-def test_a_published_ledger_above_the_seed_refuses(tmp_path):
+@pytest.mark.parametrize("prior", [None, Decimal("40"), Decimal("146")])
+def test_a_published_ledger_above_the_seed_refuses(tmp_path, monkeypatch, prior):
+    # The floor is compared with this lineage's own bookings, so a raised
+    # PRIOR_LINEAGE_SPEND_USD cannot hide a booking lost from this result.
+    if prior is not None:
+        monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", prior)
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 2.0)], [SETTLED_CALL])
     with pytest.raises(grading.CombinedUsdRefused, match="below the published ledger"):
         grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
@@ -600,7 +605,46 @@ def test_a_published_ledger_above_the_seed_refuses(tmp_path):
 def test_an_unpublished_ledger_is_a_zero_floor_and_said_so(tmp_path):
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 3.5)])
     assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch) == (
-        Decimal("3.5"), Decimal(0), "absent")
+        controls.PRIOR_LINEAGE_SPEND_USD + Decimal("3.5"), Decimal(0), "absent")
+
+
+def test_a_raised_prior_lineage_spend_adds_to_the_seed_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", Decimal("40"))
+    fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 2.5)], [SETTLED_CALL])
+    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch) == (
+        Decimal("42.5"), SETTLED_CALL_USD, "present")
+
+
+def test_a_lost_booking_recorded_for_this_revision_lets_the_grade_seed(tmp_path, monkeypatch):
+    # The recovery PR for test_a_task_that_reached_codex_and_lost_its_booking_refuses:
+    # the job log's booking for that task, keyed by the revision being graded.
+    lost_task = controls.FIXED_TASK_IDS[1]
+    rows = [_task_row(controls.FIXED_TASK_IDS[0], 1.0),
+            _task_row(lost_task, reached_runner=False, model_calls=1)]
+    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {(INFERENCE_SHA, lost_task): Decimal("38.25")})
+    fetch, _ = _published(tmp_path, rows, [SETTLED_CALL])
+    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch) == (
+        controls.PRIOR_LINEAGE_SPEND_USD + Decimal("39.25"), SETTLED_CALL_USD, "present")
+    # Raising PRIOR_LINEAGE_SPEND_USD instead never clears the refusal.
+    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {})
+    monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", Decimal("146"))
+    with pytest.raises(grading.CombinedUsdRefused) as refused:
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+    assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
+    # An entry for another published revision does not apply to this one.
+    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {("c" * 40, lost_task): Decimal("38.25")})
+    with pytest.raises(grading.CombinedUsdRefused) as refused:
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+    assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
+
+
+def test_a_lost_booking_entry_below_the_ledger_floor_refuses(tmp_path, monkeypatch):
+    lost_task = controls.FIXED_TASK_IDS[0]
+    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {(INFERENCE_SHA, lost_task): Decimal("1")})
+    fetch, _ = _published(tmp_path, [_task_row(lost_task, reached_runner=False, model_calls=1)],
+                          [SETTLED_CALL])
+    with pytest.raises(grading.CombinedUsdRefused, match="below the published ledger"):
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
 
 
 @pytest.mark.parametrize("case", ["ledger_fetch_error", "no_report", "foreign_report", "bad_repo", "bad_ledger_line"])

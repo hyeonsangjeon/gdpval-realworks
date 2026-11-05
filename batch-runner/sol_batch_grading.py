@@ -391,8 +391,10 @@ def published_solve(
     published as ``observability.budget_metrics.conservative_cost_usd``; it
     survives relay legs, where each leg's per-turn ledger does not. The
     published cost_ledger.jsonl holds only the last leg's rows, so its settled
-    rows priced at the same list meter are a lower bound: a seed below it
-    means a booking was lost, and refuses.
+    rows priced at the same list meter are a lower bound: booked spend below
+    it, not counting ``PRIOR_LINEAGE_SPEND_USD``, means a booking was lost,
+    and refuses. A row that reached Codex without a booking refuses unless
+    ``LOST_BOOKING_USD`` names it for ``revision``.
     """
     import sol_batch_controls as controls
     from core.repository_identity import validate_hf_dataset_repo_id
@@ -416,9 +418,12 @@ def published_solve(
     if not isinstance(rows, list):
         _refuse("self_report.json has no task_results list")
     try:
-        solve = controls.solve_spend_usd(rows)
+        solve = controls.solve_spend_usd(rows, revision)
     except controls.SolBatchControlsRefused as exc:
         _refuse(str(exc))
+    # Only this lineage's own bookings can cover its own ledger. What earlier
+    # lineages spent must not hide a booking lost from this one.
+    booked = solve - controls.PRIOR_LINEAGE_SPEND_USD
 
     ledger_path = _call_fetch(fetch, repo_id, "cost_ledger.jsonl", revision)
     if ledger_path is None:
@@ -454,10 +459,10 @@ def published_solve(
             if price is not None:
                 floor += price
         status = "present"
-    if solve < floor:
+    if booked < floor:
         _refuse(
-            f"published solve spend {_money(solve)} is below the published ledger's "
-            f"settled floor {_money(floor)}"
+            f"published booked solve spend {_money(booked)} (without prior lineages) is below "
+            f"the published ledger's settled floor {_money(floor)}"
         )
     return solve, floor, status
 

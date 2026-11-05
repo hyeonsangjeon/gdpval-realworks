@@ -503,7 +503,8 @@ def test_install_swaps_in_the_gated_runner_with_the_executors_own_arguments(
     assert (runner.run_id, runner.condition_name, runner.preflight_auth) == (
         original.run_id, original.condition_name, original.preflight_auth)
     assert runner._sol_session is session
-    assert session.seed_usd == 0 and session.window_mismatch is False
+    # Relative to the constant, which a recovery PR raises.
+    assert session.seed_usd == controls.PRIOR_LINEAGE_SPEND_USD and session.window_mismatch is False
 
     path = tmp_path / RECORD_NAME
     raw = path.read_bytes()
@@ -517,7 +518,8 @@ def test_install_swaps_in_the_gated_runner_with_the_executors_own_arguments(
     assert header["requested"] == {"model": "gpt-5.6-sol", "reasoning_effort": "max",
                                    "model_context_window": 1_000_000}
     assert header["wall_timeout_minutes"] == 170
-    assert "in flight" in header["usd"]["in_flight_rule"]
+    rule = header["usd"]["in_flight_rule"]
+    assert "in flight" in rule and "all uncached" in rule and "1050000" in rule and "cached share" not in rule
     assert header["usd"]["admit_while_spend_at_most"] == "95.00000000"
     assert header["usd"]["solve_budget"] == "146.00000000"
     assert header["catalog"]["sha256"] == controls.CATALOG_SHA256
@@ -527,6 +529,8 @@ def test_install_swaps_in_the_gated_runner_with_the_executors_own_arguments(
 
     banner = capsys.readouterr().out
     assert "controls on for exp036_sol_fixed5" in banner and "95.00" in banner
+    # The figure a later PRIOR raise subtracts from this lineage's solve spend.
+    assert f"prior lineages {controls.fmt(controls.PRIOR_LINEAGE_SPEND_USD)}" in banner
     assert controls.CATALOG_SHA256[:12] in banner and str(path) in banner
     assert "fixture-host" not in banner and AUTH_ARGV[1] not in banner
 
@@ -622,28 +626,51 @@ def _last(input_tokens: Any = None, cached: Any = None, output_tokens: Any = Non
 
 
 @pytest.mark.parametrize("last, bound", [
-    # Nothing reported: the whole window uncached, 1M x (10.00 + 12.50) plus
-    # 128,000 x 45.00 per 1M.
-    (None, Decimal("28.26000000")),
-    (_last(), Decimal("28.26000000")),
-    # 60k in, 50k cached, 1k out: the next request re-sends 61k with the same
-    # 50k cached, so 11k x 22.50 + 50k x 1.00 + 128k x 45.00 per 1M.
-    (_last(60_000, 50_000, 1_000), Decimal("6.05750000")),
-    # No cached count is zero cached: 10k x 22.50 + 128k x 45.00.
-    (_last(10_000, None, 0), Decimal("5.98500000")),
-    # Growth stops at the 1M window: 100k x 22.50 + 900k x 1.00 + 5.76.
-    (_last(990_000, 900_000, 30_000), Decimal("8.91000000")),
+    # Nothing reported: the held catalog's whole 1,050,000 window uncached,
+    # 1.05M x (10.00 + 12.50) plus 128,000 x 45.00 per 1M.
+    (None, Decimal("29.38500000")),
+    (_last(), Decimal("29.38500000")),
+    # 60k in, 50k cached, 1k out: the next request re-sends 61k plus up to
+    # 100k of tool output, on a cache that may be cold, so 161k x 22.50 +
+    # 128k x 45.00 per 1M. The cached count never lowers it.
+    (_last(60_000, 50_000, 1_000), Decimal("9.38250000")),
+    (_last(60_000, 0, 1_000), Decimal("9.38250000")),
+    # No cached count is zero cached: 110k x 22.50 + 128k x 45.00.
+    (_last(10_000, None, 0), Decimal("8.23500000")),
+    # Growth stops at the catalog's 1,050,000 window, not the 1M request.
+    (_last(990_000, 900_000, 30_000), Decimal("29.38500000")),
     # Counts that cannot be a request take the window bound.
-    (_last(10_000, 20_000, 0), Decimal("28.26000000")),
-    (_last(0, 0, 0), Decimal("28.26000000")),
-    (_last(10_000, 0, None), Decimal("28.26000000")),
-    (_last(True, 0, 0), Decimal("28.26000000")),
-    (object(), Decimal("28.26000000")),
+    (_last(10_000, 20_000, 0), Decimal("29.38500000")),
+    (_last(0, 0, 0), Decimal("29.38500000")),
+    (_last(10_000, 0, None), Decimal("29.38500000")),
+    (_last(True, 0, 0), Decimal("29.38500000")),
+    (object(), Decimal("29.38500000")),
 ])
 def test_the_request_left_in_flight_is_bounded_from_the_last_one_reported(last, bound):
     assert controls.in_flight_bound_usd(last, rates=controls.load_sol_list_rates()) == bound
     # Never above the reserve an attempt with no usage at all books.
     assert bound <= controls.ATTEMPT_RESERVE_USD
+
+
+@pytest.mark.parametrize("inputs, cached, outputs, tool_output", [
+    # The second review's probe: a warm last request, then a cold re-send
+    # with tool output appended. The old bound booked 6.62 and 7.2025 here.
+    (600_000, 590_000, 2_000, 20_000),
+    (900_000, 880_000, 5_000, 30_000),
+    # Ten parallel tool outputs at the catalog's 10,000-token truncation.
+    (300_000, 299_000, 1_000, 100_000),
+    (1_000_000, 999_000, 40_000, 100_000),
+])
+def test_the_in_flight_bound_covers_a_cold_resend_with_tool_output(inputs, cached, outputs, tool_output):
+    rates = controls.load_sol_list_rates()
+    resent = min(controls.CATALOG_SOL_MAX_CONTEXT_WINDOW, inputs + outputs + tool_output)
+    worst = controls.list_price_usd(input_tokens=resent, cached_input_tokens=0,
+                                    output_tokens=controls.IN_FLIGHT_OUTPUT_TOKENS, rates=rates)
+    warm = controls.list_price_usd(input_tokens=resent, cached_input_tokens=min(cached, resent),
+                                   output_tokens=controls.IN_FLIGHT_OUTPUT_TOKENS, rates=rates)
+    bound = controls.in_flight_bound_usd(_last(inputs, cached, outputs), rates=rates)
+    assert bound >= worst >= warm
+    assert bound <= controls.in_flight_bound_usd(None, rates=rates) == Decimal("29.38500000")
 
 
 @pytest.mark.parametrize("seed, code", [
@@ -855,12 +882,13 @@ def _scripted_unfinished_turn(monkeypatch, *, category: str, last: Any) -> None:
 
 @pytest.mark.parametrize("category, last, in_flight", [
     # The window bound: no last request was reported.
-    ("timeout", None, Decimal("28.26000000")),
-    ("content_filtered", None, Decimal("28.26000000")),
-    ("transport_error", None, Decimal("28.26000000")),
-    ("turn_failed", None, Decimal("28.26000000")),
-    # 600k in, 590k cached, 2k out: 12k x 22.50 + 590k x 1.00 + 128k x 45.00 per 1M.
-    ("timeout", _last(600_000, 590_000, 2_000), Decimal("6.62000000")),
+    ("timeout", None, Decimal("29.38500000")),
+    ("content_filtered", None, Decimal("29.38500000")),
+    ("transport_error", None, Decimal("29.38500000")),
+    ("turn_failed", None, Decimal("29.38500000")),
+    # 600k in, 590k cached, 2k out: 702k (with 100k of tool output) x 22.50,
+    # all uncached, + 128k x 45.00 per 1M.
+    ("timeout", _last(600_000, 590_000, 2_000), Decimal("21.55500000")),
     # A 429 is not billed: what was reported is the whole bill.
     ("rate_limited", None, None),
 ])
@@ -968,6 +996,53 @@ def test_the_rows_step2_persists_decide_by_receipt_not_by_error_text(tmp_path, u
     with pytest.raises(controls.SolBatchControlsRefused):
         controls.booked_from_rows(persisted[:1])
     assert controls.booked_from_rows(persisted[1:]) == (Decimal(0), [])
+    # The recovery: the booking the job log printed for that task, by PR.
+    assert controls.booked_from_rows(persisted, {TASKS[0]: Decimal("38.25")}) == (Decimal("38.25"), [TASKS[0]])
+
+
+def test_a_lost_booking_is_counted_only_from_its_own_entry():
+    rows = [_row("a", "success", {"budget_metrics": {"conservative_cost_usd": 12.5}}),
+            _row("b", "error", {"preprocessors": []}, model_calls=1)]
+    assert controls.booked_from_rows(rows, {"b": Decimal("38.25")}) == (Decimal("50.75"), ["a", "b"])
+    # An entry for another task, or for a row that kept its booking, changes nothing.
+    for lost in ({"a": Decimal("99")}, {"c": Decimal("38.25")}, {}):
+        with pytest.raises(controls.SolBatchControlsRefused) as refused:
+            controls.booked_from_rows(rows, lost)
+        assert str(refused.value) == "sol_batch_prior_spend_unaccounted"
+    assert controls.booked_from_rows(rows[:1], {"a": Decimal("99")}) == (Decimal("12.5"), ["a"])
+    # An entry that is not an amount refuses like a bad booking.
+    for bad in (Decimal("NaN"), Decimal("-1"), True, None, "lots"):
+        with pytest.raises(controls.SolBatchControlsRefused):
+            controls.booked_from_rows(rows, {"b": bad})
+
+
+def test_lost_bookings_apply_only_to_the_revision_they_name(monkeypatch):
+    graded, other = "b" * 40, "c" * 40
+    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {(graded, "b"): Decimal("38.25")})
+    assert controls.lost_bookings_for(graded) == {"b": Decimal("38.25")}
+    assert controls.lost_bookings_for(other) == {} and controls.lost_bookings_for(None) == {}
+    rows = [_row("b", "error", {"preprocessors": []}, model_calls=1)]
+    assert controls.solve_spend_usd(rows, graded) == controls.PRIOR_LINEAGE_SPEND_USD + Decimal("38.25")
+    for revision in (other, None):
+        with pytest.raises(controls.SolBatchControlsRefused):
+            controls.solve_spend_usd(rows, revision)
+    # A key that is not (revision, task id) refuses rather than crashing the preflight.
+    for key in ("b", (graded,), (graded, "b", "x"), (graded, 1)):
+        monkeypatch.setattr(controls, "LOST_BOOKING_USD", {key: Decimal("38.25")})
+        with pytest.raises(controls.SolBatchControlsRefused) as refused:
+            controls.lost_bookings_for(graded)
+        assert str(refused.value) == "sol_batch_prior_spend_unaccounted"
+
+
+def test_install_never_reads_the_lost_booking_table(tmp_path, monkeypatch, unit_runner, ledgers):
+    # A relay leg has no published revision; a lost booking still refuses it.
+    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {("b" * 40, TASKS[0]): Decimal("38.25")})
+    ledger = ledgers()
+    executor, settings = _executor(ledger)
+    restored = {"results": [_row(TASKS[0], "error", {"preprocessors": []}, model_calls=1)]}
+    with pytest.raises(controls.SolBatchControlsRefused) as refused:
+        controls.install(executor, **_install_kwargs(settings, ledger, tmp_path, restored_progress=restored))
+    assert str(refused.value) == "sol_batch_prior_spend_unaccounted"
 
 
 @pytest.mark.parametrize("observability", [
@@ -987,7 +1062,7 @@ def test_a_row_that_reached_the_runner_without_a_booking_refuses(observability):
 
 
 def test_install_seeds_from_prior_legs_once_and_skips_tasks_already_in_the_ledger(
-        tmp_path, monkeypatch, unit_runner, ledgers):
+        tmp_path, monkeypatch, capsys, unit_runner, ledgers):
     monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", Decimal("3"))
     ledger = ledgers()
     executor, settings = _executor(ledger)
@@ -1016,6 +1091,14 @@ def test_install_seeds_from_prior_legs_once_and_skips_tasks_already_in_the_ledge
     assert summary["this_leg_spend_usd"] == "51.00000000"
     assert summary["solve_spend_usd"] == "56.50000000"
     assert summary["remaining_under_ceiling_usd"] == "143.50000000"
+    # The PRIOR raise rule: this lineage's own spend is its solve spend less
+    # the prior-lineage figure it started from, never the whole 56.50.
+    own = Decimal(summary["solve_spend_usd"]) - Decimal(summary["prior_lineage_spend_usd"])
+    assert own == Decimal(summary["prior_legs_spend_usd"]) + Decimal(summary["this_leg_spend_usd"]) == Decimal("53.5")
+    out = capsys.readouterr().out
+    assert "prior lineages 3.00000000; prior legs 2.50000000" in out
+    assert ("leg closed: solve spend 56.50000000 (prior lineages 3.00000000, prior legs 2.50000000, "
+            "this leg 51.00000000)") in out
 
 
 def test_install_refuses_a_prior_leg_row_without_a_booking(tmp_path, unit_runner, ledgers):

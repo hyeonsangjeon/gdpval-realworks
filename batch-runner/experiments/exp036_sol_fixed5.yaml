@@ -37,9 +37,12 @@
 #      between attempts, so one attempt may overshoot; the owner accepted
 #      that. A turn that ends unfinished (timeout, content stop, transport
 #      failure) also books the one request it may have left in flight, which
-#      Codex never reports: at most 28.26, the whole 1M window uncached plus
-#      128,000 output tokens. Where this paragraph and the constants in
-#      `sol_batch_controls.py` differ, the constants are authoritative.
+#      Codex never reports: the last reported request's input and output
+#      plus 100,000 tokens of tool output, priced as a cold cache, plus
+#      128,000 output tokens; at most 29.385, the held catalog's whole
+#      1,050,000-token window uncached plus that output. Where this paragraph
+#      and the constants in `sol_batch_controls.py` differ, the constants are
+#      authoritative.
 #   3. Served model. Nothing checks it per request. Diagnostic run
 #      40967326333, whose one request came back reporting gpt-5.6-sol at
 #      reasoning effort max, and this run's own records stand in for that.
@@ -131,18 +134,35 @@
 #     Before ANY fresh exp036 dispatch that follows one which spent anything
 #     -- a leg died without a checkpoint, a relay leg failed before step 2,
 #     or the final leg ended red -- raise `PRIOR_LINEAGE_SPEND_USD` in
-#     `sol_batch_controls.py` by pull request, by the last cumulative
-#     "[sol-batch] ... solve spend" line each earlier lineage printed (job
-#     log or batch-results artifact). That includes lineages whose legs did
-#     upload a checkpoint. Relay legs run the first leg's `batch-runner/`
-#     tree, so only a fresh dispatch sees the raise.
+#     `sol_batch_controls.py` by pull request, by that lineage's OWN spend.
+#     That is its last cumulative "[sol-batch] ... solve spend" figure (job
+#     log or batch-results artifact) minus the "prior lineages" figure it
+#     started from (the install banner and the "leg closed" line print it;
+#     the record summary has both as solve_spend_usd and
+#     prior_lineage_spend_usd), plus 2.00 if its final leg ran step 6's
+#     narrative. Every solve spend figure already includes the constant, so
+#     raising it by the whole figure counts earlier lineages twice. That
+#     includes lineages whose legs did upload a checkpoint. Relay legs run
+#     the first leg's `batch-runner/` tree, so only a fresh dispatch sees the
+#     raise.
 #   - To continue a lineage whose relay leg died before step 2, dispatch
 #     that leg again by hand with the same relay_run, relay_lineage_id and
 #     source_sha, wall_timeout 0 and codex_foundry_confirmed true, rather
 #     than starting a fresh lineage.
 #   - A row that reached Codex but lost its booking (an error after the
 #     runner returned) makes the next leg and the grade preflight refuse
-#     (`sol_batch_prior_spend_unaccounted`).
+#     (`sol_batch_prior_spend_unaccounted`). Raising
+#     `PRIOR_LINEAGE_SPEND_USD` cannot clear it. To grade a published result
+#     with such a row, add `("<inference revision>", "<task id>"):
+#     Decimal("<booked>")` to `LOST_BOOKING_USD` in `sol_batch_controls.py`
+#     by pull request. <booked> is the sum of that task's "[sol-batch]
+#     <first 8 of task id> attempt N: booked X" amounts in the publishing
+#     leg's job log, or of booked_usd over its attempts in that leg's
+#     sol_batch_controls record. Grading runs from main, so that one PR
+#     unblocks it, and the entry applies to that revision only. A lineage
+#     refused at a relay leg cannot be continued this way (its legs run leg
+#     0's tree): count its own spend into `PRIOR_LINEAGE_SPEND_USD` and
+#     dispatch a fresh lineage.
 #
 # The dispatch
 # ------------
