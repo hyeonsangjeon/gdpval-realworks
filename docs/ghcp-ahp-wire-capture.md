@@ -124,7 +124,7 @@ unobserved applied/provider fields left missing). The latter must show the
 observer installed in the actual Agent Host child, not merely its parent.
 No fixture artifact is a live connection receipt or a paid launch permission.
 
-## Backend startup diagnostics (no readiness-policy change)
+## Backend startup diagnostics
 
 Run `41931364159` reached the supervisor, but not the Agent Host observer. Its
 `-15` supervisor exit was recorded **after cleanup**, not evidence of a backend
@@ -154,7 +154,50 @@ socket-path command arguments, and never read `environ`. No credential store or
 configuration content is read. The collector opens no socket and starts no
 process. Its JSON is diagnostic-only (`admission_allowed=false`).
 
-The 30-second upstream readiness fallback, 180-second probe limit, network/PID
-isolation, source/SDK pins, zero-session RPC allowlist, and paid fail-closed
-gates are unchanged. Only the push-trigger Actions probe runs a real backend;
+The upstream binaries and their 30-second fallback, the 180-second probe limit,
+network/PID isolation, source/SDK pins, zero-session RPC allowlist, and paid
+fail-closed gates are unchanged. Only the push-trigger Actions probe runs a real backend;
 NAS tests use inert processes, synthetic filesystem/proc entries and fake RPC.
+
+## Exact Agent Host fork contract and positive readiness
+
+Run `41941392305` retained the real `wire_agent_fork_refused` stack at the old
+preload line 156, but **did not retain the rejected fork arguments**. Its directory
+inventory plus pinned source reconstruct the request; this is not relabeled as
+an observed request. The regression fixture explicitly records that limitation.
+
+| Field | Pinned runtime contract | Previous check |
+| --- | --- | --- |
+| Node executable | Installed `server/node`, byte-identical to the pinned server archive | Not separately checked at this fork |
+| Module request | `server/out/bootstrap-fork` (no extension); Node resolves the pinned `bootstrap-fork.js` | String comparison required the `.js` suffix |
+| Arguments | `--type=agentHost --logsPath <one current log directory> --user-data-dir <state>/server-data/data --telemetry-level off` | Array shape only |
+| Extra options | Empty original `execArgv`, exact entrypoint/SDK/socket environment, no `execPath`/`NODE_OPTIONS` override | Not an exact argument contract |
+
+The pinned [caller:181](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/nodeAgentHostStarter.ts#L181)
+passes an extensionless module to
+[Node fork:207](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/base/parts/ipc/node/ipc.cp.ts#L207).
+The caller's [argument vector:145](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/nodeAgentHostStarter.ts#L145)
+uses server data, not the supervisor's endpoint-registry directory. The
+[server default:42](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/server/node/server.main.ts#L42)
+adds `/data`; the [logs getter:73](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/environment/common/environmentService.ts#L73)
+selects one timestamp directory there.
+
+Installation now verifies Node, server-main and bootstrap-fork bytes against the
+unchanged pinned archive. The preload accepts only the exact extensionless
+request resolving to that verified file and the exact argument vector. The logs
+directory is the single existing directory of this invocation, not a wildcard
+or a clock guess. Different paths, aliases, shadow files, options, environment
+bindings, symlinks, extra/missing/reordered arguments and file drift refuse
+before the original fork. Every attempt now records masked actual versus
+expected fields and mismatch names, including on refusal; unknown credential
+flag values are redacted before persistence. Non-matching forks are not passed
+through. Model/HTTP guards and admission checks are not relaxed.
+
+After the lazy WebSocket handshake, the capability-only probe requires both
+the real [listener-bound signal:683–687](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/agentHostMain.ts#L683)
+and the exact registered Unix socket within this invocation. The supervisor's
+"Server ready" banner does not count. Missing, truncated, conflicting or
+post-timeout evidence refuses **before the first AHP RPC**, even if a transport
+handshake succeeds. No startup timeout increase, new readiness sleep, vendor
+patch, session or model request is added. `backend_readiness` records the
+decision; a positive result only proves the local listener, not model settings.

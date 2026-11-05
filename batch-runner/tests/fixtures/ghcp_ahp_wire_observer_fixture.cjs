@@ -54,17 +54,12 @@ const hooks = instrument({
 }, { emit: line => records.push(JSON.parse(line)), nativeBinary: '/fixture/codex', nativeSha256: 'a'.repeat(64),
   modelFree: scenario === 'model_free', synthetic: true, seeds: [secret],
   entrypoint: 'vs/platform/agentHost/node/agentHostMain',
-  observerPath: '/fixture/observer.cjs', bootstrapForkPath: '/fixture/bootstrap-fork.js',
+  observerPath: '/fixture/observer.cjs',
   verifyBinary() { if (scenario === 'binary_drift') throw new Error('wire_native_binary_drift'); } });
 
 async function main() {
   if (scenario === 'fork') {
-    const original = { execArgv: ['--fixture-flag'], env: { VSCODE_ESM_ENTRYPOINT: 'vs/platform/agentHost/node/agentHostMain' } };
-    assert.equal(hooks.fork('/fixture/bootstrap-fork.js', ['--arg'], original), 'fake-child');
-    assert.deepEqual(original.execArgv, ['--fixture-flag']);
-    assert.deepEqual(forks[0][2].execArgv, ['--fixture-flag', '--require', '/fixture/observer.cjs']);
-    assert.equal(forks[0][2].env.NODE_OPTIONS, undefined);
-    assert.throws(() => hooks.fork('/wrong/bootstrap-fork.js', [], original), /wire_agent_fork_refused/);
+    records.splice(0, records.length, ...require('./ghcp_ahp_agent_fork_fixture.cjs').run('valid'));
     return;
   }
   if (scenario === 'redaction') {

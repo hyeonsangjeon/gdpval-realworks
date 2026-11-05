@@ -555,6 +555,7 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
               "model_calls": 0, "model_call_evidence_boundary": "no_prompt_rpc_and_kernel_denied_external_egress_not_a_billing_receipt",
               "launch_allowed": False, "gate_ready": False, "served_model": "not_reported", "reasoning_effort": "not_reported", "context_window": "not_reported",
               "capability_only": capability_only, "session_create_requests": 0,
+              "backend_readiness": {"ready": False, "reason": "not_checked"},
               "probe_limits": {"wall_seconds": MAX_RUNTIME_SECONDS, "rpc_requests": 2 if capability_only else MAX_RPCS, "prompt_turns": 0, "wire_bytes": MAX_WIRE_BYTES},
               "reason_codes": [], "status": "incomplete"}
     transport = process = rpc = None
@@ -604,6 +605,10 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                         time.sleep(0.1)
                 if transport is None:
                     raise Refused("agent_host_startup_deadline")
+                if capability_only:
+                    record["backend_readiness"] = backend_diagnostics.readiness(scratch)
+                    if not record["backend_readiness"]["ready"]:
+                        raise Refused("agent_host_backend_not_ready")
                 rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri(), capability_only=capability_only)
                 results = exercise_rpc(rpc)
                 record["rpc_results"] = results
@@ -628,6 +633,8 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 # Snapshot before TERM and before TemporaryDirectory removes the
                 # socket/log tree. Diagnostic failure must not skip cleanup or
                 # replace the original transport/bootstrap refusal.
+                if capability_only and record["backend_readiness"]["reason"] == "not_checked":
+                    record["backend_readiness"] = retain_or_note(lambda: backend_diagnostics.readiness(scratch))
                 before = retain_or_note(lambda: backend_diagnostics.snapshot(scratch, process)) if capability_only else None
                 if transport is not None:
                     retain_or_note(transport.close)
