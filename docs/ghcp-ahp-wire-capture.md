@@ -24,12 +24,34 @@ unchanged. No new alias, preset or fallback is accepted.
 
 This mode still uses a loopback-only kernel network namespace, an isolated PID
 namespace, dropped privileges, the strict session-only native observer and a
-120-second overall runtime deadline. Authentication does **not** permit token
-exchange, model catalogs or other HTTP: every Agent Host fetch is blocked before
-the original fetch is called. A watchdog stops the owned host on the first
-blocked boundary or turn/tool/CAPI event, including while authentication waits.
+120-second overall runtime deadline. A separate Unix-socket metadata broker
+outside that namespace permits at most two external GETs: exact
+`https://api.github.com/copilot_internal/user`, then the exact `/models` URL
+bound to its authenticated response's `endpoints.api`. The only eligible
+origins are the four literal GitHub CAPI hosts (`api.githubcopilot.com`,
+`api.individual.githubcopilot.com`, `api.business.githubcopilot.com`,
+`api.enterprise.githubcopilot.com`); only the reported one becomes active.
+There is no suffix/wildcard match, fallback host search, redirect, token mint,
+POST, request body, cookie jar, proxy inheritance, TLS bypass or external retry.
+Repeated identical GETs reuse the same in-memory response, with a separate
+16-request local transport cap; changed semantic headers fail closed.
+
+Every host fetch still stops at the observer before the original fetch. Only
+the exact metadata requests use the Unix broker. Native or other uninstrumented
+network traffic cannot leave the loopback-only namespace. The broker supplies
+the real status/body to the pinned client without substituting model data and
+never persists response bodies or credential/header values. A watchdog stops
+the owned host on the first blocked boundary or turn/tool/CAPI inference event,
+including while authentication waits.
 The AHP client checks that watchdog before sending and after receiving each RPC.
 There is no retry or second session/thread. Cleanup is mandatory on every exit.
+
+The supported persisted root setting `githubMcpServerEnabled=false` prevents
+MCP server attachment to a thread. It is written only to the fresh invocation's
+`server-data/data/User/globalStorage/agent-host-config.json` and must be reported
+false by the initial root snapshot before auth. It does NOT disable endpoint
+discovery in `CodexAgent.authenticate`; no such switch was found in the pinned
+authentication/model-refresh path. No new AHP action or guessed key is allowed.
 
 The allowed AHP sequence is initialize → authenticate → resolveSessionConfig →
 createSession → subscribe → disposeSession (at most six requests). Per-thread
@@ -38,12 +60,25 @@ reports alone populate `thread-policy.json` and `handshake.json.observed`;
 `not_reported`. Echoes and `config/read` are not application or served-model
 proof. These diagnostic schemas cannot satisfy the paid connection receipt.
 
-Authentication itself may require HTTP. In the pinned harness,
+Run `41963808070` had two `other_http` denials without raw URLs. Its two backend
+warnings identify GitHub MCP endpoint resolution and model refresh. Pinned
+`CopilotApiService._buildClientForToken` routes both through **GET
+https://api.github.com/copilot_internal/user**; this is source reconstruction,
+not an archived HTTP response. The inspected file SHA256 is
+`9cd39e35e98b03c6b751957ac98309e912ed037beb02d146a236f96900558498`, matching that
+run's source evidence. The pinned service explicitly uses the GitHub bearer
+directly: there is **no** `/copilot_internal/v2/token` mint in this path.
+
+In the pinned harness,
 [codexAgent.ts:1634](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/src/vs/platform/agentHost/node/codex/codexAgent.ts#L1634)
 resolves GitHub MCP configuration before storing the token and queuing model
-refresh. Such an attempt is recorded with a nonsecret destination category and
-`forwarded=false`, fails this zero-HTTP mode, and is not silently allowed just
-because it is not a model turn. Even a safe thread reply need not provide every
+refresh. Source `copilotApiService.ts:1158` specifies the discovery GET and
+`:634` the subsequent model-list GET. The broker writes `metadata-http.json`
+with method/host/path/status, attempted vs response-received, in-memory cache
+hits and denials. Missing status is null. The wire records metadata separately
+from CAPI **inference** requests, with method/host/path even on rejection.
+Ordinary unauthenticated push probes still allow no HTTP at all. Even a safe
+thread reply need not provide every
 applied field; admission stays closed for missing/mismatched values.
 
 The [official app-server lifecycle](https://developers.openai.com/codex/app-server/)

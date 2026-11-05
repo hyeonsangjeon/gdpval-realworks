@@ -41,7 +41,7 @@ on:
         default: false
         required: true
       authenticated_zero_turn:
-        description: Authenticate and create at most one session/thread; no turns, HTTP, fixed five or grader
+        description: One authenticated session/thread with bounded metadata GETs; no inference, fixed five or grader
         type: boolean
         default: false
         required: true
@@ -133,7 +133,7 @@ jobs:
             tests/test_ghcp_sol_copilot_smoke.py tests/test_ghcp_sol_runner_environment.py \
             tests/test_ghcp_sol_grader_contract.py tests/test_ghcp_sol_paid_gate.py \
             tests/test_ghcp_ahp_client.py tests/test_ghcp_ahp_connection.py \
-            tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py
+            tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py tests/test_ghcp_ahp_metadata_broker.py
       - name: Fake-token projection only - never launch a CLI
         env:
           PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
@@ -307,7 +307,7 @@ jobs:
           include-hidden-files: false
 
   ahp-zero-turn:
-    name: Authenticated AHP session only - zero turns and zero CAPI
+    name: Authenticated AHP session only - metadata GETs, zero inference
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.authenticated_zero_turn == true && inputs.execute_paid == false && inputs.dry_run == true && inputs.execution_adapter == 'ahp-draft' && inputs.connection_only == false && inputs.capability_only == false }}
     needs: offline-ci
     environment: ghcp-sol-gate
@@ -332,7 +332,7 @@ jobs:
           python -B batch-runner/ghcp_ahp_probe.py prepare \
             --prepared "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
             --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
-      - name: Authenticate once inside zero-egress session-only guards
+      - name: Authenticate once through the exact metadata broker with inference blocked
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GHCP_AUTHENTICATED_ZERO_TURN: 'true'
@@ -341,23 +341,13 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          zero_turn_uid="$(id -u)"
-          zero_turn_gid="$(id -g)"
-          export GHCP_AHP_OUTSIDE_NETNS="$(readlink /proc/self/ns/net)"
-          export GHCP_AHP_OUTSIDE_PIDNS="$(readlink /proc/self/ns/pid)"
-          # Secret only in environment/in-memory AHP auth; never argv or a file.
-          # Loopback-only netns also blocks non-fetch/native outbound traffic.
+          # The broker owns exactly two metadata GETs. It launches Agent Host
+          # inside the same loopback-only netns/PID/privilege guards as before.
+          # No secret in argv/file; native/SDK traffic cannot bypass the broker.
           timeout --signal=TERM --kill-after=10s 150s \
-            sudo --preserve-env=COPILOT_GITHUB_TOKEN,GHCP_AUTHENTICATED_ZERO_TURN,GHCP_PAID_EXECUTION,GHCP_CONNECTION_ONLY,GHCP_AHP_OUTSIDE_NETNS,GHCP_AHP_OUTSIDE_PIDNS,GITHUB_ACTIONS,GITHUB_EVENT_NAME,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,RUNNER_ENVIRONMENT,RUNNER_NAME,RUNNER_OS,RUNNER_ARCH,ImageOS,ImageVersion \
-            unshare --mount --net --pid --fork --mount-proc --kill-child=KILL \
-            /bin/bash -c 'set -euo pipefail; ip link set lo up; exec "$@"' ahp-zero-turn-isolation \
-            /usr/bin/setpriv --reuid="$zero_turn_uid" --regid="$zero_turn_gid" --init-groups \
-              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
-            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_probe.py" probe \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_metadata_broker.py" \
               --prepared "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
-              --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence" \
-              --outside-netns "$GHCP_AHP_OUTSIDE_NETNS" --outside-pidns "$GHCP_AHP_OUTSIDE_PIDNS" \
-              --authenticated-zero-turn
+              --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
       - name: Retain redacted zero-turn handshake and native evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -41,7 +41,7 @@ jobs:
           python -B -m pytest -q -o addopts= -p no:cacheprovider \
             --junitxml="$RUNNER_TEMP/ghcp-ahp/evidence/offline-tests.xml" \
             tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py tests/test_ghcp_ahp_connection.py \
-            tests/test_ghcp_sol_runner_environment.py tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py
+            tests/test_ghcp_sol_runner_environment.py tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py tests/test_ghcp_ahp_metadata_broker.py
           python -B tests/fixtures/ghcp_ahp_wire_fixture_artifact.py \
             --output "$RUNNER_TEMP/ghcp-ahp/evidence/wire-fixture.json"
       - name: Download and verify pinned public distributions without running them

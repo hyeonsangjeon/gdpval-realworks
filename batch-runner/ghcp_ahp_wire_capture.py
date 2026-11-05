@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import stat
 import tarfile
 
 from ghcp_ahp_diagnostics import DiagnosticRedactor, NOT_REPORTED
@@ -19,10 +20,18 @@ from ghcp_ahp_probe import (DESIRED_MODEL, MAX_ARCHIVE_EXPANSION_BYTES, Refused,
                             digest, load_manifest, save_json, strict_json)
 
 PRELOAD = Path(__file__).with_name("ghcp_ahp_wire_preload.cjs")
+METADATA_CLIENT = Path(__file__).with_name("ghcp_ahp_metadata_client.cjs")
 PIN = "2c33b50b16c472efe58357d1d2a8a5414bc23fbf"
 MAX_BYTES = 16 * 1024 * 1024
 FIELDS = ("model", "model_provider", "reasoning_effort", "context_window", "sandbox", "approval", "network", "web_search")
 SOURCES = {
+    "metadata_discovery": ("src/vs/platform/agentHost/node/shared/copilotApiService.ts", "const userUrl = `${this._gitHubEndpointService.getApiBaseUri()}/copilot_internal/user`"),
+    "metadata_auth_direct": ("src/vs/platform/agentHost/node/shared/copilotApiService.ts", "There is no Copilot session-token"),
+    "metadata_models": ("src/vs/platform/agentHost/node/shared/copilotApiService.ts", "async models(githubToken:"),
+    "metadata_mcp_lookup": ("src/vs/platform/agentHost/node/shared/githubMcpServer.ts", "copilotApiService.resolveApiEndpoint(token)"),
+    "metadata_mcp_flag": ("src/vs/platform/agentHost/common/agentHostSchema.ts", "AgentHostGitHubMcpServerEnabledConfigKey = 'githubMcpServerEnabled'"),
+    "metadata_config_file": ("src/vs/platform/agentHost/node/agentHostBootstrap.ts", "rootConfigResource: joinPath(environmentService.appSettingsHome, 'globalStorage', 'agent-host-config.json')"),
+    "metadata_settings_home": ("src/vs/platform/environment/common/environmentService.ts", "get appSettingsHome(): URI"),
     "agent_fork": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "VSCODE_ESM_ENTRYPOINT: 'vs/platform/agentHost/node/agentHostMain'"),
     "agent_module": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "new Client(FileAccess.asFileUri('bootstrap-fork').fsPath, options)"),
     "agent_arguments": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "'--logsPath', this._environmentService.logsHome"),
@@ -311,7 +320,7 @@ def agent_fork_contract(prepared, state, manifest):
             "entrypoint": "vs/platform/agentHost/node/agentHostMain", "exec_argv": [], "telemetry": "off"}
 
 
-def install(prepared, state, environment, *, model_free, credential="", session_policy=False, authenticated_zero_turn=False):
+def install(prepared, state, environment, *, model_free, credential="", session_policy=False, authenticated_zero_turn=False, metadata_socket=None):
     """Add a passive tee to the isolated host, never to the user's environment.
 
     Native binary and source stay byte-identical to their original archives.
@@ -331,6 +340,13 @@ def install(prepared, state, environment, *, model_free, credential="", session_
         from ghcp_ahp_thread_policy import NATIVE_ARGS
         if credential and not authenticated_zero_turn or environment.get("VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS") != json.dumps(NATIVE_ARGS):
             raise Refused("wire_session_policy_environment_refused")
+    if metadata_socket is not None:
+        if (not authenticated_zero_turn or not metadata_socket.is_absolute()
+                or metadata_socket.is_symlink() or metadata_socket.resolve() != metadata_socket
+                or not stat.S_ISSOCK(metadata_socket.stat().st_mode)
+                or metadata_socket.stat().st_uid != os.getuid()
+                or stat.S_IMODE(metadata_socket.stat().st_mode) != 0o600):
+            raise Refused("metadata_socket_refused")
     manifest = load_manifest()
     binary, expected, discovery = discover_native_binary(prepared, manifest)
     directory = state / "wire"
@@ -344,13 +360,15 @@ def install(prepared, state, environment, *, model_free, credential="", session_
     fork_encoded = json.dumps(fork_contract, sort_keys=True, separators=(",", ":"))
     bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free, "session_policy": session_policy,
                  "authenticated_zero_turn": authenticated_zero_turn,
+                 "metadata_reads": metadata_socket is not None, "metadata_client_sha256": digest(METADATA_CLIENT),
                  "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected,
                  "vscode_commit": PIN, "sdk_version": manifest["codex_sdk_version"],
                  "native_binary_discovery": discovery, "agent_host_fork": fork_contract}
     save_json(directory / "bootstrap.json", bootstrap)
     if "NODE_OPTIONS" in environment:
         raise Refused("wire_inherited_node_options_refused")
-    return {**environment, "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
+    return {**environment, **({"GHCP_AHP_WIRE_METADATA_SOCKET": str(metadata_socket)} if metadata_socket is not None else {}),
+            "GHCP_AHP_WIRE_METADATA_SHA256": digest(METADATA_CLIENT), "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
             "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "session-only" if session_policy else "model-free" if model_free else "connection",
             "GHCP_AHP_WIRE_NATIVE": str(binary.resolve()), "GHCP_AHP_WIRE_NATIVE_SHA256": expected,
             "GHCP_AHP_WIRE_FORK_CONTRACT": fork_encoded,
@@ -385,6 +403,7 @@ def analyze(records, *, synthetic):
                       "sandbox": "read-only", "approval": "untrusted", "network": False, "web_search": "disabled"},
         "native_requests": [], "native_applied_snapshots": [], "native_base_configuration": [],
         "native_context_reports": [], "capi_requests": [], "capi_response_reports": [],
+        "metadata_http": [], "capi_count_scope": "inference_only_metadata_gets_separate",
         "capture_errors": [], "records": records,
         "limitations": ["diagnostic_only_not_admission", "response_report_not_independent_model_attestation",
                         "capi_field_availability_requires_real_response", "native_settings_are_not_served_settings",
@@ -395,6 +414,8 @@ def analyze(records, *, synthetic):
             result["synthetic"] = True
         stream = (record.get("process", "fixture"), record.get("stream"))
         kind, value = record.get("kind"), record.get("value")
+        if kind in {"metadata_request", "metadata_response"}:
+            result["metadata_http"].append({key: record[key] for key in ("kind", "method", "host", "path", "status", "external_request") if key in record})
         if kind in {"blocked", "wire_parse_error"}:
             result["capture_errors"].append(record.get("reason", "wire_boundary_refused"))
         if kind == "ipc_request" and isinstance(value, dict):
