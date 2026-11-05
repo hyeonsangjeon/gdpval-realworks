@@ -85,7 +85,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 1477, "workflow-guards.xml": 48}
+          expected = {"contracts.xml": 1477, "workflow-guards.xml": 52}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
@@ -185,6 +185,18 @@ jobs:
             5f7dd4189640be2f627607f7ef899011116f89645b56ee830f1a2c8f96dd69d5 build/checksums/electron.txt > "$evidence/source-invariants.sha256"
           sha256sum --check "$evidence/source-invariants.sha256"
           test "$(env -i PATH="$PATH" node --version)" = v24.22.1
+          # One-line compiler correction, separate from the unchanged original patch/runtime pins.
+          # Use the same storage resolver as upstream agentService.ts:1242, not a cast/default bypass.
+          correction_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
+          printf '%s  %s\n' 555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a "$correction_file" | sha256sum --check
+          git apply --check "$correction_file"
+          git apply "$correction_file"
+          git apply --reverse --check "$correction_file"
+          printf '%s  %s\n' \
+            a4741c2a83f02acb6c7fbb61ae9800a5b9ce71d837317cb15fe79f3a2fead817 src/vs/platform/agentHost/common/agent.ts \
+            2adeb9ebfc066b728ca3f62e96853ce2cdc020a530c7b741ae0da6ddd9678ede src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            209a699ee4138a822a2aaa5a1146066d937d5526a826846106debb8b9d34a49c src/vs/platform/agentHost/node/agentService.ts > "$evidence/corrected-source.sha256"
+          sha256sum --check "$evidence/corrected-source.sha256"
       - id: dependencies
         name: Install the unchanged root and build lockfiles without lifecycle execution
         run: |
@@ -199,7 +211,7 @@ jobs:
           env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
             npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_cache="$evidence/npm-cache" \
             npm --prefix build ci --ignore-scripts --no-audit --no-fund 2>&1 | tee "$evidence/dependencies-build.log"
-          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256"
       - id: electron_types
         name: Prepare checksum-verified Electron declarations using the pinned upstream helper
         run: |
@@ -220,13 +232,13 @@ jobs:
           set -euo pipefail
           evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
           cd "$evidence/source"
-          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256" "$evidence/electron-types.sha256"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
           # Invoke the unchanged upstream script/tsconfig, including its existing declaration-file policy.
           # listFiles proves the three patched modules were checked, not a transpile-only substitute.
           env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
             npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_ignore_scripts=true \
             npm run typecheck-client -- --pretty false --listFiles --extendedDiagnostics 2>&1 | tee "$evidence/patched-typecheck.log"
-          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256" "$evidence/electron-types.sha256"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
       - id: upstream_diagnostic
         name: On compiler failure only, compare the original pinned source without changing the failed verdict
         if: failure() && steps.typecheck.outcome == 'failure'
@@ -236,7 +248,11 @@ jobs:
           evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
           cd "$evidence/source"
           patch_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-config-ready.patch"
-          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256" "$evidence/electron-types.sha256"
+          correction_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
+          git apply --reverse --check "$correction_file"
+          git apply --reverse "$correction_file"
+          sha256sum --check "$evidence/patched-source.sha256"
           git apply --reverse --check "$patch_file"
           git apply --reverse "$patch_file"
           sha256sum --check "$evidence/upstream-source.sha256"
@@ -276,7 +292,7 @@ jobs:
                      "src/vs/platform/agentHost/node/agentService.ts")
           included = {name: str(directory / "source" / name) in lines for name in modules}
           passed = all(outcomes[phase] == "success" for phase in phases[:4]) and all(included.values())
-          evidence_files = ("upstream-source.sha256", "patched-source.sha256", "source-invariants.sha256",
+          evidence_files = ("upstream-source.sha256", "patched-source.sha256", "corrected-source.sha256", "source-invariants.sha256",
                             "electron-types.sha256", "dependencies-root.log", "dependencies-build.log",
                             "electron-types.log", "patched-typecheck.log", "upstream-typecheck.log")
           hashes = {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
@@ -285,6 +301,8 @@ jobs:
                     "patched_ghcp": True, "runtime_load_status": "not_executed",
                     "upstream_commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
                     "patch_sha256": "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb",
+                    "typecheck_correction_sha256": "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a",
+                    "typechecked_source_status": "base-patch-plus-context-correction", "runtime_receipt_compatible": False,
                     "outcomes": outcomes, "patched_modules_in_compiler_input": included,
                     "typecheck_passed": passed, "evidence_sha256": hashes}
           (directory / "typecheck-result.json").write_text(json.dumps(result, indent=2) + "\n")

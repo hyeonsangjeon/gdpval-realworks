@@ -28,7 +28,9 @@ SUITE = [
     "tests/test_ghcp_ahp_wire_capture.py", "tests/test_ghcp_ahp_zero_turn.py",
     "tests/test_ghcp_ahp_metadata_broker.py", "tests/test_ghcp_ahp_connection.py",
 ]
-EXPECTED_COUNTS = {"contracts.xml": 1477, "workflow-guards.xml": 48}
+EXPECTED_COUNTS = {"contracts.xml": 1477, "workflow-guards.xml": 52}
+CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
+CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
     "ghcp-ahp-model-free-probe.yml": "445773c48f96cc0e1eb435e4f9be504f8bbffb5d17671826a07c0af78e80d176",
     "backend-tests.yml": "a2e0e2fe0451b905ab7d2eddd163f9c87b25eede7a6f7e383cb42b3722687664",
@@ -282,7 +284,7 @@ def test_source_preparation_requires_actions_and_exact_source_patch_pins():
 
 def test_typecheck_reuses_the_locked_drafts_pre_and_post_patch_hashes():
     draft = (ROOT / ".github/workflows/ghcp-ahp-patched-host-build-draft.yml").read_text()
-    command = typecheck_steps()["prepare"]["run"]
+    command = typecheck_steps()["prepare"]["run"].split("# One-line compiler correction,", 1)[0]
     pairs = re.findall(r"([0-9a-f]{64}) (src/vs/platform/agentHost/\S+\.ts)", draft)
     assert len(pairs) == 6
     for digest, path in pairs:
@@ -373,6 +375,9 @@ def run_typecheck_result(tmp_path, failed_phase=None, missing_module=None):
     assert report["patched_ghcp"] is True
     assert report["evidence_kind"] == "patched-source-typecheck-no-execution"
     assert report["patch_sha256"] == "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb"
+    assert report["typecheck_correction_sha256"] == CORRECTION_SHA256
+    assert report["typechecked_source_status"] == "base-patch-plus-context-correction"
+    assert report["runtime_receipt_compatible"] is False
     assert report["evidence_sha256"]["patched-typecheck.log"] == hashlib.sha256(log.read_bytes()).hexdigest()
     summary = (tmp_path / "summary.md").read_text()
     assert json.loads(summary.split("```json\n", 1)[1].split("\n```", 1)[0]) == report
@@ -401,3 +406,52 @@ def test_typecheck_result_refuses_an_unchecked_patched_module(tmp_path, name):
     assert result.returncode != 0 and "patched_source_typecheck_refused" in result.stderr
     assert report["typecheck_passed"] is False
     assert report["patched_modules_in_compiler_input"][name] is False
+
+
+def test_context_correction_is_separately_pinned_applied_once_and_reversed_before_base_patch():
+    assert hashlib.sha256(CORRECTION.read_bytes()).hexdigest() == CORRECTION_SHA256
+    selected = typecheck_steps()
+    prepare = selected["prepare"]["run"]
+    assert f'{CORRECTION_SHA256} "$correction_file" | sha256sum --check' in prepare
+    order = ['sha256sum --check "$evidence/patched-source.sha256"',
+             'git apply --check "$correction_file"', 'git apply "$correction_file"',
+             'git apply --reverse --check "$correction_file"', 'sha256sum --check "$evidence/corrected-source.sha256"']
+    assert [prepare.index(part) for part in order] == sorted(prepare.index(part) for part in order)
+    assert prepare.count('git apply "$correction_file"') == 1
+    assert '209a699ee4138a822a2aaa5a1146066d937d5526a826846106debb8b9d34a49c src/vs/platform/agentHost/node/agentService.ts' in prepare
+    for name in ("dependencies", "typecheck", "upstream_diagnostic"):
+        assert '"$evidence/corrected-source.sha256"' in selected[name]["run"]
+    diagnostic = selected["upstream_diagnostic"]["run"]
+    order = ['git apply --reverse "$correction_file"', 'sha256sum --check "$evidence/patched-source.sha256"',
+             'git apply --reverse "$patch_file"', 'sha256sum --check "$evidence/upstream-source.sha256"', 'npm run typecheck-client']
+    assert [diagnostic.index(part) for part in order] == sorted(diagnostic.index(part) for part in order)
+    assert '"corrected-source.sha256"' in result_program(typecheck_steps())
+
+
+@pytest.mark.parametrize("state", ["pinned_parent", "already_corrected", "unexpected_parent"])
+def test_one_line_context_patch_uses_the_upstream_prewarm_storage_contract_only(tmp_path, state):
+    """A patch-application fixture, never a source compile or host execution."""
+    lines = CORRECTION.read_text().splitlines(keepends=True)
+    assert sum(line.startswith("@@ ") for line in lines) == 1
+    minus = [line[1:] for line in lines if line.startswith("-") and not line.startswith("---")]
+    plus = [line[1:] for line in lines if line.startswith("+") and not line.startswith("+++")]
+    assert minus == ['\t\t\tprovider.chats.onChatConfigurationReady?.(defaultChat, this._chatContext(session, defaultChat));\n']
+    assert plus == ['\t\t\tprovider.chats.onChatConfigurationReady?.(defaultChat, this._chatContext(session, defaultChat, '
+                    'this._knownDefaultChatStorageResource(session, defaultChat) ?? this._newDefaultChatStorageResource(session, defaultChat)));\n']
+    body = lines[next(index for index, line in enumerate(lines) if line.startswith("@@ ")) + 1:]
+    source = "// patch fixture only\n" * 6200 + "".join(line[1:] for line in body if line[0] in " -")
+    if state == "already_corrected":
+        source = source.replace(minus[0], plus[0])
+    elif state == "unexpected_parent":
+        source = source.replace("this._chatContext(session, defaultChat)", "this._chatContext(other, defaultChat)")
+    target = tmp_path / "src/vs/platform/agentHost/node/agentService.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text(source)
+    result = subprocess.run(["git", "apply", "--check", str(CORRECTION)], cwd=tmp_path,
+                            capture_output=True, text=True, timeout=10)
+    assert (result.returncode == 0) is (state == "pinned_parent"), result.stderr
+    if state == "pinned_parent":
+        subprocess.run(["git", "apply", str(CORRECTION)], cwd=tmp_path, check=True, capture_output=True, timeout=10)
+        assert target.read_text() == source.replace(minus[0], plus[0])
+        subprocess.run(["git", "apply", "--reverse", str(CORRECTION)], cwd=tmp_path, check=True, capture_output=True, timeout=10)
+        assert target.read_text() == source
