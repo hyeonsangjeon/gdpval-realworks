@@ -497,6 +497,8 @@ def test_tampered_preparation_is_rejected_before_a_process(tmp_path, change, rea
 def backend_probe_fixture(tmp_path, monkeypatch):
     """Exercise the real cleanup path with no host, SDK, provider or socket peer."""
     import ghcp_ahp_wire_capture as wire
+    import ghcp_ahp_management as management
+    import ghcp_ahp_thread_policy as policy
 
     manifest = probe.load_manifest()
     calls = {"commands": [], "stops": 0}
@@ -507,6 +509,25 @@ def backend_probe_fixture(tmp_path, monkeypatch):
         {"artifacts": {}, "binary_sha256": {}, "source_evidence_sha256": "0" * 64}, {}))
     monkeypatch.setattr(wire, "install", lambda root, scratch, environment, **kwargs: environment)
     monkeypatch.setattr(wire, "export", lambda *args: {"capture_status": "observer_not_started"})
+
+    def fake_management_peer(client, request):
+        # Substitute only the new local IPC peer, not the real bridge's
+        # ordering, readback checks, creation accounting or cleanup path.
+        if request["op"] == "configure":
+            client.fixture_settings = copy.deepcopy(request["params"])
+            result = {"configured": True}
+        elif request["op"] == "readback":
+            result = {"settings": copy.deepcopy(client.fixture_settings), "resolved_policy": policy.POLICY,
+                "derived_permissions": "vscode-workspace-read-only", "evidence": management.EVIDENCE,
+                "admission_allowed": False}
+        else:
+            result = calls.get("session_reply")
+            if result is None and getattr(calls.get("transport"), "session_error", False):
+                result = {"error": {"code": -32007, "message": "Authentication is required to use Codex"}}
+            if result is None or "result" in result:
+                result = {"result": {"$mid": 1, "scheme": "ahp-session", "path": client.fixture_settings["session"].split(":", 1)[1]}}
+        return {"id": request["id"], "ok": True, "result": result}
+    monkeypatch.setattr(management.ManagementBridge, "_exchange", fake_management_peer)
 
     def stop():
         calls["stops"] += 1
@@ -531,11 +552,13 @@ def backend_probe_fixture(tmp_path, monkeypatch):
     def run(error=None, *, readiness="ready", session_policy=False, session_reply=None,
             authenticated_zero_turn=False, transport_factory=None):
         calls["readiness"] = readiness
+        calls["session_reply"] = session_reply
         def refused_transport(*args):
             if error is None:
                 transport = (transport_factory() if transport_factory else
                              policy_transport(session_reply) if session_policy else FakeTransport())
                 transport.close = lambda: None
+                calls["transport"] = transport
                 return transport
             raise error
         monkeypatch.setattr(probe, "WebSocket", refused_transport)
@@ -735,7 +758,8 @@ def test_full_session_policy_probe_exports_refusal_or_native_missing_without_adm
     receipt, calls, output = backend_probe_fixture(session_policy=True, session_reply=reply)
     assert calls["exit_code"] == (2 if safety_violation else 0)
     assert receipt["session_create_requests"] == 1 and receipt["model_calls"] == 0
-    assert [row["method"] for row in receipt["rpc_sent"]] == list(policy.METHODS if created else policy.METHODS[:3])
+    assert [row["method"] for row in receipt["rpc_sent"]] == [item for item in (policy.METHODS if created else policy.METHODS[:3]) if item != "createSession"]
+    assert [row["op"] for row in receipt["management_sent"]] == ["configure", "readback", "create"]
     result = json.loads((output / "thread-policy.json").read_text())
     assert result["session_created"] is created
     assert result["native_thread_responses"] == 0 and result["admission_allowed"] is False

@@ -20,6 +20,160 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).with_name("fixtures") / "ghcp_ahp_wire_observer_fixture.cjs"
 FORK_FIXTURE = FIXTURE.with_name("ghcp_ahp_agent_fork_fixture.cjs")
 POLICY_FIXTURE = FIXTURE.with_name("ghcp_ahp_thread_policy_fixture.cjs")
+MANAGEMENT_FIXTURE = FIXTURE.with_name("ghcp_ahp_management_fixture.cjs")
+
+
+@pytest.mark.parametrize("case", ["valid", "codec", "auth", "wrong_session", "lost_reply", "no_readback", "readback_tamper",
+    "approval", "sandbox", "preset", "network", "web", "effort", "missing", "unknown_channel", "unknown_method",
+    "id_collision", "bad_model", "bad_context", "bad_effort", "bad_permission", "bad_network", "bad_workspace",
+    "bad_session", "bad_field"])
+def test_local_management_real_codec_and_transaction_at_fake_child_boundary(case):
+    result = subprocess.run(["node", str(MANAGEMENT_FIXTURE), case], capture_output=True, text=True, timeout=20,
+                            env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"ok": True, "synthetic": True, "turns": 0, "external_requests": 0}
+
+
+def management_client_fixture(tmp_path, monkeypatch, mutate=None):
+    """Fake just the local peer; real Python transaction/readback validation."""
+    import time
+    import ghcp_ahp_management as management
+    from ghcp_ahp_thread_policy import POLICY
+
+    client = management.ManagementBridge(tmp_path, time.monotonic() + 30)
+    settings = None
+    def exchange(request):
+        nonlocal settings
+        if request["op"] == "configure":
+            settings = copy.deepcopy(request["params"])
+            data = {"configured": True}
+        elif request["op"] == "readback":
+            data = {"settings": copy.deepcopy(settings), "resolved_policy": copy.deepcopy(POLICY),
+                    "derived_permissions": "vscode-workspace-read-only", "evidence": management.EVIDENCE,
+                    "admission_allowed": False}
+            if mutate is not None:
+                mutate(data)
+        else:
+            data = {"result": {"$mid": 1, "scheme": "ahp-session", "path": settings["session"].split(":", 1)[1]}}
+        return {"id": request["id"], "ok": True, "result": data}
+    monkeypatch.setattr(client, "_exchange", exchange)
+    return client
+
+
+@pytest.mark.parametrize("field,bad", [("model", "gpt-5.3-codex"), ("approval", "on-request"),
+    ("permission", "vscode-workspace"), ("network", 0), ("context", 922000), ("effort", "xhigh"),
+    ("evidence", "native.thread/start.result"), ("admission", True)])
+def test_management_readback_mismatch_never_creates_session_or_retries(tmp_path, monkeypatch, field, bad):
+    from ghcp_ahp_thread_policy import POLICY
+    def mutate(data):
+        if field == "model": data["settings"]["model"]["id"] = bad
+        elif field == "approval": data["resolved_policy"]["codex.approvalPolicy"] = bad
+        elif field == "permission": data["derived_permissions"] = bad
+        elif field == "network": data["resolved_policy"]["codex.networkAccessEnabled"] = bad
+        elif field in {"context", "effort"}: data["settings"]["model"]["config"]["contextSize" if field == "context" else "thinkingLevel"] = bad
+        elif field == "evidence": data["evidence"] = bad
+        else: data["admission_allowed"] = bad
+    client = management_client_fixture(tmp_path, monkeypatch, mutate)
+    with pytest.raises(probe.Refused, match="management_init_readback_refused"):
+        client.prepare("ahp-session:/12345678-1234-4234-8234-123456789abc", "file:///fixture/workspace", POLICY)
+    with pytest.raises(probe.Refused, match="management_init_readback_required"):
+        client.create()
+    with pytest.raises(probe.Refused, match="management_init_order_refused"):
+        client.prepare("ahp-session:/12345678-1234-4234-8234-123456789abc", "file:///fixture/workspace", POLICY)
+    assert [row["op"] for row in client.sent] == ["configure", "readback"]
+
+
+def test_managed_session_uses_no_ahp_model_alias_and_cannot_inflate_applied_evidence(tmp_path, monkeypatch):
+    from .test_ghcp_ahp_probe import policy_transport
+    import ghcp_ahp_thread_policy as policy
+
+    transport = policy_transport()
+    rpc = probe.Rpc(transport, "ahp-session:/12345678-1234-4234-8234-123456789abc", "file:///fixture/workspace", session_policy=True)
+    rpc.management = management_client_fixture(tmp_path, monkeypatch)
+    results = policy.exercise(rpc, lambda: {"replies": 0})
+    assert [row["method"] for row in transport.sent] == ["initialize", "resolveSessionConfig", "subscribe", "disposeSession"]
+    assert [row["op"] for row in rpc.management.sent] == ["configure", "readback", "create"]
+    assert results["createSession"]["transport"] == "vscode-child-ipc"
+    assert probe.session_create_requests(rpc) == 1
+    assert results["management_initialize"]["settings"]["model"] == probe.DESIRED_MODEL
+    assert all("model" not in row["params"] for row in transport.sent)
+    assessed = policy.assess({"synthetic": False, "capture_status": "captured", "bootstrap": {"session_policy": True}}, results)
+    assert set(assessed["observed"].values()) == {"not_reported"}
+    assert assessed["admission_allowed"] is False
+    with pytest.raises(probe.Refused, match="management_init_order_refused"):
+        rpc.management.create()
+    with pytest.raises(probe.Refused, match="session_policy_rpc_order_refused"):
+        rpc.request("createSession", {"channel": rpc.session, "provider": "codex", "workingDirectories": [rpc.workspace], "config": policy.POLICY})
+
+
+def test_management_boundary_refusal_cannot_fallback_to_ahp(tmp_path, monkeypatch):
+    from .test_ghcp_ahp_probe import policy_transport
+    import ghcp_ahp_thread_policy as policy
+    rpc = probe.Rpc(policy_transport(), "ahp-session:/12345678-1234-4234-8234-123456789abc", "file:///fixture/workspace", session_policy=True)
+    rpc.management = management_client_fixture(tmp_path, monkeypatch)
+    def lost(_):
+        raise probe.Refused("management_peer_identity_refused")
+    monkeypatch.setattr(rpc.management, "_exchange", lost)
+    with pytest.raises(probe.Refused, match="management_peer_identity_refused"):
+        policy.exercise(rpc)
+    assert [row["method"] for row in rpc.sent] == ["initialize", "resolveSessionConfig"]
+    assert probe.session_create_requests(rpc) == 0
+
+
+@pytest.mark.parametrize("bad_owner", [None, "mode", "hash", "pid", "outside_tree"])
+def test_management_real_local_socket_peer_identity_and_single_use(bad_owner):
+    import os
+    import select
+    import tempfile
+    import time
+    import ghcp_ahp_management as management
+    from ghcp_ahp_thread_policy import POLICY
+
+    # Short, private Unix pathname. No real VS Code, SDK, provider or AF_INET.
+    with tempfile.TemporaryDirectory(prefix="ahp-ipc-fixture-") as temporary:
+        root = Path(temporary)
+        (root / "wire").mkdir(mode=0o700)
+        (root / "workspace").mkdir()
+        process = subprocess.Popen(["node", str(MANAGEMENT_FIXTURE), "serve", str(root)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={"PATH": "/usr/bin:/bin:/usr/local/bin"}, text=True)
+        try:
+            assert select.select([process.stdout], [], [], 5)[0], "fixture local socket not ready"
+            assert process.stdout.readline() == "ready\n"
+            owner_file = root / "wire/management-owner.json"
+            owner = json.loads(owner_file.read_text())
+            assert owner["server_pid"] == process.pid and owner["uid"] == os.getuid()
+            if bad_owner == "mode":
+                owner_file.chmod(0o644)
+            elif bad_owner in {"hash", "pid"}:
+                owner["bridge_sha256" if bad_owner == "hash" else "server_pid"] = "0" * 64 if bad_owner == "hash" else process.pid + 1
+                owner_file.write_text(json.dumps(owner))
+            client = management.ManagementBridge(root, time.monotonic() + 10,
+                owned_pid=process.pid if bad_owner != "outside_tree" else 999999999)
+            session = "ahp-session:/12345678-1234-4234-8234-123456789abc"
+            if bad_owner:
+                with pytest.raises(probe.Refused, match="management_.*identity_refused"):
+                    client.prepare(session, (root / "workspace").as_uri(), POLICY)
+                assert not (root / "wire/management-init.claim").exists()
+            else:
+                receipt = client.prepare(session, (root / "workspace").as_uri(), POLICY)
+                assert receipt["settings"]["model"] == probe.DESIRED_MODEL
+                assert receipt["resolved_policy"] == POLICY and receipt["admission_allowed"] is False
+                created = client.create()
+                assert created["transport"] == "vscode-child-ipc"
+                assert created["result"]["path"] == session.split(":", 1)[1]
+                assert (root / "wire/management-init.claim").is_file()
+                with pytest.raises(probe.Refused, match="management_init_order_refused"):
+                    client.create()
+                assert [row["op"] for row in client.sent] == ["configure", "readback", "create"]
+        finally:
+            try:
+                stdout, stderr = process.communicate(timeout=5)
+                assert process.returncode == 0, stdout + stderr
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
 
 
 def run_fixture(case):

@@ -559,8 +559,17 @@ def classify_rpc(results):
     created = results.get("createSession", {})
     return {"provider_requested": "codex", "session_created_without_auth": "result" in created,
             "authentication": "authentication_required_reported" if any(e.get("code") == -32007 for e in errors) else "not_reached_without_turn",
-            "errors": errors, "prompt_or_turn_sent": False, "model_settings_sent": False,
+            "errors": errors, "prompt_or_turn_sent": False,
+            "model_settings_sent": created.get("transport") == "vscode-child-ipc",
             "evidence_boundary": "empty_session_only_not_authenticated_model_execution"}
+
+
+def session_create_requests(rpc):
+    if rpc is None:
+        return 0
+    managed = getattr(rpc, "management", None)
+    return (sum(row["method"] == "createSession" for row in rpc.sent)
+            + sum(row.get("op") == "create" for row in getattr(managed, "sent", [])))
 
 
 def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False, session_policy=False,
@@ -671,6 +680,13 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri(),
                           capability_only=capability_only, session_policy=session_policy, credential=credential,
                           boundary_check=watchdog.enforce if watchdog is not None else None, require_mcp_disabled=metadata_socket is not None)
+                if session_policy:
+                    from ghcp_ahp_management import ManagementBridge
+                    # Mandatory for BOTH hosted session-policy entrypoints.
+                    # Construction/readback failures never fall back to AHP creation.
+                    rpc.management = ManagementBridge(scratch, deadline, owned_pid=process.process.pid,
+                        boundary_check=watchdog.enforce if watchdog is not None else None,
+                        sanitize=mask.clean if mask is not None else redact)
                 results = (thread_policy.exercise(rpc, lambda: thread_policy.await_native_thread(scratch, deadline))
                            if session_policy else exercise_rpc(rpc))
                 record["rpc_results"] = results
@@ -728,7 +744,7 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     else "process_group_stop_unconfirmed_pid_namespace_exit_remains_cleanup_boundary")
                 if capability_only or session_policy:
                     after = retain_or_note(lambda: backend_diagnostics.snapshot(scratch, process))
-                    diagnostic_auth = {"credential": credential, "session_create_requests": sum(row["method"] == "createSession" for row in rpc.sent) if rpc else 0} if authenticated_zero_turn else {}
+                    diagnostic_auth = {"credential": credential, "session_create_requests": session_create_requests(rpc)} if authenticated_zero_turn else {}
                     record["backend_startup"] = retain_or_note(lambda: backend_diagnostics.export(evidence, before=before, after=after,
                         primary_error_code=(str(primary_error) if isinstance(primary_error, Refused) else type(primary_error).__name__) if primary_error else None,
                         environment=environment, vscode_commit=manifest["vscode_commit"], **diagnostic_auth))
@@ -758,7 +774,11 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
         if rpc is not None:
             record["rpc_sent"] = rpc.sent
             record["rpc_received"] = rpc.received
-            record["session_create_requests"] = sum(row["method"] == "createSession" for row in rpc.sent)
+            record["session_create_requests"] = session_create_requests(rpc)
+            managed = getattr(rpc, "management", None)
+            if managed is not None:
+                record["management_sent"] = managed.sent
+                record["management_received"] = managed.received
         if mask is not None:
             mask.clean(record)
             record = mask.clean(record)

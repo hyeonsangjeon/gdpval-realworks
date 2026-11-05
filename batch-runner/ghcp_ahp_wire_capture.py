@@ -21,6 +21,7 @@ from ghcp_ahp_probe import (DESIRED_MODEL, MAX_ARCHIVE_EXPANSION_BYTES, Refused,
 
 PRELOAD = Path(__file__).with_name("ghcp_ahp_wire_preload.cjs")
 METADATA_CLIENT = Path(__file__).with_name("ghcp_ahp_metadata_client.cjs")
+MANAGEMENT_BRIDGE = Path(__file__).with_name("ghcp_ahp_management_bridge.cjs")
 PIN = "2c33b50b16c472efe58357d1d2a8a5414bc23fbf"
 MAX_BYTES = 16 * 1024 * 1024
 FIELDS = ("model", "model_provider", "reasoning_effort", "context_window", "sandbox", "approval", "network", "web_search")
@@ -58,6 +59,14 @@ SOURCES = {
     "creation_auth": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "private _ensureModelProviderAuthenticated(model:"),
     "ahp_creation_config": ("src/vs/platform/agentHost/node/protocolServerHandler.ts", "config: this._config.sessionConfigAdapter ? this._config.sessionConfigAdapter.fromClientValues(params.config) : params.config"),
     "native_launch_overrides": ("src/vs/platform/agentHost/node/codex/codexLaunchConfig.ts", "args: ['app-server', ...overrides.flatMap"),
+    "management_channel": ("src/vs/platform/agentHost/node/agentHostMain.ts", "server.registerChannel(AgentHostIpcChannels.Management, ProxyChannel.fromService(management, disposables))"),
+    "management_create": ("src/vs/platform/agentHost/node/agentHostManagementService.ts", "createSessionWithExtensions(config:"),
+    "management_contract": ("src/vs/platform/agentHost/common/agentService.ts", "AHP `createSession` (`model`, `agent`, and `importConversation`)"),
+    "management_codec": ("src/vs/base/parts/ipc/common/ipc.ts", "export function serialize(writer: IWriter, data: any)"),
+    "management_arguments": ("src/vs/base/parts/ipc/common/ipc.ts", "args[i] = revive(args[i])"),
+    "management_transport": ("src/vs/base/parts/ipc/node/ipc.cp.ts", "sender.send((<Buffer>r.buffer).toString('base64'))"),
+    "policy_raw_resolution": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "Object.assign(resolvedValues, migrateCodexPermissionValues(params.config"),
+    "policy_read_only_profile": ("src/vs/platform/agentHost/node/codex/codexLaunchConfig.ts", "return CODEX_VSCODE_WORKSPACE_READ_ONLY_PERMISSION_PROFILE"),
 }
 
 
@@ -321,7 +330,7 @@ def agent_fork_contract(prepared, state, manifest):
 
 
 def install(prepared, state, environment, *, model_free, credential="", session_policy=False, authenticated_zero_turn=False, metadata_socket=None):
-    """Add a passive tee to the isolated host, never to the user's environment.
+    """Install the observer and optional narrow local initialization bridge.
 
     Native binary and source stay byte-identical to their original archives.
     The seed travels only in the isolated process environment, is deleted by
@@ -359,6 +368,7 @@ def install(prepared, state, environment, *, model_free, credential="", session_
     fork_contract = agent_fork_contract(prepared, state, manifest)
     fork_encoded = json.dumps(fork_contract, sort_keys=True, separators=(",", ":"))
     bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free, "session_policy": session_policy,
+                 "management_bridge_sha256": digest(MANAGEMENT_BRIDGE) if session_policy else None,
                  "authenticated_zero_turn": authenticated_zero_turn,
                  "metadata_reads": metadata_socket is not None, "metadata_client_sha256": digest(METADATA_CLIENT),
                  "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected,
@@ -368,6 +378,7 @@ def install(prepared, state, environment, *, model_free, credential="", session_
     if "NODE_OPTIONS" in environment:
         raise Refused("wire_inherited_node_options_refused")
     return {**environment, **({"GHCP_AHP_WIRE_METADATA_SOCKET": str(metadata_socket)} if metadata_socket is not None else {}),
+            **({"GHCP_AHP_WIRE_MANAGEMENT_SHA256": digest(MANAGEMENT_BRIDGE)} if session_policy else {}),
             "GHCP_AHP_WIRE_METADATA_SHA256": digest(METADATA_CLIENT), "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
             "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "session-only" if session_policy else "model-free" if model_free else "connection",
             "GHCP_AHP_WIRE_NATIVE": str(binary.resolve()), "GHCP_AHP_WIRE_NATIVE_SHA256": expected,

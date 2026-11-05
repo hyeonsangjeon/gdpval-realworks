@@ -348,7 +348,8 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
         assert len(rpc_wire.sent) == 2
     if outcome == "session_refused":
         assert receipt["reason_codes"][0] == "zero_turn_session_refused"
-        assert len(rpc_wire.sent) == 4
+        assert len(rpc_wire.sent) == 3
+        assert [row["op"] for row in receipt["management_sent"]] == ["configure", "readback", "create"]
     if outcome == "no_thread":
         assert "zero_turn_native_thread_not_reported" in receipt["reason_codes"]
     if outcome == "http_blocked":

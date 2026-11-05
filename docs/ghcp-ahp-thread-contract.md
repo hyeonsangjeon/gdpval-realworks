@@ -1,10 +1,12 @@
-# Pinned AHP session and native thread refusal diagnostics
+# Pinned AHP session initialization and native thread refusal diagnostics
 
-Run `41988498753` passed both metadata GETs and authentication, but the observer
-refused `thread/start` before forwarding it. The old records contain only
-`session_policy_thread_contract_refused`, not its offending parameters. **The
-specific live mismatch is not established.** This change adds evidence only;
-it does not repair model selection, accept a default, or relax admission.
+Run `41988498753` passed authentication but lacked refusal-field diagnostics.
+The subsequent diagnostic run `42024624027` established three native request
+mismatches: model `gpt-5.3-codex`, approval `on-request`, and permission profile
+`vscode-workspace`. All were blocked before native forwarding; no successful
+session, native thread, turn or inference was observed. The local initialization
+bridge below is a new control path, not a claim that those runtime failures have
+already been repaired. It does not relax admission.
 
 All upstream references below use VS Code commit
 `2c33b50b16c472efe58357d1d2a8a5414bc23fbf`, whose generated protocol is from
@@ -31,9 +33,9 @@ An SDK-valid null/default is not automatically acceptable to this fixed probe.
 
 ## Field-by-field comparison
 
-The AHP values below are present in the last run's resolver result and creation
-request. Native values marked **expected** are source projections, not recovered
-parameters from the rejected live request.
+The AHP values below were present in the rejected run's resolver and creation
+request. Run `42024624027` recovered the three mismatches above. Other native
+values marked **expected** remain source projections, not applied-setting evidence.
 
 | Field | Pinned contract / consumer | Probe requirement and refusal candidate |
 | --- | --- | --- |
@@ -59,12 +61,65 @@ The last advertised catalog began with
 `@provider=vscode-proxy:gpt-5.3-codex`, not Sol. The thread call then explicitly
 passes the resolved model/provider at :6166, overriding native defaults.
 
-This is a concrete source-level risk, not proof of which fields appeared in the
-blocked packet. Security-profile customization and nullable/optional fields
-also need the actual boundary values. The guarded model/policy request is left
-unchanged until that evidence is available and a source-supported selection
-path can be established. In particular, accepting the first model or a 922000
-context would change the fixed conditions and is not a fix.
+Run `42024624027` confirmed the non-Sol default in the blocked native packet.
+The source-supported initial-model route is local management IPC, not AHP.
+Accepting the first model or a 922000 context would change the fixed conditions
+and is not a fix.
+
+## Local management initialization (no new external network)
+
+The hosted session-policy entrypoints always attach a narrow bridge to the
+**already owned, hash-verified Agent Host child process**. There is no CLI switch
+to fall back to AHP creation after a bridge failure. The old generic AHP-only
+helper remains covered separately; it is not the hosted session-policy route.
+
+| Field | Configuration route | What the pre-create read verifies |
+| --- | --- | --- |
+| model | `IAgentCreateSessionConfig.model` through `agentHostManagement.createSessionWithExtensions`; `agentService.ts:895`, management implementation :66 | The bridge's immutable staged `@provider=vscode-proxy:gpt-5.6-sol` selection with `thinkingLevel=max`, `contextSize=1000000`; **not** a server-applied model claim. |
+| approvalPolicy | Existing `config["codex.approvalPolicy"]`, not a new bridge policy API | The real `agentHost.resolveSessionConfig` result remains `untrusted`; `codexAgent.ts:9254,9276`. |
+| permissions | Existing raw `codex.sandboxMode=read-only` and `networkAccessEnabled=false` | Resolver preserves raw axes and does not add `permissionsPreset`; the pinned `codexLaunchConfig.ts:56` mapping derives `vscode-workspace-read-only`. Derivation is not native evidence. |
+
+The private AF_UNIX endpoint supports exactly `configure → readback → create`.
+Its directory is mode 0700 and socket/owner receipt mode 0600. The Python client
+checks UID, `SO_PEERCRED`, the owned supervisor ancestry and the bridge digest.
+The bridge attaches only after the existing exact fork path/argv/pin validation.
+It uses the pinned child IPC codec and registered service names, never a guessed
+WebSocket management method or a caller-selected channel. Actual upstream calls
+are limited to one `agentHost.resolveSessionConfig` and one
+`agentHostManagement.createSessionWithExtensions`.
+
+The five configuration keys remain unchanged. The request's workspace and
+fresh session identity are bound to this invocation. Any field, resolved raw
+policy, staged readback or identity mismatch prevents the create call. A claim
+is consumed before the resolver call and never released/reused; errors,
+concurrent operations, lost replies and duplicate creation cannot authorize
+another attempt. The model/native/turn/CAPI refusal predicates are unchanged,
+and the observer does not rewrite a native packet. No new HTTP route is opened.
+
+`management-init.json` labels the receipt
+`staged_model_and_upstream_policy_resolution_not_thread_applied` and always has
+`admission_allowed=false`. The actual create request/response transport is
+`vscode-child-ipc`; it is not recorded as an AHP create response. All records go
+through the existing redactor. Native responses alone may populate the applied
+fields in `thread-policy.json`. This bridge does not turn an echo into evidence.
+
+### Known pinned lifecycle risk (not silently worked around)
+
+`agentService.ts:5940–5949` resolves policy before provider creation, but stores
+the session state only later (:6053–6055). `codexAgent.ts:5227` schedules eager
+prewarm and :6108–6115 reads the configuration scope. Therefore the managed
+creation still **cannot prove that prewarm will read the stored raw policies**.
+Passing an explicit model closes the missing AHP-field route; it does not prove
+the other two native mismatches are gone. The next separately authorized
+zero-turn run must inspect all three boundary fields and native responses.
+If the pinned lifecycle still yields defaults, the unchanged guard refuses.
+
+Creating an empty-folder session and later attaching the workspace was examined
+and rejected as a workaround: `agentService.ts:12388` requires a Ready session
+with an existing working directory. We do not add a dummy chat, substitute a
+preset, modify the pinned distribution, delay prewarm heuristically, or rewrite
+its native request. A deeper upstream ordering change would require a separate
+decision if this risk is observed again. No dispatch accompanies this change.
 
 ## Artifact shape and privacy
 
