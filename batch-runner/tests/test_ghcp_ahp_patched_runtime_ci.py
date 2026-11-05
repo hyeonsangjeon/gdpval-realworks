@@ -103,7 +103,13 @@ def test_only_pinned_setup_actions_without_authentication_or_runtime_steps():
     assert selected["python"]["with"] == {"python-version": "3.12.11"}
     assert selected["node"]["with"] == {"node-version": "22.23.2", "package-manager-cache": "false"}
     assert selected["dependencies"]["env"] == {"PIP_CONFIG_FILE": "/dev/null"}
-    assert selected["dependencies"]["run"] == "python -m pip install --disable-pip-version-check pytest==9.1.1 PyYAML==6.0.3"
+    assert selected["dependencies"]["run"] == "python -m pip install --disable-pip-version-check --only-binary=:all: -r batch-runner/requirements-ghcp-sol-gate.txt"
+    requirements = (ROOT / "batch-runner/requirements-ghcp-sol-gate.txt").read_bytes()
+    assert hashlib.sha256(requirements).hexdigest() == "6df2e82ae1f0e03835029ad122899c257d357fc71c8aa5bde100495d2d71dfaf"
+    locked = {line.strip() for line in requirements.decode().splitlines() if line.strip() and not line.startswith("#")}
+    assert {"pytest==9.1.1", "PyYAML==6.0.3", "jsonschema==4.26.0", "pandas==2.3.3", "huggingface_hub==1.24.0"} <= locked
+    assert all(re.fullmatch(r"[A-Za-z0-9_.-]+==[A-Za-z0-9_.+-]+", line) for line in locked)
+    assert not {"openai", "anthropic", "azure-ai-inference"} & {line.split("==")[0].lower() for line in locked}
     text = WORKFLOW.read_text()
     for forbidden in ("secrets.", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN", "workflow_dispatch", "workflow_call",
                       "continue-on-error", "|| true", "gh workflow", "gh run", "typecheck", "npm ",

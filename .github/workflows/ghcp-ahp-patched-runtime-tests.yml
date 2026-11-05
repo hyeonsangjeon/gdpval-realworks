@@ -37,7 +37,10 @@ jobs:
         name: Install only offline test dependencies
         env:
           PIP_CONFIG_FILE: /dev/null
-        run: python -m pip install --disable-pip-version-check pytest==9.1.1 PyYAML==6.0.3
+        # The fake-paid capture test imports Step8 validators inside its existing
+        # effects guard. Reuse their pinned import-only dependencies, never SDKs.
+        run: >-
+          python -m pip install --disable-pip-version-check --only-binary=:all: -r batch-runner/requirements-ghcp-sol-gate.txt
       - id: workflow_guards
         name: Check this workflow's scope and result contract
         working-directory: batch-runner
