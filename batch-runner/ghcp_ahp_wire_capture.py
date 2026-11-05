@@ -21,7 +21,7 @@ from ghcp_ahp_probe import (DESIRED_MODEL, MAX_ARCHIVE_EXPANSION_BYTES, Refused,
 PRELOAD = Path(__file__).with_name("ghcp_ahp_wire_preload.cjs")
 PIN = "2c33b50b16c472efe58357d1d2a8a5414bc23fbf"
 MAX_BYTES = 16 * 1024 * 1024
-FIELDS = ("model", "reasoning_effort", "context_window", "sandbox", "approval", "network", "web_search")
+FIELDS = ("model", "model_provider", "reasoning_effort", "context_window", "sandbox", "approval", "network", "web_search")
 SOURCES = {
     "agent_fork": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "VSCODE_ESM_ENTRYPOINT: 'vs/platform/agentHost/node/agentHostMain'"),
     "agent_module": ("src/vs/platform/agentHost/node/nodeAgentHostStarter.ts", "new Client(FileAccess.asFileUri('bootstrap-fork').fsPath, options)"),
@@ -38,6 +38,17 @@ SOURCES = {
     "capi_fetch": ("src/vs/platform/agentHost/node/shared/copilotApiService.ts", "fetch: (url, options) => fetch(url"),
     "capi_stream": ("src/vs/platform/agentHost/node/codex/codexProxyService.ts", "const reader = upstream.body.getReader()"),
     "model_echo": ("src/vs/platform/agentHost/node/codex/codexMapAppServerEvents.ts", "...(modelId ? { model: modelId }"),
+    "policy_keys": ("src/vs/platform/agentHost/common/codexSessionConfigKeys.ts", "ApprovalPolicy = 'codex.approvalPolicy'"),
+    "policy_resolver": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "resolveChatConfig(params:"),
+    "policy_materialize": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "private async _materialize(session:"),
+    "policy_prewarm": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "private _schedulePrewarm(session:"),
+    "effort_resolution": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "private _getReasoningEffort(session:"),
+    "context_resolution": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "? { model_context_window: contextSize }"),
+    "native_launch_args": ("src/vs/platform/agentHost/common/agentService.ts", "AgentHostCodexAgentBinaryArgsEnvVar = 'VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS'"),
+    "native_config_contract": ("src/vs/platform/agentHost/node/codex/protocol/generated/v2/Config.ts", "model_reasoning_effort: ReasoningEffort | null"),
+    "creation_auth": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "private _ensureModelProviderAuthenticated(model:"),
+    "ahp_creation_config": ("src/vs/platform/agentHost/node/protocolServerHandler.ts", "config: this._config.sessionConfigAdapter ? this._config.sessionConfigAdapter.fromClientValues(params.config) : params.config"),
+    "native_launch_overrides": ("src/vs/platform/agentHost/node/codex/codexLaunchConfig.ts", "args: ['app-server', ...overrides.flatMap"),
 }
 
 
@@ -300,15 +311,19 @@ def agent_fork_contract(prepared, state, manifest):
             "entrypoint": "vs/platform/agentHost/node/agentHostMain", "exec_argv": [], "telemetry": "off"}
 
 
-def install(prepared, state, environment, *, model_free, credential=""):
+def install(prepared, state, environment, *, model_free, credential="", session_policy=False):
     """Add a passive tee to the isolated host, never to the user's environment.
 
     Native binary and source stay byte-identical to their original archives.
     The seed travels only in the isolated process environment, is deleted by
     the preload, and is never placed in an argv, config file or artifact.
     """
-    if type(model_free) is not bool:
+    if type(model_free) is not bool or type(session_policy) is not bool or session_policy and not model_free:
         raise Refused("wire_mode_refused")
+    if session_policy:
+        from ghcp_ahp_thread_policy import NATIVE_ARGS
+        if credential or environment.get("VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS") != json.dumps(NATIVE_ARGS):
+            raise Refused("wire_session_policy_environment_refused")
     manifest = load_manifest()
     binary, expected, discovery = discover_native_binary(prepared, manifest)
     directory = state / "wire"
@@ -320,7 +335,7 @@ def install(prepared, state, environment, *, model_free, credential=""):
     save_json(directory / "sources.json", sources)
     fork_contract = agent_fork_contract(prepared, state, manifest)
     fork_encoded = json.dumps(fork_contract, sort_keys=True, separators=(",", ":"))
-    bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free,
+    bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free, "session_policy": session_policy,
                  "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected,
                  "vscode_commit": PIN, "sdk_version": manifest["codex_sdk_version"],
                  "native_binary_discovery": discovery, "agent_host_fork": fork_contract}
@@ -328,7 +343,7 @@ def install(prepared, state, environment, *, model_free, credential=""):
     if "NODE_OPTIONS" in environment:
         raise Refused("wire_inherited_node_options_refused")
     return {**environment, "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
-            "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "model-free" if model_free else "connection",
+            "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "session-only" if session_policy else "model-free" if model_free else "connection",
             "GHCP_AHP_WIRE_NATIVE": str(binary.resolve()), "GHCP_AHP_WIRE_NATIVE_SHA256": expected,
             "GHCP_AHP_WIRE_FORK_CONTRACT": fork_encoded,
             "GHCP_AHP_WIRE_FORK_SHA256": hashlib.sha256(fork_encoded.encode()).hexdigest(),
@@ -338,7 +353,7 @@ def install(prepared, state, environment, *, model_free, credential=""):
 
 def _settings(value, source, scope, thread_id=NOT_REPORTED):
     result = dict.fromkeys(FIELDS, NOT_REPORTED)
-    for key, names in {"model": ("model",), "reasoning_effort": ("effort", "reasoningEffort"),
+    for key, names in {"model": ("model",), "model_provider": ("modelProvider",), "reasoning_effort": ("effort", "reasoningEffort"),
                        "approval": ("approvalPolicy",)}.items():
         for name in names:
             if type(value.get(name)) is str:
