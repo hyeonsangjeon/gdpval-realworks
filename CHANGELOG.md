@@ -29,9 +29,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   - Source-only Sol successor
     `gpt56_sol_foundry_codex_pilot_source_20261105_batch_path.yaml`,
     re-pinning step 2 and the preflight.
+  - A turn that ends unfinished also books the request it may have left in
+    flight (at most USD 28.26); a task row that reached Codex without a
+    booking refuses the next leg and the grade preflight; every leg needs a
+    1-170 minute watchdog.
+  - Grading refuses GitHub re-runs, commits a journal even when it does not
+    parse (so later preflights refuse), uploads it with the cost ledger, and
+    pins `gpt54_comparison_preflight.py` as a grading input.
 
-  No core/, grader-seal, step 8 or batch-run.yml bytes change, and no paid
-  call was made.
+  Dispatch exp036 exactly once: batch-run.yml has no concurrency group, and
+  a fresh dispatch after any spending one needs `PRIOR_LINEAGE_SPEND_USD`
+  raised first. No core/, grader-seal, step 8 or batch-run.yml bytes change,
+  and no paid call was made.
 
 - Repair #794's two CI test failures without changing workflow or production
   bytes. Keep the input-intake shell's five-second timeout while isolating only

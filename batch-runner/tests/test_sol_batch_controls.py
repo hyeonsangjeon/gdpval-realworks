@@ -129,7 +129,7 @@ def _install_kwargs(settings: Any, ledger: Any, workspace: Path, /, **overrides:
         experiment_id=controls.EXPERIMENT_ID, condition_key="condition_a",
         codex_settings=settings, cost_ledger=ledger, run_id=RUN_ID, task_ids=list(TASKS),
         max_retries=3, resume_max_rounds=0, task_deadlines=None, restored_progress=None,
-        workspace=workspace,
+        workspace=workspace, wall_timeout=170,
     )
     values.update(overrides)
     return values
@@ -419,6 +419,11 @@ def _refusal_case(name: str, executor: TaskExecutor, settings: CodexProviderSett
         return dict(workspace=not_a_directory), "sol_batch_record_unwritable"
     if name == "model_gpt54":
         return dict(codex_settings=_gpt54_settings()), "sol_batch_model_drift"
+    if name.startswith("watchdog_"):
+        # 290 is the dispatch input's default; None and 0 are no watchdog.
+        value = {"watchdog_290": 290, "watchdog_171": 171, "watchdog_none": None,
+                 "watchdog_zero": 0, "watchdog_text": "170"}[name]
+        return dict(wall_timeout=value), "sol_batch_watchdog_drift"
     raise AssertionError(name)
 
 
@@ -426,6 +431,7 @@ def _refusal_case(name: str, executor: TaskExecutor, settings: CodexProviderSett
     "condition_b", "task_deadlines", "ledger_none", "ledger_different", "runner_subclass",
     "provider_not_codex_settings", "four_ids", "reordered_ids", "max_retries_2",
     "resume_rounds_3", "rerun", "unwritable_workspace", "model_gpt54",
+    "watchdog_290", "watchdog_171", "watchdog_none", "watchdog_zero", "watchdog_text",
 ])
 def test_install_refuses_a_drifted_registered_run_and_changes_nothing(
         tmp_path, monkeypatch, unit_runner, ledgers, name):
@@ -510,6 +516,8 @@ def test_install_swaps_in_the_gated_runner_with_the_executors_own_arguments(
             "sources", "window_rule", "evidence_boundary"} <= set(header)
     assert header["requested"] == {"model": "gpt-5.6-sol", "reasoning_effort": "max",
                                    "model_context_window": 1_000_000}
+    assert header["wall_timeout_minutes"] == 170
+    assert "in flight" in header["usd"]["in_flight_rule"]
     assert header["usd"]["admit_while_spend_at_most"] == "95.00000000"
     assert header["usd"]["solve_budget"] == "146.00000000"
     assert header["catalog"]["sha256"] == controls.CATALOG_SHA256
@@ -578,6 +586,14 @@ SETTLED = {"call_id": "a", "state": STATE_SETTLED, "input_tokens": 100_000,
     (SETTLED, {"cache_write_input_tokens": 70_000}, (Decimal("1.60500000"), "settled")),
     # A smaller reported count does not lower the bound.
     (SETTLED, {"cache_write_input_tokens": 10}, (Decimal("1.48000000"), "settled")),
+    # A turn that ended unfinished adds the request it left in flight, and its
+    # basis is no longer complete.
+    (SETTLED, {"in_flight_usd": Decimal("6.05750000")}, (Decimal("7.53750000"), "settled_partial")),
+    # A turn with nothing priceable already books the whole reserve.
+    (dict(SETTLED, output_tokens=None), {"in_flight_usd": Decimal("28.26")},
+     (Decimal("51"), "settled_without_usage")),
+    # The bound never applies to an unreported or abandoned row.
+    ({"state": STATE_ABANDONED}, {"in_flight_usd": Decimal("28.26")}, (Decimal(0), "abandoned")),
 ])
 def test_book_row(row, evidence, booked):
     assert controls.book_row(row, rates=RATES, evidence=evidence) == booked
@@ -598,6 +614,36 @@ def test_the_rates_reach_the_price_unchanged():
                                    rates=controls.load_sol_list_rates()) == Decimal("22.50000000")
     assert controls.list_price_usd(input_tokens=1_000_000, cached_input_tokens=1_000_000,
                                    output_tokens=1_000_000, rates=controls.load_sol_list_rates()) == Decimal("46.00000000")
+
+
+def _last(input_tokens: Any = None, cached: Any = None, output_tokens: Any = None) -> SimpleNamespace:
+    return SimpleNamespace(input_tokens=input_tokens, cached_input_tokens=cached, output_tokens=output_tokens,
+                           cache_write_input_tokens=None, reasoning_output_tokens=None)
+
+
+@pytest.mark.parametrize("last, bound", [
+    # Nothing reported: the whole window uncached, 1M x (10.00 + 12.50) plus
+    # 128,000 x 45.00 per 1M.
+    (None, Decimal("28.26000000")),
+    (_last(), Decimal("28.26000000")),
+    # 60k in, 50k cached, 1k out: the next request re-sends 61k with the same
+    # 50k cached, so 11k x 22.50 + 50k x 1.00 + 128k x 45.00 per 1M.
+    (_last(60_000, 50_000, 1_000), Decimal("6.05750000")),
+    # No cached count is zero cached: 10k x 22.50 + 128k x 45.00.
+    (_last(10_000, None, 0), Decimal("5.98500000")),
+    # Growth stops at the 1M window: 100k x 22.50 + 900k x 1.00 + 5.76.
+    (_last(990_000, 900_000, 30_000), Decimal("8.91000000")),
+    # Counts that cannot be a request take the window bound.
+    (_last(10_000, 20_000, 0), Decimal("28.26000000")),
+    (_last(0, 0, 0), Decimal("28.26000000")),
+    (_last(10_000, 0, None), Decimal("28.26000000")),
+    (_last(True, 0, 0), Decimal("28.26000000")),
+    (object(), Decimal("28.26000000")),
+])
+def test_the_request_left_in_flight_is_bounded_from_the_last_one_reported(last, bound):
+    assert controls.in_flight_bound_usd(last, rates=controls.load_sol_list_rates()) == bound
+    # Never above the reserve an attempt with no usage at all books.
+    assert bound <= controls.ATTEMPT_RESERVE_USD
 
 
 @pytest.mark.parametrize("seed, code", [
@@ -775,6 +821,72 @@ def test_a_rate_refusal_is_booked_from_what_the_attempt_reported(
     assert session.spend_usd() == Decimal(booked)
 
 
+#: What the stream reported before the turn ended: 200k uncached x 10.00,
+#: 2.2M cached x 1.00, 90k out x 45.00 and 200k writes x 12.50, per 1M.
+_PARTIAL_TOTALS = dict(input_tokens=2_400_000, cached_input_tokens=2_200_000, output_tokens=90_000,
+                       reasoning_output_tokens=40_000)
+_PARTIAL_USD = Decimal("10.75000000")
+
+
+def _scripted_unfinished_turn(monkeypatch, *, category: str, last: Any) -> None:
+    """A turn that settled what the stream reported, then ended without finishing.
+
+    The settlement is core's own (codex_runner._settle_what_was_measured calls
+    settle_codex_turn with the last reported total); only the stream is scripted.
+    """
+    usage = SimpleNamespace(model_context_window=1_000_000, last=last,
+                            total=SimpleNamespace(cache_write_input_tokens=None, **_PARTIAL_TOTALS))
+
+    def await_turn(self, turn_handle, **kwargs):
+        return TurnObservation(result=None, usage=usage, timed_out=category == "timeout", items_seen=40)
+
+    def run(self, task_prompt, model=None, reference_files=None, occupation="professional",
+            experiment_prompt=None, perception_text=None, run_id=None, condition_name=None, task_id=None):
+        call_id = self._reserve_call(task_id)
+        self._await_turn(object())
+        settle_codex_turn(self.cost_ledger, call_id, totals=CodexTokenTotals(**_PARTIAL_TOTALS),
+                          resolved_model=self.provider.model)
+        return {"success": False, "text": "", "files": [], "error": category, "error_category": category,
+                "codex_diagnostics": {"items_seen": 40}}
+
+    monkeypatch.setattr(CodexAgentRunner, "_await_turn", await_turn)
+    monkeypatch.setattr(CodexAgentRunner, "run", run)
+
+
+@pytest.mark.parametrize("category, last, in_flight", [
+    # The window bound: no last request was reported.
+    ("timeout", None, Decimal("28.26000000")),
+    ("content_filtered", None, Decimal("28.26000000")),
+    ("transport_error", None, Decimal("28.26000000")),
+    ("turn_failed", None, Decimal("28.26000000")),
+    # 600k in, 590k cached, 2k out: 12k x 22.50 + 590k x 1.00 + 128k x 45.00 per 1M.
+    ("timeout", _last(600_000, 590_000, 2_000), Decimal("6.62000000")),
+    # A 429 is not billed: what was reported is the whole bill.
+    ("rate_limited", None, None),
+])
+def test_an_unfinished_turn_books_the_request_it_left_in_flight(
+        tmp_path, monkeypatch, unit_runner, ledgers, category, last, in_flight):
+    _scripted_unfinished_turn(monkeypatch, category=category, last=last)
+    ledger = ledgers()
+    record_path = tmp_path / "r.json"
+    session = _session(ledger, record_path)
+    runner = _sol_runner(session, ledger)
+
+    result = runner.run("prompt", model="gpt-5.6-sol", task_id=TASKS[0])
+
+    [row] = ledger.calls_for(TASKS[0])
+    assert row["state"] == STATE_SETTLED
+    booked = _PARTIAL_USD + (in_flight or 0)
+    attempt = _record(record_path)["attempts"][-1]
+    assert attempt["booked_usd"] == attempt["spend_after_usd"] == controls.fmt(booked)
+    assert attempt["basis"] == ("settled" if in_flight is None else "settled_partial")
+    assert attempt["in_flight_usd"] == (None if in_flight is None else controls.fmt(in_flight))
+    # The partial figure is never carried as complete to the next leg or to grading.
+    assert result["budget_metrics"] == {"conservative_cost_usd": controls.fmt(booked),
+                                        "usage_complete": in_flight is None}
+    assert session.spend_usd() == booked
+
+
 def test_a_restored_window_mismatch_keeps_the_next_leg_closed(tmp_path, unit_runner, ledgers):
     ledger = ledgers()
     executor, settings = _executor(ledger)
@@ -793,10 +905,14 @@ def test_a_restored_window_mismatch_keeps_the_next_leg_closed(tmp_path, unit_run
 # -- (p) spend carried across relay legs ------------------------------------
 
 
-def _row(task_id: str, status: str, observability: Any = None) -> dict:
+def _row(task_id: str, status: str, observability: Any = None, *, model_calls: Any = None) -> dict:
     row: dict[str, Any] = {"task_id": task_id, "status": status}
     if observability is not None:
         row["observability"] = observability
+    if model_calls is not None:
+        # The problem_solving_cost receipt step 2 stamps on every row.
+        row["problem_solving_cost"] = {"status": "not_run" if model_calls == 0 else "partial",
+                                       "model_calls": model_calls}
     return row
 
 
@@ -805,12 +921,53 @@ def test_prior_legs_are_summed_from_their_budget_metrics():
         _row("a", "success", {"budget_metrics": {"conservative_cost_usd": 12.5}}),
         _row("b", "error", {"budget_metrics": {"conservative_cost_usd": "0.75"}}),
         _row("c", "pending", {"runner_evidence": {}}),
-        _row("d", "error", {"error_category": "reference_input_integrity_failed"}),
-        _row("e", "error"),
+        # reference_input_integrity_failed: stopped before any Codex call.
+        _row("d", "error", {"preprocessors": []}, model_calls=0),
         "not a row",
     ]
     assert controls.booked_from_rows(rows) == (Decimal("13.25"), ["a", "b"])
     assert controls.solve_spend_usd(rows) == controls.PRIOR_LINEAGE_SPEND_USD + Decimal("13.25")
+
+
+@pytest.mark.parametrize("observability, model_calls", [
+    # Reached Codex, then lost its booking: step 2 rebuilt the row after the
+    # runner returned (a deliverable _save_files refused, a full disk).
+    ({"preprocessors": []}, 1),
+    ({"preprocessors": []}, 4),
+    # No receipt says no call was made.
+    ({"preprocessors": []}, None),
+    (None, None),
+    # A receipt cannot outweigh the runner's own evidence.
+    ({"runner_evidence": {}}, 0),
+    ({"preprocessors": []}, True),
+    ({"preprocessors": []}, "0"),
+])
+def test_a_row_without_a_booking_counts_as_zero_only_when_no_codex_call_was_made(observability, model_calls):
+    with pytest.raises(controls.SolBatchControlsRefused) as refused:
+        controls.booked_from_rows([_row("a", "error", observability, model_calls=model_calls)])
+    assert str(refused.value) == "sol_batch_prior_spend_unaccounted"
+
+
+def test_the_rows_step2_persists_decide_by_receipt_not_by_error_text(tmp_path, unit_runner, ledgers):
+    ledger = ledgers()
+    executor, _ = _executor(ledger)
+    executor.runner._reserve_call(TASKS[0])
+    reached = ledger.receipt_for(TASKS[0], "problem_solving_cost").as_dict()
+    never = ledger.receipt_for(TASKS[1], "problem_solving_cost").as_dict()
+    assert (reached["model_calls"], never["model_calls"]) == (1, 0)
+    # The two row shapes step 2's _execute_single_task returns without a
+    # booking: its generic except after the runner, and the reference check
+    # before it. Both rebuild observability from nothing.
+    lost = {"task_id": TASKS[0], "status": "error", "error": "ValueError: deliverable path is too deep",
+            "observability": step2._build_execution_observability(None, []), "problem_solving_cost": reached}
+    early = {"task_id": TASKS[1], "status": "error", "error": "reference_input_integrity_failed: sha256",
+             "observability": step2._build_execution_observability(None, []), "problem_solving_cost": never}
+    persisted = step2._public_persisted_results([lost, early])
+    # A checkpoint keeps only a public projection of the error.
+    assert not persisted[1]["error"].startswith("reference_input_integrity_failed")
+    with pytest.raises(controls.SolBatchControlsRefused):
+        controls.booked_from_rows(persisted[:1])
+    assert controls.booked_from_rows(persisted[1:]) == (Decimal(0), [])
 
 
 @pytest.mark.parametrize("observability", [
@@ -840,7 +997,7 @@ def test_install_seeds_from_prior_legs_once_and_skips_tasks_already_in_the_ledge
         _row(TASKS[1], "success", {"budget_metrics": {"conservative_cost_usd": 2.5},
                                     "runner_evidence": {}}),
         _row(TASKS[2], "pending"),
-        _row(TASKS[3], "error", {"error_category": "reference_input_integrity_failed"}),
+        _row(TASKS[3], "error", {"preprocessors": []}, model_calls=0),
     ]}
 
     session = controls.install(executor, **_install_kwargs(settings, ledger, tmp_path, restored_progress=restored))

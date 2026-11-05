@@ -649,13 +649,19 @@ class CombinedGradingAdmission:
             try:
                 while data:
                     data = data[os.write(self._fd, data):]
-                os.fsync(self._fd)
             except OSError:
                 # A torn line makes the journal unreadable to the next
                 # preflight, which refuses; this process stops admitting.
                 self._journal_failed = True
                 raise
+            # The whole line is written, so its seq is spent even if the fsync
+            # below fails; the next line must never repeat it.
             self._seq += 1
+            try:
+                os.fsync(self._fd)
+            except OSError:
+                self._journal_failed = True
+                raise
 
     def _record(self, event: str, **fields: Any) -> None:
         """Journal a conclusion or stop without raising into the caller."""
@@ -945,6 +951,11 @@ def run(step8_argv: Sequence[str], inference_revision: str) -> int:
         run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
         if not _RUN_ID.fullmatch(run_id) or not _RUN_ATTEMPT.fullmatch(run_attempt):
             _refuse("GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT name the journal and must be set")
+        # A re-run of a failed job can follow an attempt whose journal never
+        # reached main; its preflight would not see that spend and could
+        # spend it again. sol_batch_controls refuses solve re-runs the same way.
+        if run_attempt != "1":
+            _refuse("a GitHub re-run would forget spend from an unpublished journal; dispatch a fresh run")
         try:
             inference = json.loads(
                 (Path("workspace") / "step2_inference_results.json").read_text(encoding="utf-8")

@@ -35,8 +35,11 @@
 #      side keeps 54 for grading and reserves 51 for each attempt, so no
 #      attempt starts once booked solve spend passes 95. The check runs
 #      between attempts, so one attempt may overshoot; the owner accepted
-#      that. Where this paragraph and the constants in `sol_batch_controls.py`
-#      differ, the constants are authoritative.
+#      that. A turn that ends unfinished (timeout, content stop, transport
+#      failure) also books the one request it may have left in flight, which
+#      Codex never reports: at most 28.26, the whole 1M window uncached plus
+#      128,000 output tokens. Where this paragraph and the constants in
+#      `sol_batch_controls.py` differ, the constants are authoritative.
 #   3. Served model. Nothing checks it per request. Diagnostic run
 #      40967326333, whose one request came back reporting gpt-5.6-sol at
 #      reasoning effort max, and this run's own records stand in for that.
@@ -103,7 +106,9 @@
 # The dispatch passes `wall_timeout` 0, so this file's 170 is the watchdog,
 # and every relay leg is handed the same 0. A non-zero input wins over this
 # file: the input's default, 290, plus one worst-case task passes step 2a's
-# 350-minute cap, which kills the leg before it can upload a checkpoint.
+# 350-minute cap, which kills the leg before it can upload a checkpoint. So
+# `sol_batch_controls.py` refuses any leg whose watchdog is not between 1 and
+# 170 minutes (`sol_batch_watchdog_drift`) before its first attempt.
 #
 # Relay legs
 # ----------
@@ -121,11 +126,23 @@
 #   - A leg re-run with GitHub's re-run button would restart from an older
 #     checkpoint. `sol_batch_controls.py` refuses any run attempt other than
 #     the first.
-#   - A leg that dies before uploading a checkpoint takes its spend with it.
-#     Before dispatching again, raise `PRIOR_LINEAGE_SPEND_USD` in
-#     `sol_batch_controls.py` by pull request, by the amount that leg's job
-#     log or batch-results artifact records. Relay legs run the first leg's
-#     `batch-runner/` tree, so only a fresh dispatch sees the raise.
+#   - A fresh dispatch (relay_run 0) restores no rows, so it starts from
+#     `PRIOR_LINEAGE_SPEND_USD` alone and knows nothing of earlier lineages.
+#     Before ANY fresh exp036 dispatch that follows one which spent anything
+#     -- a leg died without a checkpoint, a relay leg failed before step 2,
+#     or the final leg ended red -- raise `PRIOR_LINEAGE_SPEND_USD` in
+#     `sol_batch_controls.py` by pull request, by the last cumulative
+#     "[sol-batch] ... solve spend" line each earlier lineage printed (job
+#     log or batch-results artifact). That includes lineages whose legs did
+#     upload a checkpoint. Relay legs run the first leg's `batch-runner/`
+#     tree, so only a fresh dispatch sees the raise.
+#   - To continue a lineage whose relay leg died before step 2, dispatch
+#     that leg again by hand with the same relay_run, relay_lineage_id and
+#     source_sha, wall_timeout 0 and codex_foundry_confirmed true, rather
+#     than starting a fresh lineage.
+#   - A row that reached Codex but lost its booking (an error after the
+#     runner returned) makes the next leg and the grade preflight refuse
+#     (`sol_batch_prior_spend_unaccounted`).
 #
 # The dispatch
 # ------------
@@ -138,6 +155,17 @@
 # Everything else stays at its leg-0 default. `dry_run: false` is what uploads
 # the result that grading downloads; `output.publish_to_hf` below does not
 # decide it.
+#
+# Dispatch exactly once. batch-run.yml has no concurrency group, so never
+# dispatch while another exp036 run is queued or running, and never retry a
+# `gh workflow run` that may already have succeeded: each lineage gets its own
+# full solve gate, and two of them can pass 200 before grading starts.
+#
+# Grading: never use GitHub's re-run button on the grade job
+# (`sol_batch_grading.py` refuses any run attempt but the first). If the
+# grade job dies or its "Commit combined solve+grade USD journal" step is red,
+# commit that run's journal from its cost-ledger artifact under
+# data/grades/_combined_usd/exp036_sol_fixed5/ before any new grade dispatch.
 #
 # On the final leg step 6 writes the narrative report with two GPT-5.6 Sol
 # Max calls, outside the solve ledger. `sol_batch_grading.py` counts them as a

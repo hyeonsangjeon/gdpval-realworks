@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import errno
 import hashlib
 import json
 import os
@@ -315,8 +316,20 @@ def test_the_paid_job_checks_before_oidc_and_records_its_journal_before_the_grad
     assert len(commit) == 1
     assert commit[0].startswith("git commit --only ") and commit[0].endswith('-- "$JOURNAL"')
     assert run.index("check-journal") < run.index("git add")
+    # A journal that does not parse is still committed, so the next preflight
+    # refuses rather than never seeing that spend; the step still goes red.
+    assert 'if ! python batch-runner/sol_batch_grading.py check-journal --journal "$JOURNAL"; then' in run
+    assert run.count("check-journal") == 1
     assert 'git rev-parse HEAD >> "$PUBLISHED_COMMITS_FILE"' in run
     assert run.index('if [[ "$JOURNAL_PUSHED" != "true" ]]') < run.index("git rev-parse HEAD >>")
+    assert run.index("git rev-parse HEAD >>") < run.index('if [[ "$JOURNAL_READABLE" != "true" ]]')
+
+    # A journal that cannot be pushed survives in the always() cost-ledger upload.
+    upload = _step("grade", "Upload cost ledger")
+    assert "always()" in upload["if"] and "steps." not in upload["if"]
+    glob = "data/grades/_combined_usd/**/*.combined_usd.jsonl"
+    assert glob in upload["with"]["path"].splitlines()
+    assert glob.startswith(grading.JOURNAL_DIR.as_posix() + "/**/")
 
 
 def test_both_grading_input_pins_cover_the_admission_and_what_it_imports():
@@ -329,6 +342,32 @@ def test_both_grading_input_pins_cover_the_admission_and_what_it_imports():
     for module in (grading, controls, usd, gpt54_v2_grading_input):
         relative = Path(module.__file__).resolve().relative_to(REPO_ROOT).as_posix()
         assert any(relative == entry or relative.startswith(entry + "/") for entry in paid), relative
+
+    # Everything a paid grade imports, not only its first level: a fresh
+    # interpreter, so modules other tests loaded cannot hide or add anything.
+    probe = (
+        "import json, sys\n"
+        "for name in ('step8_grade', 'sol_batch_grading', 'sol_batch_controls',\n"
+        "             'gpt56_pilot_usd_budget', 'step9_merge_shards'):\n"
+        "    __import__(name)\n"
+        "print(json.dumps(sorted({getattr(m, '__file__', None) or '' for m in list(sys.modules.values())})))\n"
+    )
+    loaded = json.loads(subprocess.run(
+        [sys.executable, "-c", probe], cwd=BATCH_RUNNER, env=dict(os.environ),
+        capture_output=True, text=True, check=True, timeout=300,
+    ).stdout)
+    imported = set()
+    for name in loaded:
+        if not name:
+            continue
+        path = Path(name).resolve()
+        if REPO_ROOT not in path.parents or "site-packages" in path.parts:
+            continue
+        imported.add(path.relative_to(REPO_ROOT).as_posix())
+    assert "batch-runner/gpt54_comparison_preflight.py" in imported
+    uncovered = sorted(relative for relative in imported
+                       if not any(relative == entry or relative.startswith(entry + "/") for entry in paid))
+    assert uncovered == []
 
 
 # -- (5) applicability --------------------------------------------------------
@@ -469,7 +508,8 @@ def test_the_seed_is_bound_to_one_full_inference_commit(in_batch_runner, revisio
 # -- (7) the published solve spend --------------------------------------------
 
 
-def _task_row(task_id: str, booked: object = None, *, reached_runner: bool = True, status: str = "success") -> dict:
+def _task_row(task_id: str, booked: object = None, *, reached_runner: bool = True, status: str = "success",
+              model_calls: int | None = None) -> dict:
     observability: dict = {}
     if reached_runner:
         observability["runner_evidence"] = {"schema_version": "native-runner-evidence-v1", "stage": "inference"}
@@ -477,7 +517,14 @@ def _task_row(task_id: str, booked: object = None, *, reached_runner: bool = Tru
         # step2._bounded_budget_metrics publishes the booked USD as a float.
         observability["budget_metrics"] = {"schema_version": "1.0", "conservative_cost_usd": booked,
                                            "usage_complete": True}
-    return {"task_id": task_id, "status": status, "observability": observability}
+    row = {"task_id": task_id, "status": status, "observability": observability}
+    if model_calls is None and not reached_runner:
+        model_calls = 0
+    if model_calls is not None:
+        # The problem_solving_cost receipt step 6 copies onto every task row.
+        row["problem_solving_cost"] = {"status": "not_run" if model_calls == 0 else "partial",
+                                       "model_calls": model_calls}
+    return row
 
 
 def _published(tmp_path: Path, rows: list, ledger_rows: list | None = None, *, experiment_id: str = EXP036,
@@ -531,6 +578,16 @@ def test_a_task_that_reached_the_runner_without_a_booking_refuses(tmp_path):
     with pytest.raises(grading.CombinedUsdRefused) as refused:
         grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
     assert refused.value.code == grading.UNVERIFIED
+    assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
+
+
+def test_a_task_that_reached_codex_and_lost_its_booking_refuses(tmp_path):
+    # Step 2 rebuilt the row after the runner returned, so runner_evidence and
+    # budget_metrics are gone; the solving receipt still counts the call.
+    fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 1.0),
+                                     _task_row(controls.FIXED_TASK_IDS[1], reached_runner=False, model_calls=1)], [])
+    with pytest.raises(grading.CombinedUsdRefused) as refused:
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
     assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
 
 
@@ -870,6 +927,36 @@ def test_unknown_usage_and_a_failed_request_keep_their_whole_reservation(admitte
     assert grading.journal_spend(admission.journal_path) == reserve * 2
 
 
+def test_a_failed_fsync_spends_its_seq_and_the_journal_still_reads(admitted, monkeypatch):
+    admission, recorder = admitted(_seed())
+    with recorder.attributed(task_id="t", stage=STAGE_GRADING):
+        recorder.meter(FakeResponses(), provider="azure", model="gpt-5.6-sol").responses.create(**KWARGS)
+    real_fsync = os.fsync
+    failed: list[int] = []
+
+    def fsync_fails_once(descriptor):
+        if not failed:
+            failed.append(descriptor)
+            raise OSError(errno.EIO, "fsync failed")
+        return real_fsync(descriptor)
+
+    monkeypatch.setattr(grading.os, "fsync", fsync_fails_once)
+    client = FakeResponses()
+    with recorder.attributed(task_id="t", stage=STAGE_GRADING):
+        with pytest.raises(usd.GradingUsdStopped) as stopped:
+            recorder.meter(client, provider="azure", model="gpt-5.6-sol").responses.create(**KWARGS)
+    admission.close(grading.REFUSED_EXIT)
+
+    assert stopped.value.code == grading.UNVERIFIED and client.calls == [] and failed
+    records = _records(admission.journal_path)
+    assert [record["event"] for record in records] == ["open", "reserve", "settle", "reserve", "stop", "close"]
+    assert [record["seq"] for record in records] == list(range(6))
+    # The line whose fsync failed is on disk without a conclusion, so the next
+    # preflight counts its reservation as spent.
+    assert grading.journal_spend(admission.journal_path) == Decimal("0.0315") + _reserve_for(KWARGS)
+    assert grading.main(["check-journal", "--journal", str(admission.journal_path)]) == 0
+
+
 def test_a_request_outside_any_task_stops(admitted):
     admission, recorder = admitted(_seed())
     client = FakeResponses()
@@ -1031,7 +1118,7 @@ def test_run_refuses_what_one_admission_cannot_hold(native_hosted_runner, tmp_pa
     assert not (tmp_path / grading.JOURNAL_DIR).exists()
 
 
-@pytest.mark.parametrize("case", ["other_revision", "no_run_id", "not_the_sol_batch"])
+@pytest.mark.parametrize("case", ["other_revision", "no_run_id", "not_the_sol_batch", "rerun"])
 def test_run_refuses_before_step8_when_the_run_cannot_be_bound(native_hosted_runner, tmp_path, monkeypatch, capsys, case):
     _step8_workspace(tmp_path, monkeypatch)
     revision = step8_fixture.INFERENCE_SHA
@@ -1040,11 +1127,17 @@ def test_run_refuses_before_step8_when_the_run_cannot_be_bound(native_hosted_run
         revision = "c" * 40
     elif case == "no_run_id":
         monkeypatch.delenv("GITHUB_RUN_ID")
+    elif case == "rerun":
+        # "Re-run failed jobs" after an attempt whose journal never reached main.
+        monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
     entered: list[bool] = []
     monkeypatch.setattr(step8, "main", lambda: entered.append(True) or 0)
     assert grading.run(STEP8_ARGV, revision) == grading.REFUSED_EXIT
     assert entered == []
-    assert json.loads(capsys.readouterr().err.splitlines()[-1])["status"] == "refused"
+    refusal = json.loads(capsys.readouterr().err.splitlines()[-1])
+    assert refusal["status"] == "refused"
+    if case == "rerun":
+        assert "re-run" in refusal["detail"]
     assert not (tmp_path / grading.JOURNAL_DIR).exists()
 
 

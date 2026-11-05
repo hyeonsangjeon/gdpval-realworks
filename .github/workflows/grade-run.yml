@@ -573,6 +573,7 @@ jobs:
             .github/workflows/grade-run.yml
             batch-runner/core
             batch-runner/experiments
+            batch-runner/gpt54_comparison_preflight.py
             batch-runner/gpt54_v2_grading_input.py
             batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
@@ -898,6 +899,7 @@ jobs:
             .github/workflows/grade-run.yml
             batch-runner/core
             batch-runner/experiments
+            batch-runner/gpt54_comparison_preflight.py
             batch-runner/gpt54_v2_grading_input.py
             batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
@@ -1278,7 +1280,15 @@ jobs:
             echo "[combined-usd] this run opened no journal; nothing to record"
             exit 0
           fi
-          python batch-runner/sol_batch_grading.py check-journal --journal "$JOURNAL"
+          # Committed whether or not it parses: a journal left off main is
+          # spend the next preflight cannot see, while a committed one that
+          # does not parse makes every later preflight refuse until it is
+          # repaired by hand.
+          JOURNAL_READABLE=true
+          if ! python batch-runner/sol_batch_grading.py check-journal --journal "$JOURNAL"; then
+            JOURNAL_READABLE=false
+            echo "::error::the combined USD journal does not parse; committing it anyway so every later preflight refuses until it is repaired"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- "$JOURNAL"
@@ -1298,10 +1308,13 @@ jobs:
             sleep "$BACKOFF"
           done
           if [[ "$JOURNAL_PUSHED" != "true" ]]; then
-            echo "::error::could not push the combined USD journal to ${GITHUB_REF_NAME} after 6 attempts"
+            echo "::error::could not push the combined USD journal to ${GITHUB_REF_NAME} after 6 attempts; it is in this run's cost-ledger artifact"
             exit 1
           fi
           git rev-parse HEAD >> "$PUBLISHED_COMMITS_FILE"
+          if [[ "$JOURNAL_READABLE" != "true" ]]; then
+            exit 1
+          fi
 
       - name: Commit grade result
         id: commit_grade
@@ -1933,6 +1946,11 @@ jobs:
         # Both sidecars go up. The JSONL is the portable record with a digest;
         # the sqlite3 is what the process was writing into as it went, so it
         # survives even a kill that never let the exporter run.
+        #
+        # The Sol batch's combined USD journal goes up too: when it cannot be
+        # pushed, this copy is the only record of what the grade spent, and it
+        # must be committed under data/grades/_combined_usd before any new
+        # exp036 grade is dispatched.
         if: always() && inputs.dry_run == false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1941,6 +1959,7 @@ jobs:
           path: |
             data/grades/**/*.cost_ledger.jsonl
             data/grades/**/*.cost_ledger.sqlite3
+            data/grades/_combined_usd/**/*.combined_usd.jsonl
           if-no-files-found: warn
           retention-days: 90
 

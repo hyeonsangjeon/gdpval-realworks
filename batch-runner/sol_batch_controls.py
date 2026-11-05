@@ -96,12 +96,24 @@ SOLVE_BUDGET_USD = CEILING_USD - GRADING_RESERVE_USD
 #: One refused first request: 64,000 input tokens x (10.00 + 12.50) plus
 #: 128,000 output tokens x 45.00 per 1M (1.44 + 5.76).
 REFUSED_REQUEST_USD = Decimal("7.20")
+#: Output allowance for the one request a turn that ended unfinished may still
+#: have had in flight; the same 128,000 as REFUSED_REQUEST_USD.
+IN_FLIGHT_OUTPUT_TOKENS = 128_000
+#: Turn endings that leave no billed request in flight: a 429 is not billed,
+#: and a turn that never started sent nothing.
+_NOTHING_IN_FLIGHT = frozenset({"rate_limited", "turn_start_failed"})
+#: Step 2's watchdog in minutes, as exp036_sol_fixed5.yaml's wall clock sizes
+#: it: 15 setup + 170 + one 131-minute task + 5 + 30 fits the 360-minute job.
+WALL_TIMEOUT_MINUTES = 170
 #: Step 6 narrative: two Sol Max calls, 12,288 output tokens at most. Booked by
 #: sol_batch_grading, not by the solve gate.
 NARRATIVE_ALLOWANCE_USD = Decimal("2.00")
-#: Raise by PR before re-dispatching after an exp036 lineage died without a
-#: relay checkpoint. Read its record in that run's batch-results artifact or
-#: job log.
+#: Everything earlier exp036 lineages spent; a fresh dispatch (relay_run 0)
+#: restores no rows and starts from this alone. Raise it by PR before ANY
+#: fresh exp036 dispatch that follows an exp036 dispatch which spent
+#: anything, by that lineage's last cumulative "[sol-batch] ... solve spend"
+#: line (job log or batch-results artifact), including lineages whose legs
+#: did upload a checkpoint.
 PRIOR_LINEAGE_SPEND_USD = Decimal("0")
 USD_CEILING_REACHED = "usd_ceiling_reached"
 WINDOW_MISMATCH = "sol_batch_context_window_mismatch"
@@ -320,16 +332,51 @@ def fmt(amount: Decimal | int | float | str) -> str:
     return format(value.quantize(MONEY_PLACES, rounding=ROUND_CEILING), "f")
 
 
+def in_flight_bound_usd(last: Any, *, rates: SolRates) -> Decimal:
+    """What the one request an unfinished turn may still have had in flight can cost.
+
+    Codex reports usage only when a request completes, so a turn settled after
+    a timeout, a content stop or a transport failure leaves out the request it
+    was waiting on (codex_runner._settle_what_was_measured: "at least this
+    much"). That request re-sends the last completed request's input and
+    output: it is priced as that input grown by that output, with the last
+    request's cached share, plus :data:`IN_FLIGHT_OUTPUT_TOKENS` of output.
+    Without a priceable last request it is the whole 1M window uncached plus
+    the same output, 28.26 at the list meter.
+    """
+    try:
+        breakdown = read_breakdown(last) if last is not None else None
+    except Exception:  # noqa: BLE001 - an unreadable count takes the window bound
+        breakdown = None
+    if breakdown is not None:
+        inputs = _count(breakdown.input_tokens)
+        outputs = _count(breakdown.output_tokens)
+        cached = 0 if breakdown.cached_input_tokens is None else _count(breakdown.cached_input_tokens)
+        if inputs and outputs is not None and cached is not None and cached <= inputs:
+            grown = min(CONTEXT_WINDOW, inputs + outputs)
+            amount = list_price_usd(
+                input_tokens=grown, cached_input_tokens=min(cached, grown),
+                output_tokens=IN_FLIGHT_OUTPUT_TOKENS, rates=rates,
+            )
+            if amount is not None:
+                return amount
+    amount = list_price_usd(input_tokens=CONTEXT_WINDOW, cached_input_tokens=0,
+                            output_tokens=IN_FLIGHT_OUTPUT_TOKENS, rates=rates)
+    assert amount is not None
+    return amount
+
+
 def book_row(
     row: Mapping[str, Any], *, rates: SolRates, evidence: Mapping[str, Any] | None = None,
 ) -> tuple[Decimal, str]:
     """What one Codex ledger row costs the gate, and on what basis.
 
     ``evidence`` is what the attempt itself reported: its error category,
-    items seen and the thread's cache-write count. Usage that was never
-    reported books the whole attempt reserve, except a rate refusal before any
-    item completed, which books one refused first request. Booking a 429 at
-    the full reserve would let two zero-cost refusals close the gate.
+    items seen, the thread's cache-write count and, for a turn that settled
+    without finishing, the bound on the request it left in flight. Usage that
+    was never reported books the whole attempt reserve, except a rate refusal
+    before any item completed, which books one refused first request. Booking
+    a 429 at the full reserve would let two zero-cost refusals close the gate.
     """
     facts = evidence or {}
     state = row.get("state")
@@ -348,6 +395,10 @@ def book_row(
         if amount is None:
             # A turn can settle with no counts (usage_absent).
             return ATTEMPT_RESERVE_USD, "settled_without_usage"
+        in_flight = facts.get("in_flight_usd")
+        if in_flight is not None:
+            # What the stream reported, plus the request it never reported.
+            return amount + Decimal(in_flight), "settled_partial"
         return amount, "settled"
     if state == STATE_REFUSED:
         return REFUSED_REQUEST_USD, "refused_request"
@@ -384,13 +435,31 @@ def _usd(value: Any) -> Decimal:
     return amount
 
 
+def _made_no_codex_call(row: Mapping[str, Any], observability: Mapping[str, Any]) -> bool:
+    """Whether step 2 recorded that no Codex attempt was ever reserved for the row's task.
+
+    Step 2 stamps every row with the task's ``problem_solving_cost`` receipt,
+    read from the per-turn ledger each attempt reserves in, so ``model_calls``
+    0 means no attempt reached Codex (reference_input_integrity_failed is the
+    known case). A missing ``runner_evidence`` cannot say this: step 2 drops
+    it, and the booking with it, when anything after the runner raises. Nor
+    can the error text: the checkpoint keeps only a public projection of it,
+    and self_report.json drops it.
+    """
+    if "runner_evidence" in observability:
+        return False
+    receipt = row.get("problem_solving_cost")
+    calls = receipt.get("model_calls") if isinstance(receipt, dict) else None
+    return type(calls) is int and calls == 0
+
+
 def booked_from_rows(rows: Iterable[Any]) -> tuple[Decimal, list[str]]:
     """Sum the USD earlier legs booked onto their task rows.
 
-    A row that reached the Codex runner without a booking refuses: counting it
-    as zero would under-seed the gate. A row that never reached the runner
-    (for example reference_input_integrity_failed) spent nothing. Pending rows
-    are watchdog placeholders for tasks that have not run.
+    A row without a booking counts as zero only when its solving receipt
+    shows no Codex call at all; any other such row refuses, because counting
+    it as zero would under-seed the gate. Pending rows are watchdog
+    placeholders for tasks that have not run.
     """
     total = Decimal(0)
     tasks: list[str] = []
@@ -404,7 +473,7 @@ def booked_from_rows(rows: Iterable[Any]) -> tuple[Decimal, list[str]]:
         if isinstance(metrics, dict) and "conservative_cost_usd" in metrics:
             total += _usd(metrics["conservative_cost_usd"])
             tasks.append(str(row.get("task_id")))
-        elif "runner_evidence" in observability:
+        elif not _made_no_codex_call(row, observability):
             raise SolBatchControlsRefused("sol_batch_prior_spend_unaccounted")
     return total, tasks
 
@@ -560,26 +629,38 @@ class SolBatchSession:
             except Exception:  # noqa: BLE001 - an unreadable count falls back to the bound
                 totals = None
             reported = totals.cache_write_input_tokens if totals is not None else None
+            category = outcome.get("error_category")
+            # A turn that did not finish may have had one request in flight,
+            # which its settled total never includes.
+            in_flight = None
+            if outcome.get("success") is not True and not (
+                    isinstance(category, str) and category in _NOTHING_IN_FLIGHT):
+                in_flight = in_flight_bound_usd(
+                    getattr(usage, "last", None) if usage is not None else None, rates=self.rates)
             new = [entry for entry in self._rows(key) if entry["call_id"] not in before]
             booked = []
+            in_flight_booked = False
             for entry in new:
                 # The thread total belongs to this attempt's one turn; with more
                 # rows than turns it cannot be attributed, and the bound applies.
                 facts = {
-                    "error_category": outcome.get("error_category"),
+                    "error_category": category,
                     "items_seen": diagnostics.get("items_seen"),
                     "cache_write_input_tokens": reported if len(new) == 1 else None,
                 }
+                if in_flight is not None and entry.get("state") == STATE_SETTLED:
+                    facts["in_flight_usd"] = in_flight
+                    in_flight_booked = True
                 self.evidence[entry["call_id"]] = facts
                 booked.append(book_row(entry, rates=self.rates, evidence=facts))
             window = app_server["model_context_window"]
             if window is not None and window != CONTEXT_WINDOW:
                 self.window_mismatch = True
-            category = outcome.get("error_category")
             row.update(
                 call_ids=[entry["call_id"] for entry in new],
                 booked_usd=fmt(sum((amount for amount, _ in booked), Decimal(0))),
                 basis="+".join(basis for _, basis in booked) or "no_row",
+                in_flight_usd=fmt(in_flight) if in_flight_booked else None,
                 input_tokens=_sum_counts(entry.get("input_tokens") for entry in new),
                 cached_input_tokens=_sum_counts(entry.get("cached_input_tokens") for entry in new),
                 output_tokens=_sum_counts(entry.get("output_tokens") for entry in new),
@@ -805,7 +886,7 @@ def install(
     executor: Any, *, experiment_id: str, condition_key: str, codex_settings: Any,
     cost_ledger: Any, run_id: str, task_ids: Sequence[str], max_retries: Any,
     resume_max_rounds: Any, task_deadlines: Any, restored_progress: Mapping[str, Any] | None,
-    workspace: Path | str,
+    workspace: Path | str, wall_timeout: Any,
 ) -> SolBatchSession | None:
     """Attach the Sol controls to step 2's executor, or do nothing at all.
 
@@ -823,6 +904,7 @@ def install(
             codex_settings=codex_settings, cost_ledger=cost_ledger, run_id=run_id,
             task_ids=task_ids, max_retries=max_retries, resume_max_rounds=resume_max_rounds,
             task_deadlines=task_deadlines, restored_progress=restored_progress, workspace=workspace,
+            wall_timeout=wall_timeout,
         )
     except SolBatchControlsRefused:
         raise
@@ -834,7 +916,7 @@ def _install(
     executor: Any, *, experiment_id: str, condition_key: str, codex_settings: Any,
     cost_ledger: Any, run_id: str, task_ids: Sequence[str], max_retries: Any,
     resume_max_rounds: Any, task_deadlines: Any, restored_progress: Mapping[str, Any] | None,
-    workspace: Path | str,
+    workspace: Path | str, wall_timeout: Any,
 ) -> SolBatchSession:
     _require(experiment_id == EXPERIMENT_ID, "sol_batch_unregistered_experiment")
     _require(type(codex_settings) is CodexProviderSettings and codex_settings.model == SOL_MODEL,
@@ -851,6 +933,11 @@ def _install(
              and type(resume_max_rounds) is int and resume_max_rounds == 0,
              "sol_batch_retry_policy_drift")
     _require(tuple(task_ids) == FIXED_TASK_IDS, "sol_batch_task_set_drift")
+    # Step 2's watchdog, as step 2a resolved it. The dispatch input's default
+    # (290) or no watchdog at all lets a late task run past the job's
+    # 360-minute cap, which kills the leg before it uploads a checkpoint.
+    _require(type(wall_timeout) is int and 0 < wall_timeout <= WALL_TIMEOUT_MINUTES,
+             "sol_batch_watchdog_drift")
     # A GitHub re-run restarts from an older checkpoint, or from nothing, and
     # would forget spend already made. Relay legs are fresh dispatches.
     _require(os.environ.get("GITHUB_RUN_ATTEMPT", "1") in {"", "1"}, "sol_batch_rerun_refused")
@@ -898,6 +985,7 @@ def _install(
         "experiment_id": experiment_id,
         "run_id": run_id,
         "condition_key": condition_key,
+        "wall_timeout_minutes": wall_timeout,
         "github": {"run_id": os.environ.get("GITHUB_RUN_ID"),
                    "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT")},
         "relay_lineage_id": os.environ.get("GDPVAL_RELAY_LINEAGE_ID"),
@@ -930,6 +1018,13 @@ def _install(
                 "refusal with no completed item books one refused request; a "
                 "settled turn without priceable counts books the attempt reserve; "
                 "an abandoned turn books 0"
+            ),
+            "in_flight_rule": (
+                "a settled turn that did not finish, other than a rate refusal, also "
+                "books the request it may have left in flight: the last reported "
+                "request's input grown by its output, at its cached share, plus "
+                f"{IN_FLIGHT_OUTPUT_TOKENS} output tokens; without one, {CONTEXT_WINDOW} "
+                f"uncached input tokens plus {IN_FLIGHT_OUTPUT_TOKENS} output tokens"
             ),
             "prior_lineage_spend_usd": fmt(PRIOR_LINEAGE_SPEND_USD),
             "prior_legs_spend_usd": fmt(prior_legs_usd),

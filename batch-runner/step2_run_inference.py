@@ -4181,6 +4181,7 @@ def _run_inference_impl(
                 task_deadlines=codex_deadlines,
                 restored_progress=prevalidated_progress,
                 workspace=WORKSPACE_DIR,
+                wall_timeout=wall_timeout,
             )
         except sol_batch_controls.SolBatchControlsRefused as exc:
             print(f"❌ Sol batch controls refused this run before any attempt: {exc}")
