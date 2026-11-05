@@ -55,6 +55,82 @@ def test_session_policy_cannot_be_enabled_with_a_paid_observer_mode():
     assert run_policy_fixture("mode_mismatch") == []
 
 
+@pytest.mark.parametrize("case,field,expected,actual", [
+    ("bad_model", "params.model", "gpt-5.6-sol", {"type": "string", "value": "gpt-5.6-sol-fast"}),
+    ("bad_catalog_default", "params.model", "gpt-5.6-sol", {"type": "string", "value": "gpt-5.3-codex"}),
+    ("bad_provider", "params.modelProvider", "vscode-proxy", {"type": "string", "value": "openai"}),
+    ("bad_approval", "params.approvalPolicy", "untrusted", {"type": "string", "value": "never"}),
+    ("bad_web", "params.config.web_search", "disabled", {"type": "string", "value": "live"}),
+    ("bad_context", "params.config.model_context_window", {"absent_or": 1000000}, {"type": "string", "value": "1000000"}),
+    ("bad_numeric_context", "params.config.model_context_window", {"absent_or": 1000000}, {"type": "number", "value": 922000}),
+    ("bad_null_context", "params.config.model_context_window", {"absent_or": 1000000}, {"type": "null", "value": None}),
+    ("bad_effort", "params.config.model_reasoning_effort", {"absent_or": "max"}, {"type": "string", "value": "xhigh"}),
+    ("bad_null_effort", "params.config.model_reasoning_effort", {"absent_or": "max"}, {"type": "null", "value": None}),
+    ("bad_fallback", "params.allowProviderModelFallback", {"absent_or": False}, {"type": "boolean", "value": True}),
+    ("bad_null_fallback", "params.allowProviderModelFallback", {"absent_or": False}, {"type": "null", "value": None}),
+    ("bad_missing_model", "params.model", "gpt-5.6-sol", {"type": "undefined", "value": "not_reported"}),
+    ("bad_null_model", "params.model", "gpt-5.6-sol", {"type": "null", "value": None}),
+    ("bad_no_params", "params", {"truthy": True}, {"type": "undefined", "value": "not_reported"}),
+    ("bad_null_params", "params", {"truthy": True}, {"type": "null", "value": None}),
+    ("bad_no_config", "params.config", {"truthy": True}, {"type": "undefined", "value": "not_reported"}),
+    ("bad_null_config", "params.config", {"truthy": True}, {"type": "null", "value": None}),
+    ("bad_id", "id.type", ["string", "number"], "boolean"),
+    ("bad_no_id", "id.type", ["string", "number"], "undefined"),
+    ("bad_reply", "result", {"present": False}, {"present": True}),
+    ("bad_error", "error", {"present": False}, {"present": True}),
+    ("bad_mcp", "params.config.mcp_servers", {"entry_count": 0}, {"type": "object", "entry_count": 1}),
+])
+def test_thread_refusal_reports_field_expected_typed_actual_without_forwarding(case, field, expected, actual):
+    rows = run_policy_fixture(case)
+    refusals = [row for row in rows if row["kind"] == "blocked"]
+    assert len(refusals) == 1 and refusals[0]["reason"] == "session_policy_thread_contract_refused"
+    report = next(row for row in refusals[0]["rejections"] if row["field"] == field)
+    assert report == {"field": field, "expected": expected, "actual": actual}
+    assert not any(row["kind"] == "ipc_request" and row.get("value", {}).get("method") == "thread/start" for row in rows)
+    capture = wire.analyze(rows, synthetic=True)
+    assert capture["capture_errors"] == ["session_policy_thread_contract_refused"]
+    assert capture["admission_allowed"] is False and capture["capi_requests"] == []
+    assert next(row for row in capture["records"] if row["kind"] == "blocked")["rejections"] == refusals[0]["rejections"]
+
+
+@pytest.mark.parametrize("case", ["bad_permissions", "bad_both_permissions", "bad_null_sandbox"])
+def test_thread_refusal_describes_both_sides_of_exclusive_read_only_profile(case):
+    refusal = next(row for row in run_policy_fixture(case) if row["kind"] == "blocked")
+    report = next(row for row in refusal["rejections"] if row["field"] == "params.sandbox/permissions")
+    assert report["expected"] == {"one_of": [
+        {"sandbox": "read-only", "permissions": "absent"},
+        {"sandbox": "absent", "permissions": "vscode-workspace-read-only"}]}
+    assert set(report["actual"]) == {"sandbox", "permissions"}
+    assert report["actual"]["sandbox"] == ({"type": "null", "value": None} if case == "bad_null_sandbox" else
+        {"type": "string", "value": "read-only"} if case == "bad_both_permissions" else
+        {"type": "undefined", "value": "not_reported"})
+
+
+def test_thread_refusal_reports_every_mismatch_without_claiming_an_applied_value():
+    refusal = next(row for row in run_policy_fixture("bad_multiple") if row["kind"] == "blocked")
+    assert refusal["rejected_fields"] == ["params.model", "params.approvalPolicy", "params.config.model_context_window"]
+    assert refusal["synthetic"] is True
+
+
+@pytest.mark.parametrize("case,value", [
+    ("bad_diagnostic_secret", "[REDACTED]"), ("bad_diagnostic_encoded", "[REDACTED]"),
+    ("bad_diagnostic_object", "[NON_SCALAR]"), ("bad_diagnostic_long", "[VALUE_TOO_LONG]")])
+def test_thread_refusal_redacts_before_artifact_without_raw_frames_or_nested_values(case, value):
+    rows = run_policy_fixture(case)
+    refusal = next(row for row in rows if row["kind"] == "blocked")
+    report = next(row for row in refusal["rejections"] if row["field"] == "params.model")
+    assert report["actual"]["value"] == value
+    assert "wire_text_redacted" not in refusal and "value" not in refusal
+    assert "PRIVATE_FIXTURE" not in json.dumps(rows)
+
+
+@pytest.mark.parametrize("case", ["valid_sandbox", "valid_optional_omitted", "valid_optional_exact"])
+def test_thread_contract_existing_allowed_alternatives_stay_byte_preserving(case):
+    rows = run_policy_fixture(case)
+    assert not any(row["kind"] in {"blocked", "capi_request"} for row in rows)
+    assert [row["value"]["method"] for row in rows if row["kind"] == "ipc_request"] == ["thread/start", "thread/unsubscribe"]
+
+
 def test_session_policy_native_reports_never_fill_missing_fields_from_echoes_or_process_config():
     import ghcp_ahp_thread_policy as policy
 

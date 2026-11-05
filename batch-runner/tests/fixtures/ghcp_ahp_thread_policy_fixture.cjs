@@ -61,9 +61,54 @@ async function main() {
   if (scenario === 'bad_fallback') request.params.allowProviderModelFallback = true;
   if (scenario === 'bad_mcp') request.params.config.mcp_servers = { unapproved: {} };
   if (scenario === 'bad_reply') request.result = {};
+  if (scenario === 'bad_catalog_default') request.params.model = 'gpt-5.3-codex';
+  if (scenario === 'bad_missing_model') delete request.params.model;
+  if (scenario === 'bad_null_model') request.params.model = null;
+  if (scenario === 'bad_no_params') delete request.params;
+  if (scenario === 'bad_null_params') request.params = null;
+  if (scenario === 'bad_no_config') delete request.params.config;
+  if (scenario === 'bad_null_config') request.params.config = null;
+  if (scenario === 'bad_both_permissions') request.params.sandbox = 'read-only';
+  if (scenario === 'bad_null_sandbox') request.params.sandbox = null;
+  if (scenario === 'bad_numeric_context') request.params.config.model_context_window = 922000;
+  if (scenario === 'bad_null_context') request.params.config.model_context_window = null;
+  if (scenario === 'bad_null_effort') request.params.config.model_reasoning_effort = null;
+  if (scenario === 'bad_null_fallback') request.params.allowProviderModelFallback = null;
+  if (scenario === 'bad_id') request.id = true;
+  if (scenario === 'bad_no_id') delete request.id;
+  if (scenario === 'bad_error') request.error = { message: secret };
+  if (scenario === 'bad_multiple') {
+    request.params.model = 'gpt-5.3-codex';
+    request.params.approvalPolicy = 'on-request';
+    request.params.config.model_context_window = 922000;
+  }
+  if (scenario === 'bad_diagnostic_secret') request.params.model = secret;
+  if (scenario === 'bad_diagnostic_encoded') request.params.model = Buffer.from(secret).toString('base64');
+  if (scenario === 'bad_diagnostic_object') request.params.model = { token: secret, prompt: 'PRIVATE_FIXTURE' };
+  if (scenario === 'bad_diagnostic_long') request.params.model = 'x'.repeat(300) + secret;
+  if (scenario === 'valid_sandbox') {
+    delete request.params.permissions;
+    request.params.sandbox = 'read-only';
+  }
+  if (scenario === 'valid_optional_omitted') delete request.params.config.model_context_window;
+  if (scenario === 'valid_optional_exact') {
+    request.params.config.model_reasoning_effort = 'max';
+    request.params.config.mcp_servers = {};
+    request.params.allowProviderModelFallback = false;
+  }
   if (scenario.startsWith('bad_')) {
     assert.throws(() => child.stdin.write(encode(request)), /session_policy_thread_contract_refused/);
-    assert.equal(writes.length, 0); return;
+    assert.equal(writes.length, 0);
+    assert.equal(fetches.length, 0);
+    assert.equal(claims, 0);
+    const refusal = records.find(row => row.reason === 'session_policy_thread_contract_refused');
+    assert(refusal.rejections.length > 0);
+    assert.deepEqual(refusal.rejected_fields, refusal.rejections.map(row => row.field));
+    for (const rejection of refusal.rejections) {
+      assert.deepEqual(Object.keys(rejection).sort(), ['actual', 'expected', 'field']);
+    }
+    assert(!JSON.stringify(records).includes('PRIVATE_FIXTURE'));
+    return;
   }
   if (['turn', 'resume', 'fork', 'exec', 'reply', 'partial', 'batch', 'end'].includes(scenario)) {
     const method = { turn: 'turn/start', resume: 'thread/resume', fork: 'thread/fork', exec: 'command/exec' }[scenario] || 'turn/start';
