@@ -1,6 +1,6 @@
 name: GHCP patched-runtime model-free tests
 
-# Offline fixtures only: no installed host, SDK, source build or session launch.
+# Offline contracts plus source-only typechecking; no host or session launch.
 # Keep the original branch probe and its historical hash contracts untouched.
 on:
   push:
@@ -85,7 +85,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 1477, "workflow-guards.xml": 25}
+          expected = {"contracts.xml": 1477, "workflow-guards.xml": 48}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
@@ -108,6 +108,203 @@ jobs:
             ${{ runner.temp }}/ghcp-patched-ci/contracts.xml
             ${{ runner.temp }}/ghcp-patched-ci/workflow-guards.xml
             ${{ runner.temp }}/ghcp-patched-ci/test-counts.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  patched-codex-typecheck:
+    name: patched Codex module typecheck
+    needs: contracts
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - id: checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # existing v5.1.0 pin
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # existing v7.0.0 pin
+        with:
+          python-version: '3.12.11'
+      - id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # existing v7.0.0 pin
+        with:
+          node-version: '24.22.1' # unchanged upstream .nvmrc, not the fixture Node
+          package-manager-cache: false
+      - id: prepare
+        name: Verify the pinned source and exact three-file patch
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_ACTIONS" = true
+          test "$RUNNER_OS" = Linux
+          . /etc/os-release
+          test "$ID:$VERSION_ID" = ubuntu:24.04
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          mkdir "$evidence"
+          touch "$evidence/empty-global.npmrc"
+          patch_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-config-ready.patch"
+          printf '%s  %s\n' \
+            cd5ff8f2e1ad1f140892febdc75f288adfe8e3c96bd4d3b8e9a4078a90ef5049 batch-runner/ghcp_ahp_probe_manifest.json \
+            a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb "$patch_file" | sha256sum --check
+          env -i PATH="$PATH" LANG=C.UTF-8 curl --fail --location \
+            --proto '=https' --proto-redir '=https' --max-time 300 --max-filesize 100663296 \
+            --output "$evidence/source.tgz" \
+            https://codeload.github.com/microsoft/vscode/tar.gz/2c33b50b16c472efe58357d1d2a8a5414bc23fbf
+          printf '%s  %s\n' cb7fb5b3b219585a63ec8e3dbc66bab135d2fe900b0541e73862da5302c24206 "$evidence/source.tgz" | sha256sum --check
+          mkdir "$evidence/source"
+          tar -xzf "$evidence/source.tgz" --strip-components=1 --no-same-owner --no-same-permissions -C "$evidence/source"
+          cd "$evidence/source"
+          printf '%s  %s\n' \
+            b7126bf50b27a16c59ec163c2d4009d96a540a4bb6774a5b2f0b86123047a765 src/vs/platform/agentHost/common/agent.ts \
+            24cf78f2894471cd05a9ad97d337d963f5c0f3ad964907a792e25faf37a424fa src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            21ded7ef660f7aaa0021e00eb7f890dedd2406284a802edba5bce3cff95ba659 src/vs/platform/agentHost/node/agentService.ts > "$evidence/upstream-source.sha256"
+          sha256sum --check "$evidence/upstream-source.sha256"
+          git apply --check "$patch_file"
+          git apply "$patch_file"
+          git apply --reverse --check "$patch_file"
+          printf '%s  %s\n' \
+            a4741c2a83f02acb6c7fbb61ae9800a5b9ce71d837317cb15fe79f3a2fead817 src/vs/platform/agentHost/common/agent.ts \
+            2adeb9ebfc066b728ca3f62e96853ce2cdc020a530c7b741ae0da6ddd9678ede src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            280f71720d83a4326a514c16cb1d08c6ca9e4430fdb58fc98c40afc33bebb682 src/vs/platform/agentHost/node/agentService.ts > "$evidence/patched-source.sha256"
+          sha256sum --check "$evidence/patched-source.sha256"
+          printf '%s  %s\n' \
+            6529eb9164da5d1c108edaab1210636affcaf19f5600980dfa46272323239679 package.json \
+            9f1aa3f23b902ee28a78ddb963c6fa5f8a8d8f032f3325a00756a82b9f8ad24f build/package.json \
+            b2512f1e9f111f215168ef26d284e1aaa0da59e32fea13d134799cc74400b9ee package-lock.json \
+            2975565119f8cb74d44eb74bd6a2c166027eafa953ddb863b125d3df7875d2a7 build/package-lock.json \
+            81c68bd8031151d4363aec9632af6b6baf289f87fabcd4bfd335872ff6f69be7 .npmrc \
+            b3da7ad335f268736ee1f90c20161e3307863e1e2e56f86c8c9ab1ff0dca507c build/.npmrc \
+            d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33 .nvmrc \
+            6c35a05a6798601b37cd28c535f4e7258ffdf34e271fbf6a4411d328f1db2332 src/tsconfig.json \
+            74359c514fb10624b9871279dd094fdd8034d4f3e37b154b5b98726db361c8c4 src/tsconfig.base.json \
+            c8ec14dbf6814a112522a83fefbca7e94d083712baf132079b39a2876f099b3a build/npm/electronTypes.ts \
+            5f7dd4189640be2f627607f7ef899011116f89645b56ee830f1a2c8f96dd69d5 build/checksums/electron.txt > "$evidence/source-invariants.sha256"
+          sha256sum --check "$evidence/source-invariants.sha256"
+          test "$(env -i PATH="$PATH" node --version)" = v24.22.1
+      - id: dependencies
+        name: Install the unchanged root and build lockfiles without lifecycle execution
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          sha256sum --check "$evidence/source-invariants.sha256"
+          # Retain the locked draft's lifecycle-disable setting; this does not suppress tsc diagnostics.
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_cache="$evidence/npm-cache" \
+            npm ci --ignore-scripts --no-audit --no-fund 2>&1 | tee "$evidence/dependencies-root.log"
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_cache="$evidence/npm-cache" \
+            npm --prefix build ci --ignore-scripts --no-audit --no-fund 2>&1 | tee "$evidence/dependencies-build.log"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256"
+      - id: electron_types
+        name: Prepare checksum-verified Electron declarations using the pinned upstream helper
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          sha256sum --check "$evidence/source-invariants.sha256"
+          env -i PATH="$PATH" LANG=C.UTF-8 node build/npm/electronTypes.ts 2>&1 | tee "$evidence/electron-types.log"
+          test -s .build/typings/electron.d.ts
+          expected="$(sed -n 's/^\([a-f0-9]\{64\}\) \*electron\.d\.ts$/\1/p' build/checksums/electron.txt)"
+          test "${#expected}" -eq 64
+          printf '%s  %s\n' "$expected" .build/typings/electron.d.ts > "$evidence/electron-types.sha256"
+          sha256sum --check "$evidence/electron-types.sha256"
+      - id: typecheck
+        name: Typecheck all src modules including the complete patched Codex agent
+        timeout-minutes: 90
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256" "$evidence/electron-types.sha256"
+          # Invoke the unchanged upstream script/tsconfig, including its existing declaration-file policy.
+          # listFiles proves the three patched modules were checked, not a transpile-only substitute.
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_ignore_scripts=true \
+            npm run typecheck-client -- --pretty false --listFiles --extendedDiagnostics 2>&1 | tee "$evidence/patched-typecheck.log"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256" "$evidence/electron-types.sha256"
+      - id: upstream_diagnostic
+        name: On compiler failure only, compare the original pinned source without changing the failed verdict
+        if: failure() && steps.typecheck.outcome == 'failure'
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          patch_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-config-ready.patch"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/patched-source.sha256" "$evidence/electron-types.sha256"
+          git apply --reverse --check "$patch_file"
+          git apply --reverse "$patch_file"
+          sha256sum --check "$evidence/upstream-source.sha256"
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_ignore_scripts=true \
+            npm run typecheck-client -- --pretty false --listFiles --extendedDiagnostics 2>&1 | tee "$evidence/upstream-typecheck.log"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/upstream-source.sha256" "$evidence/electron-types.sha256"
+      - id: results
+        name: Record compilation evidence without authorizing runtime execution
+        if: always()
+        env:
+          PREPARE_OUTCOME: ${{ steps.prepare.outcome }}
+          DEPENDENCIES_OUTCOME: ${{ steps.dependencies.outcome }}
+          ELECTRON_TYPES_OUTCOME: ${{ steps.electron_types.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          UPSTREAM_DIAGNOSTIC_OUTCOME: ${{ steps.upstream_diagnostic.outcome }}
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" LANG=C.UTF-8 RUNNER_TEMP="$RUNNER_TEMP" GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" \
+            PREPARE_OUTCOME="$PREPARE_OUTCOME" DEPENDENCIES_OUTCOME="$DEPENDENCIES_OUTCOME" \
+            ELECTRON_TYPES_OUTCOME="$ELECTRON_TYPES_OUTCOME" TYPECHECK_OUTCOME="$TYPECHECK_OUTCOME" \
+            UPSTREAM_DIAGNOSTIC_OUTCOME="$UPSTREAM_DIAGNOSTIC_OUTCOME" \
+            '${{ steps.python.outputs.python-path }}' -B - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-typecheck"
+          directory.mkdir(exist_ok=True)
+          phases = ("prepare", "dependencies", "electron_types", "typecheck", "upstream_diagnostic")
+          outcomes = {phase: os.environ[phase.upper() + "_OUTCOME"] for phase in phases}
+          log = directory / "patched-typecheck.log"
+          lines = set(log.read_text().splitlines()) if log.is_file() else set()
+          modules = ("src/vs/platform/agentHost/common/agent.ts",
+                     "src/vs/platform/agentHost/node/codex/codexAgent.ts",
+                     "src/vs/platform/agentHost/node/agentService.ts")
+          included = {name: str(directory / "source" / name) in lines for name in modules}
+          passed = all(outcomes[phase] == "success" for phase in phases[:4]) and all(included.values())
+          evidence_files = ("upstream-source.sha256", "patched-source.sha256", "source-invariants.sha256",
+                            "electron-types.sha256", "dependencies-root.log", "dependencies-build.log",
+                            "electron-types.log", "patched-typecheck.log", "upstream-typecheck.log")
+          hashes = {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
+                    for name in evidence_files if (directory / name).is_file()}
+          result = {"evidence_kind": "patched-source-typecheck-no-execution", "execution_allowed": False,
+                    "patched_ghcp": True, "runtime_load_status": "not_executed",
+                    "upstream_commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+                    "patch_sha256": "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb",
+                    "outcomes": outcomes, "patched_modules_in_compiler_input": included,
+                    "typecheck_passed": passed, "evidence_sha256": hashes}
+          (directory / "typecheck-result.json").write_text(json.dumps(result, indent=2) + "\n")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+              summary.write("## Patched Codex source typecheck (no runtime execution)\n\n")
+              summary.write("```json\n" + json.dumps(result, indent=2) + "\n```\n")
+          print(json.dumps(result))
+          if not passed:
+              raise SystemExit("patched_source_typecheck_refused")
+          PY
+      - id: artifacts
+        name: Retain compiler logs and source-only evidence, never an executable candidate
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-codex-typecheck-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-patched-typecheck/*.log
+            ${{ runner.temp }}/ghcp-patched-typecheck/*.sha256
+            ${{ runner.temp }}/ghcp-patched-typecheck/typecheck-result.json
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: false
