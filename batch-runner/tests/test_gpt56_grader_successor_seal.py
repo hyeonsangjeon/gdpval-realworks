@@ -84,12 +84,20 @@ def test_seal_matches_both_immutable_git_sources_and_exact_delta():
 
 def test_only_grader_identity_and_reader_pin_change_not_fixed_conditions():
     old = pilot.load_plan(ROOT / pilot.SOURCE_PROFILE_LONG_CONTEXT)
-    new = pilot.load_plan(ROOT / pilot.SOURCE_PROFILE)
+    grader_seal_path = ROOT / pilot.SOURCE_PROFILE_GRADER_SEAL
+    assert hashlib.sha256(grader_seal_path.read_bytes()).hexdigest() == pilot.SOURCE_PROFILE_GRADER_SEAL_SHA256
+    new = pilot.load_plan(grader_seal_path)
     expected = deepcopy(old)
     expected["dispatch_grading_identity"]["grader_template_source_hash"] = successor.GRADER_HASH
     reader = "batch-runner/gpt56_sol_codex_pilot_preflight.py"
-    expected["source_pins"][reader] = hashlib.sha256((ROOT / reader).read_bytes()).hexdigest()
+    # The #794 reader bytes; the 11-05 batch-path successor re-pins the reader.
+    expected["source_pins"][reader] = "9b9dc5417ff33eaa534bab368b4e50489a3336fab13ba5da9c69755f83d05e2f"
     assert new == expected
+    active = pilot.load_plan(ROOT / pilot.SOURCE_PROFILE)
+    expected_active = deepcopy(new)
+    for name in pilot.SOURCE_PROFILE_BATCH_PATH_DELTA:
+        expected_active["source_pins"][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+    assert active == expected_active
     assert pilot.DISPATCH_GRADING_IDENTITY["grader_template_source_hash"] == successor.HISTORICAL_HASH
     record = json.loads((ROOT / successor.RECORD).read_bytes())
     config = yaml.safe_load((ROOT / successor.TEMPLATE).read_bytes())

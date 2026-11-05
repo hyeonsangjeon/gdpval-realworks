@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_grader_seal.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261105_batch_path.yaml"
+SOURCE_PROFILE_GRADER_SEAL = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_grader_seal.yaml"
+SOURCE_PROFILE_GRADER_SEAL_SHA256 = "90a222ac56ed9276689b31f154fbfbdeb6d98decb614556abca131c22cc3cfc6"
 SOURCE_PROFILE_LONG_CONTEXT = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_long_context.yaml"
 SOURCE_PROFILE_LONG_CONTEXT_SHA256 = "0d957f81d2c6d82a79fa1db7ff86b21d3a6ec609011787585f93fca8b63f62b1"
 SOURCE_PROFILE_LIST_PRICES = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_list_prices.yaml"
@@ -106,6 +108,11 @@ SOURCE_PROFILE_DELTA = frozenset({
     "batch-runner/gpt56_pilot_native_result_host.py",
     "batch-runner/core/grader.py", "batch-runner/core/grade_payload.py",
 })
+#: Exact source delta from the 10-30 grader-seal profile (owner 2026-11-05: the
+#: Sol fixed-five batch runs on the generic batch path through one step-2 hook).
+#: The batch-path modules are not pilot sources and are not held here.
+SOURCE_PROFILE_BATCH_PATH_DELTA = frozenset({
+    "batch-runner/step2_run_inference.py", "batch-runner/gpt56_sol_codex_pilot_preflight.py"})
 #: Codex 0.147.0 ships gpt-5.6-sol at 272,000 tokens in its bundled models.json
 #: and clamps model_context_window to that maximum (258,400 usable at 95%).
 #: Above it, the wire observer also hands Codex this held catalog: the bundled
@@ -411,6 +418,10 @@ def source_plan_snapshot(
                                         sha256=SOURCE_PROFILE_LONG_CONTEXT_SHA256)
         require(len(long_context_data) <= 65536)
         long_context_profile = yaml.safe_load(long_context_data)
+        grader_seal_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_GRADER_SEAL),
+                                       sha256=SOURCE_PROFILE_GRADER_SEAL_SHA256)
+        require(len(grader_seal_data) <= 65536)
+        grader_seal_profile = yaml.safe_load(grader_seal_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -426,9 +437,14 @@ def source_plan_snapshot(
                 == seal({k: v for k, v in successor_contract.items() if k != "source_pins"}))
         require(seal({k: v for k, v in counters_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in original.items() if k != "source_pins"}))
-        require({name for name, digest in profile["source_pins"].items()
+        require(seal({k: v for k, v in grader_seal_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in successor_contract.items() if k != "source_pins"}))
+        require({name for name, digest in grader_seal_profile["source_pins"].items()
                  if digest != long_context_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+        require({name for name, digest in profile["source_pins"].items()
+                 if digest != grader_seal_profile["source_pins"][name]}
+                == SOURCE_PROFILE_BATCH_PATH_DELTA)
         pins = profile["source_pins"]
         require(type(pins) is dict and set(pins) == REQUIRED_SOURCES)
         require(all(type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value)
@@ -542,7 +558,8 @@ def source_plan_snapshot(
                         SOURCE_PROFILE_TEXT_TOOLS: SOURCE_PROFILE_TEXT_TOOLS_SHA256,
                         SOURCE_PROFILE_CAPTURE_COUNTERS: SOURCE_PROFILE_CAPTURE_COUNTERS_SHA256,
                         SOURCE_PROFILE_LIST_PRICES: SOURCE_PROFILE_LIST_PRICES_SHA256,
-                        SOURCE_PROFILE_LONG_CONTEXT: SOURCE_PROFILE_LONG_CONTEXT_SHA256}
+                        SOURCE_PROFILE_LONG_CONTEXT: SOURCE_PROFILE_LONG_CONTEXT_SHA256,
+                        SOURCE_PROFILE_GRADER_SEAL: SOURCE_PROFILE_GRADER_SEAL_SHA256}
         roles = tuple(sorted({*source_roles, ACTIVE_PLAN, SOURCE_PROFILE}))
         with _held_parents(ROOT, roles) as check:
             repository, _ = checkout._repository(ROOT)
@@ -582,6 +599,7 @@ def source_plan_snapshot(
             require(blobs[SOURCE_PROFILE_CAPTURE_COUNTERS] == counters_data)
             require(blobs[SOURCE_PROFILE_LIST_PRICES] == list_prices_data)
             require(blobs[SOURCE_PROFILE_LONG_CONTEXT] == long_context_data)
+            require(blobs[SOURCE_PROFILE_GRADER_SEAL] == grader_seal_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -604,10 +622,10 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_LONG_CONTEXT,
-            "supersedes_profile_sha256": SOURCE_PROFILE_LONG_CONTEXT_SHA256,
+            "supersedes_profile": SOURCE_PROFILE_GRADER_SEAL,
+            "supersedes_profile_sha256": SOURCE_PROFILE_GRADER_SEAL_SHA256,
             "grader_successor_seal": seal_report,
-            "source_change_reason": "owner_reviewed_successor_grader_seal_without_policy_change",
+            "source_change_reason": "owner_approved_sol_batch_step2_hook_without_pilot_policy_change",
             "response_capture_readiness": {
                 "status": "next_call_capture_path_only", "live_evidence_observed": False,
                 "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
@@ -1325,6 +1343,7 @@ def main(argv: list[str] | None = None) -> int:
             ROOT / SOURCE_PROFILE_CAPTURE_COUNTERS,
             ROOT / SOURCE_PROFILE_LIST_PRICES,
             ROOT / SOURCE_PROFILE_LONG_CONTEXT,
+            ROOT / SOURCE_PROFILE_GRADER_SEAL,
         }
         capture_requested = args.capture_workspace is not None
         connection_requested = args.retained_connection_reference is not None
