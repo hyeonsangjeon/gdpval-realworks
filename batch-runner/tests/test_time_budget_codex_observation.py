@@ -33,7 +33,7 @@ from core.result_fingerprint import validate_inference_result_fingerprint
 from gpt54_comparison_preflight import _canonical_json
 from gpt54_prepared_input_attestation import _identity
 from .test_gpt54_time_budget_comparison import (
-    _Clock, _handoff_arguments, dual_roots, handoff_source_seed, handoff_sources,
+    _Clock, _d3_execution_window_probe, _handoff_arguments, dual_roots, handoff_source_seed, handoff_sources,
     observation_kernel,
 )
 
@@ -316,6 +316,32 @@ def _cli_arguments(case):
         for key, value in args[f"expected_{label}_identity"].items():
             values[f"{label}-{key}"] = value
     return [item for key, value in values.items() for item in ("--" + key, str(value))]
+
+
+@pytest.mark.parametrize("delay_at", ["claim_fsync", "runner_preparation", "initial_callback_io", "final_callback_io"])
+@pytest.mark.parametrize("finished_at", [1000.999, 1001, 1002],
+                         ids=["just-before-expiry", "exact-expiry", "expired-during-io"])
+def test_d3_codex_final_execution_window(handoff_sources, tmp_path, offline, monkeypatch, record_property,
+                                        delay_at, finished_at):
+    case = _case(handoff_sources, tmp_path, offline)
+    case.direction.update(not_before_unix=990, expires_unix=1001)
+    _write_direction(case)
+    _d3_execution_window_probe(monkeypatch, case, entry,
+        lambda: entry.run_codex_observation(handoff_sources.plan, **case.arguments),
+        delay_at=delay_at, finished_at=finished_at, record_property=record_property)
+    assert offline.auth_calls == []
+
+
+@pytest.mark.parametrize("clock_error", [RuntimeError, KeyboardInterrupt], ids=["clock-error", "interrupted-clock"])
+def test_d3_codex_final_clock_error_preserves_claim(handoff_sources, tmp_path, offline, monkeypatch,
+                                                  record_property, clock_error):
+    case = _case(handoff_sources, tmp_path, offline)
+    case.direction.update(not_before_unix=990, expires_unix=1001)
+    _write_direction(case)
+    _d3_execution_window_probe(monkeypatch, case, entry,
+        lambda: entry.run_codex_observation(handoff_sources.plan, **case.arguments),
+        delay_at="final_clock", clock_error=clock_error, record_property=record_property)
+    assert offline.auth_calls == []
 
 
 @pytest.mark.parametrize("repeat,task_index,outcome", [(1, 0, "success"), (2, 1, "success"), (1, 2, "failed")])

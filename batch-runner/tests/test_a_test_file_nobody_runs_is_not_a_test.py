@@ -46,7 +46,41 @@ SUCCESSOR_GRADER_TEST = "tests/test_gpt56_grader_successor_seal.py"
 PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256 = "a2e0e2fe0451b905ab7d2eddd163f9c87b25eede7a6f7e383cb42b3722687664"
 TIME_BUDGET_RUN = (
     "cd batch-runner\n"
+    f'python -m pytest -m "not integration" --tb=short -v -rs --durations=20 -o tmp_path_retention_policy=failed {TIME_BUDGET_GLOB}\n'
+)
+TIME_BUDGET_PRE_REPAIR_RUN = (
+    "cd batch-runner\n"
     f'python -m pytest -m "not integration" --tb=short -q -rs -o tmp_path_retention_policy=failed {TIME_BUDGET_GLOB}\n'
+)
+# Main #794 merge: raw historical hashes need the exact inverse of PR797's
+# CI-only delta, including comments. Do not re-render YAML or normalize bytes.
+PR797_CI_BYTE_REVERSALS = (
+    (
+        b"  # Separate read-only runners give each contract family its own finite\n",
+        b"  # Separate read-only runners give each contract family its own 45-minute\n",
+    ),
+    (
+        b"  time-budget-contracts:\n"
+        b"    runs-on: ubuntu-24.04\n"
+        b"    # PR797/run 41700556354: 854 tests reached 52% after 42m18s of pytest,\n"
+        b"    # still progressing when the old 45m job expired. ~82m extrapolated test\n"
+        b"    # time plus setup/variance reserve fits 120m. This is offline CI only;\n"
+        b"    # registered observation generation/cleanup remain 1,200/20 seconds.\n"
+        b"    timeout-minutes: 120\n",
+        b"  time-budget-contracts:\n"
+        b"    runs-on: ubuntu-22.04\n"
+        b"    timeout-minutes: 45\n",
+    ),
+    (
+        b'          python -m pytest -m "not integration" --tb=short -v -rs --durations=20 '
+        b'-o tmp_path_retention_policy=failed tests/test_time_budget_*.py\n',
+        b'          python -m pytest -m "not integration" --tb=short -q -rs '
+        b'-o tmp_path_retention_policy=failed tests/test_time_budget_*.py\n',
+    ),
+    (
+        b"  comparison-contracts:\n    runs-on: ubuntu-24.04\n",
+        b"  comparison-contracts:\n    runs-on: ubuntu-latest\n",
+    ),
 )
 BUDGET_ORIGINAL_RUN = (
     "cd batch-runner\n"
@@ -131,6 +165,32 @@ def _without_owned_host_ci_evidence(workflow):
     return previous
 
 
+def _without_pr797_ci_runtime_budget(workflow):
+    """Undo exactly the reviewed CI-only runner/envelope/logging changes."""
+    previous = deepcopy(workflow)
+    jobs = previous["jobs"]
+    family = jobs["time-budget-contracts"]
+    assert family["runs-on"] == jobs["comparison-contracts"]["runs-on"] == "ubuntu-24.04"
+    assert family["timeout-minutes"] == 120
+    assert family["steps"][-1] == {
+        "name": "Run time-budget contracts", "run": TIME_BUDGET_RUN,
+    }
+    family["runs-on"] = "ubuntu-22.04"
+    family["timeout-minutes"] = 45
+    family["steps"][-1]["run"] = TIME_BUDGET_PRE_REPAIR_RUN
+    jobs["comparison-contracts"]["runs-on"] = "ubuntu-latest"
+    return previous
+
+
+def _without_pr797_ci_runtime_bytes(workflow_bytes):
+    """Reverse only four exact strings; zero/multiple matches always refuse."""
+    assert type(workflow_bytes) is bytes
+    for current, historical in PR797_CI_BYTE_REVERSALS:
+        assert workflow_bytes.count(current) == 1, "PR797 CI inverse must match exactly once"
+        workflow_bytes = workflow_bytes.replace(current, historical, 1)
+    return workflow_bytes
+
+
 def _without_time_budget_contracts(workflow):
     """Validate the exact new partition before undoing it for the old hash."""
     previous = deepcopy(workflow)
@@ -140,7 +200,7 @@ def _without_time_budget_contracts(workflow):
     assert family["runs-on"] == "ubuntu-22.04"
     assert family["timeout-minutes"] == jobs["pytest"]["timeout-minutes"] == 45
     assert family["steps"] == jobs["budget-readout-contracts"]["steps"][:6] + [{
-        "name": "Run time-budget contracts", "run": TIME_BUDGET_RUN,
+        "name": "Run time-budget contracts", "run": TIME_BUDGET_PRE_REPAIR_RUN,
     }]
     steps = [step for step in jobs["pytest"]["steps"] if step["name"] == "Run tests"]
     assert len(steps) == 1
@@ -183,12 +243,12 @@ def _pytest_target_arguments(args: list[str]) -> list[str]:
         if token == "--":
             targets.extend(tokens)
             break
-        if token in {"-k", "-m", "-r", "-o", "--tb", "--ignore", "--ignore-glob", "--junitxml"}:
+        if token in {"-k", "-m", "-r", "-o", "--tb", "--ignore", "--ignore-glob", "--junitxml", "--durations"}:
             value = next(tokens, None)
             assert value is not None and not value.startswith("-"), "missing pytest option value"
         elif token in {"-q", "-v"}:
             continue
-        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=", "--ignore-glob=", "--junitxml=")):
+        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=", "--ignore-glob=", "--junitxml=", "--durations=")):
             # Short attached values (-rs/-kexpr) and long --option=value forms.
             continue
         else:
@@ -426,17 +486,47 @@ def _without_successor_grader_partition(workflow):
 def test_successor_grader_assignment_is_the_only_backend_workflow_delta():
     from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
 
-    text = WORKFLOW.read_text(encoding="utf-8")
+    text = WORKFLOW.read_bytes().decode("utf-8")
     assert hashlib.sha256(text.encode()).hexdigest() == CURRENT_WORKFLOW_SHA256
-    previous = _without_successor_grader_partition(yaml.safe_load(text))
+    previous = _without_pr797_ci_runtime_budget(
+        _without_successor_grader_partition(yaml.safe_load(text)))
     for token in ("--ignore=" + SUCCESSOR_GRADER_TEST, SUCCESSOR_GRADER_TEST):
         literal = " " + token + " "
         assert text.count(literal) == 1
         text = text.replace(literal, " ", 1)
-    # Keep the earlier byte pin, not just an updated current hash. No job,
-    # trigger, permission, marker or historical guard changes are admitted.
-    assert hashlib.sha256(text.encode()).hexdigest() == PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256
-    assert yaml.safe_load(text) == previous
+    # Keep the earlier byte pin, not just an updated current hash. Reverse the
+    # approved PR797 strings too; all other bytes still reach the historical hash.
+    preceding = _without_pr797_ci_runtime_bytes(text.encode("utf-8"))
+    assert hashlib.sha256(preceding).hexdigest() == PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256
+    assert yaml.safe_load(preceding) == previous
+
+
+@pytest.mark.parametrize("index", range(len(PR797_CI_BYTE_REVERSALS)))
+@pytest.mark.parametrize("matches", [0, 2])
+def test_pr797_ci_byte_reversal_requires_exactly_one_match(index, matches):
+    raw = WORKFLOW.read_bytes()
+    current, historical = PR797_CI_BYTE_REVERSALS[index]
+    assert raw.count(current) == 1
+    changed = raw.replace(current, historical if matches == 0 else current + current, 1)
+    assert changed.count(current) == matches
+    with pytest.raises(AssertionError, match="PR797 CI inverse must match exactly once"):
+        _without_pr797_ci_runtime_bytes(changed)
+
+
+def test_pr797_ci_byte_reversal_preserves_unrelated_bytes():
+    raw = WORKFLOW.read_bytes()
+    unrelated = b"\n# unrelated workflow bytes must not disappear\n"
+    restored = _without_pr797_ci_runtime_bytes(raw)
+    changed = _without_pr797_ci_runtime_bytes(raw + unrelated)
+    assert changed == restored + unrelated
+    assert hashlib.sha256(changed).digest() != hashlib.sha256(restored).digest()
+
+
+def test_pr797_ci_byte_reversal_does_not_normalize_line_endings():
+    raw = WORKFLOW.read_bytes()
+    assert b"\r\n" not in raw
+    with pytest.raises(AssertionError, match="PR797 CI inverse must match exactly once"):
+        _without_pr797_ci_runtime_bytes(raw.replace(b"\n", b"\r\n"))
 
 
 @pytest.mark.parametrize("mutation", ["core_duplicate", "pilot_missing", "pilot_duplicate", "extra_job"])
@@ -487,7 +577,7 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     # job, trigger, permission and guard must match the captured baseline,
     # including the reviewed complete gpt56 partition (20 modules, not 9).
     previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(
-        _without_successor_grader_partition(workflow)))
+        _without_pr797_ci_runtime_budget(_without_successor_grader_partition(workflow))))
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
     for job_name, step_name, token in (
@@ -595,8 +685,10 @@ def test_backend_jobs_partition_the_comparison_contracts():
     for name, job in jobs.items():
         # No renamed check, matrix, dependencies, credentials or job-level skip.
         assert set(job) == {"runs-on", "timeout-minutes", "steps"}
-        assert job["runs-on"] == ("ubuntu-22.04" if name == "time-budget-contracts" else "ubuntu-latest")
-        assert job["timeout-minutes"] == (60 if name == "native-host-contracts" else 45)
+        assert job["runs-on"] == (
+            "ubuntu-24.04" if name in {"time-budget-contracts", "comparison-contracts"} else "ubuntu-latest")
+        assert job["timeout-minutes"] == (
+            120 if name == "time-budget-contracts" else 60 if name == "native-host-contracts" else 45)
 
     core = jobs["pytest"]["steps"]
     comparison = jobs["comparison-contracts"]["steps"]
@@ -700,7 +792,12 @@ def test_backend_jobs_partition_the_comparison_contracts():
     prefix = [
         "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs"
     ]
-    assert all(command[:len(prefix)] == prefix for command in argv)
+    time_budget_prefix = [
+        "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-v", "-rs", "--durations=20"
+    ]
+    assert len(argv) == 11
+    assert all(command[:len(prefix)] == prefix for command in argv[:10])
+    assert argv[10][:len(time_budget_prefix)] == time_budget_prefix
     excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]
                 if arg.startswith("--ignore=")]
     selected = argv[1][len(prefix):]
@@ -712,7 +809,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     native_selected = argv[7][len(prefix):]
     budget_selected = argv[8][len(prefix):]
     budget_readout_selected = argv[9][len(prefix):]
-    time_budget_selected = argv[10][len(prefix):]
+    time_budget_selected = argv[10][len(time_budget_prefix):]
     budget_glob = BUDGET_GLOB
     # shlex removes quotes: verify the actual shell expands only the target,
     # while pytest receives the core ignore glob literally.

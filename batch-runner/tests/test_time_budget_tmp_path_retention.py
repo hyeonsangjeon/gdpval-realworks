@@ -14,31 +14,35 @@ import yaml
 
 
 def test_time_budget_failed_tmp_path_retention(tmp_path, record_property):
+    from .test_a_test_file_nobody_runs_is_not_a_test import _without_pr797_ci_runtime_bytes
+
     root = Path(__file__).resolve().parents[2]
     workflow_bytes = (root / ".github/workflows/backend-tests.yml").read_bytes()
     option = b" -o tmp_path_retention_policy=failed"
     assert workflow_bytes.count(option) == 1
-    # The current inventory includes #794's one core-ignore/one pilot selection.
+    # Main #794 merge retains its one core-ignore/one pilot selection together
+    # with PR797's reviewed ubuntu-24.04/120-minute/logging delta.
     # Undo only retention here; still pin every other workflow byte exactly.
     assert hashlib.sha256(workflow_bytes.replace(option, b"", 1)).hexdigest() == (
-        "46ba0b8fa9b31282e92f421d76170774b0f4756189cd264ab95b753f0a75eb8e"
+        "7b8b585609244184a20b0b6df447bb00a8fa77a424f3de72256ab8edc6ce80d8"
     )
-    # Preserve the earlier pin too: removing exactly those two allocation
-    # arguments must recover the pre-successor, pre-retention workflow bytes.
+    # Preserve the earlier pin too: undo the two #794 allocation arguments and
+    # the exact PR797 CI delta before hashing pre-successor/pre-retention bytes.
     preceding = workflow_bytes
     for token in (b" --ignore=tests/test_gpt56_grader_successor_seal.py ",
                   b" tests/test_gpt56_grader_successor_seal.py "):
         assert preceding.count(token) == 1
         preceding = preceding.replace(token, b" ", 1)
+    preceding = _without_pr797_ci_runtime_bytes(preceding)
     assert hashlib.sha256(preceding.replace(option, b"", 1)).hexdigest() == (
         "7bd20c544ad32aff454ae212643b9228a943e072b89990c9789b89ac74134068"
     )
     job = yaml.safe_load(workflow_bytes)["jobs"]["time-budget-contracts"]
-    assert job["timeout-minutes"] == 45
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 120
     run = next(step["run"] for step in job["steps"] if step["name"] == "Run time-budget contracts")
     assert run.splitlines()[0] == "cd batch-runner" and len(run.splitlines()) == 2
     argv = shlex.split(run.splitlines()[1])
-    assert argv == ["python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs",
+    assert argv == ["python", "-m", "pytest", "-m", "not integration", "--tb=short", "-v", "-rs", "--durations=20",
                     "-o", "tmp_path_retention_policy=failed", "tests/test_time_budget_*.py"]
 
     owned = tmp_path / "lifecycle"

@@ -1,0 +1,96 @@
+name: GPT-5.4 time budget — model-free resource and cleanup probe
+
+# Publishing this file is not a request to execute either the probe or the study.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_source_sha:
+        description: Exact reviewed commit to probe (full 40-character SHA)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpt54-time-budget-resource-cleanup
+  cancel-in-progress: false
+
+jobs:
+  resource-cleanup:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'hyeonsangjeon/gdpval-realworks'
+    runs-on: ubuntu-24.04
+    # Two real 1200s deadline expirations + their original 20s cleanup windows,
+    # 20m dependencies, 3m sandbox, 6m snapshots, and checkout/upload headroom.
+    timeout-minutes: 90
+    env:
+      EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+      PROBE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      PYTHONDONTWRITEBYTECODE: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      JE_ARROW_MALLOC_CONF: "background_thread:false"
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - name: Refuse an unreviewed source before setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SOURCE_SHA" && "$PROBE_WORKFLOW_SHA" == "$EXPECTED_SOURCE_SHA" ]]
+          [[ "$GITHUB_ACTIONS" == true && "$RUNNER_ENVIRONMENT" == github-hosted ]]
+          [[ "$RUNNER_OS" == Linux && "$ImageOS" == ubuntu24 ]]
+
+      - name: Check out the exact reviewed source without stored credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.expected_source_sha }}
+          persist-credentials: false
+
+      - name: Record resources and container baseline before dependency installation
+        id: baseline
+        timeout-minutes: 3
+        run: python3 batch-runner/gpt54_time_budget_resource_probe.py before
+
+      - name: Install the observation dependencies and local sandbox helper
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -r batch-runner/requirements.txt
+          if ! command -v bwrap > /dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq bubblewrap
+          fi
+
+      - name: Prove AppArmor userns and the pinned Codex sandbox without authentication
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 batch-runner/scripts/prepare_codex_sandbox_host.py \
+            --out "$RUNNER_TEMP/time-budget-resource-probe/artifacts/sandbox-preflight.json"
+
+      - name: Exercise V2 then Codex with fake responses and real deadline cleanup
+        timeout-minutes: 45
+        run: python3 batch-runner/gpt54_time_budget_resource_probe.py exercise
+
+      - name: Record final resources and refuse missing proof or residue
+        if: always() && steps.baseline.outcome != 'skipped'
+        timeout-minutes: 3
+        run: python3 batch-runner/gpt54_time_budget_resource_probe.py after
+
+      - name: Retain model-free evidence even on refusal
+        if: always() && steps.baseline.outcome != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: time-budget-resource-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/time-budget-resource-probe/artifacts/*.json
+          if-no-files-found: error
+          retention-days: 7

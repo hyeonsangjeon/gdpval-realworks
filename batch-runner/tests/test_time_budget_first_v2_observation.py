@@ -21,7 +21,7 @@ from core.result_fingerprint import validate_inference_result_fingerprint
 from gpt54_comparison_preflight import _canonical_json
 from gpt54_prepared_input_attestation import _identity
 from .test_gpt54_time_budget_comparison import (
-    _Clock, _handoff_arguments, dual_roots, handoff_source_seed, handoff_sources,
+    _Clock, _d3_execution_window_probe, _handoff_arguments, dual_roots, handoff_source_seed, handoff_sources,
     observation_kernel,
 )
 
@@ -129,6 +129,11 @@ def _transport(monkeypatch, case, *, outcome="success", during_response=None):
 
     def check(checker, binding):
         direction_check(checker, binding)
+        if controls:
+            assert len(controls) == 1 and case.consumed.is_file()
+            assert controls[0].first_start is None and controls[0].terminal_reason is None
+            events.append("final_direction")
+            return
         assert not case.consumed.exists() and controls == []
         events.append("direction")
         clock.advance(2000)  # validation/waits must not start generation
@@ -174,7 +179,7 @@ def _transport(monkeypatch, case, *, outcome="success", during_response=None):
 
     class Transport:
         def __init__(self, **kwargs):
-            assert events[:3] == ["direction", "admission", "backend_start"]
+            assert events[:4] == ["direction", "admission", "final_direction", "backend_start"]
             assert controls[0].first_start == 2600 and controls[0].identity == case.arguments["observation"]
             assert kwargs["base_url"] == "https://hjeon-fdpo-foundry-eus2.services.ai.azure.com/openai/v1/"
             assert kwargs["timeout"] == 1200 and kwargs["max_retries"] == 0
@@ -220,6 +225,29 @@ def _transport(monkeypatch, case, *, outcome="success", during_response=None):
     monkeypatch.setattr(azure_ai_clients, "get_bearer_token_provider", lambda credential, scope: lambda: "synthetic-unused")
     monkeypatch.setattr(azure_ai_clients, "OpenAI", Transport)
     return SimpleNamespace(events=events, controls=controls, requests=requests, runners=runners, clock=clock)
+
+
+@pytest.mark.parametrize("delay_at", ["claim_fsync", "runner_preparation", "initial_callback_io", "final_callback_io"])
+@pytest.mark.parametrize("finished_at", [1000.999, 1001, 1002],
+                         ids=["just-before-expiry", "exact-expiry", "expired-during-io"])
+def test_d3_v2_final_execution_window(handoff_sources, tmp_path, monkeypatch, record_property,
+                                     delay_at, finished_at):
+    case = _case(handoff_sources, tmp_path)
+    case.direction.update(not_before_unix=990, expires_unix=1001)
+    _write_direction(case)
+    _d3_execution_window_probe(monkeypatch, case, entry,
+        lambda: entry.run_first_v2_observation(handoff_sources.plan, **case.arguments),
+        delay_at=delay_at, finished_at=finished_at, record_property=record_property)
+
+
+@pytest.mark.parametrize("clock_error", [RuntimeError, KeyboardInterrupt], ids=["clock-error", "interrupted-clock"])
+def test_d3_v2_final_clock_error_preserves_claim(handoff_sources, tmp_path, monkeypatch, record_property, clock_error):
+    case = _case(handoff_sources, tmp_path)
+    case.direction.update(not_before_unix=990, expires_unix=1001)
+    _write_direction(case)
+    _d3_execution_window_probe(monkeypatch, case, entry,
+        lambda: entry.run_first_v2_observation(handoff_sources.plan, **case.arguments),
+        delay_at="final_clock", clock_error=clock_error, record_property=record_property)
 
 
 def _assert_pre_admission_refusal(case, effects):
