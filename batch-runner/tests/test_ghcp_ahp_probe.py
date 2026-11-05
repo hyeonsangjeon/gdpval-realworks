@@ -4,6 +4,7 @@ import copy
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import socket
 import struct
@@ -391,3 +392,249 @@ def test_tampered_preparation_is_rejected_before_a_process(tmp_path, change, rea
     probe.save_json(evidence / "prepared.json", prepared)
     with pytest.raises(probe.Refused, match=reason):
         probe.verify_prepared(manifest, root, evidence, {"github_sha": "f" * 40})
+
+
+@pytest.fixture
+def backend_probe_fixture(tmp_path, monkeypatch):
+    """Exercise the real cleanup path with no host, SDK, provider or socket peer."""
+    import ghcp_ahp_wire_capture as wire
+
+    manifest = probe.load_manifest()
+    calls = {"commands": [], "stops": 0}
+    monkeypatch.setattr(probe, "require_runner", lambda: {"synthetic": True})
+    monkeypatch.setattr(probe, "require_isolation", lambda *args: {"synthetic": True})
+    monkeypatch.setattr(probe, "verify_prepared", lambda *args: (
+        {"artifacts": {}, "binary_sha256": {}, "source_evidence_sha256": "0" * 64}, {}))
+    monkeypatch.setattr(wire, "install", lambda root, scratch, environment, **kwargs: environment)
+    monkeypatch.setattr(wire, "export", lambda *args: {"capture_status": "observer_not_started"})
+
+    def stop():
+        calls["stops"] += 1
+
+    def fake_process(command, environment, cwd=None):
+        calls["commands"].append(command)
+        if command[-1] in {"--version", "--help"}:
+            text = (manifest["vscode_version"] + " " + manifest["vscode_commit"] if command[-1] == "--version"
+                    else "--foreground --new-instance --without-connection-token --log")
+            return SimpleNamespace(finish=lambda: {"exit_code": 0, "stdout": text})
+        calls["scratch"] = Path(environment["HOME"]).parent
+        return SimpleNamespace(
+            process=SimpleNamespace(pid=999999999, poll=lambda: None), check=lambda: None, stop=stop,
+            record=lambda: {"command": command, "exit_code": -15 if calls["stops"] else None,
+                            "stdout": "backend synthetic stdout", "stderr": "backend synthetic stderr"})
+
+    monkeypatch.setattr(probe, "CapturedProcess", fake_process)
+
+    def run(error=None):
+        def refused_transport(*args):
+            if error is None:
+                transport = FakeTransport()
+                transport.close = lambda: None
+                return transport
+            raise error
+        monkeypatch.setattr(probe, "WebSocket", refused_transport)
+        output = tmp_path / "evidence"
+        calls["exit_code"] = probe.run_probe(manifest, tmp_path / "prepared", output, "fixture", "fixture", capability_only=True)
+        return json.loads((output / "probe.json").read_text()), calls, output
+
+    return run
+
+
+@pytest.mark.parametrize("error,code", [
+    (probe.Refused("websocket_handshake_rejected"), "websocket_handshake_rejected"),
+    (RuntimeError(CANARY), "RuntimeError"),
+])
+def test_backend_failure_is_not_replaced_by_observer_cleanup(backend_probe_fixture, error, code):
+    receipt, calls, output = backend_probe_fixture(error)
+    assert receipt["reason_codes"] == [code, "wire_observer_not_started"]
+    assert calls["exit_code"] == 2
+    assert receipt["session_create_requests"] == receipt["model_calls"] == 0
+    assert calls["stops"] == 1 and not calls["scratch"].exists()
+    assert CANARY not in (output / "probe.json").read_text()
+
+
+def test_backend_receipt_preserves_pre_cleanup_state_and_does_not_inflate_exit_evidence(backend_probe_fixture):
+    import ghcp_ahp_backend_diagnostics as backend
+
+    receipt, calls, output = backend_probe_fixture(probe.Refused("websocket_closed"))
+    assert calls["commands"][-1][-2:] == ["--log", "debug"]
+    assert probe.MAX_RUNTIME_SECONDS == 180  # No timeout inflation.
+    assert receipt["backend_startup"]["sha256"] == probe.digest(output / "backend-startup.json")
+    diagnostics = json.loads((output / "backend-startup.json").read_text())
+    assert diagnostics["primary_error_code"] == "websocket_closed"
+    assert diagnostics["before_cleanup"]["supervisor"]["exit_code"] is None
+    assert diagnostics["after_cleanup"]["supervisor"]["exit_code"] == -15
+    assert diagnostics["before_cleanup"]["supervisor"]["stdout"] == "backend synthetic stdout"
+    assert diagnostics["after_cleanup"]["supervisor"]["stderr"] == "backend synthetic stderr"
+    assert diagnostics["environment_contract"]["authentication_supplied"] is False
+    assert diagnostics["environment_contract"]["display_present"] is False
+    assert diagnostics["admission_allowed"] is False
+    assert diagnostics["session_create_requests"] == diagnostics["model_calls"] == 0
+    assert not calls["scratch"].exists()
+    assert backend.MAX_FILE_BYTES <= probe.MAX_LOG_BYTES
+
+
+@pytest.mark.parametrize("secondary", ["snapshot", "export", "wire_export"])
+def test_backend_diagnostic_error_cannot_skip_cleanup_or_hide_primary(backend_probe_fixture, monkeypatch, secondary):
+    import ghcp_ahp_backend_diagnostics as backend
+    import ghcp_ahp_wire_capture as wire
+
+    def refused(*args, **kwargs):
+        raise probe.Refused("backend_diagnostic_fixture_refused")
+    monkeypatch.setattr(wire if secondary == "wire_export" else backend,
+                        "export" if secondary == "wire_export" else secondary, refused)
+    receipt, calls, output = backend_probe_fixture(probe.Refused("websocket_closed"))
+    assert receipt["reason_codes"][0] == "websocket_closed"
+    assert "backend_diagnostic_fixture_refused" in receipt["reason_codes"]
+    assert calls["stops"] == 1 and calls["exit_code"] == 2
+    assert not calls["scratch"].exists()
+    assert receipt["session_create_requests"] == receipt["model_calls"] == 0
+
+
+def test_stop_error_is_secondary_and_never_reported_as_confirmed_cleanup(backend_probe_fixture, monkeypatch):
+    original = probe.CapturedProcess
+
+    def process(command, *args, **kwargs):
+        value = original(command, *args, **kwargs)
+        if command[-1] not in {"--version", "--help"}:
+            def stop():
+                raise probe.Refused("fixture_stop_unconfirmed")
+            value.stop = stop
+        return value
+    monkeypatch.setattr(probe, "CapturedProcess", process)
+    receipt, calls, output = backend_probe_fixture(probe.Refused("websocket_closed"))
+    assert receipt["reason_codes"] == ["websocket_closed", "fixture_stop_unconfirmed", "wire_observer_not_started"]
+    assert receipt["cleanup"] == "process_group_stop_unconfirmed_pid_namespace_exit_remains_cleanup_boundary"
+    assert calls["exit_code"] == 2
+
+
+def test_observer_absence_alone_still_refuses_after_successful_fake_handshake(backend_probe_fixture):
+    receipt, calls, output = backend_probe_fixture()
+    assert receipt["reason_codes"] == ["wire_observer_not_started"]
+    assert calls["exit_code"] == 2
+    assert receipt["headless_started"] is True
+    assert [row["method"] for row in receipt["rpc_sent"]] == ["initialize", "resolveSessionConfig"]
+    assert receipt["session_create_requests"] == receipt["model_calls"] == 0
+
+
+def test_successful_fake_observer_still_cannot_admit_paid_execution(backend_probe_fixture, monkeypatch):
+    import ghcp_ahp_wire_capture as wire
+
+    monkeypatch.setattr(wire, "export", lambda *args: {"capture_status": "captured"})
+    receipt, calls, output = backend_probe_fixture()
+    assert calls["exit_code"] == 0 and receipt["reason_codes"] == []
+    assert receipt["status"] == "probe_completed"
+    assert receipt["launch_allowed"] is receipt["gate_ready"] is False
+    assert receipt["session_create_requests"] == receipt["model_calls"] == 0
+
+
+def test_spawn_failure_still_exports_diagnostics_without_inventing_a_process(backend_probe_fixture, monkeypatch):
+    original = probe.CapturedProcess
+
+    def process(command, *args, **kwargs):
+        if command[-1] not in {"--version", "--help"}:
+            raise PermissionError(CANARY)
+        return original(command, *args, **kwargs)
+    monkeypatch.setattr(probe, "CapturedProcess", process)
+    receipt, calls, output = backend_probe_fixture()
+    assert receipt["reason_codes"][0] == "PermissionError"
+    assert calls["stops"] == 0 and calls["exit_code"] == 2
+    diagnostics = json.loads((output / "backend-startup.json").read_text())
+    assert diagnostics["before_cleanup"]["supervisor"] is None
+    assert diagnostics["after_cleanup"]["processes"] is None
+    assert CANARY not in (output / "backend-startup.json").read_text()
+
+
+def test_startup_tree_captures_sockets_and_only_allowed_logs_without_following_symlinks(tmp_path, monkeypatch):
+    import ghcp_ahp_backend_diagnostics as backend
+
+    scratch = tmp_path / "owned"
+    logs = scratch / "server-data/logs/fixture"
+    logs.mkdir(parents=True)
+    token = "ghp_SYNTHETIC_0123456789"
+    (logs / "remoteagent.log").write_text(f"backend stderr Authorization: Bearer {token}\nfixture@example.invalid\n")
+    (logs / "account.json").write_text(CANARY)
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "remoteagent.log").write_text(CANARY)
+    (logs / "agenthost.log").symlink_to(external / "remoteagent.log")
+    (scratch / "outside").symlink_to(external, target_is_directory=True)
+    os.mkfifo(logs / "agentHost.log")
+    reads = []
+    original = backend._read
+
+    def read(path, *args):
+        reads.append(path)
+        return original(path, *args)
+    monkeypatch.setattr(backend, "_read", read)
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as fixture_socket:
+        fixture_socket.bind(str(scratch / "backend.sock"))
+        report = backend.snapshot(scratch, None)
+    assert reads == [logs / "remoteagent.log"]
+    inventory = {row["path"]: row for row in report["filesystem"]["entries"]}
+    assert inventory["backend.sock"]["kind"] == "socket"
+    assert inventory["outside"]["kind"] == "symlink"
+    assert inventory["server-data/logs/fixture/agentHost.log"]["kind"] == "other"
+    retained = json.dumps(report)
+    assert token not in retained and CANARY not in retained and "fixture@example.invalid" not in retained
+    assert "[REDACTED]" in retained
+
+
+def test_startup_diagnostic_limits_are_explicit_not_silent_success(tmp_path, monkeypatch):
+    import ghcp_ahp_backend_diagnostics as backend
+
+    scratch = tmp_path / "owned"
+    logs = scratch / "server-data/logs/fixture"
+    logs.mkdir(parents=True)
+    (logs / "remoteagent.log").write_text("x" * (backend.MAX_FILE_BYTES + 10))
+    report = backend.snapshot(scratch, None)
+    assert report["filesystem"]["logs"][0]["truncated"] is True
+    assert len(report["filesystem"]["logs"][0]["content"]) == backend.MAX_FILE_BYTES
+    monkeypatch.setattr(backend, "MAX_ENTRIES", 1)
+    report = backend.snapshot(scratch, None)
+    assert report["filesystem"]["truncated"] is True
+    assert len(report["filesystem"]["entries"]) == 1
+
+
+def test_log_read_race_cannot_expand_the_diagnostic_inventory_budget(tmp_path, monkeypatch):
+    import ghcp_ahp_backend_diagnostics as backend
+
+    scratch = tmp_path / "owned"
+    logs = scratch / "server-data/logs"
+    logs.mkdir(parents=True)
+    (logs / "remoteagent.log").write_text("inert fixture")
+    (logs / "agenthost.log").write_text("inert fixture")
+    monkeypatch.setattr(backend, "MAX_ENTRIES", 3)
+
+    def raced(*args):
+        raise FileNotFoundError("fixture log removed between listing and read")
+    monkeypatch.setattr(backend, "_read", raced)
+    inventory = backend.snapshot(scratch, None)["filesystem"]
+    assert len(inventory["entries"]) + len(inventory["errors"]) <= 3
+    assert inventory["truncated"] is True
+
+
+@pytest.mark.parametrize("state,raw_status,expected_exit", [("S", 0, None), ("Z", 0, 0), ("Z", 7 << 8, 7), ("Z", 15, -15)])
+def test_owned_process_exit_and_socket_arguments_are_not_fabricated(tmp_path, state, raw_status, expected_exit):
+    import ghcp_ahp_backend_diagnostics as backend
+
+    scratch = tmp_path / "owned"
+    scratch.mkdir()
+    proc = tmp_path / "proc"
+    for pid, parent, children in [(100, 1, "101"), (101, 100, "")]:
+        path = proc / str(pid)
+        (path / "task" / str(pid)).mkdir(parents=True)
+        tail = [state, str(parent)] + ["0"] * 47 + [str(raw_status)]
+        (path / "stat").write_text(f"{pid} (inert ) fixture) " + " ".join(tail))
+        (path / "cmdline").write_text("\0".join(["/fixture/node", "inline-code-" + CANARY,
+            "--agent-host-path", str(scratch / "tmp/agent.sock"), "--socket-path", "/outside/forbidden", ""]))
+        (path / "task" / str(pid) / "children").write_text(children)
+        (path / "environ").write_text(CANARY)
+    process = SimpleNamespace(process=SimpleNamespace(pid=100), record=lambda: {"exit_code": None})
+    report = backend.snapshot(scratch, process, proc_root=proc)
+    rows = report["processes"]["entries"]
+    assert [row["pid"] for row in rows] == [100, 101]
+    assert all(row["exit_code"] == expected_exit for row in rows)
+    assert rows[1]["parent_pid"] == 100
+    assert rows[0]["socket_arguments"] == {"--agent-host-path": "tmp/agent.sock", "--socket-path": "outside_invocation_tree"}
+    assert CANARY not in json.dumps(report)
