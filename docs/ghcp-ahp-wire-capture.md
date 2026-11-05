@@ -123,3 +123,38 @@ and `wire-capture.json` (real model-free observer startup/capabilities, with
 unobserved applied/provider fields left missing). The latter must show the
 observer installed in the actual Agent Host child, not merely its parent.
 No fixture artifact is a live connection receipt or a paid launch permission.
+
+## Backend startup diagnostics (no readiness-policy change)
+
+Run `41931364159` reached the supervisor, but not the Agent Host observer. Its
+`-15` supervisor exit was recorded **after cleanup**, not evidence of a backend
+crash. The pinned supervisor captures backend stdout/stderr at
+[debug level:389](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/cli/src/tunnels/agent_host.rs#L389)
+and [405](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/cli/src/tunnels/agent_host.rs#L405),
+which the previous info-level receipt omitted. Its
+[30-second fallback:419](https://github.com/microsoft/vscode/blob/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/cli/src/tunnels/agent_host.rs#L419)
+sets `ready=true` even without the listening message; the subsequent "Server
+ready" banner is therefore not backend readiness proof. That explains a
+misleading readiness signal, **not the original startup delay**.
+
+The capability-only probe now selects the advertised `--log debug` option and
+retains `backend-startup.json` before the invocation-owned temporary tree is
+deleted. It contains redacted supervisor/backend output, allowlisted VS Code
+startup logs, pre/post-cleanup supervisor status, descendant process state/exit
+status when reported, socket arguments and directory metadata. Missing exit
+status stays null. A post-cleanup SIGTERM is never promoted to a spontaneous
+exit. The original WebSocket/bootstrap error stays first in `probe.json`;
+observer/diagnostic/cleanup errors are secondary and still fail closed.
+
+Collection is bounded to 512 tree entries/errors, 32 owned processes, and 12
+allowlisted logs of 128 KiB each. Truncation/read races are explicit. Symlink
+directories are not followed; symlinks, sockets and FIFOs are never read as log
+content. `/proc` reads follow only the supervisor's descendants, retain only
+socket-path command arguments, and never read `environ`. No credential store or
+configuration content is read. The collector opens no socket and starts no
+process. Its JSON is diagnostic-only (`admission_allowed=false`).
+
+The 30-second upstream readiness fallback, 180-second probe limit, network/PID
+isolation, source/SDK pins, zero-session RPC allowlist, and paid fail-closed
+gates are unchanged. Only the push-trigger Actions probe runs a real backend;
+NAS tests use inert processes, synthetic filesystem/proc entries and fake RPC.

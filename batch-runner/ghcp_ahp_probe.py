@@ -574,15 +574,23 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
             if help_result["exit_code"] != 0 or any(flag not in help_result["stdout"] for flag in ("--foreground", "--new-instance", "--without-connection-token")):
                 raise Refused("headless_cli_contract_not_available")
             if capability_only:
+                import ghcp_ahp_backend_diagnostics as backend_diagnostics
                 import ghcp_ahp_wire_capture as wire_capture
                 environment = wire_capture.install(root, scratch, environment, model_free=True)
+                if "--log" not in help_result["stdout"]:
+                    raise Refused("backend_diagnostic_log_flag_unavailable")
             with socket.socket() as port_reservation:
                 port_reservation.bind(("127.0.0.1", 0))
                 port = port_reservation.getsockname()[1]
             command = [cli, "agent", "host", "--foreground", "--new-instance", "--without-connection-token", "--host", "127.0.0.1", "--port", str(port),
                        "--server-data-dir", str(scratch / "server-data"), "--user-data-dir", str(scratch / "user-data"), "--disable-telemetry"]
-            process = CapturedProcess(command, environment, cwd=workspace)
+            if capability_only:
+                # The pinned supervisor forwards backend stdout/stderr only at
+                # debug level (agent_host.rs:389,405). No timeout/ready change.
+                command.extend(["--log", "debug"])
+            primary_error = None
             try:
+                process = CapturedProcess(command, environment, cwd=workspace)
                 while time.monotonic() < deadline:
                     process.check()
                     if process.process.poll() is not None:
@@ -604,19 +612,49 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     record["codex_session"]["evidence_boundary"] = "capability_only_zero_session_requests"
                 record["headless_started"] = isinstance(results.get("initialize", {}).get("result"), dict) and results["initialize"]["result"].get("protocolVersion") in {"1.1.0", "1.0.0"}
                 record["status"] = "probe_completed" if record["headless_started"] else "protocol_initialization_refused"
+            except Exception as error:
+                primary_error = error
+                raise
             finally:
+                secondary_errors = []
+
+                def retain_or_note(action):
+                    try:
+                        return action()
+                    except Exception as error:
+                        secondary_errors.append(error)
+                        return None
+
+                # Snapshot before TERM and before TemporaryDirectory removes the
+                # socket/log tree. Diagnostic failure must not skip cleanup or
+                # replace the original transport/bootstrap refusal.
+                before = retain_or_note(lambda: backend_diagnostics.snapshot(scratch, process)) if capability_only else None
                 if transport is not None:
-                    transport.close()
-                process.stop()
-                record["host_process"] = process.record()
-                record["cleanup"] = "owned_process_group_stopped_pid_namespace_exit_cleans_detached_children"
+                    retain_or_note(transport.close)
+                stopped = False
+                if process is not None:
+                    errors_before_stop = len(secondary_errors)
+                    retain_or_note(process.stop)
+                    stopped = len(secondary_errors) == errors_before_stop
+                    record["host_process"] = retain_or_note(process.record)
+                record["cleanup"] = ("owned_process_group_stopped_pid_namespace_exit_cleans_detached_children" if stopped
+                    else "process_group_stop_unconfirmed_pid_namespace_exit_remains_cleanup_boundary")
                 if capability_only:
-                    record["wire_capture"] = wire_capture.export(scratch, evidence)
-                    if record["wire_capture"]["capture_status"] != "captured":
-                        raise Refused("wire_observer_not_started")
+                    after = retain_or_note(lambda: backend_diagnostics.snapshot(scratch, process))
+                    record["backend_startup"] = retain_or_note(lambda: backend_diagnostics.export(evidence, before=before, after=after,
+                        primary_error_code=(str(primary_error) if isinstance(primary_error, Refused) else type(primary_error).__name__) if primary_error else None,
+                        environment=environment, vscode_commit=manifest["vscode_commit"]))
+                    record["host_process"] = retain_or_note(lambda: backend_diagnostics.DiagnosticRedactor("").clean(record.get("host_process")))
+                    record["wire_capture"] = retain_or_note(lambda: wire_capture.export(scratch, evidence))
+                    if record["wire_capture"] is not None and record["wire_capture"]["capture_status"] != "captured":
+                        secondary_errors.append(Refused("wire_observer_not_started"))
+                errors_to_record = secondary_errors if primary_error is not None else secondary_errors[1:]
+                record["reason_codes"].extend(str(error) if isinstance(error, Refused) else type(error).__name__ for error in errors_to_record)
+                if primary_error is None and secondary_errors:
+                    raise secondary_errors[0]
     except Exception as error:
         record["status"] = "probe_refused"
-        record["reason_codes"].append(str(error) if isinstance(error, Refused) else type(error).__name__)
+        record["reason_codes"].insert(0, str(error) if isinstance(error, Refused) else type(error).__name__)
         if isinstance(error, Refused) and hasattr(error, "native_binary_discovery"):
             record["native_binary_discovery"] = redact(error.native_binary_discovery)
     finally:
