@@ -320,6 +320,35 @@ def test_session_policy_install_binds_the_exact_supported_native_configuration(p
     assert json.loads(env["VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS"]) == policy.NATIVE_ARGS
 
 
+def test_authenticated_zero_turn_install_seeds_mask_only_and_keeps_model_free_guards(prepared_fixture, monkeypatch):
+    import ghcp_ahp_thread_policy as policy
+
+    for key, value in {"GITHUB_EVENT_NAME": "workflow_dispatch", "GHCP_AUTHENTICATED_ZERO_TURN": "true",
+                       "GHCP_PAID_EXECUTION": "false", "GHCP_CONNECTION_ONLY": "false"}.items():
+        monkeypatch.setenv(key, value)
+    root, state, _, _ = prepared_fixture
+    secret = "SYNTHETIC_zero_turn_seed_NOT_REAL"
+    env = wire.install(root, state, {"VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS": json.dumps(policy.NATIVE_ARGS)},
+                       model_free=True, session_policy=True, credential=secret, authenticated_zero_turn=True)
+    assert env["GHCP_AHP_WIRE_MODE"] == "session-only"
+    assert json.loads(env["GHCP_AHP_WIRE_SEEDS"]) == [secret]
+    assert "COPILOT_GITHUB_TOKEN" not in env
+    metadata = json.loads((state / "wire/bootstrap.json").read_text())
+    assert metadata["model_free"] is metadata["session_policy"] is metadata["authenticated_zero_turn"] is True
+    for path in (state / "wire").glob("*.json"):
+        assert secret not in path.read_text()
+
+
+@pytest.mark.parametrize("case,expected", [("http_auth", "copilot_auth_token_exchange"),
+    ("http_models", "capi_models_catalog"), ("http_response", "capi_responses"), ("http_other", "other_http")])
+def test_zero_turn_http_denial_records_only_destination_category_never_secrets(case, expected):
+    rows = run_policy_fixture(case)
+    denied = [row for row in rows if row["kind"] == "blocked"]
+    assert len(denied) == 1 and denied[0]["destination"] == expected
+    assert denied[0]["forwarded"] is False
+    assert not any(row["kind"] == "capi_request" for row in rows)
+
+
 @pytest.mark.parametrize("damage", ["missing", "wrong_model", "credential", "paid_mode", "flag_type"])
 def test_session_policy_install_refuses_unbound_or_authenticated_environment(prepared_fixture, damage):
     import ghcp_ahp_thread_policy as policy

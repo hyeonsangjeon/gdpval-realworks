@@ -167,8 +167,8 @@ function instrument({ spawn, fetch, fork }, options) {
     mask.learn(value);
     record(kind, { ...fields, value, wire_text_redacted: mask.text(text) });
   }
-  function blocked(boundary, reason) {
-    record('blocked', { boundary, reason });
+  function blocked(boundary, reason, details = {}) {
+    record('blocked', { boundary, reason, ...details });
     fail(reason);
   }
   function requestAllowed(message, stream) {
@@ -286,7 +286,24 @@ function instrument({ spawn, fetch, fork }, options) {
   async function wrappedFetch(url, init) {
     // This mode has no HTTP allowance, including model catalogs/auth refresh.
     // Stop before parsing/calling fetch, not merely after a failed network call.
-    if (sessionOnly) blocked('capi_or_http', 'session_policy_http_refused');
+    if (sessionOnly) {
+      // Classification only: never retain query/header/body/userinfo values or
+      // call a Request/custom object's getters to inspect a forbidden request.
+      let destination = 'not_reported';
+      if (typeof url === 'string') {
+        try {
+          const parsed = new URL(url);
+          const known = new Map([
+            ['https://api.github.com/copilot_internal/v2/token', 'copilot_auth_token_exchange'],
+            ['https://api.githubcopilot.com/models', 'capi_models_catalog'],
+            ['https://api.githubcopilot.com/responses', 'capi_responses'],
+            ['https://api.githubcopilot.com/chat/completions', 'capi_chat_completions'],
+          ]);
+          destination = known.get(parsed.origin + parsed.pathname) || 'other_http';
+        } catch { destination = 'invalid_url'; }
+      }
+      blocked('capi_or_http', 'session_policy_http_refused', { destination, forwarded: false });
+    }
     const address = new URL(typeof url === 'string' || url instanceof URL ? url : url.url);
     const isResponses = /\/(?:v1\/)?responses\/?$/.test(address.pathname);
     const isModelRoute = isResponses || /\/chat\/completions\/?$/.test(address.pathname);

@@ -1,4 +1,4 @@
-"""Read-only startup evidence from the isolated, credential-free probe only.
+"""Read-only startup evidence from an isolated probe; credentials never exported.
 
 No process, socket connection, authentication, session or model is started here.
 Only the invocation-owned tree and the supervisor's descendants are inspected;
@@ -174,12 +174,12 @@ def snapshot(scratch, process, *, proc_root=Path("/proc")):
     return DiagnosticRedactor("").clean(result)
 
 
-def export(evidence, *, before, after, primary_error_code, environment, vscode_commit):
+def export(evidence, *, before, after, primary_error_code, environment, vscode_commit, credential="", session_create_requests=0):
     report = {"schema": "ghcp-ahp-backend-startup-v1", "synthetic": False, "diagnostic_only": True,
-              "admission_allowed": False, "session_create_requests": 0, "model_calls": 0,
+              "admission_allowed": False, "session_create_requests": session_create_requests, "model_calls": 0,
               "vscode_commit": vscode_commit, "primary_error_code": primary_error_code,
               "before_cleanup": before, "after_cleanup": after,
-              "environment_contract": {"authentication_supplied": False, "credential_environment_inherited": False,
+              "environment_contract": {"authentication_supplied": bool(credential), "credential_environment_inherited": False,
                   "display_present": bool(environment.get("DISPLAY") or environment.get("WAYLAND_DISPLAY")),
                   "shell_variable_present": bool(environment.get("SHELL")),
                   "isolated_home": environment.get("HOME"), "isolated_tmp": environment.get("TMPDIR")},
@@ -187,5 +187,7 @@ def export(evidence, *, before, after, primary_error_code, environment, vscode_c
                   "exit_after_cleanup_is_not_evidence_of_a_spontaneous_crash",
                   "missing_exit_status_is_null_not_zero", "no_authentication_or_model_readiness_claim"]}
     path = evidence / "backend-startup.json"
-    save_json(path, DiagnosticRedactor("").clean(report))
+    mask = DiagnosticRedactor(credential)
+    mask.clean(report)
+    save_json(path, mask.clean(report))
     return {"path": path.name, "sha256": digest(path), "diagnostic_only": True, "admission_allowed": False}

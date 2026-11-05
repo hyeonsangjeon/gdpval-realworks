@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CANARY = "FAKE_PAID_AUTH_CANARY_97531_NOT_A_CREDENTIAL"
 CONDITION = "github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false"
 TASK_CONDITION = ("always() && !cancelled() && " + CONDITION + " && inputs.connection_only != true && inputs.capability_only != true && "
+                  "inputs.authenticated_zero_turn != true && "
                   "needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || "
                   "(needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true'))")
 
@@ -31,13 +32,14 @@ def _workflow():
 @pytest.mark.parametrize("event", ["push", "pull_request", "workflow_dispatch", "workflow_run", "schedule"])
 @pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.parametrize("dry", [False, True])
-def test_paid_job_event_truth_table_from_yaml(event, enabled, dry):
+@pytest.mark.parametrize("zero_turn", [False, True])
+def test_paid_job_event_truth_table_from_yaml(event, enabled, dry, zero_turn):
     job = _workflow()["jobs"]["paid-task"]
     expression = job["if"].removeprefix("${{ ").removesuffix(" }}")
     assert expression == TASK_CONDITION
-    # Only this exact three-clause expression is accepted; no general YAML eval.
-    observed = all((event == "workflow_dispatch", enabled is True, dry is False))
-    assert observed is (event == "workflow_dispatch" and enabled and not dry)
+    # Exact paid source expression, now also excluding the zero-turn mode.
+    observed = all((event == "workflow_dispatch", enabled is True, dry is False, zero_turn is False))
+    assert observed is (event == "workflow_dispatch" and enabled and not dry and not zero_turn)
     if event in {"push", "pull_request"}:
         assert observed is False
 
@@ -47,7 +49,10 @@ def test_secret_references_only_in_protected_connection_and_task_runtime_steps()
     assert workflow["on"]["workflow_dispatch"]["inputs"]["execute_paid"]["default"] == "false"
     jobs = workflow["jobs"]
     secret_jobs = [name for name, job in jobs.items() if "secrets." in yaml.dump(job)]
-    assert secret_jobs == ["ahp-connection", "paid-task"]
+    assert secret_jobs == ["ahp-zero-turn", "ahp-connection", "paid-task"]
+    assert jobs["ahp-zero-turn"]["environment"] == "ghcp-sol-gate"
+    assert "inputs.execute_paid == false" in jobs["ahp-zero-turn"]["if"]
+    assert "inputs.authenticated_zero_turn == true" in jobs["ahp-zero-turn"]["if"]
     job = jobs["paid-task"]
     assert job["environment"] == "ghcp-sol-gate" and job["runs-on"] == "ubuntu-24.04"
     assert job["needs"] == ["plan", "ahp-connection"] and job["timeout-minutes"] == "25"

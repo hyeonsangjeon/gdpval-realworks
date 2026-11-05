@@ -528,18 +528,21 @@ def backend_probe_fixture(tmp_path, monkeypatch):
 
     monkeypatch.setattr(probe, "CapturedProcess", fake_process)
 
-    def run(error=None, *, readiness="ready", session_policy=False, session_reply=None):
+    def run(error=None, *, readiness="ready", session_policy=False, session_reply=None,
+            authenticated_zero_turn=False, transport_factory=None):
         calls["readiness"] = readiness
         def refused_transport(*args):
             if error is None:
-                transport = policy_transport(session_reply) if session_policy else FakeTransport()
+                transport = (transport_factory() if transport_factory else
+                             policy_transport(session_reply) if session_policy else FakeTransport())
                 transport.close = lambda: None
                 return transport
             raise error
         monkeypatch.setattr(probe, "WebSocket", refused_transport)
         output = tmp_path / "evidence"
         calls["exit_code"] = probe.run_probe(manifest, tmp_path / "prepared", output, "fixture", "fixture",
-            **({"session_policy": True} if session_policy else {"capability_only": True}))
+            **({"session_policy": True, "authenticated_zero_turn": True, "credential": "SYNTHETIC_AuthZeroTurn_NotACredential_123456"}
+               if authenticated_zero_turn else {"session_policy": True} if session_policy else {"capability_only": True}))
         return json.loads((output / "probe.json").read_text()), calls, output
 
     try:

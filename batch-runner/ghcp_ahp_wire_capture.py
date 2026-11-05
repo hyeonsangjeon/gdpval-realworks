@@ -311,18 +311,25 @@ def agent_fork_contract(prepared, state, manifest):
             "entrypoint": "vs/platform/agentHost/node/agentHostMain", "exec_argv": [], "telemetry": "off"}
 
 
-def install(prepared, state, environment, *, model_free, credential="", session_policy=False):
+def install(prepared, state, environment, *, model_free, credential="", session_policy=False, authenticated_zero_turn=False):
     """Add a passive tee to the isolated host, never to the user's environment.
 
     Native binary and source stay byte-identical to their original archives.
     The seed travels only in the isolated process environment, is deleted by
     the preload, and is never placed in an argv, config file or artifact.
     """
-    if type(model_free) is not bool or type(session_policy) is not bool or session_policy and not model_free:
+    if (type(model_free) is not bool or type(session_policy) is not bool or type(authenticated_zero_turn) is not bool
+            or session_policy and not model_free):
         raise Refused("wire_mode_refused")
+    if authenticated_zero_turn:
+        from ghcp_ahp_zero_turn import require_context, validate_credential
+        require_context()
+        validate_credential(credential)
+        if not session_policy or not model_free:
+            raise Refused("wire_mode_refused")
     if session_policy:
         from ghcp_ahp_thread_policy import NATIVE_ARGS
-        if credential or environment.get("VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS") != json.dumps(NATIVE_ARGS):
+        if credential and not authenticated_zero_turn or environment.get("VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS") != json.dumps(NATIVE_ARGS):
             raise Refused("wire_session_policy_environment_refused")
     manifest = load_manifest()
     binary, expected, discovery = discover_native_binary(prepared, manifest)
@@ -336,6 +343,7 @@ def install(prepared, state, environment, *, model_free, credential="", session_
     fork_contract = agent_fork_contract(prepared, state, manifest)
     fork_encoded = json.dumps(fork_contract, sort_keys=True, separators=(",", ":"))
     bootstrap = {"schema_version": "ghcp-ahp-wire-bootstrap-v1", "model_free": model_free, "session_policy": session_policy,
+                 "authenticated_zero_turn": authenticated_zero_turn,
                  "observer_sha256": digest(PRELOAD), "native_binary_sha256": expected,
                  "vscode_commit": PIN, "sdk_version": manifest["codex_sdk_version"],
                  "native_binary_discovery": discovery, "agent_host_fork": fork_contract}
