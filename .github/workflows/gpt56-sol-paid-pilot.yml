@@ -1,0 +1,162 @@
+name: Sol five-task paid pilot (WIP - launch blocked)
+
+# This is a prospective paid route, NOT another model-free probe. The source
+# gate currently refuses before auth because the live Step2/Step8 bridge is
+# unfinished. See batch-runner/docs/sol_pilot_launch_wip_20261104.md.
+on:
+  workflow_dispatch:
+    inputs:
+      execute_paid:
+        description: Explicit opt-in to the approved five-task pilot, combined USD 200
+        required: true
+        type: boolean
+        default: false
+      expected_source_sha:
+        description: Exact reviewed main/workflow SHA (40 lowercase hex characters)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpt56-sol-foundry-codex-pilot5-v1
+  cancel-in-progress: false
+
+jobs:
+  admit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Require explicit paid opt-in, first attempt and exact main source
+        env:
+          EXECUTE_PAID: ${{ inputs.execute_paid }}
+          EXPECTED_SHA: ${{ inputs.expected_source_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXECUTE_PAID" == true && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks && "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 && "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" && "$WORKFLOW_SHA" == "$EXPECTED_SHA" ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.expected_source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10.12'
+      - name: Install unchanged source-verifier dependency closure
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements.txt
+      - name: Verify source, fixed contract and live bridge before any auth
+        id: admission
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_source_sha }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          HF_HUB_OFFLINE: '1'
+          HF_DATASETS_OFFLINE: '1'
+          HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          python batch-runner/gpt56_sol_pilot_launch.py admit --execute-paid \
+            --expected-source-sha "$EXPECTED_SHA" > "$RUNNER_TEMP/sol-pilot-admission.json"
+      - name: Retain admission or refusal (not model evidence)
+        if: always() && (steps.admission.outcome == 'success' || steps.admission.outcome == 'failure')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sol-pilot-admission
+          path: ${{ runner.temp }}/sol-pilot-admission.json
+          if-no-files-found: error
+          retention-days: 7
+
+  solve_1:
+    needs: admit
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 0
+  solve_2:
+    needs: solve_1
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 1
+      predecessor_artifact_id: ${{ needs.solve_1.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.solve_1.outputs.manifest_sha256 }}
+  solve_3:
+    needs: solve_2
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 2
+      predecessor_artifact_id: ${{ needs.solve_2.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.solve_2.outputs.manifest_sha256 }}
+  solve_4:
+    needs: solve_3
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 3
+      predecessor_artifact_id: ${{ needs.solve_3.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.solve_3.outputs.manifest_sha256 }}
+  solve_5:
+    needs: solve_4
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 4
+      predecessor_artifact_id: ${{ needs.solve_4.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.solve_4.outputs.manifest_sha256 }}
+  grade_1:
+    needs: solve_5
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 5
+      predecessor_artifact_id: ${{ needs.solve_5.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.solve_5.outputs.manifest_sha256 }}
+  grade_2:
+    needs: grade_1
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 6
+      predecessor_artifact_id: ${{ needs.grade_1.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.grade_1.outputs.manifest_sha256 }}
+  grade_3:
+    needs: grade_2
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 7
+      predecessor_artifact_id: ${{ needs.grade_2.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.grade_2.outputs.manifest_sha256 }}
+  grade_4:
+    needs: grade_3
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 8
+      predecessor_artifact_id: ${{ needs.grade_3.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.grade_3.outputs.manifest_sha256 }}
+  grade_5:
+    needs: grade_4
+    uses: ./.github/workflows/gpt56-sol-paid-pilot-stage.yml
+    with:
+      execute_paid: ${{ inputs.execute_paid }}
+      expected_source_sha: ${{ inputs.expected_source_sha }}
+      stage_index: 9
+      predecessor_artifact_id: ${{ needs.grade_4.outputs.artifact_id }}
+      predecessor_sha256: ${{ needs.grade_4.outputs.manifest_sha256 }}
