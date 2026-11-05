@@ -42,9 +42,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   Dispatch exp036 exactly once: batch-run.yml has no concurrency group, and
   a fresh dispatch after any spending one needs `PRIOR_LINEAGE_SPEND_USD`
   raised first, by that lineage's own spend (its solve spend minus the
-  prior-lineage figure it started from). The grade preflight checks the
-  published ledger against this lineage's own bookings, so a raised
-  constant cannot hide a lost one. No core/, grader-seal, step 8 or
+  prior-lineage figure it started from, plus the USD 51 attempt reserve when
+  its last leg printed no "leg closed" line, because a hard kill mid-attempt
+  leaves that attempt out of every printed figure). The grade preflight
+  checks the published ledger against this lineage's own bookings, so a
+  raised constant cannot hide a lost one. No core/, grader-seal, step 8 or
   batch-run.yml bytes change, and no paid call was made.
 
 - Repair #794's two CI test failures without changing workflow or production

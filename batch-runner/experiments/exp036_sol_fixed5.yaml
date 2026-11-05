@@ -140,11 +140,17 @@
 #     started from (the install banner and the "leg closed" line print it;
 #     the record summary has both as solve_spend_usd and
 #     prior_lineage_spend_usd), plus 2.00 if its final leg ran step 6's
-#     narrative. Every solve spend figure already includes the constant, so
-#     raising it by the whole figure counts earlier lineages twice. That
-#     includes lineages whose legs did upload a checkpoint. Relay legs run
-#     the first leg's `batch-runner/` tree, so only a fresh dispatch sees the
-#     raise.
+#     narrative, plus `ATTEMPT_RESERVE_USD` (51.00) if the last of its legs
+#     to print "[sol-batch] record:" printed no "[sol-batch] leg closed" line
+#     after it (its record's summary is then null). A leg killed mid-attempt
+#     (an OOM kill, a lost runner, a cancellation or a timeout) neither
+#     books nor prints the attempt it was running, so no figure it printed
+#     includes that attempt; if it died between attempts instead, the 51
+#     over-counts, which is the safe side. Every solve spend figure already
+#     includes the constant, so raising it by the whole figure counts
+#     earlier lineages twice. That includes lineages whose legs did upload a
+#     checkpoint. Relay legs run the first leg's `batch-runner/` tree, so
+#     only a fresh dispatch sees the raise.
 #   - To continue a lineage whose relay leg died before step 2, dispatch
 #     that leg again by hand with the same relay_run, relay_lineage_id and
 #     source_sha, wall_timeout 0 and codex_foundry_confirmed true, rather

@@ -120,8 +120,13 @@ NARRATIVE_ALLOWANCE_USD = Decimal("2.00")
 #: spend" figure minus the prior-lineage figure it started from (the "leg
 #: closed" line and the install banner print it; record summary
 #: solve_spend_usd - prior_lineage_spend_usd), plus NARRATIVE_ALLOWANCE_USD
-#: if its final leg ran step 6. Every solve spend figure already includes
-#: this constant, so raising it by the whole figure counts it twice.
+#: if its final leg ran step 6, plus ATTEMPT_RESERVE_USD if the last of its
+#: legs to print "[sol-batch] record:" printed no "[sol-batch] leg closed"
+#: line after it (record summary null). A hard kill mid-attempt (OOM, a lost
+#: runner, a cancellation or a timeout) skips both that attempt's booking and
+#: the close, so no printed figure includes the attempt it was running. Every
+#: solve spend figure already includes this constant, so raising it by the
+#: whole figure counts it twice.
 PRIOR_LINEAGE_SPEND_USD = Decimal("0")
 #: Bookings step 2 lost from a published exp036 result, in USD, keyed by
 #: (HF inference revision, task id). Leave it empty unless a grade preflight

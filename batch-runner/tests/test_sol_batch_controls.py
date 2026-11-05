@@ -20,6 +20,7 @@ import dataclasses
 import inspect
 import json
 import os
+import re
 import shutil
 import socket
 import sys
@@ -1099,6 +1100,69 @@ def test_install_seeds_from_prior_legs_once_and_skips_tasks_already_in_the_ledge
     assert "prior lineages 3.00000000; prior legs 2.50000000" in out
     assert ("leg closed: solve spend 56.50000000 (prior lineages 3.00000000, prior legs 2.50000000, "
             "this leg 51.00000000)") in out
+
+
+class _LegKilled(BaseException):
+    """Unwinds the test once the kill point's log, record and ledger are captured."""
+
+
+def _own_spend_by_the_prior_rule(log: str) -> Decimal:
+    """PRIOR_LINEAGE_SPEND_USD's raise rule, read off one lineage's job log.
+
+    The last "solve spend" figure less the "prior lineages" figure it started
+    from, plus the attempt reserve when the leg printed no "leg closed" line.
+    """
+    figures = re.findall(r"solve spend (\d+\.\d{8})", log)
+    prior = re.findall(r"prior lineages (\d+\.\d{8})", log)
+    own = Decimal(figures[-1]) - Decimal(prior[0])
+    return own + (controls.ATTEMPT_RESERVE_USD if "[sol-batch] leg closed" not in log else 0)
+
+
+def test_the_prior_raise_rule_counts_the_attempt_a_killed_leg_was_running(
+        tmp_path, monkeypatch, capsys, unit_runner, ledgers):
+    # A hard kill (OOM, a lost runner, a cancellation) runs no finally and no
+    # close: the log, record and ledger stay as they are at the kill point,
+    # which is captured right after core reserves the turn's row.
+    monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", Decimal("3"))
+    _scripted_parent(monkeypatch, 1_000_000)
+    ledger = ledgers()
+    executor, settings = _executor(ledger)
+    session = controls.install(executor, **_install_kwargs(settings, ledger, tmp_path))
+    runner = executor.runner
+    runner.run("prompt", model="gpt-5.6-sol", task_id=TASKS[0])  # settled at 1.605
+    at_kill: dict[str, Any] = {}
+
+    def killed_mid_turn(self, task_prompt, task_id=None, **kwargs):
+        self._reserve_call(task_id)
+        at_kill.update(log=capsys.readouterr().out, record=_record(tmp_path / RECORD_NAME),
+                       own=session.spend_usd() - controls.PRIOR_LINEAGE_SPEND_USD)
+        raise _LegKilled
+
+    monkeypatch.setattr(CodexAgentRunner, "run", killed_mid_turn)
+    with pytest.raises(_LegKilled):
+        runner.run("prompt", model="gpt-5.6-sol", task_id=TASKS[1])
+
+    log = at_kill["log"]
+    assert "[sol-batch] record:" in log and "[sol-batch] leg closed" not in log
+    assert at_kill["record"]["summary"] is None and len(at_kill["record"]["attempts"]) == 1
+    # The last printed figure leaves out the running attempt, which the gate
+    # counts at the reserve; the rule adds the reserve back.
+    assert re.findall(r"solve spend (\d+\.\d{8})", log)[-1] == "4.60500000"
+    assert at_kill["own"] == Decimal("1.605") + controls.ATTEMPT_RESERVE_USD
+    assert _own_spend_by_the_prior_rule(log) == at_kill["own"]
+
+    # A leg that closes prints a figure that already holds every attempt, so
+    # nothing is added.
+    session.finish()
+    closed = at_kill["log"] + capsys.readouterr().out
+    assert _own_spend_by_the_prior_rule(closed) == session.spend_usd() - controls.PRIOR_LINEAGE_SPEND_USD
+
+    # The rule is written where the operator reads it.
+    for path in (Path(controls.__file__), BATCH_RUNNER / "experiments/exp036_sol_fixed5.yaml"):
+        text = " ".join(path.read_text(encoding="utf-8").replace("#:", " ").replace("#", " ")
+                        .replace("`", "").split())
+        assert "plus ATTEMPT_RESERVE_USD" in text
+        assert 'printed no "[sol-batch] leg closed" line' in text
 
 
 def test_install_refuses_a_prior_leg_row_without_a_booking(tmp_path, unit_runner, ledgers):
