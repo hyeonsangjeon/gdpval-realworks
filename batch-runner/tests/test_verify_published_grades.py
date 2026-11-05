@@ -765,15 +765,16 @@ def test_the_paid_job_hands_over_the_commits_it_actually_pushed(grade_run_workfl
 
 
 def test_every_push_in_the_paid_job_records_what_it_landed(grade_run_workflow):
-    """Three steps push: the grade, the shard merge, and the analysis. A push
-    that does not record its SHA publishes a commit nothing will check."""
+    """Four steps push: the grade, the combined solve+grade USD journal, the
+    shard merge, and the analysis. A push that does not record its SHA
+    publishes a commit nothing will check."""
     grade = grade_run_workflow["jobs"]["grade"]
     recording = [
         step for step in grade["steps"]
         if "PUBLISHED_COMMITS_FILE" in step.get("run", "")
         and "rev-parse HEAD >>" in step.get("run", "")
     ]
-    assert len(recording) == 3, [s.get("name") for s in recording]
+    assert len(recording) == 4, [s.get("name") for s in recording]
 
 
 def test_the_script_the_workflow_calls_is_in_the_repository():

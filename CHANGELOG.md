@@ -13,6 +13,26 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Run GPT-5.6 Sol (Max, 1M requested) on the fixed five through the generic
+  batch path (owner approval 2026-11-05). Adds:
+  - `exp036_sol_fixed5`: exp033 tasks and prompt, exp035 retries, office
+    toolchain.
+  - `sol_batch_controls.py`: the #796 held 1M catalog, plus a between-attempt
+    gate at USD 200 combined with grading, USD 54 kept for grading and USD 51
+    reserved per attempt, priced on the list long-context Standard Global
+    meter with the cached-input discount.
+  - One guarded step-2 hook.
+  - `sol_batch_grading.py` with `exp036_v2_sol_max.yaml`: grading holds the
+    same ceiling, seeded from the published solve spend.
+  - `ImageVersion` passed into the grading containers, with a free admission
+    proof.
+  - Source-only Sol successor
+    `gpt56_sol_foundry_codex_pilot_source_20261105_batch_path.yaml`,
+    re-pinning step 2 and the preflight.
+
+  No core/, grader-seal, step 8 or batch-run.yml bytes change, and no paid
+  call was made.
+
 - Repair #794's two CI test failures without changing workflow or production
   bytes. Keep the input-intake shell's five-second timeout while isolating only
   the standard library subprocess wait from the fixture's global sleep denial;
