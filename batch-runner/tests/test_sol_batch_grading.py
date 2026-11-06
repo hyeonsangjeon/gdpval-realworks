@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import dataclasses
 import errno
 import hashlib
 import json
@@ -19,7 +20,7 @@ import subprocess
 import sys
 from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 import yaml
@@ -61,6 +62,18 @@ NEW_INPUT_PATHS = (
 KWARGS = {"model": "gpt-5.6-sol", "input": "Grade this rubric item.", "max_output_tokens": 2400}
 MILLION = Decimal(1_000_000)
 PLACES = Decimal("0.00000001")
+
+
+def _exp036() -> controls.SolRun:
+    """exp036's registry entry, read at call time so a patched registry is seen."""
+    return controls.RUNS["exp036_sol_fixed5"]
+
+
+def _patch_run(monkeypatch, experiment_id: str = "exp036_sol_fixed5", **changes) -> None:
+    """Replace one registry entry's fields for one test."""
+    runs = dict(controls.RUNS)
+    runs[experiment_id] = dataclasses.replace(runs[experiment_id], **changes)
+    monkeypatch.setattr(controls, "RUNS", MappingProxyType(runs))
 
 
 @pytest.fixture(autouse=True)
@@ -134,16 +147,16 @@ def _reserve_for(kwargs: dict) -> Decimal:
 
 def _seed(**overrides) -> grading.Seed:
     values = dict(
-        experiment_id=grading.GRADED_EXPERIMENT_ID,
+        experiment_id=EXP036,
         config_name=grading.GRADING_CONFIG_NAME,
         inference_revision=INFERENCE_SHA,
         solve_usd=Decimal("40"),
         published_ledger_floor_usd=Decimal("0"),
         published_ledger_status="absent",
-        narrative_allowance_usd=controls.NARRATIVE_ALLOWANCE_USD,
+        narrative_allowance_usd=_exp036().narrative_allowance_usd,
         prior_grading_usd=Decimal("0"),
         prior_journals=(),
-        ceiling_usd=controls.CEILING_USD,
+        ceiling_usd=_exp036().ceiling_usd,
     )
     values.update(overrides)
     return grading.Seed(**values)
@@ -532,7 +545,13 @@ def _task_row(task_id: str, booked: object = None, *, reached_runner: bool = Tru
 def _published(tmp_path: Path, rows: list, ledger_rows: list | None = None, *, experiment_id: str = EXP036,
                ledger_error: BaseException | None = None):
     report = tmp_path / "self_report.json"
-    report.write_text(json.dumps({"meta": {"experiment_id": experiment_id}, "task_results": rows}), encoding="utf-8")
+    # A published result carries every registered task in order; tasks a test
+    # does not name stopped before Codex (no call, no booking).
+    named = {row["task_id"]: row for row in rows}
+    full = [named.pop(task, None) or _task_row(task, reached_runner=False) for task in controls.FIXED_TASK_IDS]
+    full += list(named.values())
+    meta = {"experiment_id": experiment_id, "ordered_task_ids": [row["task_id"] for row in full]}
+    report.write_text(json.dumps({"meta": meta, "task_results": full}), encoding="utf-8")
     files: dict[str, Path] = {"self_report.json": report}
     if ledger_rows is not None:
         ledger = tmp_path / "cost_ledger.jsonl"
@@ -567,8 +586,8 @@ def test_the_seed_is_the_booked_usd_on_the_published_task_rows(tmp_path):
     ]
     ledger = [SETTLED_CALL, {**SETTLED_CALL, "state": "reserved"}, {"record_type": "run", "state": "settled"}]
     fetch, calls = _published(tmp_path, rows, ledger)
-    solve, floor, status = grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
-    assert solve == controls.PRIOR_LINEAGE_SPEND_USD + Decimal("42.62345678")
+    solve, floor, status = grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)
+    assert solve == _exp036().prior_lineage_spend_usd + Decimal("42.62345678")
     assert (floor, status) == (SETTLED_CALL_USD, "present")
     assert calls == [("HyeonSang/exp036_sol_fixed5", "self_report.json", INFERENCE_SHA),
                      ("HyeonSang/exp036_sol_fixed5", "cost_ledger.jsonl", INFERENCE_SHA)]
@@ -578,7 +597,7 @@ def test_a_task_that_reached_the_runner_without_a_booking_refuses(tmp_path):
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 1.0),
                                      _task_row(controls.FIXED_TASK_IDS[1])], [])
     with pytest.raises(grading.CombinedUsdRefused) as refused:
-        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)
     assert refused.value.code == grading.UNVERIFIED
     assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
 
@@ -589,7 +608,7 @@ def test_a_task_that_reached_codex_and_lost_its_booking_refuses(tmp_path):
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 1.0),
                                      _task_row(controls.FIXED_TASK_IDS[1], reached_runner=False, model_calls=1)], [])
     with pytest.raises(grading.CombinedUsdRefused) as refused:
-        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)
     assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
 
 
@@ -598,22 +617,22 @@ def test_a_published_ledger_above_the_seed_refuses(tmp_path, monkeypatch, prior)
     # The floor is compared with this lineage's own bookings, so a raised
     # PRIOR_LINEAGE_SPEND_USD cannot hide a booking lost from this result.
     if prior is not None:
-        monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", prior)
+        _patch_run(monkeypatch, prior_lineage_spend_usd=prior)
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 2.0)], [SETTLED_CALL])
     with pytest.raises(grading.CombinedUsdRefused, match="below the published ledger"):
-        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)
 
 
 def test_an_unpublished_ledger_is_a_zero_floor_and_said_so(tmp_path):
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 3.5)])
-    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch) == (
-        controls.PRIOR_LINEAGE_SPEND_USD + Decimal("3.5"), Decimal(0), "absent")
+    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch) == (
+        _exp036().prior_lineage_spend_usd + Decimal("3.5"), Decimal(0), "absent")
 
 
 def test_a_raised_prior_lineage_spend_adds_to_the_seed_once(tmp_path, monkeypatch):
-    monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", Decimal("40"))
+    _patch_run(monkeypatch, prior_lineage_spend_usd=Decimal("40"))
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 2.5)], [SETTLED_CALL])
-    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch) == (
+    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch) == (
         Decimal("42.5"), SETTLED_CALL_USD, "present")
 
 
@@ -623,30 +642,29 @@ def test_a_lost_booking_recorded_for_this_revision_lets_the_grade_seed(tmp_path,
     lost_task = controls.FIXED_TASK_IDS[1]
     rows = [_task_row(controls.FIXED_TASK_IDS[0], 1.0),
             _task_row(lost_task, reached_runner=False, model_calls=1)]
-    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {(INFERENCE_SHA, lost_task): Decimal("38.25")})
+    _patch_run(monkeypatch, lost_booking_usd={(INFERENCE_SHA, lost_task): Decimal("38.25")})
     fetch, _ = _published(tmp_path, rows, [SETTLED_CALL])
-    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch) == (
-        controls.PRIOR_LINEAGE_SPEND_USD + Decimal("39.25"), SETTLED_CALL_USD, "present")
+    assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch) == (
+        _exp036().prior_lineage_spend_usd + Decimal("39.25"), SETTLED_CALL_USD, "present")
     # Raising PRIOR_LINEAGE_SPEND_USD instead never clears the refusal.
-    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {})
-    monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", Decimal("146"))
+    _patch_run(monkeypatch, lost_booking_usd={}, prior_lineage_spend_usd=Decimal("146"))
     with pytest.raises(grading.CombinedUsdRefused) as refused:
-        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)
     assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
     # An entry for another published revision does not apply to this one.
-    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {("c" * 40, lost_task): Decimal("38.25")})
+    _patch_run(monkeypatch, lost_booking_usd={("c" * 40, lost_task): Decimal("38.25")})
     with pytest.raises(grading.CombinedUsdRefused) as refused:
-        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)
     assert refused.value.detail == "sol_batch_prior_spend_unaccounted"
 
 
 def test_a_lost_booking_entry_below_the_ledger_floor_refuses(tmp_path, monkeypatch):
     lost_task = controls.FIXED_TASK_IDS[0]
-    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {(INFERENCE_SHA, lost_task): Decimal("1")})
+    _patch_run(monkeypatch, lost_booking_usd={(INFERENCE_SHA, lost_task): Decimal("1")})
     fetch, _ = _published(tmp_path, [_task_row(lost_task, reached_runner=False, model_calls=1)],
                           [SETTLED_CALL])
     with pytest.raises(grading.CombinedUsdRefused, match="below the published ledger"):
-        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, fetch=fetch)
+        grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)
 
 
 @pytest.mark.parametrize("case", ["ledger_fetch_error", "no_report", "foreign_report", "bad_repo", "bad_ledger_line"])
@@ -667,7 +685,7 @@ def test_anything_unreadable_about_the_published_run_refuses(tmp_path, case):
         fetch, _ = _published(tmp_path, rows, [])
         (tmp_path / "cost_ledger.jsonl").write_text("{not json\n", encoding="utf-8")
     with pytest.raises(grading.CombinedUsdRefused) as refused:
-        grading.published_solve(repo_id, INFERENCE_SHA, fetch=fetch)
+        grading.published_solve(repo_id, INFERENCE_SHA, _exp036(), fetch=fetch)
     assert refused.value.code == grading.UNVERIFIED
 
 
@@ -839,7 +857,7 @@ def test_a_symlinked_journal_or_journal_directory_refuses(tmp_path):
 
 def _preflight_with(monkeypatch, tmp_path, solve: Decimal, journals: dict[str, str] | None = None):
     monkeypatch.setattr(grading, "published_solve",
-                        lambda repo_id, revision: (solve, Decimal(0), "absent"))
+                        lambda repo_id, revision, run: (solve, Decimal(0), "absent"))
     monkeypatch.setattr(step8, "_repo_root", lambda: tmp_path)
     for name, spent in (journals or {}).items():
         _write_journal(tmp_path / grading.JOURNAL_DIR / EXP036 / name, [
@@ -851,7 +869,7 @@ def _preflight_with(monkeypatch, tmp_path, solve: Decimal, journals: dict[str, s
 
 def test_the_committed_floor_is_solve_plus_narrative_plus_earlier_grading(in_batch_runner, tmp_path, monkeypatch):
     seed = _preflight_with(monkeypatch, tmp_path, Decimal("150"), {"run-11-1.combined_usd.jsonl": "10.00000000"})
-    assert seed.committed_floor() == Decimal("150") + controls.NARRATIVE_ALLOWANCE_USD + Decimal("10")
+    assert seed.committed_floor() == Decimal("150") + _exp036().narrative_allowance_usd + Decimal("10")
     record = seed.as_record()
     assert record["solve_usd"] == "150.00000000"
     assert record["narrative_allowance_usd"] == "2.00000000"
@@ -918,12 +936,12 @@ def test_a_request_under_the_ceiling_is_sent_and_settled(admitted):
     assert (records[2]["input_tokens"], records[2]["output_tokens"], records[2]["reasoning_tokens"]) == (1000, 200, 50)
     assert admission.pending == {} and admission.spent == Decimal("0.0315")
     assert records[0]["schema"] == grading.JOURNAL_SCHEMA
-    assert records[0]["experiment_id"] == grading.GRADED_EXPERIMENT_ID
+    assert records[0]["experiment_id"] == EXP036
 
 
 def test_a_request_that_would_pass_the_ceiling_is_never_sent(admitted):
-    floor = controls.CEILING_USD - Decimal("0.01")
-    admission, recorder = admitted(_seed(solve_usd=floor - controls.NARRATIVE_ALLOWANCE_USD))
+    floor = _exp036().ceiling_usd - Decimal("0.01")
+    admission, recorder = admitted(_seed(solve_usd=floor - _exp036().narrative_allowance_usd))
     client = FakeResponses()
     metered = recorder.meter(client, provider="azure", model="gpt-5.6-sol")
     with recorder.attributed(task_id="t", stage=STAGE_GRADING):
@@ -1117,7 +1135,7 @@ def test_step8_stops_at_the_combined_ceiling_and_keeps_what_it_finished(
         native_hosted_runner, tmp_path, monkeypatch, capsys, restore_step8_binding):
     clients = _step8_workspace(tmp_path, monkeypatch)
     # Room for exactly one reservation: the second request would pass 200.
-    seed = _seed(solve_usd=controls.CEILING_USD - controls.NARRATIVE_ALLOWANCE_USD - _reserve_for(KWARGS))
+    seed = _seed(solve_usd=_exp036().ceiling_usd - _exp036().narrative_allowance_usd - _reserve_for(KWARGS))
     asked: list[tuple] = []
     monkeypatch.setattr(grading, "preflight", lambda *args: asked.append(args) or seed)
 
@@ -1200,10 +1218,15 @@ def test_check_journal_prints_what_a_journal_spent(tmp_path, capsys):
 
 
 def test_the_grade_side_and_the_solve_side_name_one_experiment_and_one_ceiling():
-    assert grading.GRADED_EXPERIMENT_ID == controls.EXPERIMENT_ID
+    # Every Sol run is registered on both sides, with one config and one
+    # ceiling; an approval changes both, and the preflight refuses a mismatch.
+    sol_side = {approval.experiment_id: (approval.config_name, approval.ceiling_usd, approval.approved is not None)
+                for approval in grading.APPROVALS if approval.solve_seed == grading.SOLVE_SEED_SOL_BATCH}
+    assert sol_side == {run.experiment_id: (run.grading_config_name, run.ceiling_usd, run.approval is not None)
+                        for run in controls.RUNS.values()}
     assert (grading.CEILING, grading.UNVERIFIED, grading.UNKNOWN) == (usd.CEILING, usd.UNVERIFIED, usd.UNKNOWN)
     experiment = yaml.safe_load((BATCH_RUNNER / "experiments" / f"{EXP036}.yaml").read_text(encoding="utf-8"))
-    assert experiment["experiment"]["id"] == grading.GRADED_EXPERIMENT_ID
+    assert experiment["experiment"]["id"] == EXP036 == _exp036().experiment_id
     assert _exp036_config()["config_name"] == grading.GRADING_CONFIG_NAME
     template = (BATCH_RUNNER / grading.TEMPLATE).read_bytes()
     assert hashlib.sha256(template).hexdigest() == grading.TEMPLATE_SHA256

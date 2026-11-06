@@ -27,6 +27,17 @@ grading-only ceiling (:data:`EXP035_PARITY_CEILING_USD`). Its seed is every
 committed journal of that approval; there is no solve spend, because exp035's
 inference is not part of it.
 
+:data:`EXP037_FIRST25` (approved 2026-11-06): the first 25 tasks of the Sol
+220 under one USD 400 ceiling for the solve run and its grade together.
+:data:`EXP038_REST195` registers the other 195 with no approval and no ceiling;
+it waits for the owner's decision on exp037's readout.
+
+For a Sol run the published task list must be the one sol_batch_controls
+registers, in its order, so the grade covers the whole approved scope and is
+never a diagnostic subset; and every committed grade of the pair must name a
+writing run whose journal is committed, so sequential resume chunks share one
+ceiling with no chunk's spend missing.
+
 An entry whose ``approved`` is ``None`` registers a pair without admitting it:
 the pair is refused once its two YAML files are read, before anything
 published or committed is ("registered but not approved for spending"); its
@@ -150,8 +161,33 @@ EXP035_PARITY = Approval(
               " deliverable selection the reviewed selector changed, for parity; stop automatically"
               " at USD 200 (\"한도 높여. 중간에 멈출 확률 제로로\", 12:20 KST)"),
 )
+EXP037_FIRST25 = Approval(
+    experiment_id="exp037_sol_first25",
+    config_name="exp037_v2_sol_max",
+    ceiling_usd=Decimal("400"),
+    solve_seed=SOLVE_SEED_SOL_BATCH,
+    exclusive_experiment=True,
+    inference_revision=None,
+    task_ids_sha256=None,
+    approved="2026-11-06 owner: USD 400 for the exp037 first-25 solve run and its grade together",
+)
+#: The remaining 195 of the Sol 220: registered so that neither half grades
+#: anything else, refused until the owner approves a ceiling from exp037's
+#: readout.
+EXP038_REST195 = Approval(
+    experiment_id="exp038_sol_rest195",
+    config_name="exp038_v2_sol_max",
+    ceiling_usd=None,
+    solve_seed=SOLVE_SEED_SOL_BATCH,
+    exclusive_experiment=True,
+    inference_revision=None,
+    task_ids_sha256=None,
+    approved=None,
+)
 #: Every admission this module can open. One approval per experiment and per
-#: config, because an experiment's journals share one directory.
+#: config, because an experiment's journals share one directory. Each Sol
+#: entry has a twin in ``sol_batch_controls.RUNS`` with the same config and
+#: ceiling (a test holds the two together; the preflight refuses a mismatch).
 #:
 #: There is no retired state. An entry cannot simply be removed or set back to
 #: unapproved once it has a committed journal: that journal would then have no
@@ -161,9 +197,9 @@ EXP035_PARITY = Approval(
 #: graded under another ceiling (for example a single-hash regrade for the Sol
 #: 220 comparison) until a PR gives the registry a retired state that keeps
 #: journal ownership but admits nothing.
-APPROVALS: tuple[Approval, ...] = (EXP036_SOL_BATCH, EXP035_PARITY)
-#: The Sol batch; equal to ``sol_batch_controls.EXPERIMENT_ID`` (a test holds
-#: the two together).
+APPROVALS: tuple[Approval, ...] = (EXP036_SOL_BATCH, EXP035_PARITY, EXP037_FIRST25, EXP038_REST195)
+#: The first Sol batch, exp036; ``sol_batch_controls.RUNS`` holds it under the
+#: same id.
 GRADED_EXPERIMENT_ID = EXP036_SOL_BATCH.experiment_id
 #: The one grading config allowed to grade it.
 GRADING_CONFIG_NAME = EXP036_SOL_BATCH.config_name
@@ -499,6 +535,7 @@ def preflight(
     except ValueError:
         _refuse("the experiment name is not a single grade-file component")
     prior, journals = prior_grading(step8._repo_root(), slug, approval)
+    check_grade_writers(step8._repo_root(), slug, approval.config_name, journals)
     solve_usd, floor, status, narrative = _solve_seed(approval, experiment, inference_revision)
     seed = Seed(
         experiment_id=approval.experiment_id,
@@ -528,8 +565,8 @@ def _solve_seed(
 
     A grading-only approval holds no solve spend. The Sol batch holds what
     sol_batch_controls booked onto the published task rows (cross-checked by
-    :func:`published_solve`) plus the step 6 narrative allowance, and its two
-    sides must name the same experiment and the same ceiling.
+    :func:`published_solve`) plus the run's step 6 narrative allowance, and
+    its two sides must name the same run, config and ceiling.
     """
     if approval.solve_seed == SOLVE_SEED_NONE:
         return Decimal(0), Decimal(0), "not_applicable", Decimal(0)
@@ -537,16 +574,19 @@ def _solve_seed(
         _refuse("the approval names no known solve seed")
     import sol_batch_controls as controls
 
-    if controls.EXPERIMENT_ID != approval.experiment_id:
-        _refuse("sol_batch_controls grades a different experiment")
-    if controls.CEILING_USD != approval.ceiling_usd:
-        _refuse("the solve and grade sides name different ceilings")
+    run = controls.registered_run(approval.experiment_id)
+    if run is None or run.approval is None:
+        _refuse("sol_batch_controls does not approve this run")
+    if run.grading_config_name != approval.config_name or run.ceiling_usd != approval.ceiling_usd:
+        _refuse("the solve and grade sides name different configs or ceilings")
+    if controls.registry_problems({run.experiment_id: run}):
+        _refuse(f"{run.experiment_id}'s registry entry is incomplete")
     try:
         repo_id = experiment["data"]["source"]
     except (KeyError, TypeError):
         _refuse("the experiment YAML names no data.source")
-    solve_usd, floor, status = published_solve(repo_id, inference_revision)
-    return solve_usd, floor, status, controls.NARRATIVE_ALLOWANCE_USD
+    solve_usd, floor, status = published_solve(repo_id, inference_revision, run)
+    return solve_usd, floor, status, run.narrative_allowance_usd
 
 
 # -- the published solve spend ------------------------------------------------
@@ -603,6 +643,7 @@ def _call_fetch(
 def published_solve(
     repo_id: str,
     revision: str,
+    run: Any,
     *,
     fetch: Callable[[str, str, str], Path | None] = _fetch,
 ) -> tuple[Decimal, Decimal, str]:
@@ -613,9 +654,12 @@ def published_solve(
     survives relay legs, where each leg's per-turn ledger does not. The
     published cost_ledger.jsonl holds only the last leg's rows, so its settled
     rows priced at the same list meter are a lower bound: booked spend below
-    it, not counting ``PRIOR_LINEAGE_SPEND_USD``, means a booking was lost,
-    and refuses. A row that reached Codex without a booking refuses unless
-    ``LOST_BOOKING_USD`` names it for ``revision``.
+    it, not counting the run's ``prior_lineage_spend_usd``, means a booking
+    was lost, and refuses. A row that reached Codex without a booking refuses
+    unless the run's ``lost_booking_usd`` names it for ``revision``. The
+    published task list must be the registered one, in the registered order:
+    the grade then covers the whole approved scope and is never a diagnostic
+    subset.
     """
     import sol_batch_controls as controls
     from core.repository_identity import validate_hf_dataset_repo_id
@@ -633,18 +677,24 @@ def published_solve(
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         _refuse(f"self_report.json could not be read ({type(exc).__name__})")
     meta = report.get("meta") if isinstance(report, dict) else None
-    if not isinstance(meta, dict) or meta.get("experiment_id") != GRADED_EXPERIMENT_ID:
+    if not isinstance(meta, dict) or meta.get("experiment_id") != run.experiment_id:
         _refuse("self_report.json belongs to another experiment")
     rows = report.get("task_results")
     if not isinstance(rows, list):
         _refuse("self_report.json has no task_results list")
+    ordered = meta.get("ordered_task_ids")
+    if (not isinstance(ordered, list) or len(ordered) != run.task_count
+            or not all(isinstance(task, str) for task in ordered)
+            or controls.ordered_task_ids_sha256(ordered) != run.ordered_task_ids_sha256
+            or [row.get("task_id") if isinstance(row, dict) else None for row in rows] != ordered):
+        _refuse("the published task list is not the registered one")
     try:
-        solve = controls.solve_spend_usd(rows, revision)
+        solve = controls.solve_spend_usd(rows, revision, run)
     except controls.SolBatchControlsRefused as exc:
         _refuse(str(exc))
     # Only this lineage's own bookings can cover its own ledger. What earlier
     # lineages spent must not hide a booking lost from this one.
-    booked = solve - controls.PRIOR_LINEAGE_SPEND_USD
+    booked = solve - run.prior_lineage_spend_usd
 
     ledger_path = _call_fetch(fetch, repo_id, "cost_ledger.jsonl", revision)
     if ledger_path is None:
@@ -829,6 +879,48 @@ def prior_grading(
             "spent_usd": _money(spent),
         })
     return total, journals
+
+
+def check_grade_writers(
+    repo_root: Path | str, slug: str, config_name: str, journals: Sequence[Mapping[str, str]],
+) -> None:
+    """Refuse while any committed grade of this pair was written by a run with no committed journal.
+
+    Every grading process of an approved pair opens one journal, and
+    grade-run.yml commits it before the grade. A grade on main whose writing
+    run (runner_evidence.observation.run_id and run_attempt) has no journal
+    means that run's spend is missing from this ceiling: its journal push
+    failed and a later step still committed the grade or partial. That
+    journal must be committed from the run's cost-ledger artifact first.
+    Task progress files (``_progress/``) carry no runner evidence and are
+    skipped.
+    """
+    root = Path(repo_root)
+    names = {Path(journal["path"]).name for journal in journals}
+    grades = root / "data" / "grades"
+    if not grades.is_dir():
+        return
+    for path in sorted(grades.rglob(f"{slug}__judge_*__{config_name}__cfg_*.json")):
+        if "_progress" in path.relative_to(grades).parts:
+            continue
+        if path.is_symlink() or not path.is_file():
+            _refuse(f"{path.name} is not a regular grade file")
+        try:
+            grade = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            _refuse(f"{path.name} could not be read ({type(exc).__name__})")
+        evidence = grade.get("runner_evidence") if isinstance(grade, dict) else None
+        observation = evidence.get("observation") if isinstance(evidence, dict) else None
+        run_id = observation.get("run_id") if isinstance(observation, dict) else None
+        attempt = observation.get("run_attempt") if isinstance(observation, dict) else None
+        if (not isinstance(run_id, str) or not _RUN_ID.fullmatch(run_id)
+                or not isinstance(attempt, str) or not _RUN_ATTEMPT.fullmatch(attempt)):
+            _refuse(f"{path.name} names no grading run")
+        if f"run-{run_id}-{attempt}.combined_usd.jsonl" not in names:
+            _refuse(
+                f"{path.name} was written by run {run_id} attempt {attempt}, whose combined USD "
+                "journal is not on main; commit it from that run's cost-ledger artifact first"
+            )
 
 
 # -- the per-request admission ------------------------------------------------

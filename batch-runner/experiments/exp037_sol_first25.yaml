@@ -1,0 +1,256 @@
+# Codex against Foundry — GPT-5.6 Sol, the first 25 of the 220
+# =============================================================
+#
+# The first stage of the Sol 220 (owner approval 2026-11-06): 25 tasks, then
+# the other 195 as exp038_sol_rest195 once the owner approves it. Everything
+# that touches a result is exp036's: exp033's prompt byte for byte, exp035's
+# retry budget, gpt-5.6-sol at reasoning effort max with 1,000,000 tokens of
+# context requested through the held catalog, the office toolchain, one fresh
+# Codex session per task. Only the task list and the money change.
+#
+# This is a comparison of configurations, not of models. Against exp035
+# (gpt-5.4) three things move at once: the model, effort max with a 1M
+# request, and install_libreoffice: true. A Sol-versus-gpt-5.4 difference on
+# these tasks is a difference between those two whole setups.
+#
+# The twenty-five tasks
+# ---------------------
+#
+# The first 25 tasks of the trial-stage rule, select_trial_run_tasks in
+# core/execution_envelope_tasks.py: walk the industries from the largest down
+# (ties by name) and take the smallest-numbered task not yet taken from each in
+# turn. Its first 30 are exp034's list and advance_check_plan.yaml's
+# trial_run.task_ids; these are their first 25, in that order. The rule was
+# committed before exp034 ran and reads nothing but the score-free catalogue,
+# so it cannot follow a result, and it has no seed to redraw.
+#
+#   catalog_sha256           5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
+#   ordered_task_ids_sha256  6721f7e99e7c4b59697ad925e68b5e43dc491f9c94d780c8f3777380b13c8093
+#
+# Why this rule and not the first 25 lines of exp035's sorted list: those 25
+# hold no Information task and one Finance task, and their reference answers
+# are only pdf, docx, xlsx, zip and plain text. This run exists to measure how
+# Sol's deliverables, failures and costs behave before 195 more tasks are
+# bought, and a sample blind to a whole industry and to slide-deck and image
+# answers measures less. This one holds all nine industries (3 each, 2 from Retail
+# Trade and Wholesale Trade), 23 occupations and 1,205 rubric items.
+#
+# Nothing hard is left out. 02aa1805 and 0818571f never succeeded on gpt-5.4;
+# 0353ee0c, 105f8ad0, 1d4672c8 and 11e1b169 produced no deliverable in
+# exp035; 0e386e32 and 15ddd28d were refused by the selector there. Four of
+# exp036's five are here again (2ea2e5b5 is not), which also shows how much a
+# Sol re-run of the same task moves.
+#
+# Running the list in the rule's order means that if the USD gate stops the run
+# early, what did run is still spread over the industries: the first 18 are two
+# from every industry.
+#
+# The money, owner approval 2026-11-06
+# ------------------------------------
+#
+# USD 400 over solve and grade together, at the same list meter as exp036.
+# The constants in sol_batch_controls.RUNS["exp037_sol_first25"] are
+# authoritative:
+#
+#   ceiling                400
+#   grading reserve        115   the 25 tasks' 1,205 rubric items at USD 0.0936
+#                                each (exp035's grade of 17 of them, priced at
+#                                this meter) plus the 2.00 narrative allowance
+#   solve budget           285
+#   attempt reserve         51   exp036's; 2.4 x the costliest Sol attempt
+#                                measured (21.26) and above the 29.385 in-flight
+#                                bound
+#   attempts start while booked solve spend <= 234
+#
+# exp036 booked 38.79 for five tasks (7.76 a task, 1.01 to 21.26), so 25 tasks
+# at that mean book about 194 and the 25th first attempt starts with about 48
+# to spare. Unspent solve budget is grading money: the grade is admitted
+# against the whole 400 minus what solve and earlier grading committed. The
+# gate is checked between attempts, so the last admitted attempt can overshoot
+# by what it costs above 51; the owner accepted that for exp036 and it stands.
+#
+# If the money runs out, nothing is bypassed. A task the gate refuses ends as
+# usd_ceiling_reached, is not retried, and is reported as "not attempted (USD
+# gate)" and scored 0 on the fixed 25-task denominator. A grade that reaches the
+# ceiling stops with exit 4 and keeps its journal; finishing it needs a new
+# owner approval that raises this run's ceiling.
+#
+# Resume stays off
+# ----------------
+#
+# resume_max_rounds: 0, for exp036's reasons: the attempt reserve assumes at
+# most four attempts per task, and content stops are never re-run
+# (NON_RESUMABLE_ERROR_CATEGORIES keeps content_filtered out of every resume
+# round). A content stop is a benchmark result and stays a 0.
+#
+# The wall clock and the relay legs
+# ---------------------------------
+#
+# exp036's per-leg arithmetic, unchanged: a 170-minute watchdog, one
+# worst-case task of about 131 minutes started just before it, about 15
+# minutes of setup with the office toolchain, under 5 minutes of steps 3 to 7
+# (exp035's final leg did all of them for 220 tasks in 4.5 minutes) and up to
+# 30 minutes of "Verify dispatched result PR checks": about 351 of the job's
+# 360 minutes. The dispatch passes wall_timeout 0, so this file's 170 is the
+# watchdog on every leg; sol_batch_controls refuses any other value above 170.
+#
+# exp036 averaged 390 seconds a task, so 25 tasks are about 163 minutes of
+# work: one leg, maybe two. relay_max_runs: 5 allows six legs, 1,020 minutes of
+# watchdog, which still finishes if every task ran 40 minutes. Legs cannot add
+# an attempt or change a result. The relay's own guard refuses a leg that
+# finished no task.
+#
+# Every relay rule in exp036's header applies here unchanged, with this run's
+# names: a GitHub re-run of a leg is refused; a fresh dispatch after any
+# dispatch that spent needs RUNS["exp037_sol_first25"].prior_lineage_spend_usd
+# raised by that lineage's own spend first; a row that lost its booking needs a
+# lost_booking_usd entry before it can be graded.
+#
+# Grading
+# -------
+#
+# grade-run.yml grades it with grading_configs/exp037_v2_sol_max.yaml through
+# sol_batch_grading.py under the same 400. There is no rerun_identity, so no
+# pull request sits between the solve and its grade; the grade preflight
+# instead refuses a published result whose task list is not these 25 in this
+# order, so the grade always covers the whole approved scope. Expect one
+# grading process (about 4 to 5.5 hours against the 338-minute chunk budget);
+# if it runs over, step 8 exits 7 and the next chunk resumes under the same
+# ceiling, after its journal is on main.
+#
+# The dispatch
+# ------------
+#
+#   experiment_yaml           exp037_sol_first25
+#   codex_foundry_confirmed   true
+#   dry_run                   false
+#   wall_timeout              0, so this file's 170 is used
+#
+# Dispatch exactly once, and not while any other paid GPT-5.6 Sol work (a
+# grade included) is running: both would share one deployment's rate limit,
+# and this run is meant to measure that limit.
+
+experiment:
+  id: "exp037_sol_first25"
+  name: "Codex command-line tool against Foundry — GPT-5.6 Sol, first 25 of 220"
+  description: >-
+    The first stage of GPT-5.6 Sol on the whole benchmark: the first 25 tasks of
+    the trial-stage rule, run exactly as exp036 ran its five. Solve and grade
+    together held to USD 400 at list price.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-11-06"
+
+control:
+  fixed:
+    - model
+    - reasoning_effort
+    - context_window
+    - prompt
+    - temperature
+    - self_qa
+    - retry_budget
+    - execution_environment
+  changed:
+    # The stage, and nothing else.
+    - tasks
+
+data:
+  # HyeonSang/<experiment.id>, as in exp033-exp036. Step 0 creates it, step 7
+  # uploads to it, and grade-run.yml downloads from it.
+  source: "HyeonSang/exp037_sol_first25"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+    # select_trial_run_tasks(catalog)[:25] -- exp034's first 25, in its order.
+    # sol_batch_controls.RUNS pins their ordered_task_ids_sha256 6721f7e9...;
+    # the grade preflight refuses a published result with any other list.
+    task_ids:
+      - "0ed38524-a4ad-405f-9dee-7b2252659aad"
+      - "01d7e53e-0513-4109-a242-8ccaf442cd21"
+      - "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+      - "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+      - "05389f78-589a-473c-a4ae-67c61050bfca"
+      - "02aa1805-c658-4069-8a6a-02dec146063a"
+      - "0419f1c3-d669-45d0-81cd-f4d5923b06a5"
+      - "105f8ad0-8dd2-422f-9e88-2be5fbd2b215"
+      - "02314fc6-a24e-42f4-a8cd-362cae0f0ec1"
+      - "1d4672c8-b0a7-488f-905f-9ab4e25a19f7"
+      - "11e1b169-5fb6-4d79-8a83-82ddf4987a85"
+      - "0353ee0c-18b5-4ad3-88e8-e001d223e1d7"
+      - "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9"
+      - "11dcc268-cb07-4d3a-a184-c6d7a19349bc"
+      - "0e386e32-df20-4d1f-b536-7159bc409ad5"
+      - "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+      - "1137e2bb-bdf9-4876-b572-f29b7de5e595"
+      - "045aba2e-4093-42aa-ab7f-159cc538278c"
+      - "3600de06-3f71-4e48-9480-e4828c579924"
+      - "17111c03-aac7-45c2-857d-c06d8223d6ad"
+      - "0ec25916-1b5c-4bfe-93d3-4e103d860f3a"
+      - "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+      - "15ddd28d-8445-4baa-ac7f-f41372e1344e"
+      - "2c249e0f-4a8c-4f8e-b4f4-6508ba29b34f"
+      - "0e4fe8cd-16d0-4f41-8247-6385b4762582"
+condition_a:
+  name: "Codex command-line tool, Foundry deployment"
+  model:
+    provider: "azure"
+    # Must equal execution.codex.model: CodexAgentRunner.run refuses a
+    # mismatch rather than calling one deployment and recording another.
+    deployment: "gpt-5.6-sol"
+    # Codex owns the request, so these are inherited defaults, not claims
+    # about what was sent. The effort it sends is the one execution.codex
+    # names.
+    temperature: 0.0
+    seed: 42
+    reasoning_effort: null
+  prompt:
+    # Byte-for-byte exp033's, exp034's, exp035's and exp036's.
+    system: |
+      You are completing a professional work task. You have a terminal and a
+      working directory. Do the task and leave the finished deliverables in
+      the working directory as real files.
+    prefix: null
+    body: null
+    suffix: null
+  # Off, for the reason exp033 gives.
+  qa:
+    enabled: false
+    max_retries: 0
+    model: null
+    min_score: 6
+    prompt: ""
+
+execution:
+  mode: "codex_foundry"
+  codex:
+    endpoint_from_route: true
+    model: "gpt-5.6-sol"
+    # exp036's owner conditions 4 and 1: effort, then window. Step 1
+    # carries both keys into the prepared file, and step 2 hands them to Codex.
+    reasoning_effort: "max"
+    model_context_window: 1000000
+    # Both 0 on purpose; retries live in max_retries below, where they are
+    # counted.
+    request_max_retries: 0
+    stream_max_retries: 0
+  # Wall clock for one turn. Unchanged from exp033-exp036.
+  timeout: 1800
+  # Attempts after an infrastructure failure, per task: four at most, as in
+  # exp035. The USD gate can refuse to start any of them.
+  max_retries: 3
+  # Off; see "Resume stays off" in the header.
+  resume_max_rounds: 0
+  # exp036's owner condition 5, kept: a Sol run is compared with Sol runs.
+  install_libreoffice: true
+  # Step 2's watchdog in minutes, used because the dispatch passes
+  # wall_timeout 0. See "The wall clock and the relay legs" in the header.
+  wall_timeout: 170
+  # Leg zero plus five relay legs; see "The wall clock and the relay legs".
+  relay_max_runs: 5
+
+output:
+  # Nothing in codex_foundry mode reads this to decide an upload; the
+  # dispatch's dry_run: false does. Written true so the two agree.
+  publish_to_hf: true
+  submit_to_evals: false

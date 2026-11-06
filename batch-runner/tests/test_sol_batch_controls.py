@@ -25,7 +25,7 @@ import socket
 import sys
 from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 import pytest
@@ -59,6 +59,18 @@ RUN_ID = "exp036_sol_fixed5:123456789:1"
 TASKS = controls.FIXED_TASK_IDS
 RECORD_NAME = "sol_batch_controls_condition_a.json"
 ANCHOR_LEDGER = BATCH_RUNNER / "tests/fixtures/run_record/cost_ledger_condition_a.jsonl"
+
+
+def _exp036() -> controls.SolRun:
+    """exp036's registry entry, read at call time so a patched registry is seen."""
+    return controls.RUNS["exp036_sol_fixed5"]
+
+
+def _patch_run(monkeypatch, experiment_id: str = "exp036_sol_fixed5", **changes) -> None:
+    """Replace one registry entry's fields for one test."""
+    runs = dict(controls.RUNS)
+    runs[experiment_id] = dataclasses.replace(runs[experiment_id], **changes)
+    monkeypatch.setattr(controls, "RUNS", MappingProxyType(runs))
 
 
 @pytest.fixture(autouse=True)
@@ -126,7 +138,7 @@ def _executor(ledger: CostReceiptLedger, settings: CodexProviderSettings | None 
 def _install_kwargs(settings: Any, ledger: Any, workspace: Path, /, **overrides: Any) -> dict[str, Any]:
     """The keywords step 2's hook passes for the registered batch; ``overrides`` replace any of them."""
     values: dict[str, Any] = dict(
-        experiment_id=controls.EXPERIMENT_ID, condition_key="condition_a",
+        experiment_id=_exp036().experiment_id, condition_key="condition_a",
         codex_settings=settings, cost_ledger=ledger, run_id=RUN_ID, task_ids=list(TASKS),
         max_retries=3, resume_max_rounds=0, task_deadlines=None, restored_progress=None,
         workspace=workspace, wall_timeout=170,
@@ -138,7 +150,7 @@ def _install_kwargs(settings: Any, ledger: Any, workspace: Path, /, **overrides:
 def _session(ledger: Any, record_path: Path, *, seed: Decimal = Decimal(0),
              prior_legs: Decimal = Decimal(0), window_mismatch: bool = False) -> controls.SolBatchSession:
     return controls.SolBatchSession(
-        ledger=ledger, rates=controls.load_sol_list_rates(), record_path=record_path,
+        run=_exp036(), ledger=ledger, rates=controls.load_sol_list_rates(), record_path=record_path,
         seed_usd=seed, prior_legs_usd=prior_legs, window_mismatch=window_mismatch, header={},
     )
 
@@ -504,7 +516,7 @@ def test_install_swaps_in_the_gated_runner_with_the_executors_own_arguments(
         original.run_id, original.condition_name, original.preflight_auth)
     assert runner._sol_session is session
     # Relative to the constant, which a recovery PR raises.
-    assert session.seed_usd == controls.PRIOR_LINEAGE_SPEND_USD and session.window_mismatch is False
+    assert session.seed_usd == _exp036().prior_lineage_spend_usd and session.window_mismatch is False
 
     path = tmp_path / RECORD_NAME
     raw = path.read_bytes()
@@ -530,7 +542,7 @@ def test_install_swaps_in_the_gated_runner_with_the_executors_own_arguments(
     banner = capsys.readouterr().out
     assert "controls on for exp036_sol_fixed5" in banner and "95.00" in banner
     # The figure a later PRIOR raise subtracts from this lineage's solve spend.
-    assert f"prior lineages {controls.fmt(controls.PRIOR_LINEAGE_SPEND_USD)}" in banner
+    assert f"prior lineages {controls.fmt(_exp036().prior_lineage_spend_usd)}" in banner
     assert controls.CATALOG_SHA256[:12] in banner and str(path) in banner
     assert "fixture-host" not in banner and AUTH_ARGV[1] not in banner
 
@@ -600,7 +612,7 @@ SETTLED = {"call_id": "a", "state": STATE_SETTLED, "input_tokens": 100_000,
     ({"state": STATE_ABANDONED}, {"in_flight_usd": Decimal("28.26")}, (Decimal(0), "abandoned")),
 ])
 def test_book_row(row, evidence, booked):
-    assert controls.book_row(row, rates=RATES, evidence=evidence) == booked
+    assert controls.book_row(row, rates=RATES, reserve=_exp036().attempt_reserve_usd, evidence=evidence) == booked
 
 
 def test_reasoning_never_adds_to_a_settled_turn():
@@ -649,7 +661,7 @@ def _last(input_tokens: Any = None, cached: Any = None, output_tokens: Any = Non
 def test_the_request_left_in_flight_is_bounded_from_the_last_one_reported(last, bound):
     assert controls.in_flight_bound_usd(last, rates=controls.load_sol_list_rates()) == bound
     # Never above the reserve an attempt with no usage at all books.
-    assert bound <= controls.ATTEMPT_RESERVE_USD
+    assert bound <= _exp036().attempt_reserve_usd
 
 
 @pytest.mark.parametrize("inputs, cached, outputs, tool_output", [
@@ -954,7 +966,7 @@ def test_prior_legs_are_summed_from_their_budget_metrics():
         "not a row",
     ]
     assert controls.booked_from_rows(rows) == (Decimal("13.25"), ["a", "b"])
-    assert controls.solve_spend_usd(rows) == controls.PRIOR_LINEAGE_SPEND_USD + Decimal("13.25")
+    assert controls.solve_spend_usd(rows, None, _exp036()) == _exp036().prior_lineage_spend_usd + Decimal("13.25")
 
 
 @pytest.mark.parametrize("observability, model_calls", [
@@ -1018,25 +1030,25 @@ def test_a_lost_booking_is_counted_only_from_its_own_entry():
 
 def test_lost_bookings_apply_only_to_the_revision_they_name(monkeypatch):
     graded, other = "b" * 40, "c" * 40
-    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {(graded, "b"): Decimal("38.25")})
-    assert controls.lost_bookings_for(graded) == {"b": Decimal("38.25")}
-    assert controls.lost_bookings_for(other) == {} and controls.lost_bookings_for(None) == {}
+    _patch_run(monkeypatch, lost_booking_usd={(graded, "b"): Decimal("38.25")})
+    assert controls.lost_bookings_for(_exp036(), graded) == {"b": Decimal("38.25")}
+    assert controls.lost_bookings_for(_exp036(), other) == {} and controls.lost_bookings_for(_exp036(), None) == {}
     rows = [_row("b", "error", {"preprocessors": []}, model_calls=1)]
-    assert controls.solve_spend_usd(rows, graded) == controls.PRIOR_LINEAGE_SPEND_USD + Decimal("38.25")
+    assert controls.solve_spend_usd(rows, graded, _exp036()) == _exp036().prior_lineage_spend_usd + Decimal("38.25")
     for revision in (other, None):
         with pytest.raises(controls.SolBatchControlsRefused):
-            controls.solve_spend_usd(rows, revision)
+            controls.solve_spend_usd(rows, revision, _exp036())
     # A key that is not (revision, task id) refuses rather than crashing the preflight.
     for key in ("b", (graded,), (graded, "b", "x"), (graded, 1)):
-        monkeypatch.setattr(controls, "LOST_BOOKING_USD", {key: Decimal("38.25")})
+        _patch_run(monkeypatch, lost_booking_usd={key: Decimal("38.25")})
         with pytest.raises(controls.SolBatchControlsRefused) as refused:
-            controls.lost_bookings_for(graded)
+            controls.lost_bookings_for(_exp036(), graded)
         assert str(refused.value) == "sol_batch_prior_spend_unaccounted"
 
 
 def test_install_never_reads_the_lost_booking_table(tmp_path, monkeypatch, unit_runner, ledgers):
     # A relay leg has no published revision; a lost booking still refuses it.
-    monkeypatch.setattr(controls, "LOST_BOOKING_USD", {("b" * 40, TASKS[0]): Decimal("38.25")})
+    _patch_run(monkeypatch, lost_booking_usd={("b" * 40, TASKS[0]): Decimal("38.25")})
     ledger = ledgers()
     executor, settings = _executor(ledger)
     restored = {"results": [_row(TASKS[0], "error", {"preprocessors": []}, model_calls=1)]}
@@ -1063,7 +1075,7 @@ def test_a_row_that_reached_the_runner_without_a_booking_refuses(observability):
 
 def test_install_seeds_from_prior_legs_once_and_skips_tasks_already_in_the_ledger(
         tmp_path, monkeypatch, capsys, unit_runner, ledgers):
-    monkeypatch.setattr(controls, "PRIOR_LINEAGE_SPEND_USD", Decimal("3"))
+    _patch_run(monkeypatch, prior_lineage_spend_usd=Decimal("3"))
     ledger = ledgers()
     executor, settings = _executor(ledger)
     executor.runner._reserve_call(TASKS[0])  # a live row: counted from the ledger at 51
@@ -1150,7 +1162,7 @@ def test_a_record_that_cannot_be_written_never_raises(tmp_path, capsys, ledgers)
 
 def test_a_record_that_cannot_be_serialised_only_warns(tmp_path, capsys, ledgers):
     session = controls.SolBatchSession(
-        ledger=ledgers(), rates=controls.load_sol_list_rates(), record_path=tmp_path / "r.json",
+        run=_exp036(), ledger=ledgers(), rates=controls.load_sol_list_rates(), record_path=tmp_path / "r.json",
         seed_usd=Decimal(0), prior_legs_usd=Decimal(0), window_mismatch=False,
         header={"not_json": float("nan")})
     session.finish()
@@ -1188,7 +1200,7 @@ def test_loopback_codex_reports_the_window_the_held_catalog_sets(
     ledger = ledgers(run_id="codex-e2e")
     record_path = tmp_path / "r.json"
     session = controls.SolBatchSession(
-        ledger=ledger, rates=controls.load_sol_list_rates(), record_path=record_path,
+        run=_exp036(), ledger=ledger, rates=controls.load_sol_list_rates(), record_path=record_path,
         seed_usd=Decimal(0), prior_legs_usd=Decimal(0), window_mismatch=False, header={})
 
     with ScriptedResponses([says("done")]) as server:

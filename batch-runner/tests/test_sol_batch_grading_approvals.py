@@ -70,7 +70,7 @@ def test_one_approval_per_experiment_and_per_config_and_the_sol_batch_unchanged(
     assert len(set(configs)) == len(configs)
     sol = grading.EXP036_SOL_BATCH
     assert (sol.experiment_id, sol.config_name) == (grading.GRADED_EXPERIMENT_ID, grading.GRADING_CONFIG_NAME)
-    assert (sol.experiment_id, sol.ceiling_usd) == (controls.EXPERIMENT_ID, controls.CEILING_USD)
+    assert sol.ceiling_usd == controls.RUNS[sol.experiment_id].ceiling_usd
     assert (sol.solve_seed, sol.exclusive_experiment, sol.task_ids_sha256) == (
         grading.SOLVE_SEED_SOL_BATCH, True, None)
     assert PARITY.solve_seed == grading.SOLVE_SEED_NONE and PARITY.exclusive_experiment is False

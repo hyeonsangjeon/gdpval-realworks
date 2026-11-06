@@ -1,12 +1,15 @@
-"""Solve-side controls for the GPT-5.6 Sol fixed-five batch on the generic Codex path.
+"""Solve-side controls for GPT-5.6 Sol runs on the generic Codex batch path.
 
 Step 2 calls :func:`install` once, right after its TaskExecutor exists, for
 every codex_foundry run that is not the paused gpt56 pilot. It is inert unless
-the run asks Codex for gpt-5.6-sol or is :data:`EXPERIMENT_ID`: every other run
-gets ``None`` back before anything is read, written or printed.
+the run asks Codex for gpt-5.6-sol or is registered in :data:`RUNS`: every
+other run gets ``None`` back before anything is read, written or printed.
 
-For :data:`EXPERIMENT_ID` (owner approval 2026-11-05) it swaps the executor's
-runner for :class:`SolBatchCodexRunner`, which adds two controls:
+:data:`RUNS` holds every Sol run the owner registered, each with its own task
+list and USD ceiling: exp036_sol_fixed5 (approved 2026-11-05),
+exp037_sol_first25 (approved 2026-11-06) and exp038_sol_rest195 (registered,
+not approved: refused before any attempt). For an approved run it swaps the
+executor's runner for :class:`SolBatchCodexRunner`, which adds two controls:
 
 * The held #796 1M catalog. Codex 0.147.0's bundled catalog gives gpt-5.6-sol
   272,000 tokens and clamps the requested 1,000,000 to 258,400 usable; the held
@@ -14,9 +17,10 @@ runner for :class:`SolBatchCodexRunner`, which adds two controls:
   attempt, before Codex starts.
 * A between-attempt USD gate. Before each attempt it books every ledger row of
   the run at the published long-context list meter, adds what earlier relay
-  legs booked, and refuses to START the attempt once that spend plus one
-  attempt reserve would pass the solve budget. A running attempt is never
-  stopped, so the last admitted attempt can overshoot; the owner accepted that.
+  legs booked, and refuses to START the attempt once that spend plus the
+  run's attempt reserve would pass the run's solve budget. A running attempt
+  is never stopped, so the last admitted attempt can overshoot; the owner
+  accepted that.
 
 Any other gpt-5.6-sol run on this path is refused before its first attempt, so a
 copied or mistyped experiment file cannot run without the gate.
@@ -37,6 +41,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from core import runner_environment
@@ -59,8 +64,6 @@ from core.cost_receipts import (
 )
 from core.reference_integrity import open_verified_reference
 
-#: The one experiment these controls run. Any other id asking for Sol is refused.
-EXPERIMENT_ID = "exp036_sol_fixed5"
 SOL_MODEL = "gpt-5.6-sol"
 #: Requested explicitly: the 0.147.0 catalog default for gpt-5.6-sol is "low".
 REASONING_EFFORT = "max"
@@ -69,6 +72,7 @@ CONTEXT_WINDOW = 1_000_000
 CODEX_BUNDLED_SOL_CONTEXT_WINDOW = 272_000
 #: Sol's context_window and max_context_window in the held catalog, 100% usable.
 CATALOG_SOL_MAX_CONTEXT_WINDOW = 1_050_000
+#: exp036_sol_fixed5's five tasks, in exp033's order (its registry entry holds their digest).
 FIXED_TASK_IDS = (
     "02aa1805-c658-4069-8a6a-02dec146063a",
     "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
@@ -89,10 +93,6 @@ CATALOG_SHA256 = "41e884c807616100cc92c8b734337725d37ecd096586c598f3c389032e8db4
 PRICE_TABLE_SHA256 = "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e"
 #: The table's long-context Standard Global meter, the higher of its two Global tiers.
 SOL_METER = "long_context_standard_global"
-CEILING_USD = Decimal("200")
-GRADING_RESERVE_USD = Decimal("54")
-ATTEMPT_RESERVE_USD = Decimal("51")
-SOLVE_BUDGET_USD = CEILING_USD - GRADING_RESERVE_USD
 #: One refused first request: 64,000 input tokens x (10.00 + 12.50) plus
 #: 128,000 output tokens x 45.00 per 1M (1.44 + 5.76).
 REFUSED_REQUEST_USD = Decimal("7.20")
@@ -106,34 +106,164 @@ IN_FLIGHT_TOOL_OUTPUT_TOKENS = 100_000
 #: Turn endings that leave no billed request in flight: a 429 is not billed,
 #: and a turn that never started sent nothing.
 _NOTHING_IN_FLIGHT = frozenset({"rate_limited", "turn_start_failed"})
-#: Step 2's watchdog in minutes, as exp036_sol_fixed5.yaml's wall clock sizes
-#: it: 15 setup + 170 + one 131-minute task + 5 + 30 fits the 360-minute job.
+#: The longest step-2 watchdog any registered run may use, in minutes:
+#: 15 setup + 170 + one 131-minute task + 5 + 30 fits the 360-minute job.
 WALL_TIMEOUT_MINUTES = 170
-#: Step 6 narrative: two Sol Max calls, 12,288 output tokens at most. Booked by
-#: sol_batch_grading, not by the solve gate.
-NARRATIVE_ALLOWANCE_USD = Decimal("2.00")
-#: Everything earlier exp036 lineages spent; a fresh dispatch (relay_run 0)
-#: restores no rows and starts from this alone. Raise it by PR before ANY
-#: fresh exp036 dispatch that follows an exp036 dispatch which spent
-#: anything, including lineages whose legs did upload a checkpoint. Raise it
-#: by that lineage's OWN spend: its last cumulative "[sol-batch] ... solve
-#: spend" figure minus the prior-lineage figure it started from (the "leg
-#: closed" line and the install banner print it; record summary
-#: solve_spend_usd - prior_lineage_spend_usd), plus NARRATIVE_ALLOWANCE_USD
-#: if its final leg ran step 6. Every solve spend figure already includes
-#: this constant, so raising it by the whole figure counts it twice.
-PRIOR_LINEAGE_SPEND_USD = Decimal("0")
-#: Bookings step 2 lost from a published exp036 result, in USD, keyed by
-#: (HF inference revision, task id). Leave it empty unless a grade preflight
-#: refused with sol_batch_prior_spend_unaccounted: a task row reached Codex
-#: (its problem_solving_cost receipt counts model calls) but an error after
-#: the runner rebuilt it without its budget_metrics, and raising
-#: PRIOR_LINEAGE_SPEND_USD cannot clear that. Add the task's booking by PR:
-#: the sum of its "[sol-batch] <first 8 of task id> attempt N: booked X" in the
-#: publishing leg's job log (or of booked_usd over its attempts in that leg's
-#: sol_batch_controls record). Only the grade preflight reads it, for the
-#: revision it grades, so an entry never applies to another lineage.
-LOST_BOOKING_USD: Mapping[tuple[str, str], Decimal] = {}
+
+
+@dataclass(frozen=True)
+class SolRun:
+    """One Sol run the owner registered on this path, with its own USD ceiling.
+
+    ``approval`` names who approved spending and when. ``None`` registers the
+    run without approving it: :func:`install` refuses it before any attempt
+    and the grade preflight refuses it before reading anything published.
+    The money fields of an approved run are all set; :func:`registry_problems`
+    lists what is not.
+    """
+
+    experiment_id: str
+    #: The one grading config allowed to grade this run; its twin entry in
+    #: sol_batch_grading.APPROVALS names the same config and ceiling.
+    grading_config_name: str
+    task_count: int
+    #: core/inference_manifest._ordered_task_ids_sha256 of data.filter.task_ids,
+    #: the digest inference_provenance.json publishes.
+    ordered_task_ids_sha256: str
+    approval: str | None
+    #: Solve and grade together, at the list meter.
+    ceiling_usd: Decimal | None = None
+    #: Kept out of the solve budget for grading and the step 6 narrative.
+    grading_reserve_usd: Decimal | None = None
+    #: The most one attempt is assumed to add when the gate admits it; also the
+    #: booking of an attempt whose usage was never reported.
+    attempt_reserve_usd: Decimal | None = None
+    #: Step 6 narrative: two Sol Max calls, 12,288 output tokens at most.
+    #: Booked by sol_batch_grading, not by the solve gate.
+    narrative_allowance_usd: Decimal | None = None
+    #: Everything earlier lineages of this run spent; a fresh dispatch
+    #: (relay_run 0) restores no rows and starts from this alone. Raise it by
+    #: PR before ANY fresh dispatch of this run that follows one which spent
+    #: anything, including lineages whose legs did upload a checkpoint. Raise
+    #: it by that lineage's OWN spend: its last cumulative "[sol-batch] ...
+    #: solve spend" figure minus the prior-lineage figure it started from (the
+    #: "leg closed" line and the install banner print it; record summary
+    #: solve_spend_usd - prior_lineage_spend_usd), plus the narrative allowance
+    #: if its final leg ran step 6. Every solve spend figure already includes
+    #: this value, so raising it by the whole figure counts it twice.
+    prior_lineage_spend_usd: Decimal = Decimal(0)
+    #: Bookings step 2 lost from a published result of this run, in USD, keyed
+    #: by (HF inference revision, task id). Leave it empty unless a grade
+    #: preflight refused with sol_batch_prior_spend_unaccounted: a task row
+    #: reached Codex (its problem_solving_cost receipt counts model calls) but
+    #: an error after the runner rebuilt it without its budget_metrics, and
+    #: raising prior_lineage_spend_usd cannot clear that. Add the task's
+    #: booking by PR: the sum of its "[sol-batch] <first 8 of task id> attempt
+    #: N: booked X" in the publishing leg's job log (or of booked_usd over its
+    #: attempts in that leg's sol_batch_controls record). Only the grade
+    #: preflight reads it, for the revision it grades, so an entry never
+    #: applies to another lineage.
+    lost_booking_usd: Mapping[tuple[str, str], Decimal] = dataclasses.field(
+        default_factory=lambda: MappingProxyType({}))
+    #: This run's watchdog ceiling, at most WALL_TIMEOUT_MINUTES.
+    wall_timeout_minutes: int = WALL_TIMEOUT_MINUTES
+
+    @property
+    def solve_budget_usd(self) -> Decimal:
+        return self.ceiling_usd - self.grading_reserve_usd
+
+    @property
+    def admit_while_at_most_usd(self) -> Decimal:
+        return self.solve_budget_usd - self.attempt_reserve_usd
+
+
+#: Every Sol run registered on this path. A new run, a raised ceiling or an
+#: approval is a pull request that edits this table.
+RUNS: Mapping[str, SolRun] = MappingProxyType({run.experiment_id: run for run in (
+    # Owner approval 2026-11-05. USD 200 = 146 solve + 54 grading; 51 per attempt.
+    SolRun(
+        experiment_id="exp036_sol_fixed5",
+        grading_config_name="exp036_v2_sol_max",
+        task_count=5,
+        ordered_task_ids_sha256="23ede7c52a525584acce5840f69efcb8725ed7523714f5ad92e564cbae7331cd",
+        approval="owner 2026-11-05",
+        ceiling_usd=Decimal("200"),
+        grading_reserve_usd=Decimal("54"),
+        attempt_reserve_usd=Decimal("51"),
+        narrative_allowance_usd=Decimal("2.00"),
+    ),
+    # Owner approval 2026-11-06. USD 400 = 285 solve + 115 grading; 51 per
+    # attempt, so attempts start while booked solve spend <= 234.
+    # 115 = the 25 tasks' 1,205 rubric items at USD 0.0936 per item (what
+    # exp035's grade of 17 of them cost at this meter) + 2.00 narrative.
+    SolRun(
+        experiment_id="exp037_sol_first25",
+        grading_config_name="exp037_v2_sol_max",
+        task_count=25,
+        ordered_task_ids_sha256="6721f7e99e7c4b59697ad925e68b5e43dc491f9c94d780c8f3777380b13c8093",
+        approval="owner 2026-11-06",
+        ceiling_usd=Decimal("400"),
+        grading_reserve_usd=Decimal("115"),
+        attempt_reserve_usd=Decimal("51"),
+        narrative_allowance_usd=Decimal("2.00"),
+    ),
+    # Registered, NOT approved: the other 195 tasks need a new owner
+    # approval, which sets the money fields here in the same pull request.
+    SolRun(
+        experiment_id="exp038_sol_rest195",
+        grading_config_name="exp038_v2_sol_max",
+        task_count=195,
+        ordered_task_ids_sha256="18699a1808cb03a6ecfdf9479879f1662b3b49ae5617df6fcbcf391f56269725",
+        approval=None,
+    ),
+)})
+#: Experiment id plus grading config name: grade, ledger and progress file
+#: names carry both, and NAME_MAX (255) leaves room for 36 characters together.
+NAME_BUDGET_CHARACTERS = 36
+
+
+def ordered_task_ids_sha256(task_ids: Sequence[str]) -> str:
+    """The digest core/inference_manifest.py:381-387 publishes as ordered_task_ids_sha256."""
+    encoded = json.dumps(list(task_ids), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def registered_run(experiment_id: Any) -> SolRun | None:
+    """The registry entry for ``experiment_id``, or ``None``; reads nothing else."""
+    return RUNS.get(experiment_id) if isinstance(experiment_id, str) else None
+
+
+def registry_problems(runs: Mapping[str, SolRun] | None = None) -> list[str]:
+    """What is wrong with the registry, as sentences; empty when nothing is."""
+    problems: list[str] = []
+    table = RUNS if runs is None else runs
+    configs = [run.grading_config_name for run in table.values()]
+    if len(set(configs)) != len(configs):
+        problems.append("two runs share a grading config")
+    for key, run in table.items():
+        name = run.experiment_id
+        if key != name:
+            problems.append(f"{key}: keyed under another id")
+        if len(name) + len(run.grading_config_name) > NAME_BUDGET_CHARACTERS:
+            problems.append(f"{name}: id plus config name is past {NAME_BUDGET_CHARACTERS} characters")
+        if type(run.task_count) is not int or run.task_count < 1:
+            problems.append(f"{name}: task_count must be a positive int")
+        if not (isinstance(run.ordered_task_ids_sha256, str) and len(run.ordered_task_ids_sha256) == 64):
+            problems.append(f"{name}: ordered_task_ids_sha256 must be 64 hex characters")
+        if not 0 < run.wall_timeout_minutes <= WALL_TIMEOUT_MINUTES:
+            problems.append(f"{name}: wall_timeout_minutes must be 1..{WALL_TIMEOUT_MINUTES}")
+        money = (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd,
+                 run.narrative_allowance_usd)
+        if run.approval is None:
+            continue
+        if any(not isinstance(value, Decimal) or not value.is_finite() or value <= 0 for value in money):
+            problems.append(f"{name}: an approved run needs every money field above 0")
+            continue
+        if not run.narrative_allowance_usd < run.grading_reserve_usd < run.ceiling_usd:
+            problems.append(f"{name}: narrative < grading reserve < ceiling does not hold")
+        if not 0 < run.attempt_reserve_usd < run.solve_budget_usd:
+            problems.append(f"{name}: the attempt reserve must leave a positive admission threshold")
+    return problems
 USD_CEILING_REACHED = "usd_ceiling_reached"
 WINDOW_MISMATCH = "sol_batch_context_window_mismatch"
 GATE_UNVERIFIED = "sol_batch_gate_unverified"
@@ -385,7 +515,8 @@ def in_flight_bound_usd(last: Any, *, rates: SolRates) -> Decimal:
 
 
 def book_row(
-    row: Mapping[str, Any], *, rates: SolRates, evidence: Mapping[str, Any] | None = None,
+    row: Mapping[str, Any], *, rates: SolRates, reserve: Decimal,
+    evidence: Mapping[str, Any] | None = None,
 ) -> tuple[Decimal, str]:
     """What one Codex ledger row costs the gate, and on what basis.
 
@@ -412,7 +543,7 @@ def book_row(
         )
         if amount is None:
             # A turn can settle with no counts (usage_absent).
-            return ATTEMPT_RESERVE_USD, "settled_without_usage"
+            return reserve, "settled_without_usage"
         in_flight = facts.get("in_flight_usd")
         if in_flight is not None:
             # What the stream reported, plus the request it never reported.
@@ -425,7 +556,7 @@ def book_row(
     if (facts.get("error_category") == "rate_limited"
             and type(items_seen) is int and items_seen == 0):
         return REFUSED_REQUEST_USD, "rate_limited_first_request"
-    return ATTEMPT_RESERVE_USD, "usage_unreported"
+    return reserve, "usage_unreported"
 
 
 # -- spend carried across relay legs and to grading -------------------------
@@ -504,10 +635,10 @@ def booked_from_rows(
     return total, tasks
 
 
-def lost_bookings_for(revision: Any) -> dict[str, Decimal]:
-    """:data:`LOST_BOOKING_USD`'s entries for one published inference revision, by task id."""
+def lost_bookings_for(run: SolRun, revision: Any) -> dict[str, Decimal]:
+    """The run's lost_booking_usd entries for one published inference revision, by task id."""
     found: dict[str, Decimal] = {}
-    for key, amount in LOST_BOOKING_USD.items():
+    for key, amount in run.lost_booking_usd.items():
         if not (isinstance(key, tuple) and len(key) == 2 and all(isinstance(part, str) for part in key)):
             raise SolBatchControlsRefused("sol_batch_prior_spend_unaccounted")
         if isinstance(revision, str) and key[0] == revision:
@@ -515,13 +646,13 @@ def lost_bookings_for(revision: Any) -> dict[str, Decimal]:
     return found
 
 
-def solve_spend_usd(rows: Iterable[Any], revision: str | None = None) -> Decimal:
+def solve_spend_usd(rows: Iterable[Any], revision: str | None, run: SolRun) -> Decimal:
     """The lineage's solve spend from its published task rows; the grade side seeds from this.
 
     ``revision`` is the published inference commit being graded; it selects
-    the :data:`LOST_BOOKING_USD` entries recorded for that result.
+    the run's lost_booking_usd entries recorded for that result.
     """
-    return PRIOR_LINEAGE_SPEND_USD + booked_from_rows(rows, lost_bookings_for(revision))[0]
+    return run.prior_lineage_spend_usd + booked_from_rows(rows, lost_bookings_for(run, revision))[0]
 
 
 # -- the gate ---------------------------------------------------------------
@@ -576,10 +707,11 @@ class SolBatchSession:
     """
 
     def __init__(
-        self, *, ledger: Any, rates: SolRates, record_path: Path | str,
+        self, *, run: SolRun, ledger: Any, rates: SolRates, record_path: Path | str,
         seed_usd: Decimal, prior_legs_usd: Decimal, window_mismatch: bool,
         header: Mapping[str, Any],
     ) -> None:
+        self.run = run
         self.ledger = ledger
         self.rates = rates
         self.record_path = Path(record_path)
@@ -608,7 +740,8 @@ class SolBatchSession:
         total = Decimal(0)
         complete = True
         for row in rows:
-            amount, basis = book_row(row, rates=self.rates, evidence=self.evidence.get(row["call_id"]))
+            amount, basis = book_row(row, rates=self.rates, reserve=self.run.attempt_reserve_usd,
+                                     evidence=self.evidence.get(row["call_id"]))
             total += amount
             complete = complete and basis in _COMPLETE_BASES
         return total, complete
@@ -626,14 +759,15 @@ class SolBatchSession:
             spend = self.spend_usd()
         except Exception:  # noqa: BLE001 - an unreadable ledger refuses rather than guesses
             return GATE_UNVERIFIED, {}
+        run = self.run
         decision = {
             "spend_before_usd": fmt(spend),
-            "reserve_usd": fmt(ATTEMPT_RESERVE_USD),
-            "solve_budget_usd": fmt(SOLVE_BUDGET_USD),
+            "reserve_usd": fmt(run.attempt_reserve_usd),
+            "solve_budget_usd": fmt(run.solve_budget_usd),
         }
         if self.window_mismatch:
             return WINDOW_MISMATCH, decision
-        if spend + ATTEMPT_RESERVE_USD > SOLVE_BUDGET_USD:
+        if spend + run.attempt_reserve_usd > run.solve_budget_usd:
             return USD_CEILING_REACHED, decision
         return None, decision
 
@@ -693,7 +827,8 @@ class SolBatchSession:
                     facts["in_flight_usd"] = in_flight
                     in_flight_booked = True
                 self.evidence[entry["call_id"]] = facts
-                booked.append(book_row(entry, rates=self.rates, evidence=facts))
+                booked.append(book_row(entry, rates=self.rates, reserve=self.run.attempt_reserve_usd,
+                                       evidence=facts))
             window = app_server["model_context_window"]
             if window is not None and window != CONTEXT_WINDOW:
                 self.window_mismatch = True
@@ -756,7 +891,7 @@ class SolBatchSession:
         except Exception:  # noqa: BLE001
             admitted = sum(1 for row in self.attempts
                            if row.get("task_id") == key and row.get("admitted") is True)
-            return task_budget_metrics(ATTEMPT_RESERVE_USD * max(1, admitted), False)
+            return task_budget_metrics(self.run.attempt_reserve_usd * max(1, admitted), False)
 
     def finish(self) -> None:
         """Close the leg's record with its spend summary. Never raises; a second call does nothing."""
@@ -768,7 +903,7 @@ class SolBatchSession:
                 this_leg = self._booked(self._rows())[0]
                 solve = self.seed_usd + this_leg
                 money = {"this_leg_spend_usd": fmt(this_leg), "solve_spend_usd": fmt(solve),
-                         "remaining_under_ceiling_usd": fmt(CEILING_USD - solve)}
+                         "remaining_under_ceiling_usd": fmt(self.run.ceiling_usd - solve)}
             except Exception as exc:  # noqa: BLE001
                 money = {"this_leg_spend_usd": None, "solve_spend_usd": None,
                          "remaining_under_ceiling_usd": None, "summary_error": type(exc).__name__}
@@ -789,7 +924,7 @@ class SolBatchSession:
                  f"(prior lineages {self.summary['prior_lineage_spend_usd']}, "
                  f"prior legs {self.summary['prior_legs_spend_usd']}, this leg "
                  f"{money['this_leg_spend_usd']}); {money['remaining_under_ceiling_usd']} left under "
-                 f"the {CEILING_USD} ceiling; {self.summary['attempts_admitted']} attempts "
+                 f"the {self.run.ceiling_usd} ceiling; {self.summary['attempts_admitted']} attempts "
                  f"admitted, {len(refused)} refused; window mismatch: "
                  f"{'yes' if self.window_mismatch else 'no'}", inline=True)
             self._write()
@@ -932,17 +1067,18 @@ def install(
 ) -> SolBatchSession | None:
     """Attach the Sol controls to step 2's executor, or do nothing at all.
 
-    Returns ``None``, touching and printing nothing, unless the run is
-    :data:`EXPERIMENT_ID` or asks Codex for gpt-5.6-sol. For the registered
-    batch it returns the installed session. Every refusal is a
+    Returns ``None``, touching and printing nothing, unless the run is in
+    :data:`RUNS` or asks Codex for gpt-5.6-sol. For an approved registered run
+    it returns the installed session. Every refusal is a
     :class:`SolBatchControlsRefused` raised before any attempt, with
     ``executor.runner`` unchanged.
     """
-    if experiment_id != EXPERIMENT_ID and not _asks_for_sol(codex_settings):
+    run = registered_run(experiment_id)
+    if run is None and not _asks_for_sol(codex_settings):
         return None
     try:
         return _install(
-            executor, experiment_id=experiment_id, condition_key=condition_key,
+            executor, run=run, experiment_id=experiment_id, condition_key=condition_key,
             codex_settings=codex_settings, cost_ledger=cost_ledger, run_id=run_id,
             task_ids=task_ids, max_retries=max_retries, resume_max_rounds=resume_max_rounds,
             task_deadlines=task_deadlines, restored_progress=restored_progress, workspace=workspace,
@@ -955,12 +1091,15 @@ def install(
 
 
 def _install(
-    executor: Any, *, experiment_id: str, condition_key: str, codex_settings: Any,
+    executor: Any, *, run: SolRun | None, experiment_id: str, condition_key: str, codex_settings: Any,
     cost_ledger: Any, run_id: str, task_ids: Sequence[str], max_retries: Any,
     resume_max_rounds: Any, task_deadlines: Any, restored_progress: Mapping[str, Any] | None,
     workspace: Path | str, wall_timeout: Any,
 ) -> SolBatchSession:
-    _require(experiment_id == EXPERIMENT_ID, "sol_batch_unregistered_experiment")
+    _require(run is not None and run.experiment_id == experiment_id, "sol_batch_unregistered_experiment")
+    # Registered for a later approval: nothing below is read or started.
+    _require(run.approval is not None, "sol_batch_run_not_approved")
+    _require(not registry_problems({run.experiment_id: run}), "sol_batch_registry_invalid")
     _require(type(codex_settings) is CodexProviderSettings and codex_settings.model == SOL_MODEL,
              "sol_batch_model_drift")
     _require(codex_settings.reasoning_effort == REASONING_EFFORT
@@ -974,11 +1113,15 @@ def _install(
     _require(type(max_retries) is int and max_retries == MAX_RETRIES
              and type(resume_max_rounds) is int and resume_max_rounds == 0,
              "sol_batch_retry_policy_drift")
-    _require(tuple(task_ids) == FIXED_TASK_IDS, "sol_batch_task_set_drift")
+    task_list = list(task_ids)
+    _require(all(isinstance(task, str) for task in task_list)
+             and len(task_list) == run.task_count
+             and ordered_task_ids_sha256(task_list) == run.ordered_task_ids_sha256,
+             "sol_batch_task_set_drift")
     # Step 2's watchdog, as step 2a resolved it. The dispatch input's default
     # (290) or no watchdog at all lets a late task run past the job's
     # 360-minute cap, which kills the leg before it uploads a checkpoint.
-    _require(type(wall_timeout) is int and 0 < wall_timeout <= WALL_TIMEOUT_MINUTES,
+    _require(type(wall_timeout) is int and 0 < wall_timeout <= run.wall_timeout_minutes,
              "sol_batch_watchdog_drift")
     # A GitHub re-run restarts from an older checkpoint, or from nothing, and
     # would forget spend already made. Relay legs are fresh dispatches.
@@ -1025,6 +1168,9 @@ def _install(
     header = {
         "schema": RECORD_SCHEMA,
         "experiment_id": experiment_id,
+        "registered_run": {"approval": run.approval, "task_count": run.task_count,
+                           "ordered_task_ids_sha256": run.ordered_task_ids_sha256,
+                           "grading_config_name": run.grading_config_name},
         "run_id": run_id,
         "condition_key": condition_key,
         "wall_timeout_minutes": wall_timeout,
@@ -1042,11 +1188,11 @@ def _install(
                     "bundled_window": CODEX_BUNDLED_SOL_CONTEXT_WINDOW},
         "added_codex_overrides": ["model_catalog_json=" + CATALOG_RELATIVE],
         "usd": {
-            "ceiling": fmt(CEILING_USD),
-            "grading_reserve": fmt(GRADING_RESERVE_USD),
-            "attempt_reserve": fmt(ATTEMPT_RESERVE_USD),
-            "solve_budget": fmt(SOLVE_BUDGET_USD),
-            "admit_while_spend_at_most": fmt(SOLVE_BUDGET_USD - ATTEMPT_RESERVE_USD),
+            "ceiling": fmt(run.ceiling_usd),
+            "grading_reserve": fmt(run.grading_reserve_usd),
+            "attempt_reserve": fmt(run.attempt_reserve_usd),
+            "solve_budget": fmt(run.solve_budget_usd),
+            "admit_while_spend_at_most": fmt(run.admit_while_at_most_usd),
             "refused_request": fmt(REFUSED_REQUEST_USD),
             "meter": SOL_METER,
             "rates": {"input": str(rates.input), "cached_input": str(rates.cached_input),
@@ -1070,7 +1216,7 @@ def _install(
                 f"{CATALOG_SOL_MAX_CONTEXT_WINDOW} uncached input tokens plus "
                 f"{IN_FLIGHT_OUTPUT_TOKENS} output tokens"
             ),
-            "prior_lineage_spend_usd": fmt(PRIOR_LINEAGE_SPEND_USD),
+            "prior_lineage_spend_usd": fmt(run.prior_lineage_spend_usd),
             "prior_legs_spend_usd": fmt(prior_legs_usd),
             "prior_leg_tasks": prior_tasks,
         },
@@ -1084,9 +1230,9 @@ def _install(
         "evidence_boundary": EVIDENCE_BOUNDARY,
     }
     session = SolBatchSession(
-        ledger=cost_ledger, rates=rates,
+        run=run, ledger=cost_ledger, rates=rates,
         record_path=Path(workspace) / f"sol_batch_controls_{condition_key}.json",
-        seed_usd=PRIOR_LINEAGE_SPEND_USD + prior_legs_usd, prior_legs_usd=prior_legs_usd,
+        seed_usd=run.prior_lineage_spend_usd + prior_legs_usd, prior_legs_usd=prior_legs_usd,
         window_mismatch=window_mismatch, header=header,
     )
     # The same arguments core/executor.py:721-731 gives CodexAgentRunner. Built
@@ -1099,13 +1245,13 @@ def _install(
     # An attribute of the executor step 2 owns; no class or function in a
     # sealed module is patched.
     executor.runner = replacement
-    _say(f"[sol-batch] controls on for {EXPERIMENT_ID}")
+    _say(f"[sol-batch] controls on for {run.experiment_id} ({run.approval})")
     _say(f"[sol-batch] reasoning effort {REASONING_EFFORT} (the Codex 0.147.0 catalog default "
          f"for {SOL_MODEL} is low)")
     _say(f"[sol-batch] context window {CONTEXT_WINDOW:,} via held catalog {CATALOG_SHA256[:12]}")
-    _say(f"[sol-batch] USD gate: {CEILING_USD} ceiling − {GRADING_RESERVE_USD} grading = "
-         f"{SOLVE_BUDGET_USD} solve budget; {ATTEMPT_RESERVE_USD} reserve per attempt; attempts "
-         f"start while booked spend ≤ {SOLVE_BUDGET_USD - ATTEMPT_RESERVE_USD:.2f}; prior lineages "
-         f"{fmt(PRIOR_LINEAGE_SPEND_USD)}; prior legs {fmt(prior_legs_usd)}")
+    _say(f"[sol-batch] USD gate: {run.ceiling_usd} ceiling − {run.grading_reserve_usd} grading = "
+         f"{run.solve_budget_usd} solve budget; {run.attempt_reserve_usd} reserve per attempt; attempts "
+         f"start while booked spend ≤ {run.admit_while_at_most_usd:.2f}; prior lineages "
+         f"{fmt(run.prior_lineage_spend_usd)}; prior legs {fmt(prior_legs_usd)}")
     _say(f"[sol-batch] record: {session.record_path}")
     return session

@@ -40,9 +40,10 @@ back in their own prepared order (`23ede7c5...` for exp033's five,
 
 So the rule is per-experiment, and this file resolves it per-experiment via
 `rerun_identity.experiment_id`. Getting that wrong is expensive in both
-directions. All five experiments that pin ids today — exp027, exp033, exp034,
-exp035 and exp036 — pin them out of base order, so holding their grading
-configs to the base order would reject the only pin that can actually work.
+directions. All seven experiments that pin ids today — exp027, exp033, exp034,
+exp035, exp036, exp037 and exp038 — pin them out of base order, so holding
+their grading configs to the base order would reject the only pin that can
+actually work.
 exp035 is the sharpest case: it pins the same 220 ids as the base corpus, as
 the same set, with no duplicates, differing from index 0 onward. Copied either
 way round the file looks completely correct.
@@ -76,6 +77,8 @@ EXPERIMENTS_THAT_PIN_IDS = (
     "exp034_codex_foundry_trial30",
     "exp035_codex_foundry_full220",
     "exp036_sol_fixed5",
+    "exp037_sol_first25",
+    "exp038_sol_rest195",
 )
 
 

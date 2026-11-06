@@ -13,6 +13,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Stage GPT-5.6 Sol toward all 220 tasks (owner approval 2026-11-06).
+  - `sol_batch_controls.RUNS` replaces the one pinned experiment with a
+    registry of Sol runs, each with its own task digest and USD ceiling:
+    `exp036_sol_fixed5` unchanged (200 = 146 solve + 54 grading, 51 per
+    attempt); `exp037_sol_first25` approved at 400 = 285 solve + 115 grading,
+    51 per attempt, so attempts start while booked solve spend is at most 234;
+    `exp038_sol_rest195` registered with no approval and no ceiling, so step 2
+    refuses it before any attempt (`sol_batch_run_not_approved`) and the grade
+    preflight refuses it before any download. `sol_batch_grading.APPROVALS`
+    gains the same two entries, and a test holds both sides equal.
+  - `exp037_sol_first25`: the first 25 tasks of the trial-stage rule
+    (`select_trial_run_tasks`, exp034's first 25: all nine industries),
+    exp033's prompt byte for byte, exp036's Sol settings, six relay legs.
+    `exp038_sol_rest195`: the other 195 in exp035's order, eleven legs.
+    Grading configs `exp037_v2_sol_max.yaml` and `exp038_v2_sol_max.yaml`
+    copy the exp035 Sol Max template blocks; neither pins a subset.
+  - For a Sol run the grade preflight also refuses a published task list
+    other than the registered one, and for every approved pair a committed
+    grade whose writing run has no committed journal. grade-run.yml
+    dispatches an approved grade's next resume chunk only after the finished
+    chunk's journal is on main, so sequential chunks share one ceiling.
+  - `scripts/sol_stage_readout.py`: a model-free readout of a Sol stage or of
+    several stages together: fixed-denominator, full-item and judged-only
+    scores, zeros by cause, file habits, solve and grading USD per task, and
+    a projection for the remaining tasks, with four pre-registered go/no-go
+    rules for the next stage. It changes no grade or headline.
+
+  No step 2, step 8, core/, grader-seal or batch-run.yml bytes change, the
+  Sol source profile is untouched, and no paid call was made. Dispatch
+  exp037 once, with no other paid Sol work running.
+
 - Grade the files a reader would open instead of refusing the task (owner
   decision 1, 2026-11-06). `core/deliverable_selector.py`:
   - An email saved as `.eml` is a document. Criteria about the email, memo
