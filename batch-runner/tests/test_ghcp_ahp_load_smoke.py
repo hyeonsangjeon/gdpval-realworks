@@ -199,6 +199,22 @@ def test_smoke_network_and_child_process_guards_refuse_before_effects(operation,
     assert value["reason"].startswith("load_smoke_") and value["reason"].endswith("_refused")
 
 
+@pytest.mark.parametrize("method", ["spawn", "spawnSync", "fork", "exec", "execSync", "execFile", "execFileSync"])
+def test_child_process_refusal_retains_sanitized_method_and_callsite_without_running_it(method, node_copy):
+    script = f"const rows=[]; require({json.dumps(str(smoke.DRIVER))}).boundaryGuards(row=>rows.push(row)); "
+    script += f"try {{ require('node:child_process')[{json.dumps(method)}]('never-execute-fixture', ['--token', 'fixture-private-value']); }} "
+    script += "catch(error) { console.log(JSON.stringify({rows, reason:error.message})); }"
+    process = subprocess.run([str(node_copy), "-e", script], env={"PATH": "/usr/bin:/bin"}, capture_output=True, text=True, timeout=5)
+    assert process.returncode == 0, process.stderr
+    value = json.loads(process.stdout)
+    assert value["reason"] == "load_smoke_child_process_refused"
+    assert len(value["rows"]) == 1
+    row = value["rows"][0]
+    assert row["kind"] == "boundary_refused" and row["method"] == method and row["executable"] == "never-execute-fixture"
+    assert row["args"] == ["--token", "[REDACTED]"] and len(row["stack"]) >= 2
+    assert "fixture-private-value" not in process.stdout
+
+
 def process_value():
     return {"schema": "ghcp-load-smoke-process-v1", "synthetic": True, "model_free": True, "execution_allowed": False,
             "timed_out": False, "launch_error": None, "parent_pid": 2, "child_pid": 3, "ipc_messages_sent": 0,

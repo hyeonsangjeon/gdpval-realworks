@@ -8,7 +8,7 @@ const cp = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { syncBuiltinESMExports } = require('node:module');
 const runtime = require('./ghcp_ahp_patched_runtime.cjs');
-const { redactor } = require('./ghcp_ahp_wire_preload.cjs');
+const { redactor, safeArguments } = require('./ghcp_ahp_wire_preload.cjs');
 const LIMIT = 1024 * 1024;
 const DEADLINE_MS = 15000;
 const OBSERVATION_MS = 1000;
@@ -38,7 +38,16 @@ function boundaryGuards(emit) {
     }
     return listen.apply(this, args); // Local Unix socket only; no incoming TCP listener.
   };
-  for (const name of ['spawn', 'spawnSync', 'fork', 'exec', 'execSync', 'execFile', 'execFileSync']) cp[name] = deny('child_process');
+  for (const name of ['spawn', 'spawnSync', 'fork', 'exec', 'execSync', 'execFile', 'execFileSync']) {
+    cp[name] = function (command, args) {
+      const clean = redactor();
+      emit({ kind: 'boundary_refused', operation: 'child_process', method: name,
+        executable: typeof command === 'string' ? cleanText(clean, command).slice(0, 512) : 'not_reported',
+        args: clean.clean(safeArguments(Array.isArray(args) ? args : [])).slice(0, 16),
+        stack: cleanText(clean, new Error('load_smoke_child_process_refused').stack).split('\n').slice(0, 8) });
+      throw new Error('load_smoke_child_process_refused'); // Still refuse BEFORE every process effect.
+    };
+  }
   syncBuiltinESMExports();
 }
 
