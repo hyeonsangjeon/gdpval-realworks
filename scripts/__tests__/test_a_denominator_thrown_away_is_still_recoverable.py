@@ -1078,8 +1078,8 @@ def test_the_walk_still_fails_a_payload_that_landed_on_the_wrong_side(
         _denominator_invariant(other)
 
 
-def test_the_six_sealed_files_on_disk_are_still_sealed():
-    """Keep the six on-disk payload seals and their durable voucher documents.
+def test_the_seven_sealed_files_on_disk_are_still_sealed():
+    """Keep the seven on-disk payload seals and their durable voucher documents.
 
     Fixture-based tests cannot detect lost seals in the actual repository,
     including the 185-task gold ceiling. ``documents_asserting`` reports only
@@ -1093,6 +1093,11 @@ def test_the_six_sealed_files_on_disk_are_still_sealed():
     ``tasks/LATEST_TASK_RESULT/README.md`` is a rolling record. When it no
     longer asserts a sealed digest, its absence is not a dropped voucher and
     must not require restoring obsolete history.
+
+    The seventh seal is the published exp035 grade. The parity regrade's
+    selection record names its sha256, because the regrade's pinned task list
+    is a diff against exactly those bytes; rewriting them would make the
+    record false.
     """
     sealed = {
         backfill._display(path): backfill.documents_asserting(path)
@@ -1100,13 +1105,18 @@ def test_the_six_sealed_files_on_disk_are_still_sealed():
     }
     sealed = {path: docs for path, docs in sealed.items() if docs}
 
-    assert len(sealed) == 6, f"expected six sealed payloads, found {sealed}"
+    assert len(sealed) == 7, f"expected seven sealed payloads, found {sealed}"
+    assert any(path.startswith("data/grades/exp035_codex_foundry_full220__judge_") for path in sealed), (
+        "the published exp035 grade must stay sealed; the parity selection record "
+        "is a diff against its bytes"
+    )
     assert any("79c2f503" in path for path in sealed), (
         "the 185-task gold ceiling must still be refused; it is quoted as a "
         "reproduction receipt in PR3_FULL_GOLD_CORPUS.md"
     )
     assert {doc for docs in sealed.values() for doc in docs} == {
         "CHANGELOG.md",
+        "batch-runner/docs/run_records/exp035_parity_selection_20261106.json",
         "data/grades/_validation/PR3_REPEAT_VARIATION.md",
         "scripts/__tests__/test_analyze_grade_run.py",
         "scripts/__tests__/test_sol_max_anchor_selection.py",

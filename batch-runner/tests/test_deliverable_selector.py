@@ -715,3 +715,17 @@ def test_parenthesized_docx_sets_aside_only_the_same_name_copy_of_matching_word_
     assert selection.selection_rule == "set_diff_then_separate_primaries+rendition_copies"
     assert _selected_names(selection) == {"report.docx", "other.docx"}
     assert selection.support_artifacts == [_path("uniform", "report.md")]
+
+    # The same task without the copy: the unchanged rules give exactly these
+    # primaries under the same rule, so the only thing the copy changes is
+    # that it is listed as support. Setting it aside is not a looser reading.
+    without_copy = [name for name in names if name != "report.md"]
+    baseline = _uniform_selection(
+        list(reversed(without_copy)) if reverse_files else without_copy,
+        [PARENTHESIZED_DOCX_REQUIREMENT],
+    )
+    assert baseline.selection_status == "ok"
+    assert baseline.task_class == selection.task_class
+    assert baseline.primary_targets == selection.primary_targets
+    assert baseline.selection_rule + "+rendition_copies" == selection.selection_rule
+    assert baseline.support_artifacts == []
