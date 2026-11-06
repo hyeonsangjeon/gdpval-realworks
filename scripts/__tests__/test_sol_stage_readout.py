@@ -24,8 +24,9 @@ GRADE = REPO_ROOT / (
     "data/grades/exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602__rubric_"
     "11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777__src_"
     "814d56797e9fc3dc__v2.2.json")
-#: That grade's own journal. The exp036 regrade adds another journal to the
-#: same directory, so the expected figures read this one file.
+#: That grade's own journal, opened by the run that wrote it (its
+#: runner_evidence: run 42039154052, attempt 1). The exp036 regrade adds
+#: another journal to the same directory, so the expected figures read this one file.
 GRADE_JOURNAL = REPO_ROOT / "data/grades/_combined_usd/exp036_sol_fixed5/run-42039154052-1.combined_usd.jsonl"
 #: The fields the readout reads from HyeonSang/exp036_sol_fixed5's self_report.json at 8708d920.
 SELF_REPORT = {
@@ -320,6 +321,19 @@ def test_a_stage_is_read_from_its_own_final_grade_and_journals_only(tmp_path):
         encoding="utf-8")
     with pytest.raises(SystemExit, match="not by exp036_sol_fixed5 / exp036_v2_sol_max"):
         read(directory=other)
+    # The same pair's journal of another grade (exp036's regrade writes one) is
+    # not the journal of the run that wrote this grade.
+    regrade = tmp_path / "regrade"
+    regrade.mkdir()
+    shutil.copy(GRADE_JOURNAL, regrade / "run-99999999999-1.combined_usd.jsonl")
+    with pytest.raises(SystemExit, match="was written by run 42039154052 attempt 1, whose combined USD journal "
+                                         "is not in"):
+        read(directory=regrade)
+    unnamed = {key: value for key, value in published.items() if key != "runner_evidence"}
+    with pytest.raises(SystemExit, match="names no grading run"):
+        read(unnamed)
+    with pytest.raises(SystemExit, match="names no grading run"):
+        read({**published, "runner_evidence": {"observation": {"run_id": "42039154052", "run_attempt": "0"}}})
 
 
 # -- journals: what the preflight counts ----------------------------------------
@@ -349,7 +363,8 @@ def test_a_journal_line_on_no_listed_task_is_still_counted(tmp_path):
     readout = _readout()
     journals = tmp_path / "journals"
     journals.mkdir()
-    (journals / "run-1-1.combined_usd.jsonl").write_text(_journal_lines(
+    # Named after the run that wrote GRADE, as the readout requires.
+    (journals / GRADE_JOURNAL.name).write_text(_journal_lines(
         {"event": "reserve", "seq": 1, "ticket": "g1", "task_id": None, "reserve_usd": "0.50000000"},
         {"event": "settle", "seq": 2, "ticket": "g1", "spent_usd": "0.30000000"},
     ), encoding="utf-8")
@@ -411,6 +426,8 @@ def test_the_cause_table_names_the_sol_harness_refusals_by_their_codes():
 EXPERIMENTS = REPO_ROOT / "batch-runner/experiments"
 RENDERER = {"libreoffice_binary": "soffice", "libreoffice_version": "LibreOffice 24.2.7.2", "pymupdf_version": "2.1"}
 REVISIONS = {"exp037_sol_first25": "37" * 20, "exp038_sol_rest195": "38" * 20}
+#: The GitHub run that wrote each stage's final grade (runner_evidence.observation).
+WRITERS = {"exp037_sol_first25": "37000000001", "exp038_sol_rest195": "38000000001"}
 
 
 def _stage_tasks(experiment_id: str) -> list[str]:
@@ -456,13 +473,20 @@ def registry(monkeypatch):
 
 def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: list[str], *,
                  refused: tuple[str, ...] = (), refused_usd: float = 0.0, harness: tuple[str, ...] = (),
-                 renderer: dict = RENDERER) -> list[str]:
-    """A final grade, a self_report.json and a journal for ``tasks``.
+                 grader_failed: tuple[str, ...] = (), renderer: dict = RENDERER, writer: str | None = None,
+                 earlier: dict[str, tuple[str, ...]] | None = None) -> list[str]:
+    """A final grade, a self_report.json and the journals of the runs that graded ``tasks``.
 
     ``refused`` tasks ended at the USD gate (after ``refused_usd`` of earlier
-    attempts); ``harness`` tasks were refused by the Sol harness's window check.
+    attempts); ``harness`` tasks were refused by the Sol harness's window check;
+    ``grader_failed`` tasks left files the judge was called on but marked no
+    item of. The grade's writer is GitHub run ``writer`` (attempt 1), whose
+    journal holds every task's grading lines except those of ``earlier``
+    chunks: {run id: tasks that chunk graded}, one journal each.
     """
-    grade_rows, report_rows, journal = [], [], []
+    writer = writer or WRITERS[experiment_id]
+    chunk_of = {task: run_id for run_id, chunk in (earlier or {}).items() for task in chunk}
+    grade_rows, report_rows, journals_lines = [], [], {writer: [], **{run_id: [] for run_id in earlier or {}}}
     for task in tasks:
         if task in refused or task in harness:
             category = "usd_ceiling_reached" if task in refused else "sol_batch_context_window_mismatch"
@@ -471,12 +495,18 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
                                 "observability": {"error_category": category, "budget_metrics": {
                                     "conservative_cost_usd": refused_usd if task in refused else 0}}})
             continue
-        grade_rows.append({"task_id": task, "error": None, "pct": 50.0, "pct_full_denominator": 40.0,
-                           "items": [{}] * 10, "score_excluded_items": 0, "grading_wall_time_ms": 60_000,
-                           "judge_call_count": 3, "selection_rule": "single_main"})
+        if task in grader_failed:
+            grade_rows.append({"task_id": task, "error": "all_items_score_excluded", "items": [{}] * 10,
+                               "score_excluded_items": 10, "grading_wall_time_ms": 60_000, "judge_call_count": 3,
+                               "selection_rule": "single_main"})
+        else:
+            grade_rows.append({"task_id": task, "error": None, "pct": 50.0, "pct_full_denominator": 40.0,
+                               "items": [{}] * 10, "score_excluded_items": 0, "grading_wall_time_ms": 60_000,
+                               "judge_call_count": 3, "selection_rule": "single_main"})
         report_rows.append({"task_id": task, "status": "success", "latency_ms": 600_000,
                             "deliverable_files": [f"deliverable_files/{task}/answer.docx"],
                             "observability": {"budget_metrics": {"conservative_cost_usd": 6.0}}})
+        journal = journals_lines[chunk_of.get(task, writer)]
         journal += [{"event": "reserve", "ticket": f"g{len(journal)}", "task_id": task, "reserve_usd": "1.00000000"},
                     {"event": "settle", "ticket": f"g{len(journal)}", "spent_usd": "0.50000000"}]
     config_name = f"{experiment_id[:6]}_v2_sol_max"
@@ -484,7 +514,9 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
              "source_inference_revision": REVISIONS[experiment_id], "tasks": grade_rows,
              "grader_source_hash": source_hash, "renderer_fingerprint": renderer,
              "judge": {"model": "gpt-5.6-sol", "reasoning_effort": "max"}, "prompt": {"version": "v2.2"},
-             "rubric": {"commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf"}}
+             "rubric": {"commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf"},
+             # step 8's native runner evidence: the run whose journal holds the last chunk.
+             "runner_evidence": {"observation": {"run_id": writer, "run_attempt": "1"}}}
     (tmp_path / f"{experiment_id}.grade.json").write_text(json.dumps(grade), encoding="utf-8")
     (tmp_path / f"{experiment_id}.self_report.json").write_text(json.dumps({
         "meta": {"experiment_id": experiment_id, "ordered_task_ids": list(tasks)}, "task_results": report_rows,
@@ -494,8 +526,10 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
     journals.mkdir()
     opening = {"event": "open", "schema": "sol-batch-grading-journal-v1", "experiment_id": experiment_id,
                "config_name": config_name}
-    (journals / "run-1-1.combined_usd.jsonl").write_text("".join(
-        json.dumps({**line, "seq": seq}) + "\n" for seq, line in enumerate([opening, *journal])), encoding="utf-8")
+    for run_id, journal in journals_lines.items():
+        (journals / f"run-{run_id}-1.combined_usd.jsonl").write_text("".join(
+            json.dumps({**line, "seq": seq}) + "\n" for seq, line in enumerate([opening, *journal])),
+            encoding="utf-8")
     return [experiment_id, str(tmp_path / f"{experiment_id}.grade.json"),
             str(tmp_path / f"{experiment_id}.self_report.json")]
 
@@ -617,3 +651,102 @@ def test_a_later_stage_replaces_a_refused_row_but_not_its_spend(tmp_path, regist
     exp038 = _write_stage(tmp_path, "exp038_sol_rest195", _this_tree_hash(readout, "exp038_v2_sol_max"), again)
     with pytest.raises(SystemExit, match="counts every task once"):
         _run(readout, tmp_path, exp037, exp038)
+
+
+# -- the writer's journal ------------------------------------------------------------
+
+
+def test_a_final_grade_is_read_with_the_journal_of_the_run_that_wrote_it(tmp_path):
+    readout = _readout()
+    first25 = _stage_tasks("exp037_sol_first25")
+    # Two chunks: run 100 graded the first 13 tasks and committed a partial;
+    # run 200 graded the other 12 and wrote the final grade.
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", _this_tree_hash(readout, "exp037_v2_sol_max"), first25,
+                          writer="200", earlier={"100": tuple(first25[:13])})
+    journals = tmp_path / "exp037_sol_first25.journals"
+    assert sorted(path.name for path in journals.iterdir()) == [
+        "run-100-1.combined_usd.jsonl", "run-200-1.combined_usd.jsonl"]
+    summary = _run(readout, tmp_path, exp037, extra=("--remaining-from", "exp038_sol_rest195"))["summary"]
+    assert summary["usd"]["grading"] == summary["stages"][0]["grading_usd"] == 25 * 0.5
+    assert summary["usd"]["grading_per_judged_item"] == 0.05
+    # The last chunk's journal push failed and the grade was committed by hand:
+    # that chunk's 6.00 would drop out of the stage's committed figure, its
+    # per-item rate and the grading projection. check_grade_writers refuses
+    # the pair's next grade on main for the same missing journal.
+    (journals / "run-200-1.combined_usd.jsonl").unlink()
+    with pytest.raises(SystemExit, match="was written by run 200 attempt 1, whose combined USD journal is not in"):
+        _run(readout, tmp_path, exp037)
+    grading = readout._batch_runner_module("sol_batch_grading")
+    root = tmp_path / "repo"
+    (root / "data/grades").mkdir(parents=True)
+    shutil.copy(exp037[1], root / "data/grades" / (
+        "exp037_sol_first25__judge_gpt-5_6-sol__exp037_v2_sol_max__cfg_0123456789abcdef__x.json"))
+    with pytest.raises(grading.CombinedUsdRefused, match="was written by run 200 attempt 1"):
+        grading.check_grade_writers(root, "exp037_sol_first25", "exp037_v2_sol_max",
+                                    [{"path": "run-100-1.combined_usd.jsonl"}])
+    # A grade that judged nothing spent nothing to read: no journal is needed.
+    gated = _write_stage(tmp_path, "exp037_sol_first25", _this_tree_hash(readout, "exp037_v2_sol_max"), first25,
+                         refused=tuple(first25))
+    for path in journals.iterdir():
+        path.unlink()
+    assert _run(readout, tmp_path, gated)["summary"]["usd"]["grading"] == 0.0
+
+
+# -- a projection needs a sample ------------------------------------------------------
+
+
+def test_nothing_attempted_projects_nothing(tmp_path):
+    readout = _readout()
+    first25 = _stage_tasks("exp037_sol_first25")
+    hashed = _this_tree_hash(readout, "exp037_v2_sol_max")
+    # The USD gate refused every attempt (a lineage dispatched with no
+    # admission room left): every task moves, and none is a sample.
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", hashed, first25, refused=tuple(first25))
+    summary = _run(readout, tmp_path, exp037, extra=("--remaining-from", "exp038_sol_rest195"))["summary"]
+    projection = summary["projection"]
+    assert summary["zeros_by_cause"] == {"usd_gate": 25} and len(summary["moved_by_usd_gate"]) == 25
+    assert (projection["attempted_sample"], projection["judged_item_sample"]) == (0, 0)
+    assert projection["remaining_tasks"] == 220
+    # Legs and chunks of 0 would read as "R3 and R4 hold" with nothing measured.
+    for field in ("solve_usd_mean", "solve_usd_p90", "solve_legs", "grading_usd", "grading_chunks"):
+        assert projection[field] is None, field
+    assert summary["rules"]["R3"] is None and summary["rules"]["R4"] is None
+    assert summary["time"] == {"solve_minutes_per_task_mean": None, "grading_seconds_per_judged_item": None}
+    assert summary["usd"]["solve_per_task_mean"] is None and summary["usd"]["grading_per_judged_item"] is None
+    # By hand, the same.
+    summary = _run(readout, tmp_path, exp037, extra=("--remaining-tasks", "195", "--remaining-items", "9248"))[
+        "summary"]
+    assert summary["rules"]["R3"] is None and summary["rules"]["R4"] is None
+    assert summary["projection"]["solve_legs"] is summary["projection"]["grading_chunks"] is None
+    # The Sol harness refused every attempt: R2 fails, R3 and R4 are not evaluated.
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", hashed, first25, harness=tuple(first25))
+    summary = _run(readout, tmp_path, exp037, extra=("--remaining-from", "exp038_sol_rest195"))["summary"]
+    assert summary["zeros_by_cause"] == {"sol_gate": 25} and summary["rules"]["R2"] is False
+    assert summary["rules"]["R3"] is None and summary["rules"]["R4"] is None
+    # The same rows passed to summarise directly.
+    rows = readout.read_stage("exp037_sol_first25", Path(exp037[1]), Path(exp037[2]),
+                              tmp_path / "exp037_sol_first25.journals")
+    direct = readout.summarise(rows, 25, 195, 9248)
+    assert direct["rules"]["R3"] is direct["rules"]["R4"] is None
+    assert direct["projection"]["solve_usd_p90"] is direct["projection"]["grading_usd"] is None
+
+
+def test_nothing_judged_projects_no_grading(tmp_path):
+    readout = _readout()
+    first25 = _stage_tasks("exp037_sol_first25")
+    # Every task left files and was attempted, but the judge marked no item
+    # of any: the solve side is a sample, the grading side is not.
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", _this_tree_hash(readout, "exp037_v2_sol_max"), first25,
+                          grader_failed=tuple(first25))
+    summary = _run(readout, tmp_path, exp037, extra=("--remaining-from", "exp038_sol_rest195"))["summary"]
+    projection = summary["projection"]
+    assert summary["zeros_by_cause"] == {"grader_other": 25}
+    assert (projection["attempted_sample"], projection["judged_item_sample"]) == (25, 0)
+    # The judge's calls still spent under the ceiling.
+    assert summary["usd"]["grading"] == summary["stages"][0]["grading_usd"] == 25 * 0.5
+    assert summary["usd"]["grading_per_judged_item"] is None
+    assert summary["time"]["grading_seconds_per_judged_item"] is None
+    assert projection["grading_usd"] is projection["grading_chunks"] is None and summary["rules"]["R4"] is None
+    # 195 tasks at 10 minutes each: 1,950 minutes, 12 legs of 170.
+    assert projection["solve_legs"] == 12 and summary["rules"]["R3"] is False
+    assert projection["solve_usd_mean"] == round(6.0 * 195) and projection["solve_usd_p90"] == round(6.0 * 195)

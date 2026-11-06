@@ -17,7 +17,10 @@ final grade (run_status "final", the stage's own experiment id) and the
 self_report.json of the revision that grade names; the two must list the
 same tasks in the same order, and that list must be the registered one. A
 grade that judged anything needs its journals: a journals directory holding
-none refuses.
+none refuses, and so does one without the journal of the run that wrote the
+grade (runner_evidence.observation's run id and attempt, the journal
+sol_batch_grading.check_grade_writers requires on main), since that run's
+grading would drop out of every figure.
 
 Every task counts once on the fixed denominator (the stage's task count, or
 220 for the union); a task the judge never saw counts 0 and is labelled by
@@ -35,7 +38,9 @@ other repeat refuses. ``sol_gate`` tasks count with infrastructure for R2.
 registered task list (batch-runner/experiments/<id>.yaml) plus the tasks the
 gate moved, with rubric items from the committed task catalogue. Or pass both
 ``--remaining-tasks`` and ``--remaining-items`` by hand. With neither, nothing
-is projected and R3 and R4 print null: not evaluated.
+is projected and R3 and R4 print null: not evaluated. A projection needs a
+sample: with no attempted task the solve projection and R3 print null, and
+with no judged rubric item the grading projection and R4.
 
 Grading USD per task is read from every journal in
 data/grades/_combined_usd/<id>/, which holds every grading process of that
@@ -296,6 +301,19 @@ def _check_stage(experiment_id: str, grade: dict, report: dict, grade_path: Path
         raise SystemExit(f"{grade_path} does not grade the tasks of {report_path}, in their order")
 
 
+def writer_journal(grade: dict, grade_path: Path) -> tuple[str, str, str]:
+    """The run and attempt that wrote the grade, and the journal they opened, as check_grade_writers names it."""
+    grading = _batch_runner_module("sol_batch_grading")
+    evidence = grade.get("runner_evidence")
+    observation = evidence.get("observation") if isinstance(evidence, dict) else None
+    run_id = observation.get("run_id") if isinstance(observation, dict) else None
+    attempt = observation.get("run_attempt") if isinstance(observation, dict) else None
+    if (not isinstance(run_id, str) or not grading._RUN_ID.fullmatch(run_id)
+            or not isinstance(attempt, str) or not grading._RUN_ATTEMPT.fullmatch(attempt)):
+        raise SystemExit(f"{grade_path} names no grading run (runner_evidence.observation run_id and run_attempt)")
+    return run_id, attempt, f"run-{run_id}-{attempt}.combined_usd.jsonl"
+
+
 def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals: Path,
                batch_root: Path | None = None) -> list[dict]:
     grade = json.loads(grade_path.read_text(encoding="utf-8"))
@@ -305,10 +323,20 @@ def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals
     run = controls.registered_run(experiment_id)
     graded = {task["task_id"]: task for task in grade["tasks"]}
     grading_usd, unattributed, journal_names = journal_usd(journals, (experiment_id, run.grading_config_name))
-    if not journal_names and any(not task.get("error") or (task.get("judge_call_count") or 0) > 0
-                                 for task in grade["tasks"]):
-        raise SystemExit(f"{journals} holds no combined USD journal, yet {grade_path} judged tasks; "
-                         "pass that grade's journals with --journals-dir")
+    if any(not task.get("error") or (task.get("judge_call_count") or 0) > 0 for task in grade["tasks"]):
+        if not journal_names:
+            raise SystemExit(f"{journals} holds no combined USD journal, yet {grade_path} judged tasks; "
+                             "pass that grade's journals with --journals-dir")
+        # The run that wrote this grade (its last chunk) spent under the same
+        # ceiling: without its journal, that chunk's grading drops out of every
+        # figure below. check_grade_writers refuses the pair's next grade on main
+        # for the same reason.
+        run_id, attempt, writer = writer_journal(grade, grade_path)
+        if writer not in journal_names:
+            raise SystemExit(
+                f"{grade_path} was written by run {run_id} attempt {attempt}, whose combined USD journal is not "
+                f"in {journals}; commit it from that run's cost-ledger artifact first, or pass that grade's "
+                "journals with --journals-dir")
     # Every journal read, whole: the preflight's prior-grading figure.
     grading_total = sum(grading_usd.values(), Decimal(0)) + unattributed
     # A line on no task of this stage (a request booked without a task id)
@@ -428,6 +456,12 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
               rerun: list[str] | None = None, stages: list[dict] | None = None) -> dict:
     """The readout. ``remaining_tasks``/``remaining_items`` None: nothing is projected, R3 and R4 are None.
 
+    A projection needs a sample. With no attempted task the solve figures
+    read from the sample (mean minutes, the solve projections, the legs) and
+    R3 are None; with no judged rubric item the grading ones (seconds and USD
+    per judged item, the grading projection, the chunks) and R4 are None. A 0
+    there would read as "R3 and R4 hold" with nothing measured.
+
     ``stages`` are the stages' records, including a stage whose every row a
     later stage replaced; by default, those of ``rows``.
     """
@@ -440,21 +474,26 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
     moved = [row["task_id"] for row in rows if row["cause"] == "usd_gate"]
     causes = Counter(row["cause"] for row in rows)
     solve = [row["solve_usd"] for row in attempted]
-    judged_items = sum(row["items"] - row["excluded_items"] for row in judged) or 1
+    # The rubric items the judge marked: the sample of every grading rate.
+    judged_items = sum(row["items"] - row["excluded_items"] for row in judged)
     unattributed = sum((record["grading_unattributed_usd"] for record in records), Decimal(0))
     grading_total = float(sum((record["grading_usd"] for record in records), Decimal(0)))
-    per_item = grading_total / judged_items
+    # Each side is projected only from a sample of its own.
+    solve_sampled = projected and bool(attempted)
+    grading_sampled = projected and judged_items > 0
+    per_item = grading_total / judged_items if judged_items else None
     rng = random.Random(20261106)
     boot = (sorted(sum(rng.choice(solve) for _ in range(remaining_tasks)) for _ in range(2000))
-            if solve and projected else [0])
-    mean_minutes = statistics.mean(row["solve_seconds"] for row in attempted) / 60 if attempted else 0
+            if solve_sampled else None)
+    mean_minutes = statistics.mean(row["solve_seconds"] for row in attempted) / 60 if attempted else None
     # Tasks that left files are the ones a grade has to mark; a refusal (R1) is
     # a selector defect to fix, not a saving to project.
-    judged_share = sum(1 for row in attempted if row["files"]) / len(attempted) if attempted else 0
-    grade_seconds_per_item = (sum(row["grading_seconds"] for row in judged) / judged_items) if judged else 0
+    judged_share = sum(1 for row in attempted if row["files"]) / len(attempted) if attempted else None
+    grade_seconds_per_item = sum(row["grading_seconds"] for row in judged) / judged_items if judged_items else None
     legs = chunks = None
-    if projected:
+    if solve_sampled:
         legs = math.ceil(remaining_tasks * mean_minutes / LEG_MINUTES) if remaining_tasks else 0
+    if grading_sampled:
         chunks = (math.ceil(remaining_items * judged_share * grade_seconds_per_item / CHUNK_SECONDS)
                   if remaining_items else 0)
     with_files = [row for row in rows if row["files"]]
@@ -486,15 +525,17 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
                 "grading_unattributed": round(float(unattributed), 2),
                 "solve_per_task_mean": round(statistics.mean(solve), 2) if solve else None,
                 "solve_per_task_max": round(max(solve), 2) if solve else None,
-                "grading_per_judged_item": round(per_item, 4)},
-        "time": {"solve_minutes_per_task_mean": round(mean_minutes, 1),
-                 "grading_seconds_per_judged_item": round(grade_seconds_per_item, 1)},
+                "grading_per_judged_item": None if per_item is None else round(per_item, 4)},
+        "time": {"solve_minutes_per_task_mean": None if mean_minutes is None else round(mean_minutes, 1),
+                 "grading_seconds_per_judged_item":
+                     None if grade_seconds_per_item is None else round(grade_seconds_per_item, 1)},
         "projection": {
             "attempted_sample": len(attempted),
+            "judged_item_sample": judged_items,
             "remaining_tasks": remaining_tasks, "remaining_items": remaining_items,
-            "solve_usd_mean": round(statistics.mean(solve) * remaining_tasks, 0) if solve and projected else None,
-            "solve_usd_p90": round(boot[int(0.9 * len(boot))], 0) if projected else None,
-            "grading_usd": round(per_item * remaining_items * judged_share, 0) if projected else None,
+            "solve_usd_mean": round(statistics.mean(solve) * remaining_tasks, 0) if solve_sampled else None,
+            "solve_usd_p90": round(boot[int(0.9 * len(boot))], 0) if solve_sampled else None,
+            "grading_usd": round(per_item * remaining_items * judged_share, 0) if grading_sampled else None,
             "solve_legs": legs, "grading_chunks": chunks,
         },
     }
@@ -504,7 +545,7 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
     summary["rules"] = {
         "R1": refusals == 0,
         "R2": infrastructure <= math.floor(0.08 * len(rows)),
-        # None: not evaluated, because nothing was projected.
+        # None: not evaluated, because nothing was projected or no sample was there to project from.
         "R3": None if legs is None else legs <= MAX_LEGS - 2,
         "R4": None if chunks is None else chunks <= MAX_CHUNKS - 2,
     }

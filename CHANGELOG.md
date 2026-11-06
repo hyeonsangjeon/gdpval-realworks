@@ -72,11 +72,15 @@ entries land under a fresh dated heading the day they merge to `main`.
     a projection for the remaining tasks, with four pre-registered go/no-go
     rules for the next stage. It changes no grade or headline. It reads a
     registered stage only from its final grade (that stage's own experiment
-    id, every registered task in the self_report's order) and refuses a
-    journals directory with no journal when the grade judged anything, or
-    a journal another approval opened. With no `--remaining-from` and not
-    both `--remaining-tasks` and `--remaining-items`, nothing is projected
-    and R3 and R4 print `null` (not evaluated) instead of holding.
+    id, every registered task in the self_report's order). When the grade
+    judged anything, it refuses a journals directory with no journal or
+    without the journal of the run that wrote the grade (the journal
+    `check_grade_writers` requires on main), and it refuses a journal
+    another approval opened. With no `--remaining-from` and not both
+    `--remaining-tasks` and `--remaining-items`, nothing is projected and R3
+    and R4 print `null` (not evaluated) instead of holding. The solve
+    projection and R3 are also `null` when no task was attempted, and the
+    grading projection and R4 when no rubric item was judged.
     - Zeros use one cause table with
       `batch-runner/scripts/merge_parity_regrade.py`, which gains
       `grader_other` (a grader-side error other than a refusal), `usd_gate`,
