@@ -311,7 +311,7 @@ def run_smoke(root, evidence, identity, outside_netns, outside_pidns):
     runtime._write(evidence / "server-bundle-manifest.json", runtime._read(root / "inputs/server-bundle-manifest.json", bundle.MAX_MANIFEST))
     runtime._write(evidence / "transfer.json", runtime._encoded(transfer) + b"\n")
     if failures:
-        raise Refused("load_smoke_refused:" + ",".join(failures))
+        raise Refused("load_smoke_refused")  # Details stay in JSON; ':' is not a safe refusal-code character.
     return verify_smoke_evidence(evidence, identity)
 
 

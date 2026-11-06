@@ -32,7 +32,7 @@ SUITE = [
     "tests/test_ghcp_ahp_metadata_broker.py", "tests/test_ghcp_ahp_connection.py",
 ]
 EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smoke.py", "tests/test_ghcp_ahp_readiness_smoke.py"]
-EXPECTED_COUNTS = {"contracts.xml": 1651, "workflow-guards.xml": 74}
+EXPECTED_COUNTS = {"contracts.xml": 1658, "workflow-guards.xml": 74}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -629,10 +629,13 @@ def readiness_steps():
     return {row["id"]: row for row in workflow()["jobs"]["patched-agent-host-readiness-smoke"]["steps"]}
 
 
-def test_readiness_job_requires_both_same_run_bundle_and_load_smoke():
+def test_readiness_and_import_are_independent_mandatory_checks_of_the_same_bundle():
     job = workflow()["jobs"]["patched-agent-host-readiness-smoke"]
     assert job["name"] == "patched agent host readiness smoke"
-    assert job["needs"] == ["patched-codex-server-bundle", "patched-agent-host-load-smoke"]
+    assert job["needs"] == "patched-codex-server-bundle"
+    original = workflow()["jobs"]["patched-agent-host-load-smoke"]
+    assert original["needs"] == "patched-codex-server-bundle"
+    assert "continue-on-error" not in original and "always()" not in job["if"]
     assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "15"
     assert job["permissions"] == {"contents": "read"}
     assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"

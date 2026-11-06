@@ -86,7 +86,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 1651, "workflow-guards.xml": 74}
+          expected = {"contracts.xml": 1658, "workflow-guards.xml": 74}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
@@ -115,7 +115,9 @@ jobs:
 
   patched-agent-host-readiness-smoke:
     name: patched agent host readiness smoke
-    needs: [patched-codex-server-bundle, patched-agent-host-load-smoke]
+    # Independent checks of one bundle. The import job remains mandatory and its
+    # failure remains red; readiness has its OWN same-process load-proof guard.
+    needs: patched-codex-server-bundle
     if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
