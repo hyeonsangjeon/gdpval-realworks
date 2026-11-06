@@ -31,8 +31,8 @@ SUITE = [
     "tests/test_ghcp_ahp_wire_capture.py", "tests/test_ghcp_ahp_zero_turn.py",
     "tests/test_ghcp_ahp_metadata_broker.py", "tests/test_ghcp_ahp_connection.py",
 ]
-EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smoke.py"]
-EXPECTED_COUNTS = {"contracts.xml": 1581, "workflow-guards.xml": 69}
+EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smoke.py", "tests/test_ghcp_ahp_readiness_smoke.py"]
+EXPECTED_COUNTS = {"contracts.xml": 1651, "workflow-guards.xml": 74}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -103,7 +103,7 @@ def test_workflow_runs_only_on_the_named_branch_push():
     assert value["on"] == {"push": {"branches": [BRANCH]}}
     assert value["permissions"] == {"contents": "read"}
     assert value["concurrency"] == {"group": "ghcp-patched-runtime-tests-${{ github.ref }}", "cancel-in-progress": "false"}
-    assert set(value["jobs"]) == {"contracts", "patched-codex-typecheck", "patched-codex-server-bundle", "patched-agent-host-load-smoke"}
+    assert set(value["jobs"]) == {"contracts", "patched-codex-typecheck", "patched-codex-server-bundle", "patched-agent-host-load-smoke", "patched-agent-host-readiness-smoke"}
     job = value["jobs"]["contracts"]
     assert set(job) == {"name", "if", "runs-on", "timeout-minutes", "steps"}
     assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
@@ -623,3 +623,57 @@ def test_load_smoke_shell_is_only_syntax_checked_on_nas_and_never_suppresses_err
     assert "|| true" not in command and "set +e" not in command and "exit 0" not in command
     result = subprocess.run(["/bin/bash", "-n"], input=command, capture_output=True, text=True, timeout=5)
     assert result.returncode == 0, result.stderr
+
+
+def readiness_steps():
+    return {row["id"]: row for row in workflow()["jobs"]["patched-agent-host-readiness-smoke"]["steps"]}
+
+
+def test_readiness_job_requires_both_same_run_bundle_and_load_smoke():
+    job = workflow()["jobs"]["patched-agent-host-readiness-smoke"]
+    assert job["name"] == "patched agent host readiness smoke"
+    assert job["needs"] == ["patched-codex-server-bundle", "patched-agent-host-load-smoke"]
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "15"
+    assert job["permissions"] == {"contents": "read"}
+    assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
+    assert "environment" not in job and "continue-on-error" not in job
+    selected = readiness_steps()
+    assert list(selected) == ["checkout", "python", "payload", "prepare", "readiness", "artifacts"]
+    for name in ("checkout", "python"):
+        assert selected[name]["uses"] == smoke_steps()[name]["uses"]
+        assert selected[name]["with"] == smoke_steps()[name]["with"]
+    assert selected["payload"]["with"] == {"artifact-ids": "${{ needs.patched-codex-server-bundle.outputs.payload_artifact_id }}",
+        "merge-multiple": "true", "path": "${{ runner.temp }}/ghcp-readiness-transfer"}
+
+
+def test_readiness_namespace_and_no_credential_contract():
+    command = readiness_steps()["readiness"]["run"]
+    for required in ("sudo -n unshare --mount --net --pid --fork --mount-proc --kill-child=KILL",
+        "ip link set lo up; exec", "--bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs",
+        "/usr/bin/env -i PATH=/usr/bin:/bin", 'GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF"',
+        "timeout --signal=TERM --kill-after=10s 240s", 'ghcp_ahp_readiness_smoke.py" run'):
+        assert required in command
+    for forbidden in ("secrets.", "COPILOT_GITHUB_TOKEN", "GITHUB_TOKEN", "--authenticated-zero-turn", "--execute-paid", "--connection-only"):
+        assert forbidden not in command
+    assert "environment" not in workflow()["jobs"]["patched-agent-host-readiness-smoke"]
+
+
+@pytest.mark.parametrize("step", ["prepare", "readiness"])
+def test_readiness_shell_is_parsed_never_executed_on_nas(step):
+    command = readiness_steps()[step]["run"]
+    assert command.startswith("set -euo pipefail\n")
+    assert "|| true" not in command and "set +e" not in command
+    checked = subprocess.run(["/bin/bash", "-n"], input=command, capture_output=True, text=True, timeout=5)
+    assert checked.returncode == 0, checked.stderr
+
+
+def test_readiness_artifacts_are_an_exact_json_allowlist():
+    selected = readiness_steps()["artifacts"]
+    assert selected["if"] == "always()"
+    assert selected["uses"] == steps()["artifacts"]["uses"]
+    value = selected["with"]
+    expected = ["readiness-smoke.json", "backend-startup.json", "wire-capture.json", "thread-policy.json", "management-init.json",
+                *patched.ARTIFACTS, "server-bundle-manifest.json", "transfer.json"]
+    assert value["path"].splitlines() == ["${{ runner.temp }}/ghcp-readiness-evidence/" + name for name in expected]
+    assert value["name"] == "ghcp-patched-readiness-${{ github.run_id }}-${{ github.run_attempt }}"
+    assert value["if-no-files-found"] == "error" and value["include-hidden-files"] == "false"
