@@ -29,7 +29,7 @@ def encode(value):
 
 
 def build_value(bundle_sha=sha(BODY)):
-    return {"schema": "ghcp-patched-host-build-candidate-v2", "patched_ghcp": True,
+    return {"schema": "ghcp-patched-host-build-candidate-v3", "patched_ghcp": True,
             "upstream_commit": patched.PIN, "patch_sha256": patched.PATCH_SHA256,
             "source_archive_sha256": patched.SOURCE_SHA256, "base_manifest_sha256": patched.MANIFEST_SHA256,
             "patched_source_sha256": dict(patched.PATCHED_SOURCES), "runtime_relative_path": patched.RUNTIME_RELATIVE,

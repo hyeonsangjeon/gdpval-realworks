@@ -29,7 +29,7 @@ def chain(tmp_path):
     environment = bind(tree)
     contract = json.loads(environment["GHCP_AHP_PATCHED_RUNTIME_CONTRACT"])
     child, parent = 4242, 4200
-    proof = {"schema": "ghcp-patched-runtime-load-v1", "patched_ghcp": True,
+    proof = {"schema": "ghcp-patched-runtime-load-v2", "patched_ghcp": True,
         "upstream_commit": patched.PIN, "patch_sha256": patched.PATCH_SHA256,
         "build_receipt_sha256": contract["build_receipt_sha256"],
         "runtime_contract_sha256": environment["GHCP_AHP_PATCHED_RUNTIME_CONTRACT_SHA256"],

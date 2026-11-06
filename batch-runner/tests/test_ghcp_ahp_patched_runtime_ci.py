@@ -16,6 +16,9 @@ import xml.etree.ElementTree as ET
 import pytest
 import yaml
 
+import ghcp_ahp_patched_runtime as patched
+import ghcp_ahp_bundle_manifest as bundle_manifest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/ghcp-ahp-patched-runtime-tests.yml"
@@ -28,7 +31,8 @@ SUITE = [
     "tests/test_ghcp_ahp_wire_capture.py", "tests/test_ghcp_ahp_zero_turn.py",
     "tests/test_ghcp_ahp_metadata_broker.py", "tests/test_ghcp_ahp_connection.py",
 ]
-EXPECTED_COUNTS = {"contracts.xml": 1477, "workflow-guards.xml": 52}
+EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py"]
+EXPECTED_COUNTS = {"contracts.xml": 1516, "workflow-guards.xml": 61}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -55,6 +59,10 @@ def pytest_args(step):
 
 def typecheck_steps():
     return {item["id"]: item for item in workflow()["jobs"]["patched-codex-typecheck"]["steps"]}
+
+
+def bundle_steps():
+    return {item["id"]: item for item in workflow()["jobs"]["patched-codex-server-bundle"]["steps"]}
 
 
 def result_program(selected=None):
@@ -91,7 +99,7 @@ def test_workflow_runs_only_on_the_named_branch_push():
     assert value["on"] == {"push": {"branches": [BRANCH]}}
     assert value["permissions"] == {"contents": "read"}
     assert value["concurrency"] == {"group": "ghcp-patched-runtime-tests-${{ github.ref }}", "cancel-in-progress": "false"}
-    assert set(value["jobs"]) == {"contracts", "patched-codex-typecheck"}
+    assert set(value["jobs"]) == {"contracts", "patched-codex-typecheck", "patched-codex-server-bundle"}
     job = value["jobs"]["contracts"]
     assert set(job) == {"name", "if", "runs-on", "timeout-minutes", "steps"}
     assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
@@ -137,7 +145,8 @@ def test_workflow_selects_the_unchanged_1477_test_file_bundle():
     args = pytest_args(selected)
     assert args[:6] == ["-q", "-o", "addopts=", "-p", "no:cacheprovider", "--basetemp=$ci_tmp/contracts"]
     assert args[6] == "--junitxml=$RUNNER_TEMP/ghcp-patched-ci/contracts.xml"
-    assert args[7:] == SUITE
+    assert args[7:7 + len(SUITE)] == SUITE
+    assert args[7 + len(SUITE):] == EXTRA_SUITE
     assert len(SUITE) == len(set(SUITE)) == 10
     for step in (selected, steps()["workflow_guards"]):
         text = step["run"]
@@ -256,7 +265,8 @@ def test_typecheck_has_no_secret_model_endpoint_or_runtime_invocation():
                       "@ts-ignore", "@ts-nocheck", "--noEmitOnError false"):
         assert forbidden not in text
     assert re.findall(r"https://[^\s]+", WORKFLOW.read_text()) == [
-        "https://codeload.github.com/microsoft/vscode/tar.gz/2c33b50b16c472efe58357d1d2a8a5414bc23fbf"]
+        "https://codeload.github.com/microsoft/vscode/tar.gz/2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+        "https://vscode.download.prss.microsoft.com/dbazure/download/stable/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/vscode-server-linux-x64.tar.gz"]
     assert "execution_allowed\": True" not in text
 
 
@@ -374,10 +384,12 @@ def run_typecheck_result(tmp_path, failed_phase=None, missing_module=None):
     assert report["execution_allowed"] is False and report["runtime_load_status"] == "not_executed"
     assert report["patched_ghcp"] is True
     assert report["evidence_kind"] == "patched-source-typecheck-no-execution"
-    assert report["patch_sha256"] == "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb"
+    assert report["patch_sha256"] == patched.PATCH_SHA256
+    assert report["base_patch_sha256"] == "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb"
     assert report["typecheck_correction_sha256"] == CORRECTION_SHA256
     assert report["typechecked_source_status"] == "base-patch-plus-context-correction"
-    assert report["runtime_receipt_compatible"] is False
+    assert report["runtime_receipt_schema"] == "ghcp-patched-host-build-candidate-v3"
+    assert report["runtime_receipt_generated"] is False
     assert report["evidence_sha256"]["patched-typecheck.log"] == hashlib.sha256(log.read_bytes()).hexdigest()
     summary = (tmp_path / "summary.md").read_text()
     assert json.loads(summary.split("```json\n", 1)[1].split("\n```", 1)[0]) == report
@@ -455,3 +467,79 @@ def test_one_line_context_patch_uses_the_upstream_prewarm_storage_contract_only(
         assert target.read_text() == source.replace(minus[0], plus[0])
         subprocess.run(["git", "apply", "--reverse", str(CORRECTION)], cwd=tmp_path, check=True, capture_output=True, timeout=10)
         assert target.read_text() == source
+
+
+def test_bundle_job_follows_typecheck_on_standard_runner_with_read_only_permissions():
+    job = workflow()["jobs"]["patched-codex-server-bundle"]
+    assert set(job) == {"name", "needs", "if", "runs-on", "timeout-minutes", "permissions", "steps"}
+    assert job["name"] == "patched Codex server bundle build"
+    assert job["needs"] == "patched-codex-typecheck"
+    assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
+    assert job["runs-on"] == "ubuntu-24.04" and 1 <= int(job["timeout-minutes"]) <= 240
+    assert job["permissions"] == {"contents": "read"}
+    assert all("env" not in step and "continue-on-error" not in step for step in job["steps"])
+    assert {step["id"]: step["if"] for step in job["steps"] if "if" in step} == {"artifacts": "always()"}
+
+
+def test_bundle_reuses_exact_typechecked_patch_chain_and_locked_dependency_preparation():
+    selected = bundle_steps()
+    assert list(selected) == ["checkout", "python", "node", "prepare", "dependencies", "electron_types",
+                              "product_inputs", "bundle", "manifest", "artifacts"]
+    for name in ("checkout", "python", "node", "prepare", "dependencies", "electron_types"):
+        assert selected[name] == typecheck_steps()[name]
+    assert '"$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_patched_runtime.py" verify-patchset' in selected["prepare"]["run"]
+    assert hashlib.sha256(patched.PATCH_SET.read_bytes()).hexdigest() == patched.PATCH_SHA256
+
+
+def test_bundle_product_preparation_downloads_only_the_pinned_public_vendor_archive():
+    command = bundle_steps()["product_inputs"]["run"]
+    pin = json.loads(patched.MANIFEST.read_text())["artifacts"]["server"]
+    assert pin["url"] in command and pin["sha256"] in command
+    assert f'--max-filesize {pin["maximum_bytes"]}' in command
+    assert "--proto '=https' --proto-redir '=https' --max-time 300" in command
+    assert "ghcp_ahp_bundle_manifest.py prepare" in command
+    assert command.count('env -i PATH="$PATH" LANG=C.UTF-8') == 2
+
+
+def test_bundle_compiler_has_no_network_and_uses_exact_unweakened_upstream_command():
+    command = bundle_steps()["bundle"]["run"]
+    assert 'sudo -n unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups' in command
+    assert f'env -i PATH="$PATH" LANG=C.UTF-8 BUILD_SOURCEVERSION={patched.PIN}' in command
+    assert ' '.join(bundle_manifest.COMMAND) + ' 2>&1 | tee "$evidence/server-bundle.log"' in command
+    assert 'test -s out-patched/vs/platform/agentHost/node/agentHostMain.js' in command
+    assert command.count('sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"') == 2
+    for text in (WORKFLOW.read_text(), (ROOT / "batch-runner/ghcp_ahp_bundle_manifest.py").read_text()):
+        for forbidden in ("secrets.", "COPILOT_GITHUB_TOKEN", "GITHUB_TOKEN", "workflow_dispatch", "createSession",
+                          "thread/start", "chat/completions", "api.openai.com", "api.github.com", "continue-on-error", "|| true"):
+            assert forbidden not in text
+
+
+def test_bundle_upload_contains_only_the_hash_size_manifest_not_binaries_or_logs():
+    selected = bundle_steps()
+    assert selected["artifacts"]["uses"] == steps()["artifacts"]["uses"]
+    assert selected["artifacts"]["with"] == {
+        "name": "ghcp-patched-codex-server-manifest-${{ github.run_id }}-${{ github.run_attempt }}",
+        "path": "${{ runner.temp }}/ghcp-patched-typecheck/server-bundle-manifest.json",
+        "if-no-files-found": "error", "retention-days": "7", "include-hidden-files": "false"}
+    assert "ghcp_ahp_bundle_manifest.py record" in selected["manifest"]["run"]
+    assert '--receipt "$evidence/build-receipt.json"' in selected["manifest"]["run"]
+
+
+@pytest.mark.parametrize("name", ["product_inputs", "bundle", "manifest"])
+def test_bundle_shell_is_parsed_only_on_nas_and_preserves_failures(name):
+    command = bundle_steps()[name]["run"]
+    assert command.startswith("set -euo pipefail\n")
+    assert "|| true" not in command and "set +e" not in command and "exit 0" not in command
+    result = subprocess.run(["/bin/bash", "-n"], input=command, capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+
+
+def test_bundle_manifest_adapter_cannot_launch_runtime_or_network_clients():
+    text = (ROOT / "batch-runner/ghcp_ahp_bundle_manifest.py").read_text()
+    tree = ast.parse(text)
+    imports = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
+    imports |= {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+    assert imports <= {"__future__", "argparse", "datetime", "os", "pathlib", "tarfile",
+                       "ghcp_ahp_patched_runtime", "ghcp_ahp_errors"}
+    assert not any(word in text for word in ("os.system", "os.popen", "subprocess", "eval(", "exec("))
+    assert bundle_manifest.COMMAND == ["node", "build/next/index.ts", "bundle", "--target", "server", "--minify", "--out", "out-patched"]

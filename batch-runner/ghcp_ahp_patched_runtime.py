@@ -20,18 +20,24 @@ import uuid
 from ghcp_ahp_errors import Refused
 
 PIN = "2c33b50b16c472efe58357d1d2a8a5414bc23fbf"
-PATCH_SHA256 = "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb"
+# This is the SHA of the ordered two-patch manifest, never one component alone.
+PATCH_SHA256 = "6d869d65ec18a5aba93528f27e1277ac37b48a7da439065911e11e6c71f33856"
+BASE_PATCH_SHA256 = "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb"
+CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 SOURCE_SHA256 = "cb7fb5b3b219585a63ec8e3dbc66bab135d2fe900b0541e73862da5302c24206"
 MANIFEST_SHA256 = "cd5ff8f2e1ad1f140892febdc75f288adfe8e3c96bd4d3b8e9a4078a90ef5049"
 RUNTIME_RELATIVE = "out/vs/platform/agentHost/node/agentHostMain.js"
 ENTRYPOINT = "vs/platform/agentHost/node/agentHostMain"
 LOADER = Path(__file__).with_suffix(".cjs")
 PATCH = Path(__file__).with_name("patches") / "vscode-2c33b50b-prewarm-config-ready.patch"
+PATCH_SET = PATCH.with_name("vscode-2c33b50b-prewarm-patchset.json")
+PATCH_COMPONENTS = ((PATCH.name, BASE_PATCH_SHA256),
+                    ("vscode-2c33b50b-prewarm-chat-context.patch", CORRECTION_SHA256))
 MANIFEST = Path(__file__).with_name("ghcp_ahp_probe_manifest.json")
 PATCHED_SOURCES = {
     "src/vs/platform/agentHost/common/agent.ts": "a4741c2a83f02acb6c7fbb61ae9800a5b9ce71d837317cb15fe79f3a2fead817",
     "src/vs/platform/agentHost/node/codex/codexAgent.ts": "2adeb9ebfc066b728ca3f62e96853ce2cdc020a530c7b741ae0da6ddd9678ede",
-    "src/vs/platform/agentHost/node/agentService.ts": "280f71720d83a4326a514c16cb1d08c6ca9e4430fdb58fc98c40afc33bebb682",
+    "src/vs/platform/agentHost/node/agentService.ts": "209a699ee4138a822a2aaa5a1146066d937d5526a826846106debb8b9d34a49c",
 }
 MAX_JSON = 64 * 1024
 MAX_BUNDLE = 64 * 1024 * 1024
@@ -111,8 +117,29 @@ def _equal(left, right):
     return _encoded(left) == _encoded(right)
 
 
+def verify_patch_set():
+    """Bind exact manifest bytes, ordered component hashes AND local patch bytes."""
+    raw = _read(PATCH_SET)
+    if _sha(raw) != PATCH_SHA256:
+        raise Refused("patched_patchset_manifest_refused")
+    value = _json(raw)
+    expected = {"schema": "ghcp-prewarm-patchset-v1", "upstream_commit": PIN,
+                "patches": [{"file": name, "sha256": digest} for name, digest in PATCH_COMPONENTS]}
+    if not _equal(value, expected):
+        raise Refused("patched_patchset_manifest_refused")
+    for name, digest in PATCH_COMPONENTS:
+        try:
+            data = _read(PATCH_SET.parent / name)
+        except Refused:
+            raise Refused("patched_patchset_component_unavailable") from None
+        if _sha(data) != digest:
+            raise Refused("patched_patchset_component_mismatch")
+    return value
+
+
 def validate_build_receipt(value):
-    expected = {"schema": "ghcp-patched-host-build-candidate-v2", "patched_ghcp": True,
+    verify_patch_set()
+    expected = {"schema": "ghcp-patched-host-build-candidate-v3", "patched_ghcp": True,
                 "upstream_commit": PIN, "patch_sha256": PATCH_SHA256, "source_archive_sha256": SOURCE_SHA256,
                 "base_manifest_sha256": MANIFEST_SHA256, "patched_source_sha256": PATCHED_SOURCES,
                 "runtime_relative_path": RUNTIME_RELATIVE, "evidence_kind": "source-build-no-execution",
@@ -127,7 +154,8 @@ def validate_build_receipt(value):
 
 def build_receipt(source, bundle, output):
     """Record actual build output without activating or installing any runtime."""
-    if _sha(_read(PATCH)) != PATCH_SHA256 or _sha(_read(MANIFEST)) != MANIFEST_SHA256:
+    verify_patch_set()
+    if _sha(_read(MANIFEST)) != MANIFEST_SHA256:
         raise Refused("patched_base_pin_refused")
     for relative, expected in PATCHED_SOURCES.items():
         if _sha(_read(Path(source) / relative, MAX_BUNDLE)) != expected:
@@ -135,7 +163,7 @@ def build_receipt(source, bundle, output):
     data = _read(bundle, MAX_BUNDLE)
     if b"onChatConfigurationReady" not in data:
         raise Refused("patched_bundle_hook_missing")
-    value = {"schema": "ghcp-patched-host-build-candidate-v2", "patched_ghcp": True,
+    value = {"schema": "ghcp-patched-host-build-candidate-v3", "patched_ghcp": True,
              "upstream_commit": PIN, "patch_sha256": PATCH_SHA256, "source_archive_sha256": SOURCE_SHA256,
              "base_manifest_sha256": MANIFEST_SHA256, "patched_source_sha256": dict(PATCHED_SOURCES),
              "runtime_relative_path": RUNTIME_RELATIVE, "runtime_bundle_sha256": _sha(data),
@@ -239,7 +267,7 @@ def prepare_binding(prepared, state, request, fork_contract, *, synthetic=False)
         raise Refused("patched_runtime_node_mismatch")
     directory = _safe_path(Path(state) / "wire/patched-runtime")
     directory.mkdir(mode=0o700, exist_ok=False)
-    contract = {"schema": "ghcp-patched-runtime-contract-v1", "patched_ghcp": True,
+    contract = {"schema": "ghcp-patched-runtime-contract-v2", "patched_ghcp": True,
                 "upstream_commit": PIN, "patch_sha256": PATCH_SHA256, "build_receipt_sha256": receipt_sha,
                 "runtime_bundle_sha256": receipt["runtime_bundle_sha256"], "runtime_bundle_path": str(bundle),
                 "runtime_relative_path": RUNTIME_RELATIVE, "node_path": str(node), "node_sha256": node_sha,
@@ -254,7 +282,8 @@ def prepare_binding(prepared, state, request, fork_contract, *, synthetic=False)
 
 
 def _validate_contract(contract, build):
-    expected = {"schema": "ghcp-patched-runtime-contract-v1", "patched_ghcp": True,
+    verify_patch_set()
+    expected = {"schema": "ghcp-patched-runtime-contract-v2", "patched_ghcp": True,
                 "upstream_commit": PIN, "patch_sha256": PATCH_SHA256,
                 "runtime_bundle_sha256": build["runtime_bundle_sha256"], "runtime_relative_path": RUNTIME_RELATIVE,
                 "entrypoint": ENTRYPOINT, "execution_allowed": False, "admission_allowed": False}
@@ -269,7 +298,8 @@ def _validate_contract(contract, build):
 
 
 def _validate_load(contract, contract_sha, proof, records):
-    expected = {"schema": "ghcp-patched-runtime-load-v1", "patched_ghcp": True,
+    verify_patch_set()
+    expected = {"schema": "ghcp-patched-runtime-load-v2", "patched_ghcp": True,
                 "upstream_commit": PIN, "patch_sha256": PATCH_SHA256,
                 "build_receipt_sha256": contract["build_receipt_sha256"], "runtime_contract_sha256": contract_sha,
                 "loaded_relative_path": RUNTIME_RELATIVE, "loaded_source_sha256": contract["runtime_bundle_sha256"],
@@ -361,6 +391,7 @@ def validate_provenance(value, *, measured=True):
         raise Refused("patched_runtime_provenance_missing_or_invalid")
     hashes = ("build_receipt_sha256", "loaded_bundle_sha256", "load_evidence_sha256", "runtime_contract_sha256")
     if measured:
+        verify_patch_set()
         if (value["runtime_load_status"] != "measured" or any(not _hex(value[key]) for key in hashes)
                 or type(value["runtime_evidence_synthetic"]) is not bool):
             raise Refused("patched_runtime_provenance_unmeasured")
@@ -450,6 +481,7 @@ def write_summary(directory, *, handshake=False, policy=False):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest="mode", required=True)
+    modes.add_parser("verify-patchset")
     build = modes.add_parser("build-receipt")
     build.add_argument("--source", type=Path, required=True)
     build.add_argument("--bundle", type=Path, required=True)
@@ -461,6 +493,9 @@ def main(argv=None):
     stage.add_argument("--build-receipt", type=Path, required=True)
     stage.add_argument("--build-receipt-sha256", required=True)
     args = parser.parse_args(argv)
+    if args.mode == "verify-patchset":
+        print(json.dumps({"patch_sha256": PATCH_SHA256, "patch_set": verify_patch_set(), "execution_allowed": False}))
+        return 0
     if args.mode == "stage-runtime":
         report = stage_runtime(args.base, args.runtime, args.bundle,
                                {"path": args.build_receipt, "sha256": args.build_receipt_sha256})
