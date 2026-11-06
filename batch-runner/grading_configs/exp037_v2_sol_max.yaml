@@ -9,7 +9,7 @@ description: |
   request is needed between the solve run and its grade; sol_batch_grading.py
   refuses a published result whose task list is not the registered 25, and
   runs step 8 for this config under the combined solve and grade ceiling of
-  USD 400.
+  USD 700.
 
 judge:
   provider: "azure_openai"

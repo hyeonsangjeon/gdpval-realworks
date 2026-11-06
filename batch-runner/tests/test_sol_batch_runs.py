@@ -1,4 +1,4 @@
-"""The registry of Sol runs: exp036 unchanged, exp037 approved at USD 400, exp038 registered only.
+"""The registry of Sol runs: exp036 unchanged, exp037 approved at USD 700, exp038 registered only.
 
 Model-free and offline. Every task list is re-derived from the committed
 catalogue and the earlier stages' files, never trusted from the registry.
@@ -87,15 +87,28 @@ def test_exp036_is_registered_exactly_as_pr_799_ran_it():
     assert tuple(_task_ids(EXP036)) == controls.FIXED_TASK_IDS and run.task_count == 5
 
 
-def test_exp037_holds_the_owner_approved_400():
+#: The owner's words for exp037, quoted on both sides of the twin tables.
+EXP037_OWNER_WORDS = ('"셋다 예", 01:55 KST', '"700으로 올려", 12:30 KST')
+
+
+def test_exp037_holds_the_owner_approved_700():
     run = controls.RUNS[EXP037]
-    assert run.approval == "owner 2026-11-06"
+    assert run.approval == 'owner 2026-11-06 ("셋다 예", 01:55 KST; "700으로 올려", 12:30 KST)'
+    approved = grading.EXP037_FIRST25.approved
+    assert approved.startswith("2026-11-06 owner") and "USD 700" in approved
+    for words in EXP037_OWNER_WORDS:
+        assert words in approved
+    # 700 = 550 solve + 150 grading (the narrative's 2.00 inside the 150).
     assert (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd) == (
-        Decimal("400"), Decimal("115"), Decimal("51"))
-    assert (run.solve_budget_usd, run.admit_while_at_most_usd) == (Decimal("285"), Decimal("234"))
+        Decimal("700"), Decimal("150"), Decimal("51"))
+    assert (run.solve_budget_usd, run.admit_while_at_most_usd) == (Decimal("550"), Decimal("499"))
     assert run.narrative_allowance_usd == Decimal("2.00") and run.prior_lineage_spend_usd == 0
-    # 25 tasks at exp036's measured mean (38.79 / 5) still admit the 25th first attempt.
-    assert 24 * Decimal("38.788156") / 5 < run.admit_while_at_most_usd
+    assert grading.EXP037_FIRST25.ceiling_usd == run.ceiling_usd
+    # 25 tasks at exp036's measured mean (38.79 / 5) admit the 25th first
+    # attempt with about 313 to spare, and a grade at exp035's per-item cost
+    # for these 1,205 items (0.0936) plus the narrative fits the 150.
+    assert run.admit_while_at_most_usd - 24 * Decimal("38.788156") / 5 > 312
+    assert 1205 * Decimal("0.0936") + run.narrative_allowance_usd < run.grading_reserve_usd
 
 
 def test_exp038_is_registered_but_not_approved():
@@ -234,18 +247,19 @@ def test_exp037_installs_only_with_its_own_tasks_and_its_own_money(tmp_path, cap
     assert session.run is controls.RUNS[EXP037] and executor.runner is not runner
     record = json.loads((workspace / "sol_batch_controls_condition_a.json").read_text(encoding="utf-8"))
     assert record["header"]["experiment_id"] == EXP037
-    assert record["header"]["registered_run"]["approval"] == "owner 2026-11-06"
+    assert record["header"]["registered_run"]["approval"] == controls.RUNS[EXP037].approval
     assert {key: record["header"]["usd"][key] for key in (
         "ceiling", "grading_reserve", "attempt_reserve", "solve_budget", "admit_while_spend_at_most")} == {
-        "ceiling": "400.00000000", "grading_reserve": "115.00000000", "attempt_reserve": "51.00000000",
-        "solve_budget": "285.00000000", "admit_while_spend_at_most": "234.00000000"}
+        "ceiling": "700.00000000", "grading_reserve": "150.00000000", "attempt_reserve": "51.00000000",
+        "solve_budget": "550.00000000", "admit_while_spend_at_most": "499.00000000"}
     banner = capsys.readouterr().out
-    assert "[sol-batch] controls on for exp037_sol_first25 (owner 2026-11-06)" in banner
-    assert "USD gate: 400 ceiling − 115 grading = 285 solve budget; 51 reserve per attempt" in banner
-    assert "attempts start while booked spend ≤ 234.00" in banner
+    assert ('[sol-batch] controls on for exp037_sol_first25 (owner 2026-11-06 ("셋다 예", 01:55 KST; '
+            '"700으로 올려", 12:30 KST))') in banner
+    assert "USD gate: 700 ceiling − 150 grading = 550 solve budget; 51 reserve per attempt" in banner
+    assert "attempts start while booked spend ≤ 499.00" in banner
 
 
-def test_exp037s_gate_admits_through_234_and_books_unreported_usage_at_51(tmp_path):
+def test_exp037s_gate_admits_through_499_and_books_unreported_usage_at_51(tmp_path):
     from core.cost_receipts import STATE_RESERVED
 
     class Ledger:
@@ -264,11 +278,11 @@ def test_exp037s_gate_admits_through_234_and_books_unreported_usage_at_51(tmp_pa
         return controls.SolBatchSession(run=run, ledger=Ledger(), rates=rates, record_path=tmp_path / "r.json",
                                         seed_usd=seed, prior_legs_usd=Decimal(0), window_mismatch=False, header={})
 
-    assert session(Decimal("234")).admit("t")[0] is None
-    refusal, decision = session(Decimal("234.00000001")).admit("t")
+    assert session(Decimal("499")).admit("t")[0] is None
+    refusal, decision = session(Decimal("499.00000001")).admit("t")
     assert refusal == controls.USD_CEILING_REACHED
-    assert decision == {"spend_before_usd": "234.00000001", "reserve_usd": "51.00000000",
-                        "solve_budget_usd": "285.00000000"}
+    assert decision == {"spend_before_usd": "499.00000001", "reserve_usd": "51.00000000",
+                        "solve_budget_usd": "550.00000000"}
     assert controls.book_row({"state": STATE_RESERVED}, rates=rates, reserve=run.attempt_reserve_usd) == (
         Decimal("51"), "usage_unreported")
 

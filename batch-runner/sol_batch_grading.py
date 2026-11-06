@@ -28,7 +28,7 @@ committed journal of that approval; there is no solve spend, because exp035's
 inference is not part of it.
 
 :data:`EXP037_FIRST25` (approved 2026-11-06): the first 25 tasks of the Sol
-220 under one USD 400 ceiling for the solve run and its grade together.
+220 under one USD 700 ceiling for the solve run and its grade together.
 :data:`EXP038_REST195` registers the other 195 with no approval and no ceiling;
 it waits for the owner's decision on exp037's readout.
 
@@ -161,15 +161,21 @@ EXP035_PARITY = Approval(
               " deliverable selection the reviewed selector changed, for parity; stop automatically"
               " at USD 200 (\"한도 높여. 중간에 멈출 확률 제로로\", 12:20 KST)"),
 )
+#: The first stage of the Sol 220. Its ceiling and config have a twin in
+#: sol_batch_controls.RUNS["exp037_sol_first25"], which also splits the 700
+#: into 550 solve and 150 grading; the preflight refuses the two if they
+#: disagree, and test_sol_batch_runs holds them equal.
 EXP037_FIRST25 = Approval(
     experiment_id="exp037_sol_first25",
     config_name="exp037_v2_sol_max",
-    ceiling_usd=Decimal("400"),
+    ceiling_usd=Decimal("700"),
     solve_seed=SOLVE_SEED_SOL_BATCH,
     exclusive_experiment=True,
     inference_revision=None,
     task_ids_sha256=None,
-    approved="2026-11-06 owner: USD 400 for the exp037 first-25 solve run and its grade together",
+    approved=("2026-11-06 owner (\"셋다 예\", 01:55 KST): solve and grade the first 25 tasks of the"
+              " Sol 220 first, the other 195 only after a new approval; USD 700 for the exp037 solve"
+              " run and its grade together (\"700으로 올려\", 12:30 KST)"),
 )
 #: The remaining 195 of the Sol 220: registered so that neither half grades
 #: anything else, refused until the owner approves a ceiling from exp037's

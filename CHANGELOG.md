@@ -13,12 +13,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Stage GPT-5.6 Sol toward all 220 tasks (owner approval 2026-11-06).
+- Stage GPT-5.6 Sol toward all 220 tasks (owner decisions 2 and 3,
+  2026-11-06: "셋다 예" at 01:55 KST, the first 25 tasks first and the other
+  195 only after a new approval; the ceiling "700으로 올려" at 12:30 KST).
   - `sol_batch_controls.RUNS` replaces the one pinned experiment with a
     registry of Sol runs, each with its own task digest and USD ceiling:
     `exp036_sol_fixed5` unchanged (200 = 146 solve + 54 grading, 51 per
-    attempt); `exp037_sol_first25` approved at 400 = 285 solve + 115 grading,
-    51 per attempt, so attempts start while booked solve spend is at most 234;
+    attempt); `exp037_sol_first25` approved at 700 = 550 solve + 150 grading,
+    51 per attempt, so attempts start while booked solve spend is at most 499
+    (narrative allowance 2.00 inside the 150). Simulated over 40,000 draws
+    (exp036's five bookings resampled or fitted lognormal; each task's
+    grading from exp035's grade at the Sol meter), every first attempt starts
+    and the grade fits with probability 1.000 / 0.999, and the expected
+    spend is about USD 330;
     `exp038_sol_rest195` registered with no approval and no ceiling, so step 2
     refuses it before any attempt (`sol_batch_run_not_approved`) and the grade
     preflight refuses it before any download. `sol_batch_grading.APPROVALS`

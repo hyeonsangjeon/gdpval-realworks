@@ -48,26 +48,34 @@
 # The money, owner approval 2026-11-06
 # ------------------------------------
 #
-# USD 400 over solve and grade together, at the same list meter as exp036.
-# The constants in sol_batch_controls.RUNS["exp037_sol_first25"] are
+# USD 700 over solve and grade together, at the same list meter as exp036
+# ("셋다 예", 01:55 KST: the first 25 first; "700으로 올려", 12:30 KST: the
+# ceiling). The values in sol_batch_controls.RUNS["exp037_sol_first25"] are
 # authoritative:
 #
-#   ceiling                400
-#   grading reserve        115   the 25 tasks' 1,205 rubric items at USD 0.0936
-#                                each (exp035's grade of 17 of them, priced at
-#                                this meter) plus the 2.00 narrative allowance
-#   solve budget           285
+#   ceiling                700
+#   grading reserve        150   about the grade's simulated median (138: each
+#                                task's exp035 grading cost at this meter,
+#                                times 1.00-1.25 for Sol's deliverables; p90
+#                                161, p99 198) plus the 2.00 narrative
+#                                allowance
+#   solve budget           550
 #   attempt reserve         51   exp036's; 2.4 x the costliest Sol attempt
 #                                measured (21.26) and above the 29.385 in-flight
 #                                bound
-#   attempts start while booked solve spend <= 234
+#   attempts start while booked solve spend <= 499
 #
 # exp036 booked 38.79 for five tasks (7.76 a task, 1.01 to 21.26), so 25 tasks
-# at that mean book about 194 and the 25th first attempt starts with about 48
-# to spare. Unspent solve budget is grading money: the grade is admitted
-# against the whole 400 minus what solve and earlier grading committed. The
-# gate is checked between attempts, so the last admitted attempt can overshoot
-# by what it costs above 51; the owner accepted that for exp036 and it stands.
+# at that mean book about 194 and the 25th first attempt starts with about 313
+# to spare. The grading reserve only sets where the solve gate stops: the
+# grade is admitted against the whole 700 minus what solve and earlier grading
+# committed, so a grade above 150 still fits beside a solve run below 550.
+# Simulated over 40,000 draws of exp036's five bookings (resampled, or a
+# fitted lognormal capped at one full attempt), every first attempt starts and
+# the grade fits with probability 1.000 (resampled) and 0.999 (lognormal); the
+# expected spend is about 330. The gate is checked between attempts, so the
+# last admitted attempt can overshoot by what it costs above 51; the owner
+# accepted that for exp036 and it stands.
 #
 # If the money runs out, nothing is bypassed. A task the gate refuses ends as
 # usd_ceiling_reached, is not retried, and is reported as "not attempted (USD
@@ -110,13 +118,18 @@
 # -------
 #
 # grade-run.yml grades it with grading_configs/exp037_v2_sol_max.yaml through
-# sol_batch_grading.py under the same 400. There is no rerun_identity, so no
+# sol_batch_grading.py under the same 700. There is no rerun_identity, so no
 # pull request sits between the solve and its grade; the grade preflight
 # instead refuses a published result whose task list is not these 25 in this
-# order, so the grade always covers the whole approved scope. Expect one
-# grading process (about 4 to 5.5 hours against the 338-minute chunk budget);
-# if it runs over, step 8 exits 7 and the next chunk resumes under the same
-# ceiling, after its journal is on main.
+# order, and sol_batch_grading.py refuses a dispatch that names tasks or a
+# task limit (leave both empty), so the grade always covers the whole approved
+# scope. Expect one grading process: about 4.3 to 5.8 hours (exp035 graded 17
+# of these tasks in 2.71 hours, times 1.0 to 1.4 for Sol's deliverables, plus
+# about 8 more tasks at 12 to 15 minutes) against the 338-minute chunk budget.
+# If it runs over, step 8 exits 7 and the next chunk resumes under the same
+# ceiling: it is dispatched only once this chunk's journal is on main, and it
+# waits for a fresh approval of the grading environment, because an unsharded
+# chunk does not inherit one.
 #
 # The dispatch
 # ------------
@@ -136,7 +149,7 @@ experiment:
   description: >-
     The first stage of GPT-5.6 Sol on the whole benchmark: the first 25 tasks of
     the trial-stage rule, run exactly as exp036 ran its five. Solve and grade
-    together held to USD 400 at list price.
+    together held to USD 700 at list price.
   author: "Hyeonsang Jeon"
   created_at: "2026-11-06"
 

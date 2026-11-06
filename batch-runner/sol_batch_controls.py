@@ -192,18 +192,24 @@ RUNS: Mapping[str, SolRun] = MappingProxyType({run.experiment_id: run for run in
         attempt_reserve_usd=Decimal("51"),
         narrative_allowance_usd=Decimal("2.00"),
     ),
-    # Owner approval 2026-11-06. USD 400 = 285 solve + 115 grading; 51 per
-    # attempt, so attempts start while booked solve spend <= 234.
-    # 115 = the 25 tasks' 1,205 rubric items at USD 0.0936 per item (what
-    # exp035's grade of 17 of them cost at this meter) + 2.00 narrative.
+    # Owner approval 2026-11-06: the first 25 first ("셋다 예", 01:55 KST),
+    # at USD 700 ("700으로 올려", 12:30 KST). USD 700 = 550 solve + 150
+    # grading; 51 per attempt, so attempts start while booked solve spend
+    # <= 499. 150 is about the grade's simulated median (138: each task's
+    # exp035 grading cost at this meter, times 1.00-1.25 for Sol's
+    # deliverables; p90 161) plus the 2.00 narrative. It only sets where the
+    # solve gate stops: the grade is admitted against the whole 700 minus what
+    # is committed. Simulated over 40,000 draws of exp036's five bookings
+    # (resampled, or a fitted lognormal), every first attempt starts and the
+    # grade fits with probability 1.000 / 0.999; expected spend about 330.
     SolRun(
         experiment_id="exp037_sol_first25",
         grading_config_name="exp037_v2_sol_max",
         task_count=25,
         ordered_task_ids_sha256="6721f7e99e7c4b59697ad925e68b5e43dc491f9c94d780c8f3777380b13c8093",
-        approval="owner 2026-11-06",
-        ceiling_usd=Decimal("400"),
-        grading_reserve_usd=Decimal("115"),
+        approval='owner 2026-11-06 ("셋다 예", 01:55 KST; "700으로 올려", 12:30 KST)',
+        ceiling_usd=Decimal("700"),
+        grading_reserve_usd=Decimal("150"),
         attempt_reserve_usd=Decimal("51"),
         narrative_allowance_usd=Decimal("2.00"),
     ),
