@@ -8,7 +8,12 @@ const { fileURLToPath } = require('node:url');
 const modules = require('node:module');
 
 const PIN = '2c33b50b16c472efe58357d1d2a8a5414bc23fbf';
-const PATCH = 'a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb';
+// Ordered two-patch manifest SHA, not the SHA of the original patch alone.
+const PATCH = '6d869d65ec18a5aba93528f27e1277ac37b48a7da439065911e11e6c71f33856';
+const PATCH_COMPONENTS = [
+  { file: 'vscode-2c33b50b-prewarm-config-ready.patch', sha256: 'a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb' },
+  { file: 'vscode-2c33b50b-prewarm-chat-context.patch', sha256: '555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a' },
+];
 const RELATIVE = 'out/vs/platform/agentHost/node/agentHostMain.js';
 const ENTRYPOINT = 'vs/platform/agentHost/node/agentHostMain';
 const CONTRACT = 'GHCP_AHP_PATCHED_RUNTIME_CONTRACT';
@@ -43,6 +48,19 @@ function read(value, maximum = LIMIT) {
     return bytes;
   } finally { fs.closeSync(descriptor); }
 }
+function verifyPatchSet() {
+  const directory = path.join(__dirname, 'patches');
+  const raw = read(path.join(directory, 'vscode-2c33b50b-prewarm-patchset.json'), 65536);
+  if (sha(raw) !== PATCH) fail('patched_patchset_manifest_refused');
+  const expected = { schema: 'ghcp-prewarm-patchset-v1', upstream_commit: PIN, patches: PATCH_COMPONENTS };
+  if (JSON.stringify(sorted(JSON.parse(raw))) !== JSON.stringify(sorted(expected))) fail('patched_patchset_manifest_refused');
+  for (const item of PATCH_COMPONENTS) {
+    let data;
+    try { data = read(path.join(directory, item.file), 65536); }
+    catch { fail('patched_patchset_component_unavailable'); }
+    if (sha(data) !== item.sha256) fail('patched_patchset_component_mismatch');
+  }
+}
 function validate(contract, encoded) {
   const keys = ['schema', 'patched_ghcp', 'upstream_commit', 'patch_sha256', 'build_receipt_sha256',
     'runtime_bundle_sha256', 'runtime_bundle_path', 'runtime_relative_path', 'node_path', 'node_sha256',
@@ -50,7 +68,7 @@ function validate(contract, encoded) {
   if (!contract || typeof contract !== 'object' || Array.isArray(contract) ||
       JSON.stringify(Object.keys(contract).sort()) !== JSON.stringify(keys.sort()) ||
       JSON.stringify(sorted(contract)) !== encoded ||
-      contract.schema !== 'ghcp-patched-runtime-contract-v1' || contract.patched_ghcp !== true ||
+      contract.schema !== 'ghcp-patched-runtime-contract-v2' || contract.patched_ghcp !== true ||
       contract.upstream_commit !== PIN || contract.patch_sha256 !== PATCH ||
       contract.execution_allowed !== false || contract.admission_allowed !== false ||
       contract.runtime_relative_path !== RELATIVE || contract.entrypoint !== ENTRYPOINT ||
@@ -58,6 +76,7 @@ function validate(contract, encoded) {
       !['build_receipt_sha256', 'runtime_bundle_sha256', 'node_sha256', 'loader_sha256'].every(key => hex(contract[key]))) {
     fail('patched_runtime_contract_refused');
   }
+  verifyPatchSet();
   safePath(contract.node_path); safePath(contract.runtime_bundle_path); safePath(contract.proof_directory, true);
   if (path.basename(contract.node_path) !== 'node' ||
       path.join(path.dirname(contract.node_path), RELATIVE) !== contract.runtime_bundle_path ||
@@ -95,6 +114,7 @@ function activate({ modelFree, sessionOnly, entrypoint, forkContract }) {
       const location = new URL(url);
       if (location.protocol !== 'file:' || fileURLToPath(location) !== contract.runtime_bundle_path) return nextLoad(url, context);
       if (location.search || location.hash || measured) fail('patched_runtime_load_alias_or_duplicate');
+      verifyPatchSet();
       const before = sha(read(contract.runtime_bundle_path));
       if (before !== contract.runtime_bundle_sha256) fail('patched_runtime_before_load_mismatch');
       let loaded;
@@ -105,7 +125,7 @@ function activate({ modelFree, sessionOnly, entrypoint, forkContract }) {
       if (loaded.format !== 'module' || !bytes || bytes.length === 0 || bytes.length > LIMIT) fail('patched_runtime_load_unmeasured');
       const actual = sha(bytes), after = sha(read(contract.runtime_bundle_path));
       if (actual !== contract.runtime_bundle_sha256 || after !== actual) fail('patched_runtime_loaded_source_mismatch');
-      const proof = { schema: 'ghcp-patched-runtime-load-v1', patched_ghcp: true,
+      const proof = { schema: 'ghcp-patched-runtime-load-v2', patched_ghcp: true,
         upstream_commit: PIN, patch_sha256: PATCH, build_receipt_sha256: contract.build_receipt_sha256,
         runtime_contract_sha256: expected, loaded_relative_path: RELATIVE,
         loaded_source_sha256: actual, disk_before_sha256: before, disk_after_sha256: after,
