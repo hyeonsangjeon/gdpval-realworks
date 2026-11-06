@@ -10,33 +10,48 @@ whose grade row has no error), as aggregate-grades.mjs shows it.
 
     python scripts/sol_stage_readout.py \\
         --stage exp037_sol_first25 data/grades/<exp037 grade>.json <self_report.json> \\
-        [--stage exp038_sol_rest195 ...] [--remaining-from exp038_sol_rest195] [--json out.json]
+        [--stage exp038_sol_rest195 ...] --remaining-from exp038_sol_rest195 [--json out.json]
+
+Each stage is a run registered in sol_batch_controls.RUNS, read from its
+final grade (run_status "final", the stage's own experiment id) and the
+self_report.json of the revision that grade names; the two must list the
+same tasks in the same order, and that list must be the registered one. A
+grade that judged anything needs its journals: a journals directory holding
+none refuses.
 
 Every task counts once on the fixed denominator (the stage's task count, or
 220 for the union); a task the judge never saw counts 0 and is labelled by
 why, with the cause table in batch-runner/scripts/merge_parity_regrade.py.
 
-A task the solve gate refused (``usd_gate``: usd_ceiling_reached, never
-attempted) still counts 0 on its stage's denominator, but it is left out of
-every per-task cost and time figure and of the projection's sample, and it is
-listed as moved: it belongs on the next stage's list. In a union, a later
-stage's row for that task replaces the refused one; any other repeat refuses.
+A task whose last attempt the Sol harness refused before it started
+(``usd_gate``: usd_ceiling_reached; ``sol_gate``: the context-window or
+ledger check) still counts 0 on its stage's denominator, but it is left out
+of every per-task cost and time figure and of the projection's sample. A
+``usd_gate`` task is listed as moved: it belongs on the next stage's list. In
+a union, a later stage's row for that task replaces the refused one; any
+other repeat refuses. ``sol_gate`` tasks count with infrastructure for R2.
 
 ``--remaining-from <id>`` projects the next stage from that experiment's
 registered task list (batch-runner/experiments/<id>.yaml) plus the tasks the
-gate moved, with rubric items from the committed task catalogue. Or pass
-``--remaining-tasks`` and ``--remaining-items`` by hand.
+gate moved, with rubric items from the committed task catalogue. Or pass both
+``--remaining-tasks`` and ``--remaining-items`` by hand. With neither, nothing
+is projected and R3 and R4 print null: not evaluated.
 
 Grading USD per task is read from every journal in
 data/grades/_combined_usd/<id>/, which holds every grading process of that
 experiment: the right set for a stage's own grade, including its resume
 chunks. After a regrade of the same experiment, pass the journals of the grade
 being read with ``--journals-dir <id> <dir>``. Each journal's total is
-sol_batch_grading.journal_spend's, the figure the grade preflight counts; what
-its lines do not place on a task is reported as unattributed. ``stages`` sets
-each stage's solve spend, narrative allowance and grading against the ceiling
-its two registry entries approve, as the grade preflight's "committed" line
-does.
+sol_batch_grading.journal_spend's, the figure the grade preflight counts, and
+its open line must name the stage and its config; what its lines do not place
+on a task is reported as unattributed. ``stages`` sets each stage's solve
+spend, narrative allowance and grading against the ceiling its two registry
+entries approve, as the grade preflight's "committed" line does: the solve
+spend is sol_batch_controls.solve_spend_usd over the stage's published rows
+(the run's prior-lineage spend, every booked row including those the gate
+refused on a retry, and its lost bookings for the graded revision), and the
+grading is every journal read. With the experiment's whole journal directory
+that is the preflight's figure for the next grade of the stage.
 
 ``one_grader`` holds when every stage was graded by this tree's grader source
 closure with its own config (the grade's grader_source_hash equals step 8's
@@ -93,7 +108,7 @@ MAX_LEGS = MAX_CHUNKS = 11
 #: Pre-registered before exp037 ran (spec2/first25.md); a readout prints which hold.
 RULES = {
     "R1": "no grader refusal (selection_error) among tasks that left files",
-    "R2": "infrastructure plus unclassified losses at most 2 of 25 (8%)",
+    "R2": "infrastructure (sol_gate refusals included) plus unclassified losses at most 2 of 25 (8%)",
     "R3": "projected solve legs for the remainder at most 9 of 11",
     "R4": "projected grading chunks for the remainder at most 9 of 11",
 }
@@ -146,13 +161,15 @@ def _journal_lines_by_task(path: Path) -> dict[str, Decimal]:
     return dict(spent)
 
 
-def journal_usd(directory: Path) -> tuple[dict[str, Decimal], Decimal, list[str]]:
+def journal_usd(directory: Path, owner: tuple[str, str] | None = None,
+                ) -> tuple[dict[str, Decimal], Decimal, list[str]]:
     """Per-task grading USD, the USD no task line holds, and the journals read.
 
     Each journal's total is sol_batch_grading.journal_spend's: settled,
     abandoned and never-concluded reserves, or the close line's in-memory
     total when a conclusion's own line failed to write. A journal that
-    function refuses refuses the readout.
+    function refuses refuses the readout, and so does one whose open line
+    names another (experiment id, config name) than ``owner``.
     """
     grading = _batch_runner_module("sol_batch_grading")
     by_task: dict[str, Decimal] = defaultdict(Decimal)
@@ -163,6 +180,11 @@ def journal_usd(directory: Path) -> tuple[dict[str, Decimal], Decimal, list[str]
             total = grading.journal_spend(path)
         except grading.CombinedUsdRefused as refused:
             raise SystemExit(f"{path}: {refused.detail}") from None
+        if owner is not None:
+            opening = json.loads(path.read_text(encoding="utf-8").split("\n", 1)[0])
+            opened_by = (opening.get("experiment_id"), opening.get("config_name"))
+            if opened_by != owner:
+                raise SystemExit(f"{path}: opened by {opened_by[0]} / {opened_by[1]}, not by {owner[0]} / {owner[1]}")
         lines = _journal_lines_by_task(path)
         placed = sum(lines.values(), Decimal(0))
         if placed > total:
@@ -217,59 +239,108 @@ def registered_money(experiment_id: str) -> dict[str, Decimal | None]:
             "narrative_allowance_usd": None if run is None else run.narrative_allowance_usd}
 
 
-def _stage_money(rows: list[dict]) -> list[dict[str, Any]]:
+def _stage_money(stages: list[dict]) -> list[dict[str, Any]]:
     """What each stage committed against its ceiling: solve, narrative allowance and grading."""
-    records: dict[str, dict] = {}
-    for row in rows:
-        records.setdefault(row["stage"], row["stage_record"])
     money = []
-    for stage, record in records.items():
-        mine = [row for row in rows if row["stage"] == stage]
-        solve = sum(Decimal(str(row["solve_usd"])) for row in mine)
-        grading = sum(Decimal(str(row["grading_usd"])) for row in mine) + record["grading_unattributed_usd"]
+    for record in stages:
+        solve, grading = record["solve_usd"], record["grading_usd"]
         narrative = record["narrative_allowance_usd"] or Decimal(0)
         committed = solve + narrative + grading
         ceiling = record["ceiling_usd"]
-        money.append({"stage": stage, "ceiling_usd": None if ceiling is None else float(ceiling),
-                      "solve_usd": round(float(solve), 2), "narrative_allowance_usd": float(narrative),
+        money.append({"stage": record["stage"], "ceiling_usd": None if ceiling is None else float(ceiling),
+                      "solve_usd": round(float(solve), 2),
+                      "prior_lineage_spend_usd": round(float(record["prior_lineage_spend_usd"]), 2),
+                      "lost_booking_usd": round(float(record["lost_booking_usd"]), 2),
+                      "narrative_allowance_usd": float(narrative),
                       "grading_usd": round(float(grading), 2), "committed_usd": round(float(committed), 2),
                       "left_under_ceiling_usd": None if ceiling is None else round(float(ceiling - committed), 2)})
     return money
+
+
+def _stage_solve(experiment_id: str, report: dict, revision: str) -> tuple[Decimal, Decimal, dict[str, Decimal]]:
+    """The stage's solve spend as the grade preflight counts it, its prior lineages, and its lost bookings."""
+    controls = _batch_runner_module("sol_batch_controls")
+    run = controls.registered_run(experiment_id)
+    try:
+        lost = controls.lost_bookings_for(run, revision)
+        solve = controls.solve_spend_usd(report["task_results"], revision, run)
+    except controls.SolBatchControlsRefused as refused:
+        raise SystemExit(f"{experiment_id}: the grade preflight would refuse this solve spend ({refused})") from None
+    return solve, run.prior_lineage_spend_usd, lost
+
+
+def _check_stage(experiment_id: str, grade: dict, report: dict, grade_path: Path, report_path: Path) -> None:
+    """Refuse a grade or a self_report.json that is not this registered stage's whole, final result."""
+    controls = _batch_runner_module("sol_batch_controls")
+    run = controls.registered_run(experiment_id)
+    if run is None:
+        raise SystemExit(f"{experiment_id} is not a Sol run registered in sol_batch_controls.RUNS")
+    meta = report.get("meta") or {}
+    if meta.get("experiment_id") != experiment_id:
+        raise SystemExit(f"{report_path} is not {experiment_id}'s self_report.json")
+    if grade.get("experiment_id") != experiment_id:
+        raise SystemExit(f"{grade_path} is not a grade of {experiment_id}")
+    if grade.get("run_status") != "final":
+        raise SystemExit(f"{grade_path} is not a final grade (run_status {grade.get('run_status')!r}); "
+                         "read a stage once its last grading chunk has committed")
+    revision = grade.get("source_inference_revision")
+    if not isinstance(revision, str) or len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
+        raise SystemExit(f"{grade_path} names no 40-hex source_inference_revision")
+    ordered = meta.get("ordered_task_ids")
+    if (not isinstance(ordered, list) or len(ordered) != run.task_count
+            or controls.ordered_task_ids_sha256(ordered) != run.ordered_task_ids_sha256):
+        raise SystemExit(f"{report_path} does not list {experiment_id}'s registered tasks")
+    if [solved.get("task_id") for solved in report.get("task_results") or []] != ordered:
+        raise SystemExit(f"{report_path}'s task_results are not its ordered_task_ids")
+    if [task.get("task_id") for task in grade.get("tasks") or []] != ordered:
+        raise SystemExit(f"{grade_path} does not grade the tasks of {report_path}, in their order")
 
 
 def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals: Path,
                batch_root: Path | None = None) -> list[dict]:
     grade = json.loads(grade_path.read_text(encoding="utf-8"))
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    if report["meta"]["experiment_id"] != experiment_id:
-        raise SystemExit(f"{report_path} is not {experiment_id}'s self_report.json")
+    _check_stage(experiment_id, grade, report, grade_path, report_path)
+    controls = _batch_runner_module("sol_batch_controls")
+    run = controls.registered_run(experiment_id)
     graded = {task["task_id"]: task for task in grade["tasks"]}
-    grading_usd, unattributed, journal_names = journal_usd(journals)
+    grading_usd, unattributed, journal_names = journal_usd(journals, (experiment_id, run.grading_config_name))
+    if not journal_names and any(not task.get("error") or (task.get("judge_call_count") or 0) > 0
+                                 for task in grade["tasks"]):
+        raise SystemExit(f"{journals} holds no combined USD journal, yet {grade_path} judged tasks; "
+                         "pass that grade's journals with --journals-dir")
+    # Every journal read, whole: the preflight's prior-grading figure.
+    grading_total = sum(grading_usd.values(), Decimal(0)) + unattributed
     # A line on no task of this stage (a request booked without a task id)
     # is still spend under the ceiling.
     listed = {solved["task_id"] for solved in report["task_results"]}
     unattributed += sum((amount for task, amount in grading_usd.items() if task not in listed), Decimal(0))
+    revision = grade["source_inference_revision"]
+    solve, prior_lineage, lost = _stage_solve(experiment_id, report, revision)
     stage = {
         "stage": experiment_id,
         "grader": grader_identity(experiment_id, grade, BATCH_RUNNER if batch_root is None else batch_root),
         "journals": journal_names,
+        "solve_usd": solve,
+        "prior_lineage_spend_usd": prior_lineage,
+        "lost_booking_usd": sum(lost.values(), Decimal(0)),
+        "grading_usd": grading_total,
         "grading_unattributed_usd": unattributed,
         **registered_money(experiment_id),
     }
     rows = []
     for solved in report["task_results"]:
         task_id = solved["task_id"]
-        marked = graded.get(task_id)
+        marked = graded[task_id]
         observability = solved.get("observability") or {}
         files = [str(name) for name in solved.get("deliverable_files") or []]
         category = observability.get("error_category")
+        metrics = observability.get("budget_metrics") or {}
+        # The row's booking, or the lost booking the preflight counts for it.
+        booked = metrics.get("conservative_cost_usd") if "conservative_cost_usd" in metrics else lost.get(task_id, 0)
         # Step 8's own rule for a judged task: a grade row with no error.
-        judged = marked is not None and not marked.get("error")
-        if judged:
-            cause = "judged"
-        else:
-            cause = CAUSES.zero_cause_of("missing_from_grade" if marked is None else marked.get("error"), category)
-        marked = marked or {}
+        judged = not marked.get("error")
+        cause = "judged" if judged else CAUSES.zero_cause_of(marked.get("error"), category)
         stems: dict[str, set[str]] = defaultdict(set)
         for name in files:
             if _ext(name) in DOCUMENT_EXTENSIONS:
@@ -282,7 +353,7 @@ def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals
             "selection_rule": marked.get("selection_rule"), "selection_error": marked.get("selection_error"),
             "items": len(marked.get("items") or []), "excluded_items": marked.get("score_excluded_items") or 0,
             "solve_seconds": (solved.get("latency_ms") or 0) / 1000,
-            "solve_usd": float((observability.get("budget_metrics") or {}).get("conservative_cost_usd") or 0),
+            "solve_usd": float(booked or 0),
             "grading_seconds": (marked.get("grading_wall_time_ms") or 0) / 1000,
             "grading_usd": float(grading_usd.get(task_id, 0)),
             "files": [name.rsplit("/", 1)[-1] for name in files],
@@ -329,10 +400,16 @@ def remaining_from(repo_root: Path, experiment_id: str, moved: list[str]) -> tup
     return len(tasks), sum(items[task] for task in tasks), tasks
 
 
-def _graders(rows: list[dict]) -> tuple[list[dict], list[str]]:
-    stages: dict[str, dict] = {}
+def _stage_records(rows: list[dict]) -> list[dict]:
+    """Each stage's shared record, in the order its rows first appear."""
+    records: dict[str, dict] = {}
     for row in rows:
-        stages.setdefault(row["stage"], row["stage_record"]["grader"])
+        records.setdefault(row["stage"], row["stage_record"])
+    return list(records.values())
+
+
+def _graders(records: list[dict]) -> tuple[list[dict], list[str]]:
+    stages = {record["stage"]: record["grader"] for record in records}
     problems: list[str] = []
     for stage, identity in stages.items():
         if identity["config_name"] is None:
@@ -347,31 +424,41 @@ def _graders(rows: list[dict]) -> tuple[list[dict], list[str]]:
     return list(stages.values()), problems
 
 
-def summarise(rows: list[dict], denominator: int, remaining_tasks: int, remaining_items: int,
-              rerun: list[str] | None = None) -> dict:
+def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, remaining_items: int | None,
+              rerun: list[str] | None = None, stages: list[dict] | None = None) -> dict:
+    """The readout. ``remaining_tasks``/``remaining_items`` None: nothing is projected, R3 and R4 are None.
+
+    ``stages`` are the stages' records, including a stage whose every row a
+    later stage replaced; by default, those of ``rows``.
+    """
+    records = _stage_records(rows) if stages is None else stages
+    projected = remaining_tasks is not None and remaining_items is not None
     judged = [row for row in rows if row["cause"] == "judged"]
     # Never attempted: on the fixed denominator at 0, but not a sample of what
     # an attempt costs or takes.
-    attempted = [row for row in rows if row["cause"] != "usd_gate"]
+    attempted = [row for row in rows if row["cause"] not in CAUSES.NOT_ATTEMPTED]
     moved = [row["task_id"] for row in rows if row["cause"] == "usd_gate"]
     causes = Counter(row["cause"] for row in rows)
     solve = [row["solve_usd"] for row in attempted]
     judged_items = sum(row["items"] - row["excluded_items"] for row in judged) or 1
-    unattributed = sum({id(row["stage_record"]): row["stage_record"]["grading_unattributed_usd"]
-                        for row in rows}.values(), Decimal(0))
-    grading_total = sum(row["grading_usd"] for row in rows) + float(unattributed)
+    unattributed = sum((record["grading_unattributed_usd"] for record in records), Decimal(0))
+    grading_total = float(sum((record["grading_usd"] for record in records), Decimal(0)))
     per_item = grading_total / judged_items
     rng = random.Random(20261106)
-    boot = sorted(sum(rng.choice(solve) for _ in range(remaining_tasks)) for _ in range(2000)) if solve else [0]
+    boot = (sorted(sum(rng.choice(solve) for _ in range(remaining_tasks)) for _ in range(2000))
+            if solve and projected else [0])
     mean_minutes = statistics.mean(row["solve_seconds"] for row in attempted) / 60 if attempted else 0
     # Tasks that left files are the ones a grade has to mark; a refusal (R1) is
     # a selector defect to fix, not a saving to project.
     judged_share = sum(1 for row in attempted if row["files"]) / len(attempted) if attempted else 0
     grade_seconds_per_item = (sum(row["grading_seconds"] for row in judged) / judged_items) if judged else 0
-    legs = math.ceil(remaining_tasks * mean_minutes / LEG_MINUTES) if remaining_tasks else 0
-    chunks = math.ceil(remaining_items * judged_share * grade_seconds_per_item / CHUNK_SECONDS) if remaining_items else 0
+    legs = chunks = None
+    if projected:
+        legs = math.ceil(remaining_tasks * mean_minutes / LEG_MINUTES) if remaining_tasks else 0
+        chunks = (math.ceil(remaining_items * judged_share * grade_seconds_per_item / CHUNK_SECONDS)
+                  if remaining_items else 0)
     with_files = [row for row in rows if row["files"]]
-    graders, grader_problems = _graders(rows)
+    graders, grader_problems = _graders(records)
     summary = {
         "tasks": len(rows), "denominator": denominator,
         "graders": graders,
@@ -384,16 +471,18 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int, remainin
         "moved_by_usd_gate": moved,
         "rerun_after_usd_gate": list(rerun or []),
         # Against each stage's approved ceiling, as the grade preflight counts it.
-        "stages": _stage_money(rows),
+        "stages": _stage_money(records),
         "file_habits": {
             "tasks_with_files": len(with_files),
             "email_files": sum(row["email_files"] for row in rows),
             "same_stem_multi_format_groups": sum(row["same_stem_formats"] for row in rows),
             "helper_files": sum(row["helper_files"] for row in rows),
             "image_files": sum(row["image_files"] for row in rows),
-            "selection_rules": dict(Counter(row["selection_rule"] for row in with_files)),
+            "selection_rules": dict(Counter(str(row["selection_rule"]) for row in with_files)),
         },
-        "usd": {"solve": round(sum(solve), 2), "grading": round(grading_total, 2),
+        # Solve: what the stages committed (sol_batch_controls.solve_spend_usd).
+        "usd": {"solve": round(float(sum((record["solve_usd"] for record in records), Decimal(0))), 2),
+                "grading": round(grading_total, 2),
                 "grading_unattributed": round(float(unattributed), 2),
                 "solve_per_task_mean": round(statistics.mean(solve), 2) if solve else None,
                 "solve_per_task_max": round(max(solve), 2) if solve else None,
@@ -403,19 +492,21 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int, remainin
         "projection": {
             "attempted_sample": len(attempted),
             "remaining_tasks": remaining_tasks, "remaining_items": remaining_items,
-            "solve_usd_mean": round(statistics.mean(solve) * remaining_tasks, 0) if solve else None,
-            "solve_usd_p90": round(boot[int(0.9 * len(boot))], 0),
-            "grading_usd": round(per_item * remaining_items * judged_share, 0),
+            "solve_usd_mean": round(statistics.mean(solve) * remaining_tasks, 0) if solve and projected else None,
+            "solve_usd_p90": round(boot[int(0.9 * len(boot))], 0) if projected else None,
+            "grading_usd": round(per_item * remaining_items * judged_share, 0) if projected else None,
             "solve_legs": legs, "grading_chunks": chunks,
         },
     }
-    infrastructure = causes.get("infrastructure", 0) + causes.get("unclassified_failure", 0)
+    # The harness's own refusals are not the model's: counted as infrastructure.
+    infrastructure = sum(causes.get(cause, 0) for cause in ("infrastructure", "sol_gate", "unclassified_failure"))
     refusals = sum(1 for row in with_files if row["cause"] == "grader_refusal")
     summary["rules"] = {
         "R1": refusals == 0,
         "R2": infrastructure <= math.floor(0.08 * len(rows)),
-        "R3": legs <= MAX_LEGS - 2,
-        "R4": chunks <= MAX_CHUNKS - 2,
+        # None: not evaluated, because nothing was projected.
+        "R3": None if legs is None else legs <= MAX_LEGS - 2,
+        "R4": None if chunks is None else chunks <= MAX_CHUNKS - 2,
     }
     return summary
 
@@ -429,8 +520,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--remaining-from", default=None, metavar="EXPERIMENT_ID",
                         help="project the next stage from this experiment's registered task list, plus the "
                              "tasks the USD gate moved")
-    parser.add_argument("--remaining-tasks", type=int, default=None)
-    parser.add_argument("--remaining-items", type=int, default=None)
+    parser.add_argument("--remaining-tasks", type=int, default=None, help="with --remaining-items")
+    parser.add_argument("--remaining-items", type=int, default=None, help="with --remaining-tasks")
     parser.add_argument("--json", default=None)
     parser.add_argument("--journals-dir", nargs=2, action="append", default=[],
                         metavar=("EXPERIMENT_ID", "DIR"),
@@ -439,21 +530,28 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.remaining_from is not None and (args.remaining_tasks is not None or args.remaining_items is not None):
         parser.error("--remaining-from derives the remaining tasks and items; do not also pass them")
+    if (args.remaining_tasks is None) != (args.remaining_items is None):
+        parser.error("pass both --remaining-tasks and --remaining-items, or --remaining-from")
     repo_root = Path(args.repo_root)
     overrides = {experiment_id: Path(directory) for experiment_id, directory in args.journals_dir}
     rows: list[dict] = []
+    stages: list[dict] = []
     for experiment_id, grade_path, report_path in args.stage:
         journals = overrides.get(experiment_id, repo_root / "data/grades/_combined_usd" / experiment_id)
-        rows += read_stage(experiment_id, Path(grade_path), Path(report_path), journals,
-                           batch_root=(repo_root / "batch-runner").resolve())
+        stage_rows = read_stage(experiment_id, Path(grade_path), Path(report_path), journals,
+                                batch_root=(repo_root / "batch-runner").resolve())
+        rows += stage_rows
+        stages += _stage_records(stage_rows)
+    if len({record["stage"] for record in stages}) != len(stages):
+        raise SystemExit("a stage is passed twice; a union counts every task once")
     rows, rerun = union(rows)
-    remaining_tasks, remaining_items = args.remaining_tasks or 0, args.remaining_items or 0
+    remaining_tasks, remaining_items = args.remaining_tasks, args.remaining_items
     remaining: dict[str, Any] = {}
     if args.remaining_from is not None:
         moved = [row["task_id"] for row in rows if row["cause"] == "usd_gate"]
         remaining_tasks, remaining_items, task_ids = remaining_from(repo_root, args.remaining_from, moved)
         remaining = {"experiment_id": args.remaining_from, "task_ids": task_ids}
-    summary = summarise(rows, args.denominator or len(rows), remaining_tasks, remaining_items, rerun)
+    summary = summarise(rows, args.denominator or len(rows), remaining_tasks, remaining_items, rerun, stages)
     if remaining:
         summary["projection"]["remaining_from"] = remaining["experiment_id"]
     tasks = [{key: value for key, value in row.items() if key != "stage_record"} for row in rows]

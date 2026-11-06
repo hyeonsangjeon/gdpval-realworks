@@ -42,13 +42,18 @@
 #     of exp037 under main's, so the two halves of the 220 are marked by one
 #     grader.
 #
-# One grader also needs one renderer, and requirements-renderer.txt and the
-# LibreOffice package are not pinned. Before the first paid exp038 grade,
-# run its free dry run and compare the fingerprint "Preflight grading
-# renderer" prints with renderer_fingerprint in exp037's grade file. If they
-# differ, regrade exp037 under the new renderer, or pin the renderer through
-# a reseal, before paying for exp038's grade. The readout's one_grader flag
-# checks the result afterwards.
+# One grader also needs one renderer. LibreOffice is pinned (the grading
+# image's digest in grade-run.yml, and EXPECTED_LIBREOFFICE_VERSION in
+# scripts/preflight_grading_renderer.py), but requirements-renderer.txt
+# (PyMuPDF and the other pip renderer libraries) is not: the grade job
+# pip-installs it through requirements.txt with >= constraints, so
+# pymupdf_version can move between two grades (exp035 was graded with
+# 1.28.2, exp036 with 2.1). Before the first paid exp038 grade, run its free
+# dry run and compare the fingerprint "Preflight grading renderer" prints
+# with renderer_fingerprint in exp037's grade file, pymupdf_version first.
+# If they differ, regrade exp037 under the new renderer, or pin
+# requirements-renderer.txt through a reseal, before paying for exp038's
+# grade. The readout's one_grader flag checks the result afterwards.
 #
 # The wall clock and the relay legs
 # ---------------------------------

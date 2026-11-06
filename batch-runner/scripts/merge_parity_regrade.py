@@ -74,11 +74,22 @@ def check_pair(published: dict[str, Any], regrade: dict[str, Any]) -> None:
 # judge had nothing to see.
 
 #: Every cause zero_cause_of can return.
-ZERO_CAUSES = ("grader_refusal", "grader_other", "content_filter", "usd_gate", "turn_timeout",
+ZERO_CAUSES = ("grader_refusal", "grader_other", "content_filter", "usd_gate", "sol_gate", "turn_timeout",
                "infrastructure", "unclassified_failure", "model_other")
 #: The grade-row error that means the solve left nothing to grade; the solve
 #: side then says why.
 NOTHING_TO_GRADE = frozenset({"no_deliverables"})
+#: sol_batch_controls.USD_CEILING_REACHED: the solve gate refused the attempt
+#: because the run's solve budget was spent.
+USD_GATE = frozenset({"usd_ceiling_reached"})
+#: sol_batch_controls.WINDOW_MISMATCH and GATE_UNVERIFIED: the Sol harness
+#: refused the attempt before it started (the served context window was not
+#: 1,000,000 earlier in the run, or the gate could not read the task's ledger
+#: rows). Neither is the model's; both are counted with infrastructure.
+SOL_GATE = frozenset({"sol_batch_context_window_mismatch", "sol_batch_gate_unverified"})
+#: Causes whose last attempt never started: on a fixed denominator they are
+#: 0, but they are no sample of what an attempt costs or takes.
+NOT_ATTEMPTED = frozenset({"usd_gate", "sol_gate"})
 #: The provider's or the runner's faults, not the model's (core/execution_errors.py
 #: and core/codex_runner.py vocabularies).
 INFRASTRUCTURE = frozenset({"rate_limited", "turn_start_failed", "runtime_unavailable", "runtime_start_failed",
@@ -100,8 +111,10 @@ def zero_cause_of(grade_error: Any, error_category: Any) -> str:
         return "grader_other"
     if error_category == "content_filtered":
         return "content_filter"
-    if error_category == "usd_ceiling_reached":
+    if error_category in USD_GATE:
         return "usd_gate"
+    if error_category in SOL_GATE:
+        return "sol_gate"
     if error_category in TURN_TIMEOUT:
         return "turn_timeout"
     if error_category in INFRASTRUCTURE:

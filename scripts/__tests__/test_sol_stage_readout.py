@@ -1,16 +1,19 @@
 """scripts/sol_stage_readout.py on exp036's published records and on stages built from the real configs.
 
-Model-free and offline: the diagnosis's numbers for exp036, the cause table it
-shares with merge_parity_regrade.py, the USD-gate rows it moves, and the
-grader identity two stages with different configs can share.
+Model-free and offline: the diagnosis's numbers for exp036, the money the
+grade preflight would count, the cause table it shares with
+merge_parity_regrade.py, the USD-gate rows it moves, the records it refuses,
+and the grader identity two stages with different configs can share.
 """
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import json
 import shutil
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 import yaml
@@ -146,8 +149,9 @@ def test_exp036_reads_as_the_diagnosis_found_it(tmp_path):
     assert summary["usd"]["grading_unattributed"] == 0.0
     # The grade preflight's own figure: "committed 51.50751850 of 200.00000000".
     assert summary["stages"] == [{
-        "stage": "exp036_sol_fixed5", "ceiling_usd": 200.0, "solve_usd": 38.79, "narrative_allowance_usd": 2.0,
-        "grading_usd": 10.72, "committed_usd": 51.51, "left_under_ceiling_usd": 148.49}]
+        "stage": "exp036_sol_fixed5", "ceiling_usd": 200.0, "solve_usd": 38.79, "prior_lineage_spend_usd": 0.0,
+        "lost_booking_usd": 0.0, "narrative_allowance_usd": 2.0, "grading_usd": 10.72, "committed_usd": 51.51,
+        "left_under_ceiling_usd": 148.49}]
     assert summary["rules"]["R1"] is False and summary["rules"]["R2"] is True
     assert summary["moved_by_usd_gate"] == [] and summary["projection"]["attempted_sample"] == 5
     # That grade was made before the reviewed selector changed the grader
@@ -196,6 +200,126 @@ def test_a_task_in_two_stages_is_refused(tmp_path):
         assert "counts every task once" in str(stop)
     else:
         raise AssertionError("a union with a repeated task was accepted")
+
+
+def _exp036_argv(tmp_path: Path, *extra: str) -> list[str]:
+    report = tmp_path / "self_report.json"
+    report.write_text(json.dumps(SELF_REPORT), encoding="utf-8")
+    journals = tmp_path / "journals"
+    journals.mkdir(exist_ok=True)
+    shutil.copy(GRADE_JOURNAL, journals)
+    return ["--repo-root", str(REPO_ROOT), "--stage", "exp036_sol_fixed5", str(GRADE), str(report),
+            "--journals-dir", "exp036_sol_fixed5", str(journals), "--json", str(tmp_path / "out.json"), *extra]
+
+
+def test_nothing_projected_leaves_r3_and_r4_unevaluated(tmp_path):
+    readout = _readout()
+    readout.main(_exp036_argv(tmp_path))
+    summary = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))["summary"]
+    # Zero legs and zero chunks for nothing projected would read as "R3 and R4 hold".
+    assert summary["rules"]["R3"] is None and summary["rules"]["R4"] is None
+    projection = summary["projection"]
+    assert projection["remaining_tasks"] is projection["remaining_items"] is None
+    assert projection["solve_legs"] is projection["grading_chunks"] is projection["grading_usd"] is None
+    # Half the projection by hand is refused, not read as the other half 0.
+    for half in (("--remaining-tasks", "195"), ("--remaining-items", "9248")):
+        with pytest.raises(SystemExit):
+            readout.main(_exp036_argv(tmp_path, *half))
+    readout.main(_exp036_argv(tmp_path, "--remaining-tasks", "195", "--remaining-items", "9248"))
+    summary = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))["summary"]
+    assert type(summary["rules"]["R3"]) is bool and type(summary["rules"]["R4"]) is bool
+    assert summary["projection"]["solve_legs"] > 0 and summary["projection"]["grading_chunks"] > 0
+
+
+def test_a_stage_commits_what_the_grade_preflight_counts(tmp_path, monkeypatch):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    grading = readout._batch_runner_module("sol_batch_grading")
+    revision = "8708d9206ce4c9c9ba96f8bfba0745e12e597777"
+    report = json.loads(json.dumps(SELF_REPORT))
+    # A task that reached Codex but lost its booking, carried by lost_booking_usd,
+    # and a lineage before this one that spent 40.
+    lost = report["task_results"][3]
+    lost["observability"].pop("budget_metrics")
+    lost["observability"]["runner_evidence"] = {}
+    run = dataclasses.replace(
+        controls.RUNS["exp036_sol_fixed5"], prior_lineage_spend_usd=Decimal("40"),
+        lost_booking_usd=MappingProxyType({(revision, lost["task_id"]): Decimal("1.25")}))
+    monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
+    report_path = tmp_path / "self_report.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    root = tmp_path / "repo"
+    journals = root / "data/grades/_combined_usd/exp036_sol_fixed5"
+    journals.mkdir(parents=True)
+    shutil.copy(GRADE_JOURNAL, journals)
+    rows = readout.read_stage("exp036_sol_fixed5", GRADE, report_path, journals)
+    stage = readout.summarise(rows, 5, None, None)["stages"][0]
+    # The preflight's own functions on the same records.
+    solve, _floor, _status = grading.published_solve(
+        "HyeonSang/exp036_sol_fixed5", revision, run,
+        fetch=lambda _repo, name, _revision: report_path if name == "self_report.json" else None)
+    prior, journal_list = grading.prior_grading(root, "exp036_sol_fixed5", grading.EXP036_SOL_BATCH)
+    seed = grading.Seed(
+        experiment_id=run.experiment_id, config_name=run.grading_config_name, inference_revision=revision,
+        solve_usd=solve, published_ledger_floor_usd=Decimal(0), published_ledger_status="absent",
+        narrative_allowance_usd=run.narrative_allowance_usd, prior_grading_usd=prior,
+        prior_journals=tuple(journal_list), ceiling_usd=run.ceiling_usd)
+    assert stage["committed_usd"] == round(float(seed.committed_floor()), 2) == 91.75
+    assert stage["left_under_ceiling_usd"] == round(float(run.ceiling_usd - seed.committed_floor()), 2)
+    assert stage["solve_usd"] == round(float(solve), 2) == round(38.788156 - 1.010582 + 1.25 + 40, 2)
+    assert (stage["prior_lineage_spend_usd"], stage["lost_booking_usd"]) == (40.0, 1.25)
+    assert [row["solve_usd"] for row in rows if row["task_id"] == lost["task_id"]] == [1.25]
+    # A row the preflight would refuse refuses the readout too.
+    monkeypatch.setattr(controls, "RUNS", MappingProxyType({
+        **controls.RUNS, run.experiment_id: dataclasses.replace(run, lost_booking_usd=MappingProxyType({}))}))
+    with pytest.raises(SystemExit, match="sol_batch_prior_spend_unaccounted"):
+        readout.read_stage("exp036_sol_fixed5", GRADE, report_path, journals)
+
+
+def test_a_stage_is_read_from_its_own_final_grade_and_journals_only(tmp_path):
+    readout = _readout()
+    report_path = tmp_path / "self_report.json"
+    report_path.write_text(json.dumps(SELF_REPORT), encoding="utf-8")
+    journals = tmp_path / "journals"
+    journals.mkdir()
+    shutil.copy(GRADE_JOURNAL, journals)
+    published = json.loads(GRADE.read_text(encoding="utf-8"))
+
+    def read(grade=published, report=SELF_REPORT, directory=journals, stage="exp036_sol_fixed5"):
+        (tmp_path / "grade.json").write_text(json.dumps(grade), encoding="utf-8")
+        report_path.write_text(json.dumps(report), encoding="utf-8")
+        return readout.read_stage(stage, tmp_path / "grade.json", report_path, directory)
+
+    assert len(read()) == 5
+    # Between grading chunks the committed grade is partial.
+    with pytest.raises(SystemExit, match="not a final grade"):
+        read({**published, "run_status": "partial"})
+    with pytest.raises(SystemExit, match="is not a grade of exp036_sol_fixed5"):
+        read({**published, "experiment_id": "exp037_sol_first25"})
+    with pytest.raises(SystemExit, match="does not grade the tasks"):
+        read({**published, "tasks": published["tasks"][::-1]})
+    with pytest.raises(SystemExit, match="does not grade the tasks"):
+        read({**published, "tasks": published["tasks"][:4]})
+    with pytest.raises(SystemExit, match="registered tasks"):
+        read(report={**SELF_REPORT, "meta": {**SELF_REPORT["meta"],
+                                             "ordered_task_ids": SELF_REPORT["meta"]["ordered_task_ids"][:4]},
+                     "task_results": SELF_REPORT["task_results"][:4]})
+    with pytest.raises(SystemExit, match="names no 40-hex source_inference_revision"):
+        read({**published, "source_inference_revision": None})
+    with pytest.raises(SystemExit, match="not a Sol run registered"):
+        read(stage="exp035_codex_foundry_full220")
+    # A mistyped journals directory is not "grading cost 0".
+    with pytest.raises(SystemExit, match="holds no combined USD journal"):
+        read(directory=tmp_path / "typo")
+    # Another approval's journal is not this stage's spend.
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "run-1-1.combined_usd.jsonl").write_text(
+        json.dumps({"event": "open", "seq": 0, "schema": "sol-batch-grading-journal-v1",
+                    "experiment_id": "exp035_codex_foundry_full220", "config_name": "e35par"}) + "\n",
+        encoding="utf-8")
+    with pytest.raises(SystemExit, match="not by exp036_sol_fixed5 / exp036_v2_sol_max"):
+        read(directory=other)
 
 
 # -- journals: what the preflight counts ----------------------------------------
@@ -255,6 +379,8 @@ def test_a_journal_the_preflight_would_refuse_refuses_the_readout(tmp_path):
     (True, "content_filtered", "grader_other"),
     ("no_deliverables", "content_filtered", "content_filter"),
     ("no_deliverables", "usd_ceiling_reached", "usd_gate"),
+    ("no_deliverables", "sol_batch_context_window_mismatch", "sol_gate"),
+    ("no_deliverables", "sol_batch_gate_unverified", "sol_gate"),
     ("no_deliverables", "timeout", "turn_timeout"),
     ("no_deliverables", "rate_limited", "infrastructure"),
     ("no_deliverables", "turn_failed", "unclassified_failure"),
@@ -272,10 +398,19 @@ def test_the_readout_and_the_parity_record_share_one_cause_table(grade_error, ca
     assert cause in merge.ZERO_CAUSES
 
 
+def test_the_cause_table_names_the_sol_harness_refusals_by_their_codes():
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    assert readout.CAUSES.USD_GATE == {controls.USD_CEILING_REACHED}
+    assert readout.CAUSES.SOL_GATE == {controls.WINDOW_MISMATCH, controls.GATE_UNVERIFIED}
+    assert readout.CAUSES.NOT_ATTEMPTED == {"usd_gate", "sol_gate"} <= set(readout.CAUSES.ZERO_CAUSES)
+
+
 # -- two stages built from the real exp037 and exp038 configs ----------------------
 
 EXPERIMENTS = REPO_ROOT / "batch-runner/experiments"
 RENDERER = {"libreoffice_binary": "soffice", "libreoffice_version": "LibreOffice 24.2.7.2", "pymupdf_version": "2.1"}
+REVISIONS = {"exp037_sol_first25": "37" * 20, "exp038_sol_rest195": "38" * 20}
 
 
 def _stage_tasks(experiment_id: str) -> list[str]:
@@ -290,16 +425,51 @@ def _this_tree_hash(readout, config_name: str) -> str:
     return step8.compute_grader_source_hash(relative, config, batch_root=readout.BATCH_RUNNER)
 
 
+@pytest.fixture
+def registry(monkeypatch):
+    """The two registries; ``approve_exp038`` and ``list_tasks`` edit them as exp038's approval PR would."""
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    grading = readout._batch_runner_module("sol_batch_grading")
+
+    class Registry:
+        @staticmethod
+        def approve_exp038(ceiling: str = "1500") -> None:
+            approval = dataclasses.replace(grading.EXP038_REST195, ceiling_usd=Decimal(ceiling),
+                                           approved="test: the exp038 approval PR")
+            monkeypatch.setattr(grading, "APPROVALS", tuple(
+                approval if entry.experiment_id == approval.experiment_id else entry for entry in grading.APPROVALS))
+            run = dataclasses.replace(
+                controls.RUNS["exp038_sol_rest195"], approval="test: the exp038 approval PR",
+                ceiling_usd=Decimal(ceiling), grading_reserve_usd=Decimal("500"),
+                attempt_reserve_usd=Decimal("51"), narrative_allowance_usd=Decimal("2.00"))
+            monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
+
+        @staticmethod
+        def list_tasks(experiment_id: str, tasks: list[str]) -> None:
+            run = dataclasses.replace(controls.RUNS[experiment_id], task_count=len(tasks),
+                                      ordered_task_ids_sha256=controls.ordered_task_ids_sha256(tasks))
+            monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
+
+    return Registry
+
+
 def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: list[str], *,
-                 refused: tuple[str, ...] = (), renderer: dict = RENDERER) -> list[str]:
-    """A grade and a self_report.json for ``tasks``; ``refused`` never left the USD gate."""
-    grade_rows, report_rows = [], []
+                 refused: tuple[str, ...] = (), refused_usd: float = 0.0, harness: tuple[str, ...] = (),
+                 renderer: dict = RENDERER) -> list[str]:
+    """A final grade, a self_report.json and a journal for ``tasks``.
+
+    ``refused`` tasks ended at the USD gate (after ``refused_usd`` of earlier
+    attempts); ``harness`` tasks were refused by the Sol harness's window check.
+    """
+    grade_rows, report_rows, journal = [], [], []
     for task in tasks:
-        if task in refused:
+        if task in refused or task in harness:
+            category = "usd_ceiling_reached" if task in refused else "sol_batch_context_window_mismatch"
             grade_rows.append({"task_id": task, "error": "no_deliverables", "judge_call_count": 0})
             report_rows.append({"task_id": task, "status": "error", "latency_ms": 10, "deliverable_files": [],
-                                "observability": {"error_category": "usd_ceiling_reached",
-                                                  "budget_metrics": {"conservative_cost_usd": 0}}})
+                                "observability": {"error_category": category, "budget_metrics": {
+                                    "conservative_cost_usd": refused_usd if task in refused else 0}}})
             continue
         grade_rows.append({"task_id": task, "error": None, "pct": 50.0, "pct_full_denominator": 40.0,
                            "items": [{}] * 10, "score_excluded_items": 0, "grading_wall_time_ms": 60_000,
@@ -307,13 +477,25 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
         report_rows.append({"task_id": task, "status": "success", "latency_ms": 600_000,
                             "deliverable_files": [f"deliverable_files/{task}/answer.docx"],
                             "observability": {"budget_metrics": {"conservative_cost_usd": 6.0}}})
-    grade = {"tasks": grade_rows, "grader_source_hash": source_hash, "renderer_fingerprint": renderer,
+        journal += [{"event": "reserve", "ticket": f"g{len(journal)}", "task_id": task, "reserve_usd": "1.00000000"},
+                    {"event": "settle", "ticket": f"g{len(journal)}", "spent_usd": "0.50000000"}]
+    config_name = f"{experiment_id[:6]}_v2_sol_max"
+    grade = {"experiment_id": experiment_id, "run_status": "final",
+             "source_inference_revision": REVISIONS[experiment_id], "tasks": grade_rows,
+             "grader_source_hash": source_hash, "renderer_fingerprint": renderer,
              "judge": {"model": "gpt-5.6-sol", "reasoning_effort": "max"}, "prompt": {"version": "v2.2"},
              "rubric": {"commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf"}}
     (tmp_path / f"{experiment_id}.grade.json").write_text(json.dumps(grade), encoding="utf-8")
-    (tmp_path / f"{experiment_id}.self_report.json").write_text(
-        json.dumps({"meta": {"experiment_id": experiment_id}, "task_results": report_rows}), encoding="utf-8")
-    (tmp_path / f"{experiment_id}.journals").mkdir(exist_ok=True)
+    (tmp_path / f"{experiment_id}.self_report.json").write_text(json.dumps({
+        "meta": {"experiment_id": experiment_id, "ordered_task_ids": list(tasks)}, "task_results": report_rows,
+    }), encoding="utf-8")
+    journals = tmp_path / f"{experiment_id}.journals"
+    shutil.rmtree(journals, ignore_errors=True)
+    journals.mkdir()
+    opening = {"event": "open", "schema": "sol-batch-grading-journal-v1", "experiment_id": experiment_id,
+               "config_name": config_name}
+    (journals / "run-1-1.combined_usd.jsonl").write_text("".join(
+        json.dumps({**line, "seq": seq}) + "\n" for seq, line in enumerate([opening, *journal])), encoding="utf-8")
     return [experiment_id, str(tmp_path / f"{experiment_id}.grade.json"),
             str(tmp_path / f"{experiment_id}.self_report.json")]
 
@@ -327,24 +509,26 @@ def _run(readout, tmp_path: Path, *stages: list[str], extra: tuple[str, ...] = (
     return json.loads(out.read_text(encoding="utf-8"))
 
 
-def test_two_stages_with_their_own_configs_can_be_one_grader(tmp_path):
+def test_two_stages_with_their_own_configs_can_be_one_grader(tmp_path, registry):
     readout = _readout()
+    registry.approve_exp038()
     first, rest = _this_tree_hash(readout, "exp037_v2_sol_max"), _this_tree_hash(readout, "exp038_v2_sol_max")
     # The configs differ only in their name and description, and the raw
     # hash covers the config file: equal raw hashes are impossible.
     assert first != rest
-    exp037 = _write_stage(tmp_path, "exp037_sol_first25", first, _stage_tasks("exp037_sol_first25")[:3])
-    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", rest, _stage_tasks("exp038_sol_rest195")[:2])
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", first, _stage_tasks("exp037_sol_first25"))
+    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", rest, _stage_tasks("exp038_sol_rest195"))
     summary = _run(readout, tmp_path, exp037, exp038)["summary"]
+    assert summary["tasks"] == summary["denominator"] == 220
     assert summary["one_grader"] is True and summary["one_grader_problems"] == []
     assert [(stage["stage"], stage["ceiling_usd"]) for stage in summary["stages"]] == [
-        ("exp037_sol_first25", 700.0), ("exp038_sol_rest195", None)]
-    assert summary["stages"][0]["committed_usd"] == 3 * 6.0 + 2.0
+        ("exp037_sol_first25", 700.0), ("exp038_sol_rest195", 1500.0)]
+    assert summary["stages"][0]["committed_usd"] == 25 * 6.0 + 2.0 + 25 * 0.5
     assert [grader["graded_by_this_tree"] for grader in summary["graders"]] == [True, True]
     assert len({grader["template_blocks_sha256"] for grader in summary["graders"]}) == 1
 
     # Another renderer marks the second stage differently, however the code agrees.
-    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", rest, _stage_tasks("exp038_sol_rest195")[:2],
+    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", rest, _stage_tasks("exp038_sol_rest195"),
                           renderer={**RENDERER, "pymupdf_version": "1.28.2"})
     summary = _run(readout, tmp_path, exp037, exp038)["summary"]
     assert summary["one_grader"] is False
@@ -352,7 +536,7 @@ def test_two_stages_with_their_own_configs_can_be_one_grader(tmp_path):
 
     # A grade whose hash is not this tree's for its own config was marked by
     # another closure, or under another config.
-    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", first, _stage_tasks("exp038_sol_rest195")[:2])
+    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", first, _stage_tasks("exp038_sol_rest195"))
     summary = _run(readout, tmp_path, exp037, exp038)["summary"]
     assert summary["one_grader"] is False
     assert summary["one_grader_problems"][0].startswith("exp038_sol_rest195: graded by grader source")
@@ -382,27 +566,54 @@ def test_a_task_the_usd_gate_refused_is_moved_not_sampled(tmp_path):
     assert summary["projection"]["remaining_tasks"] == len(rest) + 1 == 196
     assert summary["projection"]["remaining_items"] == sum(items[task] for task in rest) + items[refused]
     assert document["remaining_task_ids"] == rest + [refused]
+    assert type(summary["rules"]["R3"]) is bool and type(summary["rules"]["R4"]) is bool
     with pytest.raises(SystemExit):
         readout.main(["--repo-root", str(REPO_ROOT), "--stage", *exp037,
                       "--remaining-from", "exp038_sol_rest195", "--remaining-tasks", "195"])
 
 
-def test_a_later_stage_replaces_a_refused_row_and_nothing_else(tmp_path):
+def test_a_task_the_sol_harness_refused_is_infrastructure_not_a_sample(tmp_path):
     readout = _readout()
     first25 = _stage_tasks("exp037_sol_first25")
-    refused = first25[24]
     exp037 = _write_stage(tmp_path, "exp037_sol_first25", _this_tree_hash(readout, "exp037_v2_sol_max"),
-                          first25[:3] + [refused], refused=(refused,))
-    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", _this_tree_hash(readout, "exp038_v2_sol_max"),
-                          [refused] + _stage_tasks("exp038_sol_rest195")[:1])
+                          first25, harness=tuple(first25[20:]))
+    summary = _run(readout, tmp_path, exp037, extra=("--remaining-from", "exp038_sol_rest195"))["summary"]
+    # Not the model's zeros, and nothing to move: the harness refused before an attempt started.
+    assert summary["zeros_by_cause"] == {"sol_gate": 5} and summary["moved_by_usd_gate"] == []
+    assert summary["projection"]["attempted_sample"] == 20
+    assert summary["usd"]["solve_per_task_mean"] == 6.0
+    assert summary["time"]["solve_minutes_per_task_mean"] == 10.0
+    # Five harness refusals of 25 are past R2's two.
+    assert summary["rules"]["R2"] is False
+
+
+def test_a_later_stage_replaces_a_refused_row_but_not_its_spend(tmp_path, registry):
+    readout = _readout()
+    registry.approve_exp038()
+    first25 = _stage_tasks("exp037_sol_first25")
+    refused = first25[24]
+    # The gate refused the task's retry after an attempt that booked 40.
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", _this_tree_hash(readout, "exp037_v2_sol_max"),
+                          first25, refused=(refused,), refused_usd=40.0)
+    single = _run(readout, tmp_path, exp037)["summary"]
+    assert single["usd"]["solve"] == single["stages"][0]["solve_usd"] == 24 * 6.0 + 40.0
+    assert single["usd"]["solve_per_task_mean"] == 6.0
+    # exp038's approval PR appends the moved task to its list.
+    rest = _stage_tasks("exp038_sol_rest195") + [refused]
+    registry.list_tasks("exp038_sol_rest195", rest)
+    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", _this_tree_hash(readout, "exp038_v2_sol_max"), rest)
     document = _run(readout, tmp_path, exp037, exp038)
     summary = document["summary"]
-    assert summary["tasks"] == 5 and summary["rerun_after_usd_gate"] == [refused]
+    assert summary["tasks"] == summary["denominator"] == 220 and summary["rerun_after_usd_gate"] == [refused]
     assert summary["moved_by_usd_gate"] == [] and "usd_gate" not in summary["zeros_by_cause"]
     assert [(row["stage"], row["cause"]) for row in document["tasks"] if row["task_id"] == refused] == [
         ("exp038_sol_rest195", "judged")]
+    # The replaced row's 40 stays in exp037's stage and in the union's solve.
+    assert summary["stages"][0]["solve_usd"] == 24 * 6.0 + 40.0
+    assert summary["usd"]["solve"] == 24 * 6.0 + 40.0 + 196 * 6.0
     # A judged task cannot be graded twice in one union.
-    again = _write_stage(tmp_path, "exp038_sol_rest195", _this_tree_hash(readout, "exp038_v2_sol_max"),
-                         first25[:1])
+    again = _stage_tasks("exp038_sol_rest195") + [first25[0]]
+    registry.list_tasks("exp038_sol_rest195", again)
+    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", _this_tree_hash(readout, "exp038_v2_sol_max"), again)
     with pytest.raises(SystemExit, match="counts every task once"):
-        _run(readout, tmp_path, exp037, again)
+        _run(readout, tmp_path, exp037, exp038)

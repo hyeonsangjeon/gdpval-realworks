@@ -81,6 +81,7 @@ an import.
 from __future__ import annotations
 
 import argparse
+import glob
 import hashlib
 import json
 import os
@@ -242,6 +243,10 @@ UNKNOWN = "usd_usage_unverified"
 
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+#: A config name that is its own step 8 slug (step8_grade._config_name_slug):
+#: the grade, ledger and progress files carry it unchanged, so a name match on
+#: them finds every file of the pair.
+_CONFIG_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?")
 _RUN_ID = re.compile(r"[1-9][0-9]{0,19}")
 _RUN_ATTEMPT = re.compile(r"[1-9][0-9]{0,5}")
 _MONEY_TEXT = re.compile(r"(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,8})?")
@@ -302,7 +307,8 @@ def approval_problems(approvals: Sequence[Approval] | None = None) -> list[str]:
 
     One approval per experiment and per config (an experiment's journals share
     one directory); experiment id plus config name within the name budget; a
-    ceiling exactly when there is an approval; a Sol batch entry exclusive to
+    config name that is its own grade-file slug; a ceiling exactly when there
+    is an approval; a Sol batch entry exclusive to
     its experiment, taking its scope from sol_batch_controls; a grading-only
     entry pinned to one inference revision and one task scope.
     """
@@ -328,6 +334,9 @@ def approval_problems(approvals: Sequence[Approval] | None = None) -> list[str]:
         if len(approval.experiment_id) + len(approval.config_name) > NAME_BUDGET_CHARACTERS:
             problems.append(f"{name}: experiment id plus config name is past "
                             f"{NAME_BUDGET_CHARACTERS} characters")
+        if not _CONFIG_NAME.fullmatch(approval.config_name):
+            problems.append(f"{name}: the config name is not its own grade-file slug "
+                            "(letters, digits, '.', '_' and '-', opening and closing with a letter or digit)")
         if approval.approved is None:
             if approval.ceiling_usd is not None:
                 problems.append(f"{name}: a ceiling without an approval")
@@ -906,7 +915,10 @@ def check_grade_writers(
     grades = root / "data" / "grades"
     if not grades.is_dir():
         return
-    for path in sorted(grades.rglob(f"{slug}__judge_*__{config_name}__cfg_*.json")):
+    # approval_problems holds config names to their own slug; escaped anyway,
+    # so no name can widen or empty this match.
+    pattern = f"{glob.escape(slug)}__judge_*__{glob.escape(config_name)}__cfg_*.json"
+    for path in sorted(grades.rglob(pattern)):
         if "_progress" in path.relative_to(grades).parts:
             continue
         if path.is_symlink() or not path.is_file():
