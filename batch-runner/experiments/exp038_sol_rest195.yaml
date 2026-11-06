@@ -21,13 +21,34 @@
 # The approval pull request
 # -------------------------
 #
-# Owner approval for this stage comes after exp037's readout and sets, in one
-# pull request: approval and the four money fields in RUNS, re-derived from
-# exp037's measured per-task solve and grading cost, with the same approval and
-# ceiling on EXP038_REST195 in sol_batch_grading.APPROVALS; this header's wall-clock
-# figures, re-derived from exp037's measured task time; and, if exp037
-# changed the grader, a regrade of exp037 under the same grader so the two
-# halves of the 220 are marked by one grader.
+# Owner approval for this stage comes after exp037's readout
+# (scripts/sol_stage_readout.py --remaining-from exp038_sol_rest195) and sets,
+# in one pull request:
+#
+#   - approval and the four money fields in RUNS, re-derived from exp037's
+#     measured per-task solve and grading cost, and the same approval and
+#     ceiling on EXP038_REST195 in sol_batch_grading.APPROVALS;
+#   - the tasks exp037's USD gate refused, if any (the readout's
+#     moved_by_usd_gate): appended to data.filter.task_ids below, with
+#     RUNS' task_count and ordered_task_ids_sha256 recomputed for the new
+#     list, this header's counts, and the tests that hold this list to
+#     exp035's order minus exp037's 25
+#     (test_exp038_is_every_other_task_in_exp035s_order and the task_count
+#     and digest assertions in test_sol_batch_runs.py) changed to the new
+#     rule;
+#   - this header's wall-clock figures, re-derived from exp037's measured
+#     task time;
+#   - if exp037 was graded by another grader closure than main's, a regrade
+#     of exp037 under main's, so the two halves of the 220 are marked by one
+#     grader.
+#
+# One grader also needs one renderer, and requirements-renderer.txt and the
+# LibreOffice package are not pinned. Before the first paid exp038 grade,
+# run its free dry run and compare the fingerprint "Preflight grading
+# renderer" prints with renderer_fingerprint in exp037's grade file. If they
+# differ, regrade exp037 under the new renderer, or pin the renderer through
+# a reseal, before paying for exp038's grade. The readout's one_grader flag
+# checks the result afterwards.
 #
 # The wall clock and the relay legs
 # ---------------------------------
@@ -36,8 +57,8 @@
 #
 #   195 tasks x 390 s (exp036's mean) = 1,268 minutes of work
 #   170-minute watchdog per leg, the same per-leg arithmetic as exp036
-#   relay_max_runs: 10 -> eleven legs, 1,870 minutes: 7.5 legs needed, so
-#   at least nine with room to spare
+#   1,268 / 170 = 7.5, so eight legs are needed at that rate;
+#   relay_max_runs: 10 -> eleven legs, 1,870 minutes, three to spare
 #
 # Eleven legs is the most batch-run.yml accepts (relay_max_runs 0..10, and a
 # relay_run input above 10 is refused), so the lineage can finish only if
@@ -48,11 +69,14 @@
 # Resume stays off, the money and relay rules are exp037's (see that file's
 # header), with this run's names.
 #
-# Grading would run as one unsharded process in sequential resume chunks
-# (step 8 exits 7 at the 338-minute budget and the next chunk is dispatched
-# only after the finished chunk's journal is on main): about 32 to 40 hours,
-# six to eight of the eleven chunks grade-run.yml allows, every chunk under
-# this run's one ceiling.
+# Grading would run as one unsharded process in sequential resume chunks:
+# step 8 exits 7 at the 338-minute budget, the next chunk is dispatched only
+# after the finished chunk's journal is on main, and each chunk after the
+# first waits for a fresh approval of the grading environment (an unsharded
+# chunk does not inherit one). About 32 to 40 hours, six to eight of the
+# eleven chunks grade-run.yml allows, every chunk under this run's one
+# ceiling. The grade covers the whole registered list: sol_batch_grading.py
+# refuses a dispatch that names tasks or a task limit.
 
 experiment:
   id: "exp038_sol_rest195"

@@ -19,17 +19,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   - `sol_batch_controls.RUNS` replaces the one pinned experiment with a
     registry of Sol runs, each with its own task digest and USD ceiling:
     `exp036_sol_fixed5` unchanged (200 = 146 solve + 54 grading, 51 per
-    attempt); `exp037_sol_first25` approved at 700 = 550 solve + 150 grading,
-    51 per attempt, so attempts start while booked solve spend is at most 499
-    (narrative allowance 2.00 inside the 150). Simulated over 40,000 draws
-    (exp036's five bookings resampled or fitted lognormal; each task's
-    grading from exp035's grade at the Sol meter), every first attempt starts
-    and the grade fits with probability 1.000 / 0.999, and the expected
-    spend is about USD 330;
+    attempt); `exp037_sol_first25` approved at 700 = 550 solve + 150 grading
+    (the 2.00 narrative allowance inside the 150), 51 per attempt, so
+    attempts start while booked solve spend is at most 499;
     `exp038_sol_rest195` registered with no approval and no ceiling, so step 2
     refuses it before any attempt (`sol_batch_run_not_approved`) and the grade
     preflight refuses it before any download. `sol_batch_grading.APPROVALS`
-    gains the same two entries, and a test holds both sides equal.
+    gains the same two entries, and a test holds both sides equal. Simulated
+    over 40,000 draws for exp037 (exp036's five bookings resampled or fitted
+    lognormal; each task's grading from exp035's grade at the Sol meter),
+    every first attempt starts and the grade fits with probability 1.000 /
+    0.999, and the expected spend is about USD 330.
   - #799's constants are now fields of `RUNS["exp036_sol_fixed5"]`:
     `PRIOR_LINEAGE_SPEND_USD` is `prior_lineage_spend_usd`,
     `LOST_BOOKING_USD` is `lost_booking_usd`, and the money constants are the
@@ -63,6 +63,32 @@ entries land under a fresh dated heading the day they merge to `main`.
     scores, zeros by cause, file habits, solve and grading USD per task, and
     a projection for the remaining tasks, with four pre-registered go/no-go
     rules for the next stage. It changes no grade or headline.
+    - Zeros use one cause table with
+      `batch-runner/scripts/merge_parity_regrade.py`, which gains `grader_other` (a grader-side error other than a
+      refusal), `usd_gate`, `unclassified_failure` and `turn_timeout` (a
+      turn past its wall clock, until now infrastructure there), and calls
+      a zero with no solve-side category `model_other` (was `unknown` or
+      `other_model_side`). A parity record made before this merges keeps
+      the old labels.
+    - A task the USD gate refused stays 0 on its stage's denominator but is
+      left out of per-task cost, time and the projection, and is listed as
+      moved; in a union a later stage's row replaces it.
+      `--remaining-from exp038_sol_rest195` takes the remaining tasks and
+      rubric items from exp038's registered list plus the moved tasks.
+    - Grading USD per journal is `sol_batch_grading.journal_spend`'s, with
+      what no task line holds reported as unattributed, and each stage's
+      solve, narrative and grading USD is set against its approved ceiling
+      (exp036: 51.51 of 200, the grade preflight's figure).
+    - `one_grader` holds when each stage's grade was made by this tree's
+      grader recomputed for its own config, and the configs' template
+      blocks, the judge, prompt version, rubric commit and renderer
+      fingerprint agree. The raw `grader_source_hash` covers the config
+      file, so two stages' raw hashes always differ.
+  - exp038's header lists what its approval PR must change (money on both
+    twin entries, any tasks exp037's gate moved with the task count, digest
+    and tests, the wall-clock figures), and requires a free exp038 grade dry
+    run whose renderer fingerprint equals exp037's grade's before any paid
+    exp038 grade: the renderer requirements and LibreOffice are not pinned.
 
   No step 2, step 8, core/, grader-seal or batch-run.yml bytes change, the
   Sol source profile is untouched, and no paid call was made. Dispatch

@@ -254,8 +254,9 @@ def test_the_relay_legs_cover_the_measured_rate_with_room():
     work_minutes = {name: controls.RUNS[name].task_count * EXP036_SECONDS_PER_TASK / 60 for name in legs}
     # exp037: six legs, room for four times exp036's rate.
     assert legs[EXP037] * 170 >= 4 * work_minutes[EXP037]
-    # exp038: at least nine legs and a quarter more than exp036's rate needs.
-    assert legs[EXP038] >= 9
+    # exp038: exp036's rate needs eight legs (7.5); eleven also cover a
+    # quarter more than that rate.
+    assert math.ceil(work_minutes[EXP038] / 170) == 8
     assert legs[EXP038] >= math.ceil(1.25 * work_minutes[EXP038] / 170)
 
 
