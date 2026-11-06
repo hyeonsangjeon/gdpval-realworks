@@ -50,9 +50,14 @@ entries land under a fresh dated heading the day they merge to `main`.
     copy the exp035 Sol Max template blocks; neither pins a subset.
   - For a Sol run the grade preflight also refuses a published task list
     other than the registered one, and for every approved pair a committed
-    grade whose writing run has no committed journal. grade-run.yml
-    dispatches an approved grade's next resume chunk only after the finished
-    chunk's journal is on main, so sequential chunks share one ceiling.
+    grade whose writing run has no committed journal, so a resume chunk
+    dispatched by hand after a lost journal push is refused. The automatic
+    retrigger already skipped the next chunk when the journal push failed
+    (its `if` carries GitHub's implicit `success()`); its `if` now names
+    that dependency (`steps.usd_journal.outcome == 'success'`) so a later
+    `always()` or `continue-on-error` cannot drop it. `run` refuses
+    `--tasks` and `--limit` for exp037 and exp038 as for every approved
+    grade, so a Sol grade is never a diagnostic subset.
   - `scripts/sol_stage_readout.py`: a model-free readout of a Sol stage or of
     several stages together: fixed-denominator, full-item and judged-only
     scores, zeros by cause, file habits, solve and grading USD per task, and

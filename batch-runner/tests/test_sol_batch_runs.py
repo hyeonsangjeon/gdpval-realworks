@@ -358,13 +358,36 @@ def test_exp037s_gate_admits_through_499_and_books_unreported_usage_at_51(tmp_pa
 
 def test_the_unapproved_pair_is_refused_before_any_download(monkeypatch):
     monkeypatch.chdir(BATCH_RUNNER)
-    monkeypatch.setattr(grading, "_fetch", lambda *args: (_ for _ in ()).throw(AssertionError("fetched")))
+    # published_solve binds _fetch as its default when it is defined, so
+    # patching _fetch could never fire; trap the readers themselves.
+    for name in ("published_solve", "prior_grading", "check_grade_writers", "_fetch"):
+        monkeypatch.setattr(grading, name, _never(name))
     for ask in (grading.applies, grading.approval_for):
         with pytest.raises(grading.CombinedUsdRefused, match="registered but not approved for spending"):
             ask(EXP038, "grading_configs/exp038_v2_sol_max.yaml")
     with pytest.raises(grading.CombinedUsdRefused, match="registered but not approved for spending") as refused:
         grading.preflight(EXP038, "grading_configs/exp038_v2_sol_max.yaml", INFERENCE_SHA, 1)
     assert refused.value.code == grading.UNVERIFIED
+
+
+@pytest.mark.parametrize("narrowing", [["--tasks", "0ed38524-a4ad-405f-9dee-7b2252659aad"], ["--limit", "3"],
+                                       ["--tasks", "0ed38524-a4ad-405f-9dee-7b2252659aad", "--limit", "1"]],
+                         ids=["tasks", "limit", "both"])
+@pytest.mark.parametrize("experiment_id", [EXP037, EXP038])
+def test_a_sol_220_grade_cannot_be_narrowed_to_a_subset(tmp_path, monkeypatch, capsys, experiment_id, narrowing):
+    # The approval, not the dispatch, defines the scope: a subset would be a
+    # _diagnostic/ grade paid under a ceiling sized for the whole stage.
+    # Refused from the arguments alone, before the preflight or a journal.
+    monkeypatch.chdir(BATCH_RUNNER)
+    monkeypatch.setattr(grading, "preflight", _never("the preflight"))
+    monkeypatch.setattr(step8, "main", _never("step 8"))
+    monkeypatch.setattr(step8, "_repo_root", lambda: tmp_path)
+    config = controls.RUNS[experiment_id].grading_config_name
+    argv = [experiment_id, "--config", f"grading_configs/{config}.yaml", "--source", "local", *narrowing]
+    assert grading.run(argv, INFERENCE_SHA) == grading.REFUSED_EXIT
+    refusal = json.loads(capsys.readouterr().err.splitlines()[-1])
+    assert refusal["reason"] == grading.UNVERIFIED and "whole scope" in refusal["detail"]
+    assert not (tmp_path / grading.JOURNAL_DIR).exists()
 
 
 @pytest.mark.parametrize("experiment_id, config", [
@@ -449,10 +472,19 @@ def test_a_registered_run_is_graded_only_from_the_file_named_after_it(tmp_path, 
 
 
 def test_the_next_chunk_waits_for_this_chunks_journal():
-    steps = {step.get("name"): step for step in _yaml(WORKFLOW)["jobs"]["grade"]["steps"]}
+    ordered = _yaml(WORKFLOW)["jobs"]["grade"]["steps"]
+    names = [step.get("name") for step in ordered]
+    steps = {step.get("name"): step for step in ordered}
     journal = steps["Commit combined solve+grade USD journal"]
-    assert journal["id"] == "usd_journal"
     retrigger = steps["Auto-retrigger next chunk (time budget hit)"]
+    # What already makes the retrigger wait: the journal step runs first and
+    # a failed push fails the job, and the retrigger's `if` names no status
+    # function, so GitHub adds success().
+    assert names.index(journal["name"]) < names.index(retrigger["name"])
+    assert "continue-on-error" not in journal and "continue-on-error" not in retrigger
+    assert not any(check in retrigger["if"] for check in ("always()", "failure()", "cancelled()"))
+    # The clause that states it where it is used.
+    assert journal["id"] == "usd_journal"
     assert "steps.commit_grade.outputs.committed == 'true'" in retrigger["if"]
     assert ("(steps.sol_usd.outputs.enabled != 'true' || steps.usd_journal.outcome == 'success')"
             in retrigger["if"])

@@ -1575,11 +1575,14 @@ jobs:
           echo "committed=true" >> "$GITHUB_OUTPUT"
 
       # An approved grade's next chunk is dispatched only once this chunk's
-      # combined USD journal is on main: the next preflight sums committed
-      # journals, so a chunk that could not push its journal would otherwise
-      # hand its successor a ceiling with this chunk's spend missing. Its
-      # preflight would also refuse (check_grade_writers); this keeps the
-      # successor from being dispatched at all.
+      # combined USD journal is on main, because the next preflight sums the
+      # committed journals. That held before the last clause too: this `if`
+      # names no status function, so GitHub adds success(), and a journal
+      # that cannot be pushed fails its step and the job. The clause states
+      # the dependency where it is used, so a later always() here or a
+      # continue-on-error on the journal step cannot drop it. A next chunk
+      # dispatched by hand is refused by its own preflight instead
+      # (sol_batch_grading.check_grade_writers).
       - name: Auto-retrigger next chunk (time budget hit)
         if: steps.grade.outputs.rc == '7' && steps.commit_grade.outputs.committed == 'true' && inputs.dry_run == false && (steps.sol_usd.outputs.enabled != 'true' || steps.usd_journal.outcome == 'success')
         env:
