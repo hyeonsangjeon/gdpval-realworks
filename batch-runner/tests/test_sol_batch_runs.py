@@ -6,13 +6,14 @@ catalogue and the earlier stages' files, never trusted from the registry.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 import shutil
 import socket
 from decimal import Decimal
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 import yaml
@@ -44,6 +45,12 @@ def offline(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", refused)
     monkeypatch.setattr(socket, "create_connection", refused)
     monkeypatch.setattr(socket, "getaddrinfo", refused)
+
+
+def _never(what: str):
+    def called(*args, **kwargs):
+        raise AssertionError(f"{what} must not be reached")
+    return called
 
 
 def _yaml(path: Path) -> dict:
@@ -116,6 +123,65 @@ def test_exp038_is_registered_but_not_approved():
     assert run.approval is None
     assert (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd, run.narrative_allowance_usd) == (
         None, None, None, None)
+
+
+def _patched(monkeypatch, experiment_id: str, **changes) -> controls.SolRun:
+    runs = dict(controls.RUNS)
+    runs[experiment_id] = dataclasses.replace(runs[experiment_id], **changes)
+    monkeypatch.setattr(controls, "RUNS", MappingProxyType(runs))
+    return runs[experiment_id]
+
+
+@pytest.mark.parametrize("changes, field", [
+    ({"ordered_task_ids_sha256": "A" * 64}, "ordered_task_ids_sha256"),
+    ({"ordered_task_ids_sha256": "g" * 64}, "ordered_task_ids_sha256"),
+    ({"ordered_task_ids_sha256": "a" * 63}, "ordered_task_ids_sha256"),
+    ({"wall_timeout_minutes": 171}, "wall_timeout_minutes"),
+    ({"wall_timeout_minutes": True}, "wall_timeout_minutes"),
+    ({"prior_lineage_spend_usd": Decimal("-0.01")}, "prior_lineage_spend_usd"),
+    ({"prior_lineage_spend_usd": Decimal("NaN")}, "prior_lineage_spend_usd"),
+    ({"prior_lineage_spend_usd": Decimal("Infinity")}, "prior_lineage_spend_usd"),
+    ({"prior_lineage_spend_usd": 3.5}, "prior_lineage_spend_usd"),
+    ({"lost_booking_usd": {(INFERENCE_SHA, "t"): Decimal("-1")}}, "lost_booking_usd"),
+    ({"lost_booking_usd": {(INFERENCE_SHA, "t"): 1.0}}, "lost_booking_usd"),
+    ({"lost_booking_usd": {("B" * 40, "t"): Decimal("1")}}, "lost_booking_usd"),
+    ({"lost_booking_usd": {("b" * 39, "t"): Decimal("1")}}, "lost_booking_usd"),
+    ({"lost_booking_usd": {(INFERENCE_SHA, ""): Decimal("1")}}, "lost_booking_usd"),
+    ({"lost_booking_usd": {(INFERENCE_SHA, " t"): Decimal("1")}}, "lost_booking_usd"),
+    ({"lost_booking_usd": {"t": Decimal("1")}}, "lost_booking_usd"),
+    ({"lost_booking_usd": {(INFERENCE_SHA, "t", "x"): Decimal("1")}}, "lost_booking_usd"),
+])
+@pytest.mark.parametrize("experiment_id", [EXP037, EXP038])
+def test_the_registry_refuses_an_entry_that_would_skew_the_seed(experiment_id, changes, field):
+    # The digest must be lowercase hex, and the two values the grade's seed
+    # adds must be finite Decimals of at least 0: a negative one would lower it.
+    run = dataclasses.replace(controls.RUNS[experiment_id], **changes)
+    problems = controls.registry_problems({experiment_id: run})
+    assert problems and all(field in problem for problem in problems)
+
+
+def test_a_zero_lost_booking_and_a_raised_prior_spend_are_well_formed():
+    run = dataclasses.replace(controls.RUNS[EXP037], prior_lineage_spend_usd=Decimal("12.5"),
+                              lost_booking_usd={(INFERENCE_SHA, _task_ids(EXP037)[0]): Decimal("0")})
+    assert controls.registry_problems({EXP037: run}) == []
+
+
+def test_a_malformed_entry_refuses_the_solve_and_the_grade(tmp_path, monkeypatch, unit_runner, ledgers):
+    _patched(monkeypatch, EXP037, prior_lineage_spend_usd=Decimal("-1"))
+    ledger = ledgers()
+    executor, settings = _executor(ledger)
+    runner = executor.runner
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    with pytest.raises(controls.SolBatchControlsRefused) as refused:
+        controls.install(executor, **_install_kwargs(
+            settings, ledger, workspace, experiment_id=EXP037, task_ids=_task_ids(EXP037)))
+    assert str(refused.value) == "sol_batch_registry_invalid"
+    assert executor.runner is runner and list(workspace.iterdir()) == []
+    monkeypatch.chdir(BATCH_RUNNER)
+    monkeypatch.setattr(grading, "published_solve", _never("a published solve read"))
+    with pytest.raises(grading.CombinedUsdRefused, match="registry entry is incomplete"):
+        grading.preflight(EXP037, "grading_configs/exp037_v2_sol_max.yaml", INFERENCE_SHA, 1)
 
 
 def test_the_digest_is_the_one_inference_provenance_publishes():

@@ -36,6 +36,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import stat
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -120,6 +121,16 @@ class SolRun:
     and the grade preflight refuses it before reading anything published.
     The money fields of an approved run are all set; :func:`registry_problems`
     lists what is not.
+
+    These fields were #799's module constants, and older CHANGELOG entries
+    and run notes still use those names: ``EXPERIMENT_ID`` is
+    ``RUNS["exp036_sol_fixed5"]``, ``CEILING_USD``, ``GRADING_RESERVE_USD``,
+    ``ATTEMPT_RESERVE_USD``, ``SOLVE_BUDGET_USD`` and ``NARRATIVE_ALLOWANCE_USD``
+    are its ``ceiling_usd``, ``grading_reserve_usd``, ``attempt_reserve_usd``,
+    ``solve_budget_usd`` and ``narrative_allowance_usd``, and
+    ``PRIOR_LINEAGE_SPEND_USD`` and ``LOST_BOOKING_USD`` are its
+    ``prior_lineage_spend_usd`` and ``lost_booking_usd``. A recovery pull
+    request edits the entry of the run it recovers, never another run's.
     """
 
     experiment_id: str
@@ -149,8 +160,15 @@ class SolRun:
     #: solve spend" figure minus the prior-lineage figure it started from (the
     #: "leg closed" line and the install banner print it; record summary
     #: solve_spend_usd - prior_lineage_spend_usd), plus the narrative allowance
-    #: if its final leg ran step 6. Every solve spend figure already includes
-    #: this value, so raising it by the whole figure counts it twice.
+    #: if its final leg ran step 6, plus the run's attempt_reserve_usd if the
+    #: last of its legs to print "[sol-batch] record:" printed no "[sol-batch]
+    #: leg closed" line after it (record summary null). A hard kill
+    #: mid-attempt (OOM, a lost runner, a cancellation or a timeout) skips both
+    #: that attempt's booking and the close, so no printed figure includes the
+    #: attempt it was running; if the leg died between attempts instead, the
+    #: reserve over-counts, which is the safe side. Every solve spend figure
+    #: already includes this value, so raising it by the whole figure counts
+    #: it twice.
     prior_lineage_spend_usd: Decimal = Decimal(0)
     #: Bookings step 2 lost from a published result of this run, in USD, keyed
     #: by (HF inference revision, task id). Leave it empty unless a grade
@@ -175,6 +193,14 @@ class SolRun:
     @property
     def admit_while_at_most_usd(self) -> Decimal:
         return self.solve_budget_usd - self.attempt_reserve_usd
+
+
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _spend(value: Any) -> bool:
+    return isinstance(value, Decimal) and value.is_finite() and value >= 0
 
 
 #: Every Sol run registered on this path. A new run, a raised ceiling or an
@@ -254,10 +280,24 @@ def registry_problems(runs: Mapping[str, SolRun] | None = None) -> list[str]:
             problems.append(f"{name}: id plus config name is past {NAME_BUDGET_CHARACTERS} characters")
         if type(run.task_count) is not int or run.task_count < 1:
             problems.append(f"{name}: task_count must be a positive int")
-        if not (isinstance(run.ordered_task_ids_sha256, str) and len(run.ordered_task_ids_sha256) == 64):
+        if not (isinstance(run.ordered_task_ids_sha256, str)
+                and _SHA256_HEX.fullmatch(run.ordered_task_ids_sha256)):
             problems.append(f"{name}: ordered_task_ids_sha256 must be 64 hex characters")
-        if not 0 < run.wall_timeout_minutes <= WALL_TIMEOUT_MINUTES:
+        if type(run.wall_timeout_minutes) is not int or not 0 < run.wall_timeout_minutes <= WALL_TIMEOUT_MINUTES:
             problems.append(f"{name}: wall_timeout_minutes must be 1..{WALL_TIMEOUT_MINUTES}")
+        # Both feed the grade's seed, approved or not: a negative or
+        # non-Decimal value would quietly lower it.
+        if not _spend(run.prior_lineage_spend_usd):
+            problems.append(f"{name}: prior_lineage_spend_usd must be a finite Decimal of at least 0")
+        lost = run.lost_booking_usd
+        if not isinstance(lost, Mapping) or not all(
+                isinstance(key, tuple) and len(key) == 2
+                and isinstance(key[0], str) and _FULL_SHA.fullmatch(key[0])
+                and isinstance(key[1], str) and key[1] and key[1] == key[1].strip()
+                and _spend(amount)
+                for key, amount in lost.items()):
+            problems.append(f"{name}: lost_booking_usd must map (40-hex revision, task id) to a finite "
+                            "Decimal of at least 0")
         money = (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd,
                  run.narrative_allowance_usd)
         if run.approval is None:

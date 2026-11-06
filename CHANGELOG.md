@@ -30,6 +30,18 @@ entries land under a fresh dated heading the day they merge to `main`.
     refuses it before any attempt (`sol_batch_run_not_approved`) and the grade
     preflight refuses it before any download. `sol_batch_grading.APPROVALS`
     gains the same two entries, and a test holds both sides equal.
+  - #799's constants are now fields of `RUNS["exp036_sol_fixed5"]`:
+    `PRIOR_LINEAGE_SPEND_USD` is `prior_lineage_spend_usd`,
+    `LOST_BOOKING_USD` is `lost_booking_usd`, and the money constants are the
+    money fields. A recovery PR edits the entry of the run it recovers.
+    exp036's YAML header names the fields (a comment-only edit). The
+    prior-lineage raise rule now also adds the run's attempt reserve (51)
+    when the lineage's last leg printed no "leg closed" line: a hard kill
+    mid-attempt leaves that attempt out of every printed figure. A test
+    reproduces the kill point. The registry refuses a digest that is not 64
+    lowercase hex characters, and a prior-lineage spend or lost booking that
+    is not a finite Decimal of at least 0 keyed by (40-hex revision, task
+    id), so neither can lower a grade's seed.
   - `exp037_sol_first25`: the first 25 tasks of the trial-stage rule
     (`select_trial_run_tasks`, exp034's first 25: all nine industries),
     exp033's prompt byte for byte, exp036's Sol settings, six relay legs.

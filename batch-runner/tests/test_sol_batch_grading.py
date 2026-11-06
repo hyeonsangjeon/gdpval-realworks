@@ -615,7 +615,7 @@ def test_a_task_that_reached_codex_and_lost_its_booking_refuses(tmp_path):
 @pytest.mark.parametrize("prior", [None, Decimal("40"), Decimal("146")])
 def test_a_published_ledger_above_the_seed_refuses(tmp_path, monkeypatch, prior):
     # The floor is compared with this lineage's own bookings, so a raised
-    # PRIOR_LINEAGE_SPEND_USD cannot hide a booking lost from this result.
+    # prior_lineage_spend_usd cannot hide a booking lost from this result.
     if prior is not None:
         _patch_run(monkeypatch, prior_lineage_spend_usd=prior)
     fetch, _ = _published(tmp_path, [_task_row(controls.FIXED_TASK_IDS[0], 2.0)], [SETTLED_CALL])
@@ -646,7 +646,7 @@ def test_a_lost_booking_recorded_for_this_revision_lets_the_grade_seed(tmp_path,
     fetch, _ = _published(tmp_path, rows, [SETTLED_CALL])
     assert grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch) == (
         _exp036().prior_lineage_spend_usd + Decimal("39.25"), SETTLED_CALL_USD, "present")
-    # Raising PRIOR_LINEAGE_SPEND_USD instead never clears the refusal.
+    # Raising prior_lineage_spend_usd instead never clears the refusal.
     _patch_run(monkeypatch, lost_booking_usd={}, prior_lineage_spend_usd=Decimal("146"))
     with pytest.raises(grading.CombinedUsdRefused) as refused:
         grading.published_solve("HyeonSang/exp036_sol_fixed5", INFERENCE_SHA, _exp036(), fetch=fetch)

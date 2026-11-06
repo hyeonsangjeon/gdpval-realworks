@@ -111,8 +111,10 @@
 # Every relay rule in exp036's header applies here unchanged, with this run's
 # names: a GitHub re-run of a leg is refused; a fresh dispatch after any
 # dispatch that spent needs RUNS["exp037_sol_first25"].prior_lineage_spend_usd
-# raised by that lineage's own spend first; a row that lost its booking needs a
-# lost_booking_usd entry before it can be graded.
+# raised by that lineage's own spend first (plus the 51 attempt reserve when
+# its last leg printed no "leg closed" line, as exp036's header explains); a
+# row that lost its booking needs a lost_booking_usd entry before it can be
+# graded.
 #
 # Grading
 # -------
