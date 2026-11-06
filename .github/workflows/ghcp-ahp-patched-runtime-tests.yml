@@ -1,6 +1,6 @@
 name: GHCP patched-runtime model-free tests
 
-# Offline contracts, source typechecking and a server bundle build; no host/session launch.
+# Offline contracts, builds and an isolated model-free import; no authentication/session request.
 # Keep the original branch probe and its historical hash contracts untouched.
 on:
   push:
@@ -74,7 +74,7 @@ jobs:
             tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py \
             tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py \
             tests/test_ghcp_ahp_metadata_broker.py tests/test_ghcp_ahp_connection.py \
-            tests/test_ghcp_ahp_patchset.py
+            tests/test_ghcp_ahp_patchset.py tests/test_ghcp_ahp_load_smoke.py
       - id: results
         name: Require every expected case to pass without skips
         run: |
@@ -86,7 +86,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 1516, "workflow-guards.xml": 61}
+          expected = {"contracts.xml": 1581, "workflow-guards.xml": 69}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
@@ -346,6 +346,8 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: read
+    outputs:
+      payload_artifact_id: ${{ steps.payload_artifact.outputs.artifact-id }}
     steps:
       # Same byte-pinned preparation as typecheck, in a fresh runner, not the locked build draft.
       - *source_checkout
@@ -391,6 +393,26 @@ jobs:
             --source "$evidence/source" --bundle-directory "$evidence/source/out-patched" \
             --inputs "$evidence/build-inputs.json" --receipt "$evidence/build-receipt.json" \
             --output "$evidence/server-bundle-manifest.json"
+      - id: payload
+        name: Bind the exact built bytes and vendor archive to this run for the load smoke
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_load_smoke.py pack \
+            --bundle "$evidence/source/out-patched/vs/platform/agentHost/node/agentHostMain.js" \
+            --manifest "$evidence/server-bundle-manifest.json" --server-archive "$evidence/server.tgz" \
+            --output "$evidence/load-smoke-transfer"
+      - id: payload_artifact
+        name: Short-lived same-run payload for the model-free consumer only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-load-payload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-patched-typecheck/load-smoke-transfer/payload.tar
+            ${{ runner.temp }}/ghcp-patched-typecheck/load-smoke-transfer/transfer.json
+          if-no-files-found: error
+          retention-days: 1
+          include-hidden-files: false
       - id: artifacts
         name: Upload the hash and size manifest only, no executable or binary artifacts
         if: always()
@@ -398,6 +420,68 @@ jobs:
         with:
           name: ghcp-patched-codex-server-manifest-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ghcp-patched-typecheck/server-bundle-manifest.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  patched-agent-host-load-smoke:
+    name: patched agent host model-free load smoke
+    needs: patched-codex-server-bundle
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - *source_checkout
+      - *source_python
+      - id: payload
+        name: Receive the producer artifact ID from this run, never a branch-latest build
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # existing v7.0.0 pin
+        with:
+          artifact-ids: ${{ needs.patched-codex-server-bundle.outputs.payload_artifact_id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/ghcp-load-transfer
+      - id: prepare
+        name: Verify same-run provenance and stage separate positive and one-byte-negative copies
+        run: |
+          set -euo pipefail
+          '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_load_smoke.py prepare \
+            --transfer "$RUNNER_TEMP/ghcp-load-transfer" --output "$RUNNER_TEMP/ghcp-load-smoke"
+      - id: smoke
+        name: Import the actual bundle without authentication, network egress or client RPC
+        run: |
+          set -euo pipefail
+          umask 077
+          smoke_uid="$(id -u)"
+          smoke_gid="$(id -g)"
+          smoke_netns="$(readlink /proc/self/ns/net)"
+          smoke_pidns="$(readlink /proc/self/ns/pid)"
+          timeout --signal=TERM --kill-after=10s 90s \
+            sudo -n unshare --mount --net --pid --fork --mount-proc --kill-child=KILL \
+            /usr/bin/setpriv --reuid="$smoke_uid" --regid="$smoke_gid" --clear-groups \
+              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+              GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+              RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
+              ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+              GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_load_smoke.py" run \
+              --prepared "$RUNNER_TEMP/ghcp-load-smoke" --evidence "$RUNNER_TEMP/ghcp-load-smoke-evidence" \
+              --outside-netns "$smoke_netns" --outside-pidns "$smoke_pidns"
+      - id: artifacts
+        name: Retain synthetic model-free receipts and redacted diagnostics, never runtime state or credentials
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-load-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/load-smoke.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/patched-build-receipt.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/patched-runtime-contract.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/patched-load-evidence.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/server-bundle-manifest.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/transfer.json
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: false
