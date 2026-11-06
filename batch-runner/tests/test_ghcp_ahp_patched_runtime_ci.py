@@ -1,4 +1,4 @@
-"""Branch-only offline CI and source typechecking, never a host/model launch.
+"""Branch-only offline CI, builds and isolated no-auth load smoke; no model request.
 
 The compiler job's shell is parsed, not run, by these offline tests.
 """
@@ -31,8 +31,8 @@ SUITE = [
     "tests/test_ghcp_ahp_wire_capture.py", "tests/test_ghcp_ahp_zero_turn.py",
     "tests/test_ghcp_ahp_metadata_broker.py", "tests/test_ghcp_ahp_connection.py",
 ]
-EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py"]
-EXPECTED_COUNTS = {"contracts.xml": 1516, "workflow-guards.xml": 61}
+EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smoke.py"]
+EXPECTED_COUNTS = {"contracts.xml": 1581, "workflow-guards.xml": 69}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -63,6 +63,10 @@ def typecheck_steps():
 
 def bundle_steps():
     return {item["id"]: item for item in workflow()["jobs"]["patched-codex-server-bundle"]["steps"]}
+
+
+def smoke_steps():
+    return {item["id"]: item for item in workflow()["jobs"]["patched-agent-host-load-smoke"]["steps"]}
 
 
 def result_program(selected=None):
@@ -99,7 +103,7 @@ def test_workflow_runs_only_on_the_named_branch_push():
     assert value["on"] == {"push": {"branches": [BRANCH]}}
     assert value["permissions"] == {"contents": "read"}
     assert value["concurrency"] == {"group": "ghcp-patched-runtime-tests-${{ github.ref }}", "cancel-in-progress": "false"}
-    assert set(value["jobs"]) == {"contracts", "patched-codex-typecheck", "patched-codex-server-bundle"}
+    assert set(value["jobs"]) == {"contracts", "patched-codex-typecheck", "patched-codex-server-bundle", "patched-agent-host-load-smoke"}
     job = value["jobs"]["contracts"]
     assert set(job) == {"name", "if", "runs-on", "timeout-minutes", "steps"}
     assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
@@ -471,12 +475,13 @@ def test_one_line_context_patch_uses_the_upstream_prewarm_storage_contract_only(
 
 def test_bundle_job_follows_typecheck_on_standard_runner_with_read_only_permissions():
     job = workflow()["jobs"]["patched-codex-server-bundle"]
-    assert set(job) == {"name", "needs", "if", "runs-on", "timeout-minutes", "permissions", "steps"}
+    assert set(job) == {"name", "needs", "if", "runs-on", "timeout-minutes", "permissions", "steps", "outputs"}
     assert job["name"] == "patched Codex server bundle build"
     assert job["needs"] == "patched-codex-typecheck"
     assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
     assert job["runs-on"] == "ubuntu-24.04" and 1 <= int(job["timeout-minutes"]) <= 240
     assert job["permissions"] == {"contents": "read"}
+    assert job["outputs"] == {"payload_artifact_id": "${{ steps.payload_artifact.outputs.artifact-id }}"}
     assert all("env" not in step and "continue-on-error" not in step for step in job["steps"])
     assert {step["id"]: step["if"] for step in job["steps"] if "if" in step} == {"artifacts": "always()"}
 
@@ -484,7 +489,7 @@ def test_bundle_job_follows_typecheck_on_standard_runner_with_read_only_permissi
 def test_bundle_reuses_exact_typechecked_patch_chain_and_locked_dependency_preparation():
     selected = bundle_steps()
     assert list(selected) == ["checkout", "python", "node", "prepare", "dependencies", "electron_types",
-                              "product_inputs", "bundle", "manifest", "artifacts"]
+                              "product_inputs", "bundle", "manifest", "payload", "payload_artifact", "artifacts"]
     for name in ("checkout", "python", "node", "prepare", "dependencies", "electron_types"):
         assert selected[name] == typecheck_steps()[name]
     assert '"$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_patched_runtime.py" verify-patchset' in selected["prepare"]["run"]
@@ -543,3 +548,78 @@ def test_bundle_manifest_adapter_cannot_launch_runtime_or_network_clients():
                        "ghcp_ahp_patched_runtime", "ghcp_ahp_errors"}
     assert not any(word in text for word in ("os.system", "os.popen", "subprocess", "eval(", "exec("))
     assert bundle_manifest.COMMAND == ["node", "build/next/index.ts", "bundle", "--target", "server", "--minify", "--out", "out-patched"]
+
+
+def test_payload_is_short_lived_and_produced_after_the_real_bundle_receipt():
+    selected = bundle_steps()
+    assert selected["payload_artifact"]["uses"] == steps()["artifacts"]["uses"]
+    assert selected["payload_artifact"]["with"] == {
+        "name": "ghcp-patched-load-payload-${{ github.run_id }}-${{ github.run_attempt }}",
+        "path": "${{ runner.temp }}/ghcp-patched-typecheck/load-smoke-transfer/payload.tar\n${{ runner.temp }}/ghcp-patched-typecheck/load-smoke-transfer/transfer.json\n",
+        "if-no-files-found": "error", "retention-days": "1", "include-hidden-files": "false"}
+    assert list(selected).index("manifest") < list(selected).index("payload") < list(selected).index("payload_artifact")
+    assert "ghcp_ahp_load_smoke.py pack" in selected["payload"]["run"]
+    assert '--bundle "$evidence/source/out-patched/vs/platform/agentHost/node/agentHostMain.js"' in selected["payload"]["run"]
+
+
+def test_load_smoke_is_separate_standard_runner_job_with_no_model_environment():
+    job = workflow()["jobs"]["patched-agent-host-load-smoke"]
+    assert set(job) == {"name", "needs", "if", "runs-on", "timeout-minutes", "permissions", "steps"}
+    assert job["name"] == "patched agent host model-free load smoke"
+    assert job["needs"] == "patched-codex-server-bundle"
+    assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "15"
+    assert job["permissions"] == {"contents": "read"}
+    selected = smoke_steps()
+    assert list(selected) == ["checkout", "python", "payload", "prepare", "smoke", "artifacts"]
+    for name in ("checkout", "python"):
+        assert selected[name] == typecheck_steps()[name]
+    assert {name: step["if"] for name, step in selected.items() if "if" in step} == {"artifacts": "always()"}
+    assert all("env" not in step and "continue-on-error" not in step for step in selected.values())
+
+
+def test_load_smoke_download_is_bound_to_the_same_run_producer_artifact_id():
+    selected = smoke_steps()["payload"]
+    assert selected["uses"] == "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131"
+    assert selected["with"] == {
+        "artifact-ids": "${{ needs.patched-codex-server-bundle.outputs.payload_artifact_id }}",
+        "merge-multiple": "true", "path": "${{ runner.temp }}/ghcp-load-transfer"}
+    command = smoke_steps()["prepare"]["run"]
+    assert "ghcp_ahp_load_smoke.py prepare" in command
+    assert '--transfer "$RUNNER_TEMP/ghcp-load-transfer"' in command
+    assert "curl" not in command and "npm" not in command
+
+
+def test_actual_load_is_in_net_and_pid_namespaces_without_capabilities_or_inherited_credentials():
+    command = smoke_steps()["smoke"]["run"]
+    for required in ('smoke_netns="$(readlink /proc/self/ns/net)"', 'smoke_pidns="$(readlink /proc/self/ns/pid)"',
+                     'timeout --signal=TERM --kill-after=10s 90s',
+                     'sudo -n unshare --mount --net --pid --fork --mount-proc --kill-child=KILL',
+                     '--bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs',
+                     '/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1',
+                     '"$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_load_smoke.py" run',
+                     '--outside-netns "$smoke_netns" --outside-pidns "$smoke_pidns"'):
+        assert required in command
+    assert command.count('ghcp_ahp_load_smoke.py" run') == 1
+    for forbidden in ("secrets.", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN", "workflow_dispatch", "createSession",
+                      "--authenticated-zero-turn", "--connection-only", "--execute-paid", "HOME=", "CODEX_HOME="):
+        assert forbidden not in command
+
+
+def test_load_smoke_artifact_contains_only_receipts_not_runtime_data_or_token_stores():
+    selected = smoke_steps()["artifacts"]
+    assert selected["uses"] == steps()["artifacts"]["uses"]
+    value = selected["with"]
+    assert value["name"] == "ghcp-patched-load-smoke-${{ github.run_id }}-${{ github.run_attempt }}"
+    expected = ["load-smoke.json", *patched.ARTIFACTS, "server-bundle-manifest.json", "transfer.json"]
+    assert value["path"].splitlines() == ["${{ runner.temp }}/ghcp-load-smoke-evidence/" + name for name in expected]
+    assert value["if-no-files-found"] == "error" and value["retention-days"] == "7" and value["include-hidden-files"] == "false"
+
+
+@pytest.mark.parametrize("job,name", [("bundle", "payload"), ("smoke", "prepare"), ("smoke", "smoke")])
+def test_load_smoke_shell_is_only_syntax_checked_on_nas_and_never_suppresses_errors(job, name):
+    command = (bundle_steps() if job == "bundle" else smoke_steps())[name]["run"]
+    assert command.startswith("set -euo pipefail\n")
+    assert "|| true" not in command and "set +e" not in command and "exit 0" not in command
+    result = subprocess.run(["/bin/bash", "-n"], input=command, capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
