@@ -1,6 +1,6 @@
 name: GHCP patched-runtime model-free tests
 
-# Offline contracts, builds and an isolated model-free import; no authentication/session request.
+# Offline contracts, builds and isolated no-auth readiness; no model or turn request.
 # Keep the original branch probe and its historical hash contracts untouched.
 on:
   push:
@@ -74,7 +74,7 @@ jobs:
             tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py \
             tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py \
             tests/test_ghcp_ahp_metadata_broker.py tests/test_ghcp_ahp_connection.py \
-            tests/test_ghcp_ahp_patchset.py tests/test_ghcp_ahp_load_smoke.py
+            tests/test_ghcp_ahp_patchset.py tests/test_ghcp_ahp_load_smoke.py tests/test_ghcp_ahp_readiness_smoke.py
       - id: results
         name: Require every expected case to pass without skips
         run: |
@@ -86,7 +86,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 1581, "workflow-guards.xml": 69}
+          expected = {"contracts.xml": 1651, "workflow-guards.xml": 74}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
@@ -109,6 +109,80 @@ jobs:
             ${{ runner.temp }}/ghcp-patched-ci/contracts.xml
             ${{ runner.temp }}/ghcp-patched-ci/workflow-guards.xml
             ${{ runner.temp }}/ghcp-patched-ci/test-counts.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  patched-agent-host-readiness-smoke:
+    name: patched agent host readiness smoke
+    needs: [patched-codex-server-bundle, patched-agent-host-load-smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - id: checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.11'
+      - id: payload
+        name: Receive the same-run byte-verified server bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          artifact-ids: ${{ needs.patched-codex-server-bundle.outputs.payload_artifact_id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/ghcp-readiness-transfer
+      - id: prepare
+        name: Prepare the unchanged public CLI and SDK pins, never authenticate or execute
+        run: |
+          set -euo pipefail
+          '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_readiness_smoke.py prepare \
+            --transfer "$RUNNER_TEMP/ghcp-readiness-transfer" --output "$RUNNER_TEMP/ghcp-readiness"
+      - id: readiness
+        name: Observe exact bootstrap-fork readiness and stop at the no-auth session boundary
+        run: |
+          set -euo pipefail
+          umask 077
+          readiness_uid="$(id -u)"
+          readiness_gid="$(id -g)"
+          readiness_netns="$(readlink /proc/self/ns/net)"
+          readiness_pidns="$(readlink /proc/self/ns/pid)"
+          timeout --signal=TERM --kill-after=10s 240s \
+            sudo -n unshare --mount --net --pid --fork --mount-proc --kill-child=KILL \
+            /bin/bash -c 'set -euo pipefail; ip link set lo up; exec "$@"' readiness-isolation \
+            /usr/bin/setpriv --reuid="$readiness_uid" --regid="$readiness_gid" --clear-groups \
+              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+              GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+              RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
+              ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+              GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+              GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_readiness_smoke.py" run \
+              --prepared "$RUNNER_TEMP/ghcp-readiness" --evidence "$RUNNER_TEMP/ghcp-readiness-evidence" \
+              --outside-netns "$readiness_netns" --outside-pidns "$readiness_pidns"
+      - id: artifacts
+        name: Retain only model-free receipts and redacted observation JSON
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ghcp-patched-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-readiness-evidence/readiness-smoke.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/backend-startup.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/wire-capture.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/thread-policy.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/management-init.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/patched-build-receipt.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/patched-runtime-contract.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/patched-load-evidence.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/server-bundle-manifest.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/transfer.json
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: false
