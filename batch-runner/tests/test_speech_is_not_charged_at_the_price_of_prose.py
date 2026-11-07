@@ -1037,19 +1037,44 @@ def test_the_speech_rows_written_since_the_split_carry_the_counts():
     it is visible, in ``test_the_nine_exp035_shards_verify_as_published.py``,
     not here.
     """
-    post_split = [
-        row
-        for _, rows in _committed_audio_ledgers()
+    # Every grade that lands with speech in it adds rows here, so the exact
+    # figures are held on the exp035 shard ledgers they were measured on, which
+    # are published and never rewritten; everything else is held per row
+    # (owner decision 2026-11-07: a legitimate new grade must not turn this
+    # red, a wrong one still must). The total over all ledgers is a floor:
+    # nothing published disappears.
+    post_split_by_path = [
+        (path, row)
+        for path, rows in _committed_audio_ledgers()
         for row in rows
         if "audio" in str(row.get("resolved_model") or "").lower()
         and "audio_input_tokens" in row
     ]
-    assert len(post_split) == 38, (
-        f"{len(post_split)} committed speech rows now postdate the split, not 38"
+    post_split = [row for _, row in post_split_by_path]
+    # The published exp035 grade's own shard folder, by its full name: a later
+    # exp035 regrade (e35par, sharded or not) writes under another config hash
+    # and lands in `_diagnostic/`, so it can never be counted here.
+    exp035_shards = Path(__file__).resolve().parents[2] / "data/grades/_shards" / (
+        "exp035_codex_foundry_full220__judge_gpt-5_6-sol__exp035_codex_foundry_full220_v2_sol_max"
+        "__cfg_89820de9d9c4e2e3__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf"
+        "__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0__src_fd0db9d9d78d6d54__v2.2"
     )
-    assert sum(row["audio_input_tokens"] for row in post_split) == 11399
+    assert exp035_shards.is_dir(), f"exp035's published shard ledgers are gone: {exp035_shards}"
+    exp035 = [row for path, row in post_split_by_path if path.parent == exp035_shards]
+    assert len(exp035) == 38, (
+        f"{len(exp035)} speech rows in exp035's shard ledgers postdate the split, not 38"
+    )
+    assert sum(row["audio_input_tokens"] for row in exp035) == 11399
+    assert len(post_split) >= 38, (
+        f"{len(post_split)} committed speech rows postdate the split; a published one disappeared"
+    )
 
     for row in post_split:
+        # The split means the input count was captured, as a number (the sum
+        # above needed that of every row when it covered every ledger).
+        assert type(row["audio_input_tokens"]) is int and row["audio_input_tokens"] >= 0, (
+            f"a post-split speech row carries audio_input_tokens={row['audio_input_tokens']!r}"
+        )
         assert row.get("model_cost_usd") is None, (
             "a speech row acquired a price; gpt-audio-1.5 is unpriced on "
             "purpose and a number here would be prose rates charged to speech"

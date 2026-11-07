@@ -70,7 +70,7 @@ def test_one_approval_per_experiment_and_per_config_and_the_sol_batch_unchanged(
     assert len(set(configs)) == len(configs)
     sol = grading.EXP036_SOL_BATCH
     assert (sol.experiment_id, sol.config_name) == (grading.GRADED_EXPERIMENT_ID, grading.GRADING_CONFIG_NAME)
-    assert (sol.experiment_id, sol.ceiling_usd) == (controls.EXPERIMENT_ID, controls.CEILING_USD)
+    assert sol.ceiling_usd == controls.RUNS[sol.experiment_id].ceiling_usd
     assert (sol.solve_seed, sol.exclusive_experiment, sol.task_ids_sha256) == (
         grading.SOLVE_SEED_SOL_BATCH, True, None)
     assert PARITY.solve_seed == grading.SOLVE_SEED_NONE and PARITY.exclusive_experiment is False
@@ -86,6 +86,9 @@ def test_one_approval_per_experiment_and_per_config_and_the_sol_batch_unchanged(
 def test_the_registry_keeps_its_own_rules():
     assert grading.approval_problems() == []
     assert grading.NAME_BUDGET_CHARACTERS == 36
+    # check_grade_writers finds a pair's grades by its raw config name.
+    assert all(step8._config_name_slug(approval.config_name) == approval.config_name
+               for approval in grading.APPROVALS)
 
 
 @pytest.mark.parametrize("entries, problem", [
@@ -97,6 +100,14 @@ def test_the_registry_keeps_its_own_rules():
      "past 36 characters"),
     (lambda: (grading.EXP036_SOL_BATCH, dataclasses.replace(PARITY, approved=None)),
      "a ceiling without an approval"),
+    # Step 8 names the grade after the config name's slug; check_grade_writers
+    # matches the raw name, so the two must be one string.
+    (lambda: (grading.EXP036_SOL_BATCH, dataclasses.replace(PARITY, config_name="e35 par")),
+     "not its own grade-file slug"),
+    (lambda: (grading.EXP036_SOL_BATCH, dataclasses.replace(PARITY, config_name="e35par*")),
+     "not its own grade-file slug"),
+    (lambda: (grading.EXP036_SOL_BATCH, dataclasses.replace(PARITY, config_name=".e35par")),
+     "not its own grade-file slug"),
     (lambda: (grading.EXP036_SOL_BATCH, dataclasses.replace(PARITY, ceiling_usd=None)),
      "an approval without a positive ceiling"),
     (lambda: (grading.EXP036_SOL_BATCH, dataclasses.replace(PARITY, ceiling_usd=Decimal("0"))),

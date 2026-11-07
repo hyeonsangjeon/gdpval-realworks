@@ -63,20 +63,70 @@ def check_pair(published: dict[str, Any], regrade: dict[str, Any]) -> None:
         raise SystemExit("the regrade's tasks are not in the published task order")
 
 
-#: Why a task never reached the judge, by the step 2 error_category its
-#: published self_report.json row carries (observability.error_category).
-INFRASTRUCTURE = {"rate_limited", "transport_error", "runtime_unavailable", "turn_start_failed", "timeout"}
+# -- why a task scored 0 ----------------------------------------------------
+#
+# The one cause table for a zero on a fixed denominator. scripts/
+# sol_stage_readout.py loads this file for it, so a parity record and a Sol
+# stage readout name the same zero the same way. The grade row's error is read
+# first: a refusal or any other failure on the grader's side is the grader's,
+# whatever the solve did. Otherwise the step 2 error_category of the task's
+# published self_report.json row (observability.error_category) says why the
+# judge had nothing to see.
+
+#: Every cause zero_cause_of can return.
+ZERO_CAUSES = ("grader_refusal", "grader_other", "content_filter", "usd_gate", "sol_gate", "turn_timeout",
+               "infrastructure", "unclassified_failure", "model_other")
+#: The grade-row error that means the solve left nothing to grade; the solve
+#: side then says why.
+NOTHING_TO_GRADE = frozenset({"no_deliverables"})
+#: sol_batch_controls.USD_CEILING_REACHED: the solve gate refused the attempt
+#: because the run's solve budget was spent.
+USD_GATE = frozenset({"usd_ceiling_reached"})
+#: sol_batch_controls.WINDOW_MISMATCH and GATE_UNVERIFIED: the Sol harness
+#: refused the attempt before it started (the served context window was not
+#: 1,000,000 earlier in the run, or the gate could not read the task's ledger
+#: rows). Neither is the model's; both are counted with infrastructure.
+SOL_GATE = frozenset({"sol_batch_context_window_mismatch", "sol_batch_gate_unverified"})
+#: Causes whose last attempt never started: on a fixed denominator they are
+#: 0, but they are no sample of what an attempt costs or takes.
+NOT_ATTEMPTED = frozenset({"usd_gate", "sol_gate"})
+#: The provider's or the runner's faults, not the model's (core/execution_errors.py
+#: and core/codex_runner.py vocabularies).
+INFRASTRUCTURE = frozenset({"rate_limited", "turn_start_failed", "runtime_unavailable", "runtime_start_failed",
+                            "session_start_failed", "transport_error", "workspace_error", "out_of_memory"})
+#: The runner's fallback when a failure names no cause: reported apart, never
+#: counted for or against the model.
+UNCLASSIFIED = frozenset({"turn_failed", "execution_error"})
+#: A turn that ran past its wall clock. Either side's (a slow deployment or a
+#: long answer), so it is neither infrastructure nor the model's and is
+#: reported on its own.
+TURN_TIMEOUT = frozenset({"timeout"})
+
+
+def zero_cause_of(grade_error: Any, error_category: Any) -> str:
+    """Why a task the judge did not mark scored 0, as one of :data:`ZERO_CAUSES`."""
+    if grade_error == "selection_error":
+        return "grader_refusal"
+    if grade_error and grade_error not in NOTHING_TO_GRADE:
+        return "grader_other"
+    if error_category == "content_filtered":
+        return "content_filter"
+    if error_category in USD_GATE:
+        return "usd_gate"
+    if error_category in SOL_GATE:
+        return "sol_gate"
+    if error_category in TURN_TIMEOUT:
+        return "turn_timeout"
+    if error_category in INFRASTRUCTURE:
+        return "infrastructure"
+    if error_category in UNCLASSIFIED:
+        return "unclassified_failure"
+    # A success that left nothing, a model mismatch, or no category at all.
+    return "model_other"
 
 
 def zero_cause(row: dict[str, Any], categories: dict[str, str]) -> str:
-    if row.get("error") == "selection_error":
-        return "grader_refusal"
-    category = categories.get(row["task_id"])
-    if category == "content_filtered":
-        return "content_filter"
-    if category in INFRASTRUCTURE:
-        return "infrastructure"
-    return "other_model_side" if category else "unknown"
+    return zero_cause_of(row.get("error"), categories.get(row["task_id"]))
 
 
 def headline(rows: list[dict[str, Any]], categories: dict[str, str] | None = None) -> dict[str, Any]:

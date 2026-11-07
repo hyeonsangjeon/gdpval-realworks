@@ -276,32 +276,54 @@ test('the published headline is passed through untouched when the rows disagree'
 
 // ── the corpus itself ─────────────────────────────────────────────────────
 
-test('every grade file the aggregator reads is measured, and exactly four disagree', async () => {
-  // The natural negative control: four known positives against sixteen
-  // known negatives, on the real published data rather than on fixtures.
+// The one published file the aggregator projects by another path: the pre-1.x
+// legacy dummy, which has no headline to measure.
+const PROJECTED_ELSEWHERE = ['dummy_gpt5_baseline.json'];
+
+test('every grade file the aggregator reads is measured, and only the four known files disagree', async () => {
+  // The natural negative control: four known positives against every other
+  // file as a known negative, on the real published data rather than on
+  // fixtures.
+  //
+  // Per file, not a count (owner decision 2026-11-07). This used to pin the
+  // number of measured files (18, 19, then 20), so every legitimate grade that
+  // landed on `main` turned it red until somebody recounted, and the count
+  // itself could not say which file was wrong. Now every file must be
+  // measured and supported by its rows, except the four known 1.0 files, which
+  // must stay flagged exactly as before; a new file that is unmeasured, has no
+  // rows to support its headline, or disagrees with them fails by name. The
+  // floors only say nothing published disappeared: twenty-one files, twenty
+  // measured, when they were set.
   const files = (await readdir(GRADES_DIR))
     .filter((name) => name.endsWith('.json'))
     .sort();
-  assert.ok(files.length >= 19, `expected the published corpus, found ${files.length}`);
+  assert.ok(files.length >= 21, `expected the published corpus, found ${files.length}`);
 
   const flagged = [];
+  const unmeasured = [];
+  const unsupported = [];
   let measured = 0;
   for (const name of files) {
     const raw = JSON.parse(await readFile(join(GRADES_DIR, name), 'utf8'));
     const record = processGradesFile(join(GRADES_DIR, name), raw);
     const got = record.summary?.headline_support;
-    if (!got) continue; // the pre-1.x legacy dummy, projected by another path
+    if (!got) {
+      unmeasured.push(name);
+      continue;
+    }
     measured += 1;
     if (got.supported === false) flagged.push([record.schema_version, got.delta_pct]);
+    // `null` is "the comparison could not be made", which is not agreement —
+    // but only a defect when a numeric headline is published. An all-unscored
+    // grade (every task refused or undelivered) publishes no headline at all.
+    else if (got.supported !== true && Number.isFinite(raw?.summary?.openai_compat?.avg_score_pct)) {
+      unsupported.push(`${name}: supported ${got.supported}`);
+    }
   }
 
-  // Nineteen since exp035's merged grade landed on `main`, up from eighteen.
-  // The count is the tripwire; the control is `flagged`, and that stayed at
-  // the same four 1.0 files, so what grew is the negative side.
-  // Twenty since exp036's Sol grade (grade run 42039154052) landed on `main` on
-  // 2026-11-05: it is measured and supported, so the negative side grew again
-  // and `flagged` is the same four.
-  assert.equal(measured, 20, 'an item-level grade went unmeasured');
+  assert.deepEqual(unmeasured, PROJECTED_ELSEWHERE, 'an item-level grade went unmeasured');
+  assert.deepEqual(unsupported, [], 'a published headline has no scored rows to support it');
+  assert.ok(measured >= 20, `a measured grade file disappeared: ${measured} left`);
   assert.equal(flagged.length, 4, `expected the four known files, got ${flagged.length}`);
   // All four are 1.0, and all four are published LOW: the ungraded tasks were
   // counted as zeros, so the recomputed mean is above the headline every time.

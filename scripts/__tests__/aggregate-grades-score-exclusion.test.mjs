@@ -527,14 +527,24 @@ test('a schema the projection has never validated gets no run-level lift either'
   assert.ok(!record.summary.score_exclusion_lift);
 });
 
-test('fourteen of the twenty-one published files owe part of their headline to unread rubric', async () => {
-  // Fourteen known positives against seven known negatives, on the real data.
-  // Thirteen of twenty until exp036's Sol grade (grade run 42039154052) landed on
-  // `main` on 2026-11-05. Its lift is 6.81 points: three of its five tasks were
-  // never judged (a content filter and two selector refusals), so the unread
-  // rubric is a large share of what its headline divides by.
-  // An equality rather than a floor: a corpus that changes this should make
-  // somebody look at it, the same way the headline-support corpus check does.
+test('every published file says what its headline owes to unread rubric, and no payload claims a figure its rows do not support', async () => {
+  // Fourteen known positives against seven known negatives, on the real data,
+  // when this was last an equality. exp036's Sol grade (grade run 42039154052)
+  // made it fourteen of twenty-one on 2026-11-05: its lift is 6.81 points,
+  // because three of its five tasks were never judged (a content filter and two
+  // selector refusals), so the unread rubric is a large share of what its
+  // headline divides by.
+  //
+  // Per file, not a count (owner decision 2026-11-07). The equality turned red
+  // on every legitimate grade that landed on `main` until somebody recounted,
+  // and a recount cannot tell a correct new file from a wrong one. What made a
+  // count worth looking at is now asserted on each file instead: the lift is
+  // never negative and is read from the same rows as the headline; a payload
+  // that states its own full-denominator figure is checked against the rows
+  // and must agree, whether or not the record carries a lift; one that states
+  // nothing is reported as silence, never as agreement. The floors only say
+  // nothing published lost its lift or its claim: fourteen and two when they
+  // were set.
   const files = (await readdir(GRADES_DIR))
     .filter((name) => name.endsWith('.json'))
     .sort();
@@ -547,7 +557,21 @@ test('fourteen of the twenty-one published files owe part of their headline to u
     const raw = JSON.parse(await readFile(join(GRADES_DIR, name), 'utf8'));
     const record = processGradesFile(join(GRADES_DIR, name), raw);
     const got = record.summary?.score_exclusion_lift;
-    if (!got) continue;
+    const claimed = raw?.summary?.score_exclusions?.avg_score_pct_full_denominator;
+    if (!got) {
+      // No task's denominator moved, so the full-denominator mean is the mean
+      // of the rows. A payload that states another figure claims unread
+      // rubric the rows do not show. The tolerance is the aggregator's own
+      // (HEADLINE_ROW_TOLERANCE_PCT, 0.05) plus the half step of the
+      // two-decimal row mean it is compared with.
+      if (Number.isFinite(claimed)) {
+        const fromRows = record.summary?.headline_support?.avg_score_pct_from_rows;
+        assert.ok(Number.isFinite(fromRows) && Math.abs(claimed - fromRows) <= 0.055,
+          `${name}: the payload claims ${claimed} where its rows average ${fromRows} with no unread rubric`);
+        claiming += 1;
+      }
+      continue;
+    }
     withLift += 1;
 
     // Dividing by MORE rubric cannot raise a run's average any more than it
@@ -574,19 +598,21 @@ test('fourteen of the twenty-one published files owe part of their headline to u
     // recomputed one that are not the same number.
     assert.notEqual(got.payload_agrees, false,
       `${name}: a published payload claims a figure the rows do not support`);
+    // The three values are held to what each payload says, file by file: a
+    // payload that states the figure was checked (`true`), one that states
+    // nothing is silence (`null`). This replaces counting the claimants, which
+    // was there because the old equality could not see a `null` → `true` move.
+    assert.equal(got.payload_agrees, Number.isFinite(claimed) ? true : null,
+      `${name}: payload_agrees ${got.payload_agrees} for a payload that ${Number.isFinite(claimed) ? 'states' : 'does not state'} its own figure`);
     if (got.payload_agrees !== null) claiming += 1;
 
     worst = Math.max(worst, got.lift_pct);
   }
 
-  assert.equal(withLift, 14, `expected fourteen affected files, found ${withLift}`);
-  // The equality above stopped being able to see the `null` → `true` move once
-  // `false` became the only failing value, so count the claimants separately.
-  // Two today: exp035's merged grade and exp036's Sol grade, and both agree.
-  // This number rising is not a defect — it is the producer's #362 figure
-  // reaching more runs — but it should still be somebody's decision to write
-  // down rather than something that slid past.
-  assert.equal(claiming, 2, `expected two payloads to carry their own figure, found ${claiming}`);
+  assert.ok(withLift >= 14, `a published file lost its lift: ${withLift} affected files left`);
+  // exp035's merged grade and exp036's Sol grade, both agreeing. More is the
+  // producer's #362 figure reaching more runs, each one checked above.
+  assert.ok(claiming >= 2, `a published payload stopped carrying its own figure: ${claiming} left`);
   // exp998's three-task pro smoke: one task of three, 3.53 points of headline.
   // The 215-220 task runs move 0.14 to 0.53.
   assert.ok(worst >= 3.5, `the widest published run-level lift fell to ${worst}`);
