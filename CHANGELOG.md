@@ -22,7 +22,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   could pass if the count happened to match. Each now reads every file and
   checks its content: no amount beside real tokens and no $0 from a later
   writer beside real usage; every file but the legacy dummy has a cost block,
-  records contact and is measured; headlines are supported by their rows
+  records its usage counters and is measured (an all-unscored grade, which
+  publishes no headline and calls nobody, passes); headlines are supported by their rows
   except the four known 1.0 files, which stay flagged; lifts are non-negative;
   a payload's own full-denominator figure must agree with its rows, with or
   without a lift; speech rows stay unpriced. Exact figures stay where the data

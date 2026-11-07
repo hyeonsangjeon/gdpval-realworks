@@ -313,8 +313,12 @@ test('every grade file the aggregator reads is measured, and only the four known
     }
     measured += 1;
     if (got.supported === false) flagged.push([record.schema_version, got.delta_pct]);
-    // `null` is "the comparison could not be made", which is not agreement.
-    else if (got.supported !== true) unsupported.push(`${name}: supported ${got.supported}`);
+    // `null` is "the comparison could not be made", which is not agreement —
+    // but only a defect when a numeric headline is published. An all-unscored
+    // grade (every task refused or undelivered) publishes no headline at all.
+    else if (got.supported !== true && Number.isFinite(raw?.summary?.openai_compat?.avg_score_pct)) {
+      unsupported.push(`${name}: supported ${got.supported}`);
+    }
   }
 
   assert.deepEqual(unmeasured, PROJECTED_ELSEWHERE, 'an item-level grade went unmeasured');

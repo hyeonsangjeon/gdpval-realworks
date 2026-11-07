@@ -218,9 +218,12 @@ def test_the_sidecar_naming_scheme_is_past_NAME_MAX_for_six_grades():
         if len((grade.stem + suffix).encode()) > _MAX_LEDGER_NAME
     ]
 
-    assert len(over) == 6, (
-        f"{len(over)} grade files now have un-creatable ledger sidecars, not 6; "
-        "the naming scheme moved, or a new run landed past NAME_MAX"
+    # A floor, not a count (owner decision 2026-11-07): a legitimate new grade
+    # past the cliff must not turn this red. The loop below is the content
+    # check: a grade past the cliff never claims a ledger it could not create.
+    assert len(over) >= 6, (
+        f"{len(over)} grade files have un-creatable ledger sidecars, fewer than 6; "
+        "a published grade disappeared or the naming scheme moved"
     )
     for grade in over:
         payload = json.loads(grade.read_text(encoding="utf-8"))

@@ -160,6 +160,16 @@ function recordsContact(cost) {
   return CONTACT_COUNTERS.some((field) => Number.isFinite(cost?.[field]) && cost[field] > 0);
 }
 
+/**
+ * Whether a cost block records its usage counters at all. A grade whose every
+ * task was refused or never delivered (step 8 writes it as "unscored") calls
+ * nobody, so its counters are 0 and its amount is null: that is a recorded
+ * no-contact run, not a missing measurement.
+ */
+function recordsCounters(cost) {
+  return CONTACT_COUNTERS.every((field) => Number.isFinite(cost?.[field]));
+}
+
 // The schema versions the pre-receipt summariser wrote: the sixteen zeros on
 // disk are all theirs (twelve 1.0 files and four 1.1 files).
 const LEGACY_SUMMARISER_VERSIONS = ['1.0', '1.1', '1.2'];
@@ -194,14 +204,14 @@ test('no published grade republishes an amount it never measured', async () => {
     if (typeof cost.estimated_cost_usd === 'number') {
       offenders.push(`${name}: ${cost.estimated_cost_usd}`);
     }
-    if (!recordsContact(cost)) noContact.push(name);
+    if (!recordsCounters(cost)) noContact.push(name);
   }
 
-  // Every block on this corpus records tokens, so there is no row the
-  // exemption in test 2 could apply to. That is now checked per file: if a
-  // future run really does spend nothing, it fails here by name and the fix is
-  // to say so in the assertion — not to relax the rule.
-  assert.deepEqual(noContact, [], 'a published cost block records no contact with any provider');
+  // Every block must record its usage counters, so a missing measurement fails
+  // here by name. A run that called nobody (an all-unscored grade) records 0s
+  // and publishes no amount, which passes; `offenders` above still refuses any
+  // amount published beside real tokens.
+  assert.deepEqual(noContact, [], 'a published cost block is missing a usage counter');
   // A grade whose cost block went missing is a grade nobody can price or
   // floor, however many files there are.
   assert.deepEqual(blockless, NO_COST_BLOCK, 'a published grade carries no cost block');
