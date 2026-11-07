@@ -13,6 +13,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Stop failing the corpus tests when a legitimate grade lands (owner decision
+  2026-11-07: "이게 뭐 할 때마다 뭔가 빨개지면은 페일이라고 하는 게 말이 안 되잖아"). Five tests in four
+  files pinned how much had been published (files with a cost block, zeros on
+  disk, measured headlines, files with a score-exclusion lift and payloads
+  stating their own figure, committed post-split speech rows), so new grades
+  on `main` turned them red until someone recounted, while a wrong new file
+  could pass if the count happened to match. Each now reads every file and
+  checks its content: no amount beside real tokens and no $0 from a later
+  writer beside real usage; every file but the legacy dummy has a cost block,
+  records contact and is measured; headlines are supported by their rows
+  except the four known 1.0 files, which stay flagged; lifts are non-negative;
+  a payload's own full-denominator figure must agree with its rows, with or
+  without a lift; speech rows stay unpriced. Exact figures stay where the data
+  is fixed (exp035's 38 speech rows and 11,399 audio tokens, the 165 pre-split
+  rows, the four flagged deltas); totals are floors. Found by simulating the
+  exp036 complete-scope regrade, the e35par parity payload and a 25-task
+  exp037 grade with their ledgers, journals and analyses. Seals, grader
+  hashes, USD gates, sealed-payload lists and source pins are unchanged.
+
 - Stage GPT-5.6 Sol toward all 220 tasks (owner decisions 2 and 3,
   2026-11-06: "셋다 예" at 01:55 KST, the first 25 tasks first and the other
   195 only after a new approval; the ceiling "700으로 올려" at 12:30 KST).
