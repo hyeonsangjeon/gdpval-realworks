@@ -189,9 +189,11 @@ def _events(journal: Path) -> list[str]:
     return [record["event"] for record in _records(journal)]
 
 
-def _write_journal(path: Path, records: list[dict], *, experiment_id: str = grading.GRADED_EXPERIMENT_ID) -> Path:
+def _write_journal(path: Path, records: list[dict], *, experiment_id: str = grading.GRADED_EXPERIMENT_ID,
+                   config_name: str = grading.GRADING_CONFIG_NAME) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [{"event": "open", "schema": grading.JOURNAL_SCHEMA, "experiment_id": experiment_id}, *records]
+    lines = [{"event": "open", "schema": grading.JOURNAL_SCHEMA, "experiment_id": experiment_id,
+              "config_name": config_name}, *records]
     path.write_text(
         "".join(json.dumps({**record, "seq": index}, sort_keys=True) + "\n" for index, record in enumerate(lines)),
         encoding="utf-8",

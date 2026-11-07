@@ -13,6 +13,80 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Grade the files a reader would open instead of refusing the task (owner
+  decision 1, 2026-11-06). `core/deliverable_selector.py`:
+  - An email saved as `.eml` is a document. Criteria about the email, memo
+    or letter route to it the way they route to a Word file, and an email
+    never stands in for a requested Word file. `.msg` stays a support file.
+  - Where same-name renditions of one document in one folder left no
+    requested format and no single PDF, the other renditions are set aside
+    and the rest is selected by the unchanged rules. The rendition kept is
+    the one whose format the task's prompt or rubric names ("include a text
+    file called data_flow.txt" keeps the `.txt`), when exactly one is named
+    and the unchanged rules then grade it as a primary; a format the task
+    forbids ("not PDF") is not named. Otherwise a fixed format order
+    decides: the formats the renderer draws, then the other formats the
+    reader opens, then the legacy `.doc`, `.xls` and `.ppt`, then `.html`
+    pages, then `.msg`. Formats the grader cannot open (`.msg`, `.doc`,
+    `.xls`, `.ppt`) are never preferred by name. Files in other folders,
+    source code, archives, data files and cross-family pairs (a workbook
+    beside a prose file) are never set aside.
+    A build script beside the document stays a co-primary under those rules
+    (15d37511, aad21e4c, cebf301e), as it already is in 49 of the 142 `ok`
+    tasks of the published exp035 grade.
+  - An image the rubric scores as part of the deliverable ("saved as a JPG")
+    is graded beside the document and shown to visual and manifest criteria.
+  - One document beside companions of other kinds under other names is
+    graded with the companions as support, unless the task names their
+    format.
+
+  `core/tools/read_deliverable.py` reads an `.eml` decoded: headers, body and
+  an attachment list, and each attachment opens like an archive member. The
+  tool schemas the judge sees are unchanged. Offline replays: exp036
+  refusals 2 to 0; exp035 7 to 2 (0e386e32 and 7de33b48, code packages,
+  refused by design); gold-185 unchanged except 3baa0009, whose requested
+  chart image is now graded. Registered as a reviewed successor of the #794
+  grader seal: `gpt56_sol_grader_seal_20261106.json` chains to the untouched
+  20261030 record and admits exactly the two changed files, read by the new
+  `gpt56_pilot_grader_reseal.py`, with the source profile
+  `gpt56_sol_foundry_codex_pilot_source_20261106_selector_reseal.yaml`. The
+  20261030 record, its reader and every earlier profile are byte-identical.
+  Every grading config's source hash moves (exp036 `src_814d56797e9fc3dc` to
+  `src_6f8811acb9de0b81`), so a regrade writes a new file and nothing
+  published is overwritten. Merge with a merge commit: the record names the
+  selector commit.
+
+- Regrade the exp035 tasks whose deliverable selection changed, under their
+  own automatic USD stop (owner approval 2026-11-06).
+  `sol_batch_grading.APPROVALS` replaces the one hard-wired pair with a
+  registry of (experiment, grading config) pairs, each under its own
+  ceiling: `exp036_sol_fixed5` with `exp036_v2_sol_max` is unchanged (USD 200
+  for the solve run and its grade together), and
+  `exp035_codex_foundry_full220` with the new `e35par.yaml` grades only the
+  eight tasks (424 items) recorded in
+  `docs/run_records/exp035_parity_selection_20261106.json` and stops at
+  `EXP035_PARITY_CEILING_USD` (USD 200, raised by the owner so the run does
+  not stop midway; estimated about USD 62, p99 about USD 112, and 1 of
+  1,000,000 simulated runs passed 200). A pair can be registered without an
+  approval, which refuses it once its two YAML files are read, before
+  anything published or committed is; every journal is bound to the approval
+  that wrote it. An approved grade refuses step 8's `--tasks` and a non-zero
+  `--limit` (the dispatch inputs `tasks` and `tasks_limit`): the approval,
+  not the dispatch, defines the scope its ceiling pays for. That refusal is
+  in `sol_batch_grading.py run` only: neither preflight step receives those
+  inputs, so a narrowed exp036 dispatch passes the free dry run and is
+  refused in the paid job after its login, before anything is spent
+  (e35par's pinned task list already fails a narrowed dry run). Operator
+  rule: never narrow an approved pair; dispatch it with `tasks` empty and
+  `tasks_limit` 0. Adds
+  `scripts/selection_diff_against_grade.py` (which tasks of a published
+  grade the current selector shows the judge differently) and
+  `scripts/merge_parity_regrade.py` (a run record that reports a diagnostic
+  regrade beside the published grade it does not replace, with both
+  denominators and zeros by cause). The selection record seals the published
+  exp035 grade's bytes. The exp035 template and the exp036 config are
+  unchanged, and no paid call was made.
+
 - Run GPT-5.6 Sol (Max, 1M requested) on the fixed five through the generic
   batch path (owner approval 2026-11-05). Adds:
   - `exp036_sol_fixed5`: exp033 tasks and prompt, exp035 retries, office

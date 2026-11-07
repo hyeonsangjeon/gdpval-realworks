@@ -527,14 +527,18 @@ test('a schema the projection has never validated gets no run-level lift either'
   assert.ok(!record.summary.score_exclusion_lift);
 });
 
-test('thirteen of the twenty published files owe part of their headline to unread rubric', async () => {
-  // Thirteen known positives against seven known negatives, on the real data.
+test('fourteen of the twenty-one published files owe part of their headline to unread rubric', async () => {
+  // Fourteen known positives against seven known negatives, on the real data.
+  // Thirteen of twenty until exp036's Sol grade (grade run 42039154052) landed on
+  // `main` on 2026-11-05. Its lift is 6.81 points: three of its five tasks were
+  // never judged (a content filter and two selector refusals), so the unread
+  // rubric is a large share of what its headline divides by.
   // An equality rather than a floor: a corpus that changes this should make
   // somebody look at it, the same way the headline-support corpus check does.
   const files = (await readdir(GRADES_DIR))
     .filter((name) => name.endsWith('.json'))
     .sort();
-  assert.ok(files.length >= 20, `expected the published corpus, found ${files.length}`);
+  assert.ok(files.length >= 21, `expected the published corpus, found ${files.length}`);
 
   let withLift = 0;
   let claiming = 0;
@@ -575,13 +579,14 @@ test('thirteen of the twenty published files owe part of their headline to unrea
     worst = Math.max(worst, got.lift_pct);
   }
 
-  assert.equal(withLift, 13, `expected thirteen affected files, found ${withLift}`);
+  assert.equal(withLift, 14, `expected fourteen affected files, found ${withLift}`);
   // The equality above stopped being able to see the `null` → `true` move once
   // `false` became the only failing value, so count the claimants separately.
-  // One today, exp035's merged grade. This number rising is not a defect — it
-  // is the producer's #362 figure reaching more runs — but it should still be
-  // somebody's decision to write down rather than something that slid past.
-  assert.equal(claiming, 1, `expected one payload to carry its own figure, found ${claiming}`);
+  // Two today: exp035's merged grade and exp036's Sol grade, and both agree.
+  // This number rising is not a defect — it is the producer's #362 figure
+  // reaching more runs — but it should still be somebody's decision to write
+  // down rather than something that slid past.
+  assert.equal(claiming, 2, `expected two payloads to carry their own figure, found ${claiming}`);
   // exp998's three-task pro smoke: one task of three, 3.53 points of headline.
   // The 215-220 task runs move 0.14 to 0.53.
   assert.ok(worst >= 3.5, `the widest published run-level lift fell to ${worst}`);

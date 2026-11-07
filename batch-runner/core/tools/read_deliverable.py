@@ -324,6 +324,7 @@ _EXT_KIND = {
     ".mp4": "video", ".mov": "video", ".webm": "video",
     ".mkv": "video", ".avi": "video",
     ".zip": "zip",
+    ".eml": "email",
 }
 
 
@@ -621,6 +622,182 @@ def open_archive_member(p: Path, member: str) -> Any:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+# ── Email messages ───────────────────────────────────────────────────
+
+#: An ``.eml`` is RFC 5322 text, so the sniff in ``_kind_of`` would call it
+#: text and hand a judge the raw MIME: quoted-printable soft line breaks that
+#: split words and well IDs ("Farme=\nr City", "WL4=\n7646"), ``=E2=80=94``
+#: escapes, both alternative bodies, and every attachment as base64. In
+#: exp036's one email that is 26,449 characters, of which the message a person
+#: reads is 1,927 and the base64 of the attached workbook about 20,000. A mail
+#: client shows the decoded message and its attachment list, so that is what
+#: is returned here, and an attachment opens the way an archive member does.
+_EMAIL_MEMBER_HINT = (
+    "open an attachment with scope={\"member\": \"<name>\"} on any op, "
+    "e.g. read_content for a .xlsx"
+)
+_EMAIL_HEADERS = ("From", "To", "Cc", "Date", "Subject")
+_HTML_BLOCK_TAGS = frozenset({
+    "p", "div", "br", "li", "tr", "table", "ul", "ol", "blockquote",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+})
+
+
+def _email_message(p: Path) -> Any:
+    from email import message_from_binary_file, policy
+
+    with p.open("rb") as handle:
+        return message_from_binary_file(handle, policy=policy.default)
+
+
+def _email_part_text(part: Any) -> str:
+    try:
+        content = part.get_content()
+    except Exception:  # noqa: BLE001 - unknown charset or broken transfer encoding
+        content = (part.get_payload(decode=True) or b"").decode("utf-8", errors="replace")
+    return content if isinstance(content, str) else ""
+
+
+def _html_to_text(markup: str) -> str:
+    """Visible text of an HTML body, one block per line; no markup, no CSS."""
+    from html.parser import HTMLParser
+
+    class _Text(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.parts: List[str] = []
+            self.hidden = 0
+
+        def handle_starttag(self, tag: str, attrs: Any) -> None:
+            if tag in ("script", "style", "head"):
+                self.hidden += 1
+            elif tag == "li":
+                self.parts.append("\n- ")
+            elif tag in _HTML_BLOCK_TAGS:
+                self.parts.append("\n")
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag in ("script", "style", "head"):
+                self.hidden = max(0, self.hidden - 1)
+            elif tag in _HTML_BLOCK_TAGS:
+                self.parts.append("\n")
+
+        def handle_data(self, data: str) -> None:
+            if not self.hidden:
+                self.parts.append(data)
+
+    parser = _Text()
+    parser.feed(markup)
+    parser.close()
+    lines = [" ".join(line.split()) for line in "".join(parser.parts).splitlines()]
+    kept: List[str] = []
+    for line in lines:
+        if line or (kept and kept[-1]):
+            kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _email_parts(message: Any) -> Tuple[Any, List[Tuple[str, Any]]]:
+    """The body a mail client shows as text, and the attachments by unique name."""
+    body = message.get_body(preferencelist=("plain", "html"))
+    attachments: List[Tuple[str, Any]] = []
+    taken: set = set()
+    for part in message.walk():
+        if part.is_multipart() or part is body:
+            continue
+        filename = part.get_filename()
+        if not filename and part.get_content_disposition() != "attachment":
+            continue  # the other rendering of the body, not an attachment
+        name = Path(str(filename or "")).name
+        if name in ("", ".", ".."):
+            name = "attachment"
+        stem, suffix, n = Path(name).stem, Path(name).suffix, 1
+        while name in taken:
+            n += 1
+            name = f"{stem} ({n}){suffix}"
+        taken.add(name)
+        attachments.append((name, part))
+    return body, attachments
+
+
+def _email_attachment_rows(attachments: List[Tuple[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": name,
+            "content_type": part.get_content_type(),
+            "kind": _EXT_KIND.get(Path(name).suffix.lower(), "unknown"),
+            "size": len(part.get_payload(decode=True) or b""),
+        }
+        for name, part in attachments
+    ]
+
+
+def _inspect_email(p: Path) -> Dict[str, Any]:
+    message = _email_message(p)
+    body, attachments = _email_parts(message)
+    return {
+        "headers": {h: str(message.get(h)).strip() for h in _EMAIL_HEADERS if message.get(h)},
+        "body_content_type": body.get_content_type() if body is not None else None,
+        "attachment_count": len(attachments),
+        "attachments": _email_attachment_rows(attachments),
+        "note": _EMAIL_MEMBER_HINT,
+    }
+
+
+def _read_email_text(p: Path, _scope: Dict[str, Any]) -> str:
+    message = _email_message(p)
+    body, attachments = _email_parts(message)
+    lines = ["[Email message]"]
+    lines += [f"{h}: {str(message.get(h)).strip()}" for h in _EMAIL_HEADERS if message.get(h)]
+    lines.append("")
+    if body is None:
+        lines.append("[This message has no text body.]")
+    else:
+        text = _email_part_text(body)
+        if body.get_content_type() == "text/html":
+            text = _html_to_text(text)
+        lines.append(text.strip())
+        if body.get_content_type() == "text/plain" and any(
+            part.get_content_type() == "text/html"
+            and part is not body
+            and not part.get_filename()
+            for part in message.walk()
+        ):
+            lines += ["", "[The message also carries an HTML rendering of this "
+                          "body; the plain-text rendering is shown.]"]
+    lines += ["", f"[Attachments: {len(attachments)}]"]
+    lines += [
+        f"{row['name']} | {row['kind']} | {row['size']} bytes"
+        for row in _email_attachment_rows(attachments)
+    ]
+    if attachments:
+        lines.append(_EMAIL_MEMBER_HINT)
+    return "\n".join(lines)
+
+
+@contextmanager
+def open_email_attachment(p: Path, member: str) -> Any:
+    """One attachment on disk, under its own name, for the length of one op.
+
+    Looked up by the exact name the listing shows, so there is nothing a
+    caller can name that is not an attachment of this message.
+    """
+    _body, attachments = _email_parts(_email_message(p))
+    named = dict(attachments)
+    if member not in named:
+        raise InvalidScope(
+            f"no attachment {member!r} in message; attachments: {list(named)[:20]}"
+        )
+    data = named[member].get_payload(decode=True) or b""
+    temp_dir = tempfile.mkdtemp(prefix="gdpval-eml-")
+    try:
+        target = Path(temp_dir) / Path(member).name
+        target.write_bytes(data)
+        yield target
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def _orientation(width_pt: float, height_pt: float) -> str:
     if width_pt > height_pt:
         return "landscape"
@@ -758,6 +935,8 @@ def _op_inspect_structure(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
             base["video"] = _inspect_video(p)
         elif kind == "zip":
             base.update(_inspect_zip(p))
+        elif kind == "email":
+            base.update(_inspect_email(p))
         elif kind == "notebook":
             base.update(_inspect_notebook(p))
         # txt/csv/image: size + kind only
@@ -1317,6 +1496,8 @@ def has_extractable_text(path: Union[str, Path]) -> Optional[bool]:
             return bool(_read_xlsx_text(p, {}).strip())
         if kind in ("txt", "csv"):
             return bool(p.read_text(encoding="utf-8", errors="replace").strip())
+        if kind == "email":
+            return bool(_read_email_text(p, {}).strip())
         if kind == "notebook":
             return bool(_read_notebook_text(p, {}).strip())
         if kind == "video":
@@ -1508,6 +1689,8 @@ def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
         text = _read_notebook_text(p, scope)
     elif kind == "zip":
         text = _read_zip_text(p, scope)
+    elif kind == "email":
+        text = _read_email_text(p, scope)
     else:
         route = _NON_TEXT_READ_ROUTES.get(kind)
         note = "this file holds no text"
@@ -2707,15 +2890,17 @@ def read_deliverable(
         # extraction happens here rather than inside each op: `probe_audio` on
         # a WAV inside an archive is `probe_audio` on a WAV.
         if "member" in scope:
-            if _kind_of(resolved) != "zip":
+            container = _kind_of(resolved)
+            if container not in ("zip", "email"):
                 raise InvalidScope(
                     f"scope key 'member' is only valid on a zip archive, "
-                    f"not on a {_kind_of(resolved)} file"
+                    f"not on a {container} file"
                 )
             member = scope.pop("member")
             if not isinstance(member, str) or not member:
                 raise InvalidScope("scope key 'member' must be a non-empty string")
-            with open_archive_member(resolved, member) as member_path:
+            opener = open_email_attachment if container == "email" else open_archive_member
+            with opener(resolved, member) as member_path:
                 return _envelope_ok(fn(member_path, scope))
         data = fn(resolved, scope)
         return _envelope_ok(data)

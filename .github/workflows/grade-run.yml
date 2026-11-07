@@ -645,9 +645,11 @@ jobs:
           PY
 
       # The same check the paid job runs before its Azure login; see "Resolve
-      # combined solve+grade USD admission" there. Every other grade prints
-      # {"enabled": false}. The Sol batch reads its published solve spend
-      # anonymously and exits 4 if the remaining budget cannot hold a grade.
+      # combined solve+grade USD admission" there. A grade that no approval in
+      # sol_batch_grading.APPROVALS names prints {"enabled": false}. An
+      # approved pair is checked against its own ceiling (a Sol run with its
+      # published solve spend, read anonymously) and exits 4 if the remaining
+      # budget cannot hold a grade.
       - name: Check combined solve+grade USD admission (model-free)
         run: |
           set -euo pipefail
@@ -996,14 +998,17 @@ jobs:
               )
           PY
 
-      # Model-free and before any credential. For every grade but one it exits
-      # 0 and writes enabled=false, and Run grading calls step8_grade.py as
-      # before. For the GPT-5.6 Sol batch (exp036_sol_fixed5 graded with
-      # exp036_v2_sol_max.yaml) it writes enabled=true, and Run grading goes
-      # through sol_batch_grading.py, which holds solve and grade together to
-      # the owner's USD 200. It exits 4 here, before the OIDC login, if the
-      # published solve spend, the config, the grade file name or the
-      # remaining budget is inadmissible.
+      # Model-free and before any credential. A grade that no approval in
+      # sol_batch_grading.APPROVALS names exits 0 with enabled=false, and Run
+      # grading calls step8_grade.py as before. An approved pair writes
+      # enabled=true, and Run grading goes through sol_batch_grading.py, which
+      # holds every paid request to that approval's ceiling: a Sol run's solve
+      # and grade together (exp036_sol_fixed5 with exp036_v2_sol_max.yaml, the
+      # owner's USD 200), or a grading-only approval (the exp035 parity
+      # regrade, e35par.yaml). It exits 4 here, before the OIDC login, if the
+      # pair is not approved, or the published solve spend, the config or its
+      # pinned scope, the grade file name or the remaining budget is
+      # inadmissible.
       - name: Resolve combined solve+grade USD admission
         id: sol_usd
         run: |
@@ -1190,8 +1195,8 @@ jobs:
           # with it. 338 is the last value whose worst case (358.3min) still
           # lands inside the timeout on both the success and the failure path.
           GRADER_TIME_BUDGET_SEC: "20280"
-          # 'true' only for the Sol batch; see "Resolve combined solve+grade
-          # USD admission" above.
+          # 'true' only for an approved pair; see "Resolve combined
+          # solve+grade USD admission" above.
           SOL_COMBINED_USD: ${{ steps.sol_usd.outputs.enabled }}
         run: |
           cd batch-runner
@@ -1251,7 +1256,7 @@ jobs:
             exit "$RC"
           fi
 
-      # The Sol batch's grading journal: one per process, every reservation
+      # An approved grade's journal: one per process, every reservation
       # and settlement of this run's paid grading requests, and what the next
       # preflight adds to the committed total. Committed on every outcome,
       # because a budget stop exits 4 and fails Run grading, and that is the
@@ -1947,10 +1952,10 @@ jobs:
         # the sqlite3 is what the process was writing into as it went, so it
         # survives even a kill that never let the exporter run.
         #
-        # The Sol batch's combined USD journal goes up too: when it cannot be
-        # pushed, this copy is the only record of what the grade spent, and it
-        # must be committed under data/grades/_combined_usd before any new
-        # exp036 grade is dispatched.
+        # An approved grade's combined USD journal goes up too: when it cannot
+        # be pushed, this copy is the only record of what the grade spent, and
+        # it must be committed under data/grades/_combined_usd before any new
+        # grade of that experiment is dispatched.
         if: always() && inputs.dry_run == false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

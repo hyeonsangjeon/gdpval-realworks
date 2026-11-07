@@ -1,24 +1,44 @@
 #!/usr/bin/env python3
-"""Combined solve+grade USD admission for grading the GPT-5.6 Sol fixed-five batch.
+"""Owner-approved USD admissions for paid Sol Max grades, one per approved pair.
 
 grade-run.yml runs ``preflight`` for every generic grade, before any Azure
 login, and runs ``run`` in place of ``python step8_grade.py`` only when that
-preflight answered ``enabled=true``. It applies to exactly one pair: the
-experiment :data:`GRADED_EXPERIMENT_ID` graded with the config named
-:data:`GRADING_CONFIG_NAME`. Any other grade gets ``enabled=false`` and runs
-step 8 as before. Either half of the pair without the other is refused, so a
-copied config cannot grade the batch without the ceiling, and the batch cannot
-be graded by a config that the ceiling was not sized for.
+preflight answered ``enabled=true``. It applies only to the pairs in
+:data:`APPROVALS`: one experiment graded with one config, under one ceiling.
+Any other grade gets ``enabled=false`` and runs step 8 as before. The config
+half of a pair never grades another experiment, so a copied config cannot
+carry an approval elsewhere. Where an approval is ``exclusive_experiment``
+(the Sol batch), the experiment half is never graded by another config either,
+so the batch cannot be graded by a config its ceiling was not sized for.
 
-For that pair the owner's USD 200 (approved 2026-11-05) covers the solve run
-and its grade together. ``preflight`` seeds the grade's admission with what is
-already committed:
+:data:`EXP036_SOL_BATCH`: the owner's USD 200 (approved 2026-11-05) covers the
+solve run and its grade together. ``preflight`` seeds the grade's admission
+with what is already committed:
 
 * the solve spend that ``sol_batch_controls`` booked onto each published task
   row (self_report.json ``observability.budget_metrics``), cross-checked
   against a lower bound priced from the published cost_ledger.jsonl;
 * a fixed allowance for the step 6 narrative, which runs outside both ledgers;
 * every grading journal already committed for this experiment.
+
+:data:`EXP035_PARITY` (approved 2026-11-06): regrading only the exp035 tasks
+whose deliverable selection the reviewed selector changed, under the approved
+grading-only ceiling (:data:`EXP035_PARITY_CEILING_USD`). Its seed is every
+committed journal of that approval; there is no solve spend, because exp035's
+inference is not part of it.
+
+An entry whose ``approved`` is ``None`` registers a pair without admitting it:
+the pair is refused once its two YAML files are read, before anything
+published or committed is ("registered but not approved for spending"); its
+config grades no other experiment, an exclusive entry's experiment is graded
+by no other config (a non-exclusive entry's experiment with another config
+stays inert, like any grade no approval names), and no journal can claim it.
+:func:`approval_problems` holds every entry to the registry's rules.
+
+An approval defines the scope it pays for: the whole published run (the Sol
+batch) or the config's pinned task list (a grading-only approval). ``run``
+refuses step 8's ``--tasks`` and ``--limit``, which would grade a subset of it
+under the same ceiling.
 
 ``run`` then lets step 8 grade under a per-request admission that refuses any
 request whose reservation would carry that total past the ceiling. A refusal
@@ -42,7 +62,7 @@ at :691-692, and grading_request, unattributed, reserve, finish and abandon at
 identity check refuses if a future reseal moves that name.
 
 Top-level imports are the standard library and yaml only. Everything else is
-imported after :func:`applies` has said this grade is the Sol batch, so the
+imported after :func:`applies` has found this grade's approval, so the
 ``enabled=false`` path that every other paid grade now passes cannot fail on
 an import.
 """
@@ -67,11 +87,92 @@ from typing import Any, Callable, Iterator, Mapping, NoReturn, Sequence
 
 import yaml
 
-#: The one experiment this admission grades; equal to
-#: ``sol_batch_controls.EXPERIMENT_ID`` (a test holds the two together).
-GRADED_EXPERIMENT_ID = "exp036_sol_fixed5"
+SOLVE_SEED_SOL_BATCH = "sol_batch_controls"
+SOLVE_SEED_NONE = "none"
+
+
+@dataclass(frozen=True)
+class Approval:
+    """One owner-approved (experiment, grading config) pair and its USD ceiling.
+
+    With ``approved`` None the pair is registered but admits nothing yet: it is
+    refused once the experiment YAML and the config are read, before anything
+    published or committed is. Its config grades nothing else, and when
+    ``exclusive_experiment`` is set its experiment is graded by nothing else.
+    """
+
+    #: ``experiment.id`` in experiments/<id>.yaml; the YAML must be named after it.
+    experiment_id: str
+    #: ``config_name`` of the one grading config this approval admits.
+    config_name: str
+    #: The combined ceiling; None exactly when ``approved`` is None.
+    ceiling_usd: Decimal | None
+    #: SOLVE_SEED_SOL_BATCH: the ceiling also covers the solve run, seeded from
+    #: what sol_batch_controls booked. SOLVE_SEED_NONE: grading spend only.
+    solve_seed: str
+    #: True: no other config may grade this experiment (the Sol batch).
+    exclusive_experiment: bool
+    #: Pinned inference commit, or None when the dispatch names it.
+    inference_revision: str | None
+    #: step 8's ordered-task-ids SHA-256 of the config's pinned scope, or None
+    #: when the config pins none and the grade covers the whole published run.
+    task_ids_sha256: str | None
+    #: The owner's dated approval, or None: registered, not approved.
+    approved: str | None
+
+
+EXP036_SOL_BATCH = Approval(
+    experiment_id="exp036_sol_fixed5",
+    config_name="exp036_v2_sol_max",
+    ceiling_usd=Decimal("200"),
+    solve_seed=SOLVE_SEED_SOL_BATCH,
+    exclusive_experiment=True,
+    inference_revision=None,
+    task_ids_sha256=None,
+    approved="2026-11-05 owner: USD 200 for the exp036 solve run and its grade together",
+)
+#: The parity regrade's automatic stop: the owner's USD 200 of 2026-11-06,
+#: 12:20 KST ("한도 높여. 중간에 멈출 확률 제로로": raise the ceiling, make
+#: the chance of stopping midway zero). Priced at the Sol list meter from
+#: exp035's own token counts, the eight tasks' 424 items are expected to cost
+#: about USD 62 (p99 112); one draw in a million passed 200. This is the one
+#: place the figure lives, and test_sol_batch_grading_approvals pins it.
+EXP035_PARITY_CEILING_USD = Decimal("200")
+EXP035_PARITY = Approval(
+    experiment_id="exp035_codex_foundry_full220",
+    config_name="e35par",
+    ceiling_usd=EXP035_PARITY_CEILING_USD,
+    solve_seed=SOLVE_SEED_NONE,
+    exclusive_experiment=False,
+    inference_revision="dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0",
+    task_ids_sha256="b2ed72124660d52d20ffb3af870fa308a3ebdf3b2bbe4aed9dc495f240ac4851",
+    approved=("2026-11-06 owner (\"셋다 예\", 01:55 KST): regrade the exp035 tasks whose"
+              " deliverable selection the reviewed selector changed, for parity; stop automatically"
+              " at USD 200 (\"한도 높여. 중간에 멈출 확률 제로로\", 12:20 KST)"),
+)
+#: Every admission this module can open. One approval per experiment and per
+#: config, because an experiment's journals share one directory.
+#:
+#: There is no retired state. An entry cannot simply be removed or set back to
+#: unapproved once it has a committed journal: that journal would then have no
+#: owner and every later preflight of its experiment would refuse. Nor can an
+#: experiment take a second entry: the registry would be malformed, and that
+#: refuses every approved grade. So after the parity regrade exp035 cannot be
+#: graded under another ceiling (for example a single-hash regrade for the Sol
+#: 220 comparison) until a PR gives the registry a retired state that keeps
+#: journal ownership but admits nothing.
+APPROVALS: tuple[Approval, ...] = (EXP036_SOL_BATCH, EXP035_PARITY)
+#: The Sol batch; equal to ``sol_batch_controls.EXPERIMENT_ID`` (a test holds
+#: the two together).
+GRADED_EXPERIMENT_ID = EXP036_SOL_BATCH.experiment_id
 #: The one grading config allowed to grade it.
-GRADING_CONFIG_NAME = "exp036_v2_sol_max"
+GRADING_CONFIG_NAME = EXP036_SOL_BATCH.config_name
+#: Experiment id plus config name. For this judge and prompt version the
+#: longest file step 8 creates is 219 + that many bytes (the grade stem plus
+#: CHECKPOINT_TMP_EXTRA), so 36 keeps it within NAME_MAX. check_name_budget
+#: computes the real name before any login; approval_problems holds the
+#: registry to it.
+NAME_BUDGET_CHARACTERS = 36
 #: exp035's Sol Max config. The judge, rubric, grader, tpm_guard, prompt and
 #: output blocks were copied from it, and the reservation sizes below assume
 #: that judge; a drifted block would grade under a ceiling sized for another.
@@ -98,6 +199,7 @@ UNVERIFIED = "usd_ledger_unverified"
 UNKNOWN = "usd_usage_unverified"
 
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 _RUN_ID = re.compile(r"[1-9][0-9]{0,19}")
 _RUN_ATTEMPT = re.compile(r"[1-9][0-9]{0,5}")
 _MONEY_TEXT = re.compile(r"(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,8})?")
@@ -153,26 +255,101 @@ def _experiment_path(experiment_yaml_name: str) -> Path:
 # -- applicability ------------------------------------------------------------
 
 
-def applies(experiment_yaml_name: str, config_path: str | Path) -> bool:
-    """Whether this grade is the Sol batch graded by its own config.
+def approval_problems(approvals: Sequence[Approval] | None = None) -> list[str]:
+    """What breaks the registry's rules; empty when every entry keeps them.
+
+    One approval per experiment and per config (an experiment's journals share
+    one directory); experiment id plus config name within the name budget; a
+    ceiling exactly when there is an approval; a Sol batch entry exclusive to
+    its experiment, taking its scope from sol_batch_controls; a grading-only
+    entry pinned to one inference revision and one task scope.
+    """
+    entries = APPROVALS if approvals is None else tuple(approvals)
+    problems: list[str] = []
+    experiments: set[str] = set()
+    configs: set[str] = set()
+    for approval in entries:
+        if type(approval) is not Approval:
+            problems.append(f"{approval!r} is not an Approval")
+            continue
+        name = f"{approval.experiment_id}/{approval.config_name}"
+        if (not isinstance(approval.experiment_id, str) or not approval.experiment_id
+                or not isinstance(approval.config_name, str) or not approval.config_name):
+            problems.append(f"{name}: names no experiment or no config")
+            continue
+        if approval.experiment_id in experiments:
+            problems.append(f"{name}: a second approval for the experiment")
+        if approval.config_name in configs:
+            problems.append(f"{name}: a second approval for the config")
+        experiments.add(approval.experiment_id)
+        configs.add(approval.config_name)
+        if len(approval.experiment_id) + len(approval.config_name) > NAME_BUDGET_CHARACTERS:
+            problems.append(f"{name}: experiment id plus config name is past "
+                            f"{NAME_BUDGET_CHARACTERS} characters")
+        if approval.approved is None:
+            if approval.ceiling_usd is not None:
+                problems.append(f"{name}: a ceiling without an approval")
+        else:
+            if not isinstance(approval.approved, str) or not approval.approved.strip():
+                problems.append(f"{name}: the approval is not stated")
+            if (type(approval.ceiling_usd) is not Decimal or not approval.ceiling_usd.is_finite()
+                    or approval.ceiling_usd <= 0):
+                problems.append(f"{name}: an approval without a positive ceiling")
+        if approval.solve_seed == SOLVE_SEED_SOL_BATCH:
+            if (approval.exclusive_experiment is not True or approval.inference_revision is not None
+                    or approval.task_ids_sha256 is not None):
+                problems.append(f"{name}: a Sol batch approval is exclusive and takes its scope "
+                                "from sol_batch_controls")
+        elif approval.solve_seed == SOLVE_SEED_NONE:
+            if (not isinstance(approval.inference_revision, str)
+                    or not _FULL_SHA.fullmatch(approval.inference_revision)
+                    or not isinstance(approval.task_ids_sha256, str)
+                    or not _SHA256.fullmatch(approval.task_ids_sha256)):
+                problems.append(f"{name}: a grading-only approval pins its inference revision "
+                                "and task scope")
+        else:
+            problems.append(f"{name}: an unknown solve seed")
+    return problems
+
+
+def approval_for(experiment_yaml_name: str, config_path: str | Path) -> Approval | None:
+    """The approval this grade runs under, or ``None`` when no approval names it.
 
     Both files are read the way step 8 reads them. A file that cannot be read
-    refuses rather than answering ``False``: step 8 would fail on it too, and
-    refusing here keeps an unreadable exp036 file from slipping past as "not
-    the Sol batch".
+    refuses rather than answering ``None``: step 8 would fail on it too, and
+    refusing here keeps an unreadable approved file from slipping past as "not
+    approved". A config named by an approval that is handed another
+    experiment refuses, and so does an exclusive approval's experiment handed
+    another config.
     """
     if not isinstance(experiment_yaml_name, str) or not experiment_yaml_name:
         _refuse("experiment name must be a non-empty string")
     experiment = _load_yaml(_experiment_path(experiment_yaml_name), "experiment YAML")
     config = _load_yaml(Path(config_path), "grading config")
     meta = experiment.get("experiment") if isinstance(experiment, dict) else None
-    registered = isinstance(meta, dict) and meta.get("id") == GRADED_EXPERIMENT_ID
-    named = isinstance(config, dict) and config.get("config_name") == GRADING_CONFIG_NAME
-    if not registered and not named:
-        return False
-    if registered and named:
-        return True
-    _refuse("the Sol batch and exp036_v2_sol_max.yaml only grade each other")
+    declared = meta.get("id") if isinstance(meta, dict) else None
+    named = config.get("config_name") if isinstance(config, dict) else None
+    by_config = [approval for approval in APPROVALS if approval.config_name == named]
+    by_experiment = [approval for approval in APPROVALS
+                     if approval.exclusive_experiment and approval.experiment_id == declared]
+    if not by_config and not by_experiment:
+        return None
+    problems = approval_problems()
+    if problems:
+        _refuse(f"the approval registry is malformed: {problems[0]}")
+    for approval in (*by_config, *by_experiment):
+        if approval.experiment_id == declared and approval.config_name == named:
+            # Before anything published or committed is read.
+            if approval.approved is None:
+                _refuse(f"{approval.experiment_id} is registered but not approved for spending")
+            return approval
+    pair = (by_config or by_experiment)[0]
+    _refuse(f"{pair.experiment_id} and the {pair.config_name} config only grade each other")
+
+
+def applies(experiment_yaml_name: str, config_path: str | Path) -> bool:
+    """Whether an approval in :data:`APPROVALS` holds this grade's USD admission."""
+    return approval_for(experiment_yaml_name, config_path) is not None
 
 
 # -- the committed floor ------------------------------------------------------
@@ -256,26 +433,32 @@ def preflight(
     inference_revision: str,
     shard_count: int,
 ) -> Seed | None:
-    """The committed floor for the Sol batch's grade, or ``None`` for any other grade.
+    """The committed floor for an approved grade, or ``None`` for any other grade.
 
-    Model-free: it reads the two YAML files, the template, the published
-    self_report.json and cost_ledger.jsonl (anonymously) and the committed
-    grading journals. It refuses before any OIDC login when the pair, the
-    config, the file name or the remaining budget is inadmissible.
+    Model-free: it reads the two YAML files, the template, the committed
+    grading journals and, for the Sol batch, the published self_report.json
+    and cost_ledger.jsonl (anonymously). It refuses before any OIDC login when
+    the pair, the config, the scope, the file name or the remaining budget is
+    inadmissible.
     """
-    if not applies(experiment_yaml_name, config_path):
+    approval = approval_for(experiment_yaml_name, config_path)
+    if approval is None:
         return None
-    import sol_batch_controls as controls
     import step8_grade as step8
 
-    if controls.EXPERIMENT_ID != GRADED_EXPERIMENT_ID:
-        _refuse("sol_batch_controls grades a different experiment")
+    # Every journal of one approval lands in one directory named after the
+    # experiment YAML; an alias YAML declaring the same id would open a second
+    # directory and hide the first one's spend from this sum.
+    if experiment_yaml_name != approval.experiment_id:
+        _refuse("an approved experiment is graded under its own YAML name only")
     # One process owns the admission. N shards would each see the whole
     # remaining budget.
     if type(shard_count) is not int or shard_count != 1:
-        _refuse("the Sol batch is graded by one unsharded process")
+        _refuse("an approved grade is graded by one unsharded process")
     if not isinstance(inference_revision, str) or not _FULL_SHA.fullmatch(inference_revision):
         _refuse("the inference revision must be a full 40-character lowercase HF commit")
+    if approval.inference_revision is not None and inference_revision != approval.inference_revision:
+        _refuse("the dispatch names another inference revision than the approval")
 
     experiment = _load_yaml(_experiment_path(experiment_yaml_name), "experiment YAML")
     config = _load_yaml(Path(config_path), "grading config")
@@ -290,34 +473,44 @@ def preflight(
         if block not in config or block not in template or config[block] != template[block]:
             _refuse(f"grading config block {block!r} differs from the template")
     rerun = config.get("rerun_identity")
-    if rerun is not None:
-        if (not isinstance(rerun, dict) or rerun.get("experiment_id") != GRADED_EXPERIMENT_ID
+    if approval.task_ids_sha256 is None:
+        if rerun is not None:
+            if (not isinstance(rerun, dict) or rerun.get("experiment_id") != approval.experiment_id
+                    or rerun.get("inference_revision") != inference_revision):
+                _refuse("the config's rerun_identity names another experiment or revision")
+    else:
+        # The ceiling was sized for one pinned scope; a config that pins any
+        # other list, or none, is not the grade that was approved.
+        if (not isinstance(rerun, dict) or rerun.get("experiment_id") != approval.experiment_id
                 or rerun.get("inference_revision") != inference_revision):
             _refuse("the config's rerun_identity names another experiment or revision")
+        task_ids = rerun.get("task_ids")
+        if (not isinstance(task_ids, list) or not task_ids
+                or any(not isinstance(task_id, str) for task_id in task_ids)
+                or rerun.get("expected_task_count") != len(task_ids)
+                or step8._ordered_task_ids_sha256(task_ids) != approval.task_ids_sha256):
+            _refuse("the config's pinned task scope is not the approved scope")
 
     check_name_budget(step8, config, config_path, experiment_yaml_name, inference_revision)
 
-    try:
-        repo_id = experiment["data"]["source"]
-    except (KeyError, TypeError):
-        _refuse("the experiment YAML names no data.source")
-    solve_usd, floor, status = published_solve(repo_id, inference_revision)
+    # Everything local before anything is fetched.
     try:
         slug = step8._experiment_path_slug(experiment_yaml_name)
     except ValueError:
         _refuse("the experiment name is not a single grade-file component")
-    prior, journals = prior_grading(step8._repo_root(), slug)
+    prior, journals = prior_grading(step8._repo_root(), slug, approval)
+    solve_usd, floor, status, narrative = _solve_seed(approval, experiment, inference_revision)
     seed = Seed(
-        experiment_id=GRADED_EXPERIMENT_ID,
-        config_name=GRADING_CONFIG_NAME,
+        experiment_id=approval.experiment_id,
+        config_name=approval.config_name,
         inference_revision=inference_revision,
         solve_usd=solve_usd,
         published_ledger_floor_usd=floor,
         published_ledger_status=status,
-        narrative_allowance_usd=controls.NARRATIVE_ALLOWANCE_USD,
+        narrative_allowance_usd=narrative,
         prior_grading_usd=prior,
         prior_journals=tuple(journals),
-        ceiling_usd=controls.CEILING_USD,
+        ceiling_usd=approval.ceiling_usd,
     )
     if seed.committed_floor() >= seed.ceiling_usd:
         _refuse(
@@ -326,6 +519,34 @@ def preflight(
             CEILING,
         )
     return seed
+
+
+def _solve_seed(
+    approval: Approval, experiment: Any, inference_revision: str,
+) -> tuple[Decimal, Decimal, str, Decimal]:
+    """``(solve_usd, ledger_floor_usd, ledger_status, narrative_usd)`` already under the ceiling.
+
+    A grading-only approval holds no solve spend. The Sol batch holds what
+    sol_batch_controls booked onto the published task rows (cross-checked by
+    :func:`published_solve`) plus the step 6 narrative allowance, and its two
+    sides must name the same experiment and the same ceiling.
+    """
+    if approval.solve_seed == SOLVE_SEED_NONE:
+        return Decimal(0), Decimal(0), "not_applicable", Decimal(0)
+    if approval.solve_seed != SOLVE_SEED_SOL_BATCH:
+        _refuse("the approval names no known solve seed")
+    import sol_batch_controls as controls
+
+    if controls.EXPERIMENT_ID != approval.experiment_id:
+        _refuse("sol_batch_controls grades a different experiment")
+    if controls.CEILING_USD != approval.ceiling_usd:
+        _refuse("the solve and grade sides name different ceilings")
+    try:
+        repo_id = experiment["data"]["source"]
+    except (KeyError, TypeError):
+        _refuse("the experiment YAML names no data.source")
+    solve_usd, floor, status = published_solve(repo_id, inference_revision)
+    return solve_usd, floor, status, controls.NARRATIVE_ALLOWANCE_USD
 
 
 # -- the published solve spend ------------------------------------------------
@@ -489,8 +710,23 @@ def _reject_constant(name: str) -> NoReturn:
     _refuse(f"journal line carries {name}")
 
 
-def _read_journal(path: Path) -> tuple[Decimal, str]:
-    """``(spent_usd, sha256)`` of one committed journal; anything malformed refuses."""
+def _journal_owner(record: Mapping[str, Any]) -> Approval | None:
+    """The approved admission that wrote a journal, from its open line."""
+    for approval in APPROVALS:
+        if approval.approved is None:
+            continue
+        if (record.get("experiment_id") == approval.experiment_id
+                and record.get("config_name") == approval.config_name):
+            return approval
+    return None
+
+
+def _read_journal(path: Path, approval: Approval | None = None) -> tuple[Decimal, str]:
+    """``(spent_usd, sha256)`` of one committed journal; anything malformed refuses.
+
+    The open line names the approval that wrote it. With ``approval`` given,
+    a journal written under any other approval refuses too.
+    """
     if not JOURNAL_NAME.fullmatch(path.name):
         _refuse(f"{path.name} is not a combined USD journal name")
     try:
@@ -527,9 +763,11 @@ def _read_journal(path: Path) -> tuple[Decimal, str]:
             _refuse(f"{path.name} continues after its close line")
         event = record.get("event")
         if index == 0:
-            if (event != "open" or record.get("schema") != JOURNAL_SCHEMA
-                    or record.get("experiment_id") != GRADED_EXPERIMENT_ID):
-                _refuse(f"{path.name} is not a {GRADED_EXPERIMENT_ID} journal")
+            owner = _journal_owner(record)
+            if event != "open" or record.get("schema") != JOURNAL_SCHEMA or owner is None:
+                _refuse(f"{path.name} is not the journal of an approved admission")
+            if approval is not None and owner is not approval:
+                _refuse(f"{path.name} is not a {approval.experiment_id} / {approval.config_name} journal")
             continue
         ticket = record.get("ticket")
         if event == "reserve":
@@ -563,12 +801,15 @@ def journal_spend(path: Path | str) -> Decimal:
     return _read_journal(Path(path))[0]
 
 
-def prior_grading(repo_root: Path | str, slug: str) -> tuple[Decimal, list[dict[str, str]]]:
+def prior_grading(
+    repo_root: Path | str, slug: str, approval: Approval = EXP036_SOL_BATCH,
+) -> tuple[Decimal, list[dict[str, str]]]:
     """Every committed journal for this experiment, each counted once.
 
     Journals are per process and never overlap. step 8's own cost ledgers are
     never summed here: a resumed chunk re-imports the earlier chunk's rows, so
-    adding them would count those rows twice.
+    adding them would count those rows twice. A journal in the directory that
+    another approval wrote refuses: it is spend this sum cannot place.
     """
     root = Path(repo_root)
     directory = root / JOURNAL_DIR / slug
@@ -580,7 +821,7 @@ def prior_grading(repo_root: Path | str, slug: str) -> tuple[Decimal, list[dict[
     if not directory.exists():
         return total, journals
     for path in sorted(directory.glob("run-*.combined_usd.jsonl")):
-        spent, digest = _read_journal(path)
+        spent, digest = _read_journal(path, approval)
         total += spent
         journals.append({
             "path": path.relative_to(root).as_posix(),
@@ -931,7 +1172,13 @@ def _exit_status(code: Any) -> int:
 
 
 def run(step8_argv: Sequence[str], inference_revision: str) -> int:
-    """Run step 8 for the Sol batch under the combined admission; returns its exit code."""
+    """Run step 8 under its approval's USD admission; returns its exit code.
+
+    Refused from step 8's arguments alone, before any file is read: a dry
+    run, the paused pilot's workspace, a source other than local, more than
+    one shard, and any ``--tasks`` or non-zero ``--limit`` (the approval, not
+    the dispatch, defines the scope).
+    """
     import step8_grade as step8
 
     saved_argv = sys.argv
@@ -948,10 +1195,19 @@ def run(step8_argv: Sequence[str], inference_revision: str) -> int:
         if args.source != "local":
             _refuse("only --source local is graded")
         if args.shard_count != 1:
-            _refuse("the Sol batch is graded by one unsharded process")
+            _refuse("an approved grade is graded by one unsharded process")
+        # The approval defines the scope its ceiling was sized for: the whole
+        # published run, or the config's pinned task list. --tasks or --limit
+        # would grade a subset (a _diagnostic/ grade) and spend under that
+        # ceiling all the same. grade-run.yml passes tasks and tasks_limit
+        # here only, so this is where they are refused; nothing is read and no
+        # journal is opened first.
+        if args.tasks or args.limit:
+            _refuse("an approved grade covers its approval's whole scope; --tasks and --limit "
+                    "would grade a subset under its ceiling")
         seed = preflight(args.experiment_yaml_name, args.config, inference_revision, args.shard_count)
         if seed is None:
-            _refuse("this grade is not the Sol batch; run step8_grade.py directly")
+            _refuse("no approved USD admission holds this grade; run step8_grade.py directly")
         run_id = os.environ.get("GITHUB_RUN_ID", "")
         run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
         if not _RUN_ID.fullmatch(run_id) or not _RUN_ATTEMPT.fullmatch(run_attempt):
@@ -1033,7 +1289,7 @@ def _write_github_output(name: str, value: str) -> None:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sol_batch_grading.py",
-        description="Combined solve+grade USD admission for grading the Sol fixed-five batch.",
+        description="Owner-approved USD admissions for paid Sol Max grades (sol_batch_grading.APPROVALS).",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("preflight", help="Model-free admission check; writes enabled=true|false.")
