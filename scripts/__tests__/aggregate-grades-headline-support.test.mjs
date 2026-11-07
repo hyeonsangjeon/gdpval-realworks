@@ -277,7 +277,7 @@ test('the published headline is passed through untouched when the rows disagree'
 // ── the corpus itself ─────────────────────────────────────────────────────
 
 test('every grade file the aggregator reads is measured, and exactly four disagree', async () => {
-  // The natural negative control: four known positives against fifteen
+  // The natural negative control: four known positives against sixteen
   // known negatives, on the real published data rather than on fixtures.
   const files = (await readdir(GRADES_DIR))
     .filter((name) => name.endsWith('.json'))
@@ -298,7 +298,10 @@ test('every grade file the aggregator reads is measured, and exactly four disagr
   // Nineteen since exp035's merged grade landed on `main`, up from eighteen.
   // The count is the tripwire; the control is `flagged`, and that stayed at
   // the same four 1.0 files, so what grew is the negative side.
-  assert.equal(measured, 19, 'an item-level grade went unmeasured');
+  // Twenty since exp036's Sol grade (grade run 42039154052) landed on `main` on
+  // 2026-11-05: it is measured and supported, so the negative side grew again
+  // and `flagged` is the same four.
+  assert.equal(measured, 20, 'an item-level grade went unmeasured');
   assert.equal(flagged.length, 4, `expected the four known files, got ${flagged.length}`);
   // All four are 1.0, and all four are published LOW: the ungraded tasks were
   // counted as zeros, so the recomputed mean is above the headline every time.
