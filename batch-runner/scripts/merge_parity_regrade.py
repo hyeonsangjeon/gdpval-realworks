@@ -16,8 +16,17 @@ because none of them is the whole truth on its own:
 * both again on ``pct_full_denominator``, which keeps score-excluded rubric
   weight in the denominator
 
-The merged view mixes two grader source hashes, two renderer fingerprints and
-two judge draws; the record names all of them next to the numbers.
+When the regrade covers only some tasks, the merged view mixes the two grades'
+grader source hashes and renderer fingerprints (where they differ) and two
+judge draws; when it covers every task, the merged view is the regrade itself.
+``mixed_identity_caveat`` says which, from the two grades, and the record
+names both grades' hashes and fingerprints next to the numbers.
+
+Zeros are split by cause (``zero_cause_of``) when the inference's
+self_report.json is given (``--self-report``, and ``--compare-self-report`` for
+the ``--compare`` grade). A headline without one counts the grade rows' raw
+errors instead, under its own key ``unjudged_by_grade_error``, so one key never
+holds two vocabularies.
 """
 
 from __future__ import annotations
@@ -130,6 +139,12 @@ def zero_cause(row: dict[str, Any], categories: dict[str, str]) -> str:
 
 
 def headline(rows: list[dict[str, Any]], categories: dict[str, str] | None = None) -> dict[str, Any]:
+    """The four means and the unjudged rows, counted by zero cause when ``categories`` is given.
+
+    Without ``categories`` the unjudged rows are counted by the grade row's raw
+    error, under ``unjudged_by_grade_error`` instead of ``unjudged_by_error``:
+    the two vocabularies overlap in name only (``no_deliverables`` is not a cause).
+    """
     judged = [row for row in rows if not row.get("error")]
     errors: dict[str, int] = {}
     for row in rows:
@@ -143,7 +158,7 @@ def headline(rows: list[dict[str, Any]], categories: dict[str, str] | None = Non
     return {
         "tasks": len(rows),
         "judged_tasks": len(judged),
-        "unjudged_by_error": dict(sorted(errors.items())),
+        "unjudged_by_error" if categories is not None else "unjudged_by_grade_error": dict(sorted(errors.items())),
         "judged_only_mean_pct": mean([float(row["pct"]) for row in judged]),
         "fixed_denominator_mean_pct": mean([float(row["pct"]) if not row.get("error") else 0.0 for row in rows]),
         "judged_only_mean_pct_full_denominator": mean([float(row["pct_full_denominator"]) for row in judged]),
@@ -175,8 +190,13 @@ def merge(published: dict[str, Any], regrade: dict[str, Any]) -> tuple[list[dict
     return merged, per_task
 
 
-def compare(rows: list[dict[str, Any]], other: dict[str, Any]) -> dict[str, Any]:
-    """Both grades on the other grade's task set (for example the fixed five)."""
+def compare(rows: list[dict[str, Any]], other: dict[str, Any], categories: dict[str, str] | None = None,
+            other_categories: dict[str, str] | None = None) -> dict[str, Any]:
+    """Both grades on the other grade's task set (for example the fixed five).
+
+    ``categories`` are this experiment's error categories, ``other_categories``
+    the other grade's inference's; each side's zeros are split by its own.
+    """
     ids = [row["task_id"] for row in other["tasks"]]
     mine = {row["task_id"]: row for row in rows}
     missing = [task_id for task_id in ids if task_id not in mine]
@@ -184,14 +204,54 @@ def compare(rows: list[dict[str, Any]], other: dict[str, Any]) -> dict[str, Any]
         raise SystemExit(f"the comparison grade holds tasks this one does not: {missing}")
     return {
         "task_ids": ids,
-        "this": headline([mine[task_id] for task_id in ids]),
-        "other": headline(list(other["tasks"])),
+        "this": headline([mine[task_id] for task_id in ids], categories),
+        "other": headline(list(other["tasks"]), other_categories),
         "other_experiment_id": other.get("experiment_id"),
         "other_grader_source_hash": other.get("grader_source_hash"),
         "per_task": [{"task_id": task_id, "this": _row_view(mine[task_id]),
                       "other": _row_view(next(row for row in other["tasks"] if row["task_id"] == task_id))}
                      for task_id in ids],
     }
+
+
+_COUNT = {1: "one", 2: "two"}
+
+
+def _counted(count: int, noun: str, plural: str) -> str:
+    return f"{_COUNT[count]} {noun if count == 1 else plural}"
+
+
+def identity_caveat(published: dict[str, Any], regrade: dict[str, Any]) -> str:
+    """Where the merged rows come from, read from the two grades rather than assumed.
+
+    A regrade of every published task leaves no published row, so the merged
+    view is the regrade itself: one grader source hash, one renderer
+    fingerprint and one judge draw. Otherwise the merged rows span both grades'
+    judge draws, and their hashes and fingerprints are counted as they are.
+    """
+    regraded = {row["task_id"] for row in regrade["tasks"]}
+    if all(row["task_id"] in regraded for row in published["tasks"]):
+        renderer = "one renderer fingerprint" if regrade.get("renderer_fingerprint") else (
+            "no recorded renderer fingerprint")
+        return (f"the regrade replaces every published row, so the merged view is the regrade itself "
+                f"(run_status {regrade.get('run_status')}): one grader source hash, {renderer} and one judge draw")
+    hashes = len({published.get("grader_source_hash"), regrade.get("grader_source_hash")})
+    fingerprints = [published.get("renderer_fingerprint"), regrade.get("renderer_fingerprint")]
+    if any(fingerprints):
+        renderer = _counted(len({json.dumps(fingerprint, sort_keys=True) for fingerprint in fingerprints}),
+                            "renderer fingerprint", "renderer fingerprints")
+    else:
+        renderer = "no recorded renderer fingerprint"
+    return (f"merged rows come from {_counted(hashes, 'grader source hash', 'grader source hashes')}, "
+            f"{renderer} and two judge draws; it is a parity view, not a published grade")
+
+
+def _categories(path: Path) -> dict[str, str]:
+    """task_id -> step 2 error_category from a published self_report.json (empty categories dropped)."""
+    report = json.loads(path.read_text(encoding="utf-8"))
+    categories = {row["task_id"]: str((row.get("observability") or {}).get("error_category") or "")
+                  for row in report.get("task_results") or [] if isinstance(row, dict)}
+    return {task_id: category for task_id, category in categories.items() if category}
 
 
 def main() -> int:
@@ -204,14 +264,14 @@ def main() -> int:
                         help="another complete grade whose task set both are also reported on")
     parser.add_argument("--self-report", type=Path, default=None,
                         help="the inference's published self_report.json; splits the zeros by cause")
+    parser.add_argument("--compare-self-report", type=Path, default=None,
+                        help="the --compare grade's inference self_report.json; splits its zeros by cause")
     parser.add_argument("--json-out", type=Path, required=True)
     args = parser.parse_args()
-    categories: dict[str, str] | None = None
-    if args.self_report is not None:
-        report = json.loads(args.self_report.read_text(encoding="utf-8"))
-        categories = {row["task_id"]: str((row.get("observability") or {}).get("error_category") or "")
-                      for row in report.get("task_results") or [] if isinstance(row, dict)}
-        categories = {task_id: category for task_id, category in categories.items() if category}
+    if args.compare_self_report is not None and args.compare is None:
+        raise SystemExit("--compare-self-report needs --compare")
+    categories = _categories(args.self_report) if args.self_report is not None else None
+    other_categories = _categories(args.compare_self_report) if args.compare_self_report is not None else None
 
     published, published_sha = _load(args.published)
     regrade, regrade_sha = _load(args.regrade)
@@ -238,14 +298,12 @@ def main() -> int:
                     "task_ids": [row["task_id"] for row in regrade["tasks"]]},
         "merged_headline": headline(merged, categories),
         "per_task": per_task,
-        "mixed_identity_caveat": (
-            "merged rows come from two grader source hashes, two renderer fingerprints and two judge draws; "
-            "it is a parity view, not a published grade"
-        ),
+        "mixed_identity_caveat": identity_caveat(published, regrade),
     }
     if args.compare is not None:
         other, other_sha = _load(args.compare)
-        record["compare"] = {"file": args.compare.name, "sha256": other_sha, **compare(merged, other)}
+        record["compare"] = {"file": args.compare.name, "sha256": other_sha,
+                             **compare(merged, other, categories, other_categories)}
     args.json_out.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({"published": record["published"]["headline"], "merged": record["merged_headline"]}, indent=1))
     return 0

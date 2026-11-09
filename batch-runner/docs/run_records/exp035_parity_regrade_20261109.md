@@ -3,8 +3,9 @@
 선택기 수정(#801) 뒤 exp035(gpt-5.4) 220개 과제 중 **판정자에게 보이는 것이 달라진
 8개 과제(평가 항목 424개)**만 같은 Sol Max 채점자로 다시 채점했습니다. 결과는 진단
 폴더에 있고, **발행된 exp035 채점은 그대로 둡니다.** 이 문서는 두 채점을 합쳐 본
-"대조용 보기"를 실행 기록으로 따로 남기는 것입니다. 수치는 전부 커밋된 파일에서 다시
-계산했고, 이 기록을 만들면서 모델을 부르지 않았습니다.
+"대조용 보기"를 실행 기록으로 따로 남기는 것입니다. 수치는 커밋된 파일과, 고정
+개정판에서 인증 없이 받은 `self_report.json`·결과물 파일에서 다시 계산했고, 이 기록을
+만들면서 모델을 부르지 않았습니다.
 
 - 발행 채점: `data/grades/exp035_codex_foundry_full220__…__src_fd0db9d9d78d6d54__v2.2.json`
   (sha256 `a7cd9b348028dfd0…`, 2026-09-12T20:34:50Z, `run_status: final`, 220개)
@@ -28,11 +29,13 @@ python scripts/merge_parity_regrade.py \
   --selection-diff docs/run_records/exp035_parity_selection_20261106.json \
   --self-report <HyeonSang/exp035_codex_foundry_full220 @dc36d683의 self_report.json> \
   --compare ../data/grades/<exp036 새 채점>.json \
+  --compare-self-report <HyeonSang/exp036_sol_fixed5 @8708d920의 self_report.json> \
   --json-out docs/run_records/exp035_parity_regrade_20261109.json
 ```
 
 `self_report.json`은 인증 없이 `dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0` 개정판에서
-받았습니다(220행, sha256 `5642abc1…0996`). 도구는 실험·추론 개정판·판정자·프롬프트·
+받았습니다(220행, sha256 `5642abc1…0996`). exp036 쪽은 `8708d9206ce4c9c9ba96f8bfba0745e12e597777`
+개정판에서 받았습니다(sha256 `7e9b97c8…3d98`). 도구는 실험·추론 개정판·판정자·프롬프트·
 루브릭이 같은지, 재채점이 자기 범위를 다 채웠는지, 범위가 선택 비교 기록과 같은지를
 확인한 뒤에만 기록을 씁니다. 이번에 거절 없이 통과했습니다.
 
@@ -97,8 +100,13 @@ python scripts/merge_parity_regrade.py \
 | 합계 | 78 | 72 | |
 
 풀이 쪽 원인은 `self_report.json`의 `observability.error_category`에서 읽었습니다.
-`turn_failed`는 러너가 원인을 적지 못한 실패여서 모델 쪽으로도 인프라 쪽으로도 세지
-않습니다. 예전 표기(`other_model_side`)를 쓰는 문서가 있으면 같은 6개입니다.
+`error_category`가 여섯 개 모두 `turn_failed`라 이 표는 그 여섯의 원인을 나누지 않고,
+모델 쪽으로도 인프라 쪽으로도 세지 않습니다. 러너가 원인을 못 적은 것은 아닙니다. 마지막
+구간 `outcomes.json`(`exp035_run34685779030_partial/`)의 `message`로 나누면 환경 2(통신
+끊김 1, 503 1), 모델·과제 4(출력 길이 한도 3, 내용이 유효하지 않음 1)입니다.
+[`exp035_round_report.md`](exp035_round_report.md) 결과 3의 환경 57은 이 표의 인프라 55에
+그 2를 더한 값이고, 모델·과제 13은 그 4에 콘텐츠 필터 9를 더한 값입니다. 예전
+표기(`other_model_side`)를 쓰는 문서가 있으면 같은 6개입니다.
 
 ## 같은 다섯 과제 위의 Sol과 gpt-5.4
 
@@ -120,9 +128,9 @@ python scripts/merge_parity_regrade.py \
 | 3baa0009 | 70.09 (재채점된 행) | 72.77 |
 | 0818571f | 0 — 콘텐츠 필터, 파일 없음 | 0 — 콘텐츠 필터, 파일 없음 |
 
-JSON의 `compare` 블록은 0점을 원인이 아니라 채점 행의 오류 그대로(`no_deliverables`)
-적습니다. 위 표의 "콘텐츠 필터"는 두 실험의 `self_report.json`에서 직접 확인한 것입니다
-(exp035는 02aa1805와 0818571f 둘 다, exp036은 0818571f가 `content_filtered`).
+JSON의 `compare` 블록도 0점을 원인으로 적습니다. gpt-5.4 쪽은 `--self-report`(exp035),
+Sol 쪽은 `--compare-self-report`(exp036)에서 읽어 각각 `content_filter` 2(02aa1805,
+0818571f)와 1(0818571f)입니다.
 
 ## 비용 — 합산 USD 일지
 
@@ -154,11 +162,14 @@ JSON의 `compare` 블록은 0점을 원인이 아니라 채점 행의 오류 그
   `install_libreoffice: true`, `model_context_window: 1000000`, `reasoning_effort: "max"`로
   풀었고, exp035는 셋 다 지정하지 않았습니다. 과제도 다섯 개뿐이고 0818571f는 둘 다
   필터로 끝났습니다.
-- **02aa1805의 Sol 점수에는 Sol 통합 문서의 한계와 채점기 읽기 방식이 같이 들어 있습니다.**
-  요청된 정수 계통 8곳 중 4곳이 복구되지 않았다고 문서 스스로 적었고, 수식 셀 40개
-  (`K7:N16`)가 계산된 값 없이 저장돼 판정자에게 빈칸으로 보였습니다(`data_only=True`).
-  자세한 내용은 [`exp036_sol_fixed5_regrade_20261109.md`](exp036_sol_fixed5_regrade_20261109.md)에
-  있습니다. gpt-5.4는 이 과제에서 파일을 내지 못했습니다.
+- **02aa1805의 Sol 점수 94.13에서 깎인 점수는 대부분 채점기 읽기 방식 때문이고, 통합
+  문서가 빠뜨린 정수 계통은 점수에 들어가지 않았습니다.** 수식 셀 40개(`K7:N16`)가 계산된
+  값 없이 저장돼 판정자에게 빈칸으로 보였고(`data_only=True`), 잃은 5.05점 중 4.75점이 그
+  칸에 걸린 항목(16·17·18·55번)입니다. 문서 스스로 요청된 정수 계통 8곳 중 4곳이 복구되지
+  않았다고 적었지만, 8곳이 다 있는지 재는 평가 항목은 없습니다(19번은 "이 계통들에만"
+  속하는지를 보고 통과). 자세한 내용은 [`exp036_sol_fixed5_regrade_20261109.md`](exp036_sol_fixed5_regrade_20261109.md)에
+  있습니다. gpt-5.4는 이 과제에서 파일을 내지 못했으므로, 5 고정 평균의 차이 19.852점
+  (72.664 − 52.812) 중 18.826점(94.13 / 5)이 이 한 과제에서 나옵니다.
 - **잰 값이 옛 범위를 대신합니다.** exp036 옛 채점만으로는 Sol의 5 고정 평균을 [33.47, 73.47]
   범위로만 말할 수 있었고, 이제 72.664를 씁니다.
 - **렌더러가 다릅니다.** 발행 exp035 채점은 PyMuPDF `1.28.2`, 재채점과 exp036은 `2.1`로

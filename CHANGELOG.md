@@ -24,12 +24,14 @@ entries land under a fresh dated heading the day they merge to `main`.
     the one zero left is 0818571f's content filter. 02aa1805 94.13 and
     0112fc9b 98.18 were refused before; 3baa0009 69.33 to 72.77 with its
     chart image graded; 2ea2e5b5 98.00 to 98.24 on identical inputs. The
-    regrade's journal spent USD 21.88885250, and the exp036 lineage has
-    committed USD 73.39637100 of its 200.
+    regrade's journal spent USD 21.88885250 at the Sol list meter (an
+    approval ledger, not an Azure bill), and the exp036 lineage has committed
+    USD 73.39637100 of its 200.
   - exp035 parity regrade (e35par, `_diagnostic/b2ed7212…4851/`): the eight
     tasks whose selection changed, all judged; USD 57.50499500 of its own
-    200. Merged into the published grade as a parity view only, the
-    fixed-220 mean reads 54.5248 (published 52.3240) and judged-only 81.0504
+    200 at the Sol list meter (an approval ledger, not an Azure bill).
+    Merged into the published grade as a parity view only, the fixed-220
+    mean reads 54.5248 (published 52.3240) and judged-only 81.0504
     over 148 tasks (published 81.0654 over 142); grader refusals 8 to 2. The
     published exp035 grade and its dashboard card do not change.
   - Run records `exp036_sol_fixed5_regrade_20261109` and
@@ -39,9 +41,19 @@ entries land under a fresh dated heading the day they merge to `main`.
     spend from the combined USD journals, and the caveats: Sol against
     gpt-5.4 compares two run configurations, not two models; 02aa1805's
     workbook leaves four of eight water systems unrecovered and 40 formula
-    cells without cached values, which the reader sees as blanks; the
-    measured 72.664 replaces the old [33.47, 73.47] bound; exp035's published
-    grade used PyMuPDF 1.28.2 and the regrades 2.1, and PyMuPDF is unpinned.
+    cells without cached values, which the reader sees as blanks (no rubric
+    item checks that all eight systems are present, so the missing four cost
+    no points; the blanks account for 4.75 of the 5.05 lost); the measured
+    72.664 replaces the old [33.47, 73.47] bound; exp035's published grade
+    used PyMuPDF 1.28.2 and the regrades 2.1, and PyMuPDF is unpinned.
+  - `merge_parity_regrade.py` writes `mixed_identity_caveat` from the two
+    grades instead of a fixed sentence: a regrade of every task (exp036) is
+    the merged view itself, with one grader source hash, renderer fingerprint
+    and judge draw. A partial one (exp035) still reads as a parity view, word
+    for word as before. `--compare-self-report` splits the compared grade's
+    zeros by cause too, so `compare` no longer puts raw grade errors under the
+    key that holds causes everywhere else. Without a self report a headline
+    now counts raw errors under `unjudged_by_grade_error`.
   - `SUPERSEDED_GRADE_IDS` retires the pre-fix exp036 grade display-only; the
     file stays where it is. `OFFICIAL_GRADE_IDS` is unchanged. The retirement
     comments in `officialExperimentScope.js` and `officialFilter.ts` now also

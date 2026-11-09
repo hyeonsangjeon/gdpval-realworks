@@ -11,7 +11,7 @@
    "content_filter": 1
   }
  },
- "mixed_identity_caveat": "merged rows come from two grader source hashes, two renderer fingerprints and two judge draws; it is a parity view, not a published grade",
+ "mixed_identity_caveat": "the regrade replaces every published row, so the merged view is the regrade itself (run_status final): one grader source hash, one renderer fingerprint and one judge draw",
  "per_task": [
   {
    "after": {
