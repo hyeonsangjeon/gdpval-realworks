@@ -13,6 +13,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Report the two regrades that ran after the selector fix (#801), and retire
+  the pre-fix exp036 card. Both ran on `main` `567f9b3f` and committed their
+  own results (runs 42361049576 and 42560225887); no paid or model call was
+  made here.
+  - exp036, all five tasks regraded with the same judge, rubric, config and
+    inference (`src_814d56797e9fc3dc` to `src_6f8811acb9de0b81`): four of five
+    judged instead of two, the fixed-five mean 33.466 to 72.664 (both
+    denominators equal now, 0 excluded items), judged-only 83.665 to 90.83;
+    the one zero left is 0818571f's content filter. 02aa1805 94.13 and
+    0112fc9b 98.18 were refused before; 3baa0009 69.33 to 72.77 with its
+    chart image graded; 2ea2e5b5 98.00 to 98.24 on identical inputs. The
+    regrade's journal spent USD 21.88885250, and the exp036 lineage has
+    committed USD 73.39637100 of its 200.
+  - exp035 parity regrade (e35par, `_diagnostic/b2ed7212…4851/`): the eight
+    tasks whose selection changed, all judged; USD 57.50499500 of its own
+    200. Merged into the published grade as a parity view only, the
+    fixed-220 mean reads 54.5248 (published 52.3240) and judged-only 81.0504
+    over 148 tasks (published 81.0654 over 142); grader refusals 8 to 2. The
+    published exp035 grade and its dashboard card do not change.
+  - Run records `exp036_sol_fixed5_regrade_20261109` and
+    `exp035_parity_regrade_20261109` (`.json` from
+    `scripts/merge_parity_regrade.py`, `.md` in Korean) give both
+    denominators, both scopes, per-task before and after, zeros by cause,
+    spend from the combined USD journals, and the caveats: Sol against
+    gpt-5.4 compares two run configurations, not two models; 02aa1805's
+    workbook leaves four of eight water systems unrecovered and 40 formula
+    cells without cached values, which the reader sees as blanks; the
+    measured 72.664 replaces the old [33.47, 73.47] bound; exp035's published
+    grade used PyMuPDF 1.28.2 and the regrades 2.1, and PyMuPDF is unpinned.
+  - `SUPERSEDED_GRADE_IDS` retires the pre-fix exp036 grade display-only; the
+    file stays where it is. `OFFICIAL_GRADE_IDS` is unchanged. The retirement
+    comments in `officialExperimentScope.js` and `officialFilter.ts` now also
+    cover a same-identity regrade after a grader-side fix.
+  - The seal test in `test_a_denominator_thrown_away_is_still_recoverable.py`
+    checked that exactly seven payloads were sealed by exactly seven
+    documents; the two run records seal the grades they quote, so it now
+    checks a list of required (payload, voucher) pairs, including the new
+    ones, and a new voucher is not a failure.
+
 - Stop failing the corpus tests when a legitimate grade lands (owner decision
   2026-11-07: "이게 뭐 할 때마다 뭔가 빨개지면은 페일이라고 하는 게 말이 안 되잖아"). Five tests in four
   files pinned how much had been published (files with a cost block, zeros on

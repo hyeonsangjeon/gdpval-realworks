@@ -1,0 +1,202 @@
+{
+ "experiment_id": "exp036_sol_fixed5",
+ "merged_headline": {
+  "fixed_denominator_mean_pct": 72.664,
+  "fixed_denominator_mean_pct_full_denominator": 72.664,
+  "judged_only_mean_pct": 90.83,
+  "judged_only_mean_pct_full_denominator": 90.83,
+  "judged_tasks": 4,
+  "tasks": 5,
+  "unjudged_by_error": {
+   "content_filter": 1
+  }
+ },
+ "mixed_identity_caveat": "merged rows come from two grader source hashes, two renderer fingerprints and two judge draws; it is a parity view, not a published grade",
+ "per_task": [
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 227,
+    "pct": 94.13,
+    "pct_full_denominator": 94.13,
+    "primary_paths": [
+     [
+      "Email_to_Manager_Well_Recommendations.eml"
+     ],
+     [
+      "Illinois_Green_Hydrogen_Well_Screening.xlsx"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_separate_primaries"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 71,
+    "selection_rule": "ambiguous_candidates"
+   },
+   "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 112,
+    "pct": 98.18,
+    "pct_full_denominator": 98.18,
+    "primary_paths": [
+     [
+      "CS_SOAP_Note_2024-03-01.docx"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_single+rendition_copies"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 55,
+    "selection_rule": "format_variant_no_match"
+   },
+   "task_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 161,
+    "pct": 98.24,
+    "pct_full_denominator": 98.24,
+    "primary_paths": [
+     [
+      "Work Time Study - Activity Analysis.pptx"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_primary_support_split"
+   },
+   "before": {
+    "error": null,
+    "judge_call_count": 160,
+    "pct": 98.0,
+    "pct_full_denominator": 98.0,
+    "primary_paths": [
+     [
+      "Work Time Study - Activity Analysis.pptx"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_primary_support_split"
+   },
+   "task_id": "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 98,
+    "pct": 72.77,
+    "pct_full_denominator": 72.77,
+    "primary_paths": [
+     [
+      "create_global_growth_chart.py"
+     ],
+     [
+      "world_bank_global_outlook_article.md"
+     ],
+     [
+      "world_bank_global_growth_2024_2025_2027.jpg"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_separate_primaries+requested_image"
+   },
+   "before": {
+    "error": null,
+    "judge_call_count": 85,
+    "pct": 69.33,
+    "pct_full_denominator": 55.71,
+    "primary_paths": [
+     [
+      "create_global_growth_chart.py"
+     ],
+     [
+      "world_bank_global_outlook_article.md"
+     ]
+    ],
+    "score_excluded_items": 9,
+    "selection_rule": "set_diff_then_separate_primaries"
+   },
+   "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+  },
+  {
+   "after": {
+    "error": "no_deliverables",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_zero_guard"
+   },
+   "before": {
+    "error": "no_deliverables",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_zero_guard"
+   },
+   "task_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+  }
+ ],
+ "published": {
+  "file": "exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777__src_814d56797e9fc3dc__v2.2.json",
+  "graded_at": "2026-11-05T15:14:23Z",
+  "grader_source_hash": "814d56797e9fc3dcc2083fd6af1ff5b0c2197060c77f1494299aec35e080d553",
+  "headline": {
+   "fixed_denominator_mean_pct": 33.466,
+   "fixed_denominator_mean_pct_full_denominator": 30.742,
+   "judged_only_mean_pct": 83.665,
+   "judged_only_mean_pct_full_denominator": 76.855,
+   "judged_tasks": 2,
+   "tasks": 5,
+   "unjudged_by_error": {
+    "content_filter": 1,
+    "grader_refusal": 2
+   }
+  },
+  "renderer_fingerprint": {
+   "libreoffice_binary": "soffice",
+   "libreoffice_version": "LibreOffice 24.2.7.2 420(Build:2)",
+   "pymupdf_version": "2.1"
+  },
+  "sha256": "fcb0359b7bfe5f8e603ebe1e95a4eccf9f9935643cc5fff2abd4b5095e46f3be"
+ },
+ "regrade": {
+  "file": "exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777__src_6f8811acb9de0b81__v2.2.json",
+  "graded_at": "2026-11-09T09:08:21Z",
+  "grader_source_hash": "6f8811acb9de0b810b6f1dd263ace12b1dd5ea54f8c886352b15c4104557083b",
+  "renderer_fingerprint": {
+   "libreoffice_binary": "soffice",
+   "libreoffice_version": "LibreOffice 24.2.7.2 420(Build:2)",
+   "pymupdf_version": "2.1"
+  },
+  "run_status": "final",
+  "sha256": "6649ba7a6c07d06827bd017e58f306ed54736fdf9d8e85f2b533ae73a1c00ebf",
+  "task_ids": [
+   "02aa1805-c658-4069-8a6a-02dec146063a",
+   "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
+   "2ea2e5b5-257f-42e6-a7dc-93763f28b19d",
+   "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+   "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+  ]
+ },
+ "schema": "parity-regrade-record-v1",
+ "source_inference_revision": "8708d9206ce4c9c9ba96f8bfba0745e12e597777"
+}
