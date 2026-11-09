@@ -221,3 +221,39 @@ def test_a_comparison_self_report_without_a_comparison_is_refused(tmp_path, monk
     with pytest.raises(SystemExit, match="needs --compare"):
         merge.main()
     assert not (tmp_path / "record.json").exists()
+
+
+@pytest.mark.parametrize("meta, field", [
+    ({"experiment_id": "expY", "source_repo_id": "o/expX"}, "experiment_id"),
+    ({"experiment_id": "expX", "source_repo_id": "o/expY"}, "source_repo_id"),
+    ({}, "experiment_id"),
+])
+def test_a_self_report_of_another_inference_is_refused(tmp_path, monkeypatch, meta, field):
+    published, regrade = _published(), _grade(
+        [_row("t2", status="ok", rule="r2", primaries=[["b"]], support=[], pct=90.0, full=81.0)], status="diagnostic")
+    report = {"meta": meta, "task_results": [{"task_id": "t3", "observability": {"error_category": "content_filtered"}}]}
+    for name, payload in (("pub.json", published), ("re.json", regrade), ("sr.json", report)):
+        (tmp_path / name).write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["merge_parity_regrade.py", "--published", str(tmp_path / "pub.json"),
+                                     "--regrade", str(tmp_path / "re.json"), "--self-report", str(tmp_path / "sr.json"),
+                                     "--json-out", str(tmp_path / "record.json")])
+    with pytest.raises(SystemExit, match=f"--self-report is another inference's report: meta.{field}"):
+        merge.main()
+    assert not (tmp_path / "record.json").exists()
+
+
+def test_a_self_report_of_this_inference_splits_the_zeros(tmp_path, monkeypatch):
+    published, regrade = _published(), _grade(
+        [_row("t2", status="ok", rule="r2", primaries=[["b"]], support=[], pct=90.0, full=81.0)], status="diagnostic")
+    report = {"meta": {"experiment_id": "expX", "source_repo_id": "o/expX"},
+              "task_results": [{"task_id": "t3", "observability": {"error_category": "content_filtered"}}]}
+    for name, payload in (("pub.json", published), ("re.json", regrade), ("sr.json", report)):
+        (tmp_path / name).write_text(json.dumps(payload), encoding="utf-8")
+    out = tmp_path / "record.json"
+    monkeypatch.setattr("sys.argv", ["merge_parity_regrade.py", "--published", str(tmp_path / "pub.json"),
+                                     "--regrade", str(tmp_path / "re.json"), "--self-report", str(tmp_path / "sr.json"),
+                                     "--json-out", str(out)])
+    assert merge.main() == 0
+    record = json.loads(out.read_text(encoding="utf-8"))
+    assert record["merged_headline"]["unjudged_by_error"] == {"content_filter": 1}
+    assert record["published"]["headline"]["unjudged_by_error"] == {"content_filter": 1, "grader_refusal": 1}

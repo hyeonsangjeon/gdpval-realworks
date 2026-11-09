@@ -246,9 +246,22 @@ def identity_caveat(published: dict[str, Any], regrade: dict[str, Any]) -> str:
             f"{renderer} and two judge draws; it is a parity view, not a published grade")
 
 
-def _categories(path: Path) -> dict[str, str]:
-    """task_id -> step 2 error_category from a published self_report.json (empty categories dropped)."""
+#: self_report.json ``meta`` field -> the grade field that names the same inference.
+SELF_REPORT_IDENTITY = (("experiment_id", "experiment_id"), ("source_repo_id", "source_inference_repo_id"))
+
+
+def _categories(path: Path, grade: dict[str, Any], option: str) -> dict[str, str]:
+    """task_id -> step 2 error_category from a published self_report.json (empty categories dropped).
+
+    Refused unless the report names the inference ``grade`` was made from: a
+    report of another run would relabel this grade's zeros without a sound.
+    """
     report = json.loads(path.read_text(encoding="utf-8"))
+    meta = report.get("meta") or {}
+    for field, grade_field in SELF_REPORT_IDENTITY:
+        if meta.get(field) != grade.get(grade_field):
+            raise SystemExit(f"{option} is another inference's report: meta.{field} {meta.get(field)!r}, "
+                             f"grade {grade_field} {grade.get(grade_field)!r}")
     categories = {row["task_id"]: str((row.get("observability") or {}).get("error_category") or "")
                   for row in report.get("task_results") or [] if isinstance(row, dict)}
     return {task_id: category for task_id, category in categories.items() if category}
@@ -270,12 +283,14 @@ def main() -> int:
     args = parser.parse_args()
     if args.compare_self_report is not None and args.compare is None:
         raise SystemExit("--compare-self-report needs --compare")
-    categories = _categories(args.self_report) if args.self_report is not None else None
-    other_categories = _categories(args.compare_self_report) if args.compare_self_report is not None else None
-
     published, published_sha = _load(args.published)
     regrade, regrade_sha = _load(args.regrade)
     check_pair(published, regrade)
+    other, other_sha = _load(args.compare) if args.compare is not None else (None, None)
+    categories = (_categories(args.self_report, published, "--self-report")
+                  if args.self_report is not None else None)
+    other_categories = (_categories(args.compare_self_report, other, "--compare-self-report")
+                        if args.compare_self_report is not None else None)
     if args.selection_diff is not None:
         planned = json.loads(args.selection_diff.read_text(encoding="utf-8"))
         if planned.get("ordered_task_ids") != [row["task_id"] for row in regrade["tasks"]]:
@@ -300,8 +315,7 @@ def main() -> int:
         "per_task": per_task,
         "mixed_identity_caveat": identity_caveat(published, regrade),
     }
-    if args.compare is not None:
-        other, other_sha = _load(args.compare)
+    if other is not None:
         record["compare"] = {"file": args.compare.name, "sha256": other_sha,
                              **compare(merged, other, categories, other_categories)}
     args.json_out.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")

@@ -102,7 +102,8 @@ python scripts/merge_parity_regrade.py \
 풀이 쪽 원인은 `self_report.json`의 `observability.error_category`에서 읽었습니다.
 `error_category`가 여섯 개 모두 `turn_failed`라 이 표는 그 여섯의 원인을 나누지 않고,
 모델 쪽으로도 인프라 쪽으로도 세지 않습니다. 러너가 원인을 못 적은 것은 아닙니다. 마지막
-구간 `outcomes.json`(`exp035_run34685779030_partial/`)의 `message`로 나누면 환경 2(통신
+구간 `outcomes.json`(`exp035_run34685779030_partial/`)의 `failure_class`는 여섯 모두
+`execution_environment`이지만, 각 행의 `message`로 나누면 환경 2(통신
 끊김 1, 503 1), 모델·과제 4(출력 길이 한도 3, 내용이 유효하지 않음 1)입니다.
 [`exp035_round_report.md`](exp035_round_report.md) 결과 3의 환경 57은 이 표의 인프라 55에
 그 2를 더한 값이고, 모델·과제 13은 그 4에 콘텐츠 필터 9를 더한 값입니다. 예전

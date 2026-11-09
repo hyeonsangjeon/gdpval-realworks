@@ -53,7 +53,9 @@ entries land under a fresh dated heading the day they merge to `main`.
     for word as before. `--compare-self-report` splits the compared grade's
     zeros by cause too, so `compare` no longer puts raw grade errors under the
     key that holds causes everywhere else. Without a self report a headline
-    now counts raw errors under `unjudged_by_grade_error`.
+    now counts raw errors under `unjudged_by_grade_error`. Either self report
+    is refused unless its `meta.experiment_id` and `meta.source_repo_id` name
+    the grade's own inference, so another run's report cannot relabel zeros.
   - `SUPERSEDED_GRADE_IDS` retires the pre-fix exp036 grade display-only; the
     file stays where it is. `OFFICIAL_GRADE_IDS` is unchanged. The retirement
     comments in `officialExperimentScope.js` and `officialFilter.ts` now also
