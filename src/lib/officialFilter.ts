@@ -81,9 +81,10 @@ export function isOfficialGrade(g: Pick<GradeResult, 'id'>): boolean {
 }
 
 /**
- * A complete run retired in favour of a newer judge (phase 4). Distinct from
- * `isPartialCorpusGrade`: nothing is wrong with these numbers, they are simply
- * no longer the comparison the page is making.
+ * A complete run retired in favour of a newer one (phase 4: a newer judge; or a
+ * same-identity regrade after a grader-side fix, as for exp036's pre-fix
+ * selector). Distinct from `isPartialCorpusGrade`: the run covered its whole
+ * corpus, it is simply no longer the comparison the page is making.
  */
 export function isSupersededGrade(g: Pick<GradeResult, 'id'>): boolean {
   return isSupersededGradeId(g.id)
@@ -104,7 +105,7 @@ export function isLegacyExp003(g: Pick<GradeResult, 'id'>): boolean {
  * True when a grade card should be hidden from the default (non-debug) view:
  * legacy demo, smoke/test run, a superseded/partial exp003 card, a grading run
  * that covered only part of its inference corpus, or a complete run retired in
- * favour of a newer judge.
+ * favour of a newer one.
  * Curated OFFICIAL ids are never hidden (reverse protection).
  */
 export function isHiddenGrade(g: GradeResult): boolean {

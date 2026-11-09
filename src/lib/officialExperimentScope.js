@@ -60,11 +60,14 @@ export const OFFICIAL_GRADE_IDS = new Set([
 ])
 
 /**
- * Full-corpus runs retired in favour of a newer one. Their numbers are sound —
- * this is not the partial-corpus rule — but a results page that keeps every
- * generation becomes a changelog, and readers compare whatever is on screen.
- * The dashboard therefore shows the current result plus exactly one older run
- * as an A/B comparator, and retires the rest.
+ * Full-corpus runs retired in favour of a newer one. This is not the
+ * partial-corpus rule — each covered its whole inference run — but a results
+ * page that keeps every generation becomes a changelog, and readers compare
+ * whatever is on screen. For exp003 the dashboard therefore shows the current
+ * result plus exactly one older run as an A/B comparator, and retires the rest.
+ * A grade can also be retired because a regrade with the same judge, rubric,
+ * config and inference replaced it after a grader-side fix; its own entry
+ * below says what was wrong.
  *
  * Which older run earns that slot is decided by how many things it varies at
  * once. The two `gpt-5.6-sol` runs share a judge, a rubric, and an inference
@@ -84,6 +87,12 @@ export const SUPERSEDED_GRADE_IDS = new Set([
   // gpt-5.4 judge, 220 tasks — was the A/B comparator until a same-judge
   // predecessor existed to take the slot
   'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4__rubric_v2_tools',
+  // gpt-5.6-sol judge, exp036's 5 tasks, graded with the pre-fix deliverable
+  // selector: two of the five (02aa1805, 0112fc9b) were refused before the
+  // judge saw them. Superseded by the complete regrade with the same judge,
+  // rubric, config and inference, src_6f8811acb9de0b81
+  // (batch-runner/docs/run_records/exp036_sol_fixed5_regrade_20261109.md).
+  'exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777__src_814d56797e9fc3dc__v2.2',
 ])
 
 /** Curated official baseline: badged, and exempt from every hide rule. */
