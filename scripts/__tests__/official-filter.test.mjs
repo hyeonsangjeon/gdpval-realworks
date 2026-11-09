@@ -13,6 +13,7 @@ import {
   isHiddenOfficialExperiment,
   isOfficialGradeId,
   isPartialCorpusGrade,
+  isSmokeExperimentId,
   isSupersededGradeId,
   OFFICIAL_GRADE_IDS,
   OFFICIAL_TASK_COUNT,
@@ -223,7 +224,20 @@ test('the pre-fix exp036 grade is retired, not deleted', () => {
 })
 
 test('the complete exp036 regrade stays on screen', () => {
+  // Not official, so nothing exempts it from a hide rule: every id-based rule
+  // isHiddenGrade applies has to pass it. Partial coverage is the one rule
+  // read from the aggregated card rather than the id, so it is not checked
+  // here; the test below only checks the grade's own task list is complete.
+  assert.equal(isOfficialGradeId(EXP036_REGRADE), false)
   assert.equal(isSupersededGradeId(EXP036_REGRADE), false)
+  // isLegacyExp003 (officialFilter.ts): the `__src_<hex>__v2.2` suffix must not
+  // read as the legacy `__<7hex>__v<n>` naming.
+  assert.equal(/__[0-9a-f]{7}__v\d/i.test(EXP036_REGRADE), false)
+  assert.equal(EXP036_REGRADE.endsWith('_tight'), false)
+  for (const id of [EXP036_REGRADE, 'exp036_sol_fixed5']) {
+    assert.equal(isHiddenDiagnosticExperimentId(id), false)
+    assert.equal(isSmokeExperimentId(id), false)
+  }
 })
 
 test('the exp036 regrade differs from the retired grade in the grader source only', () => {

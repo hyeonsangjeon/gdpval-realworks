@@ -65,18 +65,19 @@ export const OFFICIAL_GRADE_IDS = new Set([
  * page that keeps every generation becomes a changelog, and readers compare
  * whatever is on screen. For exp003 the dashboard therefore shows the current
  * result plus exactly one older run as an A/B comparator, and retires the rest.
+ *
+ * Which older run earns that slot is decided by how many things it varies at
+ * once. The two exp003 `gpt-5.6-sol` runs share a judge, a rubric, and an
+ * inference corpus, and differ only in `grader_source_hash` — so the gap
+ * between them is attributable to the harness and to nothing else. Both
+ * `gpt-5.4` runs vary the judge as well, which makes them a worse comparator
+ * for the same question: `gpt-5.4-mini` varies judge size and version together,
+ * and full-size `gpt-5.4` varies judge version on top of the harness change.
+ * Neither can isolate anything the sol-vs-sol pair does not isolate better.
+ *
  * A grade can also be retired because a regrade with the same judge, rubric,
  * config and inference replaced it after a grader-side fix; its own entry
  * below says what was wrong.
- *
- * Which older run earns that slot is decided by how many things it varies at
- * once. The two `gpt-5.6-sol` runs share a judge, a rubric, and an inference
- * corpus, and differ only in `grader_source_hash` — so the gap between them is
- * attributable to the harness and to nothing else. Both `gpt-5.4` runs vary the
- * judge as well, which makes them a worse comparator for the same question:
- * `gpt-5.4-mini` varies judge size and version together, and full-size
- * `gpt-5.4` varies judge version on top of the harness change. Neither can
- * isolate anything the sol-vs-sol pair does not isolate better.
  *
  * Retirement is display-only. The grade JSON is untouched, the card is one
  * `?debug=1` away, and its own page still resolves by direct URL.
