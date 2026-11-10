@@ -87,6 +87,26 @@ def preparation_record(identity, build, transfer):
             "limits": {"sessions": 1, "native_threads": 1, "turns": 0, "capi_inference_requests": 0}}
 
 
+def extract_runtime_inputs(base, root):
+    """Add byte-pinned CLI/SDK inputs AFTER the server-only staging boundary.
+
+    Never copy the already extracted SDK tree. Its legitimate .bin/codex link
+    belongs to the existing safe archive extractor, not stage_runtime's input.
+    """
+    manifest = probe.load_manifest()
+    for name in ("cli", "codex_sdk", "source"):
+        spec = manifest["artifacts"][name]
+        raw = runtime._read(base / "downloads" / (name + ".tgz"), spec["maximum_bytes"])
+        require(runtime._sha(raw) == spec["sha256"], "prewarm_runtime_input_hash_refused")
+        runtime._write(root / "downloads" / (name + ".tgz"), raw)
+    for name, relative in (("cli", "cli"), ("codex_sdk", "codex-sdk")):
+        target = root / relative
+        target.mkdir(exist_ok=False)
+        probe.extract_archive(root / "downloads" / (name + ".tgz"), target)
+    probe.save_json(root / "cli-data/servers/lru.json", ["Stable-" + runtime.PIN])
+    return manifest
+
+
 def prepare(transfer_directory, build_path, base, output, evidence, identity):
     build = runtime._json(runtime._read(build_path))
     producer = validate_build(build, identity)
@@ -97,7 +117,11 @@ def prepare(transfer_directory, build_path, base, output, evidence, identity):
     prepared = load.prepare_payload(transfer_directory, output / "payload", producer)
     transfer = prepared["transfer"]
     request = {"path": output / "payload/build-receipt.json", "sha256": transfer["build_receipt_sha256"]}
-    runtime.stage_runtime(base, output / "runtime", output / "payload/inputs/agentHostMain.js", request)
+    # The producer's verified server-only tree has not had an SDK extracted into
+    # it. Retain the unmodified symlink/special-file guard over this whole input.
+    runtime.stage_runtime(output / "payload/base", output / "runtime", output / "payload/inputs/agentHostMain.js", request)
+    manifest = extract_runtime_inputs(base, output / "runtime")
+    probe.verify_prepared(manifest, output / "runtime", evidence, identity)
     value = preparation_record(identity, build, transfer)
     raw = runtime._encoded(value) + b"\n"
     runtime._write(output / "preparation.json", raw)
