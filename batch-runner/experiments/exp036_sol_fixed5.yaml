@@ -130,21 +130,27 @@
 #     checkpoint. `sol_batch_controls.py` refuses any run attempt other than
 #     the first.
 #   - A fresh dispatch (relay_run 0) restores no rows, so it starts from
-#     `PRIOR_LINEAGE_SPEND_USD` alone and knows nothing of earlier lineages.
-#     Before ANY fresh exp036 dispatch that follows one which spent anything
-#     -- a leg died without a checkpoint, a relay leg failed before step 2,
-#     or the final leg ended red -- raise `PRIOR_LINEAGE_SPEND_USD` in
-#     `sol_batch_controls.py` by pull request, by that lineage's OWN spend.
-#     That is its last cumulative "[sol-batch] ... solve spend" figure (job
-#     log or batch-results artifact) minus the "prior lineages" figure it
-#     started from (the install banner and the "leg closed" line print it;
-#     the record summary has both as solve_spend_usd and
-#     prior_lineage_spend_usd), plus 2.00 if its final leg ran step 6's
-#     narrative. Every solve spend figure already includes the constant, so
-#     raising it by the whole figure counts earlier lineages twice. That
-#     includes lineages whose legs did upload a checkpoint. Relay legs run
-#     the first leg's `batch-runner/` tree, so only a fresh dispatch sees the
-#     raise.
+#     `RUNS["exp036_sol_fixed5"].prior_lineage_spend_usd` alone and knows
+#     nothing of earlier lineages. Before ANY fresh exp036 dispatch that
+#     follows one which spent anything -- a leg died without a checkpoint, a
+#     relay leg failed before step 2, or the final leg ended red -- raise
+#     that field in `sol_batch_controls.py` by pull request, by that
+#     lineage's OWN spend. That is its last cumulative "[sol-batch] ... solve
+#     spend" figure (job log or batch-results artifact) minus the "prior
+#     lineages" figure it started from (the install banner and the "leg
+#     closed" line print it; the record summary has both as solve_spend_usd
+#     and prior_lineage_spend_usd), plus 2.00 if its final leg ran step 6's
+#     narrative, plus attempt_reserve_usd (51.00) if the last of its legs to
+#     print "[sol-batch] record:" printed no "[sol-batch] leg closed" line
+#     after it (its record's summary is then null). A leg killed mid-attempt
+#     (an OOM kill, a lost runner, a cancellation or a timeout) neither books
+#     nor prints the attempt it was running, so no figure it printed includes
+#     that attempt; if it died between attempts instead, the 51 over-counts,
+#     which is the safe side. Every solve spend figure already includes the
+#     field, so raising it by the whole figure counts earlier lineages twice.
+#     That includes lineages whose legs did upload a checkpoint. Relay legs
+#     run the first leg's `batch-runner/` tree, so only a fresh dispatch sees
+#     the raise.
 #   - To continue a lineage whose relay leg died before step 2, dispatch
 #     that leg again by hand with the same relay_run, relay_lineage_id and
 #     source_sha, wall_timeout 0 and codex_foundry_confirmed true, rather
@@ -152,17 +158,17 @@
 #   - A row that reached Codex but lost its booking (an error after the
 #     runner returned) makes the next leg and the grade preflight refuse
 #     (`sol_batch_prior_spend_unaccounted`). Raising
-#     `PRIOR_LINEAGE_SPEND_USD` cannot clear it. To grade a published result
+#     `prior_lineage_spend_usd` cannot clear it. To grade a published result
 #     with such a row, add `("<inference revision>", "<task id>"):
-#     Decimal("<booked>")` to `LOST_BOOKING_USD` in `sol_batch_controls.py`
-#     by pull request. <booked> is the sum of that task's "[sol-batch]
-#     <first 8 of task id> attempt N: booked X" amounts in the publishing
-#     leg's job log, or of booked_usd over its attempts in that leg's
-#     sol_batch_controls record. Grading runs from main, so that one PR
-#     unblocks it, and the entry applies to that revision only. A lineage
-#     refused at a relay leg cannot be continued this way (its legs run leg
-#     0's tree): count its own spend into `PRIOR_LINEAGE_SPEND_USD` and
-#     dispatch a fresh lineage.
+#     Decimal("<booked>")` to `RUNS["exp036_sol_fixed5"].lost_booking_usd`
+#     in `sol_batch_controls.py` by pull request. <booked> is the sum of
+#     that task's "[sol-batch] <first 8 of task id> attempt N: booked X"
+#     amounts in the publishing leg's job log, or of booked_usd over its
+#     attempts in that leg's sol_batch_controls record. Grading runs from
+#     main, so that one PR unblocks it, and the entry applies to that
+#     revision only. A lineage refused at a relay leg cannot be continued
+#     this way (its legs run leg 0's tree): count its own spend into
+#     `prior_lineage_spend_usd` and dispatch a fresh lineage.
 #
 # The dispatch
 # ------------

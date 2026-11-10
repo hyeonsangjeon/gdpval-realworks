@@ -13,6 +13,189 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Report the two regrades that ran after the selector fix (#801), and retire
+  the pre-fix exp036 card. Both ran on `main` `567f9b3f` and committed their
+  own results (runs 42361049576 and 42560225887); no paid or model call was
+  made here.
+  - exp036, all five tasks regraded with the same judge, rubric, config and
+    inference (`src_814d56797e9fc3dc` to `src_6f8811acb9de0b81`): four of five
+    judged instead of two, the fixed-five mean 33.466 to 72.664 (both
+    denominators equal now, 0 excluded items), judged-only 83.665 to 90.83;
+    the one zero left is 0818571f's content filter. 02aa1805 94.13 and
+    0112fc9b 98.18 were refused before; 3baa0009 69.33 to 72.77 with its
+    chart image graded; 2ea2e5b5 98.00 to 98.24 on identical inputs. The
+    regrade's journal spent USD 21.88885250 at the Sol list meter (an
+    approval ledger, not an Azure bill), and the exp036 lineage has committed
+    USD 73.39637100 of its 200.
+  - exp035 parity regrade (e35par, `_diagnostic/b2ed7212…4851/`): the eight
+    tasks whose selection changed, all judged; USD 57.50499500 of its own
+    200 at the Sol list meter (an approval ledger, not an Azure bill).
+    Merged into the published grade as a parity view only, the fixed-220
+    mean reads 54.5248 (published 52.3240) and judged-only 81.0504
+    over 148 tasks (published 81.0654 over 142); grader refusals 8 to 2. The
+    published exp035 grade and its dashboard card do not change.
+  - Run records `exp036_sol_fixed5_regrade_20261109` and
+    `exp035_parity_regrade_20261109` (`.json` from
+    `scripts/merge_parity_regrade.py`, `.md` in Korean) give both
+    denominators, both scopes, per-task before and after, zeros by cause,
+    spend from the combined USD journals, and the caveats: Sol against
+    gpt-5.4 compares two run configurations, not two models; 02aa1805's
+    workbook leaves four of eight water systems unrecovered and 40 formula
+    cells without cached values, which the reader sees as blanks (no rubric
+    item checks that all eight systems are present, so the missing four cost
+    no points; the blanks account for 4.75 of the 5.05 lost); the measured
+    72.664 replaces the old [33.47, 73.47] bound; exp035's published grade
+    used PyMuPDF 1.28.2 and the regrades 2.1, and PyMuPDF is unpinned.
+  - `merge_parity_regrade.py` writes `mixed_identity_caveat` from the two
+    grades instead of a fixed sentence: a regrade of every task (exp036) is
+    the merged view itself, with one grader source hash, renderer fingerprint
+    and judge draw. A partial one (exp035) still reads as a parity view, word
+    for word as before. `--compare-self-report` splits the compared grade's
+    zeros by cause too, so `compare` no longer puts raw grade errors under the
+    key that holds causes everywhere else. Without a self report a headline
+    now counts raw errors under `unjudged_by_grade_error`. Either self report
+    is refused unless its `meta.experiment_id` and `meta.source_repo_id` name
+    the grade's own inference, so another run's report cannot relabel zeros.
+  - `SUPERSEDED_GRADE_IDS` retires the pre-fix exp036 grade display-only; the
+    file stays where it is. `OFFICIAL_GRADE_IDS` is unchanged. The retirement
+    comments in `officialExperimentScope.js` and `officialFilter.ts` now also
+    cover a same-identity regrade after a grader-side fix.
+  - The seal test in `test_a_denominator_thrown_away_is_still_recoverable.py`
+    checked that exactly seven payloads were sealed by exactly seven
+    documents; the two run records seal the grades they quote, so it now
+    checks a list of required (payload, voucher) pairs, including the new
+    ones, and a new voucher is not a failure.
+
+- Stop failing the corpus tests when a legitimate grade lands (owner decision
+  2026-11-07: "이게 뭐 할 때마다 뭔가 빨개지면은 페일이라고 하는 게 말이 안 되잖아"). Five tests in four
+  files pinned how much had been published (files with a cost block, zeros on
+  disk, measured headlines, files with a score-exclusion lift and payloads
+  stating their own figure, committed post-split speech rows), so new grades
+  on `main` turned them red until someone recounted, while a wrong new file
+  could pass if the count happened to match. Each now reads every file and
+  checks its content: no amount beside real tokens and no $0 from a later
+  writer beside real usage; every file but the legacy dummy has a cost block,
+  records its usage counters and is measured (an all-unscored grade, which
+  publishes no headline and calls nobody, passes); headlines are supported by their rows
+  except the four known 1.0 files, which stay flagged; lifts are non-negative;
+  a payload's own full-denominator figure must agree with its rows, with or
+  without a lift; speech rows stay unpriced. Exact figures stay where the data
+  is fixed (exp035's 38 speech rows and 11,399 audio tokens, the 165 pre-split
+  rows, the four flagged deltas); totals are floors. Found by simulating the
+  exp036 complete-scope regrade, the e35par parity payload and a 25-task
+  exp037 grade with their ledgers, journals and analyses. Seals, grader
+  hashes, USD gates, sealed-payload lists and source pins are unchanged.
+
+- Stage GPT-5.6 Sol toward all 220 tasks (owner decisions 2 and 3,
+  2026-11-06: "셋다 예" at 01:55 KST, the first 25 tasks first and the other
+  195 only after a new approval; the ceiling "700으로 올려" at 12:30 KST).
+  - `sol_batch_controls.RUNS` replaces the one pinned experiment with a
+    registry of Sol runs, each with its own task digest and USD ceiling:
+    `exp036_sol_fixed5` unchanged (200 = 146 solve + 54 grading, 51 per
+    attempt); `exp037_sol_first25` approved at 700 = 550 solve + 150 grading
+    (the 2.00 narrative allowance inside the 150), 51 per attempt, so attempts
+    start while booked solve spend is at most 499; `exp038_sol_rest195`
+    registered with no approval and no ceiling, so step 2 refuses it before
+    any attempt (`sol_batch_run_not_approved`) and the grade preflight refuses
+    it before any download. `sol_batch_grading.APPROVALS` gains the same two
+    entries, and a test holds both sides equal. An approval's config name must
+    be its own grade-file slug (letters, digits, `.`, `_`, `-`), so the writer
+    check below matches every grade step 8 names after it. Simulated over
+    40,000 draws for exp037 (exp036's five bookings resampled or fitted
+    lognormal; each task's grading from exp035's grade at the Sol meter),
+    every first attempt starts and the grade fits with probability 1.000 /
+    0.999, and the expected spend is about USD 330.
+  - #799's constants are now fields of `RUNS["exp036_sol_fixed5"]`:
+    `PRIOR_LINEAGE_SPEND_USD` is `prior_lineage_spend_usd`, `LOST_BOOKING_USD`
+    is `lost_booking_usd`, and the money constants are the money fields. A
+    recovery PR edits the entry of the run it recovers. exp036's YAML header
+    names the fields (a comment-only edit). exp036's gate figures (146 / 51 /
+    95.00) and refusal codes are unchanged, but a re-dispatched exp036 leg's
+    output is not byte-identical to #799's: the banner's first line adds the
+    approval (`controls on for exp036_sol_fixed5 (owner 2026-11-05)`), and the
+    `sol_batch_controls_condition_a.json` header gains a `registered_run`
+    block under the same `sol-batch-controls-v1` schema. Nothing reads either.
+    The prior-lineage raise rule now also adds the run's attempt reserve (51)
+    when the lineage's last leg printed no "leg closed" line: a hard kill
+    mid-attempt leaves that attempt out of every printed figure. A test
+    reproduces the kill point. The registry refuses a digest that is not 64
+    lowercase hex characters, and a prior-lineage spend or lost booking that
+    is not a finite Decimal of at least 0 keyed by (40-hex revision, task id),
+    so neither can lower a grade's seed.
+  - `exp037_sol_first25`: the first 25 tasks of the trial-stage rule
+    (`select_trial_run_tasks`, exp034's first 25: all nine industries),
+    exp033's prompt byte for byte, exp036's Sol settings, six legs (leg zero
+    and five relay legs, `relay_max_runs: 5`). `exp038_sol_rest195`: the other
+    195 in exp035's order, eleven legs (`relay_max_runs: 10`). Grading configs
+    `exp037_v2_sol_max.yaml` and `exp038_v2_sol_max.yaml` copy the exp035 Sol
+    Max template blocks; neither pins a subset.
+  - For a Sol run the grade preflight also refuses a published task list
+    other than the registered one, and for every approved pair a committed
+    grade whose writing run has no committed journal, so a resume chunk
+    dispatched by hand after a lost journal push is refused. The automatic
+    retrigger already skipped the next chunk when the journal push failed
+    (its `if` carries GitHub's implicit `success()`); its `if` now names
+    that dependency (`steps.usd_journal.outcome == 'success'`) so a later
+    `always()` or `continue-on-error` cannot drop it. `run` refuses
+    `--tasks` and `--limit` for exp037 and exp038 as for every approved
+    grade, so a Sol grade is never a diagnostic subset.
+  - `scripts/sol_stage_readout.py`: a model-free readout of a Sol stage or of
+    several stages together: fixed-denominator, full-item and judged-only
+    scores, zeros by cause, file habits, solve and grading USD per task, and
+    a projection for the remaining tasks, with four pre-registered go/no-go
+    rules for the next stage. It changes no grade or headline. It reads a
+    registered stage only from its final grade (that stage's own experiment
+    id, every registered task in the self_report's order). When the grade
+    judged anything, it refuses a journals directory with no journal or
+    without the journal of the run that wrote the grade (the journal
+    `check_grade_writers` requires on main), and it refuses a journal
+    another approval opened. With no `--remaining-from` and not both
+    `--remaining-tasks` and `--remaining-items`, nothing is projected and R3
+    and R4 print `null` (not evaluated) instead of holding. The solve
+    projection and R3 are also `null` when no task was attempted, and the
+    grading projection and R4 when no rubric item was judged.
+    - Zeros use one cause table with
+      `batch-runner/scripts/merge_parity_regrade.py`, which gains
+      `grader_other` (a grader-side error other than a refusal), `usd_gate`,
+      `sol_gate` (the Sol harness refused the attempt before it started:
+      `sol_batch_context_window_mismatch` or `sol_batch_gate_unverified`),
+      `unclassified_failure` and `turn_timeout` (a turn past its wall clock,
+      until now infrastructure there), and calls a zero with no solve-side
+      category `model_other` (was `unknown` or `other_model_side`). A parity
+      record made before this merges keeps the old labels.
+    - A task the USD gate or the Sol harness refused stays 0 on its stage's
+      denominator but is left out of per-task cost, time and the projection.
+      A USD-gate task is listed as moved, and in a union a later stage's row
+      replaces it; a `sol_gate` task counts as infrastructure for R2.
+      `--remaining-from exp038_sol_rest195` takes the remaining tasks and
+      rubric items from exp038's registered list plus the moved tasks.
+    - Grading USD per journal is `sol_batch_grading.journal_spend`'s, with
+      what no task line holds reported as unattributed. Each stage's solve,
+      narrative and grading USD is set against its approved ceiling, as the
+      grade preflight's committed line counts it: the solve figure is
+      `sol_batch_controls.solve_spend_usd` over the stage's published rows
+      (prior lineages, every booking including a gate-refused row's, and
+      lost bookings for the graded revision), and it stays with its stage
+      when a union replaces a row. exp036 before its regrade reads 51.51 of
+      200, the preflight's figure then.
+    - `one_grader` holds when each stage's grade was made by this tree's
+      grader recomputed for its own config, and the configs' template
+      blocks, the judge, prompt version, rubric commit and renderer
+      fingerprint agree. The raw `grader_source_hash` covers the config
+      file, so two stages' raw hashes always differ.
+  - exp038's header lists what its approval PR must change (money on both
+    twin entries, any tasks exp037's gate moved with the task count, digest
+    and tests, the wall-clock figures), and requires a free exp038 grade dry
+    run whose renderer fingerprint equals exp037's grade's before any paid
+    exp038 grade: PyMuPDF and the other pip renderer libraries in
+    `requirements-renderer.txt` are not pinned (exp035 was graded with
+    PyMuPDF 1.28.2, exp036 with 2.1); LibreOffice is pinned by the grading
+    image's digest and the renderer preflight's version check.
+
+  No step 2, step 8, core/, grader-seal or batch-run.yml bytes change, the
+  Sol source profile is untouched, and no paid call was made. Dispatch
+  exp037 once, with no other paid Sol work running.
+
 - Grade the files a reader would open instead of refusing the task (owner
   decision 1, 2026-11-06). `core/deliverable_selector.py`:
   - An email saved as `.eml` is a document. Criteria about the email, memo

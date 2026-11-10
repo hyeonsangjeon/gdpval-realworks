@@ -1078,13 +1078,97 @@ def test_the_walk_still_fails_a_payload_that_landed_on_the_wrong_side(
         _denominator_invariant(other)
 
 
-def test_the_seven_sealed_files_on_disk_are_still_sealed():
-    """Keep the seven on-disk payload seals and their durable voucher documents.
+#: Grade directories and stems of the payloads below, named once.
+_GOLD30 = (
+    "data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/"
+)
+_GOLD30_STEM = (
+    "exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2"
+    "__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf"
+    "__src_c33d9d55703fbf5d__v2.2.json"
+)
+_EXP036 = (
+    "data/grades/exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602"
+    "__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777"
+)
+_EXP035_PUBLISHED = (
+    "data/grades/exp035_codex_foundry_full220__judge_gpt-5_6-sol__exp035_codex_foundry_full220_v2_sol_max"
+    "__cfg_89820de9d9c4e2e3__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf"
+    "__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0__src_fd0db9d9d78d6d54__v2.2.json"
+)
+_E35PAR = (
+    "data/grades/_diagnostic/b2ed72124660d52d20ffb3af870fa308a3ebdf3b2bbe4aed9dc495f240ac4851/"
+    "exp035_codex_foundry_full220__judge_gpt-5_6-sol__e35par__cfg_947381242d273196"
+    "__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0"
+    "__src_02cbcf3824bd89a2__v2.2.json"
+)
+_RUN_RECORDS = "batch-runner/docs/run_records/"
+
+#: Every payload a committed document must keep vouching for, and the documents
+#: that must. A voucher states the payload's current digest, so a listed
+#: document missing from what ``documents_asserting`` finds means the bytes were
+#: rewritten or the document now asserts an obsolete digest; either fails.
+#: A payload or a document that starts vouching later is not a failure: a run
+#: record that quotes the grade it reports is the mechanism working, and the
+#: owner's 2026-11-07 rule is that a legitimate file landing on main turns
+#: nothing red. Add the pair here when the voucher matters.
+REQUIRED_SEALS = {
+    "data/grades/_diagnostic/29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9/"
+    "exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__validation_exp003_v2_sol_max_anchor4"
+    "__cfg_7f3c7c2e542cf580__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf"
+    "__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_b00e83209ab6ca93__v2.2.json": {
+        "CHANGELOG.md",
+        "scripts/__tests__/test_analyze_grade_run.py",
+    },
+    _GOLD30 + "_repeats/run-002/" + _GOLD30_STEM: {"data/grades/_validation/PR3_REPEAT_VARIATION.md"},
+    _GOLD30 + "_repeats/run-003/" + _GOLD30_STEM: {"data/grades/_validation/PR3_REPEAT_VARIATION.md"},
+    _GOLD30 + _GOLD30_STEM: {"data/grades/_validation/PR3_REPEAT_VARIATION.md"},
+    # 327 quotes the 185-task gold ceiling's digest as the receipt for the
+    # 31 audio-routed items it counts. Naming the payload is the point of
+    # that document, so it moves with the seal.
+    "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/"
+    "exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530"
+    "__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf"
+    "__src_79c2f5035c4aa826__v2.2.json": {
+        "tasks/rebuilding_grading_task/327-thirty-one-items-that-listened.md",
+        "tasks/rebuilding_grading_task/PR3_FULL_GOLD_CORPUS.md",
+    },
+    "data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini.json": {
+        "scripts/__tests__/test_sol_max_anchor_selection.py",
+    },
+    # The parity regrade's selection record is a diff against exactly these
+    # bytes, and its run record merges the regrade into them.
+    _EXP035_PUBLISHED: {
+        _RUN_RECORDS + "exp035_parity_selection_20261106.json",
+        _RUN_RECORDS + "exp035_parity_regrade_20261109.json",
+        _RUN_RECORDS + "exp035_parity_regrade_20261109.md",
+    },
+    _E35PAR: {
+        _RUN_RECORDS + "exp035_parity_regrade_20261109.json",
+        _RUN_RECORDS + "exp035_parity_regrade_20261109.md",
+    },
+    # exp036 before and after the selector fix: the run record reports one
+    # against the other, and the parity record puts gpt-5.4 beside the new one.
+    _EXP036 + "__src_814d56797e9fc3dc__v2.2.json": {
+        _RUN_RECORDS + "exp036_sol_fixed5_regrade_20261109.json",
+        _RUN_RECORDS + "exp036_sol_fixed5_regrade_20261109.md",
+    },
+    _EXP036 + "__src_6f8811acb9de0b81__v2.2.json": {
+        _RUN_RECORDS + "exp036_sol_fixed5_regrade_20261109.json",
+        _RUN_RECORDS + "exp036_sol_fixed5_regrade_20261109.md",
+        _RUN_RECORDS + "exp035_parity_regrade_20261109.json",
+    },
+}
+
+
+def test_every_required_seal_on_disk_still_holds():
+    """Keep the on-disk payload seals and their durable voucher documents.
 
     Fixture-based tests cannot detect lost seals in the actual repository,
     including the 185-task gold ceiling. ``documents_asserting`` reports only
-    documents whose digests match the current payload bytes, so the expected
-    durable voucher set catches a document left asserting an obsolete digest.
+    documents whose digests match the current payload bytes, so a required
+    voucher missing from its payload's list is a document left asserting an
+    obsolete digest, or a payload whose bytes moved under it.
 
     Five payloads were previously unsealed and backfilled; their durable
     vouchers must continue to match the rewritten bytes. ``CHANGELOG.md``
@@ -1094,44 +1178,53 @@ def test_the_seven_sealed_files_on_disk_are_still_sealed():
     longer asserts a sealed digest, its absence is not a dropped voucher and
     must not require restoring obsolete history.
 
-    The seventh seal is the published exp035 grade. The parity regrade's
-    selection record names its sha256, because the regrade's pinned task list
-    is a diff against exactly those bytes; rewriting them would make the
-    record false.
+    This used to assert that exactly seven payloads were sealed and exactly
+    which documents sealed them. Two run records quoting the grades they report
+    (the exp036 regrade and the exp035 parity merge) sealed three more payloads
+    and turned it red, although every seal it guarded still held. What the
+    count stood for is the pair list above; a new voucher is not a lost one.
     """
     sealed = {
-        backfill._display(path): backfill.documents_asserting(path)
+        backfill._display(path): set(backfill.documents_asserting(path))
         for path in backfill.collect_grade_files(REPO_ROOT / "data" / "grades")
     }
-    sealed = {path: docs for path, docs in sealed.items() if docs}
-
-    assert len(sealed) == 7, f"expected seven sealed payloads, found {sealed}"
-    assert any(path.startswith("data/grades/exp035_codex_foundry_full220__judge_") for path in sealed), (
+    missing_payloads = sorted(set(REQUIRED_SEALS) - set(sealed))
+    assert not missing_payloads, (
+        f"required sealed payloads are no longer on disk: {missing_payloads}. "
+        "A published grade is never deleted or moved."
+    )
+    lost = {
+        path: sorted(documents - sealed[path])
+        for path, documents in REQUIRED_SEALS.items()
+        if documents - sealed[path]
+    }
+    assert not lost, (
+        "a required voucher no longer asserts the current digest of the payload "
+        f"it names: {lost}. Either the payload's bytes were rewritten (restore "
+        "them: the document is now false) or the document was edited to another "
+        "digest. A rolling latest-result record that no longer asserts a digest "
+        "is not a required voucher; do not restore obsolete history to satisfy "
+        "this list."
+    )
+    assert REQUIRED_SEALS[_EXP035_PUBLISHED] <= sealed[_EXP035_PUBLISHED], (
         "the published exp035 grade must stay sealed; the parity selection record "
         "is a diff against its bytes"
     )
-    assert any("79c2f503" in path for path in sealed), (
-        "the 185-task gold ceiling must still be refused; it is quoted as a "
-        "reproduction receipt in PR3_FULL_GOLD_CORPUS.md"
-    )
-    assert {doc for docs in sealed.values() for doc in docs} == {
-        "CHANGELOG.md",
-        "batch-runner/docs/run_records/exp035_parity_selection_20261106.json",
-        "data/grades/_validation/PR3_REPEAT_VARIATION.md",
-        "scripts/__tests__/test_analyze_grade_run.py",
-        "scripts/__tests__/test_sol_max_anchor_selection.py",
-        # 327 quotes the 185-task gold ceiling's digest as the receipt for the
-        # 31 audio-routed items it counts. Naming the payload is the point of
-        # that document, so it joins the list of things to move with the seal.
-        "tasks/rebuilding_grading_task/327-thirty-one-items-that-listened.md",
-        "tasks/rebuilding_grading_task/PR3_FULL_GOLD_CORPUS.md",
-    }, (
-        "the durable voucher document set changed. Check that each required "
-        "voucher still asserts the current digest of the payload it names. "
-        "A rolling latest-result record that no longer asserts a digest is "
-        "not a required voucher; do not restore obsolete history to satisfy "
-        "this set."
-    )
+
+
+def test_a_rewritten_payload_loses_its_required_voucher(tmp_path: Path):
+    """The negative control for the pair list: rewriting vouched bytes is seen.
+
+    A fixture tree with one payload and one tracked document quoting its digest
+    prefix; after the payload changes, ``documents_asserting`` no longer names
+    the document, which is exactly the difference the pair list checks.
+    """
+    root, payload, _ = _sealed_fixture(tmp_path)
+    before = set(backfill.documents_asserting(payload, root))
+    assert before, "the fixture must start sealed"
+    payload.write_text(payload.read_text() + " ")
+    after = set(backfill.documents_asserting(payload, root))
+    assert before - after == before, "a rewritten payload must lose its voucher"
 
 
 # --------------------------------------------------------------------------

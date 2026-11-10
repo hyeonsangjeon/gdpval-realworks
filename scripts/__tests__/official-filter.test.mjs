@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   filterDashboardExperiments,
@@ -10,6 +13,7 @@ import {
   isHiddenOfficialExperiment,
   isOfficialGradeId,
   isPartialCorpusGrade,
+  isSmokeExperimentId,
   isSupersededGradeId,
   OFFICIAL_GRADE_IDS,
   OFFICIAL_TASK_COUNT,
@@ -201,6 +205,59 @@ test('promotion does not disturb the measured hide rules', () => {
   for (const id of [SOL_220_R1, SOL_220_LEGACY]) {
     assert.equal(/__[0-9a-f]{7}__v\d/i.test(id), false)
     assert.equal(id.endsWith('_tight'), false)
+  }
+})
+
+// ── exp036: the pre-fix selector grade is retired by its complete regrade ────
+// The grade made before the deliverable-selector fix refused two of exp036's
+// five tasks. The regrade after the fix covers all five with the same judge,
+// rubric, config and inference, so only the grader source hash differs.
+
+const EXP036_PRE_FIX =
+  'exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777__src_814d56797e9fc3dc__v2.2'
+const EXP036_REGRADE =
+  'exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777__src_6f8811acb9de0b81__v2.2'
+
+test('the pre-fix exp036 grade is retired, not deleted', () => {
+  assert.equal(isSupersededGradeId(EXP036_PRE_FIX), true)
+  assert.equal(isOfficialGradeId(EXP036_PRE_FIX), false)
+})
+
+test('the complete exp036 regrade stays on screen', () => {
+  // Not official, so nothing exempts it from a hide rule: every id-based rule
+  // isHiddenGrade applies has to pass it. Partial coverage is the one rule
+  // read from the aggregated card rather than the id, so it is not checked
+  // here; the test below only checks the grade's own task list is complete.
+  assert.equal(isOfficialGradeId(EXP036_REGRADE), false)
+  assert.equal(isSupersededGradeId(EXP036_REGRADE), false)
+  // isLegacyExp003 (officialFilter.ts): the `__src_<hex>__v2.2` suffix must not
+  // read as the legacy `__<7hex>__v<n>` naming.
+  assert.equal(/__[0-9a-f]{7}__v\d/i.test(EXP036_REGRADE), false)
+  assert.equal(EXP036_REGRADE.endsWith('_tight'), false)
+  for (const id of [EXP036_REGRADE, 'exp036_sol_fixed5']) {
+    assert.equal(isHiddenDiagnosticExperimentId(id), false)
+    assert.equal(isSmokeExperimentId(id), false)
+  }
+})
+
+test('the exp036 regrade differs from the retired grade in the grader source only', () => {
+  // Same judge, rubric, config and inference: the retirement replaces one
+  // measurement with a better one of the same thing, nothing else moved.
+  const strip = (id) => id.replace(/__src_[0-9a-f]+__/, '__src__')
+  assert.equal(strip(EXP036_PRE_FIX), strip(EXP036_REGRADE))
+  assert.notEqual(EXP036_PRE_FIX, EXP036_REGRADE)
+})
+
+test('both exp036 ids name complete top-level grades the aggregator reads', () => {
+  // The aggregator's card id is the file's basename, so a typo here would
+  // retire nothing and leave two exp036 cards on screen. Both files stay
+  // committed: retirement never deletes or moves a published grade.
+  const grades = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'data', 'grades')
+  for (const id of [EXP036_PRE_FIX, EXP036_REGRADE]) {
+    const payload = JSON.parse(readFileSync(join(grades, `${id}.json`), 'utf8'))
+    assert.equal(payload.experiment_id, 'exp036_sol_fixed5')
+    assert.equal(payload.run_status, 'final')
+    assert.equal(payload.tasks.length, payload.expected_task_count)
   }
 })
 
