@@ -67,6 +67,9 @@ SOURCES = {
     "management_transport": ("src/vs/base/parts/ipc/node/ipc.cp.ts", "sender.send((<Buffer>r.buffer).toString('base64'))"),
     "policy_raw_resolution": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "Object.assign(resolvedValues, migrateCodexPermissionValues(params.config"),
     "policy_read_only_profile": ("src/vs/platform/agentHost/node/codex/codexLaunchConfig.ts", "return CODEX_VSCODE_WORKSPACE_READ_ONLY_PERMISSION_PROFILE"),
+    "hooks_catalog_request": ("src/vs/platform/agentHost/node/codex/codexAgent.ts", "client.request<'hooks/list', HooksListResponse>('hooks/list', { cwds: [cwd] })"),
+    "native_transport_error": ("src/vs/platform/agentHost/node/codex/codexAppServerClient.ts", "this._onTransportError.fire(err instanceof Error ? err : new Error(String(err)))"),
+    "native_dispose_eof": ("src/vs/platform/agentHost/node/codex/codexAppServerClient.ts", "this._transport.stdin.end()"),
 }
 
 
@@ -424,7 +427,7 @@ def analyze(records, *, synthetic):
         "native_requests": [], "native_applied_snapshots": [], "native_base_configuration": [],
         "native_context_reports": [], "capi_requests": [], "capi_response_reports": [],
         "metadata_http": [], "capi_count_scope": "inference_only_metadata_gets_separate",
-        "capture_errors": [], "records": records,
+        "capture_errors": [], "native_rpc_refusals": [], "records": records,
         "limitations": ["diagnostic_only_not_admission", "response_report_not_independent_model_attestation",
                         "capi_field_availability_requires_real_response", "native_settings_are_not_served_settings",
                         "sdk_context_window_is_not_provider_capacity_proof"]}
@@ -438,6 +441,10 @@ def analyze(records, *, synthetic):
             result["metadata_http"].append({key: record[key] for key in ("kind", "method", "host", "path", "status", "external_request") if key in record})
         if kind in {"blocked", "wire_parse_error"}:
             result["capture_errors"].append(record.get("reason", "wire_boundary_refused"))
+        if kind == "blocked" and record.get("boundary") == "native_ipc":
+            result["native_rpc_refusals"].append({key: record[key] for key in (
+                "process", "sequence", "stream", "reason", "method", "method_type", "rpc_sequence",
+                "write_sequence", "trigger", "message_shape", "sequence_scope", "forwarded") if key in record})
         if kind == "ipc_request" and isinstance(value, dict):
             if "id" in value:
                 key = (*stream, type(value["id"]).__name__, str(value["id"]))
@@ -586,4 +593,5 @@ def export(state, destination, *, credential="", patched_request=None):
     save_json(output, report)
     return {"path": output.name, "sha256": digest(output), "capture_status": report["capture_status"],
             "synthetic": report["synthetic"], "admission_allowed": False,
+            "native_rpc_refusals": report["native_rpc_refusals"],
             **({"patched_runtime": patched_provenance} if patched_provenance is not None else {})}

@@ -159,6 +159,17 @@ function diagnosticScalar(value) {
   return { type, value: safe };
 }
 
+function rpcRefusalDiagnostic(message, stream, inspection) {
+  // Diagnostics only. Never retain params, response bodies, ids or raw frames.
+  // A refused frame remains buffered; stdin.end() can inspect that SAME frame
+  // again. These ordinals count inspections/chunks, not distinct native calls.
+  const method = diagnosticScalar(message.method);
+  return { stream, ...inspection, method: method.value, method_type: method.type,
+    message_shape: { id_type: diagnosticScalar(message.id).type,
+      has_result: Object.hasOwn(message, 'result'), has_error: Object.hasOwn(message, 'error') },
+    sequence_scope: 'per_stream_inspection_not_unique_rpc', forwarded: false };
+}
+
 function threadContractDiagnostic(message, modelFree, readOnly) {
   // Diagnostics only, called AFTER the unchanged refusal predicate fires.
   // These comparisons neither authorize nor rewrite a native request.
@@ -216,7 +227,7 @@ function instrument({ spawn, fetch, fork }, options) {
     record('blocked', { boundary, reason, ...details });
     fail(reason);
   }
-  function requestAllowed(message, stream) {
+  function requestAllowed(message, stream, inspection) {
     if (sessionOnly && message.method === 'thread/start') {
       const p = message.params, config = p?.config;
       const readOnly = p?.sandbox === 'read-only' && p?.permissions === undefined ||
@@ -230,22 +241,23 @@ function instrument({ spawn, fetch, fork }, options) {
           config.model_reasoning_effort !== undefined && config.model_reasoning_effort !== 'max' ||
           Object.keys(config.mcp_servers || {}).length !== 0 || !['string', 'number'].includes(typeof message.id) ||
           Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error')) {
-        blocked('native_ipc', 'session_policy_thread_contract_refused', threadContractDiagnostic(message, modelFree, readOnly));
+        blocked('native_ipc', 'session_policy_thread_contract_refused', {
+          ...rpcRefusalDiagnostic(message, stream, inspection), ...threadContractDiagnostic(message, modelFree, readOnly) });
       }
-      if (threadRequestId !== undefined || !options.claimThread) blocked('native_ipc', 'session_policy_thread_limit');
-      try { options.claimThread(); } catch { blocked('native_ipc', 'session_policy_thread_limit'); }
+      if (threadRequestId !== undefined || !options.claimThread) blocked('native_ipc', 'session_policy_thread_limit', rpcRefusalDiagnostic(message, stream, inspection));
+      try { options.claimThread(); } catch { blocked('native_ipc', 'session_policy_thread_limit', rpcRefusalDiagnostic(message, stream, inspection)); }
       threadRequestId = message.id; threadStream = stream;
       return;
     }
     if (sessionOnly && ['thread/unsubscribe', 'thread/archive'].includes(message.method)) {
       if (!ownedThread || stream !== threadStream || message.params?.threadId !== ownedThread ||
           Object.keys(message.params).length !== 1 || Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error')) {
-        blocked('native_ipc', 'session_policy_foreign_cleanup_refused');
+        blocked('native_ipc', 'session_policy_foreign_cleanup_refused', rpcRefusalDiagnostic(message, stream, inspection));
       }
       return;
     }
     if (modelFree && (!READ_ONLY_RPC.has(message.method) || Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error'))) {
-      blocked('native_ipc', 'wire_model_free_rpc_refused');
+      blocked('native_ipc', 'wire_model_free_rpc_refused', rpcRefusalDiagnostic(message, stream, inspection));
     }
   }
   function wrappedSpawn(command, args, settings) {
@@ -269,9 +281,10 @@ function instrument({ spawn, fetch, fork }, options) {
     for (const key of Object.keys(env)) if (key.startsWith('GHCP_AHP_WIRE_') || key === 'NODE_OPTIONS') delete env[key];
     const child = spawn(command, args, { ...settings, env });
     record('native_started', { stream, native_binary_sha256: nativeSha256, session_only: sessionOnly });
+    let rpcSequence = 0, writeSequence = 0, trigger = 'not_reported';
     const outgoing = frames(text => {
       const value = parseJson(text);
-      requestAllowed(value, stream); // Before the original write, including batched lines.
+      requestAllowed(value, stream, { rpc_sequence: ++rpcSequence, write_sequence: writeSequence, trigger }); // Before forwarding.
       raw('ipc_request', { stream, delivery: 'attempted' }, value, text);
     }, /\r?\n/);
     const incoming = frames(text => {
@@ -284,6 +297,7 @@ function instrument({ spawn, fetch, fork }, options) {
     }, /\r?\n/);
     const originalWrite = child.stdin.write;
     function inspectOutgoing(chunk) {
+      ++writeSequence;
       // The pinned client writes complete newline-delimited messages. Never
       // forward a partial free-mode packet: a child could parse it on EOF.
       if (modelFree && !Buffer.from(chunk).toString('utf8').endsWith('\n')) blocked('native_ipc', 'wire_model_free_partial_rpc_refused');
@@ -291,12 +305,14 @@ function instrument({ spawn, fetch, fork }, options) {
       if (modelFree) outgoing.end();
     }
     child.stdin.write = function (chunk, ...rest) {
+      trigger = 'stdin.write';
       inspectOutgoing(typeof chunk === 'string' ? Buffer.from(chunk, typeof rest[0] === 'string' ? rest[0] : 'utf8') : chunk);
       return originalWrite.call(this, chunk, ...rest);
     };
     if (typeof child.stdin.end === 'function') {
       const originalEnd = child.stdin.end;
       child.stdin.end = function (chunk, ...rest) {
+        trigger = 'stdin.end';
         if (typeof chunk === 'string' || Buffer.isBuffer(chunk)) inspectOutgoing(Buffer.from(chunk));
         outgoing.end();
         return originalEnd.call(this, chunk, ...rest);

@@ -299,14 +299,32 @@ def test_zero_turn_job_is_protected_and_tokens_are_never_in_commands_or_artifact
     assert "$COPILOT_GITHUB_TOKEN" not in step["run"]
     assert "ghcp_ahp_connection.py" not in step["run"] and "execute-paid" not in step["run"]
     upload = job["steps"][-1]
-    assert upload["if"] == "always()" and upload["with"]["path"].endswith("/evidence/*.json")
+    assert upload["if"] == "always()"
+    assert upload["with"]["path"].splitlines() == [
+        "${{ runner.temp }}/ghcp-zero-turn/evidence/*.json",
+        "${{ runner.temp }}/ghcp-zero-turn/evidence/summary.md"]
     assert not any("continue-on-error" in step for step in job["steps"])
     push = (ROOT / ".github/workflows/ghcp-ahp-model-free-probe.yml").read_text()
     assert "test_ghcp_ahp_zero_turn.py" in push
     assert "secrets." not in push and "--authenticated-zero-turn" not in push
 
 
-@pytest.mark.parametrize("outcome", ["reported", "auth_refused", "session_refused", "no_thread", "http_blocked", "wrong_model"])
+def test_zero_turn_upload_preserves_original_markdown_bytes_and_excludes_other_logs(tmp_path):
+    value = yaml.load((ROOT / ".github/workflows/agentic-v2-ghcp-sol-gate.yml").read_text(), Loader=yaml.BaseLoader)
+    upload = value["jobs"]["ahp-zero-turn"]["steps"][-1]
+    prefix = "${{ runner.temp }}/ghcp-zero-turn/evidence/"
+    patterns = [path.removeprefix(prefix) for path in upload["with"]["path"].splitlines()]
+    original = b"# Producer summary\n\n- execution_allowed: `false`\n"
+    (tmp_path / "summary.md").write_bytes(original)
+    (tmp_path / "summary.json").write_text('{"execution_allowed": false}\n')
+    for name in ("backend.log", "private.env", "other.md"):
+        (tmp_path / name).write_text("synthetic excluded file")
+    selected = {path.name: path.read_bytes() for pattern in patterns for path in tmp_path.glob(pattern)}
+    assert set(selected) == {"summary.json", "summary.md"}
+    assert selected["summary.md"] == original
+
+
+@pytest.mark.parametrize("outcome", ["reported", "auth_refused", "session_refused", "no_thread", "http_blocked", "wrong_model", "native_rpc_refused"])
 def test_full_authenticated_probe_exports_real_receipt_contract_and_always_cleans_up(
         backend_probe_fixture, context, monkeypatch, outcome):
     """Fake process/AHP/native bytes; real RPC/observer parsing/assessment/export."""
@@ -326,6 +344,13 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
             ])
         if outcome == "http_blocked":
             rows.append({"kind": "blocked", "reason": "session_policy_http_refused", "boundary": "capi_or_http"})
+        if outcome == "native_rpc_refused":
+            rows.extend({"kind": "blocked", "reason": "wire_model_free_rpc_refused", "boundary": "native_ipc",
+                "stream": "ipc-1", "method": "hooks/list", "method_type": "string", "rpc_sequence": ordinal,
+                "write_sequence": 10, "trigger": trigger, "forwarded": False,
+                "message_shape": {"id_type": "number", "has_result": False, "has_error": False},
+                "sequence_scope": "per_stream_inspection_not_unique_rpc"}
+                for ordinal, trigger in ((10, "stdin.write"), (11, "stdin.end")))
         (directory / "wire-1.jsonl").write_text("".join(json.dumps({**row, "sequence": index, "synthetic": True}) + "\n"
                                                     for index, row in enumerate(rows, 1)))
         probe.save_json(directory / "bootstrap.json", {"session_policy": True, "authenticated_zero_turn": True,
@@ -335,7 +360,7 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
 
     monkeypatch.setattr(wire_capture, "export", export)
     monkeypatch.setattr(policy, "await_native_thread", lambda *args: {"replies": 0 if outcome == "no_thread" else 1})
-    rpc_wire = Wire(auth_error=outcome == "auth_refused", session_error=outcome == "session_refused")
+    rpc_wire = Wire(auth_error=outcome == "auth_refused", session_error=outcome in {"session_refused", "native_rpc_refused"})
     receipt, calls, output = backend_probe_fixture(authenticated_zero_turn=True, transport_factory=lambda: rpc_wire)
     assert calls["stops"] >= 1
     assert receipt["authentication_supplied"] is True
@@ -361,6 +386,13 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
     assert handshake["auth_rpc_succeeded"] is (outcome != "auth_refused")
     assert handshake["capi_requests"] == handshake["model_turn_start_requests"] == handshake["model_turn_events"] == 0
     assert handshake["observed"]["served_model"] == handshake["observed"]["web_search"] == "not_reported"
+    if outcome == "native_rpc_refused":
+        refusals = receipt["wire_capture"]["native_rpc_refusals"]
+        assert refusals == handshake["wire_capture"]["native_rpc_refusals"]
+        assert [(row["method"], row["rpc_sequence"], row["trigger"]) for row in refusals] == [
+            ("hooks/list", 10, "stdin.write"), ("hooks/list", 11, "stdin.end")]
+        assert all(row["forwarded"] is False and row["process"] == "wire-1.jsonl" for row in refusals)
+        assert handshake["session_created"] is False
     if outcome in {"reported", "wrong_model"}:
         assert handshake["observed"]["approval"] == "untrusted"
         assert handshake["observed"]["reasoning_effort"] == "max"
