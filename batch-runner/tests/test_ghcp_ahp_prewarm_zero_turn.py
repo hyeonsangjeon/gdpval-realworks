@@ -318,14 +318,18 @@ def test_prepare_stages_a_distinct_tree_and_keeps_producer_and_consumer_bindings
         return {"transfer": transfer}
     monkeypatch.setattr(load, "prepare_payload", payload)
     monkeypatch.setattr(runtime, "stage_runtime", lambda *args: calls.append(("stage", *args)))
+    monkeypatch.setattr(prewarm, "extract_runtime_inputs", lambda *args: calls.append(("extract", *args)) or {"synthetic": True})
+    monkeypatch.setattr(probe, "verify_prepared", lambda *args: calls.append(("verify_inputs", *args)))
     monkeypatch.setattr(prewarm, "verify_preparation", lambda *args: calls.append(("verify", *args)))
     output, evidence, base = tmp_path / "next", tmp_path / "next-evidence", tmp_path / "original"
     evidence.mkdir()
     result = prewarm.prepare(tmp_path / "downloaded", selected, base, output, evidence, IDENTITY)
     assert calls[0] == ("payload", tmp_path / "downloaded", output / "payload", prewarm.validate_build(build(), IDENTITY))
-    assert calls[1] == ("stage", base, output / "runtime", output / "payload/inputs/agentHostMain.js",
+    assert calls[1] == ("stage", output / "payload/base", output / "runtime", output / "payload/inputs/agentHostMain.js",
                        {"path": output / "payload/build-receipt.json", "sha256": transfer["build_receipt_sha256"]})
-    assert calls[2] == ("verify", output / "preparation.json", output / "runtime", evidence, IDENTITY)
+    assert calls[2] == ("extract", base, output / "runtime")
+    assert calls[3] == ("verify_inputs", {"synthetic": True}, output / "runtime", evidence, IDENTITY)
+    assert calls[4] == ("verify", output / "preparation.json", output / "runtime", evidence, IDENTITY)
     assert result["consumer"] == IDENTITY and result["producer"] == build()
     assert result["execution_allowed"] is False and result["applied_policy"] == "not_reported"
     assert (output / "preparation.json").read_bytes() == (evidence / "prewarm-zero-turn-preparation.json").read_bytes()

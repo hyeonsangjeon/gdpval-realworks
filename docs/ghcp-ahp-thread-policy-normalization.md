@@ -231,6 +231,29 @@ resolver echoes. Preserve zero turns/inference and admission=false for missing
 served-model/effort/context proof. Stop once on auth, policy, boundary or capture
 failure; no retry or promotion to the one-turn/five-task gate.
 
+## Server-only staging before SDK extraction (2026-11-11)
+
+Run 42893496988 stopped before authentication with
+`patched_runtime_staging_special_file`. The new preparation had incorrectly
+passed a complete, already SDK-populated tree to `stage_runtime`; the pinned
+SDK's `node_modules/.bin/codex -> ../@openai/codex/bin/codex.js` is a legitimate
+contained package link but is not allowed in that staging input.
+
+The corrected composition stages the producer's verified **server-only** tree
+first, with the original special-file/symlink guard intact. It then revalidates
+the pinned CLI/SDK/source archive bytes and extracts CLI/SDK through the existing
+safe tar filter, as in the no-auth readiness preparation. No extracted SDK tree
+is copied or substituted. Original binary/source preparation verification and
+the patched runtime receipt chain must pass before authentication. Neither
+staging nor extraction is a native-policy application report.
+
+The offline integration fixture uses inert archives with the real relative
+SDK-link shape and runs the actual payload, staging, extraction and receipt
+functions (no stubs at those boundaries). The corrected composition passes;
+the old whole-tree composition still refuses. A FIFO or symlink injected into
+the actual server staging input is still rejected before SDK extraction.
+No pin, patch, permission, native observer or activation guard is changed.
+
 ## License for the copied VS Code function excerpts
 
 The source fixture retains Microsoft's notices. Its excerpts are covered by the
