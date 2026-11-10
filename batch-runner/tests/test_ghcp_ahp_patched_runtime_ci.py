@@ -31,8 +31,10 @@ SUITE = [
     "tests/test_ghcp_ahp_wire_capture.py", "tests/test_ghcp_ahp_zero_turn.py",
     "tests/test_ghcp_ahp_metadata_broker.py", "tests/test_ghcp_ahp_connection.py",
 ]
-EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smoke.py", "tests/test_ghcp_ahp_readiness_smoke.py"]
-EXPECTED_COUNTS = {"contracts.xml": 1682, "workflow-guards.xml": 74}
+EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smoke.py", "tests/test_ghcp_ahp_readiness_smoke.py",
+               "tests/test_ghcp_ahp_permission_normalization.py",
+               "tests/test_ghcp_ahp_prewarm_zero_turn.py", "tests/test_ghcp_ahp_prewarm_order.py"]
+EXPECTED_COUNTS = {"contracts.xml": 1956, "workflow-guards.xml": 74}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -227,7 +229,13 @@ def test_result_check_refuses_missing_reduced_extra_failed_or_skipped_cases(tmp_
 @pytest.mark.parametrize("name,expected", ORIGINAL_WORKFLOWS.items())
 def test_original_workflow_bytes_and_historical_hashes_are_preserved(name, expected):
     assert re.fullmatch(r"[0-9a-f]{64}", expected)
-    assert hashlib.sha256((ROOT / ".github/workflows" / name).read_bytes()).hexdigest() == expected
+    data = (ROOT / ".github/workflows" / name).read_bytes()
+    if name == "agentic-v2-ghcp-sol-gate.yml":
+        from .test_ghcp_ahp_prewarm_zero_turn import restore_workflow
+        # Reverse only the exact, separately tested zero-turn preparation overlay.
+        # Hash all historical bytes; never update the historical expected SHA.
+        data = restore_workflow(data.decode()).encode()
+    assert hashlib.sha256(data).hexdigest() == expected
 
 
 def test_typecheck_job_is_branch_only_unprivileged_ubuntu_24_and_time_bounded():

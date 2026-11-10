@@ -313,6 +313,9 @@ jobs:
     environment: ghcp-sol-gate
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # Exact same-HEAD green push artifact, never a branch-latest build.
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -332,6 +335,30 @@ jobs:
           python -B batch-runner/ghcp_ahp_probe.py prepare \
             --prepared "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
             --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - name: Fetch the unique green push build for this exact dispatch SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: hyeonsangjeon/gdpval-realworks
+        run: |
+          set -euo pipefail
+          umask 077
+          build_dir="$RUNNER_TEMP/ghcp-zero-turn/build"
+          mkdir -p "$build_dir"
+          gh api "repos/$GH_REPO/actions/workflows/ghcp-ahp-patched-runtime-tests.yml/runs?event=push&status=success&head_sha=$GITHUB_SHA&per_page=100" > "$build_dir/runs.json"
+          build_run="$(python -B batch-runner/ghcp_ahp_prewarm_zero_turn.py select \
+            --runs "$build_dir/runs.json" --output "$build_dir/selected.json")"
+          gh run download "$build_run" --repo "$GH_REPO" \
+            --name "ghcp-patched-load-payload-$build_run-1" --dir "$build_dir/transfer"
+      - name: Stage the tested config-before-prewarm build for zero-turn only
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_prewarm_zero_turn.py prepare \
+            --transfer "$RUNNER_TEMP/ghcp-zero-turn/build/transfer" \
+            --build "$RUNNER_TEMP/ghcp-zero-turn/build/selected.json" \
+            --base "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
+            --output "$RUNNER_TEMP/ghcp-zero-turn/prewarm" \
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
       - name: Authenticate once through the exact metadata broker with inference blocked
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -346,7 +373,8 @@ jobs:
           # No secret in argv/file; native/SDK traffic cannot bypass the broker.
           timeout --signal=TERM --kill-after=10s 150s \
             '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_metadata_broker.py" \
-              --prepared "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
+              --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \
+              --prewarm-zero-turn-preparation "$RUNNER_TEMP/ghcp-zero-turn/prewarm/preparation.json" \
               --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
       - name: Retain redacted zero-turn handshake and native evidence only
         if: always()

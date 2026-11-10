@@ -227,10 +227,12 @@ class Server(socketserver.UnixStreamServer):
     request_queue_size = 8
 
 
-def isolated_command(prepared, evidence, socket_path):
+def isolated_command(prepared, evidence, socket_path, *, prewarm_preparation=None):
     preserved = ["COPILOT_GITHUB_TOKEN", "GHCP_AUTHENTICATED_ZERO_TURN", "GHCP_PAID_EXECUTION", "GHCP_CONNECTION_ONLY",
         "GITHUB_ACTIONS", "GITHUB_EVENT_NAME", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "RUNNER_ENVIRONMENT",
         "RUNNER_NAME", "RUNNER_OS", "RUNNER_ARCH", "ImageOS", "ImageVersion"]
+    if prewarm_preparation is not None:
+        preserved.extend(["GITHUB_REF", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF", "GITHUB_WORKFLOW_SHA"])
     environment = {key: os.environ[key] for key in preserved if key in os.environ}
     environment.update(PATH="/usr/bin:/bin", LANG="C.UTF-8")
     command = ["sudo", "--preserve-env=" + ",".join(preserved), "unshare", "--mount", "--net", "--pid", "--fork", "--mount-proc", "--kill-child=KILL",
@@ -241,6 +243,8 @@ def isolated_command(prepared, evidence, socket_path):
         "--prepared", str(prepared), "--evidence", str(evidence),
         "--outside-netns", os.readlink("/proc/self/ns/net"), "--outside-pidns", os.readlink("/proc/self/ns/pid"),
         "--authenticated-zero-turn", "--metadata-socket", str(socket_path)]
+    if prewarm_preparation is not None:
+        command.extend(["--prewarm-zero-turn-preparation", str(prewarm_preparation)])
     return command, environment
 
 
@@ -248,12 +252,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
+    parser.add_argument("--prewarm-zero-turn-preparation", type=Path)
     args = parser.parse_args(argv)
     broker = child = None
     handlers = {}
     try:
         require_runner()  # Before credential/file/process/network access; NAS refused.
         require_context()
+        if args.prewarm_zero_turn_preparation is not None:
+            import ghcp_ahp_prewarm_zero_turn as prewarm
+            identity = prewarm.context(running=True)
+            prewarm.verify_preparation(args.prewarm_zero_turn_preparation, args.prepared, args.evidence, identity)
         credential = os.environ.get("COPILOT_GITHUB_TOKEN", "")
         validate_credential(credential)
         def cancel(signum, frame):
@@ -269,7 +278,9 @@ def main(argv=None):
                 worker = threading.Thread(target=server.serve_forever, daemon=True)
                 worker.start()
                 try:
-                    command, environment = isolated_command(args.prepared, args.evidence, socket_path)
+                    options = ({"prewarm_preparation": args.prewarm_zero_turn_preparation}
+                               if args.prewarm_zero_turn_preparation is not None else {})
+                    command, environment = isolated_command(args.prepared, args.evidence, socket_path, **options)
                     child = subprocess.Popen(command, env=environment, start_new_session=True)
                     code = child.wait(timeout=135)
                 finally:

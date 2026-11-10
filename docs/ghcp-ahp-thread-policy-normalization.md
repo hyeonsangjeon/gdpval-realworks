@@ -177,6 +177,43 @@ pending patched-host route is not activated by this audit). Confirm the PAT is
 still valid; it may expire around **2026-11-11 16:50Z**. The owner alone can renew
 `ghcp-sol-gate/COPILOT_GITHUB_TOKEN`; no value or expiry was inspected here.
 
+### 2026-11-11 addendum: authorized zero-turn order verification only
+
+The subsequent leader instruction authorizes fixing the order, publishing the
+branch, and making one zero-turn dispatch after green CI. This is **not** an
+owner selection of patched GHCP for the five-task/paid experiment. The public
+`require_activation()` remains unconditionally locked; `execution_allowed=false`
+and all native-request, readback, admission, turn and inference guards remain.
+
+The narrow preparation route reuses the already tested two-patch bundle. It
+does not edit either patch, the pin, permission normalization, SDK or sealed
+inputs. Its internal ready hook is after `state.config` publication, not a
+timer, alias, request rewrite, new preset or retry. Offline tests evaluate the
+exact patch's pure ready hook with inert first/second sessions: no prewarm before
+publication, one per session after publication, and no restart for duplicate,
+disposed or already-materialized sessions. These tests are synthetic, not a
+native application report.
+
+The registered gate's `ahp-zero-turn` job now fetches **the unique successful
+push run at its exact HEAD**, never branch-latest, failed, rerun or old-SHA
+artifacts. Read-only Actions access is confined to that fetch step; the Copilot
+credential remains in only the original authentication step. Producer identity,
+two-patch manifest (`6d869d65…`), fixed bundle (`5006baa5…`, 5,193,139 bytes), build
+receipt, staging copies and the current dispatch identity must all agree. The
+same-process Node loader must then measure that bundle before authentication
+or session creation. Missing or altered evidence refuses; staged policy is
+explicitly `not_reported` as an applied value. Native readback remains the only
+candidate evidence for actual thread policy; a catalog or config echo cannot
+establish served Sol/Max/1M.
+
+Only the existing two metadata GETs may leave the broker. The host still runs
+unprivileged in the loopback-only network/PID namespace, and its session-only
+observer refuses turns, tools and inference before forwarding. No authentic
+runtime is executed on NAS. The old workflow SHA is tested after an exact,
+single-match inverse of this separately tested overlay; its expected value and
+the other historical workflow hashes are unchanged. Any dispatch failure,
+including 401/403 or native policy mismatch, ends this one-attempt verification.
+
 After those prerequisites, the one-run input proposal is:
 
 ```bash

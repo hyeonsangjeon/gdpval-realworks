@@ -573,7 +573,8 @@ def session_create_requests(rpc):
 
 
 def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False, session_policy=False,
-              authenticated_zero_turn=False, credential="", metadata_socket=None, patched_request=None):
+              authenticated_zero_turn=False, credential="", metadata_socket=None, patched_request=None,
+              prewarm_preparation=None):
     if type(capability_only) is not bool or type(session_policy) is not bool or capability_only and session_policy:
         raise Refused("invalid_capability_mode")
     if patched_request is not None:
@@ -595,6 +596,14 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
         zero_turn.validate_credential(credential)
         if not session_policy or capability_only:
             raise Refused("zero_turn_auth_requires_session_policy")
+    if prewarm_preparation is not None:
+        import ghcp_ahp_prewarm_zero_turn as prewarm
+        import ghcp_ahp_patched_runtime as patched
+        # A separate, exact authenticated preparation scope. The generic/paying
+        # activation path above remains locked, including direct Python callers.
+        patched_request = prewarm.require_run(prewarm_preparation, root, evidence,
+            authenticated_zero_turn=authenticated_zero_turn, session_policy=session_policy,
+            capability_only=capability_only, metadata_socket=metadata_socket)
     mask = DiagnosticRedactor(credential) if authenticated_zero_turn else None
     prepared, source_evidence = verify_prepared(manifest, root, evidence, identity)
     wall_seconds = 120 if authenticated_zero_turn else MAX_RUNTIME_SECONDS
@@ -853,6 +862,8 @@ def main(argv=None):
     parser.add_argument("--metadata-socket", type=Path)
     parser.add_argument("--patched-build-receipt", type=Path, help="Preparation only; activation remains locked pending owner decision")
     parser.add_argument("--patched-build-receipt-sha256")
+    parser.add_argument("--prewarm-zero-turn-preparation", type=Path,
+                        help="Same-HEAD tested build, brokered authenticated zero-turn preparation only")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--capability-only", action="store_true", help="No createSession RPC; observe native/CAPI boundaries without model work")
     modes.add_argument("--session-policy-probe", action="store_true", help="One exact Codex session; zero turns and zero outbound HTTP")
@@ -876,6 +887,13 @@ def main(argv=None):
             patched.require_activation()
         if args.metadata_socket is not None and not args.authenticated_zero_turn:
             raise Refused("metadata_requires_authenticated_zero_turn")
+        if args.prewarm_zero_turn_preparation is not None:
+            import ghcp_ahp_prewarm_zero_turn as prewarm
+            if args.mode != "probe":
+                raise Refused("prewarm_requires_brokered_zero_turn")
+            prewarm.require_run(args.prewarm_zero_turn_preparation, args.prepared, args.evidence,
+                authenticated_zero_turn=args.authenticated_zero_turn, session_policy=args.authenticated_zero_turn,
+                capability_only=args.capability_only, metadata_socket=args.metadata_socket)
         credential = ""
         if args.authenticated_zero_turn:
             import ghcp_ahp_zero_turn as zero_turn
@@ -896,7 +914,12 @@ def main(argv=None):
             options["metadata_socket"] = args.metadata_socket
         if patched_request is not None:
             options["patched_request"] = patched_request
+        if args.prewarm_zero_turn_preparation is not None:
+            options["prewarm_preparation"] = args.prewarm_zero_turn_preparation
         result = run_probe(manifest, args.prepared, args.evidence, args.outside_netns, args.outside_pidns, **options)
+        if args.prewarm_zero_turn_preparation is not None:
+            import ghcp_ahp_patched_runtime as patched
+            patched.verify_artifact_chain(args.evidence, handshake=True, policy=True)
         summary = ({"probe_exit": result, "model_calls": 0, "launch_allowed": False} if patched_request is None else
                    patched.verify_artifact_chain(args.evidence, handshake=args.authenticated_zero_turn, policy=True))
         print(json.dumps(summary))
