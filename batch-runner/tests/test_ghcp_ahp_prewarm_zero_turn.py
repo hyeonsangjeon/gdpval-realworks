@@ -56,10 +56,14 @@ PREPARATION_STEPS = '''      - name: Fetch the unique green push build for this 
 AUTH_OLD = '              --prepared "$RUNNER_TEMP/ghcp-zero-turn/prepared" \\\n'
 AUTH_NEW = ('              --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \\\n'
             '              --prewarm-zero-turn-preparation "$RUNNER_TEMP/ghcp-zero-turn/prewarm/preparation.json" \\\n')
+UPLOAD_OLD = '          path: ${{ runner.temp }}/ghcp-zero-turn/evidence/*.json\n'
+UPLOAD_NEW = ('          path: |\n'
+              '            ${{ runner.temp }}/ghcp-zero-turn/evidence/*.json\n'
+              '            ${{ runner.temp }}/ghcp-zero-turn/evidence/summary.md\n')
 
 
 def restore_workflow(text):
-    for current, original in ((PERMISSIONS, ""), (PREPARATION_STEPS, ""), (AUTH_NEW, AUTH_OLD)):
+    for current, original in ((PERMISSIONS, ""), (PREPARATION_STEPS, ""), (AUTH_NEW, AUTH_OLD), (UPLOAD_NEW, UPLOAD_OLD)):
         assert text.count(current) == 1, "prewarm workflow inverse must match exactly once"
         text = text.replace(current, original, 1)
     return text
@@ -356,7 +360,7 @@ def test_workflow_build_and_secret_scopes_and_historical_bytes():
     assert "--patched-build-receipt" not in text
 
 
-@pytest.mark.parametrize("fragment", [PERMISSIONS, PREPARATION_STEPS, AUTH_NEW])
+@pytest.mark.parametrize("fragment", [PERMISSIONS, PREPARATION_STEPS, AUTH_NEW, UPLOAD_NEW])
 def test_workflow_inverse_refuses_missing_duplicate_or_changed_overlay(fragment):
     text = (ROOT / prewarm.WORKFLOW).read_text()
     for changed in (text.replace(fragment, "", 1), text + fragment, text.replace(fragment, fragment + "# changed\n", 1).replace(fragment, fragment[:-1], 1)):
