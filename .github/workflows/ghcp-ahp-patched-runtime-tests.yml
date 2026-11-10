@@ -74,7 +74,9 @@ jobs:
             tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py \
             tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py \
             tests/test_ghcp_ahp_metadata_broker.py tests/test_ghcp_ahp_connection.py \
-            tests/test_ghcp_ahp_patchset.py tests/test_ghcp_ahp_load_smoke.py tests/test_ghcp_ahp_readiness_smoke.py
+            tests/test_ghcp_ahp_patchset.py tests/test_ghcp_ahp_load_smoke.py tests/test_ghcp_ahp_readiness_smoke.py \
+            tests/test_ghcp_ahp_permission_normalization.py \
+            tests/test_ghcp_ahp_prewarm_zero_turn.py tests/test_ghcp_ahp_prewarm_order.py
       - id: results
         name: Require every expected case to pass without skips
         run: |
@@ -86,7 +88,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 1682, "workflow-guards.xml": 74}
+          expected = {"contracts.xml": 1956, "workflow-guards.xml": 74}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
