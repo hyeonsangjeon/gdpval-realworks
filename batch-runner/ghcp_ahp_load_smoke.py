@@ -25,10 +25,12 @@ PAYLOAD_LIMIT = 512 * 1024 * 1024
 FILES = {"agentHostMain.js": runtime.MAX_BUNDLE, "server-bundle-manifest.json": bundle.MAX_MANIFEST,
          "server.tgz": 335544320}
 PROFILE_DATABASE = "User/globalStorage/agent-host.db"
-# Pinned agentHostDatabase.ts:965,1453 and agentHostCatalogProjection.ts:19.
+# Pinned agentHostDatabase.ts:960,965,1440,1453 and agentHostCatalogProjection.ts:19.
 # This is an explicitly synthetic empty smoke profile, NOT a measured migration
 # receipt or a state input for readiness, authenticated sessions or the paid gate.
 PROFILE_MARKER = "sessionsV2PayloadBackfilled:copilotcli:v2"
+PROFILE_DISCOVERY_MARKER = "sessionRegistryBackfilled:copilotcli"
+PROFILE_MARKERS = (PROFILE_DISCOVERY_MARKER, PROFILE_MARKER)
 PROFILE_METADATA_SQL = "CREATE TABLE metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)"
 
 
@@ -152,7 +154,7 @@ def prepare_payload(transfer_directory, output, identity):
 def validate_profile_seed(value):
     expected = {"schema": "ghcp-load-smoke-catalog-profile-v1", "upstream_commit": runtime.PIN,
                 "database_relative_path": PROFILE_DATABASE, "initial_user_version": 0,
-                "initial_tables": ["metadata"], "metadata": [[PROFILE_MARKER, "true"]],
+                "initial_tables": ["metadata"], "metadata": [[marker, "true"] for marker in PROFILE_MARKERS],
                 "evidence_kind": "synthetic_empty_profile_not_measured_migration",
                 "synthetic": True, "execution_allowed": False}
     if (type(value) is not dict or set(value) != {*expected, "database_sha256"}
@@ -181,8 +183,10 @@ def seed_smoke_profile(data):
 
     Pinned agentHostBootstrap.ts:120 + environmentService.ts:56 locate this DB.
     The native host still runs all real schema migrations from user_version=0
-    (agentHostDatabase.ts:4331); only the Copilot catalog enumeration is already
-    marked complete (agentHostSessionsV2MigrationService.ts:90-92).
+    (agentHostDatabase.ts:4331). Both Copilot catalog completion markers are
+    required: payload migration (agentHostSessionsV2MigrationService.ts:90-92)
+    and post-migration provider discovery (agentService.ts:4450-4451). The
+    latter otherwise starts the SDK even after payload migration is complete.
     """
     data = runtime._safe_path(data)
     if not data.is_dir() or any(data.iterdir()):
@@ -193,7 +197,8 @@ def seed_smoke_profile(data):
     os.close(descriptor)
     with closing(sqlite3.connect(path)) as database:
         database.execute(PROFILE_METADATA_SQL)
-        database.execute("INSERT INTO metadata (key, value) VALUES (?, ?)", (PROFILE_MARKER, "true"))
+        database.executemany("INSERT INTO metadata (key, value) VALUES (?, ?)",
+                             ((marker, "true") for marker in PROFILE_MARKERS))
         database.commit()
     return profile_seed_receipt(data)
 

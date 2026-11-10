@@ -37,11 +37,12 @@ def test_cli_refuses_nas_before_payload_work_or_process_launch(monkeypatch, tmp_
                     "--outside-netns", "net:[1]", "--outside-pidns", "pid:[1]"])
 
 
-def test_empty_smoke_profile_seeds_only_the_pinned_copilot_payload_marker(tmp_path):
+def test_empty_smoke_profile_seeds_both_pinned_copilot_catalog_markers(tmp_path):
     value = smoke.seed_smoke_profile(tmp_path)
     assert smoke.PROFILE_DATABASE == "User/globalStorage/agent-host.db"
     assert smoke.PROFILE_MARKER == "sessionsV2PayloadBackfilled:copilotcli:v2"
-    assert value["metadata"] == [[smoke.PROFILE_MARKER, "true"]]
+    assert value["metadata"] == [["sessionRegistryBackfilled:copilotcli", "true"],
+                                 ["sessionsV2PayloadBackfilled:copilotcli:v2", "true"]]
     assert value["initial_user_version"] == 0 and value["initial_tables"] == ["metadata"]
     assert value["synthetic"] is True and value["execution_allowed"] is False
     assert value["evidence_kind"] == "synthetic_empty_profile_not_measured_migration"
@@ -66,12 +67,33 @@ def test_profile_seed_refuses_reuse_or_nonempty_user_data_without_modifying_it(t
 
 
 @pytest.mark.parametrize("sql", ["DELETE FROM metadata", "UPDATE metadata SET value='false'",
-    "UPDATE metadata SET key='sessionsV2PayloadBackfilled:copilotcli:v1'", "CREATE TABLE sessions (id TEXT)", "PRAGMA user_version=1"])
+    "UPDATE metadata SET key='sessionsV2PayloadBackfilled:copilotcli:v1' WHERE key='sessionsV2PayloadBackfilled:copilotcli:v2'",
+    "CREATE TABLE sessions (id TEXT)", "PRAGMA user_version=1"])
 def test_profile_readback_rejects_missing_wrong_or_nonempty_seed(tmp_path, sql):
     smoke.seed_smoke_profile(tmp_path)
     database = sqlite3.connect(tmp_path / smoke.PROFILE_DATABASE)
     try:
         database.execute(sql)
+        database.commit()
+    finally:
+        database.close()
+    with pytest.raises(Refused, match="^load_smoke_profile_receipt_refused$"):
+        smoke.profile_seed_receipt(tmp_path)
+
+
+@pytest.mark.parametrize("marker", ["sessionsV2PayloadBackfilled:copilotcli:v2", "sessionRegistryBackfilled:copilotcli"])
+@pytest.mark.parametrize("damage", ["missing", "false", "alias"])
+def test_profile_readback_requires_both_exact_pinned_completion_markers(tmp_path, marker, damage):
+    smoke.seed_smoke_profile(tmp_path)
+    database = sqlite3.connect(tmp_path / smoke.PROFILE_DATABASE)
+    try:
+        assert database.execute("SELECT value FROM metadata WHERE key = ?", (marker,)).fetchone() == ("true",)
+        if damage == "missing":
+            database.execute("DELETE FROM metadata WHERE key = ?", (marker,))
+        elif damage == "false":
+            database.execute("UPDATE metadata SET value = 'false' WHERE key = ?", (marker,))
+        else:
+            database.execute("UPDATE metadata SET key = ? WHERE key = ?", (marker.replace("copilotcli", "copilot"), marker))
         database.commit()
     finally:
         database.close()
@@ -239,9 +261,9 @@ def test_driver_uses_the_real_loader_but_only_an_inert_local_module(tmp_path, no
             smoke.check_process(process)
 
 
-@pytest.mark.parametrize("force_migration", [False, True])
-def test_seeded_catalog_does_not_spawn_but_forced_migration_is_still_refused(tmp_path, node_copy, force_migration):
-    """Use pinned SQL semantics in an inert module, never the vendor bundle/SDK."""
+@pytest.mark.parametrize("missing_marker", [None, "sessionsV2PayloadBackfilled:copilotcli:v2", "sessionRegistryBackfilled:copilotcli"])
+def test_seeded_catalog_does_not_spawn_but_either_missing_marker_is_refused(tmp_path, node_copy, missing_marker):
+    """Pinned migration + post-migration discovery semantics, not vendor execution."""
     tree = fixture_tree(tmp_path, node_copy)
     state, server = tree["state"], tree["node"].parent
     for name in ("logs", "data", "tmp"):
@@ -254,10 +276,14 @@ def test_seeded_catalog_does_not_spawn_but_forced_migration_is_still_refused(tmp
         'const path = await import("node:path"); const cp = await import("node:child_process");\n'
         'const data = process.argv[process.argv.indexOf("--user-data-dir") + 1];\n'
         f'const db = new DatabaseSync(path.join(data, {json.dumps(smoke.PROFILE_DATABASE)}));\n'
-        f'const marker = {json.dumps(smoke.PROFILE_MARKER)};\n'
-        + ('db.prepare("DELETE FROM metadata WHERE key = ?").run(marker);\n' if force_migration else '')
-        + 'const row = db.prepare("SELECT value FROM metadata WHERE key = ?").get(marker); db.close();\n'
-        'if (row?.value !== "true") { try { cp.spawn("/inert/copilot-runtime", ["--headless", "--stdio", "--no-auto-login"]); } catch {} }\n'
+        f'const missing = {json.dumps(missing_marker)};\n'
+        'if (missing !== null) db.prepare("DELETE FROM metadata WHERE key = ?").run(missing);\n'
+        'const completed = marker => db.prepare("SELECT value FROM metadata WHERE key = ?").get(marker)?.value === "true";\n'
+        'const enumerate = () => { try { cp.spawn("/inert/copilot-runtime", ["--headless", "--stdio", "--no-auto-login"]); } catch {} };\n'
+        # agentHostSessionsV2MigrationService.ts:90-92, then agentService.ts:4450-4451.
+        'if (!completed("sessionsV2PayloadBackfilled:copilotcli:v2")) enumerate();\n'
+        'if (!completed("sessionRegistryBackfilled:copilotcli")) enumerate();\n'
+        'db.close();\n'
         'console.log("inert catalog checked"); setInterval(() => {}, 1000);\n'
     )
     environment = bind(tree)
@@ -274,7 +300,7 @@ def test_seeded_catalog_does_not_spawn_but_forced_migration_is_still_refused(tmp
     assert process["ipc_messages_sent"] == process["sessions_created"] == process["turns_sent"] == 0
     assert runtime.collect(state, None, process["records"])["loaded_bundle_sha256"] == sha(BODY) != smoke.BASELINE_SHA256
     blocked = [row for row in process["events"] if row["kind"] == "boundary_refused"]
-    if force_migration:
+    if missing_marker is not None:
         assert len(blocked) == 1 and blocked[0]["method"] == "spawn" and blocked[0]["executable"] == "/inert/copilot-runtime"
         with pytest.raises(Refused, match="^load_smoke_process_boundary_refused$"):
             smoke.check_process(process)

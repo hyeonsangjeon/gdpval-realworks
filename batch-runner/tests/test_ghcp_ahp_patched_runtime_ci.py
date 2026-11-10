@@ -32,7 +32,7 @@ SUITE = [
     "tests/test_ghcp_ahp_metadata_broker.py", "tests/test_ghcp_ahp_connection.py",
 ]
 EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smoke.py", "tests/test_ghcp_ahp_readiness_smoke.py"]
-EXPECTED_COUNTS = {"contracts.xml": 1675, "workflow-guards.xml": 74}
+EXPECTED_COUNTS = {"contracts.xml": 1682, "workflow-guards.xml": 74}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
