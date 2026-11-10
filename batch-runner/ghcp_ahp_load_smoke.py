@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import subprocess
 import tarfile
 
@@ -22,6 +24,12 @@ BASELINE_BYTES = 5193139
 PAYLOAD_LIMIT = 512 * 1024 * 1024
 FILES = {"agentHostMain.js": runtime.MAX_BUNDLE, "server-bundle-manifest.json": bundle.MAX_MANIFEST,
          "server.tgz": 335544320}
+PROFILE_DATABASE = "User/globalStorage/agent-host.db"
+# Pinned agentHostDatabase.ts:965,1453 and agentHostCatalogProjection.ts:19.
+# This is an explicitly synthetic empty smoke profile, NOT a measured migration
+# receipt or a state input for readiness, authenticated sessions or the paid gate.
+PROFILE_MARKER = "sessionsV2PayloadBackfilled:copilotcli:v2"
+PROFILE_METADATA_SQL = "CREATE TABLE metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)"
 
 
 def ci_identity():
@@ -141,6 +149,55 @@ def prepare_payload(transfer_directory, output, identity):
     return prepared
 
 
+def validate_profile_seed(value):
+    expected = {"schema": "ghcp-load-smoke-catalog-profile-v1", "upstream_commit": runtime.PIN,
+                "database_relative_path": PROFILE_DATABASE, "initial_user_version": 0,
+                "initial_tables": ["metadata"], "metadata": [[PROFILE_MARKER, "true"]],
+                "evidence_kind": "synthetic_empty_profile_not_measured_migration",
+                "synthetic": True, "execution_allowed": False}
+    if (type(value) is not dict or set(value) != {*expected, "database_sha256"}
+            or any(not runtime._equal(value.get(key), data) for key, data in expected.items())
+            or not runtime._hex(value["database_sha256"])):
+        raise Refused("load_smoke_profile_receipt_refused")
+    return value
+
+
+def profile_seed_receipt(data):
+    data = runtime._safe_path(data)
+    path = runtime._safe_path(data / PROFILE_DATABASE)
+    raw = runtime._read(path, 1024 * 1024)
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as database:
+        version = database.execute("PRAGMA user_version").fetchone()[0]
+        tables = [row[0] for row in database.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        rows = [list(row) for row in database.execute("SELECT key, value FROM metadata ORDER BY key")]
+    return validate_profile_seed({"schema": "ghcp-load-smoke-catalog-profile-v1", "upstream_commit": runtime.PIN,
+        "database_relative_path": PROFILE_DATABASE, "database_sha256": runtime._sha(raw),
+        "initial_user_version": version, "initial_tables": tables, "metadata": rows,
+        "evidence_kind": "synthetic_empty_profile_not_measured_migration", "synthetic": True, "execution_allowed": False})
+
+
+def seed_smoke_profile(data):
+    """Prepare one fresh case's empty user-data directory; never reuse user state.
+
+    Pinned agentHostBootstrap.ts:120 + environmentService.ts:56 locate this DB.
+    The native host still runs all real schema migrations from user_version=0
+    (agentHostDatabase.ts:4331); only the Copilot catalog enumeration is already
+    marked complete (agentHostSessionsV2MigrationService.ts:90-92).
+    """
+    data = runtime._safe_path(data)
+    if not data.is_dir() or any(data.iterdir()):
+        raise Refused("load_smoke_profile_not_empty")
+    path = data / PROFILE_DATABASE
+    path.parent.mkdir(parents=True, exist_ok=False, mode=0o700)
+    descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    os.close(descriptor)
+    with closing(sqlite3.connect(path)) as database:
+        database.execute(PROFILE_METADATA_SQL)
+        database.execute("INSERT INTO metadata (key, value) VALUES (?, ?)", (PROFILE_MARKER, "true"))
+        database.commit()
+    return profile_seed_receipt(data)
+
+
 def case_config(root, name, receipt_path, receipt_sha):
     prepared = root / name
     server = prepared / "cli-data/servers" / ("Stable-" + runtime.PIN) / "server"
@@ -148,6 +205,7 @@ def case_config(root, name, receipt_path, receipt_sha):
     state = root / (name + "-state")
     for directory in (state / "wire", state / "logs", state / "data", state / "tmp"):
         directory.mkdir(parents=True, exist_ok=False, mode=0o700)
+    profile = seed_smoke_profile(state / "data")
     fork = {"vscode_commit": runtime.PIN, "entrypoint": runtime.ENTRYPOINT,
             "files": {"node": {"path": str(node), "sha256": runtime._sha(runtime._read(node, 256 * 1024 * 1024))}}}
     environment = runtime.prepare_binding(prepared, state, {"path": receipt_path, "sha256": receipt_sha}, fork, synthetic=True)
@@ -155,7 +213,7 @@ def case_config(root, name, receipt_path, receipt_sha):
     config = {"environment": environment, "config_path": str(config_path), "bootstrap": str(bootstrap),
               "bootstrap_sha256": runtime._sha(runtime._read(bootstrap, runtime.MAX_BUNDLE)),
               "logs": str(state / "logs"), "data": str(state / "data"), "socket": str(state / "tmp/agent.sock"),
-              "process_report": str(state / "process.json")}
+              "process_report": str(state / "process.json"), "profile_seed": profile}
     runtime._write(config_path, runtime._encoded(config) + b"\n")
     return state, server, config
 
@@ -195,10 +253,15 @@ def verify_smoke_evidence(evidence, expected_identity=None):
     fields = {"schema", "synthetic", "model_free", "execution_allowed", "admission_allowed", "model_calls",
               "sessions_created", "turns_sent", "authentication_supplied", "identity", "isolation", "patch_sha256",
               "bundle_manifest_sha256", "expected_bundle_sha256", "driver_sha256", "cases", "status", "failures",
-              "runtime_provenance", "mutation", "negative_load_evidence_files"}
+              "runtime_provenance", "mutation", "negative_load_evidence_files", "profile_seeds"}
     if (type(result) is not dict or set(result) != fields or result["schema"] != "ghcp-real-bundle-load-smoke-v1"
             or type(result["cases"]) is not dict or set(result["cases"]) != {"positive", "negative"}):
         raise Refused("load_smoke_receipt_schema_refused")
+    profiles = result["profile_seeds"]
+    if type(profiles) is not dict or set(profiles) != {"positive", "negative"}:
+        raise Refused("load_smoke_profile_receipt_refused")
+    for profile in profiles.values():
+        validate_profile_seed(profile)
     manifest = checked_manifest(evidence / "server-bundle-manifest.json")
     transfer = validate_transfer(runtime._json(runtime._read(evidence / "transfer.json")),
                                  expected_identity if expected_identity is not None else result.get("identity"))
@@ -265,10 +328,14 @@ def run_smoke(root, evidence, identity, outside_netns, outside_pidns):
               "sessions_created": 0, "turns_sent": 0, "authentication_supplied": False,
               "identity": identity, "isolation": isolation, "patch_sha256": runtime.PATCH_SHA256,
               "bundle_manifest_sha256": transfer["bundle_manifest_sha256"], "expected_bundle_sha256": BASELINE_SHA256,
-              "driver_sha256": runtime._sha(runtime._read(DRIVER)), "cases": {}, "status": "failure"}
+              "driver_sha256": runtime._sha(runtime._read(DRIVER)), "cases": {}, "profile_seeds": {}, "status": "failure"}
     failures = []
     for name in ("positive", "negative"):
         state, server, config = case_config(root, name, receipt_path, receipt_sha)
+        profile = profile_seed_receipt(Path(config["data"]))
+        if not runtime._equal(profile, config["profile_seed"]):
+            raise Refused("load_smoke_profile_changed_before_launch")
+        result["profile_seeds"][name] = profile
         if name == "negative":
             target = server / runtime.RUNTIME_RELATIVE
             original = runtime._read(target, runtime.MAX_BUNDLE)
