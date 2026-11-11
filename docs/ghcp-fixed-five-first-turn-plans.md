@@ -4,8 +4,9 @@
 조사 HEAD `4735721587dc5d455c2a260d91e7287ec8247464`.
 소유자는 아직 **1(패치된 GHCP)** / **3(미패치 기본 정책)** 중 고르지 않았다.
 이 문서는 후속 구현·승인에 필요한 계획이지 실행 승인이나 실행 가능한 명령이 아니다.
-`execution_allowed=false`와 기존 잠금을 유지한다. 이번 변경은 문서뿐이며
-dispatch·인증·모델 턴·유료 실행·채점은 하지 않는다.
+`execution_allowed=false`와 기존 잠금을 유지한다. 최초 계획서 커밋은
+`5c385bdc1549e52c3a79591aa794b2cdcc0ab552`다. 아래 수집 순서 상태는 후속
+오프라인 구현으로 갱신했다. dispatch·인증·모델 턴·유료 실행·채점은 하지 않는다.
 
 ## 1. 이번에는 나 경로: zero-turn 추가 실행 없음
 
@@ -26,14 +27,33 @@ zero-turn 가드는 그 메서드를 허용하지 않는다. 이를 새로 허�
 직접 파일을 써서 네이티브 쓰기 증거로 바꾸는 것은 이번 범위가 아니다.
 별도 승인된 model-free canary라면 파일 접근만 검증할 수 있고, 모델 출력은 증명하지 못한다.
 
-출력 수명도 해결해야 한다. 핀 소스 `codexAgent.ts:2687-2690`은 자식용 TMPDIR를
-만들고, `:2703-2706`은 자식 `close` 때 그 디렉터리의 비동기 삭제를 예약한다. 반면 현재
-`SessionClient.capture()`는 호스트 종료 확인 뒤 파일을 읽는다
-(`ghcp_ahp_client.py:525-531`). 따라서 **종료 후 TMPDIR에서 수집하면 된다는
-설계는 아직 성립하지 않는다**. 삭제 전 일관된 산출물 스냅샷을 별도 잡 전용 수집
-디렉터리로 보존하고, 종료 후 기존 마스킹·해시 검사를 거쳐 발행하는 연결이 필요하다.
-이 연결의 구현·경쟁 조건 검증은 미완료이며, 핀의 삭제 동작은 바꾸지 않는다.
-이는 소스에서 확인한 수명/수집 연결의 빈칸이지, 실제 산출물 유실을 재현한 결과는 아니다.
+핀 소스 `codexAgent.ts:2687-2690`은 자식용 TMPDIR를 만들고, `:2703-2706`은
+자식 `close` 때 비동기 삭제를 예약한다. 이 제품 동작은 패치하지 않는다.
+과거 `SessionClient.capture()`의 종료 후 원본 읽기만으로는 수명이 맞지 않았으므로,
+공통 컨트롤러의 **정상 dispose/terminate보다 앞**에 수집·봉인을 연결했다.
+
+| 수집 항목 | 상태 | 확인 범위 / 남은 조건 |
+| --- | --- | --- |
+| 선택지 1 job TMPDIR → 수집·봉인 → 삭제 | 해결됨 — 코드·fixture | `OutputCollection(profile=choice1_job_tmpdir)`, 실제 임시 파일 bytes와 해시·목록 대조; native 모델 쓰기 증거 아님 |
+| 선택지 3 workspace → 수집·봉인 → TMPDIR/workspace 삭제 | 해결됨 — 코드·fixture | `profile=default_policy_unpatched`, 선택지 1 판정과 분리; 빈 writableRoots를 read-only로 해석하지 않음 |
+| 선행 삭제·부분 수집·링크/특수 파일·크기 상한 초과 | 해결됨 — 오프라인 거부 경로 | 과제/gate 실패, 성공 산출물·grader 입력 발행 금지; 실패 확정 뒤 강제 정리는 허용 |
+| 실제 호스트의 writer/cleanup hold 및 관측 root 연결 | 남음 | 현재 live 과제 port가 미구현. hold 부재/실패는 거부하며, fixture 성공을 native 정지 증거로 바꾸지 않음 |
+| 실제 모델 출력의 생성·회수 실측 | 남음 | 소유자 선택·별도 실행 승인이 필요한 최초 실제 과제/도구 턴; 이번에는 실행하지 않음 |
+
+새 코드 위치: `ghcp_ahp_client.py:216`이 admission을 닫은 뒤 수집하고,
+`ghcp_ahp_output_collection.py`의 `collect_and_seal` → `after_termination` 순서로
+진행한다. 별도 디렉터리에 마스킹된 snapshot과 원본 파일 SHA256/목록을 저장하고,
+fsync·재독해를 마친 뒤에만 정상 정리를 허용한다. 봉인은 프로필·디렉터리 식별자와
+새 nonce에 결합되어 다른 작업의 봉인 재사용을 거부한다. 독립 목록과 수집 결과를 대조하고
+바이트 해시도 다시 읽어, 같은 크기의 덮어쓰기가 시각 비교를 통과하지 못하게 한다.
+봉인 파일·lifecycle receipt 누락/변조는 삭제 후에도 재검사한다.
+
+두 5과제 fixture 경로는 반드시 이 수집기를 바인딩한다. bound client는 기존
+`capture(workspace=...)`로의 우회를 거부하며, gate validator도 봉인/receipt가
+없는 capture를 거부한다. 일반 진단용 legacy capture는 유료 실행 경로가 아니다.
+`hold_outputs`는 writer와 cleanup을 함께 보류한다는 transport 계약이며,
+현재 테스트의 응답은 `synthetic=true`다. 실제 프로세스 정지 방법·중단 지연까지
+검증된 것으로 쓰지 않는다. 기존 `execution_allowed=false`는 그대로다.
 
 핀 소스 위치는 VS Code commit `2c33b50b16c472efe58357d1d2a8a5414bc23fbf`의
 `src/vs/platform/agentHost/node/codex/codexAgent.ts`다. 위 Python/CJS 위치는
@@ -92,7 +112,8 @@ zero-turn 가드는 그 메서드를 허용하지 않는다. 이를 새로 허�
    (`ghcp_ahp_patched_runtime.py:51-53`).
 4. 입력은 원본·읽기 전용으로 분리한다. 원문 문제·reference·developer instructions는
    바꾸지 않는다. 원문 deliverable 요구와 잡 TMPDIR 안의 출력 위치를 연결하고,
-   §1의 삭제 전 수집을 구현·검증해야 한다. workspace/HOME/공용 `/tmp`를
+   §1의 수집·봉인 코드는 fixture에서 검증됐으며, 실제 port의 writer/cleanup hold와
+   native observer의 root 바인딩 연결은 남아 있다. workspace/HOME/공용 `/tmp`를
    writable root에 더하거나 심볼릭 링크로 우회하지 않는다.
 5. 아래 연결 확인을 통과한 뒤에도 자동으로 5문제를 열지 않는다. 동작 중인
    live task controller, 도구/시간 상한과 비용 중단 장치를 검토하고 같은 run의
@@ -141,7 +162,8 @@ Workflow는 `agentic-v2-ghcp-sol-gate.yml`, ref는 위 브랜치의 **별도 승
    writable 작업 사본·출력의 잡 내 한정, 호스트 제어 파일/자격증명 분리를 구현·검토한다.
    기본 정책 자체가 VM 전체 격리를 증명하는 것은 아니다. agent 도구가 secret이나
    runner 제어 파일에 접근할 수 없다는 검증 없이는 유료 실행을 열지 않는다.
-4. live task transport·TMPDIR 수명/수집·첫 턴 가드·상한·비용 준비는 선택지 1과 같다.
+4. 수집·봉인·삭제는 같은 컨트롤러에서 별도 프로필로 fixture 검증됐다. live task
+   transport/hold·관측 root 연결·첫 턴 가드·상한·비용 준비는 선택지 1과 같이 남아 있다.
    데이터·문제 순서·채점 계약은 같게 두되 정책 차이는 계속 별도 조건으로 기록한다.
 
 ### 선택지 3의 dispatch 입력 명세 — 현재 유료 selector 없음
@@ -222,8 +244,10 @@ dataset revision `11e7900cdcac61bc4daf59e65feb238acda98fbf`에 결합한다.
 문제별 transcript, 도구 호출/명령 이벤트, 실제 입력·출력 bytes/hash,
 첫 턴 증거, 종료 코드·cleanup을 빠짐없이 남긴다. 도구 입력 문자열은 실행 증거로
 표기하지 않는다. 심볼릭 링크·특수 파일·범위 밖 경로·capture 누락·해시 불일치·
-유출 검사 실패는 fail-closed다. §1의 TMPDIR 삭제 전 스냅샷 연결은 아직 구현되지 않았다.
-출력 보존 실패를 빈 deliverable 성공으로 처리하지 않는다.
+유출 검사 실패는 fail-closed다. §1의 수집·봉인·삭제 순서는 구현·fixture 검증됐고,
+실제 호스트 hold/관측 root 연결과 native 실측은 남았다. 출력 보존 실패를 빈
+deliverable 성공으로 처리하지 않는다. fixture의 `workspace/`는 삭제된 원본이 아니라
+봉인에서 재구성한 export mirror이며, 원본 runtime 경로와 구분해 검증한다.
 
 실패 과제는 `status=error`와 진단을 남기고 성공 deliverable로 발행하지 않는다.
 검사된 결과만 기존 `workspace/step2_inference_results.json` 및
@@ -252,4 +276,4 @@ dataset revision `11e7900cdcac61bc4daf59e65feb238acda98fbf`에 결합한다.
 실행 전 완료 순서: 소유자 선택·예산 → 별도 검토된 프로필별 live 경로 → 출력 수명/
 격리/상한·누출 음성 테스트 → 정확한 SHA의 model-free CI 녹색 → 별도 승인된 1턴
 연결 → 결과 검토와 5과제 실행 승인. 어떤 단계도 자동 승인·자동 재dispatch하지 않는다.
-이번 문서 커밋은 이 순서의 실행이나 기존 잠금의 해제를 수행하지 않는다.
+계획서와 후속 오프라인 구현은 유료 단계의 실행이나 기존 잠금의 해제를 수행하지 않는다.
