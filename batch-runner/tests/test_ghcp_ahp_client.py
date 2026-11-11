@@ -42,6 +42,11 @@ class FakePort:
         self.sent, self.stopped = [], 0
         self.send_error = self.kill_error = False
         self.kill_result = True
+        from .test_ghcp_ahp_connection import first_turn_wire
+        self.native_evidence = first_turn_wire()  # Explicit inert response fixture, not a production default.
+
+    def first_turn_evidence(self):
+        return copy.deepcopy(self.native_evidence)
 
     def send(self, message, timeout):
         assert 0 < timeout <= client.CONTROL_TIMEOUT_SECONDS
@@ -112,6 +117,23 @@ def test_default_limits_and_bound_are_exact_not_premium_request_claims():
     assert record["overshoot_boundary"]["server_internal_model_requests"] == "no_finite_bound_proven"
     assert record["reason_codes"] == ["ahp_paid_contract_unverified"]
     assert record["model_calls"] == 0 and not record["launch_allowed"] and not record["gate_ready"]
+
+
+@pytest.mark.parametrize("missing", ["model", "reasoning", "output", "native_context"])
+def test_task_client_cancels_its_own_first_turn_when_attestation_is_missing(missing, tmp_path):
+    session, port, _ = setup()
+    if missing == "native_context":
+        port.native_evidence.pop()
+    else:
+        del port.native_evidence[4]["value"]["response"][missing]
+    assert start(session)
+    finish(session)
+    assert session.status == "stopped" and session.reason == "first_turn_attestation_refused"
+    assert not session.completed and port.stopped == 1
+    assert session.cleanup["cancel_attempts"] == session.cleanup["dispose_attempts"] == 1
+    assert not session.send_turn("turn2", "must not send")
+    assert len(work_messages(port)) == 1
+    assert session.capture(tmp_path / "capture.json")["first_turn_attestation"]["verified"] is False
 
 
 def test_turn_65_never_reaches_transport_even_when_echo_is_missing(tmp_path):

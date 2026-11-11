@@ -7,6 +7,7 @@ and real response-side reports remain distinct from independent attestation.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -415,7 +416,9 @@ def _settings(value, source, scope, thread_id=NOT_REPORTED):
             result["network"] = sandbox["networkAccess"]
     # No native effective-thread web_search/context field is invented from the
     # thread/start request or the unrelated disk-level config/read response.
-    return {"values": result, "source": source, "scope": scope, "thread_id": thread_id}
+    return {"values": result, "source": source, "scope": scope, "thread_id": thread_id,
+            "sandbox_report": copy.deepcopy(sandbox),
+            "permission_profile": copy.deepcopy(value.get("activePermissionProfile", NOT_REPORTED))}
 
 
 def analyze(records, *, synthetic):
@@ -427,7 +430,7 @@ def analyze(records, *, synthetic):
         "native_requests": [], "native_applied_snapshots": [], "native_base_configuration": [],
         "native_context_reports": [], "capi_requests": [], "capi_response_reports": [],
         "metadata_http": [], "capi_count_scope": "inference_only_metadata_gets_separate",
-        "capture_errors": [], "native_rpc_refusals": [], "native_hooks_list": [], "records": records,
+        "capture_errors": [], "native_rpc_refusals": [], "native_hooks_list": [], "native_sandbox_scopes": [], "records": records,
         "limitations": ["diagnostic_only_not_admission", "response_report_not_independent_model_attestation",
                         "capi_field_availability_requires_real_response", "native_settings_are_not_served_settings",
                         "sdk_context_window_is_not_provider_capacity_proof"]}
@@ -437,6 +440,8 @@ def analyze(records, *, synthetic):
             result["synthetic"] = True
         stream = (record.get("process", "fixture"), record.get("stream"))
         kind, value = record.get("kind"), record.get("value")
+        if kind == "native_sandbox_scope":
+            result["native_sandbox_scopes"].append({**copy.deepcopy(record), "process": stream[0]})
         if kind in {"metadata_request", "metadata_response"}:
             result["metadata_http"].append({key: record[key] for key in ("kind", "method", "host", "path", "status", "external_request") if key in record})
         if kind in {"blocked", "wire_parse_error"}:
@@ -488,9 +493,10 @@ def analyze(records, *, synthetic):
                     continue
                 method = request.get("method")
                 if method in {"thread/start", "thread/resume", "thread/fork"}:
-                    result["native_applied_snapshots"].append(_settings(response,
+                    result["native_applied_snapshots"].append({**_settings(response,
                         f"native.{method}.result", "thread_start_not_final_turn",
-                        (response.get("thread") or {}).get("id", NOT_REPORTED)))
+                        (response.get("thread") or {}).get("id", NOT_REPORTED)),
+                        "process": stream[0], "stream": stream[1], "request_id": value["id"]})
                 if method == "config/read":
                     result["native_base_configuration"].append({"scope": "disk_layers_not_thread_override", "value": response})
             params = value.get("params") or {}

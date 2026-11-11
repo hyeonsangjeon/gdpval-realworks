@@ -1,8 +1,9 @@
 """One AHP connectivity turn, never a five-task run or a settings echo proof.
 
 Only the explicit protected dispatch entry below can open a live port. Unit
-tests inject a fake port. The pinned AHP mapper does not attest served model or
-thinking level: those fields stay not_reported, even if usage.model agrees.
+tests inject a fake port. The pinned AHP mapper alone does not attest served
+model or thinking level. Only correlated response-side observer evidence can
+fill them; usage.model is still just a configuration echo.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import time
 from ghcp_ahp_client import Limits, NOT_REPORTED, SessionClient
 from ghcp_ahp_diagnostics import DiagnosticRedactor, advertised_models
 from ghcp_ahp_probe import DESIRED_MODEL, Refused, digest, require_runner, save_json, strict_json
+import ghcp_ahp_first_turn as first_turn
 
 LIMITS = Limits(turns=1, tool_calls=0, seconds=120)
 PROMPT = "Reply with exactly CONNECTED. Do not use any tools."
@@ -56,6 +58,13 @@ class ConnectionSession(SessionClient):
         self.usage_reports = []
         self.markdown_parts = []
         self.violations = []
+
+    def _attest_first_turn(self):
+        super()._attest_first_turn()
+        for field, source in (("served_model", "served_model"), ("thinking_level", "reasoning_effort"),
+                              ("context_size", "context_window")):
+            self.observed[field] = self.first_turn_attestation["observed"][source]
+            self.provenance[field] = self.first_turn_attestation["sources"][source]
 
     def _stop(self, reason, *, completed=False):
         # Late malformed/error frames cannot turn an already-completed capture
@@ -127,6 +136,8 @@ class ConnectionSession(SessionClient):
     def result(self, capture):
         verdict = settings_verdict(self.observed)
         reasons = list(dict.fromkeys(self.violations + verdict["reason_codes"]))
+        if self.first_turn_attestation["verified"] is not True:
+            reasons.append("first_turn_attestation_refused")
         reply = "".join(self.text.get((TURN, part), "") for part in self.markdown_parts)
         if self.status != "completed" or self.completed != {TURN}:
             reasons.append(self.reason or "connection_incomplete")
@@ -144,6 +155,7 @@ class ConnectionSession(SessionClient):
                 "counts": capture["counts"], "overshoot_boundary": capture["overshoot_boundary"],
                 "status": "connected" if not reasons else "refused", "connection_verified": not reasons,
                 "reason_codes": list(dict.fromkeys(reasons)), "gate_ready": False, "five_task_allowed": False,
+                "first_turn_attestation": copy.deepcopy(self.first_turn_attestation),
                 "remaining_gate": "ahp_paid_contract_unverified", "reply_exact": reply.strip() == "CONNECTED",
                 "capture_boundary": "one_client_turn_not_one_provider_request; no native zero-tool guarantee"}
 
@@ -270,6 +282,7 @@ def require_verified_connection(path):
             or not path.is_file() or path.stat().st_size > 1024 * 1024):
         raise Refused("connection_receipt_refused")
     record = strict_json(path.read_text())
+    first_turn.require_report(record.get("first_turn_attestation"))
     if (record.get("schema_version") != "ghcp-ahp-connection-v1"
             or record.get("connection_verified") is not True or record.get("status") != "connected"
             or record.get("reason_codes") != [] or record.get("requested") != REQUESTED
@@ -281,6 +294,15 @@ def require_verified_connection(path):
         artifact = path.parent / (name + ".json")
         if artifact.is_symlink() or not artifact.is_file() or digest(artifact) != record.get(name + "_sha256"):
             raise Refused("connection_capture_unverified")
+    wire_file = path.parent / "wire-capture.json"
+    if (wire_file.is_symlink() or not wire_file.is_file() or wire_file.stat().st_size > 16 * 1024 * 1024
+            or digest(wire_file) != record.get("wire_capture", {}).get("sha256")):
+        raise Refused("first_turn_capture_unverified")
+    wire = strict_json(wire_file.read_text())
+    reconstructed = first_turn.assess(wire.get("records", []))
+    first_turn.require_report(reconstructed)
+    if reconstructed.get("synthetic") is not False or reconstructed != record["first_turn_attestation"]:
+        raise Refused("first_turn_attestation_refused")
     # This pinned mapper cannot attest these two fields. Never admit a hand-
     # edited JSON or a synthetic-success fixture as a live receipt.
     raise Refused("connection_served_attestation_unavailable")

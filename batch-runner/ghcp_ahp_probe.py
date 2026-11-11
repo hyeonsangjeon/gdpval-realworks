@@ -843,13 +843,19 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 "thread_policy": record.get("thread_policy"), "wire_capture": record.get("wire_capture"),
                 "limits": {"turns": 0, "capi_inference_requests": 0, "metadata_gets": 2 if metadata_socket is not None else 0,
                            "sessions": 1, "native_threads": 1, "wall_seconds": 120}}
+            if "admission_scope" in policy_record:
+                from ghcp_ahp_zero_turn_admission import FIELDS
+                handshake.update({key: policy_record[key] for key in FIELDS})
             if patched_request is not None:
                 handshake = patched.stamp(handshake, provenance)
             save_json(evidence / "handshake.json", handshake)
         if patched_request is not None:
-            summary = patched.stamp({"schema": "ghcp-ahp-patched-summary-v1", "status": record["status"],
+            summary = {"schema": "ghcp-ahp-patched-summary-v1", "status": record["status"],
                 "probe_exit": 0 if record["status"] == "probe_completed" else 2,
-                "model_calls": 0, "launch_allowed": False, "reason_codes": record["reason_codes"]}, provenance)
+                "model_calls": 0, "launch_allowed": False, "reason_codes": record["reason_codes"]}
+            if authenticated_zero_turn and "admission_scope" in policy_record:
+                summary.update({key: policy_record[key] for key in FIELDS})
+            summary = patched.stamp(summary, provenance)
             save_json(evidence / "summary.json", summary)
             if provenance["runtime_load_status"] == "measured":
                 patched.write_summary(evidence, handshake=authenticated_zero_turn, policy=session_policy)

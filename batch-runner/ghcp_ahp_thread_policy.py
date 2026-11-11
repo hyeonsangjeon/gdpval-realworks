@@ -167,14 +167,19 @@ def matches_all(observed):
 
 
 def assess(capture, results):
+    import ghcp_ahp_zero_turn_admission as scoped
+
+    zero_turn = capture.get("bootstrap", {}).get("authenticated_zero_turn") is True
     observed = dict.fromkeys(EXPECTED, NOT_REPORTED)
     origins = dict.fromkeys(EXPECTED, NOT_REPORTED)
     starts = [row for row in capture.get("native_applied_snapshots", []) if row.get("source") == "native.thread/start.result"]
     reasons = []
+    native_report = {}
     if len(starts) == 1 and isinstance(starts[0].get("thread_id"), str) and starts[0]["thread_id"] not in {"", NOT_REPORTED}:
         thread = starts[0].get("thread_id")
         updates = [row for row in capture.get("native_applied_snapshots", []) if row.get("thread_id") == thread]
         report = updates[-1]
+        native_report = report
         for key in ("model", "model_provider", "reasoning_effort", "approval", "sandbox", "network"):
             observed[key] = report.get("values", {}).get(key, NOT_REPORTED)
             origins[key] = report.get("source", NOT_REPORTED)
@@ -187,7 +192,11 @@ def assess(capture, results):
     # Pinned ThreadStartResponse/ThreadSettings have no applied web-search field.
     # Native model is a configured model, not an upstream served-model report.
     # config/read is process/disk scope and cannot fill either of these gaps.
-    reasons.extend("unreported_or_mismatched:" + key for key in EXPECTED if not same(observed[key], EXPECTED[key]))
+    required = scoped.REQUIRED if zero_turn else EXPECTED
+    reasons.extend("unreported_or_mismatched:" + key for key in required if not same(observed[key], required[key]))
+    scope = scoped.sandbox_report(capture, native_report) if zero_turn else None
+    if scope is not None:
+        reasons.extend(scope["reason_codes"])
     native = capture.get("native_requests", [])
     turn_requests = sum(row.get("request", {}).get("method") == "turn/start" for row in native)
     turn_events = sum(str(row.get("value", {}).get("method", "")).startswith("turn/")
@@ -200,9 +209,13 @@ def assess(capture, results):
             and any(row.get("kind") == "observer_installed" and row.get("model_free") is True
                     and row.get("session_only") is True and row.get("entrypoint") == "vs/platform/agentHost/node/agentHostMain"
                     for row in capture.get("records", [])))
+    if zero_turn:
+        live = live and any(row.get("kind") == "observer_installed"
+            and row.get("entrypoint") == "vs/platform/agentHost/node/agentHostMain"
+            and row.get("process", "fixture") == native_report.get("process") for row in capture.get("records", []))
     creation = results.get("createSession", {})
     created = "result" in creation and "error" not in creation
-    return {"schema": "ghcp-ahp-thread-policy-v1", "requested_policy": copy.deepcopy(POLICY),
+    assessment = {"schema": "ghcp-ahp-thread-policy-v1", "requested_policy": copy.deepcopy(POLICY),
             "requested_model": copy.deepcopy(DESIRED_MODEL), "requested_native_launch_args": list(NATIVE_ARGS),
             "observed": observed, "origins": origins,
             "verdicts": {key: "matches" if same(observed[key], EXPECTED[key]) else
@@ -221,7 +234,20 @@ def assess(capture, results):
                        "metadata_gets": 2 if capture.get("bootstrap", {}).get("metadata_reads") else 0},
             "limitations": ["resolver_echo_is_not_applied", "process_config_is_not_thread_config",
                             "thread_model_is_not_served_model", "initial_effort_is_not_final_turn_effort",
-                            "sdk_context_is_not_provider_capacity", "unreported_web_search_refuses_admission"]}
+                            "sdk_context_is_not_provider_capacity", "unreported_web_search_refuses_full_admission"]}
+    if zero_turn:
+        auth = results.get("authenticate", {})
+        assessment.update(admission_scope=scoped.SCOPE, sandbox_scope=scope,
+            deferred_fields=list(scoped.DEFERRED), first_turn_required=True, settings_verified=False,
+            auth_rpc_succeeded="result" in auth and "error" not in auth)
+        for key in scoped.DEFERRED:
+            assessment["verdicts"][key] = "deferred_to_first_turn"
+        assessment["verdicts"]["sandbox"] = scope["verdict"]
+        assessment["admission_allowed"] = bool(created and live and not safety_violation and not reasons
+                                                and assessment["auth_rpc_succeeded"] and scope["allowed"])
+        if assessment["admission_allowed"]:
+            scoped.require_scoped_admission(assessment)
+    return assessment
 
 
 def export(evidence, results):

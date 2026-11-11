@@ -23,6 +23,124 @@ POLICY_FIXTURE = FIXTURE.with_name("ghcp_ahp_thread_policy_fixture.cjs")
 MANAGEMENT_FIXTURE = FIXTURE.with_name("ghcp_ahp_management_fixture.cjs")
 RPC_REFUSAL_FIXTURE = FIXTURE.with_name("ghcp_ahp_rpc_refusal_fixture.cjs")
 HOOKS_LIST_FIXTURE = FIXTURE.with_name("ghcp_ahp_hooks_list_fixture.cjs")
+SCOPE_FIXTURE = FIXTURE.with_name("ghcp_ahp_sandbox_scope_fixture.cjs")
+
+
+def scope_capture(case="valid", *, simulated_live=False):
+    process = subprocess.run(["node", str(SCOPE_FIXTURE), case], capture_output=True, text=True, timeout=20,
+                             env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
+    assert process.returncode == 0, process.stderr
+    fixture = json.loads(process.stdout)
+    assert fixture["real_processes"] == fixture["model_calls"] == fixture["external_requests"] == 0
+    assert all(row["synthetic"] is True for row in fixture["records"])
+    rows = copy.deepcopy(fixture["records"])
+    if simulated_live:
+        # Exercise the decision's live branch with INERT fixture bytes only.
+        # Production has no fixture/flag capable of removing this marker.
+        for row in rows:
+            row["synthetic"] = False
+    capture = wire.analyze(rows, synthetic=not simulated_live)
+    capture.update(capture_status="captured", bootstrap={"session_policy": True,
+        "authenticated_zero_turn": True, "agent_host_fork": {"state_root": fixture["state_root"]}})
+    return capture, fixture
+
+
+@pytest.mark.parametrize("case", ["valid", "normalized", "empty", "empty_legacy", "two", "duplicate", "workspace",
+    "home", "all_tmp", "state", "root", "parent", "child", "missing", "null", "not_array", "not_string",
+    "symlink", "symlink_dotdot", "replaced", "unbound_spawn", "network", "network_number", "approval", "profile",
+    "missing_profile", "implicit_tmp", "implicit_slash_tmp", "unreported_flags", "full_access", "contradiction"])
+def test_zero_turn_native_root_scope_is_measured_before_cleanup_and_never_guessed(case):
+    import ghcp_ahp_thread_policy as policy
+    import ghcp_ahp_zero_turn_admission as scoped
+
+    capture, fixture = scope_capture(case, simulated_live=True)
+    result = policy.assess(capture, {"createSession": {"result": None}, "authenticate": {"result": None}})
+    allowed = case in {"valid", "normalized", "empty", "empty_legacy"}
+    assert result["admission_allowed"] is allowed
+    assert result["sandbox_scope"]["allowed"] is allowed
+    row, = capture["native_sandbox_scopes"]
+    # Original response projection, with the existing cwd/credential redaction
+    # preserved even on refusal. Accepted tmpdir paths are not rewritten.
+    assert row["reported_writable_roots"] == capture["native_applied_snapshots"][0]["sandbox_report"].get("writableRoots", "not_reported")
+    if allowed:
+        assert row["reported_writable_roots"] == fixture["native_result"]["sandbox"]["writableRoots"]
+    assert result["observed"]["sandbox"] == fixture["native_result"]["sandbox"]["type"]
+    assert result["model_turn_start_requests"] == result["model_turn_events"] == result["capi_requests"] == 0
+    for key in scoped.DEFERRED:
+        assert result["observed"][key] == "not_reported"
+        assert result["verdicts"][key] == "deferred_to_first_turn"
+        assert "unreported_or_mismatched:" + key not in result["reasons"]
+    assert result["settings_verified"] is False and result["first_turn_required"] is True
+    if allowed:
+        assert scoped.require_scoped_admission(result)
+        assert result["sandbox_scope"]["verdict"] == ("readOnly" if case.startswith("empty") else "read_only_except_job_tmpdir")
+    else:
+        assert result["sandbox_scope"]["reason_codes"]
+
+
+def test_zero_turn_root_scope_does_not_make_synthetic_evidence_admissible():
+    import ghcp_ahp_thread_policy as policy
+    capture, _ = scope_capture()
+    result = policy.assess(capture, {"createSession": {"result": None}, "authenticate": {"result": None}})
+    assert result["sandbox_scope"]["allowed"] is True
+    assert result["synthetic"] is True and result["admission_allowed"] is False
+
+
+@pytest.mark.parametrize("damage", ["deferred_pass", "missing_scope", "duplicate_scope", "wrong_thread", "wrong_process",
+    "root_identity", "reply_identity", "scope_verdict", "raw_roots", "state_binding", "profile", "auth", "turn", "capi"])
+def test_zero_turn_scope_cannot_be_forged_or_promoted_to_full_admission(damage):
+    import ghcp_ahp_thread_policy as policy
+    import ghcp_ahp_zero_turn_admission as scoped
+
+    capture, _ = scope_capture(simulated_live=True)
+    row = capture["native_sandbox_scopes"][0]
+    if damage == "missing_scope": capture["native_sandbox_scopes"] = []
+    if damage == "duplicate_scope": capture["native_sandbox_scopes"].append(copy.deepcopy(row))
+    if damage == "wrong_thread": row["thread_id"] = "foreign"
+    if damage == "wrong_process": row["process"] = "foreign"
+    if damage == "root_identity": row["root_identities"][0]["inode"] += 1
+    if damage == "reply_identity": row["tmpdir_at_reply"]["inode"] += 1
+    if damage == "scope_verdict": row["verdict"] = "readOnly"
+    if damage == "raw_roots": row["reported_writable_roots"] = []
+    if damage == "state_binding": row["binding"]["state_root"] = "/wrong-job"
+    if damage == "profile": row["permission_profile"] = "vscode-workspace"
+    if damage == "turn": capture["native_requests"].append({"request": {"method": "turn/start"}})
+    if damage == "capi": capture["capi_requests"].append({})
+    result = policy.assess(capture, {"createSession": {"result": None},
+        "authenticate": {"error": {}} if damage == "auth" else {"result": None}})
+    if damage == "deferred_pass":
+        assert result["admission_allowed"] is True
+        result["verdicts"]["served_model"] = "matches"
+        with pytest.raises(probe.Refused, match="zero_turn_deferred_counted_as_pass"):
+            scoped.require_scoped_admission(result)
+    else:
+        assert result["admission_allowed"] is False
+
+
+@pytest.mark.parametrize("damage", ["none", "execution_allowed", "launch_allowed", "gate_ready", "connection_verified",
+    "wrong_schema", "wrong_scope", "synthetic", "deferred_model", "deferred_context", "deferred_web"])
+def test_patched_provenance_accepts_only_the_explicit_zero_turn_scope_not_execution(damage):
+    import ghcp_ahp_thread_policy as policy
+    import ghcp_ahp_patched_runtime as patched
+    capture, _ = scope_capture(simulated_live=True)
+    result = policy.assess(capture, {"createSession": {"result": None}, "authenticate": {"result": None}})
+    provenance = {"patched_ghcp": True, "patch_sha256": patched.PATCH_SHA256, "execution_allowed": False,
+        "build_receipt_sha256": "a" * 64, "loaded_bundle_sha256": "b" * 64, "load_evidence_sha256": "c" * 64,
+        "runtime_contract_sha256": "d" * 64, "runtime_load_status": "measured", "runtime_evidence_synthetic": False}
+    # Hypothetical JSON decision fixture, NOT an artifact-chain/load attestation.
+    document = {**result, **provenance}
+    if damage in {"execution_allowed", "launch_allowed", "gate_ready", "connection_verified"}:
+        document[damage] = True
+    if damage == "wrong_schema": document["schema"] = "paid-task"
+    if damage == "wrong_scope": document["admission_scope"] = "all-turns"
+    if damage == "synthetic": document["synthetic"] = True
+    if damage.startswith("deferred_"):
+        document["verdicts"][{"deferred_model": "served_model", "deferred_context": "context_window", "deferred_web": "web_search"}[damage]] = "matches"
+    if damage == "none":
+        assert patched.validate_provenance(document) == provenance
+    else:
+        with pytest.raises(probe.Refused):
+            patched.validate_provenance(document)
 
 
 def run_rpc_refusal_fixture(case):

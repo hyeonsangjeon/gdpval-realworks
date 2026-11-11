@@ -1,7 +1,8 @@
-"""Hash-bound patched-host load evidence; never paid or session admission.
+"""Hash-bound patched-host load evidence; never model/paid execution permission.
 
 The public probe entry remains locked pending the owner's patch decision. The
 loader and artifact contracts can be tested using inert Node modules only.
+The leader-approved completed zero-turn inspection has its own narrow scope.
 """
 
 from __future__ import annotations
@@ -401,9 +402,17 @@ def validate_provenance(value, *, measured=True):
         raise Refused("patched_runtime_refusal_provenance_invalid")
     if measured and value["runtime_evidence_synthetic"] and "synthetic" in value and value["synthetic"] is not True:
         raise Refused("patched_runtime_fixture_cannot_be_live_evidence")
-    for key in ("execution_allowed", "launch_allowed", "admission_allowed", "gate_ready", "connection_verified"):
+    for key in ("execution_allowed", "launch_allowed", "gate_ready", "connection_verified"):
         if key in value and value[key] is not False:
             raise Refused("patched_runtime_cannot_admit_execution")
+    if "admission_allowed" in value and value["admission_allowed"] is not False:
+        # Leader 2026-11-11: metadata/session-only admission is not execution
+        # authorization. Unknown schemas and synthetic fixtures remain closed.
+        if value.get("schema") not in {"ghcp-ahp-thread-policy-v1", "ghcp-ahp-authenticated-zero-turn-v1",
+                                       "ghcp-ahp-patched-summary-v1"}:
+            raise Refused("patched_runtime_cannot_admit_execution")
+        from ghcp_ahp_zero_turn_admission import require_scoped_admission
+        require_scoped_admission(value)
     if "model_calls" in value and (type(value["model_calls"]) is not int or value["model_calls"] != 0):
         raise Refused("patched_runtime_cannot_admit_execution")
     return {key: value[key] for key in PROVENANCE_FIELDS}
@@ -445,6 +454,15 @@ def _verify_json_chain(directory, *, handshake=False, policy=False):
             or metadata[0]["runtime_evidence_synthetic"] is not contract["synthetic"]
             or any(metadata[0][key] != value for key, value in expected.items())):
         raise Refused("patched_runtime_artifact_hash_mismatch")
+    if any("admission_scope" in value for value in documents):
+        from ghcp_ahp_zero_turn_admission import FIELDS
+        from ghcp_ahp_thread_policy import assess
+        if not handshake or not policy:
+            raise Refused("zero_turn_scope_chain_missing")
+        reconstructed = assess(documents[0], documents[3].get("rpc_results", {}))
+        for value in (documents[2], documents[3], documents[4]):
+            if any(key not in value or key not in reconstructed or not _equal(value[key], reconstructed[key]) for key in FIELDS):
+                raise Refused("zero_turn_scope_chain_mismatch")
     return documents[2]
 
 
@@ -453,6 +471,11 @@ def _summary_text(value):
              "This is not native-policy or served-model attestation.", ""]
     for key in PROVENANCE_FIELDS:
         lines.append(f"- {key}: `{json.dumps(value[key], ensure_ascii=True)}`")
+    if "admission_scope" in value:
+        from ghcp_ahp_zero_turn_admission import FIELDS
+        lines += ["", "Zero-turn admission only; deferred fields are NOT passed or served-model proof."]
+        for key in FIELDS:
+            lines.append(f"- {key}: `{json.dumps(value[key], sort_keys=True, ensure_ascii=True)}`")
     return "\n".join(lines) + "\n"
 
 
