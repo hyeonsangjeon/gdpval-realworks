@@ -249,6 +249,9 @@ def workflow():
 
 
 def evaluate(condition, event, inputs):
+    # The new selector defaults to false. Existing mode matrices retain their
+    # original meaning; the separate profile tests explicitly exercise true.
+    inputs = {"default_policy_unpatched": False, **inputs}
     text = condition.removeprefix("${{").removesuffix("}}").strip()
     for name, value in inputs.items():
         text = text.replace("inputs." + name, repr(value))

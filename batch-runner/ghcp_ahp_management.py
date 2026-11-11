@@ -24,7 +24,10 @@ MAX_REPLY = 2 * 1024 * 1024
 
 
 class ManagementBridge:
-    def __init__(self, state, deadline, *, owned_pid=None, boundary_check=None, sanitize=redact):
+    def __init__(self, state, deadline, *, owned_pid=None, boundary_check=None, sanitize=redact, admission_profile=None):
+        if admission_profile not in (None, "default_policy_unpatched"):
+            raise Refused("management_admission_profile_refused")
+        self.admission_profile = admission_profile
         self.directory = Path(state) / "wire"
         self.deadline = deadline
         self.owned_pid = owned_pid
@@ -60,6 +63,8 @@ class ManagementBridge:
         if owner_file.stat().st_size > 2048:
             raise Refused("management_owner_size_refused")
         owner = strict_json(owner_file.read_text())
+        if owner.get("admission_profile") != self.admission_profile:
+            raise Refused("management_admission_profile_refused")
         if (owner.get("schema") != "ghcp-ahp-management-owner-v1"
                 or owner.get("bridge_sha256") != digest(BRIDGE)
                 or type(owner.get("server_pid")) is not int or owner["server_pid"] <= 0
@@ -141,6 +146,11 @@ class ManagementBridge:
     def prepare(self, session, workspace, policy):
         from ghcp_ahp_thread_policy import POLICY, same
 
+        default = None
+        if self.admission_profile is not None:
+            import ghcp_ahp_default_policy as default
+            POLICY = default.POLICY
+
         expected = {"session": session, "workspace": workspace, "model": copy.deepcopy(DESIRED_MODEL), "config": copy.deepcopy(POLICY)}
         if not same(policy, POLICY):
             raise Refused("management_init_settings_refused")
@@ -149,7 +159,16 @@ class ManagementBridge:
             if not same(configured, {"configured": True}):
                 raise Refused("management_init_configure_unconfirmed")
             readback = self._request("readback", {})
-            if not same(readback, {"settings": expected, "resolved_policy": POLICY,
+            if default is not None:
+                if (type(readback) is not dict or set(readback) != {"settings", "resolved_policy", "derived_permissions",
+                        "evidence", "admission_allowed", "admission_profile"}
+                        or not same(readback["settings"], expected) or readback["admission_profile"] != default.PROFILE
+                        or readback["derived_permissions"] != "vscode-workspace" or readback["evidence"] != EVIDENCE
+                        or readback["admission_allowed"] is not False):
+                    raise Refused("management_init_readback_refused")
+                if not same(default.validate_resolved(readback["resolved_policy"]), readback["resolved_policy"]):
+                    raise Refused("management_init_readback_refused")
+            elif not same(readback, {"settings": expected, "resolved_policy": POLICY,
                                   "derived_permissions": "vscode-workspace-read-only",
                                   "evidence": EVIDENCE, "admission_allowed": False}):
                 raise Refused("management_init_readback_refused")

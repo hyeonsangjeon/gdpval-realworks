@@ -82,6 +82,8 @@ UPLOAD_NEW = ('          path: |\n'
 
 
 def restore_workflow(text):
+    from .test_ghcp_ahp_default_policy import restore_workflow as restore_default_profile
+    text = restore_default_profile(text)
     for current, original in ((PERMISSIONS, ""), (PREPARATION_STEPS, ""), (USERNS_PREPARE, ""),
                               (USERNS_RESTORE, ""), (AUTH_NEW, AUTH_OLD), (UPLOAD_NEW, UPLOAD_OLD)):
         assert text.count(current) == 1, "prewarm workflow inverse must match exactly once"

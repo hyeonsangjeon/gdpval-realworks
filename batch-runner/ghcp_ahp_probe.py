@@ -476,8 +476,19 @@ def validate_request(method, params, session, workspace):
         raise Refused("invalid_initialize_request")
 
 
+def select_thread_policy(admission_profile=None):
+    if admission_profile is None:
+        import ghcp_ahp_thread_policy as policy
+    elif admission_profile == "default_policy_unpatched":
+        import ghcp_ahp_default_policy as policy
+    else:
+        raise Refused("admission_profile_refused")
+    return policy
+
+
 class Rpc:
-    def __init__(self, transport, session, workspace, *, capability_only=False, session_policy=False, credential="", boundary_check=None, require_mcp_disabled=False):
+    def __init__(self, transport, session, workspace, *, capability_only=False, session_policy=False, credential="", boundary_check=None, require_mcp_disabled=False,
+                 admission_profile=None):
         parsed = urllib.parse.urlsplit(workspace)
         if not re.fullmatch(r"ahp-session:/[0-9a-f-]{36}", session) or parsed.scheme != "file" or parsed.netloc or not parsed.path.startswith("/") or parsed.query or parsed.fragment:
             raise Refused("unsafe_rpc_scope")
@@ -486,6 +497,9 @@ class Rpc:
             raise Refused("invalid_capability_mode")
         self.capability_only = capability_only
         self.session_policy = session_policy
+        if admission_profile is not None and (admission_profile != "default_policy_unpatched" or not session_policy or not credential):
+            raise Refused("default_policy_mode_refused")
+        self.admission_profile = admission_profile
         if credential and not session_policy:
             raise Refused("zero_turn_auth_requires_session_policy")
         self.credential = credential
@@ -507,7 +521,7 @@ class Rpc:
                                      or len(self.sent) >= 2):
             raise Refused("zero_session_probe_rpc_refused")
         if self.session_policy:
-            import ghcp_ahp_thread_policy as thread_policy
+            thread_policy = select_thread_policy(self.admission_profile)
             thread_policy.validate(method, params, self)
         else:
             validate_request(method, params, self.session, self.workspace)
@@ -574,7 +588,7 @@ def session_create_requests(rpc):
 
 def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capability_only=False, session_policy=False,
               authenticated_zero_turn=False, credential="", metadata_socket=None, patched_request=None,
-              prewarm_preparation=None):
+              prewarm_preparation=None, admission_profile=None):
     if type(capability_only) is not bool or type(session_policy) is not bool or capability_only and session_policy:
         raise Refused("invalid_capability_mode")
     if patched_request is not None:
@@ -584,6 +598,12 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
         patched.require_activation()
     identity = require_runner()
     isolation = require_isolation(outside_netns, outside_pidns)
+    thread_policy = select_thread_policy(admission_profile)
+    if admission_profile is not None:
+        if (not authenticated_zero_turn or not session_policy or capability_only or metadata_socket is None
+                or patched_request is not None or prewarm_preparation is not None):
+            raise Refused("default_policy_mode_refused")
+        thread_policy.require_context(evidence)
     if type(authenticated_zero_turn) is not bool or bool(credential) != authenticated_zero_turn:
         raise Refused("zero_turn_auth_mode_mismatch")
     if metadata_socket is not None and not authenticated_zero_turn:
@@ -591,7 +611,6 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
     if authenticated_zero_turn:
         from ghcp_ahp_diagnostics import DiagnosticRedactor
         import ghcp_ahp_zero_turn as zero_turn
-        import ghcp_ahp_thread_policy as thread_policy
         zero_turn.require_context()
         zero_turn.validate_credential(credential)
         if not session_policy or capability_only:
@@ -621,6 +640,9 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
               "backend_readiness": {"ready": False, "reason": "not_checked"},
               "probe_limits": {"wall_seconds": wall_seconds, "rpc_requests": 2 if capability_only else MAX_RPCS + authenticated_zero_turn, "prompt_turns": 0, "wire_bytes": MAX_WIRE_BYTES},
               "reason_codes": [], "status": "incomplete"}
+    profile_options = {"admission_profile": admission_profile} if admission_profile is not None else {}
+    if admission_profile is not None:
+        record.update(thread_policy.LABELS)
     transport = process = rpc = watchdog = None
     try:
         with tempfile.TemporaryDirectory(prefix="ahp-") as temporary:
@@ -647,7 +669,6 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 import ghcp_ahp_backend_diagnostics as backend_diagnostics
                 import ghcp_ahp_wire_capture as wire_capture
                 if session_policy:
-                    import ghcp_ahp_thread_policy as thread_policy
                     environment["VSCODE_AGENT_HOST_CODEX_APP_SERVER_ARGS"] = json.dumps(thread_policy.NATIVE_ARGS)
                 options = {"session_policy": True} if session_policy else {}
                 if authenticated_zero_turn:
@@ -656,7 +677,7 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                         options["metadata_socket"] = metadata_socket
                 if patched_request is not None:
                     options["patched_request"] = patched_request
-                environment = wire_capture.install(root, scratch, environment, model_free=True, **options)
+                environment = wire_capture.install(root, scratch, environment, model_free=True, **options, **profile_options)
                 if "--log" not in help_result["stdout"]:
                     raise Refused("backend_diagnostic_log_flag_unavailable")
             with socket.socket() as port_reservation:
@@ -697,16 +718,19 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                     # Loaded-byte evidence is mandatory BEFORE auth/session RPC.
                     # Pre-copy hashes and successful bootstrap alone are insufficient.
                     patched.verify_live_ready(scratch)
+                if admission_profile is not None:
+                    thread_policy.verify_live_ready(scratch)
                 rpc = Rpc(transport, "ahp-session:/" + str(uuid.uuid4()), workspace.as_uri(),
                           capability_only=capability_only, session_policy=session_policy, credential=credential,
-                          boundary_check=watchdog.enforce if watchdog is not None else None, require_mcp_disabled=metadata_socket is not None)
+                          boundary_check=watchdog.enforce if watchdog is not None else None, require_mcp_disabled=metadata_socket is not None,
+                          **profile_options)
                 if session_policy:
                     from ghcp_ahp_management import ManagementBridge
                     # Mandatory for BOTH hosted session-policy entrypoints.
                     # Construction/readback failures never fall back to AHP creation.
                     rpc.management = ManagementBridge(scratch, deadline, owned_pid=process.process.pid,
                         boundary_check=watchdog.enforce if watchdog is not None else None,
-                        sanitize=mask.clean if mask is not None else redact)
+                        sanitize=mask.clean if mask is not None else redact, **profile_options)
                 results = (thread_policy.exercise(rpc, lambda: thread_policy.await_native_thread(scratch, deadline))
                            if session_policy else exercise_rpc(rpc))
                 record["rpc_results"] = results
@@ -821,9 +845,11 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 record["reason_codes"].append("patched_runtime_load_unmeasured_or_duplicate")
             record = patched.stamp(record, provenance)
             record["source_contract_scope"] = "upstream_only_overlay_identified_by_patched_receipt"
+        if admission_profile is not None:
+            record["admission_allowed"] = (record.get("thread_policy") or {}).get("admission_allowed", False)
         save_json(evidence / "probe.json", record)
         if authenticated_zero_turn:
-            policy_path = evidence / "thread-policy.json"
+            policy_path = evidence / getattr(thread_policy, "POLICY_FILE", "thread-policy.json")
             policy_record = strict_json(policy_path.read_text()) if policy_path.is_file() else {}
             # Separate schema: never accepted as a paid connection receipt.
             handshake = {"schema": "ghcp-ahp-authenticated-zero-turn-v1",
@@ -843,12 +869,18 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                 "thread_policy": record.get("thread_policy"), "wire_capture": record.get("wire_capture"),
                 "limits": {"turns": 0, "capi_inference_requests": 0, "metadata_gets": 2 if metadata_socket is not None else 0,
                            "sessions": 1, "native_threads": 1, "wall_seconds": 120}}
-            if "admission_scope" in policy_record:
+            if admission_profile is not None:
+                FIELDS = thread_policy.FIELDS
+                handshake.update(schema="ghcp-default-unpatched-handshake-v1", **thread_policy.LABELS)
+                handshake.update({key: policy_record[key] for key in FIELDS})
+            elif "admission_scope" in policy_record:
                 from ghcp_ahp_zero_turn_admission import FIELDS
                 handshake.update({key: policy_record[key] for key in FIELDS})
             if patched_request is not None:
                 handshake = patched.stamp(handshake, provenance)
-            save_json(evidence / "handshake.json", handshake)
+            save_json(evidence / getattr(thread_policy, "HANDSHAKE_FILE", "handshake.json"), handshake)
+            if admission_profile is not None:
+                thread_policy.write_summary(evidence, handshake)
         if patched_request is not None:
             summary = {"schema": "ghcp-ahp-patched-summary-v1", "status": record["status"],
                 "probe_exit": 0 if record["status"] == "probe_completed" else 2,
@@ -879,6 +911,8 @@ def main(argv=None):
     parser.add_argument("--patched-build-receipt-sha256")
     parser.add_argument("--prewarm-zero-turn-preparation", type=Path,
                         help="Same-HEAD tested build, brokered authenticated zero-turn preparation only")
+    parser.add_argument("--admission-profile", choices=("default_policy_unpatched",),
+                        help="Separate unpatched default-policy zero-turn observation; never read-only or paid admission")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--capability-only", action="store_true", help="No createSession RPC; observe native/CAPI boundaries without model work")
     modes.add_argument("--session-policy-probe", action="store_true", help="One exact Codex session; zero turns and zero outbound HTTP")
@@ -896,6 +930,11 @@ def main(argv=None):
         # NAS/local refusal happens before manifests, files, downloads or processes.
         require_runner()
         admitted = True
+        if args.admission_profile is not None:
+            if (args.mode != "probe" or not args.authenticated_zero_turn or args.metadata_socket is None
+                    or patched_request is not None or args.prewarm_zero_turn_preparation is not None):
+                raise Refused("default_policy_mode_refused")
+            select_thread_policy(args.admission_profile).require_context(args.evidence)
         if patched_request is not None:
             # Do not read credentials or launch even a zero-turn host before the
             # pending owner decision. No flag/environment variable opens this.
@@ -931,12 +970,17 @@ def main(argv=None):
             options["patched_request"] = patched_request
         if args.prewarm_zero_turn_preparation is not None:
             options["prewarm_preparation"] = args.prewarm_zero_turn_preparation
+        if args.admission_profile is not None:
+            options["admission_profile"] = args.admission_profile
         result = run_probe(manifest, args.prepared, args.evidence, args.outside_netns, args.outside_pidns, **options)
         if args.prewarm_zero_turn_preparation is not None:
             import ghcp_ahp_patched_runtime as patched
             patched.verify_artifact_chain(args.evidence, handshake=True, policy=True)
         summary = ({"probe_exit": result, "model_calls": 0, "launch_allowed": False} if patched_request is None else
                    patched.verify_artifact_chain(args.evidence, handshake=args.authenticated_zero_turn, policy=True))
+        if args.admission_profile is not None:
+            selected = select_thread_policy(args.admission_profile).verify_chain(args.evidence)
+            summary.update(admission_profile=args.admission_profile, admission_allowed=selected["admission_allowed"], execution_allowed=False)
         print(json.dumps(summary))
         return result
     except Exception as error:
