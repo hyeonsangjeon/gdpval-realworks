@@ -228,7 +228,7 @@ jobs:
       contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
       contains(inputs.plan, 'comparison-run') ||
       contains(inputs.plan, 'comparison-grading')) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # A bound, not a budget. A `fixture` dispatch has never come near twenty
     # minutes and still does not; the extra is for `same-host`, which pulls the
     # guest image, builds two ext4 filesystems and boots a machine twice before
@@ -587,7 +587,7 @@ jobs:
       contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
       contains(inputs.plan, 'comparison-run') ||
       contains(inputs.plan, 'comparison-grading')) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       # One job per piece of the cohort. For `advance_check_5` this is a matrix
       # of one, and `--shard 1/1` is the unsharded run rather than a new code
@@ -1127,7 +1127,7 @@ jobs:
       contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
       contains(inputs.plan, 'comparison-run') ||
       contains(inputs.plan, 'comparison-grading')) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -1216,7 +1216,7 @@ jobs:
       contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
       contains(inputs.plan, 'comparison-run') ||
       contains(inputs.plan, 'comparison-grading') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read

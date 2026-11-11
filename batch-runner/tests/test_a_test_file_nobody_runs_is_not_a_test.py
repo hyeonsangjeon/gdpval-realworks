@@ -37,6 +37,8 @@ import pytest
 import yaml
 from _pytest.mark.expression import Expression
 
+from .test_workflow_ubuntu_runner_pins import restore_pre_ubuntu_2404_runner_bytes
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/backend-tests.yml"
 BUDGET_GLOB = "tests/test_codex_budget_pilot*.py"
@@ -424,10 +426,12 @@ def _without_successor_grader_partition(workflow):
 
 
 def test_successor_grader_assignment_is_the_only_backend_workflow_delta():
-    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
+    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256, PRE_UBUNTU_2404_WORKFLOW_SHA256
 
     text = WORKFLOW.read_text(encoding="utf-8")
     assert hashlib.sha256(text.encode()).hexdigest() == CURRENT_WORKFLOW_SHA256
+    text = restore_pre_ubuntu_2404_runner_bytes(WORKFLOW.name, text.encode()).decode()
+    assert hashlib.sha256(text.encode()).hexdigest() == PRE_UBUNTU_2404_WORKFLOW_SHA256
     previous = _without_successor_grader_partition(yaml.safe_load(text))
     for token in ("--ignore=" + SUCCESSOR_GRADER_TEST, SUCCESSOR_GRADER_TEST):
         literal = " " + token + " "
@@ -468,7 +472,7 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     pilot = jobs["pilot-contracts"]
     readouts = jobs["budget-readout-contracts"]
     assert set(readouts) == {"runs-on", "timeout-minutes", "steps"}
-    assert readouts["runs-on"] == "ubuntu-latest"
+    assert readouts["runs-on"] == "ubuntu-24.04"
     assert pilot["timeout-minutes"] == readouts["timeout-minutes"] == 45
     assert readouts["steps"] == pilot["steps"][:6] + [{
         "name": "Run budget pilot readout contracts", "run": BUDGET_READOUT_RUN,
@@ -478,7 +482,7 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     }
     assert "secrets." not in text and "id-token" not in text
 
-    # Validate and undo only the successor-grader inventory pair, then the
+    # Validate and undo the runner pins, then the successor-grader inventory pair and the
     # new time-budget job and ignore token. Keep the older baseline unchanged.
     # Captured before editing workflow bytes 19cd9099ad1e60865111d789207bd09fc8302095be7012eea75703c9490da09d.
     # Restore the old budget command and remove its readout job, then undo only
@@ -486,8 +490,9 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
     # owned-host JUnit/receipt additions checked above. Every other pre-existing
     # job, trigger, permission and guard must match the captured baseline,
     # including the reviewed complete gpt56 partition (20 modules, not 9).
+    historical = yaml.safe_load(restore_pre_ubuntu_2404_runner_bytes(WORKFLOW.name, text.encode()))
     previous = _without_owned_host_ci_evidence(_without_time_budget_contracts(
-        _without_successor_grader_partition(workflow)))
+        _without_successor_grader_partition(historical)))
     previous["jobs"].pop("budget-readout-contracts")
     previous["jobs"]["pilot-contracts"]["steps"][-1]["run"] = BUDGET_ORIGINAL_RUN
     for job_name, step_name, token in (
@@ -595,7 +600,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     for name, job in jobs.items():
         # No renamed check, matrix, dependencies, credentials or job-level skip.
         assert set(job) == {"runs-on", "timeout-minutes", "steps"}
-        assert job["runs-on"] == ("ubuntu-22.04" if name == "time-budget-contracts" else "ubuntu-latest")
+        assert job["runs-on"] == ("ubuntu-22.04" if name == "time-budget-contracts" else "ubuntu-24.04")
         assert job["timeout-minutes"] == (60 if name == "native-host-contracts" else 45)
 
     core = jobs["pytest"]["steps"]

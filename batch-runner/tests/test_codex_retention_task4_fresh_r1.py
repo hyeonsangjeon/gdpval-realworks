@@ -69,6 +69,7 @@ def _originals(tmp_path, monkeypatch, approved_pilot_source):
     current = comparison.inspect_plan(comparison.load_plan())
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/agentic-v2-stage-run.yml",
         "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/gpt54_codex_input_capture.py",

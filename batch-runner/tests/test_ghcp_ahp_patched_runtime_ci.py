@@ -230,7 +230,7 @@ def test_result_check_refuses_missing_reduced_extra_failed_or_skipped_cases(tmp_
 
 
 def restore_main_backend_workflow(data):
-    # Main's reviewed successor-grader partition owns the current workflow.
+    # Main's reviewed runner pins and successor partition own the workflow.
     # Check its exact bytes AND its existing ownership guard before rebuilding
     # the unchanged historical bytes; neither hash accepts an arbitrary update.
     from .test_a_test_file_nobody_runs_is_not_a_test import (
@@ -238,9 +238,11 @@ def restore_main_backend_workflow(data):
         _without_successor_grader_partition,
     )
     from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
+    from .test_workflow_ubuntu_runner_pins import restore_pre_ubuntu_2404_runner_bytes
 
     assert hashlib.sha256(data).hexdigest() == CURRENT_WORKFLOW_SHA256
     assert PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256 == ORIGINAL_WORKFLOWS["backend-tests.yml"]
+    data = restore_pre_ubuntu_2404_runner_bytes("backend-tests.yml", data)
     text = data.decode()
     previous = _without_successor_grader_partition(yaml.safe_load(text))
     for token in ("--ignore=" + SUCCESSOR_GRADER_TEST, SUCCESSOR_GRADER_TEST):

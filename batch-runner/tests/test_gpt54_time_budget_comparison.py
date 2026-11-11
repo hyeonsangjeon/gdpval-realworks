@@ -469,6 +469,7 @@ def test_time_budget_registration_preserves_historical_and_default_refusals(monk
     report = historical.inspect_plan(historical.load_plan())
     assert report["configuration_valid"] is False
     assert report["configuration_problems"] == [
+        "source_pin:.github/workflows/agentic-v2-stage-run.yml",
         "source_pin:.github/workflows/batch-run.yml",
         *[
         f"source_pin:batch-runner/{name}" for name in (
