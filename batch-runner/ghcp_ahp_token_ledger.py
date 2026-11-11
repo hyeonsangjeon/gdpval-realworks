@@ -306,7 +306,12 @@ class TokenLedger:
                 self._persist()
                 return self.global_stop
             if known is not None and known >= self.budget.task_microcredits:
-                return "token_ledger_task_limit"
+                # The fixed-five gate must not spend the remaining task budgets
+                # after any task has exhausted its allowance. Keep this latch
+                # even after end_task releases the serial admission slot.
+                self.global_stop = "token_ledger_task_limit"
+                self._persist()
+                return self.global_stop
             for turn in self.tasks[task]["admitted_turns"]:
                 if now < self.progress[(task, turn)]:
                     self.fail(task, "token_ledger_clock_refused")

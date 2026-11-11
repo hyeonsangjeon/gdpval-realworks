@@ -79,6 +79,39 @@ def fixed_five():
                 for task_id in TASK_IDS]}
 
 
+def budget_scenario(name):
+    """Inert review scenarios for an EXPLICIT 2200/11000/120 proposal input.
+
+    Does not provide a production budget default or imply owner approval.
+    Every token count/response below is fabricated, never native usage evidence.
+    """
+    if name not in {"normal", "task_limit", "five_task_limit", "usage_missing", "usage_malformed"}:
+        raise ValueError("unknown synthetic budget scenario")
+    fixture = fixed_five()
+    for index, task in enumerate(fixture["tasks"]):
+        steps = task["steps"]
+        ordinary = steps.pop(2)  # Write the owned output BEFORE the stop event.
+        reports = [ordinary]
+        if name == "five_task_limit" or (name == "task_limit" and index == 0):
+            # 2184 + 15 = 2199 for completed tasks; the stopped task reports
+            # 2184 + 17 = 2201 (task cap), or +21 = 2205 (sum 11001).
+            final_output = 6000 if name == "five_task_limit" and index == 4 else 3000
+            if name == "task_limit":
+                final_output = 4000
+            reports = [{"kind": "event", "action": usage_action(input_tokens=1_000_000, output_tokens=128000)},
+                       {"kind": "event", "action": usage_action(input_tokens=10000, output_tokens=final_output,
+                            cumulative=(1010000, 128000 + final_output, 0))}]
+        elif index == 0 and name == "usage_missing":
+            reports = []
+            steps[:] = [step for step in steps if step["kind"] != "advance"
+                        and step.get("action", {}).get("type") != "chat/turnComplete"]
+            steps.append({"kind": "advance", "seconds": 120})
+        elif index == 0 and name == "usage_malformed":
+            ordinary["action"]["usage"]["inputTokens"] = "SYNTHETIC invalid token count"
+        steps[5:5] = reports
+    return fixture
+
+
 class Clock:
     value = 0.0
 

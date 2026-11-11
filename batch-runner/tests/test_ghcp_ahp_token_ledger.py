@@ -237,6 +237,8 @@ def test_exact_credit_threshold_stops_and_never_admits_another_request(tmp_path,
     stopped = report["tasks"][0 if scope == "task" else 1]
     assert stopped["reason_codes"] == ["token_ledger_task_limit" if scope == "task" else "token_ledger_five_task_limit"]
     assert stopped["counts"]["admitted_or_observed_turns"] == 1
+    assert all(row["counts"]["admitted_or_observed_turns"] == 0
+               for row in report["tasks"][(1 if scope == "task" else 2):])
     if scope == "five":
         assert all(row["counts"]["admitted_or_observed_turns"] == 0 and row["token_ledger"]["known_estimated_credits"] is None
                    for row in report["tasks"][2:])
@@ -368,6 +370,208 @@ def test_same_journal_cannot_be_reopened_reset_or_used_for_parallel_tasks(tmp_pa
     book.admit(ids[0], "turn1", 0)
     with pytest.raises(client.Refused, match="^token_ledger_concurrent_task_refused$"):
         book.admit(ids[1], "turn1", 0)
+
+
+@pytest.mark.parametrize("profile", output.PROFILES)
+@pytest.mark.parametrize("failure", ["interrupt", "dispose", "terminate_false", "terminate_exception"])
+def test_failed_runtime_stop_latches_unknown_usage_and_refuses_remaining_tasks(tmp_path, profile, failure, monkeypatch):
+    original_send, original_terminate = fixtures.Port.send, fixtures.Port.terminate
+    affected = []
+
+    def send(port, message, timeout):
+        if not affected:
+            affected.append(port)
+        original_send(port, message, timeout)
+        action = message.get("params", {}).get("action", {}).get("type")
+        if port is affected[0] and ((failure == "interrupt" and action == "chat/turnCancelled")
+                or (failure == "dispose" and message.get("method") == "disposeSession")):
+            raise OSError("SYNTHETIC stop transport failure")
+
+    def terminate(port, timeout):
+        original_terminate(port, timeout)
+        if port is affected[0] and failure == "terminate_exception":
+            raise OSError("SYNTHETIC terminate failure")
+        return port is not affected[0] or failure != "terminate_false"
+
+    monkeypatch.setattr(fixtures.Port, "send", send)
+    monkeypatch.setattr(fixtures.Port, "terminate", terminate)
+    report = rehearsal.run_rehearsal(tmp_path / "five", output_profile=profile,
+                                    token_budget=config(task="0.0148"))
+    assert report["exit_status"] == 2
+    assert report["token_ledger"]["unknown_usage"] is True
+    assert report["token_ledger"]["known_estimated_credits"] == "0.0148"
+    assert all(row["counts"]["admitted_or_observed_turns"] == 0 for row in report["tasks"][1:])
+    first = report["tasks"][0]
+    expected = "token_ledger_interrupt_unconfirmed" if failure == "interrupt" else "token_ledger_cleanup_unconfirmed"
+    if failure.startswith("terminate_"):
+        assert first["status"] == "capture_refused" and first["reason_codes"] == ["capture_host_not_stopped"]
+    else:
+        assert first["reason_codes"] == [expected]
+    assert expected in report["token_ledger"]["tasks"][TASK]["issues"]
+    assert report["token_ledger"]["tasks"][TASK]["stopped_reason"] == expected
+    assert all(value == 0 for value in report["actual_calls"].values())
+
+
+@pytest.mark.parametrize("profile", output.PROFILES)
+def test_failed_dispose_cannot_leave_a_completed_task_or_known_aggregate(tmp_path, profile, monkeypatch):
+    session, port, book, _, collection = bound(tmp_path, profile)
+    start(session)
+    assert session.accept(event(session, 2, "chat/usage", usage=usage()))
+    assert session.accept(event(session, 3, "chat/turnComplete", duration=1))
+    original = port.send
+
+    def send(message, timeout):
+        original(message, timeout)
+        if message.get("method") == "disposeSession":
+            raise OSError(CANARY)
+
+    monkeypatch.setattr(port, "send", send)
+    session.finish()
+    assert session.status == "stopped" and session.reason == "token_ledger_cleanup_unconfirmed"
+    assert book.verify()["unknown_usage"] is True
+    assert book.task_receipt(TASK)["known_estimated_credits"] == "0.0148"
+    assert collection.events == output.EVENTS
+    assert CANARY not in json.dumps(session.cleanup)
+
+
+@pytest.mark.parametrize("profile", output.PROFILES)
+def test_simultaneous_task_admissions_share_one_locked_aggregate(tmp_path, profile):
+    book = new_ledger(tmp_path, ids=fixtures.TASK_IDS, profile=profile)
+    barrier = threading.Barrier(5)
+    outcomes = {}
+
+    def admit(task):
+        barrier.wait(timeout=5)
+        try:
+            book.admit(task, "turn1", 0)
+            outcomes[task] = "admitted"
+        except client.Refused as error:
+            outcomes[task] = str(error)
+
+    workers = [threading.Thread(target=admit, args=(task,)) for task in fixtures.TASK_IDS]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+        assert not worker.is_alive()
+    assert list(outcomes.values()).count("admitted") == 1
+    assert list(outcomes.values()).count("token_ledger_concurrent_task_refused") == 4
+    record = book.verify()
+    assert sum(len(task["admitted_turns"]) for task in record["tasks"].values()) == 1
+    assert record["known_estimated_credits"] is None and not record["unknown_usage"]
+
+
+@pytest.mark.parametrize("profile", output.PROFILES)
+def test_concurrent_replay_refuses_without_double_charge_or_budget_reset(tmp_path, profile):
+    book = new_ledger(tmp_path, ids=fixtures.TASK_IDS, profile=profile)
+    book.admit(TASK, "turn1", 0)
+    barrier, outcomes = threading.Barrier(2), []
+
+    def observe():
+        barrier.wait(timeout=5)
+        try:
+            outcomes.append(book.observe(TASK, "turn1", 1, usage(), 1))
+        except client.Refused as error:
+            outcomes.append(str(error))
+
+    workers = [threading.Thread(target=observe) for _ in range(2)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+        assert not worker.is_alive()
+    assert outcomes.count(None) == outcomes.count("token_ledger_sequence_refused") == 1
+    record = book.verify()
+    assert record["unknown_usage"] is True and record["known_estimated_credits"] == "0.0148"
+    assert len(record["tasks"][TASK]["usage_events"]) == 1
+    book.end_task(TASK, "token_ledger_sequence_refused")
+    with pytest.raises(client.Refused, match="^token_ledger_sequence_refused$"):
+        book.admit(fixtures.TASK_IDS[1], "turn1", 2)
+
+
+@pytest.mark.parametrize("inp,tier,expected", [(272000, "default", "10.88"), (272001, "long_context", "21.76008")])
+def test_cached_input_still_selects_the_tier_without_becoming_uncached_or_written(inp, tier, expected):
+    body = usage(inp, 0, inp)
+    body["cacheWriteTokens"] = 0
+    priced = ledger.price_usage(body)
+    assert priced["tier"] == tier and priced["estimated_credits"] == expected
+    assert priced["cache_write_reserve_microcredits"] == 0
+    assert priced["last"]["cacheReadTokens"] == inp and priced["last"]["cacheWriteTokens"] == 0
+
+
+@pytest.mark.parametrize("profile", output.PROFILES)
+@pytest.mark.parametrize("scenario", ["normal", "task_limit", "five_task_limit", "usage_missing", "usage_malformed"])
+def test_leader_proposal_five_task_rehearsals_preserve_stop_collection_and_seal(tmp_path, profile, scenario, monkeypatch):
+    ports, trace = [], []
+    original_send, original_collect = fixtures.Port.send, output.OutputCollection.collect_and_seal
+    original_terminate = fixtures.Port.terminate
+
+    def send(port, message, timeout):
+        if port not in ports:
+            ports.append(port)
+        if message.get("params", {}).get("action", {}).get("type") == "chat/turnCancelled":
+            trace.append((port, "interrupt"))
+        if message.get("method") == "disposeSession":
+            assert port.output_collection.phase == "sealed"
+            trace.append((port, "dispose"))
+        return original_send(port, message, timeout)
+
+    def collect(collection, port, safe):
+        trace.append((port, "collect"))
+        result = original_collect(collection, port, safe)
+        assert collection.phase == "sealed"
+        trace.append((port, "seal"))
+        return result
+
+    def terminate(port, timeout):
+        trace.append((port, "terminate"))
+        return original_terminate(port, timeout)
+
+    monkeypatch.setattr(fixtures.Port, "send", send)
+    monkeypatch.setattr(fixtures.Port, "terminate", terminate)
+    monkeypatch.setattr(output.OutputCollection, "collect_and_seal", collect)
+    root = tmp_path / "five"
+    report = rehearsal.run_rehearsal(root, fixture=fixtures.budget_scenario(scenario), output_profile=profile,
+                                    token_budget=config("2200", "11000", 120))
+    expected_total = {"normal": "0.074", "task_limit": "2201", "five_task_limit": "11001",
+                      "usage_missing": None, "usage_malformed": None}[scenario]
+    expected_stop = {"normal": None, "task_limit": "token_ledger_task_limit",
+                     "five_task_limit": "token_ledger_five_task_limit", "usage_missing": "token_ledger_usage_missing",
+                     "usage_malformed": "token_ledger_invalid_usage"}[scenario]
+    stop_index = None if scenario == "normal" else (4 if scenario == "five_task_limit" else 0)
+    assert report["exit_status"] == (0 if stop_index is None else 2)
+    assert report["fixture_pipeline_passed"] is (stop_index is None)
+    assert report["token_budget"] == config("2200", "11000", 120)
+    assert report["token_ledger"]["known_estimated_credits"] == expected_total
+    assert report["token_ledger"]["global_stop_reason"] == expected_stop
+    assert report["token_ledger"]["unknown_usage"] is scenario.startswith("usage_")
+    assert len(ports) == len(report["tasks"]) == 5
+    for index, (port, row) in enumerate(zip(ports, report["tasks"], strict=True)):
+        expected_trace = ["collect", "seal", "dispose", "terminate"]
+        if index == stop_index:
+            expected_trace.insert(0, "interrupt")
+        assert [operation for owner, operation in trace if owner is port] == expected_trace
+        assert port.output_collection.events == output.EVENTS
+        capture = rehearsal.validate_capture(root / "tasks" / row["task_id"], row["task_id"])
+        assert capture["cleanup"]["host_terminated"] is True and not capture["cleanup"]["control_errors"]
+        assert not port.output_collection.workspace.exists() and not port.output_collection.job_tmpdir.exists()
+        if stop_index is not None and index >= stop_index:
+            assert row["status"] == "stopped" and row["reason_codes"] == [expected_stop]
+        else:
+            assert row["status"] == "completed"
+        if stop_index is not None and index > stop_index:
+            assert row["counts"]["admitted_or_observed_turns"] == 0
+            assert row["token_ledger"]["known_estimated_credits"] is None
+            assert capture["generated_files"] == []
+        else:
+            assert row["counts"]["admitted_or_observed_turns"] == 1
+            assert len(capture["generated_files"]) == 1
+            assert capture["generated_files"][0]["path"] == "answer.txt"
+        assert not any(event["direction"] == "client_work" and event["after_stop"]
+                       for event in capture["transcript"]["wire"])
+    assert report["synthetic"] is True and report["execution_allowed"] is False
+    assert not report["gate5_passed"] and not report["ready_for_grading"]
+    assert all(value == 0 for value in report["actual_calls"].values())
 
 
 @pytest.mark.parametrize("profile", output.PROFILES)

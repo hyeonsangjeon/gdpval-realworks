@@ -678,6 +678,15 @@ class BudgetedSessionClient(SessionClient):
         except Refused:
             return 0
 
+    def _control(self, message):
+        failures = len(self.cleanup["control_errors"])
+        super()._control(message)
+        if len(self.cleanup["control_errors"]) != failures:
+            # A send/capture failure must not look like confirmed native stop.
+            # Retain no exception body, arguments or credential here.
+            kind = "cleanup" if message["method"] == "disposeSession" else "interrupt"
+            self.cleanup.setdefault("token_ledger_stop_failure", "token_ledger_" + kind + "_unconfirmed")
+
     def _snapshot(self, snapshot):
         state = snapshot.get("state", {})
         if snapshot.get("resource") == self.chat and (state.get("turns") or state.get("activeTurn")):
@@ -718,6 +727,15 @@ class BudgetedSessionClient(SessionClient):
                 # Envelope/order failures can happen BEFORE the usage parser.
                 # Do not keep a known subtotal looking like the aggregate total.
                 ledger.fail(self.task_id, "token_ledger_stream_integrity_refused")
+            failure = self.cleanup.get("token_ledger_stop_failure")
+            if self.cleanup["host_terminated"] is not True:
+                failure = failure or "token_ledger_cleanup_unconfirmed"
+            if failure:
+                # Failed interruption/cleanup leaves unreported provider work
+                # possible. A later successful terminate is not a usage receipt.
+                self.cleanup.setdefault("token_ledger_original_stop_reason", self.reason)
+                self.status, self.reason = "stopped", failure
+                ledger.fail(self.task_id, failure)
             ledger.end_task(self.task_id, self.reason)
         except (Refused, OSError):
             self.cleanup["token_ledger_error"] = "token_ledger_persistence_refused"
