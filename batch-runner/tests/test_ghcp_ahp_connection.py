@@ -20,6 +20,7 @@ import ghcp_ahp_connection as connection
 import ghcp_ahp_connection_transport as transport
 import ghcp_ahp_diagnostics as diagnostics
 import ghcp_ahp_probe as probe
+import ghcp_ahp_first_turn as first_turn
 
 ROOT = Path(__file__).resolve().parents[2]
 SESSION, CHAT = "ahp-session:/fixture", "ahp-chat:/fixture"
@@ -50,6 +51,10 @@ class Port:
         self.stream, self.sent = iter(stream), []
         self.clock = clock or Clock()
         self.turns_sent, self.stopped = 0, False
+        self.native_evidence = []
+
+    def first_turn_evidence(self):
+        return copy.deepcopy(self.native_evidence)
 
     def send(self, message, timeout):
         self.sent.append(copy.deepcopy(message))
@@ -89,6 +94,112 @@ def stream(*, context=1_000_000, usage=True, reply="CONNECTED", fixture_observed
     return rows
 
 
+def first_turn_wire(model="gpt-5.6-sol", effort="max", context=1_000_000, output=None):
+    native = {"process": "wire-1.jsonl", "stream": "ipc-1", "synthetic": True}
+    http = {"process": "wire-1.jsonl", "stream": "http-1", "synthetic": True}
+    response = {"id": "fixture-response", "status": "completed", "model": model,
+                "reasoning": {"effort": effort}, "output": [] if output is None else output}
+    return [
+        {**native, "kind": "ipc_request", "value": {"id": 13, "method": "turn/start", "params": {"threadId": "fixture-thread"}}},
+        {**native, "kind": "ipc_response", "value": {"id": 13, "result": {"turn": {"id": "fixture-turn"}}}},
+        {**http, "kind": "capi_request", "value": {"model": "gpt-5.6-sol", "reasoning": {"effort": "max"}}},
+        {**http, "kind": "capi_headers", "status": 200},
+        {**http, "kind": "capi_event", "event": "response.completed",
+         "value": {"type": "response.completed", "response": response}},
+        {**http, "kind": "capi_end"},
+        {**native, "kind": "ipc_response", "value": {"method": "thread/tokenUsage/updated", "params": {
+            "threadId": "fixture-thread", "turnId": "fixture-turn", "tokenUsage": {"modelContextWindow": context}}}},
+    ]
+
+
+@pytest.mark.parametrize("case", ["model_missing", "model_wrong", "effort_missing", "effort_alias", "context_missing",
+    "context_wrong", "context_string", "web_missing", "web_used", "web_unknown_item", "incomplete", "wrong_thread",
+    "wrong_turn", "second_call", "http_error", "stream_incomplete", "response_echo_only", "native_error"])
+def test_first_turn_requires_response_evidence_and_cancels_before_completion_or_second_turn(tmp_path, case):
+    records = first_turn_wire()
+    response = records[4]["value"]["response"]
+    if case == "model_missing": del response["model"]
+    if case == "model_wrong": response["model"] = "gpt-5.6-sol-fast"
+    if case == "effort_missing": del response["reasoning"]
+    if case == "effort_alias": response["reasoning"]["effort"] = "xhigh"
+    if case == "context_missing": records[-1]["value"]["params"]["tokenUsage"] = {}
+    if case == "context_wrong": records[-1]["value"]["params"]["tokenUsage"]["modelContextWindow"] = 922000
+    if case == "context_string": records[-1]["value"]["params"]["tokenUsage"]["modelContextWindow"] = "1000000"
+    if case == "web_missing": del response["output"]
+    if case == "web_used": response["output"] = [{"type": "web_search_call"}]
+    if case == "web_unknown_item": response["output"] = [{"type": "unknown_tool"}]
+    if case == "incomplete": response["status"] = "incomplete"
+    if case == "wrong_thread": records[-1]["value"]["params"]["threadId"] = "foreign"
+    if case == "wrong_turn": records[-1]["value"]["params"]["turnId"] = "foreign"
+    if case == "second_call":
+        records.insert(3, {**records[2], "stream": "http-2"})
+    if case == "http_error": records[3]["status"] = 403
+    if case == "stream_incomplete": del records[5]
+    if case == "response_echo_only":
+        records = [row for row in records if row["kind"] != "capi_event"]
+    if case == "native_error": records[1]["value"] = {"id": 13, "error": {"code": -32603}}
+    report = first_turn.assess(records)
+    assert report["verified"] is False and report["reason_codes"]
+    client, port, _ = setup(stream())
+    port.native_evidence = records
+    result, capture = complete(client, tmp_path / "capture.json")
+    assert result["connection_verified"] is False
+    assert "first_turn_attestation_refused" in result["reason_codes"]
+    assert client.status == "stopped" and not client.completed
+    assert capture["cleanup"]["cancel_attempts"] == capture["cleanup"]["dispose_attempts"] == 1
+    assert port.stopped and port.turns_sent == 1
+    assert not client.send_turn("second", "must not send")
+    assert result["first_turn_attestation"] == report
+
+
+def test_first_turn_output_inventory_zero_is_observed_not_defaulted():
+    reported = first_turn.assess(first_turn_wire(output=[{"type": "message"}, {"type": "reasoning"}]))
+    assert first_turn.require_report(reported) == reported
+    assert reported["synthetic"] is True
+    assert reported["observed"]["web_search_used"] is False
+    assert reported["sources"]["web_search_used"] == "capi.completed_response.output[*].type"
+    rows = first_turn_wire()
+    del rows[4]["value"]["response"]["output"]
+    missing = first_turn.assess(rows)
+    assert missing["observed"]["web_search_used"] == "not_reported"
+    assert "first_turn_web_search_used_not_reported" in missing["reason_codes"]
+
+
+@pytest.mark.parametrize("transport_kind", ["named_sse", "data_only_sse", "json_body"])
+def test_first_turn_uses_response_type_and_complete_body_without_inventing_a_field(transport_kind):
+    rows = first_turn_wire()
+    if transport_kind == "data_only_sse": rows[4]["event"] = "message"  # SSE default; payload type is still explicit.
+    if transport_kind == "json_body":
+        rows[4]["kind"] = "capi_body"
+        rows[4]["value"] = rows[4]["value"]["response"]
+        del rows[4]["event"]
+    assert first_turn.require_report(first_turn.assess(rows))
+
+
+@pytest.mark.parametrize("field", list(first_turn.EXPECTED))
+def test_first_turn_receipt_cannot_drop_or_forge_a_required_field(field):
+    report = first_turn.assess(first_turn_wire())
+    assert first_turn.require_report(report)
+    del report["observed"][field]
+    with pytest.raises(probe.Refused, match="^first_turn_attestation_refused$"):
+        first_turn.require_report(report)
+
+
+def test_connection_port_reads_only_bounded_owned_observer_files(tmp_path):
+    port = transport.ConnectionPort(Wire(), SimpleNamespace(), 999999999999, CANARY, observer_state=tmp_path)
+    with pytest.raises(probe.Refused, match="^first_turn_capture_unavailable$"):
+        port.first_turn_evidence()
+    directory = tmp_path / "wire"
+    directory.mkdir()
+    rows = first_turn_wire()
+    file = directory / "wire-1.jsonl"
+    file.write_text("".join(json.dumps({**row, "sequence": index}) + "\n" for index, row in enumerate(rows, 1)))
+    assert first_turn.require_report(first_turn.assess(port.first_turn_evidence()))
+    file.write_text(file.read_text().removesuffix("\n"))
+    with pytest.raises(probe.Refused, match="^first_turn_capture_incomplete$"):
+        port.first_turn_evidence()
+
+
 def setup(rows=(), *, authenticated=True):
     clock = Clock()
     port = Port(rows, clock)
@@ -123,12 +234,13 @@ def test_synthetic_attestation_events_exercise_all_three_decisions_without_enabl
                 self.provenance.update({key: "synthetic_test_only" for key in connection.FIELDS})
 
     port = Port(stream(fixture_observed=observed))
+    port.native_evidence = first_turn_wire(observed["served_model"], observed["thinking_level"])
     client = AttestingFixture(port, SESSION, CHAT, authenticated=True, clock=port.clock)
     result, capture = complete(client, tmp_path / "capture.json")
     assert result["connection_verified"] is (case == "pass")
     assert result["status"] == ("connected" if case == "pass" else "refused")
-    assert result["reason_codes"] == {"pass": [], "mismatch": ["thinking_level_mismatch"],
-                                      "not_reported": ["served_model_not_reported"]}[case]
+    assert result["reason_codes"] == {"pass": [], "mismatch": ["thinking_level_mismatch", "first_turn_attestation_refused"],
+                                      "not_reported": ["served_model_not_reported", "first_turn_attestation_refused"]}[case]
     assert result["requested"] == connection.REQUESTED
     assert result["observed"] == observed
     assert port.turns_sent == 1 and port.stopped
@@ -139,7 +251,7 @@ def test_synthetic_attestation_events_exercise_all_three_decisions_without_enabl
 def test_pinned_wire_never_promotes_model_echo_or_fixture_metadata_to_served_evidence(tmp_path):
     client, port, _ = setup(stream(fixture_observed=connection.REQUESTED))
     result, capture = complete(client, tmp_path / "capture.json")
-    assert result["reason_codes"] == ["served_model_not_reported", "thinking_level_not_reported"]
+    assert result["reason_codes"] == ["served_model_not_reported", "thinking_level_not_reported", "first_turn_attestation_refused"]
     assert result["observed"]["served_model"] == result["observed"]["thinking_level"] == "not_reported"
     assert result["observed"]["context_size"] == 1_000_000
     assert result["observed"]["usage"][0]["inputTokens"] == 12
@@ -179,6 +291,7 @@ def test_every_missing_or_mismatched_observation_refuses(field, value):
 
 def test_single_admitted_turn_finishes_instead_of_cancelling_it_at_admission(tmp_path):
     client, port, _ = setup(stream())
+    port.native_evidence = first_turn_wire()
     result, capture = complete(client, tmp_path / "capture.json")
     assert client.status == "completed" and client.completed == {connection.TURN}
     assert capture["cleanup"]["cancel_attempts"] == 0
@@ -323,12 +436,16 @@ def test_receipt_handoff_cannot_bypass_live_attestation(dispatch, tmp_path, chan
               "requested": connection.REQUESTED, "observed": copy.deepcopy(connection.REQUESTED),
               "limits": asdict(connection.LIMITS), "reply_exact": True, "client_turns_sent": 1,
               "runner": probe.require_runner(), "reason_codes": [], "capture_sha256": probe.digest(capture),
-              "handshake_sha256": probe.digest(handshake)}
+              "handshake_sha256": probe.digest(handshake), "first_turn_attestation": first_turn.assess(first_turn_wire())}
+    probe.save_json(tmp_path / "wire-capture.json", {"records": first_turn_wire()})
+    record["wire_capture"] = {"sha256": probe.digest(tmp_path / "wire-capture.json")}
     if change == "not_reported": record["observed"]["served_model"] = "not_reported"
     if change == "wrong_run": record["runner"]["github_run_id"] = "99"
     if change == "tampered_capture": record["capture_sha256"] = "0" * 64
     probe.save_json(tmp_path / "connection.json", record)
-    with pytest.raises(probe.Refused, match="connection_(verification_required|capture_unverified|served_attestation_unavailable)"):
+    reason = {"not_reported": "connection_verification_required", "wrong_run": "connection_verification_required",
+              "tampered_capture": "connection_capture_unverified", "synthetic_success": "first_turn_attestation_refused"}[change]
+    with pytest.raises(probe.Refused, match="^" + reason + "$"):
         connection.require_verified_connection(tmp_path / "connection.json")
 
 

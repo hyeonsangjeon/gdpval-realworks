@@ -53,11 +53,12 @@ def require_namespace():
 
 
 class ConnectionPort:
-    def __init__(self, wire, process, deadline, credential, *, capability_only=False):
+    def __init__(self, wire, process, deadline, credential, *, capability_only=False, observer_state=None):
         if type(capability_only) is not bool:
             raise Refused("capability_mode_invalid")
         self.wire, self.process, self.deadline, self.credential = wire, process, deadline, credential
         self.capability_only = capability_only
+        self.observer_state = observer_state
         self.redactor = DiagnosticRedactor(credential)
         self.session = "ahp-session:/" + str(uuid.uuid4())
         self.chat = None
@@ -238,6 +239,12 @@ class ConnectionPort:
             # receive timeout. sendall is bounded by the outer PID-1 deadline.
             self.wire.send(message)
 
+    def first_turn_evidence(self):
+        if self.capability_only or self.observer_state is None:
+            raise Refused("first_turn_capture_unavailable")
+        from ghcp_ahp_first_turn import read_live_records
+        return read_live_records(self.observer_state)
+
     def receive(self, timeout):
         self.process.check()
         self._remaining()
@@ -320,7 +327,7 @@ def open_connection_port(prepared, evidence, state, credential, *, capability_on
                 time.sleep(0.05)
         if wire is None:
             raise Refused("connection_startup_deadline")
-        port = ConnectionPort(wire, process, deadline, credential, capability_only=capability_only)
+        port = ConnectionPort(wire, process, deadline, credential, capability_only=capability_only, observer_state=state)
         try:
             port.initialize(workspace.as_uri())
         except Exception as error:

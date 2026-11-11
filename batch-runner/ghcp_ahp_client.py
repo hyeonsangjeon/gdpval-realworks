@@ -167,6 +167,15 @@ class SessionClient:
         self.history_pending = False
         self.observed_turns = set()
         self.terminal_channels = set()
+        from ghcp_ahp_first_turn import assess
+        self.first_turn_id = None
+        self.first_turn_attestation = assess([])
+
+    def _attest_first_turn(self):
+        from ghcp_ahp_first_turn import assess, require_report
+        reader = getattr(self.transport, "first_turn_evidence", None)
+        self.first_turn_attestation = assess(reader() if callable(reader) else [])
+        require_report(self.first_turn_attestation)
 
     def _safe(self, value):
         if isinstance(value, dict):
@@ -257,12 +266,17 @@ class SessionClient:
                 turn_id = _identifier(turn_id)
                 if self.active or turn_id in self.turns or not isinstance(text, str) or not text:
                     raise Refused("turn_admission_refused")
+                if self.turns and self.first_turn_attestation["verified"] is not True:
+                    self._stop("first_turn_attestation_refused")
+                    return False
                 message = self._dispatch({"type": "chat/turnStarted", "turnId": turn_id,
                     "startedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     "message": {"text": text, "origin": {"kind": "user"}, "model": copy.deepcopy(DESIRED_MODEL)}})
                 self._record("client_work", message)
                 # Reserve BEFORE send; missing echoes can never free a slot.
                 self.turns.add(turn_id)
+                if self.first_turn_id is None:
+                    self.first_turn_id = turn_id
                 self.active.add(turn_id)
                 self.turn_started[turn_id] = self.clock()
                 remaining = self.limits.seconds - (self.clock() - self.started)
@@ -406,6 +420,8 @@ class SessionClient:
             raise Refused("unbound_terminal_refused")
         if kind == "chat/turnStarted":
             turn = _identifier(action["turnId"])
+            if self.first_turn_id is None:
+                self.first_turn_id = turn
             self.turns.add(turn)
             self.observed_turns.add(turn)
             self.active.add(turn)
@@ -429,6 +445,11 @@ class SessionClient:
             turn = _identifier(action["turnId"])
             if turn not in self.turns:
                 raise Refused("unknown_terminal_turn")
+            if kind == "chat/turnComplete" and turn == self.first_turn_id:
+                # Shared with the connection subclass and any future paid AHP
+                # task client. This task's own first turn must attest, not the
+                # earlier connection run. No opt-out flag or config echo.
+                self._attest_first_turn()
             self.active.discard(turn)
             if kind == "chat/turnComplete":
                 self.completed.add(turn)
@@ -496,6 +517,9 @@ class SessionClient:
         with self.lock:
             if self._check():
                 complete = bool(self.completed) and not self.active and not self.history_pending
+                if complete and self.first_turn_attestation["verified"] is not True:
+                    self._stop("first_turn_attestation_refused")
+                    return
                 self._stop("completed" if complete else "incomplete_transcript", completed=complete)
 
     def capture(self, path, *, workspace=None, baseline=None):
@@ -547,6 +571,7 @@ class SessionClient:
                 "observed_overshoot": {"turns": max(0, len(self.turns) - self.limits.turns),
                                        "tool_calls": max(0, len(self.tools) - self.limits.tool_calls)},
                 "requested_model": DESIRED_MODEL, "reported": self.reported, "reported_settings": self.settings,
+                "first_turn_attestation": self.first_turn_attestation,
                 "transcript": {"wire": wire, "snapshots": self.snapshots, "history": self.history,
                                "text": [{"turn_id": key[0], "part_id": key[1], "text": text}
                                         for key, text in self.text.items()]},

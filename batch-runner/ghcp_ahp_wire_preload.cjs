@@ -222,6 +222,85 @@ function threadContractDiagnostic(message, modelFree, readOnly) {
   return { rejected_fields: rejections.map(row => row.field), rejections };
 }
 
+function directoryIdentity(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value) || value.startsWith('//') ||
+      value.split('/').includes('..') || value.includes('\0')) fail('sandbox_scope_path_invalid');
+  const normalized = path.normalize(value).replace(/\/$/, '') || '/';
+  // Inspect components BEFORE resolving. realpath equality alone can miss a
+  // symlink followed by /..; traversal segments are rejected above as well.
+  let current = '/';
+  for (const component of value.split('/').filter(part => part && part !== '.')) {
+    current = path.join(current, component);
+    const info = fs.lstatSync(current);
+    if (info.isSymbolicLink() || !info.isDirectory()) fail('sandbox_scope_symlink_or_non_directory');
+  }
+  const info = fs.lstatSync(normalized), resolved = fs.realpathSync(normalized);
+  if (resolved !== normalized || !info.isDirectory()) fail('sandbox_scope_path_identity');
+  return { path: normalized, realpath: resolved, device: info.dev, inode: info.ino, uid: info.uid };
+}
+
+function jobTempIdentity(settings, options) {
+  try {
+    const state = directoryIdentity(options.forkContract?.state_root);
+    const parent = directoryIdentity(path.join(state.path, 'tmp'));
+    const env = settings?.env || {};
+    const tmp = directoryIdentity(env.TMPDIR);
+    if (options.forkContract?.schema_version !== 'ghcp-ahp-agent-fork-v1' ||
+        path.dirname(tmp.path) !== parent.path || tmp.path === parent.path ||
+        env.TMP !== env.TMPDIR || env.TEMP !== env.TMPDIR || tmp.uid !== process.getuid()) {
+      fail('sandbox_scope_job_tmpdir_binding');
+    }
+    return { status: 'measured', state_root: state.path, job_tmpdir: tmp };
+  } catch (error) {
+    return { status: 'refused', reason: /^sandbox_scope_[a-z_]+$/.test(error.message) ?
+      error.message : 'sandbox_scope_measurement_failed' };
+  }
+}
+
+function sandboxScope(result, binding, request) {
+  const sandbox = result?.sandbox;
+  const roots = sandbox && Object.hasOwn(sandbox, 'writableRoots') ? sandbox.writableRoots : 'not_reported';
+  const report = { schema: 'ghcp-ahp-sandbox-scope-v1', status: 'refused',
+    reported_sandbox: sandbox?.type ?? 'not_reported', reported_writable_roots: roots,
+    exclude_slash_tmp: sandbox?.excludeSlashTmp ?? 'not_reported',
+    exclude_tmpdir_env_var: sandbox?.excludeTmpdirEnvVar ?? 'not_reported',
+    network: sandbox?.networkAccess ?? 'not_reported', approval: result?.approvalPolicy ?? 'not_reported',
+    permission_profile: result?.activePermissionProfile?.id ?? 'not_reported',
+    binding, normalized_writable_roots: [], root_identities: [] };
+  try {
+    if (binding.status !== 'measured') fail('sandbox_scope_job_tmpdir_unmeasured');
+    const current = directoryIdentity(binding.job_tmpdir.path);
+    if (JSON.stringify(current) !== JSON.stringify(binding.job_tmpdir)) fail('sandbox_scope_tmpdir_changed');
+    report.tmpdir_at_reply = current;
+    if (!Array.isArray(roots)) fail('sandbox_scope_roots_not_reported');
+    if (roots.length > 1) fail('sandbox_scope_root_count');
+    if (!['readOnly', 'workspaceWrite'].includes(report.reported_sandbox)) fail('sandbox_scope_kind');
+    if (report.network !== false || report.approval !== 'untrusted' ||
+        report.permission_profile !== 'vscode-workspace-read-only') fail('sandbox_scope_policy');
+    if (report.reported_sandbox === 'workspaceWrite' && (report.exclude_slash_tmp !== true ||
+        typeof report.exclude_tmpdir_env_var !== 'boolean' ||
+        roots.length === 0 && report.exclude_tmpdir_env_var !== true)) fail('sandbox_scope_implicit_write');
+    const workspaces = [request?.params?.cwd, ...(request?.params?.runtimeWorkspaceRoots || [])]
+      .filter(value => typeof value === 'string').map(directoryIdentity);
+    for (const root of roots) {
+      const identity = directoryIdentity(root);
+      report.normalized_writable_roots.push(identity.path);
+      report.root_identities.push(identity);
+      if (JSON.stringify(identity) !== JSON.stringify(current) ||
+          workspaces.some(workspace => identity.path === workspace.path ||
+            identity.path.startsWith(workspace.path + '/') || workspace.path.startsWith(identity.path + '/'))) {
+        fail('sandbox_scope_not_exact_job_tmpdir');
+      }
+    }
+    if (roots.length && report.reported_sandbox === 'readOnly') fail('sandbox_scope_contradictory_roots');
+    report.status = 'measured';
+    report.verdict = roots.length === 0 ? 'readOnly' : 'read_only_except_job_tmpdir';
+  } catch (error) {
+    report.reason = /^sandbox_scope_[a-z_]+$/.test(error.message) ? error.message : 'sandbox_scope_measurement_failed';
+  }
+  return report;
+}
+
 function instrument({ spawn, fetch, fork }, options) {
   const metadata = require('./ghcp_ahp_metadata_client.cjs');
   const { emit, nativeBinary, nativeSha256, modelFree, synthetic = false, seeds = [] } = options;
@@ -230,7 +309,7 @@ function instrument({ spawn, fetch, fork }, options) {
   if (options.metadataRequest && (!sessionOnly || modelFree !== true)) fail('metadata_mode_refused');
   const mask = redactor(seeds);
   let sequence = 0, bytes = 0, ipcNumber = 0, httpNumber = 0;
-  let threadRequestId, threadStream, ownedThread;
+  let threadRequestId, threadStream, ownedThread, threadRequest;
   function record(kind, fields = {}) {
     const safe = mask.clean({ sequence: ++sequence, kind, synthetic, ...fields });
     const line = JSON.stringify(safe) + '\n';
@@ -273,7 +352,7 @@ function instrument({ spawn, fetch, fork }, options) {
       }
       if (threadRequestId !== undefined || !options.claimThread) blocked('native_ipc', 'session_policy_thread_limit', rpcRefusalDiagnostic(message, stream, inspection));
       try { options.claimThread(); } catch { blocked('native_ipc', 'session_policy_thread_limit', rpcRefusalDiagnostic(message, stream, inspection)); }
-      threadRequestId = message.id; threadStream = stream;
+      threadRequestId = message.id; threadStream = stream; threadRequest = message;
       return;
     }
     if (sessionOnly && ['thread/unsubscribe', 'thread/archive'].includes(message.method)) {
@@ -306,6 +385,7 @@ function instrument({ spawn, fetch, fork }, options) {
     const env = { ...(settings?.env || process.env) };
     mask.learn({ apiKey: env.OPENAI_API_KEY });
     for (const key of Object.keys(env)) if (key.startsWith('GHCP_AHP_WIRE_') || key === 'NODE_OPTIONS') delete env[key];
+    const tempBinding = sessionOnly ? jobTempIdentity(settings, options) : null;
     const child = spawn(command, args, { ...settings, env });
     record('native_started', { stream, native_binary_sha256: nativeSha256, session_only: sessionOnly });
     let rpcSequence = 0, writeSequence = 0, trigger = 'not_reported', refusedFrame;
@@ -325,6 +405,8 @@ function instrument({ spawn, fetch, fork }, options) {
       if (sessionOnly && /^(?:turn\/|item\/)/.test(value.method || '')) blocked('native_event', 'session_policy_turn_or_tool_refused');
       if (sessionOnly && value.id === threadRequestId && stream === threadStream && typeof value.result?.thread?.id === 'string') {
         ownedThread = value.result.thread.id;
+        record('native_sandbox_scope', { stream, request_id: value.id, thread_id: ownedThread,
+          ...sandboxScope(value.result, tempBinding, threadRequest) });
       }
       raw('ipc_response', { stream, wire_bytes: Buffer.byteLength(text) }, value, text);
     }, /\r?\n/);
@@ -553,5 +635,6 @@ function activate() {
   globalThis.fetch = wrapped.fetch;
 }
 
-module.exports = { instrument, redactor, frames, READ_ONLY_RPC, safeArguments };
+module.exports = { instrument, redactor, frames, READ_ONLY_RPC, safeArguments,
+  directoryIdentity, jobTempIdentity, sandboxScope };
 activate();

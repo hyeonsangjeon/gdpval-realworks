@@ -250,6 +250,47 @@ def test_human_summary_preserves_every_provenance_field_and_disabled_execution(m
     assert "execution_allowed: `false`" in text
 
 
+def scoped_chain(measured_json):
+    import ghcp_ahp_thread_policy as policy
+    import ghcp_ahp_zero_turn_admission as scoped
+    _, evidence, metadata, _ = measured_json
+    capture = json.loads((evidence / "wire-capture.json").read_text())
+    capture["bootstrap"].update(session_policy=True, authenticated_zero_turn=True)
+    (evidence / "wire-capture.json").write_bytes(encode(capture))
+    results = {"authenticate": {"result": None}, "createSession": {"result": None}}
+    assessment = policy.assess(capture, results)
+    assert assessment["admission_allowed"] is False and assessment["synthetic"] is True
+    fields = {key: assessment[key] for key in scoped.FIELDS}
+    (evidence / "thread-policy.json").write_bytes(encode(patched.stamp(assessment, metadata)))
+    (evidence / "handshake.json").write_bytes(encode(patched.stamp({"schema": "ghcp-ahp-authenticated-zero-turn-v1",
+        "rpc_results": results, **fields}, metadata)))
+    (evidence / "summary.json").write_bytes(encode(patched.stamp({"schema": "ghcp-ahp-patched-summary-v1",
+        "status": "fixture", "probe_exit": 2, **fields}, metadata)))
+    patched.write_summary(evidence, handshake=True, policy=True)
+    return evidence
+
+
+def test_zero_turn_deferred_scope_is_bound_across_policy_handshake_json_and_markdown(measured_json):
+    evidence = scoped_chain(measured_json)
+    result = patched.verify_artifact_chain(evidence, handshake=True, policy=True)
+    assert result["settings_verified"] is False and result["execution_allowed"] is False
+    assert result["deferred_fields"] == ["served_model", "context_window", "web_search"]
+    text = (evidence / "summary.md").read_text()
+    assert "deferred_to_first_turn" in text and "sandbox_scope" in text
+    assert "NOT passed" in text
+
+
+@pytest.mark.parametrize("name", ["thread-policy.json", "handshake.json", "summary.json"])
+@pytest.mark.parametrize("field", ["admission_scope", "sandbox_scope", "deferred_fields", "first_turn_required", "settings_verified", "verdicts"])
+def test_zero_turn_scope_cannot_drop_a_field_or_use_an_unrelated_receipt(measured_json, name, field):
+    evidence = scoped_chain(measured_json)
+    value = json.loads((evidence / name).read_text())
+    del value[field]
+    (evidence / name).write_bytes(encode(value))
+    with pytest.raises(probe.Refused, match="zero_turn_scope_chain_mismatch"):
+        patched.verify_artifact_chain(evidence, handshake=True, policy=True)
+
+
 def test_human_summary_cannot_render_a_dropped_receipt_marker(measured_json):
     _, evidence, _, _ = measured_json
     receipt = evidence / "probe.json"

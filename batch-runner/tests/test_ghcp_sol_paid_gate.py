@@ -174,6 +174,28 @@ def test_ahp_draft_never_starts_a_host_or_falls_back_to_copilot(runtime, tmp_pat
         assert "execution_receipt" not in record  # No task adapter entered before connection admission.
 
 
+@pytest.mark.parametrize("field", ["served_model", "reasoning_effort", "context_window", "web_search_used"])
+def test_paid_ahp_job_stops_before_inputs_or_task_on_missing_first_turn_attestation(runtime, tmp_path, monkeypatch, field):
+    from .test_ghcp_ahp_connection import first_turn_wire
+    import ghcp_ahp_first_turn as first_turn
+    for key, value in {"RUNNER_ARCH": "X64", "GITHUB_RUN_ID": "100", "GITHUB_SHA": "a" * 40}.items():
+        monkeypatch.setenv(key, value)
+    report = first_turn.assess(first_turn_wire())
+    del report["observed"][field]
+    receipt = tmp_path / "connection.json"
+    receipt.write_text(json.dumps({"first_turn_attestation": report}))
+    def forbidden(*args, **kwargs):
+        pytest.fail("missing first-turn evidence entered a task, process, or input loader")
+    monkeypatch.setattr(adapter, "run_task", forbidden)
+    monkeypatch.setattr(paid, "task_materials", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    result = paid.execute_task(gate.TASK_IDS[0], runtime, tmp_path / "absent-bundle", tmp_path / "absent-state",
+                              tmp_path / "export", execution_adapter="ahp-draft", connection_receipt=receipt)
+    assert result["ready_for_contract"] is False
+    assert result["reason_codes"] == ["first_turn_attestation_refused"]
+    assert not (tmp_path / "absent-state").exists()
+
+
 @pytest.mark.parametrize("name,value", [("GITHUB_EVENT_NAME", "push"), ("GITHUB_EVENT_NAME", "pull_request"),
     ("GHCP_PAID_EXECUTION", "false"), ("GITHUB_RUN_ATTEMPT", "2"), ("RUNNER_ENVIRONMENT", "self-hosted")])
 def test_unapproved_event_or_host_cannot_reach_auth(runtime, tmp_path, monkeypatch, name, value):
