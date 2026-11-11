@@ -1,6 +1,7 @@
 """Inert receipts and fake subprocesses only; never execute bwrap/sysctl on NAS."""
 
 import copy
+import errno
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ import ghcp_ahp_thread_policy as policy
 
 ROOT = Path(__file__).resolve().parents[2]
 IDENTITY = {"github_run_id": "9005", "github_run_attempt": "1", "github_sha": "a" * 40}
+WRITER = {"candidate": "/usr/sbin/sysctl", "path": "/usr/sbin/sysctl", "sha256": "a" * 64, "bytes": 1}
 
 
 @pytest.fixture(autouse=True)
@@ -39,14 +41,26 @@ def observation(passed):
 
 
 class FakeRunner:
-    def __init__(self, checks=(False, True), *, restrict=1, clone=1, load_code=0):
+    def __init__(self, checks=(False, True), *, restrict=1, clone=1, max_namespaces=65536, load_code=0):
         self.checks = iter(checks)
         self.restrict, self.clone, self.load_code = restrict, clone, load_code
         self.loaded, self.commands, self.probes = False, [], []
+        self.max_namespaces = max_namespaces
 
     def sysctls(self):
-        return {key: {"value": value, "returncode": 0, "stdout": str(value) + "\n", "stderr": ""}
-                for key, value in ((userns.RESTRICT, self.restrict), (userns.CLONE, self.clone))}
+        return {key: {"source": "procfs", "path": str(userns.PROC_PATHS[key]), "value": value,
+                      "status": "measured" if type(value) is int else "absent" if value == "absent" else "read_error",
+                      "raw": str(value) + "\n", "error": None}
+                for key, value in ((userns.RESTRICT, self.restrict), (userns.CLONE, self.clone),
+                                   (userns.MAX_NAMESPACES, self.max_namespaces))}
+
+    def sysctl_binary(self):
+        return dict(WRITER)
+
+    def check_sysctl_binary(self, binary):
+        userns.require(binary == WRITER, "runner_userns_sysctl_binary_changed")
+
+    write_sysctl = userns.Runner.write_sysctl
 
     def aa_status(self):
         return {"returncode": 0, "profiles": {"enforce": 3, "unconfined": int(self.loaded)}, "processes": 0}
@@ -67,7 +81,7 @@ class FakeRunner:
         elif command[:4] == ["sudo", "-n", "apparmor_parser", "--remove"]:
             assert self.loaded
             self.loaded, code = False, 0
-        elif command[:4] == ["sudo", "-n", "sysctl", "-w"]:
+        elif command[:4] == ["sudo", "-n", WRITER["path"], "-w"]:
             assert command[-1] in (userns.RESTRICT + "=0", userns.RESTRICT + "=1")
             self.restrict, code = int(command[-1][-1]), 0
         else:
@@ -105,16 +119,17 @@ def test_exact_profile_first_then_only_if_failed_job_scoped_fallback_and_restore
         assert record["profile"]["sha256"] == probe.digest(evidence / "runner-userns.apparmor")
         assert runner.commands[0][:4] == ["sudo", "-n", "apparmor_parser", "--add"]
     if method == "b_job_scoped_sysctl":
-        assert runner.commands[-1] == ["sudo", "-n", "sysctl", "-w", userns.RESTRICT + "=0"]
-        assert userns.values(record["after"]) == {userns.RESTRICT: 0, userns.CLONE: 1}
+        assert runner.commands[-1] == ["sudo", "-n", "/usr/sbin/sysctl", "-w", userns.RESTRICT + "=0"]
+        assert userns.values(record["after"]) == {userns.RESTRICT: 0, userns.CLONE: 1, userns.MAX_NAMESPACES: 65536}
         if load_code == 0:
             assert runner.commands[-2][:4] == ["sudo", "-n", "apparmor_parser", "--remove"]
     else:
-        assert not any("sysctl" in command for command in runner.commands)
+        assert not any(any(Path(arg).name == "sysctl" for arg in command) for command in runner.commands)
         assert record["after"] == record["before"]
     digest = probe.digest(evidence / "runner-userns.json")
     cleanup = userns.restore(evidence, IDENTITY, runner)
-    assert cleanup["status"] == "restored" and not runner.loaded and runner.restrict == 1
+    assert cleanup["status"] == ("unchanged_verified" if method == "none_required" else "restored")
+    assert cleanup["restoration_measured"] is True and not runner.loaded and runner.restrict == 1
     assert probe.digest(evidence / "runner-userns.json") == digest  # immutable final evidence
     with pytest.raises(probe.Refused, match="already_restored"):
         userns.verify_for_auth(evidence / "runner-userns.json", prepared, evidence, IDENTITY, runner=runner)
@@ -262,10 +277,11 @@ def test_diagnostic_subprocess_has_no_inherited_secret_or_shell(monkeypatch):
         return SimpleNamespace(returncode=0, stdout="1\n", stderr="")
     monkeypatch.setattr(subprocess, "run", run)
     runner = userns.Runner()
-    assert runner.sysctls()[userns.RESTRICT]["value"] == 1
+    assert runner.run(["/usr/sbin/sysctl", "--version"])["stdout"] == "1\n"
+    assert len(calls) == 1
     for command, options in calls:
         assert options == {"env": userns.ENVIRONMENT, "capture_output": True, "text": True, "timeout": 25, "check": False}
-        assert command[:2] == ["sysctl", "-n"]
+        assert command == ["/usr/sbin/sysctl", "--version"]
 
 
 def test_workflow_prepares_before_secret_and_restores_before_unconditional_artifact_upload():
@@ -363,6 +379,230 @@ def test_canary_programs_compile_but_are_never_executed_locally():
     compile(userns.EXEC_CANARY, "exec_canary", "exec")
     compile(userns.INNER_AUDIT, "inner_audit", "exec")
     assert userns.SYSTEM_PATHS == (Path("/usr/bin/bwrap"), Path("/bin/bwrap"))
+    assert userns.SYSCTL_PATHS == (Path("/usr/sbin/sysctl"), Path("/sbin/sysctl"))
+    assert userns.PROC_PATHS == {
+        userns.RESTRICT: Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns"),
+        userns.CLONE: Path("/proc/sys/kernel/unprivileged_userns_clone"),
+        userns.MAX_NAMESPACES: Path("/proc/sys/user/max_user_namespaces")}
+
+
+@pytest.fixture
+def proc_tree(tmp_path, monkeypatch):
+    paths = {key: tmp_path / "proc/sys" / Path(*key.split(".")) for key in userns.PROC_PATHS}
+    for key, path in paths.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("65536\n" if key == userns.MAX_NAMESPACES else "1\n")
+    monkeypatch.setattr(userns, "PROC_PATHS", paths)
+    monkeypatch.setattr(userns.prewarm, "context", lambda: dict(IDENTITY))
+    return paths
+
+
+def test_diagnostics_read_all_three_proc_files_without_any_process_or_path_lookup(proc_tree, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("proc diagnostics attempted to find or execute sysctl")
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    snapshot = userns.Runner().sysctls()
+    assert userns.values(snapshot) == {userns.RESTRICT: 1, userns.CLONE: 1, userns.MAX_NAMESPACES: 65536}
+    assert userns.usable(snapshot) is True
+    for key, row in snapshot.items():
+        assert row == {"source": "procfs", "path": str(proc_tree[key]), "status": "measured",
+                       "value": 65536 if key == userns.MAX_NAMESPACES else 1,
+                       "raw": "65536\n" if key == userns.MAX_NAMESPACES else "1\n", "error": None}
+    assert userns.ENVIRONMENT == {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
+
+
+@pytest.mark.parametrize("key", [userns.RESTRICT, userns.CLONE, userns.MAX_NAMESPACES])
+def test_absent_proc_file_is_explicit_absent_not_zero_or_a_default(proc_tree, key):
+    proc_tree[key].unlink()  # Only the inert test file, never /proc.
+    snapshot = userns.Runner().sysctls()
+    assert snapshot[key]["value"] == snapshot[key]["status"] == "absent"
+    assert snapshot[key]["raw"] is None
+    assert snapshot[key]["error"]["type"] == "FileNotFoundError"
+    assert snapshot[key]["error"]["errno"] == errno.ENOENT
+    assert userns.usable(snapshot) is False
+    assert all(row["status"] == "measured" for other, row in snapshot.items() if other != key)
+
+
+@pytest.mark.parametrize("key", [userns.RESTRICT, userns.CLONE, userns.MAX_NAMESPACES])
+@pytest.mark.parametrize("error_type,number", [(PermissionError, errno.EACCES), (OSError, errno.EIO)])
+def test_proc_read_error_type_errno_and_original_message_are_retained(proc_tree, monkeypatch, key, error_type, number):
+    original = Path.open
+    error = error_type(number, "synthetic exact diagnostic", str(proc_tree[key]))
+    def open_path(path, *args, **kwargs):
+        if path == proc_tree[key]:
+            raise error
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "open", open_path)
+    snapshot = userns.Runner().sysctls()
+    row = snapshot[key]
+    assert row["status"] == "read_error" and row["value"] == "not_reported"
+    assert row["error"] == {"type": error_type.__name__, "errno": number, "message": str(error)}
+    assert userns.usable(snapshot) is False
+    assert all(row["status"] == "measured" for other, row in snapshot.items() if other != key)
+
+
+@pytest.mark.parametrize("raw", ["", "true\n", "-1\n", "1 0\n", "1" * 129])
+def test_invalid_proc_value_is_retained_and_never_admitted(proc_tree, raw):
+    proc_tree[userns.RESTRICT].write_text(raw)
+    row = userns.Runner().sysctls()[userns.RESTRICT]
+    assert row["status"] == "invalid_value" and row["value"] == "not_reported"
+    assert row["raw"] == raw and row["error"] is None
+
+
+def test_proc_ascii_decoding_error_is_recorded(proc_tree):
+    proc_tree[userns.CLONE].write_bytes(b"\xff")
+    row = userns.Runner().sysctls()[userns.CLONE]
+    assert row["status"] == "read_error" and row["value"] == "not_reported"
+    assert row["error"]["type"] == "UnicodeDecodeError" and "0xff" in row["error"]["message"]
+
+
+def test_direct_runner_diagnostic_method_refuses_nas_before_proc_read(monkeypatch):
+    def refused(): raise probe.Refused("synthetic_not_actions")
+    monkeypatch.setattr(userns.prewarm, "context", refused)
+    monkeypatch.setattr(userns, "read_proc_value", lambda *args: pytest.fail("read actual NAS kernel"))
+    with pytest.raises(probe.Refused, match="synthetic_not_actions"):
+        object.__new__(userns.Runner).sysctls()
+
+
+@pytest.fixture
+def writer_tree(tmp_path, monkeypatch):
+    paths = (tmp_path / "usr/sbin/sysctl", tmp_path / "sbin/sysctl")
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"inert fixture, never execute")
+        path.chmod(0o700)
+    monkeypatch.setattr(userns, "SYSCTL_PATHS", paths)
+    monkeypatch.setattr(userns.prewarm, "context", lambda: dict(IDENTITY))
+    return paths
+
+
+@pytest.mark.parametrize("chosen", [0, 1])
+def test_absolute_sysctl_selection_is_ordered_hashed_and_has_no_path_search(writer_tree, chosen):
+    if chosen == 1:
+        writer_tree[0].unlink()
+    value = userns.Runner().sysctl_binary()
+    assert value == {"candidate": str(writer_tree[chosen]), "path": str(writer_tree[chosen]),
+                     "sha256": probe.digest(writer_tree[chosen]), "bytes": writer_tree[chosen].stat().st_size}
+
+
+@pytest.mark.parametrize("damage", ["absent", "not_executable", "directory", "setuid", "outside_symlink"])
+def test_invalid_primary_writer_does_not_fall_back_unless_absent(writer_tree, tmp_path, damage):
+    first, second = writer_tree
+    if damage == "absent":
+        first.unlink()
+        second.unlink()
+    elif damage == "not_executable": first.chmod(0o600)
+    elif damage == "directory":
+        first.unlink()
+        first.mkdir()
+    elif damage == "setuid": first.chmod(0o4700)
+    elif damage == "outside_symlink":
+        outside = tmp_path / "outside"
+        outside.write_bytes(b"inert outside tool")
+        outside.chmod(0o700)
+        first.unlink()
+        first.symlink_to(outside)
+    with pytest.raises(probe.Refused):
+        userns.Runner().sysctl_binary()
+
+
+def test_write_and_cleanup_keep_the_original_selected_binary_not_a_new_fallback(writer_tree, monkeypatch):
+    runner = userns.Runner()
+    selected = runner.sysctl_binary()
+    writer_tree[0].write_bytes(b"changed tool bytes")
+    monkeypatch.setattr(runner, "run", lambda *args: pytest.fail("executed changed writer or fallback"))
+    for value in (0, 1):
+        with pytest.raises(probe.Refused, match="binary_changed"):
+            runner.write_sysctl(selected, value)
+
+
+@pytest.mark.parametrize("value", [-1, 2, True, "0", None])
+def test_absolute_writer_only_accepts_exact_integer_zero_or_one(writer_tree, monkeypatch, value):
+    runner = userns.Runner()
+    monkeypatch.setattr(runner, "run", lambda *args: pytest.fail("invalid sysctl mutation"))
+    with pytest.raises(probe.Refused, match="write_refused"):
+        runner.write_sysctl(runner.sysctl_binary(), value)
+
+
+@pytest.mark.parametrize("chosen", [0, 1])
+def test_missing_sysctl_on_sanitized_path_does_not_block_proc_diagnostics_fallback_or_restoration(
+        tree, proc_tree, writer_tree, monkeypatch, chosen):
+    """Production read/resolve/write/state machine; fake kernel files/processes."""
+    prepared, evidence, _ = tree
+    if chosen == 1:
+        writer_tree[0].unlink()
+    runtime = FakeRunner((False, False, True))
+    runner = userns.Runner()
+    monkeypatch.setattr(runner, "aa_status", runtime.aa_status)
+    monkeypatch.setattr(runner, "profile_loaded", runtime.profile_loaded)
+    monkeypatch.setattr(runner, "namespace_probe", runtime.namespace_probe)
+    calls = []
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        assert kwargs["env"] == {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
+        if command[0] == "sysctl" or command[:3] == ["sudo", "-n", "sysctl"]:
+            raise FileNotFoundError(errno.ENOENT, "sysctl absent from sanitized PATH")
+        if command[:3] == ["sudo", "-n", str(writer_tree[chosen])]:
+            assert command[3] == "-w" and command[4] in (userns.RESTRICT + "=0", userns.RESTRICT + "=1")
+            proc_tree[userns.RESTRICT].write_text(command[4][-1] + "\n")
+        else:
+            assert command[:3] == ["sudo", "-n", "apparmor_parser"]
+            assert command[3] in ("--add", "--remove")
+            runtime.loaded = command[3] == "--add"
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(subprocess, "run", run)
+    row = userns.prepare(prepared, evidence, IDENTITY, runner)
+    assert row["method"] == "b_job_scoped_sysctl" and row["status"] == "ready"
+    assert row["profile_probe"]["passed"] is False and row["final_probe"]["passed"] is True
+    assert userns.values(row["before"]) == {userns.RESTRICT: 1, userns.CLONE: 1, userns.MAX_NAMESPACES: 65536}
+    assert userns.values(row["after"]) == {userns.RESTRICT: 0, userns.CLONE: 1, userns.MAX_NAMESPACES: 65536}
+    assert row["sysctl_binary"]["path"] == str(writer_tree[chosen])
+    userns.verify_for_auth(evidence / "runner-userns.json", prepared, evidence, IDENTITY, runner=runner)
+    cleanup = userns.restore(evidence, IDENTITY, runner)
+    assert cleanup["status"] == "restored" and cleanup["restoration_measured"] is True
+    assert userns.values(cleanup["after_restore"]) == userns.values(row["before"])
+    assert [command[:4] for command, _ in calls] == [
+        ["sudo", "-n", "apparmor_parser", "--add"], ["sudo", "-n", "apparmor_parser", "--remove"],
+        ["sudo", "-n", str(writer_tree[chosen]), "-w"], ["sudo", "-n", str(writer_tree[chosen]), "-w"]]
+    assert [command[-1] for command, _ in calls[-2:]] == [userns.RESTRICT + "=0", userns.RESTRICT + "=1"]
+    assert userns.ENVIRONMENT["PATH"] == "/usr/bin:/bin"
+
+
+@pytest.mark.parametrize("value", [0, "absent", "not_reported"])
+def test_unusable_max_user_namespaces_cannot_mutate_or_admit(tree, value):
+    prepared, evidence, _ = tree
+    runner = FakeRunner((False,), max_namespaces=value)
+    with pytest.raises(probe.Refused, match="sysctls_not_usable"):
+        userns.prepare(prepared, evidence, IDENTITY, runner)
+    assert runner.commands == []
+    record = json.loads((evidence / "runner-userns.json").read_text())
+    assert record["before"][userns.MAX_NAMESPACES]["value"] == value and record["admission_allowed"] is False
+
+
+@pytest.mark.parametrize("value", ["absent", "not_reported"])
+def test_unmeasured_no_mutation_cleanup_never_claims_restoration(tree, value):
+    prepared, evidence, _ = tree
+    runner = FakeRunner((False,), restrict=value)
+    with pytest.raises(probe.Refused, match="sysctls_not_usable"):
+        userns.prepare(prepared, evidence, IDENTITY, runner)
+    cleanup = userns.restore(evidence, IDENTITY, runner)
+    assert cleanup["status"] == "not_required_no_mutation" and cleanup["restoration_measured"] is False
+    assert runner.commands == []
+    with pytest.raises(probe.Refused, match="already_restored"):
+        userns.verify_for_auth(evidence / "runner-userns.json", prepared, evidence, IDENTITY, runner=runner)
+
+
+@pytest.mark.parametrize("value", ["absent", "not_reported", 0, 65535])
+def test_applied_change_with_unmeasured_or_changed_cleanup_readback_still_fails(tree, value):
+    prepared, evidence, _ = tree
+    runner = FakeRunner((False, False, True))
+    userns.prepare(prepared, evidence, IDENTITY, runner)
+    runner.max_namespaces = value
+    with pytest.raises(probe.Refused, match="cleanup_readback_failed"):
+        userns.restore(evidence, IDENTITY, runner)
+    row = json.loads((evidence / "runner-userns-cleanup.json").read_text())
+    assert row["status"] == "refused" and row["restoration_measured"] is False
+    assert runner.restrict == 1  # Restoration attempted before readback refusal.
 
 
 @pytest.mark.parametrize("response,success,errors,invalid", [
