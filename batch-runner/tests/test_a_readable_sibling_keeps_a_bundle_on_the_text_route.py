@@ -71,6 +71,17 @@ cannot do. What the payload *does* prove is narrower and, for the gate, more
 interesting: the same mixed bundle reached the vision path anyway, by the
 keyword route. Only the escalation gate refuses it.
 
+A third era starts with the selector reseal of 2026-11-06
+(``gpt56_sol_grader_seal_20261106.json``). That selector makes mixed bundles
+on purpose -- an ``.eml`` beside its workbook (02aa1805), a build script graded
+beside its document once a rendition copy is set aside (15d37511, aad21e4c,
+cebf301e), a requested image beside drawing code (3baa0009, b1a79ce1) -- and
+the exp036 and exp035 parity regrades it was sealed for would otherwise land
+in the two pinned corpora above and turn them red. Grades from that era are
+recognised by their grader hash, held out of both pins, and checked for the
+outcome only: none of their mixed bundles may escalate. Their extent is left
+to pin in a later change, once they have landed.
+
 Nothing here calls a model or a network. It reads committed JSON.
 """
 
@@ -125,9 +136,28 @@ EXP035_TASKS_WITHOUT_EXTRACTION = {
 EXTRACTION_MARKER = re.compile(r'"kind"\s*:\s*"(xlsx|docx|pptx|pdf)"')
 PDF_PAGE_MARKER = "[Page "
 
+#: The grader hashes both pinned corpora were graded under: every hash carried
+#: by a committed payload with a mixed bundle before the selector reseal of
+#: 2026-11-06 (``fd0db9d9...`` is exp035's ten). Two older payloads carry no
+#: hash at all and belong to the measured corpus too. A payload graded under
+#: any other hash is held out of both pins; every grade the resealed selector
+#: makes is one of them, because its hash covers the selector's bytes.
+PRE_RESEAL_GRADER_HASHES = frozenset({
+    "1c967673eb8081a61505919476fc8509372876ab71259b8d5456532ccbf2d413",
+    "595c7254caf8fbd7e598a08f851a2101281a332ff794e9a00fcc5542c8fb8d9f",
+    "79c2f5035c4aa826355134dd87cdb8fbc320e5a1cc5fde0d8ecf91957f4eabc6",
+    "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+    "ce7d4978bce9effc113708caca10a705d215eaf0cd8a759aa3bcc759799f0338",
+    "fd0db9d9d78d6d5414bdf48694eb61726ed0a741def137a58bf8508205218c43",
+})
+
 
 def _from_exp035(path: Path) -> bool:
     return EXP035_RUN in str(path)
+
+
+def _graded_after_the_reseal(grader_hash: str | None) -> bool:
+    return grader_hash is not None and grader_hash not in PRE_RESEAL_GRADER_HASHES
 
 
 def _has_extraction_evidence(item: dict) -> bool:
@@ -135,15 +165,16 @@ def _has_extraction_evidence(item: dict) -> bool:
     return bool(EXTRACTION_MARKER.search(text)) or PDF_PAGE_MARKER in text
 
 
-def _mixed_bundle_items() -> list[tuple[Path, str, dict]]:
+def _mixed_bundle_items() -> list[tuple[Path, str, dict, str | None]]:
     """Every published item that put a mixed bundle in front of a text judge.
 
     Walks the committed payloads rather than a hard-coded list so that a new
     grade landing in ``data/grades`` is picked up, not silently skipped. The
-    era split happens in the fixtures below, on the returned paths -- this walk
-    stays corpus-wide so that nothing is filtered out before it is counted.
+    era split happens in the fixtures below, on the returned paths and grader
+    hashes -- this walk stays corpus-wide so that nothing is filtered out
+    before it is counted.
     """
-    found: list[tuple[Path, str, dict]] = []
+    found: list[tuple[Path, str, dict, str | None]] = []
     for path in sorted(GRADES.rglob("*.json")):
         try:
             payload = json.loads(path.read_text())
@@ -151,6 +182,7 @@ def _mixed_bundle_items() -> list[tuple[Path, str, dict]]:
             continue
         if not isinstance(payload, dict):
             continue
+        grader_hash = payload.get("grader_source_hash")
         for task in payload.get("tasks") or []:
             items = task.get("items")
             if not isinstance(items, list):
@@ -166,12 +198,12 @@ def _mixed_bundle_items() -> list[tuple[Path, str, dict]]:
                 }
                 renderable = suffixes & GRADER_VISUAL_RENDER_EXTENSIONS
                 if renderable and not suffixes.issubset(GRADER_VISUAL_RENDER_EXTENSIONS):
-                    found.append((path, task.get("task_id") or "", item))
+                    found.append((path, task.get("task_id") or "", item, grader_hash))
     return found
 
 
 @pytest.fixture(scope="module")
-def mixed_bundles() -> list[tuple[Path, str, dict]]:
+def mixed_bundles() -> list[tuple[Path, str, dict, str | None]]:
     found = _mixed_bundle_items()
     assert found, (
         "no published item selects a mixed renderable/non-renderable bundle. "
@@ -182,19 +214,39 @@ def mixed_bundles() -> list[tuple[Path, str, dict]]:
 
 
 @pytest.fixture(scope="module")
-def historical_bundles(mixed_bundles) -> list[tuple[Path, str, dict]]:
+def pre_reseal_bundles(mixed_bundles) -> list[tuple[Path, str, dict]]:
+    """Both pinned corpora: everything graded before the selector reseal."""
+    return [
+        (path, task_id, item)
+        for path, task_id, item, grader_hash in mixed_bundles
+        if not _graded_after_the_reseal(grader_hash)
+    ]
+
+
+@pytest.fixture(scope="module")
+def resealed_bundles(mixed_bundles) -> list[tuple[Path, str, dict]]:
+    """Grades from the resealed selector, held out of both pins."""
+    return [
+        (path, task_id, item)
+        for path, task_id, item, grader_hash in mixed_bundles
+        if _graded_after_the_reseal(grader_hash)
+    ]
+
+
+@pytest.fixture(scope="module")
+def historical_bundles(pre_reseal_bundles) -> list[tuple[Path, str, dict]]:
     """The corpus ``323`` actually measured, with exp035 held out.
 
     Not a narrowing of what is checked: the held-out half is checked by
     ``test_exp035_multiplied_the_corpus_by_five_and_none_of_it_escalated``,
-    and the outcome assertion below runs over both halves together.
+    and the outcome assertion below runs over every era together.
     """
-    return [row for row in mixed_bundles if not _from_exp035(row[0])]
+    return [row for row in pre_reseal_bundles if not _from_exp035(row[0])]
 
 
 @pytest.fixture(scope="module")
-def exp035_bundles(mixed_bundles) -> list[tuple[Path, str, dict]]:
-    return [row for row in mixed_bundles if _from_exp035(row[0])]
+def exp035_bundles(pre_reseal_bundles) -> list[tuple[Path, str, dict]]:
+    return [row for row in pre_reseal_bundles if _from_exp035(row[0])]
 
 
 def test_the_three_tasks_323_measured_are_unchanged(historical_bundles):
@@ -228,18 +280,20 @@ def test_the_three_tasks_323_measured_are_unchanged(historical_bundles):
 
 
 def test_exp035_multiplied_the_corpus_by_five_and_none_of_it_escalated(
-    mixed_bundles, exp035_bundles
+    mixed_bundles, pre_reseal_bundles, exp035_bundles
 ):
     """The outcome, read off the payload rather than inferred from a clause.
 
     ``perception_called`` is the item's own record of whether the judge was
     handed a rendered image. It is ``False`` on every mixed bundle ever
-    published -- all 4,046 of them, both eras -- so the hole has still cost
-    nothing, and that holds for the 20 tasks whose mechanism is undetermined
-    just as much as for the ones that carry extraction evidence.
+    published -- all 4,046 of them before the selector reseal, both eras -- so
+    the hole has still cost nothing, and that holds for the 20 tasks whose
+    mechanism is undetermined just as much as for the ones that carry
+    extraction evidence.
 
     This is the assertion that makes holding exp035 out of the numbers above
-    safe. It runs over the whole corpus, not either half.
+    safe. It runs over the whole corpus, not either half, and over every grade
+    the resealed selector has added since.
     """
     by_task = {task_id[:8] for _p, task_id, _i in exp035_bundles}
     payloads = {path for path, _t, _i in exp035_bundles}
@@ -252,17 +306,45 @@ def test_exp035_multiplied_the_corpus_by_five_and_none_of_it_escalated(
         f"{len(payloads)} payloads and {len(by_task)} tasks, not "
         f"{EXP035_ITEMS}/{EXP035_PAYLOADS}/{EXP035_TASKS}"
     )
-    assert len(mixed_bundles) == 722 + EXP035_ITEMS
+    assert len(pre_reseal_bundles) == 722 + EXP035_ITEMS
 
     escalated = [
         (path, task_id)
-        for path, task_id, item in mixed_bundles
+        for path, task_id, item, _grader_hash in mixed_bundles
         if item.get("perception_called") is not False
     ]
     assert not escalated, (
         f"{len(escalated)} mixed bundles escalated to the vision path, e.g. "
         f"{escalated[:3]}. 322 pinned this hole on the grounds that it costs "
         f"nothing; that is no longer true and the gate needs re-deciding."
+    )
+
+
+def test_grades_from_the_resealed_selector_are_held_out_and_none_escalated(
+    resealed_bundles,
+):
+    """The third era, checked for the outcome only.
+
+    The resealed selector grades an ``.eml`` beside its workbook, a build
+    script beside its document and a requested image beside drawing code, so
+    its regrades add mixed bundles to tasks the pinned corpora never held
+    (02aa1805, 15d37511, aad21e4c, cebf301e, 3baa0009, b1a79ce1). Counting
+    them into either pin would turn this file red the moment the regrades the
+    reseal was made for are committed, while the finding the pins stand for
+    is unchanged. So they are held out, and the one thing that would change
+    the finding is asserted for them here as well: no mixed bundle reached
+    the vision path. Pin their extent in a later change, once they have
+    landed.
+    """
+    escalated = [
+        (path, task_id)
+        for path, task_id, item in resealed_bundles
+        if item.get("perception_called") is not False
+    ]
+    assert not escalated, (
+        f"{len(escalated)} mixed bundles graded by the resealed selector "
+        f"escalated to the vision path, e.g. {escalated[:3]}. 322 pinned this "
+        f"hole on the grounds that it costs nothing; re-decide the gate."
     )
 
 

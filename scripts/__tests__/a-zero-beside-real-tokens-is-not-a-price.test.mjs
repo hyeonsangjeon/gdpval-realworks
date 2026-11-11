@@ -151,31 +151,71 @@ function publishedCost(raw) {
 
 // ── 1. The sixteen are gone, on the real corpus ───────────────────────────
 
+// The counters a cost block can show contact with a provider through. Any one
+// of them above zero makes a zero amount a claim (test 2 below).
+const CONTACT_COUNTERS = ['total_judge_calls', 'total_input_tokens', 'total_output_tokens'];
+
+/** Whether a cost block records any contact with a provider. */
+function recordsContact(cost) {
+  return CONTACT_COUNTERS.some((field) => Number.isFinite(cost?.[field]) && cost[field] > 0);
+}
+
+/**
+ * Whether a cost block records its usage counters at all. A grade whose every
+ * task was refused or never delivered (step 8 writes it as "unscored") calls
+ * nobody, so its counters are 0 and its amount is null: that is a recorded
+ * no-contact run, not a missing measurement.
+ */
+function recordsCounters(cost) {
+  return CONTACT_COUNTERS.every((field) => Number.isFinite(cost?.[field]));
+}
+
+// The schema versions the pre-receipt summariser wrote: the sixteen zeros on
+// disk are all theirs (twelve 1.0 files and four 1.1 files).
+const LEGACY_SUMMARISER_VERSIONS = ['1.0', '1.1', '1.2'];
+
+// The one published file the aggregator projects by another path: the pre-1.x
+// legacy dummy carries no cost block at all.
+const NO_COST_BLOCK = ['dummy_gpt5_baseline.json'];
+
 test('no published grade republishes an amount it never measured', async () => {
-  const names = (await readdir(GRADES_DIR)).filter((n) => n.endsWith('.json'));
-  assert.ok(names.length >= 19, `expected the published corpus, found ${names.length} files`);
+  // Floors, not counts (owner decision 2026-11-07). This used to pin the number
+  // of files with a cost block (18, 19, then 20), so every legitimate grade that
+  // landed on `main` turned it red until somebody recounted, while a new file
+  // that was itself wrong could pass as long as the count happened to match.
+  // Now every file is read and held to the rule on its own, and the floor only
+  // says nothing published disappeared: twenty-one files, twenty with a block,
+  // when the floor was set.
+  const names = (await readdir(GRADES_DIR)).filter((n) => n.endsWith('.json')).sort();
+  assert.ok(names.length >= 21, `expected the published corpus, found ${names.length} files`);
 
   const offenders = [];
+  const blockless = [];
+  const noContact = [];
   let withABlock = 0;
   for (const name of names) {
     const raw = JSON.parse(await readFile(join(GRADES_DIR, name), 'utf8'));
     const cost = processGradesFile(join(GRADES_DIR, name), raw)?.summary_v1?.cost;
-    if (!cost) continue;
+    if (!cost) {
+      blockless.push(name);
+      continue;
+    }
     withABlock += 1;
     if (typeof cost.estimated_cost_usd === 'number') {
       offenders.push(`${name}: ${cost.estimated_cost_usd}`);
     }
+    if (!recordsCounters(cost)) noContact.push(name);
   }
 
-  // Every one of the nineteen blocks records tokens, so on this corpus there
-  // is no row the exemption in test 2 could apply to. If a future run really
-  // does spend nothing, it will fail here and the fix is to say so in the
-  // assertion — not to relax the rule.
-  //
-  // Eighteen until exp035's merged grade landed on `main`; that file was read
-  // and it carries tokens like the rest, so the recount is the whole change
-  // and `offenders` — the assertion this test exists for — never moved.
-  assert.equal(withABlock, 19, 'the corpus moved; recount before trusting the rest');
+  // Every block must record its usage counters, so a missing measurement fails
+  // here by name. A run that called nobody (an all-unscored grade) records 0s
+  // and publishes no amount, which passes; `offenders` above still refuses any
+  // amount published beside real tokens.
+  assert.deepEqual(noContact, [], 'a published cost block is missing a usage counter');
+  // A grade whose cost block went missing is a grade nobody can price or
+  // floor, however many files there are.
+  assert.deepEqual(blockless, NO_COST_BLOCK, 'a published grade carries no cost block');
+  assert.ok(withABlock >= 20, `a published cost block disappeared: ${withABlock} left`);
   assert.deepEqual(offenders, [], 'a published row still carries an amount beside real tokens');
 });
 
@@ -183,13 +223,24 @@ test('the payload on disk still says zero — this is a projection, not an edit'
   // The rule this repository holds published data to is that nothing is
   // removed. The zeros stay exactly where they were written; what changed is
   // what the aggregator is willing to republish from them.
-  const names = (await readdir(GRADES_DIR)).filter((n) => n.endsWith('.json'));
-  let zerosOnDisk = 0;
+  //
+  // Content, not a count (owner decision 2026-11-07): the sixteen legacy zeros
+  // must all still be there (a floor), and a payload from any later writer may
+  // say $0 only where it recorded no contact at all. A count would have passed
+  // a new file that wrote the old lie back as long as one legacy zero was
+  // rewritten at the same time.
+  const names = (await readdir(GRADES_DIR)).filter((n) => n.endsWith('.json')).sort();
+  let legacyZeros = 0;
+  const laterZeros = [];
   for (const name of names) {
     const raw = JSON.parse(await readFile(join(GRADES_DIR, name), 'utf8'));
-    if (raw?.summary?.cost?.estimated_cost_usd === 0) zerosOnDisk += 1;
+    const cost = raw?.summary?.cost;
+    if (cost?.estimated_cost_usd !== 0) continue;
+    if (LEGACY_SUMMARISER_VERSIONS.includes(raw.schema_version)) legacyZeros += 1;
+    else if (recordsContact(cost)) laterZeros.push(`${name} (schema ${raw.schema_version})`);
   }
-  assert.equal(zerosOnDisk, 16, 'the published payloads must not have been rewritten');
+  assert.ok(legacyZeros >= 16, `the published payloads must not have been rewritten: ${legacyZeros} zeros left`);
+  assert.deepEqual(laterZeros, [], 'a payload from a later writer says $0 beside real usage');
 });
 
 // ── 2. A genuine zero survives ────────────────────────────────────────────

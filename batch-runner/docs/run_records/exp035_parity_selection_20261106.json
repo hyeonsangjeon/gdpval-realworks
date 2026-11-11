@@ -1,0 +1,304 @@
+{
+ "changed": [
+  {
+   "recorded": {
+    "primary_paths": [],
+    "reference_files_excluded": [],
+    "selection_rule": "format_variant_no_match",
+    "selection_status": "selection_error",
+    "support_artifacts": [
+     "GloNGroRealEstate_Year1_Revenue_Gross_Margin_Projection.csv",
+     "GloNGroRealEstate_Year1_Revenue_Gross_Margin_Projection.xlsx",
+     "build_glongro_projection.py",
+     "extracted/pricing-image.png"
+    ]
+   },
+   "recorded_error": "selection_error",
+   "replayed": {
+    "primary_paths": [
+     [
+      "GloNGroRealEstate_Year1_Revenue_Gross_Margin_Projection.xlsx"
+     ],
+     [
+      "build_glongro_projection.py"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "GloNGroRealEstate_Year1_Revenue_Gross_Margin_Projection.csv",
+     "extracted/pricing-image.png"
+    ]
+   },
+   "rubric_items": 56,
+   "task_id": "15d37511-75c5-4c7f-81f1-16e00c0d95f3"
+  },
+  {
+   "recorded": {
+    "primary_paths": [],
+    "reference_files_excluded": [],
+    "selection_rule": "format_variant_no_match",
+    "selection_status": "selection_error",
+    "support_artifacts": [
+     "Modlev_Tail_Lamp_Negotiation_Strategy.docx",
+     "modlev_tail_lamp_negotiation_strategy.md"
+    ]
+   },
+   "recorded_error": "selection_error",
+   "replayed": {
+    "primary_paths": [
+     [
+      "Modlev_Tail_Lamp_Negotiation_Strategy.docx"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_format_variant",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "modlev_tail_lamp_negotiation_strategy.md"
+    ]
+   },
+   "rubric_items": 46,
+   "task_id": "15ddd28d-8445-4baa-ac7f-f41372e1344e"
+  },
+  {
+   "recorded": {
+    "primary_paths": [],
+    "reference_files_excluded": [],
+    "selection_rule": "format_variant_no_match",
+    "selection_status": "selection_error",
+    "support_artifacts": [
+     "MA Telehealth Workflow Email.docx",
+     "MA Telehealth Workflow Email.txt",
+     "Telehealth Roadmap.docx",
+     "Telehealth Workflow.docx"
+    ]
+   },
+   "recorded_error": "selection_error",
+   "replayed": {
+    "primary_paths": [
+     [
+      "MA Telehealth Workflow Email.docx"
+     ],
+     [
+      "Telehealth Roadmap.docx"
+     ],
+     [
+      "Telehealth Workflow.docx"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_uniform_primaries+rendition_copies",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "MA Telehealth Workflow Email.txt"
+    ]
+   },
+   "rubric_items": 52,
+   "task_id": "1aecc095-4d76-4b89-b752-1a0f870502cd"
+  },
+  {
+   "recorded": {
+    "primary_paths": [
+     [
+      "make_world_bank_chart.py"
+     ],
+     [
+      "world_bank_june_2025_article.md"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_separate_primaries",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "world_bank_global_growth_chart.jpg"
+    ]
+   },
+   "recorded_error": null,
+   "replayed": {
+    "primary_paths": [
+     [
+      "make_world_bank_chart.py"
+     ],
+     [
+      "world_bank_june_2025_article.md"
+     ],
+     [
+      "world_bank_global_growth_chart.jpg"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_separate_primaries+requested_image",
+    "selection_status": "ok",
+    "support_artifacts": []
+   },
+   "rubric_items": 49,
+   "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+  },
+  {
+   "recorded": {
+    "primary_paths": [],
+    "reference_files_excluded": [],
+    "selection_rule": "format_variant_no_match",
+    "selection_status": "selection_error",
+    "support_artifacts": [
+     "accessibility-docs.css",
+     "editorial-accessibility-checklist.html",
+     "editorial-accessibility-checklist.pdf",
+     "editorial-accessibility-guide.html",
+     "editorial-accessibility-guide.pdf",
+     "editorial-accessibility-quiz.html",
+     "editorial-accessibility-quiz.pdf"
+    ]
+   },
+   "recorded_error": "selection_error",
+   "replayed": {
+    "primary_paths": [
+     [
+      "editorial-accessibility-checklist.pdf"
+     ],
+     [
+      "editorial-accessibility-guide.pdf"
+     ],
+     [
+      "editorial-accessibility-quiz.pdf"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "accessibility-docs.css",
+     "editorial-accessibility-checklist.html",
+     "editorial-accessibility-guide.html",
+     "editorial-accessibility-quiz.html"
+    ]
+   },
+   "rubric_items": 67,
+   "task_id": "9a8c8e28-ce76-408b-83c3-488422892e58"
+  },
+  {
+   "recorded": {
+    "primary_paths": [],
+    "reference_files_excluded": [],
+    "selection_rule": "format_variant_no_match",
+    "selection_status": "selection_error",
+    "support_artifacts": [
+     "NoxaPulse_Share_Subscription_Agreement.docx",
+     "build_subscription_agreement.py",
+     "drafting_assumptions_and_placeholders.txt",
+     "noxapulse_share_subscription_agreement.md"
+    ]
+   },
+   "recorded_error": "selection_error",
+   "replayed": {
+    "primary_paths": [
+     [
+      "NoxaPulse_Share_Subscription_Agreement.docx"
+     ],
+     [
+      "build_subscription_agreement.py"
+     ],
+     [
+      "drafting_assumptions_and_placeholders.txt"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "noxapulse_share_subscription_agreement.md"
+    ]
+   },
+   "rubric_items": 84,
+   "task_id": "aad21e4c-1d43-45fc-899a-97754a1b1b63"
+  },
+  {
+   "recorded": {
+    "primary_paths": [
+     [
+      "generate_moodboard.py"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_primary_support_split",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "music_video_moodboard.png"
+    ]
+   },
+   "recorded_error": null,
+   "replayed": {
+    "primary_paths": [
+     [
+      "generate_moodboard.py"
+     ],
+     [
+      "music_video_moodboard.png"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_primary_support_split+requested_image",
+    "selection_status": "ok",
+    "support_artifacts": []
+   },
+   "rubric_items": 35,
+   "task_id": "b1a79ce1-86b0-41fb-97dc-9206dfd7b044"
+  },
+  {
+   "recorded": {
+    "primary_paths": [],
+    "reference_files_excluded": [],
+    "selection_rule": "format_variant_no_match",
+    "selection_status": "selection_error",
+    "support_artifacts": [
+     "customer-portal-design.docx",
+     "customer-portal-design.md",
+     "generate_customer_portal_docx.py"
+    ]
+   },
+   "recorded_error": "selection_error",
+   "replayed": {
+    "primary_paths": [
+     [
+      "customer-portal-design.docx"
+     ],
+     [
+      "generate_customer_portal_docx.py"
+     ]
+    ],
+    "reference_files_excluded": [],
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies",
+    "selection_status": "ok",
+    "support_artifacts": [
+     "customer-portal-design.md"
+    ]
+   },
+   "rubric_items": 35,
+   "task_id": "cebf301e-5ea7-41ae-b117-ad8f43e7ac22"
+  }
+ ],
+ "grade_experiment_id": "exp035_codex_foundry_full220",
+ "grade_file": "exp035_codex_foundry_full220__judge_gpt-5_6-sol__exp035_codex_foundry_full220_v2_sol_max__cfg_89820de9d9c4e2e3__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0__src_fd0db9d9d78d6d54__v2.2.json",
+ "grade_grader_source_hash": "fd0db9d9d78d6d5414bdf48694eb61726ed0a741def137a58bf8508205218c43",
+ "grade_sha256": "a7cd9b348028dfd06ee865b4158022a2e853447bffee52bf95a1f9c51a4f0734",
+ "grade_source_inference_revision": "dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0",
+ "ordered_task_ids": [
+  "15d37511-75c5-4c7f-81f1-16e00c0d95f3",
+  "15ddd28d-8445-4baa-ac7f-f41372e1344e",
+  "1aecc095-4d76-4b89-b752-1a0f870502cd",
+  "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+  "9a8c8e28-ce76-408b-83c3-488422892e58",
+  "aad21e4c-1d43-45fc-899a-97754a1b1b63",
+  "b1a79ce1-86b0-41fb-97dc-9206dfd7b044",
+  "cebf301e-5ea7-41ae-b117-ad8f43e7ac22"
+ ],
+ "ordered_task_ids_sha256": "b2ed72124660d52d20ffb3af870fa308a3ebdf3b2bbe4aed9dc495f240ac4851",
+ "refused_before_and_after": [],
+ "rubric_items": 424,
+ "rubric_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+ "schema": "selection-diff-v1",
+ "selector_sha256": "07222c6b62ffb48fb0e4c3bafae53dc0dadd45f2483c9cb3d57853d07f58574d",
+ "tasks_in_grade": 220
+}

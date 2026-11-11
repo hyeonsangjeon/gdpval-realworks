@@ -37,7 +37,7 @@ EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smok
                "tests/test_ghcp_ahp_server_only_staging.py", "tests/test_ghcp_ahp_runner_userns.py",
                "tests/test_ghcp_sol_offline_rehearsal.py", "tests/test_ghcp_ahp_default_policy.py",
                "tests/test_ghcp_ahp_output_collection.py", "tests/test_ghcp_ahp_token_ledger.py"]
-EXPECTED_COUNTS = {"contracts.xml": 2901, "workflow-guards.xml": 74}
+EXPECTED_COUNTS = {"contracts.xml": 2901, "workflow-guards.xml": 80}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -229,6 +229,45 @@ def test_result_check_refuses_missing_reduced_extra_failed_or_skipped_cases(tmp_
     assert not (directory / "test-counts.json").exists()
 
 
+def restore_main_backend_workflow(data):
+    # Main's reviewed successor-grader partition owns the current workflow.
+    # Check its exact bytes AND its existing ownership guard before rebuilding
+    # the unchanged historical bytes; neither hash accepts an arbitrary update.
+    from .test_a_test_file_nobody_runs_is_not_a_test import (
+        PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256, SUCCESSOR_GRADER_TEST,
+        _without_successor_grader_partition,
+    )
+    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
+
+    assert hashlib.sha256(data).hexdigest() == CURRENT_WORKFLOW_SHA256
+    assert PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256 == ORIGINAL_WORKFLOWS["backend-tests.yml"]
+    text = data.decode()
+    previous = _without_successor_grader_partition(yaml.safe_load(text))
+    for token in ("--ignore=" + SUCCESSOR_GRADER_TEST, SUCCESSOR_GRADER_TEST):
+        literal = " " + token + " "
+        assert text.count(literal) == 1
+        text = text.replace(literal, " ", 1)
+    assert yaml.safe_load(text) == previous
+    assert hashlib.sha256(text.encode()).hexdigest() == PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256
+    return text.encode()
+
+
+@pytest.mark.parametrize("mutation", ["core_missing", "pilot_missing", "core_duplicate", "pilot_duplicate", "other_byte", "old_bytes"])
+def test_main_backend_partition_and_historical_bytes_cannot_be_bypassed(mutation):
+    data = (ROOT / ".github/workflows/backend-tests.yml").read_bytes()
+    assert hashlib.sha256(restore_main_backend_workflow(data)).hexdigest() == ORIGINAL_WORKFLOWS["backend-tests.yml"]
+    if mutation == "old_bytes":
+        damaged = restore_main_backend_workflow(data)
+    elif mutation == "other_byte":
+        damaged = data + b"\n"
+    else:
+        token = (b" --ignore=" if mutation.startswith("core_") else b" ") + b"tests/test_gpt56_grader_successor_seal.py "
+        assert data.count(token) == 1
+        damaged = data.replace(token, b" " if mutation.endswith("missing") else token + token, 1)
+    with pytest.raises(AssertionError):
+        restore_main_backend_workflow(damaged)
+
+
 @pytest.mark.parametrize("name,expected", ORIGINAL_WORKFLOWS.items())
 def test_original_workflow_bytes_and_historical_hashes_are_preserved(name, expected):
     assert re.fullmatch(r"[0-9a-f]{64}", expected)
@@ -238,6 +277,8 @@ def test_original_workflow_bytes_and_historical_hashes_are_preserved(name, expec
         # Reverse only the exact, separately tested zero-turn preparation overlay.
         # Hash all historical bytes; never update the historical expected SHA.
         data = restore_workflow(data.decode()).encode()
+    elif name == "backend-tests.yml":
+        data = restore_main_backend_workflow(data)
     assert hashlib.sha256(data).hexdigest() == expected
 
 

@@ -4,11 +4,25 @@ when the config opts into the v2 path (PR2 task 203)."""
 from __future__ import annotations
 
 import json
+import socket
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
+
+# Scripted provider only. The production runner guard still executes; these
+# synthetic labels are not permission to grade on NAS or reach an API.
+pytestmark = pytest.mark.usefixtures("native_hosted_runner")
+
+
+@pytest.fixture(autouse=True)
+def no_network_in_dispatch_fixtures(monkeypatch):
+    def refused(*args, **kwargs):
+        raise AssertionError("network forbidden in scripted grader dispatch tests")
+    monkeypatch.setattr(socket.socket, "connect", refused)
+    monkeypatch.setattr(socket, "create_connection", refused)
+    monkeypatch.setattr(socket, "getaddrinfo", refused)
 
 
 def _final(text: str) -> dict:

@@ -662,13 +662,16 @@ def test_parenthesized_docx_preserves_explicit_word_requirements(requirement):
 def test_parenthesized_docx_does_not_promote_filenames_or_references(mention):
     selection = _uniform_selection(["report.docx", "report.md"], [mention])
 
-    assert selection.selection_status == "selection_error"
-    assert selection.task_class == "format_variants"
-    assert selection.selection_rule == "format_variant_no_match"
-    assert selection.primary_targets == []
-    assert selection.support_artifacts == [
-        _path("uniform", "report.docx"), _path("uniform", "report.md")
-    ]
+    # No Word requirement was read out of the mention: had there been one, the
+    # format-variant branch would have chosen report.docx by requirement
+    # (set_diff_then_format_variant / format_variant_required_format). It
+    # declined, and the .md was set aside as a same-name rendition copy by the
+    # fixed RENDITION_ORDER instead.
+    assert selection.selection_status == "ok"
+    assert selection.selection_rule == "set_diff_single+rendition_copies"
+    assert [target.evidence_rule for target in selection.primary_targets] == ["set_diff_single"]
+    assert _selected_names(selection) == {"report.docx"}
+    assert selection.support_artifacts == [_path("uniform", "report.md")]
 
 
 @pytest.mark.parametrize(
@@ -685,21 +688,44 @@ def test_parenthesized_docx_does_not_accept_unsupported_token_suffixes(token):
         [f"The deliverable is provided as a single Word {token} document."],
     )
 
-    assert selection.selection_status == "selection_error"
-    assert selection.selection_rule == "format_variant_no_match"
-    assert selection.primary_targets == []
+    # Not read as a Word requirement (that path is set_diff_then_format_variant);
+    # the pair resolves only through the rendition-copy order.
+    assert selection.selection_status == "ok"
+    assert selection.selection_rule == "set_diff_single+rendition_copies"
+    assert selection.support_artifacts == [_path("uniform", "report.md")]
 
 
 @pytest.mark.parametrize("reverse_files", [False, True], ids=["forward", "reversed"])
-def test_parenthesized_docx_keeps_multiple_matching_word_variants_ambiguous(reverse_files):
+def test_parenthesized_docx_sets_aside_only_the_same_name_copy_of_matching_word_files(
+    reverse_files,
+):
+    # Two Word files match the requirement, so the format-variant branch still
+    # cannot pick one and returns format_variant_no_match. Only report.md, a
+    # same-name rendition of report.docx, is set aside; the two distinct Word
+    # files are then selected by the unchanged rules, as they would have been
+    # had the copy never been left.
     names = ["report.docx", "report.md", "other.docx"]
     selection = _uniform_selection(
         list(reversed(names)) if reverse_files else names,
         [PARENTHESIZED_DOCX_REQUIREMENT],
     )
 
-    assert selection.selection_status == "selection_error"
-    assert selection.task_class == "format_variants"
-    assert selection.selection_rule == "format_variant_no_match"
-    assert selection.primary_targets == []
-    assert set(selection.support_artifacts) == {_path("uniform", name) for name in names}
+    assert selection.selection_status == "ok"
+    assert selection.task_class == "separate_equivalent"
+    assert selection.selection_rule == "set_diff_then_separate_primaries+rendition_copies"
+    assert _selected_names(selection) == {"report.docx", "other.docx"}
+    assert selection.support_artifacts == [_path("uniform", "report.md")]
+
+    # The same task without the copy: the unchanged rules give exactly these
+    # primaries under the same rule, so the only thing the copy changes is
+    # that it is listed as support. Setting it aside is not a looser reading.
+    without_copy = [name for name in names if name != "report.md"]
+    baseline = _uniform_selection(
+        list(reversed(without_copy)) if reverse_files else without_copy,
+        [PARENTHESIZED_DOCX_REQUIREMENT],
+    )
+    assert baseline.selection_status == "ok"
+    assert baseline.task_class == selection.task_class
+    assert baseline.primary_targets == selection.primary_targets
+    assert baseline.selection_rule + "+rendition_copies" == selection.selection_rule
+    assert baseline.support_artifacts == []

@@ -483,6 +483,18 @@ jobs:
       # a paid run, which is the shape of the 2026-08-19 apt outage.
       volumes:
         - /opt/hostedtoolcache:/opt/hostedtoolcache
+      # Runner admission reads ImageVersion (core/runner_environment.py:54)
+      # and admits no GitHub-hosted runner without it (:67-72), and step 8
+      # refuses every paid grade that is not admitted (step8_grade.py:2510-2514).
+      # Like ImageOS, which the env block below states for setup-python, the
+      # runner gives ImageVersion to its own steps but not to a job container.
+      # `--env NAME` with no value makes docker create copy the runner's own
+      # ImageVersion into the container, and every step inherits it. Never
+      # hard-code a value: a typed version would describe an image this job
+      # may not be running on. "Prove the paid grading runner admission"
+      # below checks it on the free dry run. grade and pilot-live carry the
+      # same option, so all three containers stay identical.
+      options: --env ImageVersion
     # A container job defaults `run:` to `sh -e {0}`, not to the runner's
     # `bash -e {0}` -- the runner will not assume an arbitrary image has bash.
     # The free 2026-08-24 rehearsal found it on the first step (`set: Illegal
@@ -561,12 +573,17 @@ jobs:
             .github/workflows/grade-run.yml
             batch-runner/core
             batch-runner/experiments
+            batch-runner/gpt54_comparison_preflight.py
+            batch-runner/gpt54_v2_grading_input.py
+            batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
             batch-runner/prompts
             batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
             batch-runner/schemas
             batch-runner/scripts
+            batch-runner/sol_batch_controls.py
+            batch-runner/sol_batch_grading.py
             batch-runner/step8_grade.py
             batch-runner/step9_merge_shards.py
           )
@@ -607,6 +624,41 @@ jobs:
         run: |
           cd batch-runner
           pip install -r requirements.txt
+
+      # The paid job's step 8 runs this same admission and refuses with exit 4
+      # when it fails, after approval and the Azure login. Here it costs
+      # nothing: no credential and no model call. It prints the receipt step 8
+      # would record and names every field the container did not receive.
+      - name: Prove the paid grading runner admission (model-free)
+        run: |
+          cd batch-runner
+          python - <<'PY'
+          import json
+
+          from core import runner_environment
+
+          observation = runner_environment.observe()
+          print(json.dumps(runner_environment.receipt("grading", observation), sort_keys=True))
+          if not observation["eligible_for_execution"]:
+              unset = sorted(name for name, value in observation.items() if value is None)
+              raise SystemExit("execution_environment_refused; unset: " + ", ".join(unset))
+          PY
+
+      # The same check the paid job runs before its Azure login; see "Resolve
+      # combined solve+grade USD admission" there. A grade that no approval in
+      # sol_batch_grading.APPROVALS names prints {"enabled": false}. An
+      # approved pair is checked against its own ceiling (a Sol run with its
+      # published solve spend, read anonymously) and exits 4 if the remaining
+      # budget cannot hold a grade.
+      - name: Check combined solve+grade USD admission (model-free)
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python sol_batch_grading.py preflight \
+            --experiment "$GRADE_EXPERIMENT_YAML" \
+            --config "grading_configs/$GRADE_CONFIG" \
+            --inference-revision "$GRADE_INFERENCE_REVISION" \
+            --shard-count "$GRADE_SHARD_COUNT"
 
       # The paid job runs this only when the config needs the Office renderer.
       # Here it is unconditional and deliberately so: a free dry run is the
@@ -687,6 +739,8 @@ jobs:
       # Same reason as grade-dry-run; see the note there.
       volumes:
         - /opt/hostedtoolcache:/opt/hostedtoolcache
+      # Same reason as grade-dry-run; see the note there.
+      options: --env ImageVersion
     # Same reason as grade-dry-run; see the note there. What makes it matter
     # more here is where the bash syntax sits: Run grading, Commit grade
     # result, Merge shards, Auto-analyze and Commit analysis all use [[ ]] or
@@ -847,12 +901,17 @@ jobs:
             .github/workflows/grade-run.yml
             batch-runner/core
             batch-runner/experiments
+            batch-runner/gpt54_comparison_preflight.py
+            batch-runner/gpt54_v2_grading_input.py
+            batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
             batch-runner/prompts
             batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
             batch-runner/schemas
             batch-runner/scripts
+            batch-runner/sol_batch_controls.py
+            batch-runner/sol_batch_grading.py
             batch-runner/step8_grade.py
             batch-runner/step9_merge_shards.py
           )
@@ -938,6 +997,28 @@ jobs:
                 + "\n"
               )
           PY
+
+      # Model-free and before any credential. A grade that no approval in
+      # sol_batch_grading.APPROVALS names exits 0 with enabled=false, and Run
+      # grading calls step8_grade.py as before. An approved pair writes
+      # enabled=true, and Run grading goes through sol_batch_grading.py, which
+      # holds every paid request to that approval's ceiling: a Sol run's solve
+      # and grade together (exp036_sol_fixed5 with exp036_v2_sol_max.yaml, the
+      # owner's USD 200), or a grading-only approval (the exp035 parity
+      # regrade, e35par.yaml). It exits 4 here, before the OIDC login, if the
+      # pair is not approved, or the published solve spend or task list, the
+      # config or its pinned scope, the grade file name, an earlier grade whose
+      # journal is not on main or the remaining budget is inadmissible.
+      - name: Resolve combined solve+grade USD admission
+        id: sol_usd
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python sol_batch_grading.py preflight \
+            --experiment "$GRADE_EXPERIMENT_YAML" \
+            --config "grading_configs/$GRADE_CONFIG" \
+            --inference-revision "$GRADE_INFERENCE_REVISION" \
+            --shard-count "$GRADE_SHARD_COUNT"
 
       - name: Validate Azure OIDC identity before remote access
         if: inputs.dry_run != true
@@ -1114,6 +1195,9 @@ jobs:
           # with it. 338 is the last value whose worst case (358.3min) still
           # lands inside the timeout on both the success and the failure path.
           GRADER_TIME_BUDGET_SEC: "20280"
+          # 'true' only for an approved pair; see "Resolve combined
+          # solve+grade USD admission" above.
+          SOL_COMBINED_USD: ${{ steps.sol_usd.outputs.enabled }}
         run: |
           cd batch-runner
           ARGS=(
@@ -1156,7 +1240,11 @@ jobs:
           fi
 
           set +e
-          python step8_grade.py "${ARGS[@]}"
+          if [[ "$SOL_COMBINED_USD" == "true" ]]; then
+            python sol_batch_grading.py run --inference-revision "$GRADE_INFERENCE_REVISION" -- "${ARGS[@]}"
+          else
+            python step8_grade.py "${ARGS[@]}"
+          fi
           RC=$?
           set -e
           echo "rc=$RC" >> "$GITHUB_OUTPUT"
@@ -1166,6 +1254,72 @@ jobs:
           # other non-zero is a real failure → fail loud below.
           if [[ "$RC" != "0" && "$RC" != "7" ]]; then
             exit "$RC"
+          fi
+
+      # An approved grade's journal: one per process, every reservation
+      # and settlement of this run's paid grading requests, and what the next
+      # preflight adds to the committed total. Committed on every outcome,
+      # because a budget stop exits 4 and fails Run grading, and that is the
+      # run whose spend most needs recording. An rc=4 partial stays in the
+      # grade artifact and is not committed.
+      #
+      # It runs before "Commit grade result", not after it. That step commits
+      # before its push loop and can still refuse after a rebase; a journal
+      # published on top would carry the refused grade commit with it. Going
+      # first also puts the journal on main before an rc=7 chunk dispatches
+      # the next one, whose preflight sums every committed journal.
+      #
+      # rebase.autoStash moves step 8's own tracked edits (a resumed partial,
+      # a removed _progress checkpoint) out of the rebase's way and back.
+      # GIT_CONFIG_COUNT needs git 2.31 or later; the image has 2.43.
+      - name: Commit combined solve+grade USD journal
+        id: usd_journal
+        if: always() && inputs.dry_run == false && steps.sol_usd.outputs.enabled == 'true'
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: rebase.autoStash
+          GIT_CONFIG_VALUE_0: "true"
+        run: |
+          set -euo pipefail
+          JOURNAL="data/grades/_combined_usd/${GRADE_EXPERIMENT_SLUG}/run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.combined_usd.jsonl"
+          if [[ ! -f "$JOURNAL" ]]; then
+            echo "[combined-usd] this run opened no journal; nothing to record"
+            exit 0
+          fi
+          # Committed whether or not it parses: a journal left off main is
+          # spend the next preflight cannot see, while a committed one that
+          # does not parse makes every later preflight refuse until it is
+          # repaired by hand.
+          JOURNAL_READABLE=true
+          if ! python batch-runner/sol_batch_grading.py check-journal --journal "$JOURNAL"; then
+            JOURNAL_READABLE=false
+            echo "::error::the combined USD journal does not parse; committing it anyway so every later preflight refuses until it is repaired"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$JOURNAL"
+          git commit --only -m "chore(grades): combined USD journal for $GRADE_EXPERIMENT_YAML via $GRADE_CONFIG" -- "$JOURNAL"
+          JOURNAL_PUSHED=false
+          for attempt in 1 2 3 4 5 6; do
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            if git push; then
+              JOURNAL_PUSHED=true
+              break
+            fi
+            if [[ "$attempt" -eq 6 ]]; then
+              break
+            fi
+            BACKOFF=$(( attempt * 5 + RANDOM % 5 ))
+            echo "::warning::combined USD journal push attempt $attempt rejected; rebasing and retrying in ${BACKOFF}s"
+            sleep "$BACKOFF"
+          done
+          if [[ "$JOURNAL_PUSHED" != "true" ]]; then
+            echo "::error::could not push the combined USD journal to ${GITHUB_REF_NAME} after 6 attempts; it is in this run's cost-ledger artifact"
+            exit 1
+          fi
+          git rev-parse HEAD >> "$PUBLISHED_COMMITS_FILE"
+          if [[ "$JOURNAL_READABLE" != "true" ]]; then
+            exit 1
           fi
 
       - name: Commit grade result
@@ -1420,8 +1574,17 @@ jobs:
           git rev-parse HEAD >> "$PUBLISHED_COMMITS_FILE"
           echo "committed=true" >> "$GITHUB_OUTPUT"
 
+      # An approved grade's next chunk is dispatched only once this chunk's
+      # combined USD journal is on main, because the next preflight sums the
+      # committed journals. That held before the last clause too: this `if`
+      # names no status function, so GitHub adds success(), and a journal
+      # that cannot be pushed fails its step and the job. The clause states
+      # the dependency where it is used, so a later always() here or a
+      # continue-on-error on the journal step cannot drop it. A next chunk
+      # dispatched by hand is refused by its own preflight instead
+      # (sol_batch_grading.check_grade_writers).
       - name: Auto-retrigger next chunk (time budget hit)
-        if: steps.grade.outputs.rc == '7' && steps.commit_grade.outputs.committed == 'true' && inputs.dry_run == false
+        if: steps.grade.outputs.rc == '7' && steps.commit_grade.outputs.committed == 'true' && inputs.dry_run == false && (steps.sol_usd.outputs.enabled != 'true' || steps.usd_journal.outcome == 'success')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RESOLVED_INFERENCE_REVISION: ${{ steps.inference.outputs.revision }}
@@ -1798,6 +1961,11 @@ jobs:
         # Both sidecars go up. The JSONL is the portable record with a digest;
         # the sqlite3 is what the process was writing into as it went, so it
         # survives even a kill that never let the exporter run.
+        #
+        # An approved grade's combined USD journal goes up too: when it cannot
+        # be pushed, this copy is the only record of what the grade spent, and
+        # it must be committed under data/grades/_combined_usd before any new
+        # grade of that experiment is dispatched.
         if: always() && inputs.dry_run == false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1806,6 +1974,7 @@ jobs:
           path: |
             data/grades/**/*.cost_ledger.jsonl
             data/grades/**/*.cost_ledger.sqlite3
+            data/grades/_combined_usd/**/*.combined_usd.jsonl
           if-no-files-found: warn
           retention-days: 90
 
@@ -2003,6 +2172,8 @@ jobs:
       image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
       volumes:
         - /opt/hostedtoolcache:/opt/hostedtoolcache
+      # Same reason as grade-dry-run; see the note there.
+      options: --env ImageVersion
     defaults:
       run:
         shell: bash -e {0}

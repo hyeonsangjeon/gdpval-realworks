@@ -329,6 +329,13 @@ batch-runner/scripts/*
 # cannot boot a guest it refuses and writes the refusal down.
 !batch-runner/scripts/run_agentic_v2_wiring_check.py
 
+# The parity regrade's two offline steps: which tasks of a published grade the
+# current selector would show the judge differently (its output is the regrade
+# config's pinned task list), and the run record that reports a diagnostic
+# regrade beside the published grade it does not replace. Model-free.
+!batch-runner/scripts/selection_diff_against_grade.py
+!batch-runner/scripts/merge_parity_regrade.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html

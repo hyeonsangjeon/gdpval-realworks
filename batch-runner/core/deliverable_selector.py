@@ -7,13 +7,13 @@ and optional deliverable summary into an auditable selection object.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from core.grader_routing import is_overall_style_criterion
+from core.grader_routing import Modality, classify_criterion, is_overall_style_criterion
 from core.media_types import GRADER_AUDIO_EXTENSIONS
 
 
@@ -55,6 +55,13 @@ DOCUMENT_EXTENSIONS = {
     # ``.json`` is already read as text by ``read_deliverable``; its absence
     # here was the same inconsistency ``.ipynb`` had in the other direction.
     ".json",
+    # An email saved as a message file. A task that asks for "an email to your
+    # manager" is answered with one as readily as with a ``.docx`` memo, and
+    # ``read_deliverable`` decodes it into headers, body and attachments. Its
+    # absence here refused exp036 task 02aa1805 outright (workbook + .eml).
+    # ``.msg`` is left out on purpose: it is an Outlook OLE binary nothing in
+    # the grader can read, so it may only ever be a support file.
+    ".eml",
 }
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tif", ".tiff"}
 SPREADSHEET_EXTENSIONS = {".xls", ".xlsx", ".xlsm", ".csv"}
@@ -62,6 +69,60 @@ WORD_EXTENSIONS = {".doc", ".docx"}
 PRESENTATION_EXTENSIONS = {".ppt", ".pptx"}
 VIDEO_EXTENSIONS = {".mp4", ".mov"}
 AUDIO_EXTENSIONS = set(GRADER_AUDIO_EXTENSIONS)
+# Kept apart from WORD_EXTENSIONS: that set also feeds the requested-format
+# patterns and the single-family checks, and an email is neither a requested
+# Word file nor a member of the Word family. It only shares the Word files'
+# criterion routing ("the email ...", "the memo ...").
+EMAIL_EXTENSIONS = {".eml"}
+# Evidence rule of an image target added because the rubric scores an image
+# file as part of the deliverable (``_with_requested_images``).
+REQUESTED_IMAGE_EVIDENCE_RULE = "requested_image_primary"
+
+# Same-content renditions and the fixed order used to set copies aside. Only
+# consulted where the format-variant branch would otherwise refuse a task
+# (``format_variant_no_match``). Earlier entries win, by an order fixed in
+# advance and never a judgement of which copy is better: the formats the
+# renderer draws, then the other formats the reader opens, then the legacy
+# binaries with neither, then the pages F4 makes companions, then .msg. Every
+# extension seen in gold-185, exp003, exp035 and exp036 is listed here or is a
+# distinct-file kind (code, archive, data, media) that is never set aside.
+RENDITION_ORDER: tuple[str, ...] = (
+    ".pdf",
+    ".docx",
+    ".xlsx",
+    ".xlsm",
+    ".pptx",
+    ".eml",
+    ".md",
+    ".txt",
+    ".csv",
+    ".doc",
+    ".xls",
+    ".ppt",
+    ".html",
+    ".htm",
+    ".msg",
+)
+_RENDITION_RANK = {ext: rank for rank, ext in enumerate(RENDITION_ORDER)}
+# Two renditions are copies of one another only inside one family. PDF has no
+# family because it is the print form of every family. A workbook and a memo
+# that happen to share a name are two deliverables, not one in two formats.
+_RENDITION_FAMILY = {
+    ".docx": "prose",
+    ".doc": "prose",
+    ".eml": "prose",
+    ".msg": "prose",
+    ".md": "prose",
+    ".html": "prose",
+    ".htm": "prose",
+    ".txt": "prose",
+    ".xlsx": "table",
+    ".xlsm": "table",
+    ".xls": "table",
+    ".csv": "table",
+    ".pptx": "slides",
+    ".ppt": "slides",
+}
 
 
 ITEM_TARGET_AUDIT_SCHEMA: dict[str, Any] = {
@@ -171,6 +232,30 @@ def select_deliverables(
     in the generated-candidate set and matches the expected kind.
     """
 
+    selection = _select_deliverables(
+        task_id=task_id,
+        deliverable_files=deliverable_files,
+        reference_file_urls=reference_file_urls,
+        reference_files=reference_files,
+        instruction=instruction,
+        rubric_items=rubric_items,
+        deliverable_summary=deliverable_summary,
+        set_aside_copies=True,
+    )
+    return _with_requested_images(selection, _coerce_rubric_items(rubric_items or []))
+
+
+def _select_deliverables(
+    *,
+    task_id: str,
+    deliverable_files: list[str],
+    reference_file_urls: list[str] | None,
+    reference_files: list[str] | None,
+    instruction: str,
+    rubric_items: list[Any] | None,
+    deliverable_summary: str,
+    set_aside_copies: bool,
+) -> DeliverableSelection:
     references = _reference_basenames(reference_files or [], reference_file_urls or [])
     reference_echo: list[str] = []
     generated: list[str] = []
@@ -227,7 +312,7 @@ def select_deliverables(
     if task_class == "format_variants":
         primary_paths = _choose_format_variant(generated, required_exts, deliverable_summary)
         if not primary_paths:
-            return _selection_error(
+            refused = _selection_error(
                 task_id,
                 task_class,
                 generated,
@@ -235,6 +320,58 @@ def select_deliverables(
                 "no requested format among format variants",
                 "format_variant_no_match",
             )
+            copies = _rendition_copies(generated, required_exts) if set_aside_copies else []
+            if not copies:
+                return refused
+            # The refusal above is about copies: one document left in two
+            # renditions, and nothing that says which to grade. Setting the
+            # lower-ranked copies aside and selecting again over what is left
+            # answers that with the fixed RENDITION_ORDER. Whatever is left is
+            # judged by the unchanged rules, and if they still cannot choose,
+            # the original refusal stands.
+            #
+            # A rendition the task itself names is tried first: "include a
+            # text file called data_flow.txt" keeps the .txt, not its .docx
+            # twin. The words come from the task's own prompt and rubric, never
+            # from the model's summary. The named copy stands only where the
+            # unchanged rules then grade it as a primary; otherwise keeping it
+            # would set its twin aside and leave that document with no primary
+            # at all, so the fixed order decides as before.
+            def without(set_aside: list[str]) -> DeliverableSelection | None:
+                reselected = _select_deliverables(
+                    task_id=task_id,
+                    deliverable_files=[p for p in deliverable_files if p not in set_aside],
+                    reference_file_urls=reference_file_urls,
+                    reference_files=reference_files,
+                    instruction=instruction,
+                    rubric_items=rubric_items,
+                    deliverable_summary=deliverable_summary,
+                    set_aside_copies=False,
+                )
+                if reselected.selection_status != "ok":
+                    return None
+                return replace(
+                    reselected,
+                    support_artifacts=[
+                        *reselected.support_artifacts,
+                        *(p for p in set_aside if p not in reselected.support_artifacts),
+                    ],
+                    selection_rule=f"{reselected.selection_rule}+rendition_copies",
+                )
+
+            task_text = _norm(
+                " ".join([instruction or ""] + [item.criterion for item in items])
+            )
+            named_copies = _rendition_copies(generated, required_exts, task_text)
+            kept_by_name = [p for p in copies if p not in named_copies]
+            if kept_by_name:
+                named = without(named_copies)
+                if named is not None and set(kept_by_name) <= set(
+                    _flatten_paths(named.primary_targets)
+                ):
+                    return named
+            fixed = without(copies)
+            return fixed if fixed is not None else refused
         support = [p for p in generated if p not in primary_paths]
         return DeliverableSelection(
             selection_status="ok",
@@ -270,6 +407,22 @@ def select_deliverables(
             support_artifacts=support,
             reference_files_excluded=reference_echo,
             selection_rule="set_diff_then_primary_support_split",
+        )
+
+    if task_class == "main_plus_companions":
+        # Emitted as main_plus_support so routing treats it exactly like the
+        # document-plus-images case; the rule says how it was reached.
+        primary_path = _document_like(generated)[0]
+        return DeliverableSelection(
+            selection_status="ok",
+            task_id=task_id,
+            task_class="main_plus_support",
+            primary_targets=[
+                _target_for_path(primary_path, "lone_document_with_companions")
+            ],
+            support_artifacts=[p for p in generated if p != primary_path],
+            reference_files_excluded=reference_echo,
+            selection_rule="set_diff_then_companion_support",
         )
 
     if task_class in ("separate_equivalent", "uniform_primaries"):
@@ -345,6 +498,17 @@ def plan_targets_for_criterion(
             selected_paths=_flatten_paths(targets),
             support_paths_visible=list(selection.support_artifacts),
         )
+
+    # A requested image (``_with_requested_images``) is shown to the manifest
+    # criteria above and to the criteria the grader sends to the renderer, not
+    # to every criterion. Beside a renderable document it would otherwise be an
+    # unreadable sibling, and every text criterion would be sent to render it.
+    if classify_criterion(criterion).modality is not Modality.VISUAL:
+        documents = [
+            t for t in targets if t.evidence_rule != REQUESTED_IMAGE_EVIDENCE_RULE
+        ]
+        if documents:
+            targets = documents
 
     if _is_cross_file_criterion(criterion_norm) and len(targets) > 1:
         return CriterionTargetPlan(
@@ -547,6 +711,16 @@ def _classify_task(
     if len(_document_like(generated)) >= 2:
         return "uniform_primaries"
 
+    # One document plus files of kinds the selector does not grade as
+    # documents -- a preview .html, a .js or .svg helper, an Outlook .msg --
+    # under other names. The document-plus-images case above already settles
+    # this shape by keeping the assets as support, and these companions are
+    # assets of the same sort. Unless the task names the companion's format,
+    # in which case it may be the very thing asked for and the selector still
+    # declines rather than guess.
+    if _lone_document_with_companions(generated, text):
+        return "main_plus_companions"
+
     return "ambiguous"
 
 
@@ -557,6 +731,199 @@ def _document_like(generated: list[str]) -> list[str]:
         if _extension(p) in DOCUMENT_EXTENSIONS
         and _extension(p) not in IMAGE_EXTENSIONS
     ]
+
+
+# How a task names a companion's format, where the bare extension is not the
+# only spelling in use. Any other extension is looked for as itself.
+_COMPANION_FORMAT_WORDS = {
+    ".html": r"html?|web ?pages?",
+    ".htm": r"html?|web ?pages?",
+    ".js": r"js|javascript",
+    ".msg": r"msg|outlook",
+}
+
+
+def _lone_document_with_companions(generated: list[str], text: str) -> bool:
+    documents = _document_like(generated)
+    if len(documents) != 1:
+        return False
+    document = documents[0]
+    companions = [
+        p for p in generated
+        if p != document and _extension(p) not in IMAGE_EXTENSIONS
+    ]
+    if not companions:
+        return False
+    for path in companions:
+        ext = _extension(path)
+        if not ext or _stem_key(path) == _stem_key(document):
+            return False
+        words = _COMPANION_FORMAT_WORDS.get(ext, re.escape(ext.lstrip(".")))
+        if re.search(rf"(?<![\w-])(?:{words})\b", text):
+            return False
+    return True
+
+
+# How a task names a rendition's format. In a group of copies, the one member
+# whose format the task names is kept ahead of RENDITION_ORDER: "include a text
+# file called data_flow.txt" (2c249e0f) keeps the .txt, not a same-name .docx,
+# and "Provide instructions in Markdown format" (854f3814) keeps the .md. The
+# office and PDF spellings are listed so that a task naming two formats of one
+# group leaves the choice to the fixed order. Several words are also plain
+# English ("word", "deck", "MD" for a physician), which is why exactly one
+# named member is required and two named members are never a guess.
+#
+# Formats the grader cannot open are left out on purpose: an Outlook ``.msg``
+# (see DOCUMENT_EXTENSIONS) and the legacy binary ``.doc``, ``.xls`` and
+# ``.ppt`` have no reader, so naming one is never a reason to keep it. The
+# fixed order then decides, and it ranks every rendition the judge can read
+# above them except a same-name ``.html``/``.htm`` page: [memo.doc, memo.txt]
+# keeps the .txt, but [guide.doc, guide.html] keeps the .doc. A page kept
+# beside another document becomes its companion (F4), so ranking the page
+# first would leave [guide.doc, guide.html, plan.csv] with no guide at all.
+_RENDITION_FORMAT_WORDS = {
+    ".pdf": r"pdfs?",
+    ".docx": r"docx?|word",
+    ".xlsx": r"xls[xm]?|excel|workbooks?|spreadsheets?",
+    ".xlsm": r"xls[xm]?|excel|workbooks?|spreadsheets?",
+    ".pptx": r"pptx?|powerpoint|slides?|decks?",
+    ".eml": r"eml",
+    ".md": r"md|markdown",
+    ".html": r"html?|web ?pages?",
+    ".htm": r"html?|web ?pages?",
+    ".txt": r"txt|text files?|plain[- ]text",
+    ".csv": r"csvs?",
+}
+
+
+# A format word inside a negation names nothing: "in .xlsx or .xls format (not
+# CSV/Google Sheet/PDF and not embedded)" (62f04c2f) asks for the workbook and
+# not its PDF, and "do not submit a plain-text file" does not ask for the .txt.
+# A negation reaches from "not", "no", "without", ... up to the word and ends at
+# a clause break (. ; : ( ) or a comma), so "No more than two pages, in
+# Markdown" still names Markdown. Only the 40 characters before the word count.
+_NEGATION = re.compile(r"\b(?:not|no|non|without|instead of|rather than)\b[^.;:(),]*$")
+_NEGATION_REACH = 40
+
+
+def _rendition_named(ext: str, task_text: str) -> bool:
+    words = _RENDITION_FORMAT_WORDS.get(ext)
+    if not words:
+        return False
+    for match in re.finditer(rf"(?<![\w-])(?:{words})\b", task_text):
+        before = task_text[max(0, match.start() - _NEGATION_REACH):match.start()]
+        if not _NEGATION.search(before):
+            return True
+    return False
+
+
+def _rendition_copies(
+    generated: list[str], required_exts: set[str], task_text: str = ""
+) -> list[str]:
+    """Files that are another rendition of a file that outranks them.
+
+    A copy shares its folder and its name (``_stem_key``) with the file kept,
+    is a different RENDITION_ORDER format, and belongs to the same family.
+    The file kept is the first by: a format the task requires
+    (``required_exts``); then the one member whose format ``task_text`` names
+    outside a negation (``_rendition_named``), when exactly one does; then
+    RENDITION_ORDER.
+    With no text, or none or several members named, the fixed order alone
+    decides. Everything else is a distinct file and is never set aside: a file
+    in another folder (``frontend/index.html`` beside ``relayer/src/index.ts``),
+    source code, archives, data and media, a cross-family pair such as a
+    workbook and a memo, and two files of one format.
+    """
+    groups: dict[tuple[str, str], list[str]] = {}
+    for path in generated:
+        if _extension(path) not in _RENDITION_RANK:
+            continue
+        key = (Path(path).parent.as_posix(), _stem_key(path))
+        groups.setdefault(key, []).append(path)
+    copies: set[str] = set()
+    for members in groups.values():
+        extensions = [_extension(p) for p in members]
+        if len(members) < 2 or len(set(extensions)) != len(extensions):
+            continue
+        if len({_RENDITION_FAMILY[e] for e in extensions if e in _RENDITION_FAMILY}) > 1:
+            continue
+        named = [p for p in members if _rendition_named(_extension(p), task_text)]
+        preferred = named[0] if len(named) == 1 else None
+        keep = min(
+            members,
+            key=lambda p: (
+                _extension(p) not in required_exts,
+                p != preferred,
+                _RENDITION_RANK[_extension(p)],
+            ),
+        )
+        copies.update(p for p in members if p != keep)
+    return [p for p in generated if p in copies]
+
+
+# A rubric line that scores an image file as part of the deliverable itself:
+# "Deliverable includes at least one chart image saved as a JPG (.jpg or
+# .jpeg)" (3baa0009), "Deliverable moodboard is in PNG file format."
+# (b1a79ce1). Anchored on the deliverable as the subject, so an image to be
+# placed inside a document ("The PDF contains ... as a .png image format",
+# 99ac6944) or an input named by its file name ("what are these.jpg",
+# f2986c1f) does not match. The prompt alone is not enough: where no scored
+# line depends on the image, showing it to the judge changes nothing but cost.
+_REQUESTED_IMAGE_CRITERION_PATTERN = re.compile(
+    r"^(?:the\s+)?(?:deliverable|submission)s?\b[^.]*?\b(?:saved as|in|as)\s+"
+    r"(?:an?\s+)?\.?(?P<fmt>jpe?g|png)\b"
+)
+_IMAGE_FORMAT_EXTENSIONS = {
+    "jpg": {".jpg", ".jpeg"},
+    "jpeg": {".jpg", ".jpeg"},
+    "png": {".png"},
+}
+
+
+def _requested_image_extensions(items: list[_RubricItemText]) -> set[str]:
+    found: set[str] = set()
+    for item in items:
+        match = _REQUESTED_IMAGE_CRITERION_PATTERN.search(_norm(item.criterion))
+        if match:
+            found.update(_IMAGE_FORMAT_EXTENSIONS[match.group("fmt")])
+    return found
+
+
+def _with_requested_images(
+    selection: DeliverableSelection,
+    items: list[_RubricItemText],
+) -> DeliverableSelection:
+    """Grade a requested image file beside the document, never instead of it.
+
+    "Accompany the article with a JPG chart" asks for two files. Images are
+    otherwise always support, and support never reaches a render, so every
+    criterion about the chart was excluded as having nothing to look at. Only
+    images in the requested format are added, only to a selection that already
+    has its document, and only after the existing targets. Which criteria get
+    to see them is decided in ``plan_targets_for_criterion``.
+    """
+    if selection.selection_status != "ok" or not selection.primary_targets:
+        return selection
+    wanted = _requested_image_extensions(items)
+    images = [p for p in selection.support_artifacts if _extension(p) in wanted]
+    if not images:
+        return selection
+    taken = {target.target_id for target in selection.primary_targets}
+    added: list[SelectionTarget] = []
+    for path in images:
+        target_id = _target_id(path)
+        if target_id in taken:
+            target_id = f"{target_id}_{_kind(path)}"
+        taken.add(target_id)
+        added.append(
+            _target_for_path(path, REQUESTED_IMAGE_EVIDENCE_RULE, target_id=target_id)
+        )
+    return replace(
+        selection,
+        primary_targets=[*selection.primary_targets, *added],
+        support_artifacts=[p for p in selection.support_artifacts if p not in images],
+        selection_rule=f"{selection.selection_rule}+requested_image",
+    )
 
 
 def _has_single_primary_with_support(
@@ -810,6 +1177,8 @@ def _match_file_specific_target(
         if ext in SPREADSHEET_EXTENSIONS and re.search(r"\b(workbook|spreadsheet|excel|worksheet|sheet|tab)\b", criterion):
             extension_matches.append(target)
         elif ext in WORD_EXTENSIONS and re.search(r"\b(word|docx|document|email|memo|letter|form|template|sop)\b", criterion):
+            extension_matches.append(target)
+        elif ext in EMAIL_EXTENSIONS and re.search(r"\b(email|e-mail|memo|letter)\b", criterion):
             extension_matches.append(target)
         elif ext in PRESENTATION_EXTENSIONS and re.search(r"\b(presentation|deck|pptx|slide|powerpoint|session)\b", criterion):
             extension_matches.append(target)

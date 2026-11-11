@@ -4159,6 +4159,34 @@ def _run_inference_impl(
     if client is not None and not typed_azure_main:
         runtime_resources.own_provider_client(client)
 
+    # Owner approval 2026-11-05: the GPT-5.6 Sol fixed-five batch runs on this
+    # generic codex_foundry path. sol_batch_controls returns at once unless the
+    # run asks Codex for gpt-5.6-sol; for the registered batch it adds the held
+    # 1M catalog and the between-attempt USD gate, and it refuses any other Sol
+    # run. The paused gpt56 pilot (pilot_wire_receipts) never loads it.
+    if execution_mode == "codex_foundry" and pilot_wire_receipts is None:
+        import sol_batch_controls
+
+        try:
+            sol_batch_controls.install(
+                executor,
+                experiment_id=experiment_id,
+                condition_key=condition_key,
+                codex_settings=codex_settings,
+                cost_ledger=codex_cost_ledger,
+                run_id=run_identity,
+                task_ids=ordered_task_ids,
+                max_retries=max_retries,
+                resume_max_rounds=resume_max_rounds,
+                task_deadlines=codex_deadlines,
+                restored_progress=prevalidated_progress,
+                workspace=WORKSPACE_DIR,
+                wall_timeout=wall_timeout,
+            )
+        except sol_batch_controls.SolBatchControlsRefused as exc:
+            print(f"❌ Sol batch controls refused this run before any attempt: {exc}")
+            sys.exit(1)
+
     print(f"   Manifest:           {manifest}")
 
     # 5. Build task lookup

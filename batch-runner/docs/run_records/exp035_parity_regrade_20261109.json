@@ -1,0 +1,498 @@
+{
+ "compare": {
+  "file": "exp036_sol_fixed5__judge_gpt-5_6-sol__exp036_v2_sol_max__cfg_1794403983325602__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_8708d9206ce4c9c9ba96f8bfba0745e12e597777__src_6f8811acb9de0b81__v2.2.json",
+  "other": {
+   "fixed_denominator_mean_pct": 72.664,
+   "fixed_denominator_mean_pct_full_denominator": 72.664,
+   "judged_only_mean_pct": 90.83,
+   "judged_only_mean_pct_full_denominator": 90.83,
+   "judged_tasks": 4,
+   "tasks": 5,
+   "unjudged_by_error": {
+    "content_filter": 1
+   }
+  },
+  "other_experiment_id": "exp036_sol_fixed5",
+  "other_grader_source_hash": "6f8811acb9de0b810b6f1dd263ace12b1dd5ea54f8c886352b15c4104557083b",
+  "per_task": [
+   {
+    "other": {
+     "error": null,
+     "judge_call_count": 227,
+     "pct": 94.13,
+     "pct_full_denominator": 94.13,
+     "primary_paths": [
+      [
+       "Email_to_Manager_Well_Recommendations.eml"
+      ],
+      [
+       "Illinois_Green_Hydrogen_Well_Screening.xlsx"
+      ]
+     ],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_then_separate_primaries"
+    },
+    "task_id": "02aa1805-c658-4069-8a6a-02dec146063a",
+    "this": {
+     "error": "no_deliverables",
+     "judge_call_count": 0,
+     "pct": 0.0,
+     "pct_full_denominator": 0.0,
+     "primary_paths": [],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_zero_guard"
+    }
+   },
+   {
+    "other": {
+     "error": null,
+     "judge_call_count": 112,
+     "pct": 98.18,
+     "pct_full_denominator": 98.18,
+     "primary_paths": [
+      [
+       "CS_SOAP_Note_2024-03-01.docx"
+      ]
+     ],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_single+rendition_copies"
+    },
+    "task_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
+    "this": {
+     "error": null,
+     "judge_call_count": 110,
+     "pct": 95.15,
+     "pct_full_denominator": 93.71,
+     "primary_paths": [
+      [
+       "SOAP_note_CS_2024-03-01.md"
+      ]
+     ],
+     "score_excluded_items": 1,
+     "selection_rule": "set_diff_single"
+    }
+   },
+   {
+    "other": {
+     "error": null,
+     "judge_call_count": 161,
+     "pct": 98.24,
+     "pct_full_denominator": 98.24,
+     "primary_paths": [
+      [
+       "Work Time Study - Activity Analysis.pptx"
+      ]
+     ],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_then_primary_support_split"
+    },
+    "task_id": "2ea2e5b5-257f-42e6-a7dc-93763f28b19d",
+    "this": {
+     "error": null,
+     "judge_call_count": 147,
+     "pct": 98.82,
+     "pct_full_denominator": 98.82,
+     "primary_paths": [
+      [
+       "Work_Time_Study_Analysis.pptx"
+      ]
+     ],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_then_primary_support_split"
+    }
+   },
+   {
+    "other": {
+     "error": null,
+     "judge_call_count": 98,
+     "pct": 72.77,
+     "pct_full_denominator": 72.77,
+     "primary_paths": [
+      [
+       "create_global_growth_chart.py"
+      ],
+      [
+       "world_bank_global_outlook_article.md"
+      ],
+      [
+       "world_bank_global_growth_2024_2025_2027.jpg"
+      ]
+     ],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_then_separate_primaries+requested_image"
+    },
+    "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+    "this": {
+     "error": null,
+     "judge_call_count": 99,
+     "pct": 70.09,
+     "pct_full_denominator": 70.09,
+     "primary_paths": [
+      [
+       "make_world_bank_chart.py"
+      ],
+      [
+       "world_bank_june_2025_article.md"
+      ],
+      [
+       "world_bank_global_growth_chart.jpg"
+      ]
+     ],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_then_separate_primaries+requested_image"
+    }
+   },
+   {
+    "other": {
+     "error": "no_deliverables",
+     "judge_call_count": 0,
+     "pct": 0.0,
+     "pct_full_denominator": 0.0,
+     "primary_paths": [],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_zero_guard"
+    },
+    "task_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e",
+    "this": {
+     "error": "no_deliverables",
+     "judge_call_count": 0,
+     "pct": 0.0,
+     "pct_full_denominator": 0.0,
+     "primary_paths": [],
+     "score_excluded_items": 0,
+     "selection_rule": "set_diff_zero_guard"
+    }
+   }
+  ],
+  "sha256": "6649ba7a6c07d06827bd017e58f306ed54736fdf9d8e85f2b533ae73a1c00ebf",
+  "task_ids": [
+   "02aa1805-c658-4069-8a6a-02dec146063a",
+   "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
+   "2ea2e5b5-257f-42e6-a7dc-93763f28b19d",
+   "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+   "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+  ],
+  "this": {
+   "fixed_denominator_mean_pct": 52.812,
+   "fixed_denominator_mean_pct_full_denominator": 52.524,
+   "judged_only_mean_pct": 88.02,
+   "judged_only_mean_pct_full_denominator": 87.54,
+   "judged_tasks": 3,
+   "tasks": 5,
+   "unjudged_by_error": {
+    "content_filter": 2
+   }
+  }
+ },
+ "experiment_id": "exp035_codex_foundry_full220",
+ "merged_headline": {
+  "fixed_denominator_mean_pct": 54.5248,
+  "fixed_denominator_mean_pct_full_denominator": 54.3723,
+  "judged_only_mean_pct": 81.0504,
+  "judged_only_mean_pct_full_denominator": 80.8237,
+  "judged_tasks": 148,
+  "tasks": 220,
+  "unjudged_by_error": {
+   "content_filter": 9,
+   "grader_refusal": 2,
+   "infrastructure": 55,
+   "unclassified_failure": 6
+  }
+ },
+ "mixed_identity_caveat": "merged rows come from two grader source hashes, two renderer fingerprints and two judge draws; it is a parity view, not a published grade",
+ "per_task": [
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 176,
+    "pct": 65.76,
+    "pct_full_denominator": 65.76,
+    "primary_paths": [
+     [
+      "GloNGroRealEstate_Year1_Revenue_Gross_Margin_Projection.xlsx"
+     ],
+     [
+      "build_glongro_projection.py"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 56,
+    "selection_rule": "format_variant_no_match"
+   },
+   "task_id": "15d37511-75c5-4c7f-81f1-16e00c0d95f3"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 93,
+    "pct": 76.96,
+    "pct_full_denominator": 76.96,
+    "primary_paths": [
+     [
+      "Modlev_Tail_Lamp_Negotiation_Strategy.docx"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_format_variant"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 46,
+    "selection_rule": "format_variant_no_match"
+   },
+   "task_id": "15ddd28d-8445-4baa-ac7f-f41372e1344e"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 134,
+    "pct": 77.64,
+    "pct_full_denominator": 77.64,
+    "primary_paths": [
+     [
+      "MA Telehealth Workflow Email.docx"
+     ],
+     [
+      "Telehealth Roadmap.docx"
+     ],
+     [
+      "Telehealth Workflow.docx"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_uniform_primaries+rendition_copies"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 52,
+    "selection_rule": "format_variant_no_match"
+   },
+   "task_id": "1aecc095-4d76-4b89-b752-1a0f870502cd"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 99,
+    "pct": 70.09,
+    "pct_full_denominator": 70.09,
+    "primary_paths": [
+     [
+      "make_world_bank_chart.py"
+     ],
+     [
+      "world_bank_june_2025_article.md"
+     ],
+     [
+      "world_bank_global_growth_chart.jpg"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_separate_primaries+requested_image"
+   },
+   "before": {
+    "error": null,
+    "judge_call_count": 88,
+    "pct": 67.11,
+    "pct_full_denominator": 53.93,
+    "primary_paths": [
+     [
+      "make_world_bank_chart.py"
+     ],
+     [
+      "world_bank_june_2025_article.md"
+     ]
+    ],
+    "score_excluded_items": 9,
+    "selection_rule": "set_diff_then_separate_primaries"
+   },
+   "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 139,
+    "pct": 58.7,
+    "pct_full_denominator": 58.7,
+    "primary_paths": [
+     [
+      "editorial-accessibility-checklist.pdf"
+     ],
+     [
+      "editorial-accessibility-guide.pdf"
+     ],
+     [
+      "editorial-accessibility-quiz.pdf"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 67,
+    "selection_rule": "format_variant_no_match"
+   },
+   "task_id": "9a8c8e28-ce76-408b-83c3-488422892e58"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 181,
+    "pct": 89.49,
+    "pct_full_denominator": 89.49,
+    "primary_paths": [
+     [
+      "NoxaPulse_Share_Subscription_Agreement.docx"
+     ],
+     [
+      "build_subscription_agreement.py"
+     ],
+     [
+      "drafting_assumptions_and_placeholders.txt"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 84,
+    "selection_rule": "format_variant_no_match"
+   },
+   "task_id": "aad21e4c-1d43-45fc-899a-97754a1b1b63"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 43,
+    "pct": 81.98,
+    "pct_full_denominator": 81.98,
+    "primary_paths": [
+     [
+      "generate_moodboard.py"
+     ],
+     [
+      "music_video_moodboard.png"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_primary_support_split+requested_image"
+   },
+   "before": {
+    "error": null,
+    "judge_call_count": 74,
+    "pct": 69.34,
+    "pct_full_denominator": 69.34,
+    "primary_paths": [
+     [
+      "generate_moodboard.py"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_primary_support_split"
+   },
+   "task_id": "b1a79ce1-86b0-41fb-97dc-9206dfd7b044"
+  },
+  {
+   "after": {
+    "error": null,
+    "judge_call_count": 70,
+    "pct": 100.0,
+    "pct_full_denominator": 100.0,
+    "primary_paths": [
+     [
+      "customer-portal-design.docx"
+     ],
+     [
+      "generate_customer_portal_docx.py"
+     ]
+    ],
+    "score_excluded_items": 0,
+    "selection_rule": "set_diff_then_separate_primaries+rendition_copies"
+   },
+   "before": {
+    "error": "selection_error",
+    "judge_call_count": 0,
+    "pct": 0.0,
+    "pct_full_denominator": 0.0,
+    "primary_paths": [],
+    "score_excluded_items": 35,
+    "selection_rule": "format_variant_no_match"
+   },
+   "task_id": "cebf301e-5ea7-41ae-b117-ad8f43e7ac22"
+  }
+ ],
+ "published": {
+  "file": "exp035_codex_foundry_full220__judge_gpt-5_6-sol__exp035_codex_foundry_full220_v2_sol_max__cfg_89820de9d9c4e2e3__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0__src_fd0db9d9d78d6d54__v2.2.json",
+  "graded_at": "2026-09-12T20:34:50Z",
+  "grader_source_hash": "fd0db9d9d78d6d5414bdf48694eb61726ed0a741def137a58bf8508205218c43",
+  "headline": {
+   "fixed_denominator_mean_pct": 52.324,
+   "fixed_denominator_mean_pct_full_denominator": 52.1116,
+   "judged_only_mean_pct": 81.0654,
+   "judged_only_mean_pct_full_denominator": 80.7363,
+   "judged_tasks": 142,
+   "tasks": 220,
+   "unjudged_by_error": {
+    "content_filter": 9,
+    "grader_refusal": 8,
+    "infrastructure": 55,
+    "unclassified_failure": 6
+   }
+  },
+  "renderer_fingerprint": {
+   "libreoffice_binary": "soffice",
+   "libreoffice_version": "LibreOffice 24.2.7.2 420(Build:2)",
+   "pymupdf_version": "1.28.2"
+  },
+  "sha256": "a7cd9b348028dfd06ee865b4158022a2e853447bffee52bf95a1f9c51a4f0734"
+ },
+ "regrade": {
+  "file": "exp035_codex_foundry_full220__judge_gpt-5_6-sol__e35par__cfg_947381242d273196__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0__src_02cbcf3824bd89a2__v2.2.json",
+  "graded_at": "2026-11-09T09:54:39Z",
+  "grader_source_hash": "02cbcf3824bd89a2ea1c24b0a3b9a75eb92e84c27971316925700ba4dd64b64f",
+  "renderer_fingerprint": {
+   "libreoffice_binary": "soffice",
+   "libreoffice_version": "LibreOffice 24.2.7.2 420(Build:2)",
+   "pymupdf_version": "2.1"
+  },
+  "run_status": "diagnostic",
+  "sha256": "87d42eb58724e2cdfa449dbc69984cb92837e12f41b041def8645501f7bfbacb",
+  "task_ids": [
+   "15d37511-75c5-4c7f-81f1-16e00c0d95f3",
+   "15ddd28d-8445-4baa-ac7f-f41372e1344e",
+   "1aecc095-4d76-4b89-b752-1a0f870502cd",
+   "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+   "9a8c8e28-ce76-408b-83c3-488422892e58",
+   "aad21e4c-1d43-45fc-899a-97754a1b1b63",
+   "b1a79ce1-86b0-41fb-97dc-9206dfd7b044",
+   "cebf301e-5ea7-41ae-b117-ad8f43e7ac22"
+  ]
+ },
+ "schema": "parity-regrade-record-v1",
+ "source_inference_revision": "dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0"
+}
