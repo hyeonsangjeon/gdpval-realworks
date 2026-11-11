@@ -6,7 +6,8 @@
 이 문서는 후속 구현·승인에 필요한 계획이지 실행 승인이나 실행 가능한 명령이 아니다.
 `execution_allowed=false`와 기존 잠금을 유지한다. 최초 계획서 커밋은
 `5c385bdc1549e52c3a79591aa794b2cdcc0ab552`다. 아래 수집 순서 상태는 후속
-오프라인 구현으로 갱신했다. dispatch·인증·모델 턴·유료 실행·채점은 하지 않는다.
+오프라인 구현으로 갱신했다. §6은 `e9de3a5188a5`를 기준으로 공개 과금 문서·핀 소스·
+기존 zero-turn 카탈로그를 재조사한 내용이다. dispatch·인증·모델 턴·유료 실행·채점은 하지 않는다.
 
 ## 1. 이번에는 나 경로: zero-turn 추가 실행 없음
 
@@ -257,11 +258,41 @@ deliverable 성공으로 처리하지 않는다. fixture의 `workspace/`는 삭�
 
 ## 6. GHCP usage 기준 비용 상한과 실행 전 결정
 
+2026-11-11 조사 결론: **Sol 요율은 확인했지만, 이 Codex AHP 경로의 과제당 하드
+사용량 상한은 확인하지 못했다.** CLI의 `--max-ai-credits`는 진행 중 응답을
+끝낸 뒤 멈추는 soft limit이며, 별도 네이티브 Codex 세션에 전달되는 계약도 없다.
+사용량을 받은 뒤 취소하는 코드를 하드 상한으로 추가하지 않는다. 런타임·가드·핀·
+실행 잠금은 변경하지 않았다. 출처와 필드별 구분은
+[과금·사용량 조사](ghcp-fixed-five-usage-budget.md)에 정리했다.
+
 | 단위/항목 | 두 선택지의 현재 값 | 해석 |
 | --- | --- | --- |
 | 입력·출력·reasoning·cache 토큰 | 첫 턴 미실행, `not available` | 수신한 GHCP/SDK usage 필드만 출처와 함께 보존; 미보고는 0이 아님 |
-| 연결/과제별 premium request 수·모델 배수 | `not available` | 클라이언트 턴 수와 같은 단위가 아님 |
-| 연결 1회·고정 5문제·채점의 USD 비용 상한 | 모두 `not available` | 검증된 GHCP 요율/배수/과금 단위·예산 차단이 없으므로 추정하지 않음 |
+| Sol 공개 요율: 입력 / cache read / cache write / 출력 | 기본 `400 / 40 / 500 / 2000`, long-context `800 / 80 / 1000 / 3000` AI credits / 1M tokens | GitHub 요율과 두 기존 zero-turn 카탈로그가 일치; 사용량·청구액 실측 아님. `1 AI credit = $0.01` |
+| premium request 수·Sol 배수 | 실제 값·숫자 상한 모두 `not available` | 배수 과금은 일부 기존 연간 플랜의 legacy 방식. 공개 legacy 표에 Sol 배수 없음; 계정 플랜은 조회하지 않음 |
+| 선택지 1: 연결 1회·과제당·고정 5문제·채점 비용 상한 | 모두 `not available` | 패치된 GHCP의 카탈로그 가격 확인은 예산 차단 증거가 아님 |
+| 선택지 3: 연결 1회·과제당·고정 5문제·채점 비용 상한 | 모두 `not available` | 기본 정책 수용도 동일한 사용량·진행 중 요청의 상한 문제를 해결하지 않음 |
+
+GitHub의 [현재 과금 문서](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing)는
+토큰별 AI credit 과금을 설명한다. Sol 기본/long-context 경계는 입력 `272K` tokens다.
+Max는 더 많은 reasoning 토큰을 쓸 수 있지만 고정 premium 배수는 공개되지 않았다.
+1M 설정 자체를 매 요청의 입력 1M tokens나 long-context 청구 실적으로 바꾸지 않는다.
+
+5과제에 대해 계산 가능한 것은 클라이언트 허용량 `5 × 64 = 320`턴이다.
+`5 × 32 = 160`도구와 `5 × 1,200 = 6,000`초도 클라이언트 기준 합계이며,
+서버 내부 작업·취소 지연·청구량의 최악 상한이 아니다.
+[legacy의 사용자 프롬프트당 1건 규칙](https://docs.github.com/en/copilot/reference/copilot-billing/request-based-billing-legacy/copilot-requests)이
+해당 계정/경로에 적용되고, 모든 과금 프롬프트가 이 admission을 거치며,
+Sol 배수 `M`이 확인된다는 조건에서만 과제당 `64M`, 5과제 `320M` premium requests가 된다.
+그 규칙에서는 자율 도구 호출에 `160M`을 더하지 않는다. 여기서는 Sol의 `M`과
+legacy 적용 조건이 확인되지 않아 **5과제 최악 premium request 수는 `not available`**이다.
+연결 확인 1턴과 별도 grader는 이 320턴에 포함하지 않는다.
+
+현재 토큰 과금에서는 한 클라이언트 턴에 여러 모델 요청·compaction이 들어갈 수 있고,
+최대 provider 요청 수·누적 과금 토큰·취소 후 초과분의 유한 상한이 증명되지 않았다
+(`ghcp_ahp_client.py:6-10,37-44,594-595`). 따라서 공개 요율을 알아도
+5과제 AI credits/USD 최악 상한은 `not available`이다. 이는 무한 과금이라는 관측이
+아니라, 주어진 64턴·32도구·1,200초만으로 유한 청구 상한을 도출할 수 없다는 판단이다.
 
 `gpt56_sol_ghcp_codex_vm_gate.yaml:119-133`은 GHCP native usage만 쓰고,
 미보고/미가격 항목을 null과 사유로 남기며 OpenAI/Foundry 요율 대입을 금지한다.
@@ -269,7 +300,9 @@ deliverable 성공으로 처리하지 않는다. fixture의 `workspace/`는 삭�
 1M은 context 요구값이지 출력 토큰 또는 지출 상한이 아니다.
 
 소유자가 선택지, 첫 턴/5문제 각각의 승인 범위, 유효한 token, 실제 GHCP 계정의
-과금 조건과 수치 예산을 정해야 한다. 엔지니어는 그 예산을 실행 전에 강제할 경로와
+과금 조건과 수치 예산을 정해야 한다. GitHub 계정/조직의 budget + stop-usage 설정은
+소유자가 검토할 별도 통제이며 과제별 예산 예약·차감 계약으로 간주하지 않는다.
+이번에는 계정/예산을 조회하거나 변경하지 않았다. 엔지니어는 예산을 실행 전에 강제할 경로와
 중단 시 초과 위험을 검증해야 한다. **비용 상한 미확정은 실행 전 막힘**으로 남긴다.
 숫자를 확인하지 못하면 본 계획으로 유료 dispatch하지 않는다.
 
