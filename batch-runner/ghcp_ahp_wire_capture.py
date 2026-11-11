@@ -334,7 +334,7 @@ def agent_fork_contract(prepared, state, manifest):
 
 
 def install(prepared, state, environment, *, model_free, credential="", session_policy=False, authenticated_zero_turn=False, metadata_socket=None,
-            patched_request=None):
+            patched_request=None, admission_profile=None):
     """Install the observer and optional narrow local initialization bridge.
 
     Native binary and source stay byte-identical to their original archives.
@@ -346,6 +346,11 @@ def install(prepared, state, environment, *, model_free, credential="", session_
         raise Refused("wire_mode_refused")
     if patched_request is not None and (not model_free or not session_policy):
         raise Refused("patched_runtime_requires_zero_turn_mode")
+    if admission_profile is not None and (admission_profile != "default_policy_unpatched" or patched_request is not None
+            or not model_free or not session_policy or not authenticated_zero_turn or metadata_socket is None):
+        raise Refused("default_policy_mode_refused")
+    if any(key.startswith("GHCP_AHP_WIRE_DEFAULT_") or key == "GHCP_AHP_WIRE_ADMISSION_PROFILE" for key in environment):
+        raise Refused("wire_inherited_default_profile_refused")
     if authenticated_zero_turn:
         from ghcp_ahp_zero_turn import require_context, validate_credential
         require_context()
@@ -387,10 +392,19 @@ def install(prepared, state, environment, *, model_free, credential="", session_
                  "native_binary_discovery": discovery, "agent_host_fork": fork_contract}
     if patched_request is not None:
         bootstrap.update(patched_runtime_requested=True, patched_build_receipt_sha256=patched_request["sha256"])
+    default_environment = {}
+    if admission_profile is not None:
+        import ghcp_ahp_default_policy as default
+        contract = default.binding(prepared, state, manifest, fork_contract)
+        contract_bytes = default.encoded(contract)
+        bootstrap.update(admission_profile=admission_profile, default_policy_runtime=contract)
+        default_environment = {"GHCP_AHP_WIRE_ADMISSION_PROFILE": admission_profile,
+            "GHCP_AHP_WIRE_DEFAULT_CONTRACT": contract_bytes.decode(),
+            "GHCP_AHP_WIRE_DEFAULT_CONTRACT_SHA256": default.sha(contract_bytes)}
     save_json(directory / "bootstrap.json", bootstrap)
     if "NODE_OPTIONS" in environment:
         raise Refused("wire_inherited_node_options_refused")
-    return {**environment, **patched_environment, **({"GHCP_AHP_WIRE_METADATA_SOCKET": str(metadata_socket)} if metadata_socket is not None else {}),
+    return {**environment, **patched_environment, **default_environment, **({"GHCP_AHP_WIRE_METADATA_SOCKET": str(metadata_socket)} if metadata_socket is not None else {}),
             **({"GHCP_AHP_WIRE_MANAGEMENT_SHA256": digest(MANAGEMENT_BRIDGE)} if session_policy else {}),
             "GHCP_AHP_WIRE_METADATA_SHA256": digest(METADATA_CLIENT), "NODE_OPTIONS": "--require=" + json.dumps(str(PRELOAD)),
             "GHCP_AHP_WIRE_DIR": str(directory), "GHCP_AHP_WIRE_MODE": "session-only" if session_policy else "model-free" if model_free else "connection",
@@ -596,6 +610,14 @@ def export(state, destination, *, credential="", patched_request=None):
             if file.is_symlink() or file.stat().st_size > 512 * 1024:
                 raise Refused("wire_metadata_refused")
             report[name] = strict_json(file.read_text())
+        if report["bootstrap"].get("admission_profile") is not None:
+            import ghcp_ahp_default_policy as default
+            if report["bootstrap"]["admission_profile"] != default.PROFILE:
+                raise Refused("default_policy_profile_binding_refused")
+            report.update(admission_profile=default.PROFILE, patched_ghcp=False, execution_allowed=False,
+                          requested_policy={}, requested={"model": DESIRED_MODEL["id"], "reasoning_effort": "max",
+                              "context_window": 1_000_000, "sandbox": "product_default", "approval": "product_default",
+                              "network": "product_default", "web_search": "product_default"})
         expected = report["bootstrap"]["observer_sha256"]
         if expected != digest(PRELOAD) or report["bootstrap"].get("vscode_commit") != PIN:
             raise Refused("wire_bootstrap_identity_refused")

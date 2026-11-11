@@ -306,6 +306,9 @@ function instrument({ spawn, fetch, fork }, options) {
   const { emit, nativeBinary, nativeSha256, modelFree, synthetic = false, seeds = [] } = options;
   const sessionOnly = options.sessionOnly === true;
   if (sessionOnly && modelFree !== true) fail('session_policy_mode_refused');
+  const admissionProfile = options.admissionProfile;
+  if (admissionProfile !== undefined && admissionProfile !== 'default_policy_unpatched') fail('default_policy_profile_refused');
+  const defaultPolicy = admissionProfile ? require('./ghcp_ahp_default_policy.cjs') : null;
   if (options.metadataRequest && (!sessionOnly || modelFree !== true)) fail('metadata_mode_refused');
   const mask = redactor(seeds);
   let sequence = 0, bytes = 0, ipcNumber = 0, httpNumber = 0;
@@ -325,6 +328,7 @@ function instrument({ spawn, fetch, fork }, options) {
     record('blocked', { boundary, reason, ...details });
     fail(reason);
   }
+  if (defaultPolicy) defaultPolicy.installLoadObserver(options, record);
   function requestAllowed(message, stream, inspection) {
     if (modelFree && sessionOnly && ZERO_TURN_CATALOG_RPC.has(message.method)) {
       const contract = hooksListContract(message, options.forkContract);
@@ -340,7 +344,12 @@ function instrument({ spawn, fetch, fork }, options) {
         p?.permissions === 'vscode-workspace-read-only' && p?.sandbox === undefined;
       // The named permission is the pinned harness's own raw-axis translation,
       // NOT a client-selected codex.permissionsPreset or proof of its effect.
-      if (!modelFree || !p || p.model !== 'gpt-5.6-sol' || p.modelProvider !== 'vscode-proxy' ||
+      if (defaultPolicy) {
+        const fields = defaultPolicy.threadRejections(message, modelFree);
+        if (fields.length) blocked('native_ipc', 'default_policy_thread_contract_refused', {
+          ...rpcRefusalDiagnostic(message, stream, inspection), admission_profile: admissionProfile,
+          rejected_fields: fields.map(row => row.field), rejections: fields });
+      } else if (!modelFree || !p || p.model !== 'gpt-5.6-sol' || p.modelProvider !== 'vscode-proxy' ||
           p.approvalPolicy !== 'untrusted' || !readOnly || !config || config.web_search !== 'disabled' ||
           p.allowProviderModelFallback !== undefined && p.allowProviderModelFallback !== false ||
           config.model_context_window !== undefined && config.model_context_window !== 1000000 ||
@@ -405,7 +414,9 @@ function instrument({ spawn, fetch, fork }, options) {
       if (sessionOnly && /^(?:turn\/|item\/)/.test(value.method || '')) blocked('native_event', 'session_policy_turn_or_tool_refused');
       if (sessionOnly && value.id === threadRequestId && stream === threadStream && typeof value.result?.thread?.id === 'string') {
         ownedThread = value.result.thread.id;
-        record('native_sandbox_scope', { stream, request_id: value.id, thread_id: ownedThread,
+        if (defaultPolicy) record('default_policy_sandbox_scope', { stream, request_id: value.id, thread_id: ownedThread,
+          ...defaultPolicy.sandboxScope(value.result, tempBinding, threadRequest, directoryIdentity) });
+        else record('native_sandbox_scope', { stream, request_id: value.id, thread_id: ownedThread,
           ...sandboxScope(value.result, tempBinding, threadRequest) });
       }
       raw('ipc_response', { stream, wire_bytes: Buffer.byteLength(text) }, value, text);
@@ -458,10 +469,19 @@ function instrument({ spawn, fetch, fork }, options) {
     for (const key of ['GHCP_AHP_PATCHED_RUNTIME_CONTRACT', 'GHCP_AHP_PATCHED_RUNTIME_CONTRACT_SHA256']) {
       if (settings.env[key] !== undefined && settings.env[key] !== patchedEnvironment[key]) fail('patched_runtime_fork_environment_refused');
     }
-    const env = { ...settings.env, ...patchedEnvironment, GHCP_AHP_WIRE_SEEDS: JSON.stringify(seeds) };
+    const defaultEnvironment = options.defaultPolicyEnvironment || {};
+    for (const [key, value] of Object.entries(defaultEnvironment)) {
+      if (settings.env[key] !== undefined && settings.env[key] !== value) fail('default_policy_fork_environment_refused');
+    }
+    const env = { ...settings.env, ...patchedEnvironment, ...defaultEnvironment, GHCP_AHP_WIRE_SEEDS: JSON.stringify(seeds) };
     const execArgv = [...(settings.execArgv || []), '--require', options.observerPath];
     record('agent_fork_instrumented');
     const child = fork(modulePath, args, { ...settings, env, execArgv });
+    if (defaultPolicy) {
+      if (!Number.isInteger(child.pid) || child.pid <= 0) fail('default_policy_child_pid_unavailable');
+      record('default_policy_child', { child_pid: child.pid, parent_pid: options.parentPid,
+        contract_sha256: options.defaultPolicyContractSha256, admission_profile: admissionProfile });
+    }
     if (options.patchedRuntime) {
       if (!Number.isInteger(child.pid) || child.pid <= 0) fail('patched_runtime_child_pid_unavailable');
       record('patched_runtime_child', { child_pid: child.pid, parent_pid: options.parentPid,
@@ -472,7 +492,7 @@ function instrument({ spawn, fetch, fork }, options) {
     if (sessionOnly && options.managementDirectory) {
       require('./ghcp_ahp_management_bridge.cjs').start({ child, record,
         directory: options.managementDirectory, stateRoot: options.forkContract.state_root,
-        bridgeSha256: options.managementSha256 });
+        bridgeSha256: options.managementSha256, admissionProfile });
     }
     return child;
   }
@@ -582,6 +602,7 @@ function instrument({ spawn, fetch, fork }, options) {
   }
   record('observer_installed', { model_free: modelFree, session_only: sessionOnly, native_binary_sha256: nativeSha256,
     entrypoint: options.entrypoint || 'fixture',
+    ...(admissionProfile ? { admission_profile: admissionProfile } : {}),
     hooks: ['native_spawn_stdio', 'capi_fetch_headers_body_stream'], observer_sha256: options.observerSha256 || 'fixture' });
   return { spawn: wrappedSpawn, fetch: wrappedFetch, fork: wrappedFork };
 }
@@ -605,6 +626,18 @@ function activate() {
   const forkContract = parseJson(forkEncoded);
   const hasPatchedRuntime = Object.hasOwn(process.env, 'GHCP_AHP_PATCHED_RUNTIME_CONTRACT') ||
     Object.hasOwn(process.env, 'GHCP_AHP_PATCHED_RUNTIME_CONTRACT_SHA256');
+  const admissionProfile = process.env.GHCP_AHP_WIRE_ADMISSION_PROFILE;
+  const defaultEncoded = process.env.GHCP_AHP_WIRE_DEFAULT_CONTRACT;
+  const defaultSha = process.env.GHCP_AHP_WIRE_DEFAULT_CONTRACT_SHA256;
+  let defaultPolicyContract, defaultPolicyEnvironment;
+  if (admissionProfile !== undefined || defaultEncoded !== undefined || defaultSha !== undefined) {
+    if (admissionProfile !== 'default_policy_unpatched' || hasPatchedRuntime || mode !== 'session-only' || !metadataSocket ||
+        typeof defaultEncoded !== 'string' || defaultEncoded.length > 65536 ||
+        crypto.createHash('sha256').update(defaultEncoded).digest('hex') !== defaultSha) fail('default_policy_mode_or_contract_refused');
+    defaultPolicyContract = parseJson(defaultEncoded);
+    defaultPolicyEnvironment = { GHCP_AHP_WIRE_ADMISSION_PROFILE: admissionProfile,
+      GHCP_AHP_WIRE_DEFAULT_CONTRACT: defaultEncoded, GHCP_AHP_WIRE_DEFAULT_CONTRACT_SHA256: defaultSha };
+  }
   const patchedRuntime = hasPatchedRuntime ? require('./ghcp_ahp_patched_runtime.cjs').activate({
     modelFree: mode !== 'connection', sessionOnly: mode === 'session-only',
     entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''), forkContract,
@@ -618,6 +651,7 @@ function activate() {
     metadataRequest: metadataSocket ? require('./ghcp_ahp_metadata_client.cjs').client(metadataSocket) : undefined,
     nativeBinary, nativeSha256, observerSha256, observerPath: __filename,
     forkContract, runtimeExecPath: process.execPath, parentArgv: process.argv, parentPid: process.pid, patchedRuntime,
+    admissionProfile, defaultPolicyContract, defaultPolicyContractSha256: defaultSha, defaultPolicyEnvironment,
     managementDirectory: mode === 'session-only' ? directory : undefined, managementSha256,
     entrypoint: process.env.VSCODE_ESM_ENTRYPOINT || path.basename(process.argv[1] || ''),
     claimThread() {

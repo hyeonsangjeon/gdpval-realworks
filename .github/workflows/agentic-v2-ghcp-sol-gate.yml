@@ -45,6 +45,11 @@ on:
         type: boolean
         default: false
         required: true
+      default_policy_unpatched:
+        description: Separate choice-3 zero-turn observation of unpatched defaults; never read-only or paid admission
+        type: boolean
+        default: false
+        required: true
 
 permissions:
   contents: read
@@ -68,6 +73,25 @@ jobs:
             echo "::error::Paid execution is not implemented or approved."
             exit 2
           fi
+      # BEGIN DEFAULT_POLICY_SELECTION_GUARD
+      - name: Refuse mixed default-policy inputs before any runtime or credential
+        env:
+          DEFAULT_PROFILE: ${{ inputs.default_policy_unpatched }}
+          AUTH_ZERO: ${{ inputs.authenticated_zero_turn }}
+          PAID: ${{ inputs.execute_paid }}
+          DRY: ${{ inputs.dry_run }}
+          ADAPTER: ${{ inputs.execution_adapter }}
+          CONNECTION: ${{ inputs.connection_only }}
+          CAPABILITY: ${{ inputs.capability_only }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEFAULT_PROFILE" == true ]]; then
+            if [[ "$AUTH_ZERO" != true || "$PAID" != false || "$DRY" != true || "$ADAPTER" != ahp-draft || "$CONNECTION" != false || "$CAPABILITY" != false ]]; then
+              echo "::error::default_policy_unpatched is zero-turn observation only."
+              exit 2
+            fi
+          fi
+      # END DEFAULT_POLICY_SELECTION_GUARD
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # Offline fixtures archive the exact historical grader commit.
@@ -173,7 +197,7 @@ jobs:
   grader-contract:
     name: Step8 input layout and policy only (no judge)
     needs: [task, paid-task]
-    if: ${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true && inputs.capability_only != true && inputs.authenticated_zero_turn != true }}
+    if: ${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true && inputs.capability_only != true && inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -231,7 +255,7 @@ jobs:
           include-hidden-files: false
 
   plan:
-    if: inputs.authenticated_zero_turn != true
+    if: inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true
     needs: offline-ci
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -262,7 +286,7 @@ jobs:
 
   task:
     name: Dry capture - ${{ matrix.task_id }}
-    if: inputs.authenticated_zero_turn != true
+    if: inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -308,7 +332,7 @@ jobs:
 
   ahp-zero-turn:
     name: Authenticated AHP session only - metadata GETs, zero inference
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.authenticated_zero_turn == true && inputs.execute_paid == false && inputs.dry_run == true && inputs.execution_adapter == 'ahp-draft' && inputs.connection_only == false && inputs.capability_only == false }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.authenticated_zero_turn == true && inputs.execute_paid == false && inputs.dry_run == true && inputs.execution_adapter == 'ahp-draft' && inputs.connection_only == false && inputs.capability_only == false && inputs.default_policy_unpatched != true }}
     needs: offline-ci
     environment: ghcp-sol-gate
     runs-on: ubuntu-24.04
@@ -405,9 +429,95 @@ jobs:
           retention-days: 7
           include-hidden-files: false
 
+  # BEGIN DEFAULT_POLICY_UNPATCHED_ZERO_TURN
+  ahp-default-policy-zero-turn:
+    name: Unpatched default-policy observation - zero turns, separate admission
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.authenticated_zero_turn == true && inputs.default_policy_unpatched == true && inputs.execute_paid == false && inputs.dry_run == true && inputs.execution_adapter == 'ahp-draft' && inputs.connection_only == false && inputs.capability_only == false }}
+    needs: offline-ci
+    environment: ghcp-sol-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: '3.12.11'
+      - name: Install only the pinned YAML reader without credentials
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Require this exact SHA's unique green push CI without using its patched build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: hyeonsangjeon/gdpval-realworks
+        run: |
+          set -euo pipefail
+          umask 077
+          evidence="$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+          mkdir -p "$evidence"
+          gh api "repos/$GH_REPO/actions/workflows/ghcp-ahp-patched-runtime-tests.yml/runs?event=push&status=success&head_sha=$GITHUB_SHA&per_page=100" > "$evidence/push-runs.json"
+          python -B batch-runner/ghcp_ahp_prewarm_zero_turn.py select \
+            --runs "$evidence/push-runs.json" --output "$evidence/green-ci.json"
+      - name: Prepare only the unchanged pinned vendor release and SDK, no overlay
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_probe.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+      - id: runner-userns
+        name: Preserve the sandbox and prepare only its exact bwrap userns permission
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+      - name: Authenticate once and observe one unpatched default-policy thread, never a turn
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GHCP_AUTHENTICATED_ZERO_TURN: 'true'
+          GHCP_PAID_EXECUTION: 'false'
+          GHCP_CONNECTION_ONLY: 'false'
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=10s 150s \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_metadata_broker.py" \
+              --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+              --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched" \
+              --runner-userns-receipt "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched/runner-userns.json" \
+              --admission-profile default_policy_unpatched
+      - name: Restore only this job's AppArmor profile or original userns sysctl
+        if: ${{ always() && steps.runner-userns.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py restore \
+            --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+      - name: Retain the separately labeled default-policy evidence, never runtime state
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-ahp-default-policy-unpatched-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-default-unpatched/default_policy_unpatched/*.json
+            ${{ runner.temp }}/ghcp-default-unpatched/default_policy_unpatched/default-policy-unpatched-summary.md
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+  # END DEFAULT_POLICY_UNPATCHED_ZERO_TURN
+
   ahp-connection:
     name: AHP connection only - one turn, zero tool approvals
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.execution_adapter == 'ahp-draft' && inputs.authenticated_zero_turn != true }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.execution_adapter == 'ahp-draft' && inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true }}
     needs: plan
     environment: ghcp-sol-gate
     runs-on: ubuntu-24.04
@@ -481,7 +591,7 @@ jobs:
 
   paid-task:
     name: Paid task - ${{ matrix.task_id }}
-    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.connection_only != true && inputs.capability_only != true && inputs.authenticated_zero_turn != true && needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || (needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true')) }}
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.connection_only != true && inputs.capability_only != true && inputs.authenticated_zero_turn != true && needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || (needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true')) && inputs.default_policy_unpatched != true }}
     needs: [plan, ahp-connection]
     environment: ghcp-sol-gate
     runs-on: ubuntu-24.04

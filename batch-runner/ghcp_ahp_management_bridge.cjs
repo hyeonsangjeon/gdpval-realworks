@@ -142,7 +142,10 @@ function childClient(child, record, timeoutMs = 15000) {
   };
 }
 
-function transaction({ call, workspace, record, claim }) {
+function transaction({ call, workspace, record, claim, admissionProfile }) {
+  if (admissionProfile !== undefined && admissionProfile !== 'default_policy_unpatched') fail('management_admission_profile_refused');
+  const defaultPolicy = admissionProfile ? require('./ghcp_ahp_default_policy.cjs') : null;
+  const policy = defaultPolicy ? {} : POLICY;
   let phase = 'new', staged, receipt;
   const operations = ['configure', 'readback', 'create'];
   let index = 0;
@@ -162,7 +165,7 @@ function transaction({ call, workspace, record, claim }) {
         const p = request.params;
         check(typeof p.session === 'string' && /^ahp-session:\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(p.session), 'management_init_session_refused');
         check(p.workspace === workspace, 'management_init_workspace_refused');
-        check(same(p.model, MODEL) && same(p.config, POLICY), 'management_init_settings_refused');
+        check(same(p.model, MODEL) && same(p.config, policy), 'management_init_settings_refused');
         claim();
         staged = copy(p);
         phase = 'configured';
@@ -177,16 +180,17 @@ function transaction({ call, workspace, record, claim }) {
         check(phase === 'reading', 'management_init_order_refused');
         if (Object.hasOwn(response, 'error')) { phase = 'failed'; return response; }
         const values = response.result?.values;
-        const resolved = projection(values);
+        const resolved = defaultPolicy ? defaultPolicy.resolvedPolicy(values) : projection(values);
         record('management_policy_readback', { values: resolved,
           permissions_preset: values?.['codex.permissionsPreset'] ?? 'absent' });
-        check(same(resolved, POLICY) && !Object.hasOwn(values || {}, 'codex.permissionsPreset'), 'management_init_policy_readback_refused');
-        check(same(staged.model, MODEL) && same(staged.config, POLICY), 'management_init_readback_refused');
+        if (!defaultPolicy) check(same(resolved, POLICY) && !Object.hasOwn(values || {}, 'codex.permissionsPreset'), 'management_init_policy_readback_refused');
+        check(same(staged.model, MODEL) && same(staged.config, policy), 'management_init_readback_refused');
         // This is a staged model plus the REAL resolver response, not an
         // applied thread report. The native refusal predicate stays unchanged.
         receipt = { settings: copy(staged), resolved_policy: resolved,
-          derived_permissions: 'vscode-workspace-read-only',
-          evidence: 'staged_model_and_upstream_policy_resolution_not_thread_applied', admission_allowed: false };
+          derived_permissions: defaultPolicy ? 'vscode-workspace' : 'vscode-workspace-read-only',
+          evidence: 'staged_model_and_upstream_policy_resolution_not_thread_applied', admission_allowed: false,
+          ...(defaultPolicy ? { admission_profile: admissionProfile } : {}) };
         phase = 'verified';
         return receipt;
       }
@@ -210,7 +214,7 @@ function transaction({ call, workspace, record, claim }) {
   };
 }
 
-function start({ child, directory, stateRoot, record, bridgeSha256 }) {
+function start({ child, directory, stateRoot, record, bridgeSha256, admissionProfile }) {
   if (!path.isAbsolute(directory) || directory !== path.join(stateRoot, 'wire') || fs.realpathSync(directory) !== directory ||
       fs.statSync(directory).uid !== process.getuid() || (fs.statSync(directory).mode & 0o777) !== 0o700) fail('management_directory_refused');
   const socketPath = path.join(directory, 'management.sock');
@@ -218,7 +222,7 @@ function start({ child, directory, stateRoot, record, bridgeSha256 }) {
   // Never reuse a previous server, socket or initialization claim.
   if (fs.existsSync(socketPath) || fs.existsSync(claimPath)) fail('management_init_reuse_refused');
   const handle = transaction({ call: childClient(child, record), workspace: pathToFileURL(path.join(stateRoot, 'workspace')).href,
-    record, claim() {
+    record, admissionProfile, claim() {
       try { fs.closeSync(fs.openSync(claimPath, 'wx', 0o600)); }
       catch { fail('management_init_reuse_refused'); }
     } });
@@ -250,7 +254,7 @@ function start({ child, directory, stateRoot, record, bridgeSha256 }) {
   server.listen(socketPath, () => {
     fs.chmodSync(socketPath, 0o600);
     const owner = { schema: 'ghcp-ahp-management-owner-v1', server_pid: process.pid, agent_pid: child.pid,
-      uid: process.getuid(), bridge_sha256: bridgeSha256 };
+      uid: process.getuid(), bridge_sha256: bridgeSha256, ...(admissionProfile ? { admission_profile: admissionProfile } : {}) };
     fs.writeFileSync(path.join(directory, 'management-owner.json'), JSON.stringify(owner) + '\n', { flag: 'wx', mode: 0o600 });
     record('management_bridge_ready', owner);
   });

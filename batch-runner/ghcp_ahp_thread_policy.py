@@ -35,7 +35,7 @@ def same(left, right):
     return json.dumps(left, sort_keys=True, allow_nan=False) == json.dumps(right, sort_keys=True, allow_nan=False)
 
 
-def validate(method, params, rpc):
+def validate(method, params, rpc, *, policy=POLICY):
     credential = getattr(rpc, "credential", "")
     methods = AUTH_METHODS if credential else METHODS
     managed = getattr(rpc, "management", None) is not None
@@ -51,7 +51,7 @@ def validate(method, params, rpc):
             raise Refused("zero_turn_auth_rpc_refused")
         return
     if method in {"resolveSessionConfig", "createSession"}:
-        if not same(base.pop("config", None), POLICY):
+        if not same(base.pop("config", None), policy):
             raise Refused("session_policy_config_refused")
     # CreateSessionParams has no model field. Never send an ignored/guessed
     # AHP key; hosted probes use explicit local management plus native launch config.
@@ -67,7 +67,7 @@ def validate(method, params, rpc):
             raise Refused("zero_turn_auth_not_confirmed")
 
 
-def exercise(rpc, observe=None):
+def exercise(rpc, observe=None, *, policy=POLICY, resolve_check=None):
     results = {}
     rpc.policy_results = results
     results["initialize"] = rpc.request("initialize", {"channel": ROOT_CHANNEL,
@@ -91,11 +91,13 @@ def exercise(rpc, observe=None):
         if "error" in results["authenticate"]:
             return results
     results["resolveSessionConfig"] = rpc.request("resolveSessionConfig", {"channel": ROOT_CHANNEL,
-        "provider": "codex", "workingDirectory": rpc.workspace, "config": copy.deepcopy(POLICY)})
+        "provider": "codex", "workingDirectory": rpc.workspace, "config": copy.deepcopy(policy)})
     resolved_result = results["resolveSessionConfig"].get("result")
     resolved = resolved_result.get("values", {}) if isinstance(resolved_result, dict) else {}
-    if not isinstance(resolved, dict) or any(not same(resolved.get(key), value) for key, value in POLICY.items()):
+    if not isinstance(resolved, dict) or any(not same(resolved.get(key), value) for key, value in policy.items()):
         raise Refused("session_policy_resolver_changed_request")
+    if resolve_check is not None:
+        resolve_check(resolved)
     # Keep only our five source-defined keys. Do not copy a preset, an unknown
     # key, or a server default back into the creation request.
     management = getattr(rpc, "management", None)
@@ -103,9 +105,9 @@ def exercise(rpc, observe=None):
         # Retained generic AHP-only helper. The hosted session-policy entrypoint
         # ALWAYS supplies its local bridge; bridge failures never fall back here.
         results["createSession"] = rpc.request("createSession", {"channel": rpc.session, "provider": "codex",
-            "workingDirectories": [rpc.workspace], "config": copy.deepcopy(POLICY)})
+            "workingDirectories": [rpc.workspace], "config": copy.deepcopy(policy)})
     else:
-        results["management_initialize"] = management.prepare(rpc.session, rpc.workspace, POLICY)
+        results["management_initialize"] = management.prepare(rpc.session, rpc.workspace, policy)
         results["createSession"] = management.create()
     if "error" not in results["createSession"]:
         results["subscribe"] = rpc.request("subscribe", {"channel": rpc.session})

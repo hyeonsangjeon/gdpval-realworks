@@ -236,11 +236,13 @@ def isolation_prefix(preserved=()):
         "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs"]
 
 
-def isolated_command(prepared, evidence, socket_path, *, prewarm_preparation=None):
+def isolated_command(prepared, evidence, socket_path, *, prewarm_preparation=None, admission_profile=None):
+    if admission_profile is not None and (admission_profile != "default_policy_unpatched" or prewarm_preparation is not None):
+        raise Refused("default_policy_mode_refused")
     preserved = ["COPILOT_GITHUB_TOKEN", "GHCP_AUTHENTICATED_ZERO_TURN", "GHCP_PAID_EXECUTION", "GHCP_CONNECTION_ONLY",
         "GITHUB_ACTIONS", "GITHUB_EVENT_NAME", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "RUNNER_ENVIRONMENT",
         "RUNNER_NAME", "RUNNER_OS", "RUNNER_ARCH", "ImageOS", "ImageVersion"]
-    if prewarm_preparation is not None:
+    if prewarm_preparation is not None or admission_profile is not None:
         preserved.extend(["GITHUB_REF", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF", "GITHUB_WORKFLOW_SHA"])
     environment = {key: os.environ[key] for key in preserved if key in os.environ}
     environment.update(PATH="/usr/bin:/bin", LANG="C.UTF-8")
@@ -251,6 +253,8 @@ def isolated_command(prepared, evidence, socket_path, *, prewarm_preparation=Non
         "--authenticated-zero-turn", "--metadata-socket", str(socket_path)]
     if prewarm_preparation is not None:
         command.extend(["--prewarm-zero-turn-preparation", str(prewarm_preparation)])
+    if admission_profile is not None:
+        command.extend(["--admission-profile", admission_profile])
     return command, environment
 
 
@@ -260,13 +264,21 @@ def main(argv=None):
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--prewarm-zero-turn-preparation", type=Path)
     parser.add_argument("--runner-userns-receipt", type=Path)
+    parser.add_argument("--admission-profile", choices=("default_policy_unpatched",))
     args = parser.parse_args(argv)
     broker = child = None
     handlers = {}
     try:
         require_runner()  # Before credential/file/process/network access; NAS refused.
         require_context()
-        if args.prewarm_zero_turn_preparation is not None:
+        if args.admission_profile is not None:
+            if args.prewarm_zero_turn_preparation is not None:
+                raise Refused("default_policy_mode_refused")
+            import ghcp_ahp_default_policy as default
+            identity = default.require_context(args.evidence)
+            import ghcp_ahp_runner_userns as userns
+            userns.verify_for_auth(args.runner_userns_receipt, args.prepared, args.evidence, identity)
+        elif args.prewarm_zero_turn_preparation is not None:
             import ghcp_ahp_prewarm_zero_turn as prewarm
             identity = prewarm.context(running=True)
             prewarm.verify_preparation(args.prewarm_zero_turn_preparation, args.prepared, args.evidence, identity)
@@ -291,6 +303,8 @@ def main(argv=None):
                 try:
                     options = ({"prewarm_preparation": args.prewarm_zero_turn_preparation}
                                if args.prewarm_zero_turn_preparation is not None else {})
+                    if args.admission_profile is not None:
+                        options["admission_profile"] = args.admission_profile
                     command, environment = isolated_command(args.prepared, args.evidence, socket_path, **options)
                     child = subprocess.Popen(command, env=environment, start_new_session=True)
                     code = child.wait(timeout=135)
@@ -310,7 +324,10 @@ def main(argv=None):
         return 2
     finally:
         if broker is not None:
-            save_json(args.evidence / "metadata-http.json", broker.receipt())
+            receipt = broker.receipt()
+            if args.admission_profile is not None:
+                receipt.update(admission_profile=args.admission_profile, execution_allowed=False, patched_ghcp=False)
+            save_json(args.evidence / "metadata-http.json", receipt)
         for signum, handler in handlers.items():
             signal.signal(signum, handler)
 
