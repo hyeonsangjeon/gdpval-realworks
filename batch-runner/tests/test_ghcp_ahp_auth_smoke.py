@@ -143,6 +143,46 @@ def evidence():
     return values, servers, rpc
 
 
+@pytest.mark.parametrize("damage", ["none", "unknown", "suffix", "params_extra", "cwds_empty", "cwd_unmasked",
+    "summary_missing", "summary_scope", "summary_bool", "ordinal_bool", "ordinal_zero", "reply_envelope",
+    "jsonrpc_wrong", "id_missing", "id_bool"])
+def test_receipt_consumer_accepts_only_the_guarded_redacted_hooks_list_contract(evidence, damage):
+    values, _, _ = evidence
+    rows = values["wire-capture.json"]["records"]
+    request = {"kind": "ipc_request", "stream": "ipc-1", "rpc_sequence": 1, "write_sequence": 1,
+        "trigger": "stdin.write", "delivery": "attempted", "params_summary": {
+            "fields": ["cwds"], "cwd_count": 1, "cwd_scope": "owned_probe_workspace"},
+        "value": {"id": 20, "method": "hooks/list", "params": {"cwds": ["[REDACTED]"]}}}
+    if damage == "unknown": request["value"]["method"] = "hooks/run"
+    elif damage == "suffix": request["value"]["method"] = "hooks/listAll"
+    elif damage == "params_extra": request["value"]["params"]["execute"] = True
+    elif damage == "cwds_empty": request["value"]["params"]["cwds"] = []
+    elif damage == "cwd_unmasked": request["value"]["params"]["cwds"] = ["/not-owned"]
+    elif damage == "summary_missing": del request["params_summary"]
+    elif damage == "summary_scope": request["params_summary"]["cwd_scope"] = "arbitrary"
+    elif damage == "summary_bool": request["params_summary"]["cwd_count"] = True
+    elif damage == "ordinal_bool": request["rpc_sequence"] = True
+    elif damage == "ordinal_zero": request["rpc_sequence"] = 0
+    elif damage == "reply_envelope": request["value"]["result"] = {}
+    elif damage == "jsonrpc_wrong": request["value"]["jsonrpc"] = "1.0"
+    elif damage == "id_missing": del request["value"]["id"]
+    elif damage == "id_bool": request["value"]["id"] = True
+    response = {"kind": "ipc_response", "stream": "ipc-1", "wire_bytes": 32,
+                "value": {"id": 20, "result": {"data": []}}}
+    rows[1:1] = [request, response]
+    for index, row in enumerate(rows, 1):
+        row.update(sequence=index, process="wire-1.jsonl", synthetic=False)
+    payloads = refresh(values)
+    if damage == "none":
+        result = smoke.validate_evidence(payloads, IDENTITY)
+        assert result["turns_sent"] == result["capi_inference_requests"] == 0
+        query, = values["wire-capture.json"]["native_hooks_list"]
+        assert query["request_sequence"] == 1 and query["hook_entries"] == 0 and query["response_wire_bytes"] == 32
+    else:
+        with pytest.raises(Refused):
+            smoke.validate_evidence(payloads, IDENTITY)
+
+
 def test_fake_servers_traverse_real_auth_metadata_rpc_and_receipt_adapters(evidence):
     values, servers, rpc = evidence
     details = smoke.validate_evidence(refresh(values), IDENTITY)

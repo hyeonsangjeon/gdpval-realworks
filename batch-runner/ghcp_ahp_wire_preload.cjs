@@ -14,6 +14,8 @@ const TOTAL = 16 * 1024 * 1024;
 const READ_ONLY_RPC = new Set(['initialize', 'initialized', 'model/list', 'config/read',
   'configRequirements/read', 'account/read', 'account/rateLimits/read', 'mcpServerStatus/list',
   'skills/list', 'plugin/list', 'permissionProfile/list', 'thread/list']);
+// Additional zero-turn permission only; never a prefix or the whole hooks API.
+const ZERO_TURN_CATALOG_RPC = new Set(['hooks/list']);
 const PRIVATE = /^(?:auth|authentication|authorization|cookie|setcookie|account|accounts|accountid|accountname|user|userid|username|email|tenant|tenantid|organization|orgid|identity|login|password|secret|credential|credentials|token|accesstoken|refreshtoken|idtoken|apikey|cwd|workingdirectory|workingdirectories|homedir)$/;
 const fail = code => { throw new Error(code); };
 function parseJson(text) {
@@ -161,13 +163,30 @@ function diagnosticScalar(value) {
 
 function rpcRefusalDiagnostic(message, stream, inspection) {
   // Diagnostics only. Never retain params, response bodies, ids or raw frames.
-  // A refused frame remains buffered; stdin.end() can inspect that SAME frame
-  // again. These ordinals count inspections/chunks, not distinct native calls.
+  // Ordinals count inspections/chunks, not successful native calls. A terminal
+  // frame refusal is latched so stdin.end() cannot count that frame again.
   const method = diagnosticScalar(message.method);
   return { stream, ...inspection, method: method.value, method_type: method.type,
     message_shape: { id_type: diagnosticScalar(message.id).type,
       has_result: Object.hasOwn(message, 'result'), has_error: Object.hasOwn(message, 'error') },
     sequence_scope: 'per_stream_inspection_not_unique_rpc', forwarded: false };
+}
+
+function hooksListContract(message, contract) {
+  const p = message.params, root = contract?.state_root;
+  const rooted = contract?.schema_version === 'ghcp-ahp-agent-fork-v1' &&
+    typeof root === 'string' && path.isAbsolute(root) && path.normalize(root) === root && root !== path.parse(root).root;
+  const object = p !== null && typeof p === 'object' && !Array.isArray(p);
+  const keysOnly = object && Object.keys(p).length === 1 && Object.hasOwn(p, 'cwds');
+  const cwds = object && Array.isArray(p.cwds) ? p.cwds : null;
+  const owned = rooted && cwds?.length === 1 && cwds[0] === path.join(root, 'workspace');
+  const summary = { fields: keysOnly ? ['cwds'] : 'invalid', cwd_count: cwds ? cwds.length : 'not_reported',
+    cwd_scope: owned ? 'owned_probe_workspace' : 'unverified' };
+  const id = typeof message.id === 'number' ? Number.isSafeInteger(message.id) && message.id >= 0 :
+    typeof message.id === 'string' && message.id.length > 0 && message.id.length <= 256;
+  const envelope = Object.keys(message).every(key => ['id', 'method', 'params', 'jsonrpc'].includes(key)) &&
+    (!Object.hasOwn(message, 'jsonrpc') || message.jsonrpc === '2.0');
+  return { accepted: Boolean(keysOnly && owned && id && envelope), summary };
 }
 
 function threadContractDiagnostic(message, modelFree, readOnly) {
@@ -228,6 +247,14 @@ function instrument({ spawn, fetch, fork }, options) {
     fail(reason);
   }
   function requestAllowed(message, stream, inspection) {
+    if (modelFree && sessionOnly && ZERO_TURN_CATALOG_RPC.has(message.method)) {
+      const contract = hooksListContract(message, options.forkContract);
+      if (!contract.accepted) blocked('native_ipc', 'wire_hooks_list_contract_refused', {
+        ...rpcRefusalDiagnostic(message, stream, inspection), params_summary: contract.summary });
+      // The exact owned path is used for validation/forwarding, never receipts.
+      mask.learn({ workingDirectories: message.params.cwds });
+      return { params_summary: contract.summary };
+    }
     if (sessionOnly && message.method === 'thread/start') {
       const p = message.params, config = p?.config;
       const readOnly = p?.sandbox === 'read-only' && p?.permissions === undefined ||
@@ -281,11 +308,17 @@ function instrument({ spawn, fetch, fork }, options) {
     for (const key of Object.keys(env)) if (key.startsWith('GHCP_AHP_WIRE_') || key === 'NODE_OPTIONS') delete env[key];
     const child = spawn(command, args, { ...settings, env });
     record('native_started', { stream, native_binary_sha256: nativeSha256, session_only: sessionOnly });
-    let rpcSequence = 0, writeSequence = 0, trigger = 'not_reported';
+    let rpcSequence = 0, writeSequence = 0, trigger = 'not_reported', refusedFrame;
     const outgoing = frames(text => {
+      // Keep the original refusal and pending frame, including on EOF. Do not
+      // consume it, authorize later packets, repeat side effects or emit twice.
+      if (refusedFrame) throw refusedFrame;
       const value = parseJson(text);
-      requestAllowed(value, stream, { rpc_sequence: ++rpcSequence, write_sequence: writeSequence, trigger }); // Before forwarding.
-      raw('ipc_request', { stream, delivery: 'attempted' }, value, text);
+      const inspection = { rpc_sequence: ++rpcSequence, write_sequence: writeSequence, trigger };
+      let catalog;
+      try { catalog = requestAllowed(value, stream, inspection); } // Before forwarding.
+      catch (error) { refusedFrame = error; throw error; }
+      raw('ipc_request', { stream, delivery: 'attempted', ...(catalog ? { ...inspection, ...catalog } : {}) }, value, text);
     }, /\r?\n/);
     const incoming = frames(text => {
       const value = parseJson(text);
@@ -293,7 +326,7 @@ function instrument({ spawn, fetch, fork }, options) {
       if (sessionOnly && value.id === threadRequestId && stream === threadStream && typeof value.result?.thread?.id === 'string') {
         ownedThread = value.result.thread.id;
       }
-      raw('ipc_response', { stream }, value, text);
+      raw('ipc_response', { stream, wire_bytes: Buffer.byteLength(text) }, value, text);
     }, /\r?\n/);
     const originalWrite = child.stdin.write;
     function inspectOutgoing(chunk) {

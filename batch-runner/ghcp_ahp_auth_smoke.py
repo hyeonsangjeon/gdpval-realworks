@@ -31,6 +31,7 @@ IDENTITY_KEYS = ("github_run_id", "github_run_attempt", "github_sha")
 READ_ONLY_NATIVE = frozenset({"initialize", "initialized", "model/list", "config/read", "configRequirements/read",
     "account/read", "account/rateLimits/read", "mcpServerStatus/list", "skills/list", "plugin/list",
     "permissionProfile/list", "thread/list"})
+ZERO_TURN_CATALOG_NATIVE = frozenset({"hooks/list"})
 REFUSALS = {"auth_smoke_metadata_refused", "auth_smoke_evidence_refused", "auth_smoke_policy_refused",
     "auth_smoke_runtime_refused", "auth_smoke_child_failed", "auth_smoke_process_timeout",
     "auth_publication_secret_detected", "auth_publication_secret_check_failed"}
@@ -147,7 +148,22 @@ def validate_evidence(payloads, identity):
             method = value.get("method", "")
             require(type(method) is str and not method.startswith(("turn/", "item/")))
             if kind == "ipc_request":
-                require(method in READ_ONLY_NATIVE | {"thread/start", "thread/unsubscribe", "thread/archive"})
+                if method in ZERO_TURN_CATALOG_NATIVE:
+                    # The verified observer checked the exact owned path before
+                    # redaction. Receipt consumers require its narrow projection,
+                    # not a broader arbitrary-cwd/list-method allowance.
+                    require(set(value) <= {"id", "method", "params", "jsonrpc"}
+                            and ("jsonrpc" not in value or value["jsonrpc"] == "2.0"))
+                    request_id = value.get("id")
+                    require(type(request_id) is int and 0 <= request_id <= 9007199254740991 or
+                            type(request_id) is str and 0 < len(request_id) <= 256)
+                    require(same(value.get("params"), {"cwds": ["[REDACTED]"]}))
+                    require(same(row.get("params_summary"), {"fields": ["cwds"], "cwd_count": 1,
+                                                          "cwd_scope": "owned_probe_workspace"}))
+                    require(all(type(row.get(key)) is int and row[key] > 0 for key in ("rpc_sequence", "write_sequence")))
+                    require(row.get("trigger") in {"stdin.write", "stdin.end"} and row.get("delivery") == "attempted")
+                else:
+                    require(method in READ_ONLY_NATIVE | {"thread/start", "thread/unsubscribe", "thread/archive"})
     require(len(observers) == 1 and len(sequences) <= 16)
     recalculated = wire.analyze(records, synthetic=False)
     for key, value in recalculated.items():

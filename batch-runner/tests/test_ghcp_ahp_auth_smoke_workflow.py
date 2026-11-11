@@ -116,6 +116,12 @@ def test_native_read_only_methods_exactly_match_the_unchanged_preload():
     assert smoke.READ_ONLY_NATIVE == frozenset(ast.literal_eval(literal))
 
 
+def test_zero_turn_only_catalog_addition_is_one_exact_method_in_both_consumers():
+    source = smoke.wire.PRELOAD.read_text()
+    literal = source.split("const ZERO_TURN_CATALOG_RPC = new Set(", 1)[1].split(");", 1)[0]
+    assert smoke.ZERO_TURN_CATALOG_NATIVE == frozenset(ast.literal_eval(literal)) == {"hooks/list"}
+
+
 def test_no_fake_mode_or_patched_activation_switch_is_exposed():
     source = Path(smoke.__file__).read_text()
     tree = ast.parse(source)

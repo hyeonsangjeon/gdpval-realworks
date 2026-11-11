@@ -324,7 +324,7 @@ def test_zero_turn_upload_preserves_original_markdown_bytes_and_excludes_other_l
     assert selected["summary.md"] == original
 
 
-@pytest.mark.parametrize("outcome", ["reported", "auth_refused", "session_refused", "no_thread", "http_blocked", "wrong_model", "native_rpc_refused"])
+@pytest.mark.parametrize("outcome", ["reported", "auth_refused", "session_refused", "no_thread", "http_blocked", "wrong_model", "native_rpc_refused", "hooks_list"])
 def test_full_authenticated_probe_exports_real_receipt_contract_and_always_cleans_up(
         backend_probe_fixture, context, monkeypatch, outcome):
     """Fake process/AHP/native bytes; real RPC/observer parsing/assessment/export."""
@@ -334,11 +334,20 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
         directory.mkdir(exist_ok=True)
         rows = [{"kind": "observer_installed", "entrypoint": "vs/platform/agentHost/node/agentHostMain",
                  "model_free": True, "session_only": True, "observer_sha256": probe.digest(wire_capture.PRELOAD)}]
-        if outcome in {"reported", "wrong_model"}:
+        if outcome == "hooks_list":
+            rows.extend([
+                {"kind": "ipc_request", "stream": "ipc-1", "rpc_sequence": 10, "write_sequence": 10,
+                 "trigger": "stdin.write", "delivery": "attempted", "params_summary": {
+                     "fields": ["cwds"], "cwd_count": 1, "cwd_scope": "owned_probe_workspace"},
+                 "value": {"id": 10, "method": "hooks/list", "params": {"cwds": ["[REDACTED]"]}}},
+                {"kind": "ipc_response", "stream": "ipc-1", "wire_bytes": 32,
+                 "value": {"id": 10, "result": {"data": []}}},
+            ])
+        if outcome in {"reported", "wrong_model", "hooks_list"}:
             rows.extend([
                 {"kind": "ipc_request", "stream": "ipc-1", "value": {"id": 2, "method": "thread/start", "params": {}}},
                 {"kind": "ipc_response", "stream": "ipc-1", "value": {"id": 2, "result": {
-                    "thread": {"id": "synthetic-thread"}, "model": "gpt-5.6-sol" if outcome == "reported" else "gpt-5.6-sol-fast",
+                    "thread": {"id": "synthetic-thread"}, "model": "gpt-5.6-sol-fast" if outcome == "wrong_model" else "gpt-5.6-sol",
                     "modelProvider": "vscode-proxy", "approvalPolicy": "untrusted", "reasoningEffort": "max",
                     "sandbox": {"type": "readOnly", "networkAccess": False}, "message": CANARY}}},
             ])
@@ -367,7 +376,7 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
     assert receipt["headless_started"] is True  # Auth/session denial does not erase the successful initialize.
     assert receipt["credential_environment_inherited"] is False
     assert receipt["model_calls"] == 0 and receipt["launch_allowed"] is False
-    assert calls["exit_code"] == (0 if outcome in {"reported", "wrong_model"} else 2)
+    assert calls["exit_code"] == (0 if outcome in {"reported", "wrong_model", "hooks_list"} else 2)
     if outcome == "auth_refused":
         assert receipt["reason_codes"][0] == "zero_turn_authentication_refused"
         assert len(rpc_wire.sent) == 2
@@ -393,11 +402,19 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
             ("hooks/list", 10, "stdin.write"), ("hooks/list", 11, "stdin.end")]
         assert all(row["forwarded"] is False and row["process"] == "wire-1.jsonl" for row in refusals)
         assert handshake["session_created"] is False
-    if outcome in {"reported", "wrong_model"}:
+    if outcome == "hooks_list":
+        queries = receipt["wire_capture"]["native_hooks_list"]
+        assert queries == handshake["wire_capture"]["native_hooks_list"]
+        query, = queries
+        assert query["method"] == "hooks/list" and query["request_sequence"] == 10
+        assert query["params_summary"] == {"fields": ["cwds"], "cwd_count": 1, "cwd_scope": "owned_probe_workspace"}
+        assert query["response_received"] is True and query["response_wire_bytes"] == 32 and query["hook_entries"] == 0
+        assert handshake["observed"]["model"] == "gpt-5.6-sol"
+    if outcome in {"reported", "wrong_model", "hooks_list"}:
         assert handshake["observed"]["approval"] == "untrusted"
         assert handshake["observed"]["reasoning_effort"] == "max"
         assert handshake["observed"]["context_window"] == "not_reported"
-        assert handshake["verdicts"]["model"] == ("matches" if outcome == "reported" else "mismatch")
+        assert handshake["verdicts"]["model"] == ("mismatch" if outcome == "wrong_model" else "matches")
     for path in output.glob("*.json"):
         assert CANARY not in path.read_text(), path.name
     diagnostics = json.loads((output / "backend-startup.json").read_text())
