@@ -20,6 +20,10 @@ CANARY = "SYNTHETIC_OUTPUT_CREDENTIAL_0123456789"
 TASK = fixtures.TASK_IDS[0]
 
 
+def run_with_budget(*args, **kwargs):
+    return rehearsal.run_rehearsal(*args, token_budget=fixtures.budget_config(), **kwargs)
+
+
 @pytest.fixture(autouse=True)
 def offline_only(monkeypatch):
     def forbidden(*args, **kwargs):
@@ -422,14 +426,14 @@ def test_delete_cannot_run_without_a_successful_seal(tmp_path, profile):
 
 @pytest.mark.parametrize("profile", [None, "", "choice1", "default", "workspace-write", "read-only", True])
 def test_unknown_profiles_never_select_a_fallback_path(tmp_path, profile):
-    report = rehearsal.run_rehearsal(tmp_path / "invalid", output_profile=profile)
+    report = run_with_budget(tmp_path / "invalid", output_profile=profile)
     assert report["exit_status"] == 2 and report["reason_codes"] == ["rehearsal_output_profile_refused"]
     assert report["tasks"] == [] and not (tmp_path / "invalid").exists()
 
 
 @pytest.mark.parametrize("profile", output.PROFILES)
 def test_both_profiles_run_all_five_through_sealed_output_and_existing_grader_contract(tmp_path, profile):
-    report = rehearsal.run_rehearsal(tmp_path / "five", output_profile=profile)
+    report = run_with_budget(tmp_path / "five", output_profile=profile)
     assert report["exit_status"] == 0 and report["fixture_pipeline_passed"] is True, report
     assert report["output_profile"] == profile
     assert report["execution_allowed"] is report["grading_allowed"] is report["gate5_passed"] is False
@@ -449,7 +453,7 @@ def test_both_profiles_run_all_five_through_sealed_output_and_existing_grader_co
 @pytest.mark.parametrize("field", ["output_collection", "receipt_sha256", "seal_sha256", "profile", "execution_allowed", "synthetic", "events"])
 def test_rehashed_outer_capture_cannot_drop_or_relabel_output_proof(tmp_path, profile, field):
     root = tmp_path / "five"
-    assert rehearsal.run_rehearsal(root, output_profile=profile)["exit_status"] == 0
+    assert run_with_budget(root, output_profile=profile)["exit_status"] == 0
     task = root / "tasks" / TASK
     folder = task / "capture"
     capture = json.loads((folder / "client-capture.json").read_text())
@@ -556,7 +560,7 @@ def test_collection_failure_fails_five_task_gate_without_grader_publication(tmp_
             data.pop("second.txt", None)
             return data
         monkeypatch.setattr(output, "read_snapshot", partial)
-    report = rehearsal.run_rehearsal(tmp_path / "failed", output_profile=profile)
+    report = run_with_budget(tmp_path / "failed", output_profile=profile)
     assert report["exit_status"] == 2 and report["fixture_pipeline_passed"] is False
     assert report["reason_codes"] == ["rehearsal_capture_incomplete"]
     assert report["grader_contract"] is None and not (tmp_path / "failed/grader-input").exists()

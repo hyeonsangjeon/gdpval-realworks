@@ -18,8 +18,10 @@ premium request 배수는 일부 기존 연간 플랜의 legacy 방식이며, �
 Sol의 공개 토큰 요율은 기존 두 zero-turn 카탈로그와 일치한다. 그러나 핀 Codex
 AHP가 보내는 usage는 사후 토큰 보고이지 세션별 GHCP 청구 예약/차감 계약이 아니다.
 Copilot CLI의 AI credit session limit도 공식적으로 **soft limit**이다.
-따라서 과제당 하드 사용량 가드는 구현하지 않았고 코드·가드·잠금은 그대로다.
+따라서 과제당 하드 사용량 가드는 구현하지 않았다. 후속 23:2x 지시로 별도
+컨트롤러 soft guard를 추가했지만 하드 상한·유료 잠금 해제를 주장하지 않는다.
 연결 첫 턴·5과제·grader 각각의 비용 상한은 `not available`로 유지한다.
+제안 예산과 조건부 초과분 계산은 [실행 계획서 §6](ghcp-fixed-five-first-turn-plans.md#6-ghcp-usage-기준-비용-상한과-실행-전-결정)에 있다.
 
 ## 과금 단위와 요율
 
@@ -65,7 +67,7 @@ Sol 레코드에 `multiplierNumeric`은 없다. 이는 **서버 카탈로그가 
 | Codex SDK → AHP, 실제 대상 | `thread/tokenUsage/updated.tokenUsage.{last,total}`: input/output/cached/cache-write/reasoning/total 토큰. AHP `chat/usage`에는 input/output/cacheRead, `_meta.reasoningOutputTokens/modelContextWindow/turnTokenTotals` | SDK 0.163.0 `TokenUsageBreakdown.ts:9`, `ThreadTokenUsage.ts:11`; `codexMapAppServerEvents.ts:514-558`. 이 매핑에는 premium 수·AI credits·청구액이 없음. AHP 매핑은 native `cacheWriteInputTokens`도 그대로 내보내지 않음 |
 | Codex 알림 수명 | thread/turn에 대응한 알림을 현재 chat에 전달 | `codexAgent.ts:3899-3934`; 활성 turn이 없으면 반환. 종료 후 전체 청구량 복원이나 모든 서버 내부 작업의 보고를 보장하지 않음 |
 | Copilot SDK/provider, 비교용 | live `assistant.usage.cost`, `copilotUsage`; `session.usage.getMetrics.{totalNanoAiu,totalPremiumRequestCost,modelMetrics}` | [G6]. usage 이벤트는 ephemeral이며 resume 때 재생되지 않음. metrics는 누계 조회이며 호출 전 비용 예약이 아님; Codex AHP에는 같은 RPC 계약이 없음 |
-| VS Code의 Copilot provider | `copilotUsage.sessionTotalNanoAiu/sessionAiCreditsStatus`, `quotaSnapshots`; chat `_meta['vscode.chatUsage']` | `common/meta/vscode/agentUsageMeta.ts:15-45,110-148`; `node/copilot/copilotAgentSession.ts:3440-3481`이 Copilot SDK metrics를 조회/게시. 상태 `partial/unavailable`이나 누락을 완전한 0으로 읽지 않음 |
+| VS Code의 Copilot provider | `copilotUsage.sessionTotalNanoAiu/sessionAiCreditsStatus`, `quotaSnapshots`; session `_meta['vscode.chatUsage'][chatURI]` | `common/meta/vscode/agentUsageMeta.ts:15-45,110-148`; `node/copilot/copilotAgentSession.ts:3440-3481`이 Copilot SDK metrics를 조회/게시. 상태 `partial/unavailable`이나 누락을 완전한 0으로 읽지 않음 |
 | CLI 1.0.103 | `--usage-output-file <file>`: 종료 시 JSON; `--max-ai-credits <credits>`: session limit | 보관된 핀 help `:220-231`. 종료 파일은 실시간 admission이 아니고 강제 종료 시 완전성도 보장되지 않음. CLI 도움말을 새로 실행하지 않음 |
 | 계정별 사후 사용량 | billing UI/다운로드 보고서; SDK `account.getQuota`의 premium/account quota | [G6]·[G7]. 세션 단위 누계와 계정/월 단위 잔액은 다름. 이번에는 이 인증 경로를 호출하지 않음 |
 
@@ -98,7 +100,16 @@ GHCP 과제 비용 조회로 대체할 수 없다(`codexAgent.ts:1593-1595,3675-
 있지만, 이미 진행 중인 응답의 지출·뒤늦은 usage·compaction을 초과 전에 차단했다는
 증거는 만들지 못한다. `codexProxyService.ts:342-364`는 요청을 전달하고 응답을
 읽으며, 여기에도 과제별 예산을 원자적으로 예약하는 계약은 없다.
-이번 지시의 불가 분기에 따라 **새 usage 가드나 fake 검증 코드는 추가하지 않았다**.
+21:5x 지시의 불가 분기에서는 새 가드를 추가하지 않았다. **23:2x 후속 구현**은
+`BudgetedSessionClient` + `TokenLedger`로 이 한계를 명시한 soft guard다. 두 출력
+프로필의 고정 5과제 경로에서 같은 장부를 공유하며, 예산 입력 부재·usage 누락/오류·
+장부 손실은 거부한다. 새 테스트는 합성 토큰의 계산/중단/봉인만 검증한다.
+
+계산은 input/output/cacheRead 보고와 turn 누계를 사용한다. 핀 매핑이 생략하는
+cache-write 수는 `null`로 두고 가능한 write 요율을 입력 전체에 추가 예비분으로 잡는다.
+이 보수적 예상은 cache-write 대체 과금일 때 과대 추정할 수 있으며 청구액이 아니다.
+입력 272K 경계는 누적 입력이 아니라 각 모델 요청에 적용한다. 중복 누계는 재차
+차감하지 않고 관측 누락으로 누계가 맞지 않으면 평균 tier로 때우지 않는다.
 
 | 계산 범위 | 계산 | 무엇을 상한으로 말할 수 있는가 |
 | --- | --- | --- |

@@ -11,6 +11,21 @@ import shutil
 from ghcp_sol_actions_gate import TASK_IDS
 
 
+def budget_config():
+    """Explicit SMALL synthetic test input, never a production/owner default."""
+    return {"task_credits": "10", "five_task_credits": "50", "usage_timeout_seconds": 1200}
+
+
+def usage_action(turn_id="turn1", *, input_tokens=12, output_tokens=2, cache_read_tokens=0, cumulative=None):
+    # Literal observed-model fixture, deliberately independent of request defaults.
+    total = cumulative if cumulative is not None else (input_tokens, output_tokens, cache_read_tokens)
+    return {"type": "chat/usage", "turnId": turn_id, "usage": {
+        "model": "@provider=vscode-proxy:gpt-5.6-sol", "inputTokens": input_tokens,
+        "outputTokens": output_tokens, "cacheReadTokens": cache_read_tokens,
+        "_meta": {"turnTokenTotals": [{"model": "@provider=vscode-proxy:gpt-5.6-sol",
+            "inputTokens": total[0], "outputTokens": total[1], "cachedTokens": total[2]}]}}}
+
+
 def first_turn_records(task_id):
     native = {"process": f"fixture-{task_id}", "stream": "ipc-1", "synthetic": True}
     http = {"process": f"fixture-{task_id}", "stream": "http-1", "synthetic": True}
@@ -35,6 +50,7 @@ def turn_steps(turn_id="turn1", *, text="SYNTHETIC answer; no benchmark task was
     steps = [
         {"kind": "begin", "turn_id": turn_id, "text": "SYNTHETIC fixture input; never send to a model."},
         {"kind": "event", "action": {"type": "chat/turnStarted", "turnId": turn_id}},
+        {"kind": "event", "action": usage_action(turn_id)},
     ]
     if tools:
         steps += [
@@ -107,6 +123,8 @@ class Port:
         return copy.deepcopy(self.observed_records)
 
     def send(self, message, timeout):
+        if message.get("params", {}).get("action", {}).get("type") == "chat/turnCancelled":
+            self.operations.append("interrupt")
         if message.get("method") == "disposeSession":
             self._cleanup_admitted()
             self.operations.append("dispose")

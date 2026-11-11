@@ -213,12 +213,41 @@ class SessionClient:
         return {"jsonrpc": "2.0", "method": "dispatchAction", "params": {
             "channel": self.chat, "clientSeq": self.client_seq, "action": action}}
 
+    def _admit_usage_turn(self, turn_id):
+        # Protocol primitive. Fixed-five tasks use BudgetedSessionClient below;
+        # their entrypoint and capture validator do not accept this bare client.
+        return True
+
+    def _usage_capture(self):
+        return {}
+
+    def _watchdog_delay(self):
+        return self.limits.seconds - (self.clock() - self.started)
+
+    def _control(self, message):
+        key = "dispose_attempts" if message["method"] == "disposeSession" else "cancel_attempts"
+        self.cleanup[key] += 1
+        try:
+            self._record("client_control", message)
+        except Refused:
+            self.cleanup["control_errors"].append("control_capture_limit")
+        try:
+            self.transport.send(message, timeout=CONTROL_TIMEOUT_SECONDS)
+        except Exception:
+            self.cleanup["control_errors"].append("control_send_failed")
+
     def _stop(self, reason, *, completed=False):
         # Close admission before ANY potentially blocking cancellation I/O.
         if self.status != "open":
             return
         self.status, self.reason = ("completed" if completed else "stopped"), reason
         self.done.set()
+        # Interrupt active generation first. Unlike dispose/host termination,
+        # cancellation must not be delayed by output collection. The transport
+        # still has to hold writers/cleanup before we read and seal any output.
+        for turn in sorted(self.active):
+            self._control(self._dispatch({"type": "chat/turnCancelled", "turnId": turn,
+                "duration": max(0, int((self.clock() - self.turn_started[turn]) * 1000))}))
         # A normal dispose can delete native TMPDIR. Hold all writers/cleanup,
         # collect and fsync a verified seal BEFORE sending any dispose/terminate.
         # On refusal, still perform emergency cleanup, but never report success.
@@ -229,22 +258,8 @@ class SessionClient:
                 self.output_collection.refuse(error)
                 self.cleanup["output_original_stop_reason"] = self.reason
                 self.status, self.reason = "stopped", self.output_collection.error
-        controls = [self._dispatch({"type": "chat/turnCancelled", "turnId": turn,
-                                  "duration": max(0, int((self.clock() - self.turn_started[turn]) * 1000))})
-                    for turn in sorted(self.active)]
-        controls.append({"jsonrpc": "2.0", "id": "dispose", "method": "disposeSession",
-                         "params": {"channel": self.session}})
-        for message in controls:
-            key = "dispose_attempts" if message["method"] == "disposeSession" else "cancel_attempts"
-            self.cleanup[key] += 1
-            try:
-                self._record("client_control", message)
-            except Refused:
-                self.cleanup["control_errors"].append("control_capture_limit")
-            try:
-                self.transport.send(message, timeout=CONTROL_TIMEOUT_SECONDS)
-            except Exception:
-                self.cleanup["control_errors"].append("control_send_failed")
+        self._control({"jsonrpc": "2.0", "id": "dispose", "method": "disposeSession",
+                       "params": {"channel": self.session}})
         try:
             self.cleanup["host_terminated"] = self.transport.terminate(timeout=TERMINATE_TIMEOUT_SECONDS) is True
         except Exception:
@@ -288,6 +303,8 @@ class SessionClient:
                     raise Refused("turn_admission_refused")
                 if self.turns and self.first_turn_attestation["verified"] is not True:
                     self._stop("first_turn_attestation_refused")
+                    return False
+                if not self._admit_usage_turn(turn_id):
                     return False
                 message = self._dispatch({"type": "chat/turnStarted", "turnId": turn_id,
                     "startedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -504,7 +521,7 @@ class SessionClient:
     def run(self):
         """Pump with a separate deadline watchdog, including a silent connection."""
         def watch():
-            while not self.done.wait(max(0, self.limits.seconds - (self.clock() - self.started))):
+            while not self.done.wait(max(0, self._watchdog_delay())):
                 if not self.tick():
                     return
         watchdog = threading.Thread(target=watch, daemon=True)
@@ -605,6 +622,108 @@ class SessionClient:
                 "generated_files": generated if workspace is not None or output_reference is not None else NOT_REPORTED,
                 "cleanup": self.cleanup, "capture_boundary": "all_delivered_frames_not_unseen_server_work",
                 "workspace_collected": workspace is not None or output_reference is not None,
+                **self._usage_capture(),
                 **({"output_collection": output_reference} if output_reference is not None else {})})
             save_json(path, result)
             return result
+
+
+class BudgetedSessionClient(SessionClient):
+    """Mandatory fixed-five controller for BOTH output/policy profiles.
+
+    No fallback to a bare protocol client or default credits. Live task transport
+    remains locked/unimplemented; fixtures exercise the same stop/capture code.
+    """
+
+    _INTEGRITY_ERRORS = frozenset({"invalid_ahp_event", "invalid_server_sequence", "divergent_event_replay",
+        "event_order_refused", "event_stream_lost", "invalid_jsonrpc_version", "action_rejected",
+        "capture_size_limit", "client_send_refused", "unknown_terminal_turn"})
+
+    def __init__(self, *args, token_ledger=None, task_id=None, **kwargs):
+        self.token_ledger, self.task_id = token_ledger, task_id
+        super().__init__(*args, **kwargs)
+
+    def _ledger(self):
+        from ghcp_ahp_token_ledger import TokenLedger
+        if self.token_ledger is None:
+            raise Refused("token_budget_required")
+        if (type(self.token_ledger) is not TokenLedger or self.task_id not in self.token_ledger.tasks
+                or self.output_collection is None or self.output_collection.profile != self.token_ledger.profile
+                or self.output_collection.synthetic is not self.token_ledger.synthetic):
+            raise Refused("token_ledger_binding_refused")
+        return self.token_ledger
+
+    def _admit_usage_turn(self, turn_id):
+        try:
+            self._ledger().admit(self.task_id, turn_id, self.clock())
+            return True
+        except Refused as error:
+            self._stop(str(error))
+            return False
+
+    def _check(self):
+        if not super()._check():
+            return False
+        try:
+            reason = self._ledger().check(self.task_id, self.clock())
+            if reason:
+                self._stop(reason)
+        except (Refused, OSError) as error:
+            self._stop(str(error) if isinstance(error, Refused) else "token_ledger_persistence_refused")
+        return self.status == "open"
+
+    def _watchdog_delay(self):
+        try:
+            return min(super()._watchdog_delay(), self._ledger().wait_seconds(self.task_id, self.clock()))
+        except Refused:
+            return 0
+
+    def _snapshot(self, snapshot):
+        state = snapshot.get("state", {})
+        if snapshot.get("resource") == self.chat and (state.get("turns") or state.get("activeTurn")):
+            self._ledger().fail(self.task_id, "token_ledger_resumed_history_refused")
+            raise Refused("token_ledger_resumed_history_refused")
+        super()._snapshot(snapshot)
+
+    def _action(self, channel, action):
+        kind = action.get("type", "")
+        if kind == "chat/turnStarted" and action.get("turnId") not in self._ledger().tasks[self.task_id]["admitted_turns"]:
+            # Keep the observed active turn so fail-closed also interrupts it.
+            super()._action(channel, action)
+            self._ledger().fail(self.task_id, "token_ledger_unadmitted_turn")
+            raise Refused("token_ledger_unadmitted_turn")
+        if kind == "chat/usage":
+            if channel != self.chat:
+                raise Refused("token_ledger_foreign_usage")
+            reason = self._ledger().observe(self.task_id, action.get("turnId"), self.channel_seq[channel],
+                                             action.get("usage"), self.clock())
+            if reason:
+                self._stop(reason)
+        super()._action(channel, action)
+        if kind == "chat/turnComplete":
+            self._ledger().complete_turn(self.task_id, action["turnId"])
+
+    def _stop(self, reason, *, completed=False):
+        was_open = self.status == "open"
+        super()._stop(reason, completed=completed)
+        if not was_open and (reason.startswith("token_") or reason in self._INTEGRITY_ERRORS):
+            # Late usage must not leave a previously completed task successful.
+            self.status, self.reason = "stopped", reason
+        try:
+            ledger = self._ledger()
+        except Refused:
+            return
+        try:
+            if reason in self._INTEGRITY_ERRORS:
+                # Envelope/order failures can happen BEFORE the usage parser.
+                # Do not keep a known subtotal looking like the aggregate total.
+                ledger.fail(self.task_id, "token_ledger_stream_integrity_refused")
+            ledger.end_task(self.task_id, self.reason)
+        except (Refused, OSError):
+            self.cleanup["token_ledger_error"] = "token_ledger_persistence_refused"
+            self.status, self.reason = "stopped", "token_ledger_persistence_refused"
+
+    def _usage_capture(self):
+        ledger = self._ledger()
+        ledger.verify()
+        return {"token_ledger": ledger.task_receipt(self.task_id)}
