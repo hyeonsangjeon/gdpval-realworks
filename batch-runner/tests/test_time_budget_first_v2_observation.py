@@ -416,6 +416,7 @@ def test_time_budget_first_v2_entrypoint_defaults_and_source_roles(handoff_sourc
     # CURRENT differs for these exact bytes. Historical positives remain on F.
     current = legacy.inspect_plan(profile)
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/agentic-v2-stage-run.yml",
         "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/step8_grade.py",

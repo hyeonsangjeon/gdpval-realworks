@@ -70,25 +70,20 @@ def _named_step(batch_job, name):
     raise AssertionError(f"no step named {name!r} in the batch-run job")
 
 
-def test_the_batch_job_picks_its_host_from_the_mode(batch_job, host_record):
+def test_the_batch_job_keeps_the_required_codex_host(batch_job, host_record):
     policy = json.loads(HOST_RECORD.read_text())["execution_policy"]
     runner = policy["github_hosted_runner"]
     assert runner == "ubuntu-24.04"
     assert policy["required_same_job_readiness"] == "ready"
     assert policy["prepared_host_observation"] == "not_yet_measured_on_Actions"
     assert host_record[f"{runner}-host"]["readiness"] == "user_namespaces_restricted_by_security_policy"
-    assert batch_job["runs-on"] == (
-        "${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' "
-        f"&& '{runner}' || 'ubuntu-latest' }}}}"
-    )
+    assert batch_job["runs-on"] == runner
 
 
-def test_every_other_mode_keeps_the_host_it_always_had(batch_job):
-    # The half that is not about Codex at all. This job runs every experiment
-    # this repository has; moving all of them to a different image to fix one
-    # mode would be a change nobody asked for, on a shared file, in a PR about
-    # something else.
-    assert "|| 'ubuntu-latest' }}" in batch_job["runs-on"]
+def test_every_other_mode_uses_the_same_explicit_standard_runner(batch_job):
+    # The repository-wide runner pin now covers every mode. Mode-specific
+    # sandbox readiness and credential guards remain unchanged below.
+    assert batch_job["runs-on"] == "ubuntu-24.04"
 
 
 def test_preparation_does_not_rewrite_the_historical_unprepared_host(host_record):
