@@ -427,11 +427,11 @@ def analyze(records, *, synthetic):
         "native_requests": [], "native_applied_snapshots": [], "native_base_configuration": [],
         "native_context_reports": [], "capi_requests": [], "capi_response_reports": [],
         "metadata_http": [], "capi_count_scope": "inference_only_metadata_gets_separate",
-        "capture_errors": [], "native_rpc_refusals": [], "records": records,
+        "capture_errors": [], "native_rpc_refusals": [], "native_hooks_list": [], "records": records,
         "limitations": ["diagnostic_only_not_admission", "response_report_not_independent_model_attestation",
                         "capi_field_availability_requires_real_response", "native_settings_are_not_served_settings",
                         "sdk_context_window_is_not_provider_capacity_proof"]}
-    pending, capi, headers, ended = {}, set(), {}, set()
+    pending, pending_hooks, capi, headers, ended = {}, {}, set(), {}, set()
     for record in records:
         if record.get("synthetic") is True:
             result["synthetic"] = True
@@ -444,22 +444,46 @@ def analyze(records, *, synthetic):
         if kind == "blocked" and record.get("boundary") == "native_ipc":
             result["native_rpc_refusals"].append({key: record[key] for key in (
                 "process", "sequence", "stream", "reason", "method", "method_type", "rpc_sequence",
-                "write_sequence", "trigger", "message_shape", "sequence_scope", "forwarded") if key in record})
+                "write_sequence", "trigger", "message_shape", "params_summary", "sequence_scope", "forwarded") if key in record})
         if kind == "ipc_request" and isinstance(value, dict):
             if "id" in value:
                 key = (*stream, type(value["id"]).__name__, str(value["id"]))
                 if key in pending:
                     raise Refused("wire_duplicate_rpc_id")
                 pending[key] = value
+                if value.get("method") == "hooks/list":
+                    query = {"method": "hooks/list", "process": stream[0], "stream": stream[1],
+                        "request_sequence": record.get("rpc_sequence", NOT_REPORTED),
+                        "record_sequence": record.get("sequence", NOT_REPORTED),
+                        "params_summary": record.get("params_summary", NOT_REPORTED),
+                        "request_delivery": record.get("delivery", NOT_REPORTED),
+                        "response_received": False, "response_kind": NOT_REPORTED,
+                        "response_wire_bytes": NOT_REPORTED, "cwd_entries": NOT_REPORTED, "hook_entries": NOT_REPORTED,
+                        "size_scope": "native_stdout_utf8_jsonl_including_newline_not_tokens"}
+                    result["native_hooks_list"].append(query)
+                    pending_hooks[key] = query
             if value.get("method") in {"thread/start", "thread/resume", "thread/fork", "turn/start"}:
                 result["native_requests"].append({"source": "native_client_request_only", "request": value})
         if kind == "ipc_response" and isinstance(value, dict):
             if "id" in value:
-                request = pending.pop((*stream, type(value["id"]).__name__, str(value["id"])), None)
+                key = (*stream, type(value["id"]).__name__, str(value["id"]))
+                request = pending.pop(key, None)
                 if request is None:
                     result["capture_errors"].append("wire_uncorrelated_native_reply")
                     continue
                 response = value.get("result")
+                query = pending_hooks.pop(key, None)
+                if query is not None:
+                    size = record.get("wire_bytes")
+                    query.update(response_received=True,
+                        response_kind="error" if "error" in value and "result" not in value else
+                                      "result" if isinstance(response, dict) and "error" not in value else "invalid",
+                        response_wire_bytes=size if type(size) is int and size > 0 else NOT_REPORTED)
+                    entries = response.get("data") if isinstance(response, dict) else None
+                    if query["response_kind"] == "result" and isinstance(entries, list):
+                        query["cwd_entries"] = len(entries)
+                        if all(isinstance(entry, dict) and isinstance(entry.get("hooks"), list) for entry in entries):
+                            query["hook_entries"] = sum(len(entry["hooks"]) for entry in entries)
                 if not isinstance(response, dict):
                     continue
                 method = request.get("method")
@@ -594,4 +618,5 @@ def export(state, destination, *, credential="", patched_request=None):
     return {"path": output.name, "sha256": digest(output), "capture_status": report["capture_status"],
             "synthetic": report["synthetic"], "admission_allowed": False,
             "native_rpc_refusals": report["native_rpc_refusals"],
+            "native_hooks_list": report["native_hooks_list"],
             **({"patched_runtime": patched_provenance} if patched_provenance is not None else {})}

@@ -22,6 +22,7 @@ FORK_FIXTURE = FIXTURE.with_name("ghcp_ahp_agent_fork_fixture.cjs")
 POLICY_FIXTURE = FIXTURE.with_name("ghcp_ahp_thread_policy_fixture.cjs")
 MANAGEMENT_FIXTURE = FIXTURE.with_name("ghcp_ahp_management_fixture.cjs")
 RPC_REFUSAL_FIXTURE = FIXTURE.with_name("ghcp_ahp_rpc_refusal_fixture.cjs")
+HOOKS_LIST_FIXTURE = FIXTURE.with_name("ghcp_ahp_hooks_list_fixture.cjs")
 
 
 def run_rpc_refusal_fixture(case):
@@ -34,19 +35,19 @@ def run_rpc_refusal_fixture(case):
     return result
 
 
-def test_pinned_catalog_refusal_and_disposal_reinspect_one_rpc_not_two_calls():
+def test_capability_catalog_refusal_is_latched_and_eof_does_not_count_another_request():
     result = run_rpc_refusal_fixture("pinned_disconnect")
     assert result["forwarded_methods"] == ["initialize", "initialized", "mcpServerStatus/list", "account/read",
         "config/read", "account/read", "config/read", "model/list", "skills/list"]
     capture = wire.analyze(result["records"], synthetic=True)
     refused = capture["native_rpc_refusals"]
-    assert len(refused) == 2
+    assert len(refused) == 1
     assert [(row["method"], row["rpc_sequence"], row["write_sequence"], row["trigger"]) for row in refused] == [
-        ("hooks/list", 10, 10, "stdin.write"), ("hooks/list", 11, 10, "stdin.end")]
-    assert [row["sequence"] for row in refused] == [12, 13]
+        ("hooks/list", 10, 10, "stdin.write")]
+    assert [row["sequence"] for row in refused] == [12]
     assert all(row["stream"] == "ipc-1" and row["forwarded"] is False
                and row["sequence_scope"] == "per_stream_inspection_not_unique_rpc" for row in refused)
-    assert capture["capture_errors"] == ["wire_model_free_rpc_refused"] * 2
+    assert capture["capture_errors"] == ["wire_model_free_rpc_refused"]
     assert capture["native_requests"] == capture["native_applied_snapshots"] == capture["capi_requests"] == []
     assert capture["admission_allowed"] is capture["gate_ready"] is False
 
@@ -60,7 +61,8 @@ def test_refusal_diagnostics_do_not_expand_allowlist_or_allow_response_envelopes
     result = run_rpc_refusal_fixture(case)
     assert result["forwarded_methods"] == [] and result["spawnCount"] == 1
     refused, = wire.analyze(result["records"], synthetic=True)["native_rpc_refusals"]
-    assert refused["reason"] == "wire_model_free_rpc_refused" and refused["method"] == method
+    assert refused["reason"] == ("wire_hooks_list_contract_refused" if case in {"hooks", "end_chunk"} else "wire_model_free_rpc_refused")
+    assert refused["method"] == method
     assert refused["method_type"] == "string" and refused["forwarded"] is False
     assert refused["rpc_sequence"] == refused["write_sequence"] == 1
     assert refused["trigger"] == ("stdin.end" if case == "end_chunk" else "stdin.write")
@@ -124,9 +126,136 @@ def test_rpc_diagnostics_reach_export_receipt_with_process_and_digest(prepared_f
     saved = json.loads((output / "wire-capture.json").read_text())
     assert receipt["sha256"] == probe.digest(output / "wire-capture.json")
     assert receipt["native_rpc_refusals"] == saved["native_rpc_refusals"]
-    assert [row["method"] for row in receipt["native_rpc_refusals"]] == ["hooks/list"] * 2
+    assert [row["method"] for row in receipt["native_rpc_refusals"]] == ["hooks/list"]
     assert all(row["process"] == "wire-1.jsonl" for row in receipt["native_rpc_refusals"])
     assert receipt["synthetic"] is True and receipt["admission_allowed"] is False
+
+
+def run_hooks_list_fixture(case):
+    process = subprocess.run(["node", str(HOOKS_LIST_FIXTURE), case], capture_output=True, text=True, timeout=20,
+                             env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
+    assert process.returncode == 0, process.stderr
+    result = json.loads(process.stdout)
+    assert result["real_processes"] == result["external_requests"] == 0
+    assert all(row["synthetic"] is True for row in result["records"])
+    assert "SYNTHETIC_hooks_secret" not in json.dumps(result)
+    return result
+
+
+HOOKS_PARAMS_SUMMARY = {"fields": ["cwds"], "cwd_count": 1, "cwd_scope": "owned_probe_workspace"}
+
+
+@pytest.mark.parametrize("case", ["valid", "prelude", "end_chunk", "fragmented", "jsonrpc", "string_id"])
+def test_hooks_list_exact_owned_workspace_query_is_forwarded_once_and_measured(case):
+    result = run_hooks_list_fixture(case)
+    capture = wire.analyze(result["records"], synthetic=True)
+    query, = capture["native_hooks_list"]
+    assert query["method"] == "hooks/list" and query["request_sequence"] == (10 if case == "prelude" else 1)
+    assert query["params_summary"] == HOOKS_PARAMS_SUMMARY and query["request_delivery"] == "attempted"
+    assert query["response_received"] is True and query["response_kind"] == "result"
+    assert query["response_wire_bytes"] == result["response_bytes"][0]
+    assert query["cwd_entries"] == 1 and query["hook_entries"] == 2
+    assert query["size_scope"] == "native_stdout_utf8_jsonl_including_newline_not_tokens"
+    assert result["forwarded_methods"].count("hooks/list") == 1 and result["underlying_ends"] == 1
+    request, = [row for row in result["records"] if row["kind"] == "ipc_request" and row["value"]["method"] == "hooks/list"]
+    assert request["value"]["params"] == {"cwds": ["[REDACTED]"]}
+    assert "/fixture/owned/workspace" not in json.dumps(result["records"])
+    assert capture["native_requests"] == capture["native_applied_snapshots"] == capture["capi_requests"] == []
+    assert capture["capture_errors"] == [] and capture["native_rpc_refusals"] == []
+    assert capture["admission_allowed"] is capture["gate_ready"] is False
+
+
+def test_two_genuine_hooks_list_calls_are_not_collapsed_but_eof_adds_no_third_call():
+    result = run_hooks_list_fixture("distinct")
+    queries = wire.analyze(result["records"], synthetic=True)["native_hooks_list"]
+    assert len(queries) == 2 and result["forwarded_methods"] == ["hooks/list", "hooks/list"]
+    assert [row["request_sequence"] for row in queries] == [1, 2]
+    assert [row["response_wire_bytes"] for row in queries] == result["response_bytes"]
+    assert all(row["params_summary"] == HOOKS_PARAMS_SUMMARY and row["hook_entries"] == 2 for row in queries)
+    assert result["underlying_ends"] == 1
+
+
+@pytest.mark.parametrize("case", ["run", "execute", "register", "update", "write", "remove", "configure",
+    "singular", "suffix", "trailing_slash", "prefix", "case", "whitespace", "encoded", "nul", "unknown", "turn", "capability"])
+def test_hooks_execution_mutation_unknown_names_and_capability_mode_stay_denied(case):
+    result = run_hooks_list_fixture(case)
+    capture = wire.analyze(result["records"], synthetic=True)
+    refusal, = capture["native_rpc_refusals"]
+    assert refusal["reason"] == "wire_model_free_rpc_refused" and refusal["forwarded"] is False
+    assert refusal["rpc_sequence"] == refusal["write_sequence"] == 1 and refusal["trigger"] == "stdin.write"
+    assert capture["native_hooks_list"] == [] and result["forwarded_methods"] == []
+    assert result["underlying_ends"] == 0
+
+
+@pytest.mark.parametrize("case", ["params_missing", "params_null", "params_array", "params_string", "params_empty",
+    "extra_command", "extra_run", "extra_register", "cwds_empty", "cwds_null", "cwds_string", "cwds_many",
+    "cwd_object", "cwd_null", "cwd_number", "cwd_other", "cwd_relative", "cwd_dotdot", "id_missing", "id_null",
+    "id_bool", "id_fraction", "id_negative", "id_empty", "id_long", "result", "error", "jsonrpc_wrong", "envelope_extra",
+    "root_missing", "root_relative", "root_dotdot", "root_broad", "root_schema"])
+def test_hooks_list_invalid_params_or_envelope_never_reach_fake_native(case):
+    result = run_hooks_list_fixture(case)
+    capture = wire.analyze(result["records"], synthetic=True)
+    refusal, = capture["native_rpc_refusals"]
+    assert refusal["reason"] == "wire_hooks_list_contract_refused" and refusal["method"] == "hooks/list"
+    assert refusal["forwarded"] is False and refusal["rpc_sequence"] == refusal["write_sequence"] == 1
+    assert "params_summary" in refusal and "params" not in refusal
+    assert capture["native_hooks_list"] == [] and result["forwarded_methods"] == []
+    assert result["underlying_ends"] == 0
+
+
+def test_terminal_refusal_is_not_recounted_or_cleared_by_eof_or_a_later_valid_query():
+    result = run_hooks_list_fixture("latched")
+    capture = wire.analyze(result["records"], synthetic=True)
+    refusal, = capture["native_rpc_refusals"]
+    assert refusal["method"] == "hooks/run" and refusal["rpc_sequence"] == 1 and refusal["trigger"] == "stdin.write"
+    assert capture["capture_errors"] == ["wire_model_free_rpc_refused"]
+    assert capture["native_hooks_list"] == [] and result["forwarded_methods"] == []
+    assert result["underlying_ends"] == 0
+
+
+def test_allowed_catalog_in_a_batch_never_forwards_a_later_forbidden_turn_or_the_batch():
+    result = run_hooks_list_fixture("batch")
+    capture = wire.analyze(result["records"], synthetic=True)
+    query, = capture["native_hooks_list"]
+    assert query["request_delivery"] == "attempted" and query["response_received"] is False
+    assert query["response_wire_bytes"] == query["hook_entries"] == "not_reported"
+    refusal, = capture["native_rpc_refusals"]
+    assert refusal["method"] == "turn/start" and refusal["rpc_sequence"] == 2
+    assert result["forwarded_methods"] == [] and capture["capi_requests"] == []
+
+
+@pytest.mark.parametrize("case", ["missing_response", "error_response", "invalid_response"])
+def test_hooks_catalog_failure_or_absence_is_never_an_empty_success(case):
+    result = run_hooks_list_fixture(case)
+    query, = wire.analyze(result["records"], synthetic=True)["native_hooks_list"]
+    assert query["hook_entries"] == query["cwd_entries"] == "not_reported"
+    assert query["response_received"] is (case != "missing_response")
+    assert query["response_wire_bytes"] == ("not_reported" if case == "missing_response" else result["response_bytes"][0])
+    assert query["response_kind"] == {"missing_response": "not_reported", "error_response": "error", "invalid_response": "result"}[case]
+
+
+def test_catalog_export_receipt_retains_request_ordinal_summary_response_size_and_redaction(prepared_fixture, tmp_path):
+    root, state, _, _ = prepared_fixture
+    wire.install(root, state, {}, model_free=True)
+    fixture = run_hooks_list_fixture("prelude")
+    rows = fixture["records"]
+    rows[0]["observer_sha256"] = probe.digest(wire.PRELOAD)
+    (state / "wire/wire-1.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+    output = tmp_path / "export-hooks"
+    receipt = wire.export(state, output)
+    saved = json.loads((output / "wire-capture.json").read_text())
+    assert receipt["sha256"] == probe.digest(output / "wire-capture.json")
+    assert receipt["native_hooks_list"] == saved["native_hooks_list"]
+    query, = receipt["native_hooks_list"]
+    assert query["process"] == "wire-1.jsonl" and query["request_sequence"] == 10
+    assert query["params_summary"] == HOOKS_PARAMS_SUMMARY and query["response_wire_bytes"] == fixture["response_bytes"][0]
+    assert receipt["synthetic"] is True and receipt["admission_allowed"] is False
+
+
+def test_only_one_exact_method_is_added_to_the_session_only_catalog_permission():
+    source = wire.PRELOAD.read_text()
+    assert "const ZERO_TURN_CATALOG_RPC = new Set(['hooks/list']);" in source
+    assert "if (modelFree && sessionOnly && ZERO_TURN_CATALOG_RPC.has(message.method)) {" in source
 
 
 @pytest.mark.parametrize("case", ["valid", "codec", "auth", "wrong_session", "lost_reply", "no_readback", "readback_tamper",

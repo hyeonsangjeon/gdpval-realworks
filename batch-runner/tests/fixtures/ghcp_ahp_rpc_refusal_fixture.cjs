@@ -20,10 +20,10 @@ const hooks = instrument({
       stdout: new EventEmitter() };
   },
 }, { emit: line => records.push(JSON.parse(line)), nativeBinary: '/fixture/codex',
-  nativeSha256: 'a'.repeat(64), modelFree: true, sessionOnly: scenario !== 'capability',
+  nativeSha256: 'a'.repeat(64), modelFree: true, sessionOnly: !['capability', 'pinned_disconnect'].includes(scenario),
   synthetic: true, seeds: [secret], entrypoint: 'vs/platform/agentHost/node/agentHostMain' });
 const child = hooks.spawn('/fixture/codex', launch, { env: { OPENAI_API_KEY: secret } });
-const deny = operation => assert.throws(operation, /^Error: wire_model_free_rpc_refused$/);
+const deny = (operation, reason = 'wire_model_free_rpc_refused') => assert.throws(operation, { message: reason });
 const prelude = ['initialize', 'initialized', 'mcpServerStatus/list', 'account/read', 'config/read',
   'account/read', 'config/read', 'model/list', 'skills/list'];
 
@@ -32,17 +32,18 @@ if (scenario === 'pinned_disconnect') {
   prelude.forEach((method, index) => child.stdin.write(encode({ method,
     ...(method === 'initialized' ? {} : { id: index + 1 }), params: {} })));
   // codexAppServerClient.ts:350/353 -> codexAgent.ts:2762/4689 -> :451 EOF.
-  // This is one rejected RPC inspected twice, not a second RPC or a retry.
+  // Reproduce the old sequence in capability-only mode: the new permission is
+  // session-only. EOF must still refuse but must not count this frame twice.
   deny(() => child.stdin.write(encode({ id: 10, method: 'hooks/list', params: { cwds: ['/fixture/workspace'] } })));
   deny(() => child.stdin.end());
   assert.equal(writes.length, prelude.length);
 } else if (scenario === 'multi_stream') {
-  deny(() => child.stdin.write(encode({ id: 1, method: 'hooks/list' })));
+  deny(() => child.stdin.write(encode({ id: 1, method: 'hooks/list' })), 'wire_hooks_list_contract_refused');
   const second = hooks.spawn('/fixture/codex', launch, { env: { OPENAI_API_KEY: secret } });
   deny(() => second.stdin.write(encode({ id: 1, method: 'config/batchWrite' })));
 } else if (scenario === 'batch') {
   deny(() => child.stdin.write(encode({ id: 1, method: 'initialize' }) +
-    encode({ id: 2, method: 'hooks/list' }) + encode({ id: 3, method: 'turn/start' })));
+    encode({ id: 2, method: 'hooks/list' }) + encode({ id: 3, method: 'turn/start' })), 'wire_hooks_list_contract_refused');
 } else {
   const request = { id: 'PRIVATE_FIXTURE_id', method: 'hooks/list',
     params: { token: secret, nested: { input: 'PRIVATE_FIXTURE_prompt', cwd: '/PRIVATE_FIXTURE/path' } } };
@@ -63,7 +64,8 @@ if (scenario === 'pinned_disconnect') {
   else if (scenario === 'encoded') request.method = Buffer.from(secret).toString('base64');
   else if (scenario === 'token_shape') request.method = 'ghp_SYNTHETIC_ONLY_NOT_A_CREDENTIAL_12345';
   else assert.fail('unknown fixture scenario');
-  deny(() => scenario === 'end_chunk' ? child.stdin.end(encode(request)) : child.stdin.write(encode(request)));
+  deny(() => scenario === 'end_chunk' ? child.stdin.end(encode(request)) : child.stdin.write(encode(request)),
+    ['hooks', 'end_chunk'].includes(scenario) ? 'wire_hooks_list_contract_refused' : 'wire_model_free_rpc_refused');
 }
 assert.equal(ends.length, 0);
 if (scenario !== 'pinned_disconnect') assert.equal(writes.length, 0);
