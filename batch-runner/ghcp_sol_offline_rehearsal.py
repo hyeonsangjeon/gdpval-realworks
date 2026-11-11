@@ -22,13 +22,16 @@ import yaml
 import ghcp_ahp_client as client
 import ghcp_ahp_first_turn as first_turn
 import ghcp_ahp_offline_fixture as fixture_runtime
+import ghcp_ahp_output_collection as output_collection
 import ghcp_sol_actions_gate as gate
 import ghcp_sol_grader_contract as bridge
 
 FLAGS = {"synthetic": True, "model_free": True, "execution_allowed": False, "grading_allowed": False}
 LIMITS = {"turns": 64, "tool_calls": 32, "seconds": 1200}
+OUTPUT_FILES = tuple("output-collection/" + name for name in
+                     ("output-snapshot.json", "output-seal.json", "output-lifecycle.json"))
 CAPTURE_FILES = ("client-capture.json", "transcript.jsonl", "tool-calls.jsonl", "commands.jsonl",
-                 "first-turn-wire.jsonl", "input-file-hashes.json", "output-file-hashes.json", "exit-status.json")
+                 "first-turn-wire.jsonl", "input-file-hashes.json", "output-file-hashes.json", "exit-status.json", *OUTPUT_FILES)
 MAX_FIXTURE_BYTES = 2 * 1024 * 1024
 MAX_STEPS = 1024
 Refused = bridge.Refused
@@ -179,18 +182,26 @@ def _capture_components(capture, baseline, records, steps_done, steps_total):
     }
 
 
-def run_task(root, task):
+def run_task(root, task, output_profile=output_collection.PROFILES[0]):
     # Reuse only the pure staging function, never paid/auth/input-download entry
     # points. The caller's effects guard remains active throughout this import.
     from ghcp_sol_paid_gate import stage_task
-    work, captures = root / "workspace", root / "capture"
-    work.mkdir(parents=True, mode=0o700)
+    state, captures = root / "state", root / "capture"
+    state.mkdir(parents=True, mode=0o700)
+    work = state / "workspace"
+    work.mkdir(mode=0o700)
+    (state / "tmp").mkdir(mode=0o700)
+    job_tmpdir = state / "tmp/vscode-agent-codex-sandbox-fixture"
+    job_tmpdir.mkdir(mode=0o700)
     captures.mkdir(mode=0o700)
     stage_task(work, {"references": {name: text.encode() for name, text in task["inputs"].items()}})
     baseline = {name: identity(raw) for name, raw in client.workspace_files(work).items()}
-    clock, port = fixture_runtime.Clock(), fixture_runtime.Port(task["first_turn_records"])
+    clock = fixture_runtime.Clock()
+    collection = output_collection.OutputCollection(state, job_tmpdir, captures / "output-collection",
+                                                   profile=output_profile, synthetic=True, clock=clock)
+    port = fixture_runtime.Port(task["first_turn_records"], output_collection=collection)
     session = client.SessionClient(port, "ahp-session:/" + task["task_id"], "ahp-chat:/" + task["task_id"],
-        authenticated=True, limits=client.Limits(), clock=clock)
+        authenticated=True, limits=client.Limits(), clock=clock, output_collection=collection)
     # authenticated=True is strictly a fixture precondition. No authenticate RPC
     # or credential is sent; all I/O goes to Port.sent in this Python process.
     sequence = steps_done = 0
@@ -210,12 +221,18 @@ def run_task(root, task):
         else:
             # Fixture materialization only. No shell, tool, SDK or model runs.
             require(bool(session.active), "fixture_write_without_active_turn")
-            write(work / step["path"], step["content"].encode())
+            port.write_output(step["path"], step["content"].encode(), write=write)
     session.finish()
-    capture = session.capture(captures / "client-capture.json", workspace=work,
-                              baseline={name: row["sha256"] for name, row in baseline.items()})
+    capture = session.capture(captures / "client-capture.json")
     components = _capture_components(capture, baseline, port.observed_records, steps_done, len(task["steps"]))
-    observed_files = client.workspace_files(work)
+    # This retained workspace is a sealed export mirror, not a live runtime
+    # directory. Both bound source roots were removed only after sealing.
+    require(not work.exists() and not job_tmpdir.exists(), "rehearsal_runtime_output_not_deleted")
+    exported_workspace = root / "workspace"
+    exported_workspace.mkdir(mode=0o700)
+    for name, raw in {**{name: text.encode() for name, text in task["inputs"].items()}, **_decoded_files(capture)}.items():
+        write(exported_workspace / name, raw)
+    observed_files = client.workspace_files(exported_workspace)
     require(all(identity(observed_files[name]) == expected for name, expected in baseline.items()),
             "rehearsal_input_changed")
     require(_decoded_files(capture) == {name: raw for name, raw in observed_files.items() if name not in baseline},
@@ -223,9 +240,10 @@ def run_task(root, task):
     for name, raw in components.items():
         write(captures / name, raw)
     manifest = {"client-capture.json": identity(read(captures / "client-capture.json")),
-                **{name: identity(raw) for name, raw in components.items()}}
+                **{name: identity(raw) for name, raw in components.items()},
+                **{name: identity(read(captures / name)) for name in OUTPUT_FILES}}
     record = {**FLAGS, "schema": "ghcp-fixed-five-fixture-capture-v1", "task_id": task["task_id"],
-              "runtime": "in_memory_fixture_only", "limits": LIMITS, "files": manifest,
+              "runtime": "in_memory_fixture_only", "limits": LIMITS, "files": manifest, "output_profile": output_profile,
               "fixture_steps_delivered": steps_done, "fixture_steps_total": len(task["steps"])}
     write_json(captures / "capture.json", record)
     return validate_capture(root, task["task_id"])
@@ -246,6 +264,19 @@ def validate_capture(root, task_id):
         relative_name(name)
         require(identity(actual[name]) == digest, "rehearsal_capture_hash_mismatch")
     capture = bridge._json(actual["client-capture.json"])
+    reference = capture.get("output_collection", {})
+    require(record.get("output_profile") in output_collection.PROFILES
+            and reference.get("profile") == record["output_profile"] and reference.get("synthetic") is True
+            and reference.get("execution_allowed") is False and reference.get("status") == "complete"
+            and type(reference.get("receipt_sha256")) is str
+            and re.fullmatch(r"[a-f0-9]{64}", reference["receipt_sha256"]) is not None
+            and reference.get("events") == output_collection.EVENTS, "rehearsal_output_binding_refused")
+    snapshot = output_collection.verify_seal(captures / "output-collection", profile=record["output_profile"],
+        binding=reference.get("binding"), seal_sha256=reference.get("seal_sha256"), receipt_sha256=reference.get("receipt_sha256"))
+    require(snapshot["synthetic"] is True and snapshot["generated_files"] == capture.get("generated_files"),
+            "rehearsal_output_binding_refused")
+    require(not (root / "state/workspace").exists()
+            and not (root / "state/tmp/vscode-agent-codex-sandbox-fixture").exists(), "rehearsal_runtime_output_not_deleted")
     baseline = bridge._json(actual["input-file-hashes.json"])["files"]
     native = [bridge._json(line) for line in actual["first-turn-wire.jsonl"].splitlines()]
     require(all(all(row.get(key) is value for key, value in FLAGS.items()) for row in native),
@@ -253,6 +284,9 @@ def validate_capture(root, task_id):
     records = [row["value"] for row in native]
     require(all(row.get("synthetic") is True for row in records), "rehearsal_native_synthetic_marker_missing")
     expected = _capture_components(capture, baseline, records, record["fixture_steps_delivered"], record["fixture_steps_total"])
+    require({name: {"sha256": info["sha256"], "size": info["bytes"]} for name, info in snapshot["input_files"].items()} == baseline,
+            "rehearsal_input_changed")
+    expected.update({name: actual[name] for name in OUTPUT_FILES})
     require(set(record["files"]) == set(expected) | {"client-capture.json"}
             and all(actual[name] == raw for name, raw in expected.items()), "rehearsal_capture_component_mismatch")
     current = client.workspace_files(root / "workspace")
@@ -343,15 +377,16 @@ def prepare_grader_input(root):
     return report
 
 
-def run_rehearsal(output, *, fixture=None):
+def run_rehearsal(output, *, fixture=None, output_profile=output_collection.PROFILES[0]):
     report = {**FLAGS, "schema": "ghcp-fixed-five-offline-rehearsal-v1", "fixture_pipeline_passed": False,
               "gate5_passed": False, "ready_for_grading": False, "exit_status": 2, "reason_codes": [], "tasks": [],
               "actual_calls": {"authentication": 0, "model_turns": 0, "capi_inference": 0, "external_http": 0, "judge": 0},
               "limits": LIMITS, "cap_scope": "client_admission_in_fixture_not_server_or_billing_limit",
-              "overshoot_boundary": dict(client.OVERSHOOT), "grader_contract": None}
+              "overshoot_boundary": dict(client.OVERSHOOT), "grader_contract": None, "output_profile": output_profile}
     owned = False
     try:
         with bridge._no_effects():
+            require(output_profile in output_collection.PROFILES, "rehearsal_output_profile_refused")
             fixture = validate_fixture(copy.deepcopy(fixture if fixture is not None else fixture_runtime.fixed_five()))
             bridge._path(output)
             require(not output.exists() and not output.is_relative_to(bridge.ROOT) and not bridge.ROOT.is_relative_to(output),
@@ -364,7 +399,7 @@ def run_rehearsal(output, *, fixture=None):
             for task in fixture["tasks"]:
                 result = {**FLAGS, "task_id": task["task_id"], "capture_valid": False}
                 try:
-                    capture = run_task(output / "tasks" / task["task_id"], task)
+                    capture = run_task(output / "tasks" / task["task_id"], task, output_profile)
                     result.update(capture_valid=True, status=capture["status"], reason_codes=capture["reason_codes"],
                         counts=capture["counts"], first_turn_attestation=capture["first_turn_attestation"],
                         capture=f"tasks/{task['task_id']}/capture/capture.json")
@@ -392,8 +427,9 @@ def run_rehearsal(output, *, fixture=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output-profile", choices=output_collection.PROFILES, default=output_collection.PROFILES[0])
     args = parser.parse_args(argv)
-    result = run_rehearsal(args.output)
+    result = run_rehearsal(args.output, output_profile=args.output_profile)
     print(json.dumps({key: result[key] for key in ("synthetic", "execution_allowed", "fixture_pipeline_passed", "exit_status", "reason_codes")}))
     return result["exit_status"]
 

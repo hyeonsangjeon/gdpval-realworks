@@ -137,13 +137,19 @@ class SessionClient:
     """
 
     def __init__(self, transport, session, chat, *, authenticated=False,
-                 limits=Limits(), clock=time.monotonic, credential=None, finish_admitted_turn=False):
+                 limits=Limits(), clock=time.monotonic, credential=None, finish_admitted_turn=False,
+                 output_collection=None):
         if (not isinstance(session, str) or not re.fullmatch(r"ahp-session:/[A-Za-z0-9-]+", session)
                 or not isinstance(chat, str) or not re.fullmatch(r"ahp-chat:/[A-Za-z0-9-]+", chat)
                 or type(authenticated) is not bool or type(limits) is not Limits
                 or type(finish_admitted_turn) is not bool
                 or (credential is not None and (not isinstance(credential, str) or not credential))):
             raise Refused("invalid_session_binding")
+        if output_collection is not None:
+            from ghcp_ahp_output_collection import OutputCollection
+            if type(output_collection) is not OutputCollection or output_collection.phase != "bound":
+                raise Refused("output_binding_refused")
+        self.output_collection = output_collection
         self.transport, self.session, self.chat = transport, session, chat
         self.authenticated, self.limits, self.clock = authenticated, limits, clock
         self.finish_admitted_turn = finish_admitted_turn
@@ -213,6 +219,16 @@ class SessionClient:
             return
         self.status, self.reason = ("completed" if completed else "stopped"), reason
         self.done.set()
+        # A normal dispose can delete native TMPDIR. Hold all writers/cleanup,
+        # collect and fsync a verified seal BEFORE sending any dispose/terminate.
+        # On refusal, still perform emergency cleanup, but never report success.
+        if self.output_collection is not None:
+            try:
+                self.output_collection.collect_and_seal(self.transport, self._safe)
+            except Exception as error:
+                self.output_collection.refuse(error)
+                self.cleanup["output_original_stop_reason"] = self.reason
+                self.status, self.reason = "stopped", self.output_collection.error
         controls = [self._dispatch({"type": "chat/turnCancelled", "turnId": turn,
                                   "duration": max(0, int((self.clock() - self.turn_started[turn]) * 1000))})
                     for turn in sorted(self.active)]
@@ -233,6 +249,10 @@ class SessionClient:
             self.cleanup["host_terminated"] = self.transport.terminate(timeout=TERMINATE_TIMEOUT_SECONDS) is True
         except Exception:
             self.cleanup["host_terminated"] = False
+        if self.output_collection is not None:
+            if not self.output_collection.after_termination(self.cleanup["host_terminated"]):
+                self.cleanup["output_collection_error"] = self.output_collection.error
+                self.status, self.reason = "stopped", self.output_collection.error
 
     def _check(self):
         if self.status == "open":
@@ -528,6 +548,11 @@ class SessionClient:
             if self.status == "open" or self.cleanup["host_terminated"] is not True:
                 raise Refused("capture_host_not_stopped")
             generated = []
+            output_reference = None
+            if self.output_collection is not None:
+                if workspace is not None or baseline is not None:
+                    raise Refused("output_legacy_fallback_refused")
+                generated, output_reference = self.output_collection.capture()
             for name, raw in (workspace_files(workspace).items() if workspace is not None else []):
                 digest = hashlib.sha256(raw).hexdigest()
                 if (baseline or {}).get(name) == digest:
@@ -577,8 +602,9 @@ class SessionClient:
                                         for key, text in self.text.items()]},
                 "tool_calls": tool_events, "commands": self.commands,
                 "reported_file_edits": self.files_reported,
-                "generated_files": generated if workspace is not None else NOT_REPORTED,
+                "generated_files": generated if workspace is not None or output_reference is not None else NOT_REPORTED,
                 "cleanup": self.cleanup, "capture_boundary": "all_delivered_frames_not_unseen_server_work",
-                "workspace_collected": workspace is not None})
+                "workspace_collected": workspace is not None or output_reference is not None,
+                **({"output_collection": output_reference} if output_reference is not None else {})})
             save_json(path, result)
             return result

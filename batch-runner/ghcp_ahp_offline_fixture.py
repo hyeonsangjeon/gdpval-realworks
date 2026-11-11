@@ -5,6 +5,8 @@ changing a request must never manufacture a corresponding observed value.
 """
 
 import copy
+import os
+import shutil
 
 from ghcp_sol_actions_gate import TASK_IDS
 
@@ -71,19 +73,51 @@ class Clock:
 class Port:
     """Memory-only transport. No concrete live transport or host is imported."""
 
-    def __init__(self, records):
+    def __init__(self, records, *, output_collection=None):
         self.records = copy.deepcopy(records)
         self.observed_records = []
         self.sent = []
         self.terminated = False
+        self.output_collection = output_collection
+        self.outputs_held = False
+        self.operations = []
+
+    def hold_outputs(self, *, binding, timeout):
+        from ghcp_ahp_probe import Refused
+        if self.output_collection is None or binding != self.output_collection.binding or self.outputs_held:
+            raise Refused("output_hold_refused")
+        self.outputs_held = True
+        self.operations.append("hold")
+        return {"binding": binding, "writers_stopped": True, "cleanup_held": True, "synthetic": True}
+
+    def write_output(self, name, raw, *, write):
+        from ghcp_ahp_probe import Refused
+        if self.output_collection is None or self.outputs_held or self.terminated:
+            raise Refused("output_fixture_write_after_hold")
+        self.operations.append("write")
+        write(self.output_collection.paths[self.output_collection.source] / name, raw)
+
+    def _cleanup_admitted(self):
+        from ghcp_ahp_probe import Refused
+        if self.output_collection is not None and self.output_collection.phase not in {"sealed", "refused"}:
+            raise Refused("output_fixture_cleanup_before_seal")
 
     def first_turn_evidence(self):
         self.observed_records = copy.deepcopy(self.records)
         return copy.deepcopy(self.observed_records)
 
     def send(self, message, timeout):
+        if message.get("method") == "disposeSession":
+            self._cleanup_admitted()
+            self.operations.append("dispose")
         self.sent.append(copy.deepcopy(message))
 
     def terminate(self, timeout):
+        self._cleanup_admitted()
+        self.operations.append("terminate")
+        if self.output_collection is not None and os.path.lexists(self.output_collection.job_tmpdir):
+            # Simulate the pinned child's close callback, NOT a native process.
+            # This exact fresh fixture directory is the only recursive target.
+            shutil.rmtree(self.output_collection.job_tmpdir)
         self.terminated = True
         return True  # Simulated cleanup only; there never was a native process.
