@@ -227,6 +227,15 @@ class Server(socketserver.UnixStreamServer):
     request_queue_size = 8
 
 
+def isolation_prefix(preserved=()):
+    """The identical kernel/privilege boundary for preparation and the host."""
+    return ["sudo", *(["--preserve-env=" + ",".join(preserved)] if preserved else []),
+        "unshare", "--mount", "--net", "--pid", "--fork", "--mount-proc", "--kill-child=KILL",
+        "/bin/bash", "-c", 'set -euo pipefail; ip link set lo up; exec "$@"', "metadata-isolation",
+        "/usr/bin/setpriv", "--reuid=" + str(os.getuid()), "--regid=" + str(os.getgid()), "--init-groups",
+        "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs"]
+
+
 def isolated_command(prepared, evidence, socket_path, *, prewarm_preparation=None):
     preserved = ["COPILOT_GITHUB_TOKEN", "GHCP_AUTHENTICATED_ZERO_TURN", "GHCP_PAID_EXECUTION", "GHCP_CONNECTION_ONLY",
         "GITHUB_ACTIONS", "GITHUB_EVENT_NAME", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "RUNNER_ENVIRONMENT",
@@ -235,10 +244,7 @@ def isolated_command(prepared, evidence, socket_path, *, prewarm_preparation=Non
         preserved.extend(["GITHUB_REF", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF", "GITHUB_WORKFLOW_SHA"])
     environment = {key: os.environ[key] for key in preserved if key in os.environ}
     environment.update(PATH="/usr/bin:/bin", LANG="C.UTF-8")
-    command = ["sudo", "--preserve-env=" + ",".join(preserved), "unshare", "--mount", "--net", "--pid", "--fork", "--mount-proc", "--kill-child=KILL",
-        "/bin/bash", "-c", 'set -euo pipefail; ip link set lo up; exec "$@"', "metadata-isolation",
-        "/usr/bin/setpriv", "--reuid=" + str(os.getuid()), "--regid=" + str(os.getgid()), "--init-groups",
-        "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs",
+    command = [*isolation_prefix(preserved),
         sys.executable, "-B", str(Path(__file__).with_name("ghcp_ahp_probe.py")), "probe",
         "--prepared", str(prepared), "--evidence", str(evidence),
         "--outside-netns", os.readlink("/proc/self/ns/net"), "--outside-pidns", os.readlink("/proc/self/ns/pid"),
@@ -253,6 +259,7 @@ def main(argv=None):
     parser.add_argument("--prepared", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--prewarm-zero-turn-preparation", type=Path)
+    parser.add_argument("--runner-userns-receipt", type=Path)
     args = parser.parse_args(argv)
     broker = child = None
     handlers = {}
@@ -263,6 +270,10 @@ def main(argv=None):
             import ghcp_ahp_prewarm_zero_turn as prewarm
             identity = prewarm.context(running=True)
             prewarm.verify_preparation(args.prewarm_zero_turn_preparation, args.prepared, args.evidence, identity)
+            import ghcp_ahp_runner_userns as userns
+            userns.verify_for_auth(args.runner_userns_receipt, args.prepared, args.evidence, identity)
+        elif args.runner_userns_receipt is not None:
+            raise Refused("runner_userns_requires_prewarm_zero_turn")
         credential = os.environ.get("COPILOT_GITHUB_TOKEN", "")
         validate_credential(credential)
         def cancel(signum, frame):

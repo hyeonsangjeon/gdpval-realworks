@@ -724,6 +724,9 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                         raise Refused("zero_turn_authentication_refused")
                     if "result" not in results.get("createSession", {}):
                         raise Refused("zero_turn_session_refused")
+                    native_wait = results.get("native_wait", {})
+                    if native_wait.get("error_replies", 0) or native_wait.get("invalid_replies", 0):
+                        raise Refused("zero_turn_native_thread_failed")
                     if results.get("native_wait", {}).get("replies", 0) != 1:
                         raise Refused("zero_turn_native_thread_not_reported")
                 record["headless_started"] = isinstance(results.get("initialize", {}).get("result"), dict) and results["initialize"]["result"].get("protocolVersion") in {"1.1.0", "1.0.0"}
@@ -783,6 +786,12 @@ def run_probe(manifest, root, evidence, outside_netns, outside_pidns, *, capabil
                         record["thread_policy"] = retain_or_note(lambda: thread_policy.export(evidence, record.get("rpc_results", {})))
                         if record["thread_policy"] is not None and record["thread_policy"]["safety_violation"]:
                             secondary_errors.append(Refused("session_policy_forbidden_activity"))
+                        # A completed protocol exchange is not admission. Keep
+                        # exporting observations even when zero-turn cannot
+                        # establish served model/context/web-search evidence.
+                        if authenticated_zero_turn and (record["thread_policy"] is None
+                                or record["thread_policy"].get("admission_allowed") is not True):
+                            secondary_errors.append(Refused("zero_turn_admission_refused"))
                 errors_to_record = secondary_errors if primary_error is not None else secondary_errors[1:]
                 record["reason_codes"].extend(str(error) if isinstance(error, Refused) else type(error).__name__ for error in errors_to_record)
                 if primary_error is None and secondary_errors:

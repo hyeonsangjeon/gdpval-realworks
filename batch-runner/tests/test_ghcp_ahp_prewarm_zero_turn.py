@@ -55,7 +55,26 @@ PREPARATION_STEPS = '''      - name: Fetch the unique green push build for this 
 '''
 AUTH_OLD = '              --prepared "$RUNNER_TEMP/ghcp-zero-turn/prepared" \\\n'
 AUTH_NEW = ('              --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \\\n'
-            '              --prewarm-zero-turn-preparation "$RUNNER_TEMP/ghcp-zero-turn/prewarm/preparation.json" \\\n')
+            '              --prewarm-zero-turn-preparation "$RUNNER_TEMP/ghcp-zero-turn/prewarm/preparation.json" \\\n'
+            '              --runner-userns-receipt "$RUNNER_TEMP/ghcp-zero-turn/evidence/runner-userns.json" \\\n')
+USERNS_PREPARE = '''      - id: runner-userns
+        name: Diagnose bwrap userns and prefer an exact-binary AppArmor profile
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py prepare \\
+            --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \\
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+'''
+USERNS_RESTORE = '''      - name: Restore only this job's AppArmor profile or original userns sysctl
+        if: ${{ always() && steps.runner-userns.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py restore \\
+            --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \\
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+'''
 UPLOAD_OLD = '          path: ${{ runner.temp }}/ghcp-zero-turn/evidence/*.json\n'
 UPLOAD_NEW = ('          path: |\n'
               '            ${{ runner.temp }}/ghcp-zero-turn/evidence/*.json\n'
@@ -63,7 +82,8 @@ UPLOAD_NEW = ('          path: |\n'
 
 
 def restore_workflow(text):
-    for current, original in ((PERMISSIONS, ""), (PREPARATION_STEPS, ""), (AUTH_NEW, AUTH_OLD), (UPLOAD_NEW, UPLOAD_OLD)):
+    for current, original in ((PERMISSIONS, ""), (PREPARATION_STEPS, ""), (USERNS_PREPARE, ""),
+                              (USERNS_RESTORE, ""), (AUTH_NEW, AUTH_OLD), (UPLOAD_NEW, UPLOAD_OLD)):
         assert text.count(current) == 1, "prewarm workflow inverse must match exactly once"
         text = text.replace(current, original, 1)
     return text

@@ -359,6 +359,14 @@ jobs:
             --base "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
             --output "$RUNNER_TEMP/ghcp-zero-turn/prewarm" \
             --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - id: runner-userns
+        name: Diagnose bwrap userns and prefer an exact-binary AppArmor profile
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
       - name: Authenticate once through the exact metadata broker with inference blocked
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -375,7 +383,16 @@ jobs:
             '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_metadata_broker.py" \
               --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \
               --prewarm-zero-turn-preparation "$RUNNER_TEMP/ghcp-zero-turn/prewarm/preparation.json" \
+              --runner-userns-receipt "$RUNNER_TEMP/ghcp-zero-turn/evidence/runner-userns.json" \
               --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - name: Restore only this job's AppArmor profile or original userns sysctl
+        if: ${{ always() && steps.runner-userns.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py restore \
+            --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
       - name: Retain redacted zero-turn handshake and native evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

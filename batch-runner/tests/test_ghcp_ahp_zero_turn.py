@@ -324,7 +324,7 @@ def test_zero_turn_upload_preserves_original_markdown_bytes_and_excludes_other_l
     assert selected["summary.md"] == original
 
 
-@pytest.mark.parametrize("outcome", ["reported", "auth_refused", "session_refused", "no_thread", "http_blocked", "wrong_model", "native_rpc_refused", "hooks_list"])
+@pytest.mark.parametrize("outcome", ["reported", "auth_refused", "session_refused", "no_thread", "rpc_error", "http_blocked", "wrong_model", "native_rpc_refused", "hooks_list"])
 def test_full_authenticated_probe_exports_real_receipt_contract_and_always_cleans_up(
         backend_probe_fixture, context, monkeypatch, outcome):
     """Fake process/AHP/native bytes; real RPC/observer parsing/assessment/export."""
@@ -351,6 +351,12 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
                     "modelProvider": "vscode-proxy", "approvalPolicy": "untrusted", "reasoningEffort": "max",
                     "sandbox": {"type": "readOnly", "networkAccess": False}, "message": CANARY}}},
             ])
+        if outcome == "rpc_error":
+            rows.extend([
+                {"kind": "ipc_request", "stream": "ipc-1", "value": {"id": 13, "method": "thread/start", "params": {}}},
+                {"kind": "ipc_response", "stream": "ipc-1", "value": {"id": 13, "error": {
+                    "code": -32603, "message": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"}}},
+            ])
         if outcome == "http_blocked":
             rows.append({"kind": "blocked", "reason": "session_policy_http_refused", "boundary": "capi_or_http"})
         if outcome == "native_rpc_refused":
@@ -368,7 +374,9 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
         return REAL_EXPORT(state, evidence, credential=credential)
 
     monkeypatch.setattr(wire_capture, "export", export)
-    monkeypatch.setattr(policy, "await_native_thread", lambda *args: {"replies": 0 if outcome == "no_thread" else 1})
+    monkeypatch.setattr(policy, "await_native_thread", lambda *args: {
+        "replies": 0 if outcome in {"no_thread", "rpc_error"} else 1,
+        "error_replies": 1 if outcome == "rpc_error" else 0, "invalid_replies": 0})
     rpc_wire = Wire(auth_error=outcome == "auth_refused", session_error=outcome in {"session_refused", "native_rpc_refused"})
     receipt, calls, output = backend_probe_fixture(authenticated_zero_turn=True, transport_factory=lambda: rpc_wire)
     assert calls["stops"] >= 1
@@ -376,7 +384,11 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
     assert receipt["headless_started"] is True  # Auth/session denial does not erase the successful initialize.
     assert receipt["credential_environment_inherited"] is False
     assert receipt["model_calls"] == 0 and receipt["launch_allowed"] is False
-    assert calls["exit_code"] == (0 if outcome in {"reported", "wrong_model", "hooks_list"} else 2)
+    # Even a successful native fixture has no served-model/context/web-search
+    # proof. Admission=false MUST fail, never silently turn CI green.
+    assert calls["exit_code"] == 2
+    assert receipt["status"] == "probe_refused"
+    assert "zero_turn_admission_refused" in receipt["reason_codes"]
     if outcome == "auth_refused":
         assert receipt["reason_codes"][0] == "zero_turn_authentication_refused"
         assert len(rpc_wire.sent) == 2
@@ -386,10 +398,14 @@ def test_full_authenticated_probe_exports_real_receipt_contract_and_always_clean
         assert [row["op"] for row in receipt["management_sent"]] == ["configure", "readback", "create"]
     if outcome == "no_thread":
         assert "zero_turn_native_thread_not_reported" in receipt["reason_codes"]
+    if outcome == "rpc_error":
+        assert receipt["reason_codes"][0] == "zero_turn_native_thread_failed"
+        assert receipt["thread_policy"]["native_thread_responses"] == 0
     if outcome == "http_blocked":
         assert "session_policy_forbidden_activity" in receipt["reason_codes"]
     handshake = json.loads((output / "handshake.json").read_text())
     assert handshake["schema"] == "ghcp-ahp-authenticated-zero-turn-v1"
+    assert handshake["status"] == "probe_refused"
     assert handshake["admission_allowed"] is False
     assert handshake["auth_rpc_sent"] is True
     assert handshake["auth_rpc_succeeded"] is (outcome != "auth_refused")
