@@ -18,6 +18,11 @@ import ghcp_sol_grader_contract as bridge
 import ghcp_sol_offline_rehearsal as rehearsal
 
 
+def run_with_budget(*args, **kwargs):
+    # Explicit fixture input for existing capture/guard tests, no runtime default.
+    return rehearsal.run_rehearsal(*args, token_budget=fixtures.budget_config(), **kwargs)
+
+
 @pytest.fixture(autouse=True)
 def offline_only(monkeypatch):
     def forbidden(*args, **kwargs):
@@ -56,7 +61,7 @@ def test_five_fresh_workspaces_through_real_first_turn_capture_and_step8(tmp_pat
          patch.object(paid, "execute_task", side_effect=AssertionError("paid execution forbidden")), \
          patch.object(paid, "prepare_inputs", side_effect=AssertionError("input download forbidden")), \
          patch.object(first_turn, "require_report", wraps=first_turn.require_report) as guard:
-        result = rehearsal.run_rehearsal(root)
+        result = run_with_budget(root)
     assert result["fixture_pipeline_passed"] is True and result["exit_status"] == 0, result
     assert result == load(root / "rehearsal.json")
     assert reader.call_count == paths.call_count == 1
@@ -112,7 +117,7 @@ def test_first_turn_missing_or_mismatch_stops_only_its_task(tmp_path, field, dam
         del owner[key]
     else:
         owner[key] = wrong
-    result = rehearsal.run_rehearsal(tmp_path / "isolated", fixture=fixture)
+    result = run_with_budget(tmp_path / "isolated", fixture=fixture)
     assert_boundary(result)
     assert result["exit_status"] == 2 and result["reason_codes"] == ["rehearsal_task_stopped"]
     assert [row["status"] for row in result["tasks"]] == ["completed", "stopped", "completed", "completed", "completed"]
@@ -137,7 +142,7 @@ def test_requested_fields_cannot_replace_missing_response_fields(tmp_path):
     records[2]["value"].update(model="gpt-5.6-sol", reasoning={"effort": "max"}, modelContextWindow=1000000, webSearch=False)
     records[4]["value"]["response"] = {"id": "fixture", "status": "completed"}
     records[-1]["value"]["params"]["tokenUsage"] = {}
-    result = rehearsal.run_rehearsal(tmp_path / "request-only", fixture=fixture)
+    result = run_with_budget(tmp_path / "request-only", fixture=fixture)
     observed = result["tasks"][0]["first_turn_attestation"]["observed"]
     assert observed == dict.fromkeys(first_turn.EXPECTED, "not_reported")
     assert result["tasks"][0]["status"] == "stopped"
@@ -152,19 +157,25 @@ def test_exact_gate_caps_stop_before_any_further_fixture_work(tmp_path, cap):
         task["steps"] = [step for index in range(1, 66) for step in fixtures.turn_steps(f"turn{index}", tools=False)]
         reason, count, expected = "turn_limit_reached", "admitted_or_observed_turns", 64
     elif cap == "tools":
-        task["steps"] = fixtures.turn_steps(tools=False)[:2] + [
+        task["steps"] = fixtures.turn_steps(tools=False)[:3] + [
             {"kind": "event", "action": {"type": "chat/toolCallReady", "turnId": "turn1",
                 "toolCallId": f"tool{index}", "toolInput": "fixture only"}} for index in range(1, 34)]
         reason, count, expected = "tool_limit_reached", "observed_tool_calls", 32
     else:
-        task["steps"] = fixtures.turn_steps(tools=False)[:2] + [{"kind": "advance", "seconds": 1200}]
+        task["steps"] = fixtures.turn_steps(tools=False)[:3] + [{"kind": "advance", "seconds": 1200}]
         reason, count, expected = "time_limit_reached", "admitted_or_observed_turns", 1
     task["steps"] += [{"kind": "write", "path": "MUST-NOT-EXIST", "content": "work after cap"}]
     root = tmp_path / cap
-    result = rehearsal.run_rehearsal(root, fixture=fixture)
+    result = run_with_budget(root, fixture=fixture)
     assert_boundary(result)
     assert result["exit_status"] == 2 and result["fixture_pipeline_passed"] is False
-    assert [row["status"] for row in result["tasks"]] == ["completed", "stopped", "completed", "completed", "completed"]
+    # The old turn cap interrupts turn64 before its usage can arrive. That
+    # unknown cost now also closes aggregate admission; do not price it as zero.
+    expected_tail = ["stopped"] * 3 if cap == "turns" else ["completed"] * 3
+    assert [row["status"] for row in result["tasks"]] == ["completed", "stopped", *expected_tail]
+    if cap == "turns":
+        assert all(row["reason_codes"] == ["token_ledger_usage_missing"]
+                   and row["counts"]["admitted_or_observed_turns"] == 0 for row in result["tasks"][2:])
     failed = result["tasks"][1]
     assert failed["reason_codes"] == [reason] and failed["counts"][count] == expected
     assert not (task_root(root) / "workspace/MUST-NOT-EXIST").exists()
@@ -192,7 +203,7 @@ def test_missing_capture_field_refuses_grader_publication_but_runs_other_tasks(t
             del value[key]
         return value
     monkeypatch.setattr(client.SessionClient, "capture", damaged)
-    result = rehearsal.run_rehearsal(tmp_path / "missing")
+    result = run_with_budget(tmp_path / "missing")
     assert result["exit_status"] == 2 and result["reason_codes"] == ["rehearsal_capture_incomplete"]
     assert result["tasks"][1]["status"] == "capture_refused"
     assert [row["status"] for index, row in enumerate(result["tasks"]) if index != 1] == ["completed"] * 4
@@ -203,7 +214,7 @@ def test_missing_capture_field_refuses_grader_publication_but_runs_other_tasks(t
 @pytest.mark.parametrize("name", [*rehearsal.CAPTURE_FILES, "files/answer.txt"])
 def test_missing_persisted_component_is_rejected_before_grader_checks(tmp_path, monkeypatch, name):
     root = tmp_path / "missing-file"
-    assert rehearsal.run_rehearsal(root)["exit_status"] == 0
+    assert run_with_budget(root)["exit_status"] == 0
     (task_root(root) / "capture" / name).rename(tmp_path / "removed-component")
     def must_not_check(*args):
         pytest.fail("incomplete capture reached grader validators")
@@ -217,7 +228,7 @@ def test_missing_persisted_component_is_rejected_before_grader_checks(tmp_path, 
                                   "exit-status.json", "files/answer.txt"])
 def test_component_byte_tamper_fails_closed(tmp_path, name):
     root = tmp_path / "tamper"
-    assert rehearsal.run_rehearsal(root)["exit_status"] == 0
+    assert run_with_budget(root)["exit_status"] == 0
     target = task_root(root) / "capture" / name
     target.write_bytes(target.read_bytes() + b" ")
     with pytest.raises(rehearsal.Refused, match="rehearsal_capture_hash_mismatch"):
@@ -227,7 +238,7 @@ def test_component_byte_tamper_fails_closed(tmp_path, name):
 @pytest.mark.parametrize("key", list(rehearsal.FLAGS))
 def test_synthetic_and_disabled_execution_markers_cannot_be_flipped(tmp_path, key):
     root = tmp_path / "markers"
-    assert rehearsal.run_rehearsal(root)["exit_status"] == 0
+    assert run_with_budget(root)["exit_status"] == 0
     path = task_root(root) / "capture/capture.json"
     value = load(path)
     value[key] = not value[key]
@@ -239,7 +250,7 @@ def test_synthetic_and_disabled_execution_markers_cannot_be_flipped(tmp_path, ke
 @pytest.mark.parametrize("key", ["transcript", "generated_files", "first_turn_attestation", "limits", "cleanup"])
 def test_rehashed_capture_still_needs_semantic_components(tmp_path, key):
     root = tmp_path / "rehashed"
-    assert rehearsal.run_rehearsal(root)["exit_status"] == 0
+    assert run_with_budget(root)["exit_status"] == 0
     folder = task_root(root) / "capture"
     capture = load(folder / "client-capture.json")
     if key == "transcript": capture[key]["wire"] = []
@@ -259,8 +270,8 @@ def test_rehashed_capture_still_needs_semantic_components(tmp_path, key):
 @pytest.mark.parametrize("path", ["../escape", "/tmp/escape", "a/../escape", "a//b", "a\\b", "C:/escape", ".env", "auth.json"])
 def test_fixture_path_escape_or_credential_file_refuses_before_work(tmp_path, path):
     fixture = fixtures.fixed_five()
-    fixture["tasks"][0]["steps"][3]["path"] = path
-    result = rehearsal.run_rehearsal(tmp_path / "unsafe", fixture=fixture)
+    next(step for step in fixture["tasks"][0]["steps"] if step["kind"] == "write")["path"] = path
+    result = run_with_budget(tmp_path / "unsafe", fixture=fixture)
     assert result["exit_status"] == 2 and result["reason_codes"] == ["fixture_path_refused"]
     assert result["tasks"] == [] and not (tmp_path / "unsafe").exists()
 
@@ -277,16 +288,16 @@ def test_fixture_cannot_change_cohort_limits_or_evidence_kind(tmp_path, damage):
     if damage == "time": fixture["limits"]["seconds"] = 1201
     if damage == "live": fixture["execution_allowed"] = True
     if damage == "real-record": fixture["tasks"][0]["first_turn_records"][0]["synthetic"] = False
-    result = rehearsal.run_rehearsal(tmp_path / "invalid", fixture=fixture)
+    result = run_with_budget(tmp_path / "invalid", fixture=fixture)
     assert result["exit_status"] == 2 and result["tasks"] == []
     assert not (tmp_path / "invalid").exists()
 
 
 def test_existing_workspace_is_not_reused_or_overwritten(tmp_path):
     root = tmp_path / "once"
-    assert rehearsal.run_rehearsal(root)["exit_status"] == 0
+    assert run_with_budget(root)["exit_status"] == 0
     before = client.workspace_files(root)
-    refused = rehearsal.run_rehearsal(root)
+    refused = run_with_budget(root)
     assert refused["reason_codes"] == ["rehearsal_output_reuse_or_checkout_refused"]
     assert client.workspace_files(root) == before
 
@@ -294,7 +305,7 @@ def test_existing_workspace_is_not_reused_or_overwritten(tmp_path):
 @pytest.mark.parametrize("target", ["workspace", "capture"])
 def test_symlink_in_work_or_capture_is_not_followed(tmp_path, target):
     root = tmp_path / "links"
-    assert rehearsal.run_rehearsal(root)["exit_status"] == 0
+    assert run_with_budget(root)["exit_status"] == 0
     folder = task_root(root) / target
     (folder / "unexpected-link").symlink_to(tmp_path / "outside")
     with pytest.raises(client.Refused, match="capture_path_refused"):
@@ -304,12 +315,12 @@ def test_symlink_in_work_or_capture_is_not_followed(tmp_path, target):
 @pytest.mark.parametrize("event", ["socket.connect", "socket.getaddrinfo", "socket.sendto", "subprocess.Popen", "os.system",
                                    "os.exec", "os.posix_spawn", "os.fork"])
 def test_attempted_external_effect_is_fatal_without_trying_it(tmp_path, monkeypatch, event):
-    def attempt(*args):
+    def attempt(*args, **kwargs):
         # Exercise the installed guard directly, never issue the forbidden call.
         bridge._audit(event, ())
         pytest.fail("effect guard did not refuse")
     monkeypatch.setattr(rehearsal, "run_task", attempt)
-    result = rehearsal.run_rehearsal(tmp_path / "effect")
+    result = run_with_budget(tmp_path / "effect")
     assert result["exit_status"] == 2 and result["reason_codes"] == ["offline_effect_refused"]
     assert result["tasks"] == [] and result["grader_contract"] is None
 
@@ -324,7 +335,7 @@ def test_offline_boundary_denies_provider_import_and_auth_file_reads(tmp_path):
 
 
 def test_fixture_success_does_not_unlock_patch_activation_or_paid_client(tmp_path):
-    assert rehearsal.run_rehearsal(tmp_path / "locked")["exit_status"] == 0
+    assert run_with_budget(tmp_path / "locked")["exit_status"] == 0
     with pytest.raises(patched.Refused, match="patched_runtime_activation_pending_owner"):
         patched.require_activation()
     receipt = client.draft_receipt()
@@ -333,7 +344,9 @@ def test_fixture_success_does_not_unlock_patch_activation_or_paid_client(tmp_pat
 
 
 def test_cli_has_only_offline_output_and_no_execution_switch(tmp_path, capsys):
-    assert rehearsal.main(["--output", str(tmp_path / "cli")]) == 0
+    budget = tmp_path / "explicit-fixture-budget.json"
+    budget.write_text(json.dumps(fixtures.budget_config()))
+    assert rehearsal.main(["--output", str(tmp_path / "cli"), "--token-budget-config", str(budget)]) == 0
     value = json.loads(capsys.readouterr().out)
     assert value == {"synthetic": True, "execution_allowed": False, "fixture_pipeline_passed": True, "exit_status": 0, "reason_codes": []}
     with pytest.raises(SystemExit) as error:
@@ -351,7 +364,7 @@ def test_missing_capture_counter_cannot_be_substituted_with_zero(tmp_path, monke
             del value["counts"][field]
         return value
     monkeypatch.setattr(client.SessionClient, "capture", missing)
-    result = rehearsal.run_rehearsal(tmp_path / "missing-count")
+    result = run_with_budget(tmp_path / "missing-count")
     assert result["tasks"][1]["reason_codes"] == ["rehearsal_capture_counts_refused"]
     assert result["exit_status"] == 2 and result["grader_contract"] is None
 
@@ -366,7 +379,7 @@ def test_step8_manifest_modified_during_check_cannot_be_published(tmp_path, monk
         path.write_text(json.dumps(value))
         return checks
     monkeypatch.setattr(rehearsal, "_check_step8", changed)
-    result = rehearsal.run_rehearsal(tmp_path / "changed-manifest")
+    result = run_with_budget(tmp_path / "changed-manifest")
     assert result["exit_status"] == 2 and result["reason_codes"] == ["step8_manifest_changed"]
     assert result["grader_contract"] is None
     assert not (tmp_path / "changed-manifest/grader-input" / bridge.REPORT).exists()

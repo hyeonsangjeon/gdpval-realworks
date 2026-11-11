@@ -1,7 +1,7 @@
 # Fixed-five offline rehearsal, not a model run
 
 The separate `batch-runner/ghcp_sol_offline_rehearsal.py` entry point exercises
-the frozen five task IDs through the existing pure `stage_task`, `SessionClient`, first-turn
+the frozen five task IDs through the existing pure `stage_task`, `BudgetedSessionClient`, first-turn
 attestation, capture, and unchanged Step8 input validators. It uses synthetic
 prompts, reference bytes, tool events, response metadata, output files and a
 virtual clock. It neither solves nor grades the five benchmark tasks.
@@ -9,7 +9,8 @@ virtual clock. It neither solves nor grades the five benchmark tasks.
 ```bash
 env -i PATH="$PATH" LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
   HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
-  python -B batch-runner/ghcp_sol_offline_rehearsal.py --output /absolute/new/scratch-run
+  python -B batch-runner/ghcp_sol_offline_rehearsal.py --output /absolute/new/scratch-run \
+  --token-budget-config /absolute/explicit-synthetic-budget.json
 ```
 
 The parent output directory must already exist. The run directory must be new,
@@ -17,6 +18,11 @@ outside the checkout and without symlink ancestors. Python 3.12 and the existing
 `batch-runner/requirements-ghcp-sol-gate.txt` import-only test dependencies are
 needed. This is an offline unit/integration rehearsal, not a way to run the
 native SDK, a benchmark or the paid gate on a NAS. The CLI has no live switch.
+The budget input has no default. An explicit synthetic test example is
+`{"task_credits":"10","five_task_credits":"50","usage_timeout_seconds":1200}`.
+It is a fake-runtime input, not an owner-approved paid budget. Missing budget
+refuses before the first task turn. Prices are fixed public GHCP rates; caller
+price overrides and missing-value-to-zero substitution are not accepted.
 
 ## Decision and evidence boundary
 
@@ -24,13 +30,17 @@ This answers whether the client/capture/grader-input plumbing is ready for
 further review. A passing fixture is necessary wiring evidence, not owner
 approval, served-model proof, native cap enforcement, quality or cost evidence.
 The only changed axis is the fixture-driven orchestration; product pins,
-patches, hashes, native policies, paid locks and the existing client guards are
-unchanged. Cases are designed around the contracts, not sampled real outputs.
+patches, hashes, native policies, paid locks and existing cap predicates remain
+unchanged. A shared token-ledger soft stop now adds a controller-side condition;
+its synthetic token counts are neither provider billing nor a hard spend cap.
+Cases are designed around the contracts, not sampled real outputs.
 There is no model variance or repeated inference measurement in this rehearsal.
 
-Every receipt and manifest carries `synthetic=true`, `model_free=true`,
+Every outer rehearsal receipt and manifest carries `synthetic=true`, `model_free=true`,
 `execution_allowed=false`, `grading_allowed=false`. The raw client capture is
-kept in its existing schema and is hash-bound by that synthetic receipt. Native
+kept in its existing schema and is hash-bound by that synthetic receipt. Per-task
+ledger components carry `synthetic=true`, `soft_guard=true`, `execution_allowed=false`
+and `billing_complete=false`, and are bound by the same outer receipt. Native
 response records are individually synthetic. Fixture call counts are separate
 from the **actual** authentication/model-turn/CAPI/HTTP/judge counts of zero.
 Unreported provider and premium-request counts remain `not_reported`, not zero.
@@ -50,11 +60,12 @@ readers and validators run. No rubric fetch, renderer or judge is performed.
 1. Validate the fixed cohort, synthetic labels, exact 64/32/1200 limits, bounded
    scripts and relative file paths before creating any workspace.
 2. Create five separate workspaces, synthetic input files and native thread IDs.
-3. Use `SessionClient.send_turn` / `accept` / `tick` / `finish` without replacing
+3. Use `BudgetedSessionClient.send_turn` / `accept` / `tick` / `finish` without replacing
    their guards. Its own first turn must report served Sol, effort max,
    1,000,000 context and no web-search use. Requests/catalog/defaults cannot
    supply missing response fields. A failed task is cancelled/disposed/stopped;
-   later work for that task is not admitted, and the other four still run.
+   later work for that task is not admitted. Other tasks can continue only while
+   the shared budget is below its limit and no prior usage is unknown.
 4. Exercise 64-turn, 32-tool and 1,200-second boundaries with attempted further
    work. These are client admission/observed-event boundaries in virtual time,
    **not** a proof of a server-internal or billing ceiling. The client's explicit
@@ -79,17 +90,20 @@ empty-dry/paid converters, or count this layout check as a grade.
 | Path below the new run directory | Contents |
 | --- | --- |
 | `fixture.json`, `rehearsal.json` | Exact synthetic script and overall result; exit 0 only for five complete captures and the grader-input checks |
+| `token-ledger.json` | One durable shared five-task soft budget journal, outside model work/TMPDIR roots |
 | `tasks/<id>/workspace/` | Fresh synthetic reference and generated files; never used as HOME/config |
 | `tasks/<id>/capture/capture.json` | Synthetic receipt and hashes of every mandatory capture component |
 | `client-capture.json`, `transcript.jsonl` | Existing loss-explicit client capture and delivered frames |
 | `tool-calls.jsonl`, `commands.jsonl` | Tool events/inputs, **not** real command execution evidence |
 | `first-turn-wire.jsonl`, `exit-status.json` | Only fixture response records actually read by the guard; cleanup, terminal status and delivered/planned step counts |
+| `tasks/<id>/capture/token-ledger.json` | Hash-bound per-task usage/price snapshot, repriced against delivered usage frames before grader input |
 | `input-file-hashes.json`, `output-file-hashes.json`, `files/` | Exact initial/generated inventories and captured bytes |
 | `grader-input/` | Step8-shaped synthetic payload/deliverables and `grader-contract.json`; grading remains disallowed |
 
 Exit 2 means task/attestation/cap/capture/effect/contract refusal. A capture
 failure prevents grader-input publication for the run, but does not stop the
-other fixture tasks. A task policy or cap failure retains a valid error row and
+other fixture tasks unless usage becomes unknown or the aggregate cap is hit.
+A task policy or cap failure retains a valid error row and
 still returns exit 2. Existing output directories are never overwritten.
 
 ## Before an owner-authorized paid first turn
@@ -104,7 +118,7 @@ entry. These are output-routing labels, not new vendor config keys, a paid
 workflow selector or an owner choice.
 
 Before any normal disposal/termination, close admission, require the injected
-port to hold writers and cleanup, collect bounded files, compare an independent
+port to interrupt the active turn, then hold writers and cleanup, collect bounded files, compare an independent
 inventory and re-read byte hashes, then fsync and verify the snapshot/seal.
 Only then dispose/terminate and remove remaining bound roots. The fake port
 actually removes its fresh TMPDIR at termination to simulate the pinned close
@@ -128,6 +142,26 @@ This verifies controller ordering with real fixture files, not a native writer
 freeze, model-generated output or paid transport. A real port without the hold
 contract refuses. Actual writer/cleanup hold and observed-root binding still
 need a reviewed live integration; all execution/activation locks remain false.
+
+### Token ledger follow-up (2026-11-11, synthetic only)
+
+Both profiles require the same `BudgetedSessionClient` and `TokenLedger`. It
+prices each distinct AHP last-call usage at the 272K input boundary, using the
+turn-cumulative report to deduplicate metadata repeats and reject missing calls.
+Input/output/cacheRead are mandatory. Unreported cache-write remains null and
+receives a conservative possible-write surcharge reserve on all input tokens.
+Reported reasoning tokens are not added a second time to output. All arithmetic
+uses integer microcredits, not binary floating point.
+
+At task/aggregate `>=` cap, admission closes, active generation is interrupted,
+outputs are collected/sealed, and only then are normal cleanup/deletion allowed.
+No usage at completion or expiry of the explicit progress timeout, malformed
+usage, an unpriced model, ledger persistence failure/tamper, or resumed unknown
+history fails closed. Unknown usage blocks later tasks; known partial amounts
+remain labeled as such. Independent/parallel workers cannot claim a shared cap.
+See the first-turn plan for conditional one-response estimates and owner-pending
+budget proposals. Multiple internal calls in one AHP turn remain unbounded by
+this evidence, and no paid path or workflow lock was opened.
 The updated choice-specific preparation status is in
 [the first-turn plans](ghcp-fixed-five-first-turn-plans.md). The table below
 retains the original rehearsal's historical preparation status.

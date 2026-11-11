@@ -23,6 +23,7 @@ import ghcp_ahp_client as client
 import ghcp_ahp_first_turn as first_turn
 import ghcp_ahp_offline_fixture as fixture_runtime
 import ghcp_ahp_output_collection as output_collection
+import ghcp_ahp_token_ledger as token_ledger
 import ghcp_sol_actions_gate as gate
 import ghcp_sol_grader_contract as bridge
 
@@ -31,7 +32,8 @@ LIMITS = {"turns": 64, "tool_calls": 32, "seconds": 1200}
 OUTPUT_FILES = tuple("output-collection/" + name for name in
                      ("output-snapshot.json", "output-seal.json", "output-lifecycle.json"))
 CAPTURE_FILES = ("client-capture.json", "transcript.jsonl", "tool-calls.jsonl", "commands.jsonl",
-                 "first-turn-wire.jsonl", "input-file-hashes.json", "output-file-hashes.json", "exit-status.json", *OUTPUT_FILES)
+                 "first-turn-wire.jsonl", "input-file-hashes.json", "output-file-hashes.json", "exit-status.json",
+                 "token-ledger.json", *OUTPUT_FILES)
 MAX_FIXTURE_BYTES = 2 * 1024 * 1024
 MAX_STEPS = 1024
 Refused = bridge.Refused
@@ -142,7 +144,7 @@ def _decoded_files(capture):
 def _capture_components(capture, baseline, records, steps_done, steps_total):
     # No .get(..., []) defaults: a missing capture is a failure, not empty output.
     require(type(capture) is dict and {"transcript", "tool_calls", "commands", "generated_files", "cleanup",
-            "counts", "limits", "status", "reason_codes", "first_turn_attestation", "workspace_collected"} <= capture.keys(),
+            "counts", "limits", "status", "reason_codes", "first_turn_attestation", "workspace_collected", "token_ledger"} <= capture.keys(),
             "rehearsal_capture_incomplete")
     transcript = capture["transcript"]
     require(type(transcript) is dict and {"wire", "snapshots", "history", "text"} <= transcript.keys()
@@ -151,6 +153,23 @@ def _capture_components(capture, baseline, records, steps_done, steps_total):
             and capture["workspace_collected"] is True and capture["cleanup"]["host_terminated"] is True
             and capture["gate_ready"] is False and capture["status"] in {"completed", "stopped"}
             and bool(capture["reason_codes"]) and first_turn.same(capture["limits"], LIMITS), "rehearsal_capture_incomplete")
+    ledger = token_ledger.verify_task_receipt(capture["token_ledger"])
+    require(ledger["synthetic"] is True and ledger["closed"] is True
+            and ledger["stopped_reason"] in capture["reason_codes"], "rehearsal_token_ledger_refused")
+    work_turns = [row["message"]["params"]["action"]["turnId"] for row in transcript["wire"]
+                  if row["direction"] == "client_work"]
+    require(work_turns == ledger["admitted_turns"], "rehearsal_token_ledger_refused")
+    delivered = {row["message"]["params"]["serverSeq"]: row["message"]["params"]["action"]
+                 for row in transcript["wire"] if row["direction"] == "server"
+                 and row["message"].get("method") == "action"
+                 and row["message"]["params"]["action"].get("type") == "chat/usage"}
+    previous = {}
+    for row in ledger["usage_events"]:
+        action = delivered.get(row["server_seq"], {})
+        require(action.get("turnId") == row["turn_id"], "rehearsal_token_ledger_refused")
+        priced = token_ledger.price_usage(action.get("usage"), previous.get(row["turn_id"]))
+        require(priced == row["pricing"], "rehearsal_token_ledger_refused")
+        previous[row["turn_id"]] = priced
     counts = capture["counts"]
     require(type(counts) is dict and set(counts) == {"admitted_or_observed_turns", "observed_turns", "observed_tool_calls",
             "model_requests", "premium_requests"}
@@ -163,6 +182,9 @@ def _capture_components(capture, baseline, records, steps_done, steps_total):
     if capture["status"] == "completed":
         first_turn.require_report(capture["first_turn_attestation"])
         require(capture["reason_codes"] == ["completed"], "rehearsal_exit_status_mismatch")
+        require(not ledger["issues"] and set(work_turns) == set(ledger["completed_turns"])
+                and len(delivered) == len(ledger["usage_events"]) and ledger["known_estimated_credits"] is not None,
+                "rehearsal_token_ledger_refused")
     require(not any(row["direction"] == "client_work" and row["after_stop"] for row in transcript["wire"]),
             "rehearsal_work_after_stop")
     files = _decoded_files(capture)
@@ -178,11 +200,12 @@ def _capture_components(capture, baseline, records, steps_done, steps_total):
         "input-file-hashes.json": encoded({**FLAGS, "files": baseline}) + b"\n",
         "output-file-hashes.json": encoded({**FLAGS, "files": {name: identity(raw) for name, raw in files.items()}}) + b"\n",
         "exit-status.json": encoded(exit_status) + b"\n",
+        "token-ledger.json": encoded(ledger) + b"\n",
         **{"files/" + name: raw for name, raw in files.items()},
     }
 
 
-def run_task(root, task, output_profile=output_collection.PROFILES[0]):
+def run_task(root, task, output_profile=output_collection.PROFILES[0], *, ledger=None):
     # Reuse only the pure staging function, never paid/auth/input-download entry
     # points. The caller's effects guard remains active throughout this import.
     from ghcp_sol_paid_gate import stage_task
@@ -200,8 +223,9 @@ def run_task(root, task, output_profile=output_collection.PROFILES[0]):
     collection = output_collection.OutputCollection(state, job_tmpdir, captures / "output-collection",
                                                    profile=output_profile, synthetic=True, clock=clock)
     port = fixture_runtime.Port(task["first_turn_records"], output_collection=collection)
-    session = client.SessionClient(port, "ahp-session:/" + task["task_id"], "ahp-chat:/" + task["task_id"],
-        authenticated=True, limits=client.Limits(), clock=clock, output_collection=collection)
+    session = client.BudgetedSessionClient(port, "ahp-session:/" + task["task_id"], "ahp-chat:/" + task["task_id"],
+        authenticated=True, limits=client.Limits(), clock=clock, output_collection=collection,
+        token_ledger=ledger, task_id=task["task_id"])
     # authenticated=True is strictly a fixture precondition. No authenticate RPC
     # or credential is sent; all I/O goes to Port.sent in this Python process.
     sequence = steps_done = 0
@@ -271,6 +295,8 @@ def validate_capture(root, task_id):
             and type(reference.get("receipt_sha256")) is str
             and re.fullmatch(r"[a-f0-9]{64}", reference["receipt_sha256"]) is not None
             and reference.get("events") == output_collection.EVENTS, "rehearsal_output_binding_refused")
+    require(capture.get("token_ledger", {}).get("output_profile") == record["output_profile"]
+            and capture["token_ledger"].get("task_id") == task_id, "rehearsal_token_ledger_refused")
     snapshot = output_collection.verify_seal(captures / "output-collection", profile=record["output_profile"],
         binding=reference.get("binding"), seal_sha256=reference.get("seal_sha256"), receipt_sha256=reference.get("receipt_sha256"))
     require(snapshot["synthetic"] is True and snapshot["generated_files"] == capture.get("generated_files"),
@@ -377,7 +403,7 @@ def prepare_grader_input(root):
     return report
 
 
-def run_rehearsal(output, *, fixture=None, output_profile=output_collection.PROFILES[0]):
+def run_rehearsal(output, *, fixture=None, output_profile=output_collection.PROFILES[0], token_budget=None):
     report = {**FLAGS, "schema": "ghcp-fixed-five-offline-rehearsal-v1", "fixture_pipeline_passed": False,
               "gate5_passed": False, "ready_for_grading": False, "exit_status": 2, "reason_codes": [], "tasks": [],
               "actual_calls": {"authentication": 0, "model_turns": 0, "capi_inference": 0, "external_http": 0, "judge": 0},
@@ -395,21 +421,29 @@ def run_rehearsal(output, *, fixture=None, output_profile=output_collection.PROF
             owned = True
             write_json(output / "fixture.json", fixture)
             report["fixture_identity"] = identity(read(output / "fixture.json"))
+            ledger = token_ledger.TokenLedger(output / "token-ledger.json", token_budget, gate.fixed_task_ids(),
+                                             profile=output_profile, synthetic=True)
+            report["token_budget"] = ledger.budget.record()
             capture_failed = False
             for task in fixture["tasks"]:
                 result = {**FLAGS, "task_id": task["task_id"], "capture_valid": False}
                 try:
-                    capture = run_task(output / "tasks" / task["task_id"], task, output_profile)
+                    capture = run_task(output / "tasks" / task["task_id"], task, output_profile, ledger=ledger)
                     result.update(capture_valid=True, status=capture["status"], reason_codes=capture["reason_codes"],
                         counts=capture["counts"], first_turn_attestation=capture["first_turn_attestation"],
+                        token_ledger=capture["token_ledger"],
                         capture=f"tasks/{task['task_id']}/capture/capture.json")
                 except (Refused, client.Refused, OSError, ValueError, KeyError, TypeError) as error:
                     capture_failed = True
                     result.update(status="capture_refused", reason_codes=[str(error) if isinstance(error, (Refused, client.Refused))
                                                                          else "rehearsal_capture_refused"])
                 report["tasks"].append(result)
+            report["token_ledger"] = ledger.verify()
+            require(all(row.get("token_ledger") == ledger.task_receipt(row["task_id"])
+                        for row in report["tasks"] if row.get("capture_valid")), "rehearsal_token_ledger_changed")
             require(not capture_failed, "rehearsal_capture_incomplete")
             report["grader_contract"] = prepare_grader_input(output)
+            require(ledger.verify() == report["token_ledger"], "rehearsal_token_ledger_changed")
             require(identity(read(output / "fixture.json")) == report["fixture_identity"], "rehearsal_fixture_changed")
             require(all(row["status"] == "completed" for row in report["tasks"]), "rehearsal_task_stopped")
             report.update(fixture_pipeline_passed=True, exit_status=0)
@@ -428,8 +462,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--output-profile", choices=output_collection.PROFILES, default=output_collection.PROFILES[0])
+    parser.add_argument("--token-budget-config", type=Path,
+                        help="Explicit JSON task_credits, five_task_credits, usage_timeout_seconds; no default budget")
     args = parser.parse_args(argv)
-    result = run_rehearsal(args.output, output_profile=args.output_profile)
+    result = run_rehearsal(args.output, output_profile=args.output_profile,
+                          token_budget=read_json(args.token_budget_config) if args.token_budget_config else None)
     print(json.dumps({key: result[key] for key in ("synthetic", "execution_allowed", "fixture_pipeline_passed", "exit_status", "reason_codes")}))
     return result["exit_status"]
 
