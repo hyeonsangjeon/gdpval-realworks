@@ -140,12 +140,25 @@ def await_native_thread(state, deadline):
             raise Refused("session_policy_forbidden_activity")
         starts = {(row.get("process"), row.get("stream"), row.get("value", {}).get("id")) for row in rows
                   if row.get("kind") == "ipc_request" and row.get("value", {}).get("method") == "thread/start"}
-        replies = [row for row in rows if row.get("kind") == "ipc_response"
+        responses = [row for row in rows if row.get("kind") == "ipc_response"
                    and (row.get("process"), row.get("stream"), row.get("value", {}).get("id")) in starts]
-        if replies:
-            return {"status": "native_thread_reply_observed", "replies": len(replies)}
+        if responses:
+            errors = sum("error" in row.get("value", {}) for row in responses)
+            replies = []
+            for row in responses:
+                value = row.get("value", {})
+                result = value.get("result")
+                thread = result.get("thread") if type(result) is dict else None
+                if ("error" not in value and type(thread) is dict and type(thread.get("id")) is str
+                        and thread["id"] not in {"", NOT_REPORTED}):
+                    replies.append(row)
+            invalid = len(responses) - len(replies) - errors
+            return {"status": "native_thread_error_observed" if errors else
+                    "native_thread_invalid_reply_observed" if invalid else "native_thread_reply_observed",
+                    "replies": len(replies), "error_replies": errors, "invalid_replies": invalid}
         if time.monotonic() >= end:
-            return {"status": "native_thread_not_reported_before_deadline", "replies": 0}
+            return {"status": "native_thread_not_reported_before_deadline", "replies": 0,
+                    "error_replies": 0, "invalid_replies": 0}
         time.sleep(0.05)
 
 
