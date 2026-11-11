@@ -26,6 +26,11 @@ from ghcp_ahp_errors import Refused
 
 RESTRICT = "kernel.apparmor_restrict_unprivileged_userns"
 CLONE = "kernel.unprivileged_userns_clone"
+MAX_NAMESPACES = "user.max_user_namespaces"
+PROC_PATHS = {RESTRICT: Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns"),
+              CLONE: Path("/proc/sys/kernel/unprivileged_userns_clone"),
+              MAX_NAMESPACES: Path("/proc/sys/user/max_user_namespaces")}
+SYSCTL_PATHS = (Path("/usr/sbin/sysctl"), Path("/sbin/sysctl"))
 BWRAP_SHA256 = "77360cb751ccedc5971391444ac86a8a33c15b04d6b4a6fe45f5d25496e62c4c"
 SCHEMA = "ghcp-runner-userns-v1"
 ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
@@ -93,6 +98,39 @@ def profile_text(binary, identity):
             f'profile {profile_name(identity)} "{path}" flags=(unconfined) {{\n  userns,\n}}\n')
 
 
+def read_proc_value(path):
+    """One direct file read; absent, read error and measured zero are distinct."""
+    row = {"source": "procfs", "path": str(path), "status": "not_read",
+           "value": "not_reported", "raw": None, "error": None}
+    try:
+        with path.open("r", encoding="ascii") as source:
+            raw = source.read(129)
+        row["raw"] = raw
+        if len(raw) > 128 or not re.fullmatch(r"[0-9]+", raw.strip()):
+            row["status"] = "invalid_value"
+        else:
+            row.update(status="measured", value=int(raw.strip()))
+    except (OSError, UnicodeError) as error:
+        row["error"] = {"type": type(error).__name__, "errno": getattr(error, "errno", None), "message": str(error)}
+        if isinstance(error, FileNotFoundError):
+            row.update(status="absent", value="absent")
+        else:
+            row["status"] = "read_error"
+    return row
+
+
+def sysctl_identity(candidate):
+    # /sbin may be a distro-owned usrmerge symlink. Resolve it, then bind the
+    # exact regular executable bytes. No PATH search or alternate command.
+    require(candidate in SYSCTL_PATHS, "runner_userns_sysctl_path_refused")
+    resolved = safe_path(candidate.resolve(strict=True))
+    require(resolved in SYSCTL_PATHS, "runner_userns_sysctl_target_refused")
+    info = resolved.stat()
+    require(stat.S_ISREG(info.st_mode) and info.st_mode & 0o111 and os.access(resolved, os.X_OK)
+            and not info.st_mode & (stat.S_ISUID | stat.S_ISGID), "runner_userns_sysctl_mode_refused")
+    return {"candidate": str(candidate), "path": str(resolved), "sha256": probe.digest(resolved), "bytes": info.st_size}
+
+
 class Runner:
     def __init__(self):
         prewarm.context()  # Refuse the NAS before any process or system access.
@@ -109,13 +147,29 @@ class Runner:
             return {"returncode": -1, "stdout": "", "stderr": type(error).__name__}
 
     def sysctls(self):
-        values = {}
-        for key in (RESTRICT, CLONE):
-            row = self.run(["sysctl", "-n", key])
-            text = row["stdout"].strip()
-            values[key] = {"value": int(text) if row["returncode"] == 0 and text in {"0", "1"} else "not_reported",
-                          **brief(row)}
-        return values
+        prewarm.context()  # No kernel reads on NAS, including direct callers.
+        return {key: read_proc_value(path) for key, path in PROC_PATHS.items()}
+
+    def sysctl_binary(self):
+        prewarm.context()
+        for candidate in SYSCTL_PATHS:
+            try:
+                candidate.stat()
+            except FileNotFoundError:
+                continue  # Only absence of /usr/sbin permits the /sbin choice.
+            return sysctl_identity(candidate)
+        raise Refused("runner_userns_sysctl_binary_not_found")
+
+    def check_sysctl_binary(self, binary):
+        prewarm.context()
+        require(type(binary) is dict and type(binary.get("candidate")) is str,
+                "runner_userns_sysctl_identity_missing")
+        require(equal(binary, sysctl_identity(Path(binary["candidate"]))), "runner_userns_sysctl_binary_changed")
+
+    def write_sysctl(self, binary, value):
+        require(type(value) is int and value in (0, 1), "runner_userns_sysctl_write_refused")
+        self.check_sysctl_binary(binary)  # Keep the SAME path/hash for cleanup.
+        return self.run(["sudo", "-n", binary["path"], "-w", RESTRICT + "=" + str(value)])
 
     def aa_status(self):
         row = self.run(["sudo", "-n", "aa-status", "--json"])
@@ -185,7 +239,20 @@ def selected_bwrap(prepared, runner):
 
 
 def values(snapshot):
-    return {key: snapshot.get(key, {}).get("value", "not_reported") for key in (RESTRICT, CLONE)}
+    return {key: snapshot.get(key, {}).get("value", "not_reported") for key in PROC_PATHS}
+
+
+def measured(snapshot):
+    return all(type(snapshot.get(key)) is dict and snapshot[key].get("source") == "procfs"
+               and snapshot[key].get("path") == str(path) and snapshot[key].get("status") == "measured"
+               and type(snapshot[key].get("value")) is int and snapshot[key]["value"] >= 0
+               and snapshot[key].get("error") is None for key, path in PROC_PATHS.items())
+
+
+def usable(snapshot):
+    value = values(snapshot)
+    return (measured(snapshot) and value[RESTRICT] in (0, 1) and value[CLONE] == 1
+            and value[MAX_NAMESPACES] > 0)
 
 
 def equal(left, right):
@@ -221,7 +288,7 @@ def prepare(prepared, evidence, identity, runner):
         binary = record["bwrap"] = selected_bwrap(prepared, runner)
         record["baseline"] = runner.namespace_probe(binary)
         before = values(record["before"])
-        require(before[CLONE] == 1 and before[RESTRICT] in (0, 1), "runner_userns_sysctls_not_usable")
+        require(usable(record["before"]), "runner_userns_sysctls_not_usable")
         if record["baseline"]["passed"]:
             record.update(method="none_required", final_probe=record["baseline"])
         else:
@@ -251,18 +318,22 @@ def prepare(prepared, evidence, identity, runner):
                     require(removed["returncode"] == 0 and not runner.profile_loaded(profile_name(identity)),
                             "runner_userns_profile_remove_failed")
                     record["profile"]["loaded"] = False
-                require(values(runner.sysctls()) == before, "runner_userns_state_drift_before_fallback")
+                before_write = runner.sysctls()
+                require(usable(before_write) and equal(values(before_write), before), "runner_userns_state_drift_before_fallback")
+                record["sysctl_binary"] = runner.sysctl_binary()
                 record["sysctl_attempted"] = True
                 write_receipt(evidence, record)
-                changed = runner.run(["sudo", "-n", "sysctl", "-w", RESTRICT + "=0"])
+                changed = runner.write_sysctl(record["sysctl_binary"], 0)
                 record["sysctl_change"] = brief(changed)
                 require(changed["returncode"] == 0, "runner_userns_sysctl_change_failed")
-                require(values(runner.sysctls()) == {RESTRICT: 0, CLONE: 1}, "runner_userns_sysctl_readback_failed")
+                record["after_sysctl_write"] = runner.sysctls()
+                require(usable(record["after_sysctl_write"]) and equal(values(record["after_sysctl_write"]),
+                        {**before, RESTRICT: 0}), "runner_userns_sysctl_readback_failed")
                 record.update(method="b_job_scoped_sysctl", final_probe=runner.namespace_probe(binary))
         require(record["final_probe"]["passed"] is True, "runner_userns_namespace_probe_failed")
         record["after"] = runner.sysctls()
-        expected = {RESTRICT: 0, CLONE: 1} if record["method"] == "b_job_scoped_sysctl" else before
-        require(values(record["after"]) == expected, "runner_userns_after_drift")
+        expected = {**before, RESTRICT: 0} if record["method"] == "b_job_scoped_sysctl" else before
+        require(usable(record["after"]) and equal(values(record["after"]), expected), "runner_userns_after_drift")
         record["aa_status_after"] = runner.aa_status()
         record["status"] = "ready"
     except Exception as error:
@@ -294,7 +365,10 @@ def verify_for_auth(path, prepared, evidence, identity, *, runner=None):
     require(proof.get("passed") is True and type(proof.get("returncode")) is int and proof["returncode"] == 0
             and equal(proof.get("proof"), PROOF), "runner_userns_probe_evidence_refused")
     require(selected_bwrap(prepared, runner) == record.get("bwrap"), "runner_userns_bwrap_changed")
-    require(values(runner.sysctls()) == values(record.get("after", {})), "runner_userns_state_changed")
+    current = runner.sysctls()
+    require(usable(current) and equal(values(current), values(record.get("after", {}))), "runner_userns_state_changed")
+    if record["method"] == "b_job_scoped_sysctl":
+        runner.check_sysctl_binary(record.get("sysctl_binary"))
     if record.get("profile", {}).get("attempted") is True:
         check_profile(record, evidence, identity)
         require(runner.profile_loaded(profile_name(identity)) is (record["method"] == "a_exact_bwrap_profile"),
@@ -309,10 +383,9 @@ def validate_ready(record):
     require(record.get("status") == "ready" and method in {
         "none_required", "a_exact_bwrap_profile", "b_job_scoped_sysctl"}, "runner_userns_not_ready")
     before, after = values(record.get("before", {})), values(record.get("after", {}))
-    require(type(before[RESTRICT]) is int and before[RESTRICT] in (0, 1)
-            and type(before[CLONE]) is int and before[CLONE] == 1, "runner_userns_before_refused")
-    expected = {RESTRICT: 0, CLONE: 1} if method == "b_job_scoped_sysctl" else before
-    require(equal(after, expected), "runner_userns_after_refused")
+    require(usable(record.get("before", {})), "runner_userns_before_refused")
+    expected = {**before, RESTRICT: 0} if method == "b_job_scoped_sysctl" else before
+    require(usable(record.get("after", {})) and equal(after, expected), "runner_userns_after_refused")
     baseline, profile = record.get("baseline", {}), record.get("profile", {})
     if method == "none_required":
         require(baseline.get("passed") is True and equal(baseline, record.get("final_probe"))
@@ -332,6 +405,8 @@ def validate_ready(record):
                     and profile.get("loaded") is False and record.get("sysctl_attempted") is True
                     and record.get("sysctl_change", {}).get("returncode") == 0,
                     "runner_userns_fallback_order_refused")
+            require(usable(record.get("after_sysctl_write", {}))
+                    and equal(values(record["after_sysctl_write"]), expected), "runner_userns_sysctl_readback_failed")
 
 
 def check_profile(record, evidence, identity):
@@ -347,7 +422,8 @@ def check_profile(record, evidence, identity):
 def restore(evidence, identity, runner):
     record = read_receipt(evidence / "runner-userns.json", evidence, identity)
     result = {"schema": "ghcp-runner-userns-cleanup-v1", "runner": identity, "status": "restoring",
-              "preparation_sha256": probe.digest(evidence / "runner-userns.json"), "execution_allowed": False}
+              "preparation_sha256": probe.digest(evidence / "runner-userns.json"), "execution_allowed": False,
+              "restoration_measured": False}
     try:
         if record.get("profile", {}).get("attempted"):
             path = check_profile(record, evidence, identity)
@@ -358,13 +434,19 @@ def restore(evidence, identity, runner):
                         "runner_userns_cleanup_profile_failed")
         before = values(record["before"])
         if record.get("sysctl_attempted") is True:
-            require(before == {RESTRICT: 1, CLONE: 1}, "runner_userns_cleanup_original_refused")
-            changed = runner.run(["sudo", "-n", "sysctl", "-w", RESTRICT + "=1"])
+            require(usable(record["before"]) and before[RESTRICT] == 1, "runner_userns_cleanup_original_refused")
+            changed = runner.write_sysctl(record.get("sysctl_binary"), 1)
             result["sysctl_restore"] = brief(changed)
             require(changed["returncode"] == 0, "runner_userns_cleanup_sysctl_failed")
         result["after_restore"] = runner.sysctls()
-        require(values(result["after_restore"]) == before, "runner_userns_cleanup_readback_failed")
-        result["status"] = "restored"
+        attempted = record.get("profile", {}).get("attempted") is True or record.get("sysctl_attempted") is True
+        if not attempted and not measured(record["before"]):
+            # Unknown == unknown is NOT a numeric restoration measurement.
+            result["status"] = "not_required_no_mutation"
+        else:
+            require(measured(record["before"]) and measured(result["after_restore"])
+                    and equal(values(result["after_restore"]), before), "runner_userns_cleanup_readback_failed")
+            result.update(status="restored" if attempted else "unchanged_verified", restoration_measured=True)
     except Exception as error:
         result.update(status="refused", reason=str(error) if isinstance(error, Refused) else type(error).__name__)
         raise

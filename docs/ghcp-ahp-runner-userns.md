@@ -14,7 +14,7 @@ The observer recorded no new RPC refusal. All applied fields were not_reported.
 The old workflow was green because a matching JSON-RPC error counted as a reply.
 
 AppArmor's unprivileged userns restriction is a hypothesis, not a measured cause.
-The new runner receipt records both relevant sysctls, aa-status counts, the
+The runner receipt records three `/proc/sys` values, aa-status counts, the
 resolved bwrap path/version/hash, and an isolated namespace canary before any
 change. The canary reuses the broker's exact outer mount/net/PID namespace,
 empty capability bounding/inheritable/ambient sets and no-new-privs boundary.
@@ -30,13 +30,50 @@ Codex's sandbox policy, outer netns, no-new-privs, seccomp or capability guards.
 Only if that profile fails may this ephemeral job set
 `kernel.apparmor_restrict_unprivileged_userns=0`. Remove our profile before that
 fallback so the second intervention is distinguishable. Never change
-`kernel.unprivileged_userns_clone`, skip netns, allow network, or use full access.
+`kernel.unprivileged_userns_clone` or `user.max_user_namespaces`, skip netns,
+allow network, or use full access.
 
 The one preparation run may contain baseline/A/B local namespace canaries;
 these are not authentication retries or extra workflow dispatches. Native
 authentication/session is attempted once, only after preparation verifies.
 Always restore this job's own profile/scalar setting and record cleanup;
 cleanup failure is a workflow failure. No permanent `/etc` profile is installed.
+
+## PATH-independent diagnostics and writes
+
+Run 42942565563 stopped before authentication because the original diagnostics
+looked up `sysctl` on the deliberately narrow `/usr/bin:/bin` PATH. It recorded
+FileNotFoundError for both reads, reproduced the isolated bwrap loopback error,
+and applied neither AppArmor nor the sysctl fallback. That run does not establish
+the numeric AppArmor restriction or its cause.
+
+Read these exact files directly, without any command or PATH lookup:
+
+- `/proc/sys/kernel/apparmor_restrict_unprivileged_userns`
+- `/proc/sys/kernel/unprivileged_userns_clone`
+- `/proc/sys/user/max_user_namespaces`
+
+Each row retains its procfs source/path, raw text, status and parsed integer.
+FileNotFoundError is explicitly `absent`, never a default zero/one; other read
+errors retain the original type, errno and message. Invalid contents do not
+become a numeric observation. Missing/error values still refuse preparation;
+clone must be 1, restriction 0/1 and maximum namespaces positive before mutation.
+These are not new permissions or aliases for the native thread policy.
+
+Only the fallback writer resolves an executable: `/usr/sbin/sysctl` first;
+only if absent, `/sbin/sysctl`. Check the regular executable, resolve the distro
+usrmerge path, record bytes/SHA256, and bind that same identity for writing and
+cleanup. Drift refuses, without switching to another binary. All writes are
+the existing exact AppArmor scalar `=0` or restoration `=1`, through sudo and
+the verified absolute path. The broker/SDK/diagnostic PATH is not broadened.
+
+After mutation, all three before/after/readback values must be measured and
+match (except for the intentional restriction=0 during the fallback).
+Cleanup records `restored` only with measured equality after an attempted
+change. With no change it records `unchanged_verified` when measured, or
+`not_required_no_mutation` with `restoration_measured=false` when the original
+diagnostics were unavailable. Unknown equals unknown is not restoration proof.
+Neither cleanup status can admit authentication after cleanup or a model turn.
 
 ## Source-grounded launcher selection
 
