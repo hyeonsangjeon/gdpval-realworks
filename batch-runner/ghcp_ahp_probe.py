@@ -129,6 +129,33 @@ def checked_member(name):
     return parsed
 
 
+def _archive_data_filter(member, destination):
+    """Keep the data filter, including on Python 3.10.12's broken symlink check.
+
+    Symlinks resolve from their parent, hard links from the archive root.
+    Validate the actual symlink target first, then give the stdlib a root-relative
+    hard-link *view* of that same resolved target. Old and new data filters agree
+    on that view and still check the member path and strip unsafe metadata.
+    Only the original symbolic link is extracted; no hard link is created.
+    """
+    if not member.issym():
+        return tarfile.data_filter(member, destination)
+    if os.path.isabs(member.linkname):
+        raise tarfile.AbsoluteLinkError(member)
+    root = Path(destination).resolve()
+    target = (root / Path(member.name).parent / member.linkname).resolve()
+    if not target.is_relative_to(root):
+        raise tarfile.LinkOutsideDestinationError(member, str(target))
+    view = member.replace(linkname=str(target.relative_to(root)))
+    view.type = tarfile.LNKTYPE
+    filtered = tarfile.data_filter(view, destination)
+    # data_filter ignores mode for symbolic links and clears ownership for all
+    # data members. Preserve those rules and the archive's exact relative link.
+    result = filtered.replace(linkname=member.linkname, mode=None)
+    result.type = tarfile.SYMTYPE
+    return result
+
+
 def extract_archive(path, destination):
     """Only pinned archives; additionally use the stdlib data extraction filter."""
     if not hasattr(tarfile, "data_filter"):
@@ -141,7 +168,7 @@ def extract_archive(path, destination):
             checked_member(member.name)
             if not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
                 raise Refused("archive_special_file")
-        archive.extractall(destination, members=members, filter="data")
+        archive.extractall(destination, members=members, filter=_archive_data_filter)
 
 
 def download(artifact, target):
