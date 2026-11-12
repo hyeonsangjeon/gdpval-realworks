@@ -41,9 +41,67 @@ from .test_workflow_ubuntu_runner_pins import restore_pre_ubuntu_2404_runner_byt
 CANARY = "Bearer PRIVATE-source-canary-DO-NOT-PUBLISH"
 REGISTERED_SOURCE = "7c1f4c94067485be3170612258639d739d07d585"
 REGISTERED_TEST_SHA256 = "ceead617a77c8fe91947d509e3e32e43252bb71708b8b1d08e4d5076f31125aa"
+REGISTRATION_ENV = {
+    "PATH": os.defpath, "LANG": "C.UTF-8", "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": os.devnull, "GIT_NO_LAZY_FETCH": "1",
+    "GIT_ALLOW_PROTOCOL": "", "GIT_LFS_SKIP_SMUDGE": "1",
+    "PYTHONDONTWRITEBYTECODE": "1", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+}
 
 
-def test_sol_source_registration(tmp_path):
+@pytest.fixture(scope="module")
+def registered_source_checkout(tmp_path_factory):
+    root = Path(__file__).resolve().parents[2]
+    frozen = tmp_path_factory.mktemp("sol-registration") / "registered"
+    subprocess.run(["/usr/bin/git", "clone", "--quiet", "--shared", "--local", "--no-checkout",
+                    str(root), str(frozen)], env={**REGISTRATION_ENV, "GIT_ALLOW_PROTOCOL": "file"},
+                   check=True, capture_output=True, timeout=30)
+    for args in (("sparse-checkout", "set", "batch-runner", ".github"),
+                 ("checkout", "--quiet", "--detach", REGISTERED_SOURCE)):
+        subprocess.run(["/usr/bin/git", "-C", str(frozen), *args], env=REGISTRATION_ENV,
+                       check=True, capture_output=True, timeout=30)
+    return frozen
+
+
+def _assert_current_registered_roles(root, frozen):
+    # Current registered roles must still match; only the byte-pinned runner
+    # overlay is reconstructed. The runtime registration itself is untouched.
+    for role in ("batch-runner/gpt56_sol_codex_pilot_preflight.py",
+                 "batch-runner/gpt56_pilot_grader_seal.py", "batch-runner/gpt56_pilot_grader_reseal.py"):
+        assert (root / role).read_bytes() == (frozen / role).read_bytes(), role
+    # Derive membership from the immutable profile, not a potentially edited
+    # current profile that could omit a role. Include every predecessor/plan
+    # and both grader closures so replay cannot hide current record drift.
+    profile = pilot.load_plan(frozen / pilot.SOURCE_PROFILE)
+    roles = set(profile["source_pins"]) | set(pilot.SOURCE_PROFILE_AUXILIARY)
+    roles.add(pilot.ACTIVE_PLAN)
+    roles.update(value for name, value in vars(pilot).items()
+                 if name.startswith("SOURCE_PROFILE") and isinstance(value, str) and value.endswith(".yaml"))
+    for module in (grader_seal, grader_reseal):
+        roles.add(module.RECORD)
+        roles.update(json.loads((frozen / module.RECORD).read_bytes())["files"])
+    for role in roles:
+        data = (root / role).read_bytes()
+        if role == ".github/workflows/batch-run.yml":
+            data = restore_pre_ubuntu_2404_runner_bytes("batch-run.yml", data)
+        assert data == (frozen / role).read_bytes(), role
+
+
+@pytest.mark.parametrize("role", [pilot.ACTIVE_PLAN, pilot.SOURCE_PROFILE, pilot.SOURCE_PROFILE_PREVIOUS,
+                                 grader_seal.RECORD, grader_reseal.RECORD, pilot.GRADER_SEAL_READER,
+                                 "batch-runner/gpt56_sol_codex_pilot_preflight.py"])
+def test_historical_replay_cannot_hide_current_record_drift(registered_source_checkout, monkeypatch, role):
+    root = Path(__file__).resolve().parents[2]
+    read_bytes = Path.read_bytes
+    def changed(path):
+        data = read_bytes(path)
+        return data + b"\n" if path == root / role else data
+    monkeypatch.setattr(Path, "read_bytes", changed)
+    with pytest.raises(AssertionError, match=role):
+        _assert_current_registered_roles(root, registered_source_checkout)
+
+
+def test_sol_source_registration(tmp_path, registered_source_checkout):
     """Replay every original assertion on real registered Git bytes, not a reseal.
 
     The runner-only overlay is not authority to change the historical native
@@ -52,29 +110,8 @@ def test_sol_source_registration(tmp_path):
     the last registered source. No provider/validator success is mocked.
     """
     root = Path(__file__).resolve().parents[2]
-    frozen = tmp_path / "registered"
-    environment = {
-        "PATH": os.defpath, "LANG": "C.UTF-8", "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": os.devnull, "GIT_NO_LAZY_FETCH": "1",
-        "GIT_ALLOW_PROTOCOL": "file", "GIT_LFS_SKIP_SMUDGE": "1",
-        "PYTHONDONTWRITEBYTECODE": "1", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-    }
-    subprocess.run(["/usr/bin/git", "clone", "--quiet", "--shared", "--local", "--no-checkout",
-                    str(root), str(frozen)], env=environment, check=True, capture_output=True, timeout=30)
-    environment["GIT_ALLOW_PROTOCOL"] = ""
-    for args in (("sparse-checkout", "set", "batch-runner", ".github"),
-                 ("checkout", "--quiet", "--detach", REGISTERED_SOURCE)):
-        subprocess.run(["/usr/bin/git", "-C", str(frozen), *args], env=environment,
-                       check=True, capture_output=True, timeout=30)
-
-    # Current registered roles must still match; only the byte-pinned runner
-    # overlay is reconstructed. The runtime registration itself is untouched.
-    profile = pilot.load_plan(root / pilot.SOURCE_PROFILE)
-    for role in set(profile["source_pins"]) | set(pilot.SOURCE_PROFILE_AUXILIARY):
-        data = (root / role).read_bytes()
-        if role == ".github/workflows/batch-run.yml":
-            data = restore_pre_ubuntu_2404_runner_bytes("batch-run.yml", data)
-        assert data == (frozen / role).read_bytes(), role
+    frozen = registered_source_checkout
+    _assert_current_registered_roles(root, frozen)
     registered_test = frozen / "batch-runner/tests/test_sol_source_registration.py"
     registered_bytes = registered_test.read_bytes()
     assert hashlib.sha256(registered_bytes).hexdigest() == REGISTERED_TEST_SHA256
@@ -87,7 +124,7 @@ def test_sol_source_registration(tmp_path):
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-o", "addopts=",
          "tests/test_sol_source_registration.py", "--junitxml=" + str(report)],
-        cwd=frozen / "batch-runner", env=environment, capture_output=True, text=True, timeout=180,
+        cwd=frozen / "batch-runner", env=REGISTRATION_ENV, capture_output=True, text=True, timeout=180,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     suite = ET.parse(report).getroot().find("testsuite")
