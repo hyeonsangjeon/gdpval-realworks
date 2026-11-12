@@ -68,6 +68,7 @@ def test_prospective_source_profile_real_tracked_compilation_and_refusals(
     current = preflight.inspect_plan(preflight.load_plan(root / _PROSPECTIVE_MANIFEST))
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/agentic-v2-stage-run.yml",
         "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/step8_grade.py",

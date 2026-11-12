@@ -166,8 +166,11 @@ def test_ci_input_bundle_current_input_registration_does_not_compile_dispatch():
     assert len(specs) == 4
     with pytest.raises(comparison.DispatchPlanRefused) as refused:
         bundle._registered()  # Real full compiler; no source hash or fingerprint substitution.
+    # Runner pinning adds a real mismatch to this frozen dispatch plan. Keep
+    # its old source seals and all earlier refusal reasons; do not reapprove it.
     assert str(refused.value) == (
-        "comparison refused: source_pin:.github/workflows/batch-run.yml, "
+        "comparison refused: source_pin:.github/workflows/agentic-v2-stage-run.yml, "
+        "source_pin:.github/workflows/batch-run.yml, "
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
         "source_pin:batch-runner/gpt54_codex_input_capture.py, "
         "source_pin:batch-runner/gpt54_v2_input_capture.py, "

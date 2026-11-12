@@ -602,6 +602,7 @@ def _workflow_profile_input_seed(tmp_path_factory, frozen_local_comparison_sourc
     current = preflight.inspect_plan(preflight.load_plan(preflight.ROOT / _PROSPECTIVE_MANIFEST))
     assert current["configuration_valid"] is current["launch_allowed"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/agentic-v2-stage-run.yml",
         "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/step8_grade.py",
@@ -670,6 +671,7 @@ def test_workflow_profile_anchor_current_source_and_frozen_refusals(monkeypatch,
     current = preflight.inspect_plan(preflight.load_plan(root / _PROSPECTIVE_MANIFEST))
     assert current["configuration_valid"] is False
     assert current["configuration_problems"] == [
+        "source_pin:.github/workflows/agentic-v2-stage-run.yml",
         "source_pin:.github/workflows/batch-run.yml",
         "source_pin:batch-runner/gpt54_prepared_input_attestation.py",
         "source_pin:batch-runner/step8_grade.py",

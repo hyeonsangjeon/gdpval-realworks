@@ -204,7 +204,7 @@ def test_hosted_containment_measurement_is_read_only_and_exact():
     names = [step.get("name") for step in job["steps"]]
 
     assert job["if"] == "github.event_name == 'pull_request'"
-    assert job["runs-on"] == "ubuntu-latest"
+    assert job["runs-on"] == "ubuntu-24.04"
     assert job["permissions"] == {"contents": "read"}
     assert job["timeout-minutes"] == 45
     assert "batch-runner/sandbox/v2/measure_hosted_containment.py" in paths
