@@ -97,6 +97,65 @@ def test_archive_symlink_cannot_escape_through_an_existing_link(tmp_path):
     assert not (destination / "node_modules/.bin/codex").is_symlink()
 
 
+def test_archive_hardlink_cannot_escape_through_an_existing_link(tmp_path):
+    destination, outside = tmp_path / "out", tmp_path / "outside"
+    destination.mkdir()
+    outside.mkdir()
+    (outside / "target").write_bytes(b"outside sentinel")
+    (destination / "alias").symlink_to(outside, target_is_directory=True)
+    archive = tmp_path / "sdk.tgz"
+    _link_archive(archive, "alias/target", tarfile.LNKTYPE)
+    with pytest.raises(tarfile.LinkOutsideDestinationError):
+        probe.extract_archive(archive, destination)
+    assert (outside / "target").read_bytes() == b"outside sentinel"
+    assert not (destination / "node_modules/.bin/codex").exists()
+    assert not (destination / "node_modules/.bin/codex").is_symlink()
+
+
+@pytest.mark.parametrize("terminal_kind", [tarfile.SYMTYPE, tarfile.LNKTYPE])
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_archive_created_link_chain_cannot_escape(tmp_path, terminal_kind, reverse_order):
+    destination, outside = tmp_path / "out", tmp_path / "outside"
+    outside.mkdir()
+    (outside / "target").write_bytes(b"outside sentinel")
+    archive = tmp_path / "chain.tgz"
+    first = tarfile.TarInfo("first")
+    first.type, first.linkname = tarfile.SYMTYPE, "second"
+    second = tarfile.TarInfo("second")
+    second.type = terminal_kind
+    second.linkname = "../outside" if terminal_kind == tarfile.SYMTYPE else "../outside/target"
+    with tarfile.open(archive, "w:gz") as output:
+        for member in ([second, first] if reverse_order else [first, second]):
+            output.addfile(member)
+        content = b"must never escape"
+        payload = tarfile.TarInfo("first/escaped")
+        payload.size = len(content)
+        output.addfile(payload, io.BytesIO(content))
+    with pytest.raises(tarfile.LinkOutsideDestinationError):
+        probe.extract_archive(archive, destination)
+    assert (outside / "target").read_bytes() == b"outside sentinel"
+    assert not (outside / "escaped").exists()
+    assert not (destination / "second").exists()
+    assert not (destination / "second").is_symlink()
+
+
+@pytest.mark.parametrize("kind", [tarfile.CHRTYPE, tarfile.BLKTYPE])
+def test_archive_device_is_refused_before_any_member_is_extracted(tmp_path, kind):
+    archive = tmp_path / "device.tgz"
+    with tarfile.open(archive, "w:gz") as output:
+        content = b"must not be partially extracted"
+        regular = tarfile.TarInfo("regular.txt")
+        regular.size = len(content)
+        output.addfile(regular, io.BytesIO(content))
+        device = tarfile.TarInfo("device")
+        device.type, device.devmajor, device.devminor = kind, 1, 3
+        output.addfile(device)
+    destination = tmp_path / "out"
+    with pytest.raises(probe.Refused, match="^archive_special_file$"):
+        probe.extract_archive(archive, destination)
+    assert not destination.exists()
+
+
 def test_archive_symlink_member_path_still_uses_the_data_filter(tmp_path):
     destination, outside = tmp_path / "out", tmp_path / "outside/nested"
     (destination / "node_modules").mkdir(parents=True)
