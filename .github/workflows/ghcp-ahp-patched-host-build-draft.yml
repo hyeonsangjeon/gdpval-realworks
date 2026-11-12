@@ -1,0 +1,124 @@
+name: Patched GHCP candidate - build only, no session or model
+
+# DRAFT ONLY. Not installed or executed. The owner's patch decision is pending.
+# No push/PR/dispatch trigger, secret, environment, session or model invocation.
+on:
+  workflow_call:
+    inputs:
+      owner_approved_patched_ghcp:
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Require the owner's patched-GHCP decision before work
+        env:
+          OWNER_PATCH_APPROVED: ${{ inputs.owner_approved_patched_ghcp }}
+        run: |
+          set -euo pipefail
+          test "$OWNER_PATCH_APPROVED" = true || { echo owner_patch_decision_required; exit 2; }
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # existing v5.1.0 pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # existing v7.0.0 pin
+        with:
+          python-version: '3.12.11'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # existing v7.0.0 pin
+        with:
+          node-version: '24.22.1' # exact .nvmrc from the unchanged vendor source
+      - name: Preserve and prepare the original sealed vendor bytes
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s  %s\n' cd5ff8f2e1ad1f140892febdc75f288adfe8e3c96bd4d3b8e9a4078a90ef5049 batch-runner/ghcp_ahp_probe_manifest.json | sha256sum --check --status
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python -B batch-runner/ghcp_ahp_probe.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-patched/base" \
+            --evidence "$RUNNER_TEMP/ghcp-patched/base-evidence"
+      - name: Apply only the reviewed three-file patch in a separate build tree
+        run: |
+          set -euo pipefail
+          umask 077
+          patch_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-config-ready.patch"
+          source_archive="$RUNNER_TEMP/ghcp-patched/base/downloads/source.tgz"
+          build_source="$RUNNER_TEMP/ghcp-patched/source"
+          printf '%s  %s\n' a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb "$patch_file" | sha256sum --check --status
+          printf '%s  %s\n' cb7fb5b3b219585a63ec8e3dbc66bab135d2fe900b0541e73862da5302c24206 "$source_archive" | sha256sum --check --status
+          mkdir "$build_source"
+          tar -xzf "$source_archive" --strip-components=1 --no-same-owner --no-same-permissions -C "$build_source"
+          cd "$build_source"
+          printf '%s  %s\n' \
+            b7126bf50b27a16c59ec163c2d4009d96a540a4bb6774a5b2f0b86123047a765 src/vs/platform/agentHost/common/agent.ts \
+            24cf78f2894471cd05a9ad97d337d963f5c0f3ad964907a792e25faf37a424fa src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            21ded7ef660f7aaa0021e00eb7f890dedd2406284a802edba5bce3cff95ba659 src/vs/platform/agentHost/node/agentService.ts | sha256sum --check --status
+          git apply --check "$patch_file"
+          git apply "$patch_file"
+          git apply --reverse --check "$patch_file"
+          printf '%s  %s\n' \
+            a4741c2a83f02acb6c7fbb61ae9800a5b9ce71d837317cb15fe79f3a2fead817 src/vs/platform/agentHost/common/agent.ts \
+            2adeb9ebfc066b728ca3f62e96853ce2cdc020a530c7b741ae0da6ddd9678ede src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            280f71720d83a4326a514c16cb1d08c6ca9e4430fdb58fc98c40afc33bebb682 src/vs/platform/agentHost/node/agentService.ts | sha256sum --check --status
+          printf '%s  %s\n' \
+            b2512f1e9f111f215168ef26d284e1aaa0da59e32fea13d134799cc74400b9ee package-lock.json \
+            2975565119f8cb74d44eb74bd6a2c166027eafa953ddb863b125d3df7875d2a7 build/package-lock.json | sha256sum --check --status
+      - name: Build a separate server candidate - never execute it
+        env:
+          npm_config_audit: 'false'
+          npm_config_fund: 'false'
+          npm_config_ignore_scripts: 'true'
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ghcp-patched/source"
+          # Missing generated typings/dependencies MUST fail, not skip type checking.
+          # Review and pin any needed build preparation before promoting this draft.
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix build ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck-client
+          # Preserve distribution metadata instead of embedding OSS product defaults.
+          cp "$RUNNER_TEMP/ghcp-patched/base/cli-data/servers/Stable-2c33b50b16c472efe58357d1d2a8a5414bc23fbf/server/product.json" product.json
+          python -B - <<'PY'
+          import datetime, os, tarfile
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'ghcp-patched'
+          with tarfile.open(root / 'base/downloads/source.tgz', 'r:gz') as archive:
+              stamp = archive.getmember('vscode-2c33b50b16c472efe58357d1d2a8a5414bc23fbf/package.json').mtime
+          output = root / 'source/out-build'
+          output.mkdir(exist_ok=True)
+          (output / 'date').write_text(datetime.datetime.fromtimestamp(stamp, datetime.timezone.utc).isoformat())
+          PY
+          node build/next/index.ts bundle --target server --minify --out out-patched
+          test -s out-patched/vs/platform/agentHost/node/agentHostMain.js
+      - name: Label the candidate result and receipt as patched GHCP, not a native observation
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/ghcp-patched/candidate-evidence"
+          python -B batch-runner/ghcp_ahp_patched_runtime.py build-receipt \
+            --source "$RUNNER_TEMP/ghcp-patched/source" \
+            --bundle "$RUNNER_TEMP/ghcp-patched/source/out-patched/vs/platform/agentHost/node/agentHostMain.js" \
+            --output "$RUNNER_TEMP/ghcp-patched/candidate-evidence/patch-receipt.json"
+          cp "$RUNNER_TEMP/ghcp-patched/candidate-evidence/patch-receipt.json" \
+            "$RUNNER_TEMP/ghcp-patched/candidate-evidence/result.json"
+          printf '%s  %s\n' cd5ff8f2e1ad1f140892febdc75f288adfe8e3c96bd4d3b8e9a4078a90ef5049 batch-runner/ghcp_ahp_probe_manifest.json | sha256sum --check --status
+      - name: Retain the separately labeled candidate for review only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: patched-ghcp-build-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-patched/candidate-evidence/*.json
+            ${{ runner.temp }}/ghcp-patched/source/out-patched/vs/platform/agentHost/node/agentHostMain.js
+            ${{ runner.temp }}/ghcp-patched/source/out-patched/vs/platform/agentHost/node/agentHostMain.js.map
+          if-no-files-found: error
+          retention-days: 7
+
+# Intentionally no candidate installation, authentication, createSession, or probe step.
+# Runtime loader/receipt contracts are implemented but the public entry remains locked.
+# Owner decision, a reviewed build and a separately authorized zero-turn are still required.

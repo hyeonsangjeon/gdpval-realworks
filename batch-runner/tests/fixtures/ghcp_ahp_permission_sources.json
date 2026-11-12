@@ -1,0 +1,86 @@
+{
+  "schema": "ghcp-pinned-permission-functions-v1",
+  "synthetic": true,
+  "execution_allowed": false,
+  "vscode_commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+  "codex_sdk_version": "0.163.0",
+  "source_archive_sha256": "cb7fb5b3b219585a63ec8e3dbc66bab135d2fe900b0541e73862da5302c24206",
+  "scope": "pure_source_functions_only_not_host_or_sdk_execution",
+  "files": [
+    {
+      "name": "common",
+      "path": "src/vs/platform/agentHost/common/codexSessionConfigKeys.ts",
+      "sha256": "d70a1746711f32fa6090bf5165c6928ae16d9340cd9c02ee04134d15fb582e67",
+      "fragments": [
+        {
+          "first_line": 1,
+          "last_line": 4,
+          "sha256": "1b0f2f1e1d3582f19d6f24b34a2d78ad8b5bfa9be778ab7c139bdff7cdeff2f9",
+          "text": "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n"
+        },
+        {
+          "first_line": 15,
+          "last_line": 25,
+          "sha256": "1c8456445e7a3fb1fba851208fa50c0585c5837429ff02fcd5ac280adbfdad8c",
+          "text": "export const enum CodexSessionConfigKey {\n\tPermissionsPreset = 'codex.permissionsPreset',\n\tApprovalPolicy = 'codex.approvalPolicy',\n\tSandboxMode = 'codex.sandboxMode',\n\tAdditionalDirectories = 'codex.additionalDirectories',\n\tNetworkAccessEnabled = 'codex.networkAccessEnabled',\n\tWebSearchMode = 'codex.webSearchMode',\n\tModelReasoningEffort = 'codex.modelReasoningEffort',\n\tPersonality = 'codex.personality',\n\tReasoningSummary = 'codex.reasoningSummary',\n}\n"
+        },
+        {
+          "first_line": 34,
+          "last_line": 37,
+          "sha256": "d1a452122a0ce2259335349d2b68e5a7a32353733d6f511e257cbf3247332199",
+          "text": "export type CodexPermissionsPreset = 'default' | 'auto-review' | 'full-access';\n\n/** Ordered preset list advertised in the Codex session-config schema. */\nexport const CODEX_PERMISSIONS_PRESETS: readonly CodexPermissionsPreset[] = ['default', 'auto-review', 'full-access'];\n"
+        },
+        {
+          "first_line": 46,
+          "last_line": 46,
+          "sha256": "9fb4cd92c5c0659cc31b2461e3b8270e16fa55d81dde6ff53fc323ca9750824f",
+          "text": "export const CODEX_DEFAULT_PERMISSIONS_PRESET: CodexPermissionsPreset = 'default';\n"
+        },
+        {
+          "first_line": 58,
+          "last_line": 67,
+          "sha256": "91b5dc0a743540b083ad347869cbc8e2e5af5b46b59117ea52e688b9a69cdcf1",
+          "text": "export function narrowCodexPermissionsPreset(raw: unknown): CodexPermissionsPreset | undefined {\n\tswitch (raw) {\n\t\tcase 'default':\n\t\tcase 'auto-review':\n\t\tcase 'full-access':\n\t\t\treturn raw;\n\t\tdefault:\n\t\t\treturn undefined;\n\t}\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "resolution",
+      "path": "src/vs/platform/agentHost/node/codex/codexSessionConfigKeys.ts",
+      "sha256": "774874473761ec258abd38ea2eaeafe457457eaaf93af344c004d874d0c6092d",
+      "fragments": [
+        {
+          "first_line": 1,
+          "last_line": 4,
+          "sha256": "1b0f2f1e1d3582f19d6f24b34a2d78ad8b5bfa9be778ab7c139bdff7cdeff2f9",
+          "text": "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n"
+        },
+        {
+          "first_line": 21,
+          "last_line": 162,
+          "sha256": "391b87ab16ab504f110a1f3f3f68229de74d75416138962fe7a23d9d68955e02",
+          "text": "export type CodexApprovalPolicy = Extract<AskForApproval, string>;\n\nexport interface ICodexResolvedPermissions {\n\treadonly approvalPolicy: CodexApprovalPolicy;\n\treadonly sandboxMode: SandboxMode;\n\treadonly approvalsReviewer: ApprovalsReviewer;\n}\n\nexport function resolveCodexPermissionsPreset(preset: CodexPermissionsPreset): ICodexResolvedPermissions {\n\tswitch (preset) {\n\t\tcase 'auto-review':\n\t\t\t// Same workspace-write sandbox as `default`, but on-request approvals\n\t\t\t// are routed through the auto-reviewer instead of a UI prompt.\n\t\t\treturn { approvalPolicy: 'on-request', sandboxMode: 'workspace-write', approvalsReviewer: 'auto_review' };\n\t\tcase 'full-access':\n\t\t\treturn { approvalPolicy: 'never', sandboxMode: 'danger-full-access', approvalsReviewer: 'user' };\n\t\tcase 'default':\n\t\tdefault:\n\t\t\treturn { approvalPolicy: 'on-request', sandboxMode: 'workspace-write', approvalsReviewer: 'user' };\n\t}\n}\n\nexport function presetForResolvedPermissions(resolved: ICodexResolvedPermissions): CodexPermissionsPreset | undefined {\n\tfor (const preset of CODEX_PERMISSIONS_PRESETS) {\n\t\tconst axes = resolveCodexPermissionsPreset(preset);\n\t\tif (axes.approvalPolicy === resolved.approvalPolicy && axes.sandboxMode === resolved.sandboxMode && axes.approvalsReviewer === resolved.approvalsReviewer) {\n\t\t\treturn preset;\n\t\t}\n\t}\n\treturn undefined;\n}\n\nexport function narrowApprovalPolicy(value: unknown): CodexApprovalPolicy | undefined {\n\tswitch (value) {\n\t\tcase 'never':\n\t\tcase 'on-request':\n\t\tcase 'untrusted':\n\t\t\treturn value;\n\t\tdefault:\n\t\t\treturn undefined;\n\t}\n}\n\nexport function narrowSandboxMode(value: unknown): SandboxMode | undefined {\n\tswitch (value) {\n\t\tcase 'read-only':\n\t\tcase 'workspace-write':\n\t\tcase 'danger-full-access':\n\t\t\treturn value;\n\t\tdefault:\n\t\t\treturn undefined;\n\t}\n}\n\n/**\n * Resolve the Codex security axes (approval policy, sandbox, approvals\n * reviewer) for a session's stored config values.\n *\n * The user-facing {@link CodexSessionConfigKey.PermissionsPreset} is the source\n * of truth; when present it expands into all three axes. For backward\n * compatibility (older sessions / programmatic config) we fall back to the\n * individual {@link CodexSessionConfigKey.ApprovalPolicy} /\n * {@link CodexSessionConfigKey.SandboxMode} keys with a `user` reviewer.\n */\nexport function resolveCodexPermissions(\n\tvalues: Record<string, unknown> | undefined,\n\tdefaults: { approvalPolicy: CodexApprovalPolicy; sandboxMode: SandboxMode },\n): ICodexResolvedPermissions {\n\tconst preset = narrowCodexPermissionsPreset(values?.[CodexSessionConfigKey.PermissionsPreset]);\n\tif (preset) {\n\t\treturn resolveCodexPermissionsPreset(preset);\n\t}\n\treturn {\n\t\tapprovalPolicy: narrowApprovalPolicy(values?.[CodexSessionConfigKey.ApprovalPolicy]) ?? defaults.approvalPolicy,\n\t\tsandboxMode: narrowSandboxMode(values?.[CodexSessionConfigKey.SandboxMode]) ?? defaults.sandboxMode,\n\t\tapprovalsReviewer: 'user',\n\t};\n}\n\n/**\n * Decide how a restored session's three permission keys (`permissionsPreset`,\n * `approvalPolicy`, `sandboxMode`) should be represented, given its raw\n * persisted config values.\n *\n * This exists to prevent a silent privilege escalation on restore: a legacy\n * session that persisted only the individual axes (for example\n * `sandboxMode = 'read-only'`) and never chose a preset must not have a\n * materialized `permissionsPreset = 'default'` inserted on top of it, because\n * {@link resolveCodexPermissions} checks the preset first and would resume the\n * session as `workspace-write`.\n *\n * The returned object contains ONLY the permission keys that should be present\n * afterwards, so callers should drop all three permission keys before applying\n * it:\n * - an explicitly chosen preset is kept as-is;\n * - legacy axes that map exactly onto a preset are migrated to that preset\n *   (single source of truth) and the raw axes dropped;\n * - legacy axes with a `workspace-write` or `danger-full-access` sandbox that\n *   do NOT map exactly onto a preset are snapped to the preset whose sandbox\n *   matches (`default` / `full-access`). This keeps the resolved axes in sync\n *   with the preset the \"Approvals\" chip displays, so a legacy\n *   `approvalPolicy = 'never'` + `workspace-write` session resolves to the\n *   `default` preset's `on-request` policy (and actually prompts) instead of\n *   silently running without approval while the chip claims \"Default\n *   Permissions\". Snapping never grants more sandbox access than the legacy\n *   value already had;\n * - legacy axes with a `read-only` sandbox (which no preset expands to, and\n *   which is more locked-down than any preset) are preserved verbatim and no\n *   preset is surfaced, so restore never silently escalates them to\n *   `workspace-write`.\n */\nexport function migrateCodexPermissionValues(\n\tconfig: Record<string, unknown> | undefined,\n\tdefaults: { approvalPolicy: CodexApprovalPolicy; sandboxMode: SandboxMode },\n): Record<string, string> {\n\tconst explicitPreset = narrowCodexPermissionsPreset(config?.[CodexSessionConfigKey.PermissionsPreset]);\n\tif (explicitPreset) {\n\t\treturn { [CodexSessionConfigKey.PermissionsPreset]: explicitPreset };\n\t}\n\tconst resolved = resolveCodexPermissions(config, defaults);\n\tconst equivalentPreset = presetForResolvedPermissions(resolved);\n\tif (equivalentPreset) {\n\t\treturn { [CodexSessionConfigKey.PermissionsPreset]: equivalentPreset };\n\t}\n\t// `read-only` is more locked-down than any preset's sandbox and cannot be\n\t// represented by one, so preserve the raw axes — surfacing a preset here\n\t// would silently escalate the session to `workspace-write` on restore.\n\tif (resolved.sandboxMode === 'read-only') {\n\t\treturn {\n\t\t\t[CodexSessionConfigKey.ApprovalPolicy]: resolved.approvalPolicy,\n\t\t\t[CodexSessionConfigKey.SandboxMode]: resolved.sandboxMode,\n\t\t};\n\t}\n\t// Otherwise snap onto the preset whose sandbox matches so the displayed chip\n\t// and the resolved axes stay consistent (`danger-full-access` → Full Access,\n\t// any other non-exact `workspace-write` combo → Default Permissions).\n\treturn {\n\t\t[CodexSessionConfigKey.PermissionsPreset]: resolved.sandboxMode === 'danger-full-access'\n\t\t\t? 'full-access'\n\t\t\t: CODEX_DEFAULT_PERMISSIONS_PRESET,\n\t};\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "profiles",
+      "path": "src/vs/platform/agentHost/node/codex/codexLaunchConfig.ts",
+      "sha256": "94be5055cc9a02764be49abae6129d05b9f83384a9834be913d72278582f2b62",
+      "fragments": [
+        {
+          "first_line": 1,
+          "last_line": 4,
+          "sha256": "1b0f2f1e1d3582f19d6f24b34a2d78ad8b5bfa9be778ab7c139bdff7cdeff2f9",
+          "text": "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n"
+        },
+        {
+          "first_line": 13,
+          "last_line": 73,
+          "sha256": "df6317c44909cfeaa0e4ed7a65b07ab406c68009e5ee017842e6b1b10e5402ec",
+          "text": "const CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE = 'vscode-workspace';\nconst CODEX_VSCODE_RUNTIME_PERMISSION_PROFILE = 'vscode-runtime';\nconst CODEX_VSCODE_WORKSPACE_NETWORK_PERMISSION_PROFILE = 'vscode-workspace-network';\nconst CODEX_VSCODE_WORKSPACE_READ_ONLY_PERMISSION_PROFILE = 'vscode-workspace-read-only';\n\ntype CodexFileSystemPermissions = Record<string, string | Record<string, string>>;\n\n/**\n * Custom POSIX profiles start with Codex's empty restricted policy. Inheriting\n * `:workspace` grants root reads, but explicitly denying them keeps even approved\n * `require_escalated` commands sandboxed. Grant only the intended baseline access.\n */\nfunction codexWorkspaceFileSystemPermissions(platform: NodeJS.Platform, binaryPath?: string): CodexFileSystemPermissions {\n\treturn platform === 'win32' ? {} : {\n\t\t':minimal': 'read',\n\t\t':workspace_roots': { '.': 'write', '.git': 'read', '.agents': 'read', '.codex': 'read' },\n\t\t':tmpdir': 'write',\n\t\t...(platform === 'linux' ? { ':slash_tmp': 'read' } : {}),\n\t\t...(platform === 'linux' && binaryPath ? { [binaryPath]: 'read' } : {}),\n\t};\n}\n\nfunction serializeFileSystemPermissions(permissions: CodexFileSystemPermissions): string {\n\treturn `{ ${Object.entries(permissions).map(([path, access]) => `${JSON.stringify(path)} = ${typeof access === 'string' ? JSON.stringify(access) : serializeFileSystemPermissions(access)}`).join(', ')} }`;\n}\n\nexport function codexPermissionProfileOverrides(binaryPath: string, platform: NodeJS.Platform = process.platform): string[] {\n\tconst baseProfile = platform === 'linux' ? CODEX_VSCODE_RUNTIME_PERMISSION_PROFILE : CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE;\n\tconst baseProfilePermissions = platform === 'win32'\n\t\t? 'extends = \":workspace\"'\n\t\t: `filesystem = ${serializeFileSystemPermissions(codexWorkspaceFileSystemPermissions(platform, binaryPath))}`;\n\tconst readOnlyProfile = platform === 'win32'\n\t\t? `permissions.${CODEX_VSCODE_WORKSPACE_READ_ONLY_PERMISSION_PROFILE}={ extends = \":read-only\" }`\n\t\t: `permissions.${CODEX_VSCODE_WORKSPACE_READ_ONLY_PERMISSION_PROFILE}={ extends = \"${CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE}\", filesystem = { \":workspace_roots\" = { \".\" = \"read\" } } }`;\n\treturn [\n\t\t`default_permissions=\"${CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE}\"`,\n\t\t`permissions.${baseProfile}={ ${baseProfilePermissions}, network = { enabled = false } }`,\n\t\t...(platform === 'linux' ? [`permissions.${CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE}={ extends = \"${baseProfile}\" }`] : []),\n\t\t`permissions.${CODEX_VSCODE_WORKSPACE_NETWORK_PERMISSION_PROFILE}={ extends = \"${CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE}\", network = { enabled = true } }`,\n\t\treadOnlyProfile,\n\t];\n}\n\nexport function codexPermissionProfile(mode: SandboxMode, networkAccess: boolean): string {\n\tif (mode === 'danger-full-access') {\n\t\treturn ':danger-full-access';\n\t}\n\tif (mode === 'read-only') {\n\t\treturn CODEX_VSCODE_WORKSPACE_READ_ONLY_PERMISSION_PROFILE;\n\t}\n\treturn networkAccess ? CODEX_VSCODE_WORKSPACE_NETWORK_PERMISSION_PROFILE : CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE;\n}\n\nexport function codexPermissionProfileReadRoots(readRoots: readonly string[], platform: NodeJS.Platform = process.platform): Record<string, JsonValue> {\n\treturn {\n\t\t[`permissions.${CODEX_VSCODE_WORKSPACE_PERMISSION_PROFILE}.filesystem`]: {\n\t\t\t...codexWorkspaceFileSystemPermissions(platform),\n\t\t\t...Object.fromEntries(readRoots.map(root => [root, 'read'])),\n\t\t},\n\t};\n}\n"
+        }
+      ]
+    }
+  ]
+}

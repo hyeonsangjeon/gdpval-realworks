@@ -1,0 +1,568 @@
+name: GHCP patched-runtime model-free tests
+
+# Offline contracts, builds and isolated no-auth readiness; no model or turn request.
+# Keep the original branch probe and its historical hash contracts untouched.
+on:
+  push:
+    branches: [leader/ghcp-patched-runtime-receipt-20261106]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcp-patched-runtime-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contracts:
+    name: Patched runtime offline contracts plus workflow guards
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - id: checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # existing v5.1.0 pin
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # existing v7.0.0 pin
+        with:
+          python-version: '3.12.11'
+      - id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # existing v7.0.0 pin
+        with:
+          node-version: '22.23.2' # match the local inert-loader fixture runtime
+          package-manager-cache: false
+      - id: dependencies
+        name: Install only offline test dependencies
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        # The fake-paid capture test imports Step8 validators inside its existing
+        # effects guard. Reuse their pinned import-only dependencies, never SDKs.
+        run: >-
+          python -m pip install --disable-pip-version-check --only-binary=:all: -r batch-runner/requirements-ghcp-sol-gate.txt
+      - id: workflow_guards
+        name: Check this workflow's scope and result contract
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ghcp-patched-ci"
+          ci_tmp="$(mktemp -d /tmp/ghcp-ci.XXXXXX)"
+          env -i PATH="$PATH" LANG=C.UTF-8 \
+            PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+            '${{ steps.python.outputs.python-path }}' -B -m pytest -q -o addopts= -p no:cacheprovider \
+            --basetemp="$ci_tmp/guards" --junitxml="$RUNNER_TEMP/ghcp-patched-ci/workflow-guards.xml" \
+            tests/test_ghcp_ahp_patched_runtime_ci.py
+      - id: contracts
+        name: Run the original offline suite plus patch-set and manifest contracts
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ghcp-patched-ci"
+          ci_tmp="$(mktemp -d /tmp/ghcp-ci.XXXXXX)"
+          env -i PATH="$PATH" LANG=C.UTF-8 \
+            PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+            '${{ steps.python.outputs.python-path }}' -B -m pytest -q -o addopts= -p no:cacheprovider \
+            --basetemp="$ci_tmp/contracts" --junitxml="$RUNNER_TEMP/ghcp-patched-ci/contracts.xml" \
+            tests/test_ghcp_ahp_patched_runtime.py \
+            tests/test_ghcp_ahp_patched_runtime_rejections.py \
+            tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_sol_paid_gate.py \
+            tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_client.py \
+            tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py \
+            tests/test_ghcp_ahp_metadata_broker.py tests/test_ghcp_ahp_connection.py \
+            tests/test_ghcp_ahp_patchset.py tests/test_ghcp_ahp_load_smoke.py tests/test_ghcp_ahp_readiness_smoke.py \
+            tests/test_ghcp_ahp_permission_normalization.py \
+            tests/test_ghcp_ahp_prewarm_zero_turn.py tests/test_ghcp_ahp_prewarm_order.py \
+            tests/test_ghcp_ahp_server_only_staging.py tests/test_ghcp_ahp_runner_userns.py \
+            tests/test_ghcp_sol_offline_rehearsal.py tests/test_ghcp_ahp_default_policy.py \
+            tests/test_ghcp_ahp_output_collection.py tests/test_ghcp_ahp_token_ledger.py
+      - id: results
+        name: Require every expected case to pass without skips
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" LANG=C.UTF-8 RUNNER_TEMP="$RUNNER_TEMP" \
+            '${{ steps.python.outputs.python-path }}' -B - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          expected = {"contracts.xml": 2901, "workflow-guards.xml": 80}
+          directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
+          counts = {}
+          for name, total in expected.items():
+              cases = list(ET.parse(directory / name).getroot().iter("testcase"))
+              bad = {key: sum(case.find(key) is not None for case in cases) for key in ("failure", "error", "skipped")}
+              if len(cases) != total or any(bad.values()):
+                  raise SystemExit("junit_contract_refused:" + name)
+              counts[name] = {"passed": len(cases), "failed": 0, "errors": 0, "skipped": 0}
+          result = {"evidence_kind": "offline-tests-only", "execution_allowed": False, "counts": counts}
+          (directory / "test-counts.json").write_text(json.dumps(result, indent=2) + "\n")
+          print(json.dumps(result))
+          PY
+      - id: artifacts
+        name: Retain only JUnit and offline test counts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-runtime-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-patched-ci/contracts.xml
+            ${{ runner.temp }}/ghcp-patched-ci/workflow-guards.xml
+            ${{ runner.temp }}/ghcp-patched-ci/test-counts.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  patched-agent-host-readiness-smoke:
+    name: patched agent host readiness smoke
+    # Independent checks of one bundle. The import job remains mandatory and its
+    # failure remains red; readiness has its OWN same-process load-proof guard.
+    needs: patched-codex-server-bundle
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - id: checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.11'
+      - id: payload
+        name: Receive the same-run byte-verified server bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          artifact-ids: ${{ needs.patched-codex-server-bundle.outputs.payload_artifact_id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/ghcp-readiness-transfer
+      - id: prepare
+        name: Prepare the unchanged public CLI and SDK pins, never authenticate or execute
+        run: |
+          set -euo pipefail
+          '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_readiness_smoke.py prepare \
+            --transfer "$RUNNER_TEMP/ghcp-readiness-transfer" --output "$RUNNER_TEMP/ghcp-readiness"
+      - id: readiness
+        name: Observe exact bootstrap-fork readiness and stop at the no-auth session boundary
+        run: |
+          set -euo pipefail
+          umask 077
+          readiness_uid="$(id -u)"
+          readiness_gid="$(id -g)"
+          readiness_netns="$(readlink /proc/self/ns/net)"
+          readiness_pidns="$(readlink /proc/self/ns/pid)"
+          timeout --signal=TERM --kill-after=10s 240s \
+            sudo -n unshare --mount --net --pid --fork --mount-proc --kill-child=KILL \
+            /bin/bash -c 'set -euo pipefail; ip link set lo up; exec "$@"' readiness-isolation \
+            /usr/bin/setpriv --reuid="$readiness_uid" --regid="$readiness_gid" --clear-groups \
+              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+              GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+              RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
+              ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+              GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+              GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_readiness_smoke.py" run \
+              --prepared "$RUNNER_TEMP/ghcp-readiness" --evidence "$RUNNER_TEMP/ghcp-readiness-evidence" \
+              --outside-netns "$readiness_netns" --outside-pidns "$readiness_pidns"
+      - id: artifacts
+        name: Retain only model-free receipts and redacted observation JSON
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ghcp-patched-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-readiness-evidence/readiness-smoke.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/backend-startup.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/wire-capture.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/thread-policy.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/management-init.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/patched-build-receipt.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/patched-runtime-contract.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/patched-load-evidence.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/server-bundle-manifest.json
+            ${{ runner.temp }}/ghcp-readiness-evidence/transfer.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  patched-codex-typecheck:
+    name: patched Codex module typecheck
+    needs: contracts
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - &source_checkout
+        id: checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # existing v5.1.0 pin
+        with:
+          persist-credentials: false
+      - &source_python
+        id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # existing v7.0.0 pin
+        with:
+          python-version: '3.12.11'
+      - &source_node
+        id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # existing v7.0.0 pin
+        with:
+          node-version: '24.22.1' # unchanged upstream .nvmrc, not the fixture Node
+          package-manager-cache: false
+      - &source_prepare
+        id: prepare
+        name: Verify the pinned source and exact three-file patch
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_ACTIONS" = true
+          test "$RUNNER_OS" = Linux
+          . /etc/os-release
+          test "$ID:$VERSION_ID" = ubuntu:24.04
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          mkdir "$evidence"
+          touch "$evidence/empty-global.npmrc"
+          patch_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-config-ready.patch"
+          printf '%s  %s\n' \
+            cd5ff8f2e1ad1f140892febdc75f288adfe8e3c96bd4d3b8e9a4078a90ef5049 batch-runner/ghcp_ahp_probe_manifest.json \
+            a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb "$patch_file" | sha256sum --check
+          env -i PATH="$PATH" LANG=C.UTF-8 curl --fail --location \
+            --proto '=https' --proto-redir '=https' --max-time 300 --max-filesize 100663296 \
+            --output "$evidence/source.tgz" \
+            https://codeload.github.com/microsoft/vscode/tar.gz/2c33b50b16c472efe58357d1d2a8a5414bc23fbf
+          printf '%s  %s\n' cb7fb5b3b219585a63ec8e3dbc66bab135d2fe900b0541e73862da5302c24206 "$evidence/source.tgz" | sha256sum --check
+          mkdir "$evidence/source"
+          tar -xzf "$evidence/source.tgz" --strip-components=1 --no-same-owner --no-same-permissions -C "$evidence/source"
+          cd "$evidence/source"
+          printf '%s  %s\n' \
+            b7126bf50b27a16c59ec163c2d4009d96a540a4bb6774a5b2f0b86123047a765 src/vs/platform/agentHost/common/agent.ts \
+            24cf78f2894471cd05a9ad97d337d963f5c0f3ad964907a792e25faf37a424fa src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            21ded7ef660f7aaa0021e00eb7f890dedd2406284a802edba5bce3cff95ba659 src/vs/platform/agentHost/node/agentService.ts > "$evidence/upstream-source.sha256"
+          sha256sum --check "$evidence/upstream-source.sha256"
+          git apply --check "$patch_file"
+          git apply "$patch_file"
+          git apply --reverse --check "$patch_file"
+          printf '%s  %s\n' \
+            a4741c2a83f02acb6c7fbb61ae9800a5b9ce71d837317cb15fe79f3a2fead817 src/vs/platform/agentHost/common/agent.ts \
+            2adeb9ebfc066b728ca3f62e96853ce2cdc020a530c7b741ae0da6ddd9678ede src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            280f71720d83a4326a514c16cb1d08c6ca9e4430fdb58fc98c40afc33bebb682 src/vs/platform/agentHost/node/agentService.ts > "$evidence/patched-source.sha256"
+          sha256sum --check "$evidence/patched-source.sha256"
+          printf '%s  %s\n' \
+            6529eb9164da5d1c108edaab1210636affcaf19f5600980dfa46272323239679 package.json \
+            9f1aa3f23b902ee28a78ddb963c6fa5f8a8d8f032f3325a00756a82b9f8ad24f build/package.json \
+            b2512f1e9f111f215168ef26d284e1aaa0da59e32fea13d134799cc74400b9ee package-lock.json \
+            2975565119f8cb74d44eb74bd6a2c166027eafa953ddb863b125d3df7875d2a7 build/package-lock.json \
+            81c68bd8031151d4363aec9632af6b6baf289f87fabcd4bfd335872ff6f69be7 .npmrc \
+            b3da7ad335f268736ee1f90c20161e3307863e1e2e56f86c8c9ab1ff0dca507c build/.npmrc \
+            d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33 .nvmrc \
+            6c35a05a6798601b37cd28c535f4e7258ffdf34e271fbf6a4411d328f1db2332 src/tsconfig.json \
+            74359c514fb10624b9871279dd094fdd8034d4f3e37b154b5b98726db361c8c4 src/tsconfig.base.json \
+            c8ec14dbf6814a112522a83fefbca7e94d083712baf132079b39a2876f099b3a build/npm/electronTypes.ts \
+            5f7dd4189640be2f627607f7ef899011116f89645b56ee830f1a2c8f96dd69d5 build/checksums/electron.txt > "$evidence/source-invariants.sha256"
+          sha256sum --check "$evidence/source-invariants.sha256"
+          test "$(env -i PATH="$PATH" node --version)" = v24.22.1
+          # One-line compiler correction, separate from the unchanged original patch/runtime pins.
+          # Use the same storage resolver as upstream agentService.ts:1242, not a cast/default bypass.
+          correction_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
+          printf '%s  %s\n' 555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a "$correction_file" | sha256sum --check
+          git apply --check "$correction_file"
+          git apply "$correction_file"
+          git apply --reverse --check "$correction_file"
+          printf '%s  %s\n' \
+            a4741c2a83f02acb6c7fbb61ae9800a5b9ce71d837317cb15fe79f3a2fead817 src/vs/platform/agentHost/common/agent.ts \
+            2adeb9ebfc066b728ca3f62e96853ce2cdc020a530c7b741ae0da6ddd9678ede src/vs/platform/agentHost/node/codex/codexAgent.ts \
+            209a699ee4138a822a2aaa5a1146066d937d5526a826846106debb8b9d34a49c src/vs/platform/agentHost/node/agentService.ts > "$evidence/corrected-source.sha256"
+          sha256sum --check "$evidence/corrected-source.sha256"
+          env -i PATH="$PATH" LANG=C.UTF-8 \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_patched_runtime.py" verify-patchset
+      - &source_dependencies
+        id: dependencies
+        name: Install the unchanged root and build lockfiles without lifecycle execution
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          sha256sum --check "$evidence/source-invariants.sha256"
+          # Retain the locked draft's lifecycle-disable setting; this does not suppress tsc diagnostics.
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_cache="$evidence/npm-cache" \
+            npm ci --ignore-scripts --no-audit --no-fund 2>&1 | tee "$evidence/dependencies-root.log"
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_cache="$evidence/npm-cache" \
+            npm --prefix build ci --ignore-scripts --no-audit --no-fund 2>&1 | tee "$evidence/dependencies-build.log"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256"
+      - &source_electron_types
+        id: electron_types
+        name: Prepare checksum-verified Electron declarations using the pinned upstream helper
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          sha256sum --check "$evidence/source-invariants.sha256"
+          env -i PATH="$PATH" LANG=C.UTF-8 node build/npm/electronTypes.ts 2>&1 | tee "$evidence/electron-types.log"
+          test -s .build/typings/electron.d.ts
+          expected="$(sed -n 's/^\([a-f0-9]\{64\}\) \*electron\.d\.ts$/\1/p' build/checksums/electron.txt)"
+          test "${#expected}" -eq 64
+          printf '%s  %s\n' "$expected" .build/typings/electron.d.ts > "$evidence/electron-types.sha256"
+          sha256sum --check "$evidence/electron-types.sha256"
+      - id: typecheck
+        name: Typecheck all src modules including the complete patched Codex agent
+        timeout-minutes: 90
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
+          # Invoke the unchanged upstream script/tsconfig, including its existing declaration-file policy.
+          # listFiles proves the three patched modules were checked, not a transpile-only substitute.
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_ignore_scripts=true \
+            npm run typecheck-client -- --pretty false --listFiles --extendedDiagnostics 2>&1 | tee "$evidence/patched-typecheck.log"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
+      - id: upstream_diagnostic
+        name: On compiler failure only, compare the original pinned source without changing the failed verdict
+        if: failure() && steps.typecheck.outcome == 'failure'
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          patch_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-config-ready.patch"
+          correction_file="$GITHUB_WORKSPACE/batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
+          git apply --reverse --check "$correction_file"
+          git apply --reverse "$correction_file"
+          sha256sum --check "$evidence/patched-source.sha256"
+          git apply --reverse --check "$patch_file"
+          git apply --reverse "$patch_file"
+          sha256sum --check "$evidence/upstream-source.sha256"
+          env -i PATH="$PATH" LANG=C.UTF-8 npm_config_userconfig=/dev/null \
+            npm_config_globalconfig="$evidence/empty-global.npmrc" npm_config_ignore_scripts=true \
+            npm run typecheck-client -- --pretty false --listFiles --extendedDiagnostics 2>&1 | tee "$evidence/upstream-typecheck.log"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/upstream-source.sha256" "$evidence/electron-types.sha256"
+      - id: results
+        name: Record compilation evidence without authorizing runtime execution
+        if: always()
+        env:
+          PREPARE_OUTCOME: ${{ steps.prepare.outcome }}
+          DEPENDENCIES_OUTCOME: ${{ steps.dependencies.outcome }}
+          ELECTRON_TYPES_OUTCOME: ${{ steps.electron_types.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          UPSTREAM_DIAGNOSTIC_OUTCOME: ${{ steps.upstream_diagnostic.outcome }}
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" LANG=C.UTF-8 RUNNER_TEMP="$RUNNER_TEMP" GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" \
+            PREPARE_OUTCOME="$PREPARE_OUTCOME" DEPENDENCIES_OUTCOME="$DEPENDENCIES_OUTCOME" \
+            ELECTRON_TYPES_OUTCOME="$ELECTRON_TYPES_OUTCOME" TYPECHECK_OUTCOME="$TYPECHECK_OUTCOME" \
+            UPSTREAM_DIAGNOSTIC_OUTCOME="$UPSTREAM_DIAGNOSTIC_OUTCOME" \
+            '${{ steps.python.outputs.python-path }}' -B - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-typecheck"
+          directory.mkdir(exist_ok=True)
+          phases = ("prepare", "dependencies", "electron_types", "typecheck", "upstream_diagnostic")
+          outcomes = {phase: os.environ[phase.upper() + "_OUTCOME"] for phase in phases}
+          log = directory / "patched-typecheck.log"
+          lines = set(log.read_text().splitlines()) if log.is_file() else set()
+          modules = ("src/vs/platform/agentHost/common/agent.ts",
+                     "src/vs/platform/agentHost/node/codex/codexAgent.ts",
+                     "src/vs/platform/agentHost/node/agentService.ts")
+          included = {name: str(directory / "source" / name) in lines for name in modules}
+          passed = all(outcomes[phase] == "success" for phase in phases[:4]) and all(included.values())
+          evidence_files = ("upstream-source.sha256", "patched-source.sha256", "corrected-source.sha256", "source-invariants.sha256",
+                            "electron-types.sha256", "dependencies-root.log", "dependencies-build.log",
+                            "electron-types.log", "patched-typecheck.log", "upstream-typecheck.log")
+          hashes = {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
+                    for name in evidence_files if (directory / name).is_file()}
+          result = {"evidence_kind": "patched-source-typecheck-no-execution", "execution_allowed": False,
+                    "patched_ghcp": True, "runtime_load_status": "not_executed",
+                    "upstream_commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+                    "patch_sha256": "6d869d65ec18a5aba93528f27e1277ac37b48a7da439065911e11e6c71f33856",
+                    "base_patch_sha256": "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb",
+                    "typecheck_correction_sha256": "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a",
+                    "typechecked_source_status": "base-patch-plus-context-correction",
+                    "runtime_receipt_schema": "ghcp-patched-host-build-candidate-v3", "runtime_receipt_generated": False,
+                    "outcomes": outcomes, "patched_modules_in_compiler_input": included,
+                    "typecheck_passed": passed, "evidence_sha256": hashes}
+          (directory / "typecheck-result.json").write_text(json.dumps(result, indent=2) + "\n")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+              summary.write("## Patched Codex source typecheck (no runtime execution)\n\n")
+              summary.write("```json\n" + json.dumps(result, indent=2) + "\n```\n")
+          print(json.dumps(result))
+          if not passed:
+              raise SystemExit("patched_source_typecheck_refused")
+          PY
+      - id: artifacts
+        name: Retain compiler logs and source-only evidence, never an executable candidate
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-codex-typecheck-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-patched-typecheck/*.log
+            ${{ runner.temp }}/ghcp-patched-typecheck/*.sha256
+            ${{ runner.temp }}/ghcp-patched-typecheck/typecheck-result.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  patched-codex-server-bundle:
+    name: patched Codex server bundle build
+    needs: patched-codex-typecheck
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    outputs:
+      payload_artifact_id: ${{ steps.payload_artifact.outputs.artifact-id }}
+    steps:
+      # Same byte-pinned preparation as typecheck, in a fresh runner, not the locked build draft.
+      - *source_checkout
+      - *source_python
+      - *source_node
+      - *source_prepare
+      - *source_dependencies
+      - *source_electron_types
+      - id: product_inputs
+        name: Prepare pinned vendor product metadata and deterministic source date
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          env -i PATH="$PATH" LANG=C.UTF-8 curl --fail --location \
+            --proto '=https' --proto-redir '=https' --max-time 300 --max-filesize 335544320 \
+            --output "$evidence/server.tgz" \
+            https://vscode.download.prss.microsoft.com/dbazure/download/stable/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/vscode-server-linux-x64.tar.gz
+          printf '%s  %s\n' 65a713d95bb598310ad86db4daea28f9c3f9687b59ee9e57b3e7060a810bf916 "$evidence/server.tgz" | sha256sum --check
+          env -i PATH="$PATH" LANG=C.UTF-8 \
+            '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_bundle_manifest.py prepare \
+            --source "$evidence/source" --source-archive "$evidence/source.tgz" \
+            --server-archive "$evidence/server.tgz" --output "$evidence/build-inputs.json"
+      - id: bundle
+        name: Build the server bundle with no external network, never execute its output
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          cd "$evidence/source"
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
+          # Enter an empty network namespace, then drop back to the runner's uid/gid.
+          sudo -n unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups \
+            env -i PATH="$PATH" LANG=C.UTF-8 BUILD_SOURCEVERSION=2c33b50b16c472efe58357d1d2a8a5414bc23fbf \
+            node build/next/index.ts bundle --target server --minify --out out-patched 2>&1 | tee "$evidence/server-bundle.log"
+          test -s out-patched/vs/platform/agentHost/node/agentHostMain.js
+          sha256sum --check "$evidence/source-invariants.sha256" "$evidence/corrected-source.sha256" "$evidence/electron-types.sha256"
+      - id: manifest
+        name: Record and validate only file hashes, sizes and the locked build receipt
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          env -i PATH="$PATH" LANG=C.UTF-8 \
+            '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_bundle_manifest.py record \
+            --source "$evidence/source" --bundle-directory "$evidence/source/out-patched" \
+            --inputs "$evidence/build-inputs.json" --receipt "$evidence/build-receipt.json" \
+            --output "$evidence/server-bundle-manifest.json"
+      - id: payload
+        name: Bind the exact built bytes and vendor archive to this run for the load smoke
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/ghcp-patched-typecheck"
+          '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_load_smoke.py pack \
+            --bundle "$evidence/source/out-patched/vs/platform/agentHost/node/agentHostMain.js" \
+            --manifest "$evidence/server-bundle-manifest.json" --server-archive "$evidence/server.tgz" \
+            --output "$evidence/load-smoke-transfer"
+      - id: payload_artifact
+        name: Short-lived same-run payload for the model-free consumer only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-load-payload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-patched-typecheck/load-smoke-transfer/payload.tar
+            ${{ runner.temp }}/ghcp-patched-typecheck/load-smoke-transfer/transfer.json
+          if-no-files-found: error
+          retention-days: 1
+          include-hidden-files: false
+      - id: artifacts
+        name: Upload the hash and size manifest only, no executable or binary artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-codex-server-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ghcp-patched-typecheck/server-bundle-manifest.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  patched-agent-host-load-smoke:
+    name: patched agent host model-free load smoke
+    needs: patched-codex-server-bundle
+    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - *source_checkout
+      - *source_python
+      - id: payload
+        name: Receive the producer artifact ID from this run, never a branch-latest build
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # existing v7.0.0 pin
+        with:
+          artifact-ids: ${{ needs.patched-codex-server-bundle.outputs.payload_artifact_id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/ghcp-load-transfer
+      - id: prepare
+        name: Verify same-run provenance and stage separate positive and one-byte-negative copies
+        run: |
+          set -euo pipefail
+          '${{ steps.python.outputs.python-path }}' -B batch-runner/ghcp_ahp_load_smoke.py prepare \
+            --transfer "$RUNNER_TEMP/ghcp-load-transfer" --output "$RUNNER_TEMP/ghcp-load-smoke"
+      - id: smoke
+        name: Import the actual bundle without authentication, network egress or client RPC
+        run: |
+          set -euo pipefail
+          umask 077
+          smoke_uid="$(id -u)"
+          smoke_gid="$(id -g)"
+          smoke_netns="$(readlink /proc/self/ns/net)"
+          smoke_pidns="$(readlink /proc/self/ns/pid)"
+          timeout --signal=TERM --kill-after=10s 90s \
+            sudo -n unshare --mount --net --pid --fork --mount-proc --kill-child=KILL \
+            /usr/bin/setpriv --reuid="$smoke_uid" --regid="$smoke_gid" --clear-groups \
+              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+              GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+              RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" \
+              ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+              GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_load_smoke.py" run \
+              --prepared "$RUNNER_TEMP/ghcp-load-smoke" --evidence "$RUNNER_TEMP/ghcp-load-smoke-evidence" \
+              --outside-netns "$smoke_netns" --outside-pidns "$smoke_pidns"
+      - id: artifacts
+        name: Retain synthetic model-free receipts and redacted diagnostics, never runtime state or credentials
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing v7.0.1 pin
+        with:
+          name: ghcp-patched-load-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/load-smoke.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/patched-build-receipt.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/patched-runtime-contract.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/patched-load-evidence.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/server-bundle-manifest.json
+            ${{ runner.temp }}/ghcp-load-smoke-evidence/transfer.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false

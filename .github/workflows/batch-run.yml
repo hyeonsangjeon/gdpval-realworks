@@ -75,7 +75,7 @@ jobs:
       contains(inputs.experiment_yaml, 'gpt54_sandboxv2_codex_comparison') ||
       contains(inputs.experiment_yaml, 'comparison-run') ||
       contains(inputs.experiment_yaml, 'comparison-grading')) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -270,7 +270,7 @@ jobs:
   reject-agentic:
     needs: inspect-mode
     if: needs.inspect-mode.outputs.uses_agentic == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -283,7 +283,7 @@ jobs:
   reject-unconfirmed-codex:
     needs: inspect-mode
     if: needs.inspect-mode.outputs.codex_blocked == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -313,7 +313,7 @@ jobs:
     # hosted 24.04 target, not a moving label. The historical baseline in
     # batch-runner/docs/codex_sandbox_hosts.json is unchanged: this new prepared
     # condition must prove readiness in this job before any Azure/model access.
-    runs-on: ${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' && 'ubuntu-24.04' || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 360    # max 6 hours
     env:
       EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
@@ -1597,7 +1597,7 @@ jobs:
       contains(inputs.experiment_yaml, 'gpt54_sandboxv2_codex_comparison') ||
       contains(inputs.experiment_yaml, 'comparison-run') ||
       contains(inputs.experiment_yaml, 'comparison-grading') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Override the workflow's write/OIDC permissions before this job can start.
     permissions:

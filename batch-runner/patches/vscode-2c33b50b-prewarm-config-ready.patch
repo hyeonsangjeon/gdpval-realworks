@@ -1,0 +1,71 @@
+diff --git a/src/vs/platform/agentHost/common/agent.ts b/src/vs/platform/agentHost/common/agent.ts
+--- a/src/vs/platform/agentHost/common/agent.ts
++++ b/src/vs/platform/agentHost/common/agent.ts
+@@ -1197,6 +1197,14 @@
+ 	/** Prepare an existing chat for input without sending a turn. May acquire its native writer lock. */
+ 	prepareChat?(chat: URI, context: AgentChatOperationContext): Promise<IAgentPrepareChatResult>;
+ 
++	/**
++	 * Host-only notification after a fresh deferred chat's owning session and
++	 * authoritative configuration have been published. Never submits a turn.
++	 * Not an AHP/management command; callers cannot use it to bypass creation.
++	 * Implementations must be idempotent and retain their normal prewarm gates.
++	 */
++	onChatConfigurationReady?(chat: URI, context: AgentChatOperationContext): void;
++
+ 	/**
+ 	 * Optionally starts the runtime of a chat that was created with a deferred
+ 	 * backing ({@link IAgentCreateChatResult.provisional}) before its first send,
+diff --git a/src/vs/platform/agentHost/node/codex/codexAgent.ts b/src/vs/platform/agentHost/node/codex/codexAgent.ts
+--- a/src/vs/platform/agentHost/node/codex/codexAgent.ts
++++ b/src/vs/platform/agentHost/node/codex/codexAgent.ts
+@@ -865,4 +865,6 @@
+ 	/** TTL timer for a materialized-but-unused prewarmed thread. */
+ 	prewarmTimer: ReturnType<typeof setTimeout> | undefined;
++	/** One-shot host configuration-ready notification; never reset to retry prewarm. */
++	prewarmScheduled?: boolean;
+ 	/** True once the prewarmed session has been claimed by a user turn. */
+ 	prewarmClaimed: boolean;
+@@ -5044,4 +5046,15 @@
+ 	readonly chats: IAgentChats = {
++		onChatConfigurationReady: (chat, context) => {
++			const uri = this._resolveConversationSession(chat, context);
++			const session = uri && this._sessions.get(AgentSession.id(uri));
++			if (!session || session.disposed || session.prewarmScheduled || session.prewarmClaimed
++				|| session.threadId !== undefined || session.currentTurnId || session.materializePromise
++				|| this._configValues(session.owner.get(), chat) === undefined) {
++				return;
++			}
++			session.prewarmScheduled = true;
++			this._schedulePrewarm(session);
++		},
+ 		prepareChat: (chat, context) => this._chatLifecycleSequencer.queue(chat.toString(), () => this._prepareChat(chat, context)),
+ 		createChat: (chat: URI, context: URI | IAgentChatContext, options?: IAgentCreateChatOptions): Promise<IAgentCreateChatResult> => {
+ 			const resolved = resolveAgentChatContext(context, chat);
+@@ -5219,13 +5232,10 @@
+ 			try {
+ 				this._throwIfShuttingDown();
+ 				// Seed the eager active client over the exact chat this call binds
+ 				// — the agent never invents a chat URI to stand in for it — before
+-				// the prewarm below reads the client's tools into a `thread/start`.
++				// the host releases prewarm after publishing the session configuration.
+ 				await this._seedEagerActiveClient(session.sessionUri, chat, context, options?.activeClient);
+ 				this._throwIfShuttingDown();
+-				if (session.threadId === undefined) {
+-					this._schedulePrewarm(session);
+-				}
+ 				// Server tools are session-scoped, so they are advertised on the
+ 				// session Agent Host addressed — the only URI it knows this chat by.
+ 				this._advertiseServerTools(session, session.owner.get());
+diff --git a/src/vs/platform/agentHost/node/agentService.ts b/src/vs/platform/agentHost/node/agentService.ts
+--- a/src/vs/platform/agentHost/node/agentService.ts
++++ b/src/vs/platform/agentHost/node/agentService.ts
+@@ -6200,6 +6200,8 @@
+ 		// A dispose that arrived during creation is waiting for it (see
+ 		// `disposeSession`); warming that draft would outlive it.
+ 		if (isIdleProvisional && !isEphemeral && !this._sessionResidency.isBeingDisposed(session)) {
++			// The provider can now read the authoritative session config, not creation defaults.
++			provider.chats.onChatConfigurationReady?.(defaultChat, this._chatContext(session, defaultChat));
+ 			this._sessionPrewarmer.onProvisionalSessionCreated({ provider, session, defaultChat, workingDirectories: config?.workingDirectories });
+ 		}
+ 		return session;

@@ -19,6 +19,11 @@ import ghcp_sol_paid_gate as paid
 ROOT = Path(__file__).resolve().parents[2]
 CANARY = "FAKE_PAID_AUTH_CANARY_97531_NOT_A_CREDENTIAL"
 CONDITION = "github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false"
+TASK_CONDITION = ("always() && !cancelled() && " + CONDITION + " && inputs.connection_only != true && inputs.capability_only != true && "
+                  "inputs.authenticated_zero_turn != true && "
+                  "needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || "
+                  "(needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true'))"
+                  " && inputs.default_policy_unpatched != true")
 
 
 def _workflow():
@@ -28,26 +33,35 @@ def _workflow():
 @pytest.mark.parametrize("event", ["push", "pull_request", "workflow_dispatch", "workflow_run", "schedule"])
 @pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.parametrize("dry", [False, True])
-def test_paid_job_event_truth_table_from_yaml(event, enabled, dry):
+@pytest.mark.parametrize("zero_turn", [False, True])
+@pytest.mark.parametrize("default_profile", [False, True])
+def test_paid_job_event_truth_table_from_yaml(event, enabled, dry, zero_turn, default_profile):
     job = _workflow()["jobs"]["paid-task"]
     expression = job["if"].removeprefix("${{ ").removesuffix(" }}")
-    assert expression == CONDITION
-    # Only this exact three-clause expression is accepted; no general YAML eval.
-    observed = all((event == "workflow_dispatch", enabled is True, dry is False))
-    assert observed is (event == "workflow_dispatch" and enabled and not dry)
+    assert expression == TASK_CONDITION
+    # Exact paid expression excludes BOTH zero-turn profiles independently.
+    observed = all((event == "workflow_dispatch", enabled is True, dry is False, zero_turn is False, default_profile is False))
+    assert observed is (event == "workflow_dispatch" and enabled and not dry and not zero_turn and not default_profile)
     if event in {"push", "pull_request"}:
         assert observed is False
 
 
-def test_single_secret_reference_only_in_protected_paid_runtime_step():
+def test_secret_references_only_in_protected_connection_and_task_runtime_steps():
     workflow = _workflow()
     assert workflow["on"]["workflow_dispatch"]["inputs"]["execute_paid"]["default"] == "false"
     jobs = workflow["jobs"]
     secret_jobs = [name for name, job in jobs.items() if "secrets." in yaml.dump(job)]
-    assert secret_jobs == ["paid-task"]
+    assert secret_jobs == ["ahp-zero-turn", "ahp-default-policy-zero-turn", "ahp-connection", "paid-task"]
+    assert jobs["ahp-zero-turn"]["environment"] == "ghcp-sol-gate"
+    assert "inputs.execute_paid == false" in jobs["ahp-zero-turn"]["if"]
+    assert "inputs.authenticated_zero_turn == true" in jobs["ahp-zero-turn"]["if"]
+    assert "inputs.default_policy_unpatched != true" in jobs["ahp-zero-turn"]["if"]
+    assert jobs["ahp-default-policy-zero-turn"]["environment"] == "ghcp-sol-gate"
+    assert "inputs.default_policy_unpatched == true" in jobs["ahp-default-policy-zero-turn"]["if"]
+    assert "inputs.execute_paid == false" in jobs["ahp-default-policy-zero-turn"]["if"]
     job = jobs["paid-task"]
     assert job["environment"] == "ghcp-sol-gate" and job["runs-on"] == "ubuntu-24.04"
-    assert job["needs"] == "plan" and job["timeout-minutes"] == "25"
+    assert job["needs"] == ["plan", "ahp-connection"] and job["timeout-minutes"] == "25"
     assert job["strategy"] == {"fail-fast": "true", "max-parallel": "1",
                                "matrix": "${{ fromJSON(needs.plan.outputs.matrix) }}"}
     selected = [step for step in job["steps"] if "secrets." in yaml.dump(step)]
@@ -142,6 +156,50 @@ def test_missing_or_empty_secret_refuses_before_cli(runtime, tmp_path, monkeypat
     record = _run(runtime, tmp_path)
     assert record["ready_for_contract"] is False and record["reason_codes"] == ["auth_source_unavailable"]
     assert not (tmp_path / "export-state").exists()
+
+
+@pytest.mark.parametrize("value", [None, "", " ", CANARY])
+def test_ahp_draft_never_starts_a_host_or_falls_back_to_copilot(runtime, tmp_path, monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("COPILOT_GITHUB_TOKEN")
+    else:
+        monkeypatch.setenv("COPILOT_GITHUB_TOKEN", value)
+    def forbidden(*args, **kwargs):
+        pytest.fail("AHP draft attempted a CLI, input load or real host")
+    monkeypatch.setattr(adapter, "run_task", forbidden)
+    monkeypatch.setattr(paid, "task_materials", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    record = paid.execute_task(gate.TASK_IDS[0], runtime, tmp_path / "absent-bundle",
+                               tmp_path / "absent-state", tmp_path / "export", execution_adapter="ahp-draft")
+    assert not record["ready_for_contract"]
+    expected = "connection_verification_required" if value == CANARY else "auth_source_unavailable"
+    assert record["reason_codes"] == [expected]
+    assert not (tmp_path / "absent-state").exists()
+    assert CANARY not in (tmp_path / "export/capture.json").read_text()
+    if value == CANARY:
+        assert "execution_receipt" not in record  # No task adapter entered before connection admission.
+
+
+@pytest.mark.parametrize("field", ["served_model", "reasoning_effort", "context_window", "web_search_used"])
+def test_paid_ahp_job_stops_before_inputs_or_task_on_missing_first_turn_attestation(runtime, tmp_path, monkeypatch, field):
+    from .test_ghcp_ahp_connection import first_turn_wire
+    import ghcp_ahp_first_turn as first_turn
+    for key, value in {"RUNNER_ARCH": "X64", "GITHUB_RUN_ID": "100", "GITHUB_SHA": "a" * 40}.items():
+        monkeypatch.setenv(key, value)
+    report = first_turn.assess(first_turn_wire())
+    del report["observed"][field]
+    receipt = tmp_path / "connection.json"
+    receipt.write_text(json.dumps({"first_turn_attestation": report}))
+    def forbidden(*args, **kwargs):
+        pytest.fail("missing first-turn evidence entered a task, process, or input loader")
+    monkeypatch.setattr(adapter, "run_task", forbidden)
+    monkeypatch.setattr(paid, "task_materials", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    result = paid.execute_task(gate.TASK_IDS[0], runtime, tmp_path / "absent-bundle", tmp_path / "absent-state",
+                              tmp_path / "export", execution_adapter="ahp-draft", connection_receipt=receipt)
+    assert result["ready_for_contract"] is False
+    assert result["reason_codes"] == ["first_turn_attestation_refused"]
+    assert not (tmp_path / "absent-state").exists()
 
 
 @pytest.mark.parametrize("name,value", [("GITHUB_EVENT_NAME", "push"), ("GITHUB_EVENT_NAME", "pull_request"),

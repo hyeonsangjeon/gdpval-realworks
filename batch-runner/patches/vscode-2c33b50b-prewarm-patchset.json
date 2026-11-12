@@ -1,0 +1,14 @@
+{
+  "schema": "ghcp-prewarm-patchset-v1",
+  "upstream_commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+  "patches": [
+    {
+      "file": "vscode-2c33b50b-prewarm-config-ready.patch",
+      "sha256": "a4e8d0fad6bc37b73b8dc2731be6914d07e0af6460ccb7bcf6749a48f8c3bceb"
+    },
+    {
+      "file": "vscode-2c33b50b-prewarm-chat-context.patch",
+      "sha256": "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
+    }
+  ]
+}
