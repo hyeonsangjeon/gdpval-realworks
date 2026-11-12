@@ -4,15 +4,20 @@ No input preparation, provider call, reservation or launch verdict is stubbed
 as successful. The test consumes no study cell and authorizes no live run.
 """
 
+import ast
 import hashlib
+import inspect
 import io
 import json
+import os
 import socket
 import subprocess
+import sys
 import tarfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+import xml.etree.ElementTree as ET
 
 import pytest
 import yaml
@@ -30,12 +35,85 @@ import gpt56_pilot_grader_seal as grader_seal
 import gpt56_sol_codex_pilot_preflight as pilot
 import step8_grade as step8
 from core import azure_ai_clients, codex_azure_token
+from .test_workflow_ubuntu_runner_pins import restore_pre_ubuntu_2404_runner_bytes
 
 
 CANARY = "Bearer PRIVATE-source-canary-DO-NOT-PUBLISH"
+REGISTERED_SOURCE = "7c1f4c94067485be3170612258639d739d07d585"
+REGISTERED_TEST_SHA256 = "ceead617a77c8fe91947d509e3e32e43252bb71708b8b1d08e4d5076f31125aa"
 
 
-def test_sol_source_registration(tmp_path, monkeypatch, capsys):
+def test_sol_source_registration(tmp_path):
+    """Replay every original assertion on real registered Git bytes, not a reseal.
+
+    The runner-only overlay is not authority to change the historical native
+    source registration. Check both workflow identities, retain the entire
+    original contract below, and execute it in an isolated local checkout of
+    the last registered source. No provider/validator success is mocked.
+    """
+    root = Path(__file__).resolve().parents[2]
+    frozen = tmp_path / "registered"
+    environment = {
+        "PATH": os.defpath, "LANG": "C.UTF-8", "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull, "GIT_NO_LAZY_FETCH": "1",
+        "GIT_ALLOW_PROTOCOL": "file", "GIT_LFS_SKIP_SMUDGE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    }
+    subprocess.run(["/usr/bin/git", "clone", "--quiet", "--shared", "--local", "--no-checkout",
+                    str(root), str(frozen)], env=environment, check=True, capture_output=True, timeout=30)
+    environment["GIT_ALLOW_PROTOCOL"] = ""
+    for args in (("sparse-checkout", "set", "batch-runner", ".github"),
+                 ("checkout", "--quiet", "--detach", REGISTERED_SOURCE)):
+        subprocess.run(["/usr/bin/git", "-C", str(frozen), *args], env=environment,
+                       check=True, capture_output=True, timeout=30)
+
+    # Current registered roles must still match; only the byte-pinned runner
+    # overlay is reconstructed. The runtime registration itself is untouched.
+    profile = pilot.load_plan(root / pilot.SOURCE_PROFILE)
+    for role in set(profile["source_pins"]) | set(pilot.SOURCE_PROFILE_AUXILIARY):
+        data = (root / role).read_bytes()
+        if role == ".github/workflows/batch-run.yml":
+            data = restore_pre_ubuntu_2404_runner_bytes("batch-run.yml", data)
+        assert data == (frozen / role).read_bytes(), role
+    registered_test = frozen / "batch-runner/tests/test_sol_source_registration.py"
+    registered_bytes = registered_test.read_bytes()
+    assert hashlib.sha256(registered_bytes).hexdigest() == REGISTERED_TEST_SHA256
+    previous = next(node for node in ast.parse(registered_bytes).body
+                    if isinstance(node, ast.FunctionDef) and node.name == "test_sol_source_registration")
+    retained = ast.parse(inspect.getsource(_assert_registered_sol_source)).body[0]
+    retained.name = previous.name
+    assert ast.dump(retained) == ast.dump(previous)  # No assertion was removed or relaxed.
+    report = tmp_path / "registered-contract.xml"
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-o", "addopts=",
+         "tests/test_sol_source_registration.py", "--junitxml=" + str(report)],
+        cwd=frozen / "batch-runner", env=environment, capture_output=True, text=True, timeout=180,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    suite = ET.parse(report).getroot().find("testsuite")
+    assert suite is not None
+    assert {key: suite.get(key) for key in ("tests", "failures", "errors", "skipped")} == {
+        "tests": "1", "failures": "0", "errors": "0", "skipped": "0",
+    }
+
+
+def test_runner_overlay_does_not_authorize_current_source_registration(monkeypatch):
+    def offline(*args, **kwargs):
+        pytest.fail("source registration must not access the network")
+    monkeypatch.setattr(socket.socket, "connect", offline)
+    monkeypatch.setattr(socket, "create_connection", offline)
+    role = ".github/workflows/batch-run.yml"
+    current = (pilot.ROOT / role).read_bytes()
+    historical = restore_pre_ubuntu_2404_runner_bytes("batch-run.yml", current)
+    assert hashlib.sha256(historical).hexdigest() == pilot.SOURCE_PROFILE_AUXILIARY[role]
+    assert hashlib.sha256(current).hexdigest() != pilot.SOURCE_PROFILE_AUXILIARY[role]
+    head = checkout._git(pilot.ROOT, "rev-parse", "--verify", "HEAD^{commit}").stdout.decode().strip()
+    with pytest.raises(pilot.PilotSourceRegistrationRefused, match="^pilot_source_registration_refused$"):
+        pilot.source_plan_snapshot(expected_plan_sha256=pilot.seal(pilot.load_plan(pilot.ROOT / pilot.SOURCE_PROFILE)),
+                                   reviewed_source_sha=head)
+
+
+def _assert_registered_sol_source(tmp_path, monkeypatch, capsys):
     root = Path(__file__).resolve().parents[2]
     assert pilot.ROOT == root
     original = pilot.load_plan(root / pilot.ACTIVE_PLAN)
