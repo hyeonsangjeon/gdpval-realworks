@@ -336,6 +336,27 @@ jobs:
             deny "config_name in ${GRADE_CONFIG} is missing or unsafe"
           fi
 
+          if [[ "$GRADE_SHARD_COUNT" == "1" ]]; then
+            # step8 writes an unsharded partial directly under data/grades,
+            # not _shards/.../shard-000-of-001.json. Read its committed
+            # progress and same-run USD journal at this dispatch's main SHA.
+            # Fetch the free verifier at that same immutable SHA as well;
+            # no checkout, credentials on disk, or grader-source change.
+            INHERIT_HELPER="${RUNNER_TEMP}/grade_single_shard_inheritance.py"
+            if ! gh api --header 'Accept: application/vnd.github.raw+json' \
+              "repos/${GITHUB_REPOSITORY}/contents/batch-runner/grade_single_shard_inheritance.py?ref=${GITHUB_SHA}" \
+              > "$INHERIT_HELPER"; then
+              deny "single-shard verifier not readable at ${GITHUB_SHA}"
+            fi
+            if ! MATCH="$(python3 "$INHERIT_HELPER" --config-name "$CONFIG_NAME" \
+                --config-file "${RUNNER_TEMP}/grading_config.yaml")"; then
+              deny "single-shard committed lineage not proved"
+            fi
+            echo "[inherit] continuing approved single-shard lineage via ${MATCH}"
+            emit true
+            exit 0
+          fi
+
           SHARD_FILE="$(printf 'shard-%03d-of-%03d.json' \
             "$((10#$GRADE_SHARD_INDEX))" "$((10#$GRADE_SHARD_COUNT))")"
 
