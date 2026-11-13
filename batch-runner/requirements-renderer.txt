@@ -6,4 +6,11 @@ python-pptx>=0.6.0
 # to produce one to prove Writer is installed.
 python-docx>=1.0.0
 Pillow>=10.0.0
-PyMuPDF>=1.21.0
+# exp037 run 43310879444: Python 3.11 grading used 2.1 (requires Python >=3.11).
+# Python 3.10 verify-published used 1.28.2; keep Backend's Python pin unchanged.
+# Actions Linux x86_64 wheels carry their published PyPI SHA-256. Other hosts
+# retain exact version pins. The old run did not retain an installed-wheel hash.
+PyMuPDF @ https://files.pythonhosted.org/packages/f4/dc/e244c162ab621a45bfe36e33fe432264ef7e40592f739474864df66a2dd8/pymupdf-2.1-cp311-abi3-manylinux_2_28_x86_64.whl#sha256=a9efa2e9e5f469d3b5749199329739cfef1ff1d1846538ced4885c544eecbcd9 ; python_version >= "3.11" and sys_platform == "linux" and platform_machine == "x86_64"
+PyMuPDF @ https://files.pythonhosted.org/packages/c7/06/dace3e27af26690cb20bead80dbac42941b0841eb689b8aabbd67dde16f0/pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl#sha256=397d6715c1f0df7548a92d0afd8ce370fc48fa47aeefac16be2bc04a16a8227f ; python_version < "3.11" and sys_platform == "linux" and platform_machine == "x86_64"
+PyMuPDF==2.1 ; python_version >= "3.11" and (sys_platform != "linux" or platform_machine != "x86_64")
+PyMuPDF==1.28.2 ; python_version < "3.11" and (sys_platform != "linux" or platform_machine != "x86_64")
