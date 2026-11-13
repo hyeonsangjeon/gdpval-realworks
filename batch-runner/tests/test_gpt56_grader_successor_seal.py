@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 import gpt56_pilot_grader_reseal as reseal
+import gpt56_pilot_grader_prereqs_seal as prereqs
 import gpt56_pilot_grader_seal as successor
 import gpt56_sol_codex_pilot_preflight as pilot
 import step8_grade as step8
@@ -24,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PRICING_CONTEXT_MAIN = "c6fcacaf1e9d52e9dfc94a625ddfa0a694eb45df"
 #: The main commit this reseal branched from: still the 20261030 closure.
 RESEAL_BASE_MAIN = "cc256a5015bfb57996769c17e4aa52c26788f940"
+PREREQS_BASE_MAIN = "e33cf06bc633d803f7985290bf671097ed7ca6d3"
 
 
 @pytest.fixture(autouse=True)
@@ -123,10 +125,17 @@ def test_only_grader_identity_and_reader_pin_change_not_fixed_conditions():
         reader: "ad14c0ea0ea3efdd124a7c5e85892c8f96e87f13cabcd73a0df47ef45fb62570",
     })
     assert batch_path == expected_batch_path
-    active = pilot.load_plan(ROOT / pilot.SOURCE_PROFILE)
+    selector = pilot.load_plan(ROOT / pilot.SOURCE_PROFILE_SELECTOR_RESEAL)
     expected_active = deepcopy(batch_path)
     expected_active["dispatch_grading_identity"]["grader_template_source_hash"] = reseal.GRADER_HASH
+    held_selector_reader = archived(PREREQS_BASE_MAIN, pilot.SOURCE_PROFILE_SELECTOR_RESEAL_DELTA)
     for name in pilot.SOURCE_PROFILE_SELECTOR_RESEAL_DELTA:
+        expected_active["source_pins"][name] = hashlib.sha256(held_selector_reader[name]).hexdigest()
+    assert selector == expected_active
+    active = pilot.load_plan(ROOT / pilot.SOURCE_PROFILE)
+    expected_active = deepcopy(selector)
+    expected_active["dispatch_grading_identity"]["grader_template_source_hash"] = prereqs.GRADER_HASH
+    for name in pilot.SOURCE_PROFILE_PREREQS_DELTA:
         expected_active["source_pins"][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
     assert active == expected_active
     assert pilot.DISPATCH_GRADING_IDENTITY["grader_template_source_hash"] == successor.HISTORICAL_HASH
@@ -228,6 +237,7 @@ def test_a_new_grader_hash_without_valid_manifest_is_not_accepted(monkeypatch):
     def refused(_root):
         raise successor.GraderSealRefused("PRIVATE-fixture-value")
     monkeypatch.setattr(reseal, "verify", refused)
+    monkeypatch.setattr(prereqs, "verify", refused)
     result = pilot._inspect_plan_only(plan)
     assert result["configuration_valid"] is False
     assert "grader_successor_seal_refused" in result["configuration_problems"]
@@ -268,7 +278,7 @@ def test_old_and_successor_requests_verdict_denominator_scores_summary_equal(app
 # 20261106 selector reseal: chained to the untouched 20261030 record.
 
 
-def test_reseal_matches_immutable_sources_and_exact_selector_delta():
+def test_reseal_matches_immutable_sources_and_exact_selector_delta(tmp_path, monkeypatch):
     record = json.loads((ROOT / reseal.RECORD).read_bytes())
     sealed = json.loads((ROOT / successor.RECORD).read_bytes())
     assert hashlib.sha256((ROOT / reseal.RECORD).read_bytes()).hexdigest() == reseal.RECORD_SHA256
@@ -285,11 +295,18 @@ def test_reseal_matches_immutable_sources_and_exact_selector_delta():
     assert changed == set(record["changes"]) == reseal.CHANGED_FILES
     assert all(row["classification"] == "impact" and row["kind"] == "modified"
                for row in record["changes"].values())
-    report, sources = reseal.verify(ROOT)
-    assert report["grader_source_hash"] == reseal.GRADER_HASH
-    assert report["previous_grader_source_hash"] == successor.GRADER_HASH
-    assert report["launch_authority"] is False
-    assert set(sources) == set(after) | {reseal.RECORD, successor.RECORD}
+    # Keep the positive proof on the exact historical bytes, not on a newer
+    # closure which this unchanged predecessor is required to reject.
+    with monkeypatch.context() as held:
+        root = _materialize(tmp_path / "selector", after, reseal.RECORD, held)
+        shutil.copyfile(ROOT / successor.RECORD, root / successor.RECORD)
+        report, sources = reseal.verify(root)
+        assert report["grader_source_hash"] == reseal.GRADER_HASH
+        assert report["previous_grader_source_hash"] == successor.GRADER_HASH
+        assert report["launch_authority"] is False
+        assert set(sources) == set(after) | {reseal.RECORD, successor.RECORD}
+    with pytest.raises(successor.GraderSealRefused, match="^grader_successor_seal_refused$"):
+        reseal.verify(ROOT)
 
 
 def test_reseal_base_main_still_held_the_20261030_closure():
@@ -301,11 +318,9 @@ def test_reseal_base_main_still_held_the_20261030_closure():
 
 @pytest.fixture
 def resealed_source(tmp_path, monkeypatch):
-    root = tmp_path / "resealed"
-    for name, path in reseal.source_files(ROOT).items():
-        target = root / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(path, target)
+    record = json.loads((ROOT / reseal.RECORD).read_bytes())
+    root = _materialize(tmp_path / "resealed", archived(reseal.REVIEWED_BASE, record["files"]),
+                        reseal.RECORD, monkeypatch)
     for record in (reseal.RECORD, successor.RECORD):
         target = root / record
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -363,7 +378,8 @@ def test_reseal_manifest_edits_never_waive_a_hash(resealed_source, mutation):
 
 
 def test_superseded_successor_profile_refuses_the_resealed_bytes():
-    for name in (pilot.SOURCE_PROFILE_BATCH_PATH, pilot.SOURCE_PROFILE_GRADER_SEAL):
+    for name in (pilot.SOURCE_PROFILE_BATCH_PATH, pilot.SOURCE_PROFILE_GRADER_SEAL,
+                 pilot.SOURCE_PROFILE_SELECTOR_RESEAL):
         result = pilot._inspect_plan_only(pilot.load_plan(ROOT / name))
         assert result["configuration_valid"] is False
         assert "grader_successor_seal_refused" in result["configuration_problems"]

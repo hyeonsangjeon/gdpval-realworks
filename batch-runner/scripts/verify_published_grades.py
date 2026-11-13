@@ -180,8 +180,17 @@ def check_published(repo: Path, commits: list[str], ref: str) -> Finding:
     )
 
 
+def _changed_files(repo: Path, commits: list[str]):
+    for sha in commits:
+        out = _git(repo, "show", "--no-renames", "--name-status", "--format=", sha, "--", "data/grades")
+        for line in out.splitlines():
+            if line.strip():
+                status, path = line.split("\t", 1)
+                yield sha, status, Path(path)
+
+
 def grade_files_in(repo: Path, commits: list[str]) -> tuple[list[Path], list[str]]:
-    """The grade JSONs those commits touched, and the ones they deleted.
+    """Grades/sidecar owners touched, plus all deleted grading artifacts.
 
     Scoped to the named commits rather than a diff between two points: a
     rebase can interleave another shard's commits into the same range, and
@@ -194,31 +203,93 @@ def grade_files_in(repo: Path, commits: list[str]) -> tuple[list[Path], list[str
     """
     touched: list[Path] = []
     deleted: list[str] = []
-    for sha in commits:
-        out = _git(
-            repo,
-            "show",
-            "--no-renames",
-            "--name-status",
-            "--format=",
-            sha,
-            "--",
-            "data/grades",
-        )
-        for line in out.splitlines():
-            if not line.strip():
-                continue
-            parts = line.split("\t")
-            status, path = parts[0], parts[-1]
-            if not path.endswith(".json"):
-                continue
-            if status.startswith("D"):
-                deleted.append(path)
-                continue
-            candidate = Path(path)
-            if candidate not in touched:
-                touched.append(candidate)
+    for _, status, candidate in _changed_files(repo, commits):
+        if status.startswith("D"):
+            deleted.append(str(candidate))
+            continue
+        if candidate.name.endswith(".cost_ledger.jsonl"):
+            candidate = candidate.with_name(candidate.name[:-len(".cost_ledger.jsonl")] + ".json")
+        if candidate.suffix != ".json" or candidate.parent.name == "_progress":
+            continue
+        if candidate not in touched:
+            touched.append(candidate)
     return touched, deleted
+
+
+def check_checkpoints(repo: Path, commits: list[str]):
+    """Progress has its own contract; only proved producer cleanup is a deletion exemption."""
+    from core.task_checkpoint import redact_item, rubric_order_fingerprint
+    from scripts.verify_cost_ledger import checkpoint_counters, checkpoint_owner
+
+    changes = list(_changed_files(repo, commits))
+    findings, published, cleaned = [], [], []
+
+    def finished_item(item):
+        # core.grader.Grader._aggregate computes these two fields only after
+        # the whole task finishes (:1873-1888). Prove that transformation;
+        # do not drop the fields from the comparison or ignore other drift.
+        value = redact_item(item)
+        if value.get("verdict") == "judge_error":
+            value["score_excluded"], value["model_did_right"] = True, False
+        elif value.get("score_excluded"):
+            value["model_did_right"] = True
+        else:
+            negative = (value.get("max_score") or 0) < 0
+            value["model_did_right"] = value.get("verdict") != "pass" if negative else value.get("verdict") == "pass"
+        return value
+
+    def at(revision, path):
+        tree = _git(repo, "ls-tree", revision, "--", str(path)).split()
+        if len(tree) < 3 or tree[0] not in {"100644", "100755"} or tree[1] != "blob":
+            raise ValueError("checkpoint/grade is not a committed regular file")
+        return json.loads(_git(repo, "show", f"{revision}:{path}"))
+
+    for sha, status, path in changes:
+        if path.parent.name != "_progress":
+            continue
+        deleting = status.startswith("D")
+        try:
+            checkpoint = at(f"{sha}^" if deleting else sha, path)
+            owner = checkpoint_owner(path, checkpoint)
+            grade = at(sha, owner)
+            checkpoint_counters(checkpoint, grade)
+            if not isinstance(grade.get("tasks"), list) or any(not isinstance(task, dict) for task in grade["tasks"]):
+                raise ValueError("checkpoint owner has no task array")
+            tasks = [task for task in grade["tasks"] if task.get("task_id") == checkpoint["task_id"]]
+            if not deleting:
+                if grade.get("run_status") != "partial" or tasks:
+                    raise ValueError("progress must name an unfinished task of a partial grade")
+                published.append(str(path))
+            else:
+                if _git(repo, "show", "-s", "--format=%ae", sha).strip() != "41898282+github-actions[bot]@users.noreply.github.com":
+                    raise ValueError("checkpoint deletion was not authored by the grading workflow")
+                if not any(commit == sha and rel == owner and state in {"A", "M"}
+                           for commit, state, rel in changes):
+                    raise ValueError("checkpoint deletion has no same-commit owner grade update")
+                before = at(f"{sha}^", owner)
+                checkpoint_counters(checkpoint, before)
+                if before.get("run_status") != "partial" or len(tasks) != 1:
+                    raise ValueError("checkpoint cleanup did not finish its task")
+                for key in ("experiment_id", "source_inference_revision", "grader_source_hash"):
+                    if before.get(key) != grade.get(key):
+                        raise ValueError("checkpoint cleanup changed grade identity")
+                items = tasks[0].get("items")
+                if not isinstance(items, list):
+                    raise ValueError("finished task has no rubric items")
+                ids = [item["rubric_item_id"] for item in items]
+                prefix = checkpoint["completed_items"]
+                if (rubric_order_fingerprint(ids) != checkpoint["rubric_fingerprint"]
+                        or len(prefix) >= len(items)
+                        or [redact_item(item) for item in items[:len(prefix)]] != [finished_item(item) for item in prefix]):
+                    raise ValueError("finished task does not preserve the checkpoint's rubric and completed prefix")
+                cleaned.append(str(path))
+            findings.append(Finding("checkpoint_cleanup" if deleting else "progress", True,
+                                    "validated checkpoint cleanup" if deleting else "validated task progress, not a grade",
+                                    {"file": str(path), "owner_grade": str(owner), "task_id": checkpoint["task_id"], "commit": sha}))
+        except (GitError, ValueError, TypeError, KeyError) as exc:
+            findings.append(Finding("checkpoint_cleanup" if deleting else "progress", False, str(exc),
+                                    {"file": str(path), "commit": sha}))
+    return findings, published, cleaned
 
 
 def check_payload(repo: Path, rel: Path) -> tuple[Finding, dict | None]:
@@ -367,6 +438,10 @@ def check_ledger(repo: Path, rel: Path, payload: dict) -> Finding:
         "checks": len(findings),
         "failed": failed,
         "settled_rows": context.get("settled_rows"),
+        "refused_rows": context.get("refused_rows"),
+        "call_rows": context.get("call_rows"),
+        "completed_task_call_rows": context.get("completed_task_call_rows"),
+        "progress": context.get("progress"),
         "receipt_status": context.get("receipt_status"),
         "estimated_cost_usd": context.get("receipt_estimated_cost_usd"),
         "findings": [f.as_dict() for f in findings if not f.ok],
@@ -382,7 +457,8 @@ def check_ledger(repo: Path, rel: Path, payload: dict) -> Finding:
         "ledger",
         True,
         f"{rel} reconciles {len(findings)}/{len(findings)}: "
-        f"{context.get('settled_rows')} settled call(s), receipt "
+        f"{context.get('call_rows')} ledger call(s) "
+        f"({context.get('settled_rows')} settled, {context.get('refused_rows')} refused), receipt "
         f"{context.get('receipt_status')}",
         data,
     )
@@ -468,6 +544,11 @@ def verify(
     findings.append(check_published(repo, resolved, ref))
 
     published, deleted = grade_files_in(repo, resolved)
+    progress_findings, progress_paths, cleaned = check_checkpoints(repo, resolved)
+    findings.extend(progress_findings)
+    context["published_progress_files"] = progress_paths
+    context["cleaned_checkpoint_files"] = cleaned
+    deleted = [path for path in deleted if path not in cleaned]
     context["published_grade_files"] = [str(p) for p in published]
     context["deleted_grade_files"] = deleted
 
@@ -476,7 +557,7 @@ def verify(
             Finding(
                 "no_deletions",
                 False,
-                f"{len(deleted)} published grade file(s) were removed by these "
+                f"{len(deleted)} published grade/sidecar file(s) were removed by these "
                 f"commits: {', '.join(deleted)}. Grades are appended, never "
                 "replaced -- a re-run lands beside its predecessor.",
                 {"deleted": deleted},

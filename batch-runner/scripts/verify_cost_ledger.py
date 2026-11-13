@@ -41,10 +41,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable
+
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
+if str(BATCH_RUNNER_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
 # The token kinds a cost-receipt-v1 ``usage`` block is closed over. Audio was
 # outside it until the published schema grew explicit ``audio_*_tokens``
@@ -75,6 +80,8 @@ COMPONENT_KEY = (
 
 STATE_SETTLED = "settled"
 STATE_RESERVED = "reserved"
+STATE_REFUSED = "refused"
+STATE_ABANDONED = "abandoned"
 
 # A missing_reason that names an absent price is an honest gap: the call
 # happened, the tokens were kept, and no published rate covers the model. Any
@@ -305,7 +312,9 @@ def check_no_double_billing(calls: list[dict[str, Any]]) -> Finding:
     """
     seen: dict[str, int] = {}
     for row in calls:
-        call_id = str(row.get("call_id"))
+        call_id = row.get("call_id")
+        if not isinstance(call_id, str) or not call_id.strip():
+            return Finding("no_double_billing", False, "a call has no nonempty call_id")
         seen[call_id] = seen.get(call_id, 0) + 1
     duplicates = {key: count for key, count in seen.items() if count > 1}
     if duplicates:
@@ -346,6 +355,11 @@ def check_all_calls_settled(calls: list[dict[str, Any]]) -> Finding:
     the same mistake, one layer up, that ``call_refused_unpriced`` exists to
     stop the ledger making. They are counted in the evidence instead.
     """
+    invalid = [row.get("call_id") for row in calls
+               if row.get("state") not in {STATE_SETTLED, STATE_RESERVED, STATE_REFUSED, STATE_ABANDONED}]
+    if invalid:
+        return Finding("all_calls_settled", False, "invalid call state",
+                       {"invalid_call_ids": invalid})
     unsettled = [row for row in calls if row.get("state") == STATE_RESERVED]
     resolved_without_a_reply = sorted(
         {
@@ -390,6 +404,29 @@ def check_all_calls_settled(calls: list[dict[str, Any]]) -> Finding:
     return Finding(
         "all_calls_settled", True, detail, {"other_states": counts} if counts else None
     )
+
+
+def check_resolved_records(calls: list[dict[str, Any]]) -> Finding:
+    """Reachability and record integrity are distinct; a refusal is no free bill."""
+    from core.cost_metering import UNBILLED_STATUSES
+
+    notes = {f"provider_refused_{code}" for code in UNBILLED_STATUSES}
+    invalid = []
+    for row in calls:
+        state = row.get("state")
+        if state not in {STATE_REFUSED, STATE_ABANDONED}:
+            continue
+        reasons = row.get("missing_reasons") or []
+        malformed = row.get("model_cost_usd") is not None or any(row.get(key) is not None for key in RECEIPT_USAGE_KEYS)
+        if state == STATE_REFUSED:
+            malformed |= row.get("note") not in notes or "call_refused_unpriced" not in reasons
+        else:
+            malformed |= row.get("note") in notes or "call_refused_unpriced" in reasons
+        if malformed:
+            invalid.append(row.get("call_id"))
+    return Finding("resolved_records", not invalid,
+                   "refused/abandoned rows claim no invented usage or price" if not invalid else "invalid refusal/abandonment record",
+                   {"invalid_call_ids": invalid})
 
 
 def check_usage_reconciles(receipt: dict[str, Any], settled: list[dict[str, Any]]) -> Finding:
@@ -524,7 +561,7 @@ def check_cost_reconciles(receipt: dict[str, Any], settled: list[dict[str, Any]]
 
     calls = receipt.get("model_calls")
     if calls is not None and int(calls) != len(settled):
-        problems.append(f"receipt counts {calls} calls, ledger settles {len(settled)}")
+        problems.append(f"receipt counts {calls} calls, ledger records {len(settled)}")
 
     if problems:
         return Finding("cost_reconciles", False, "; ".join(problems), {"problems": problems})
@@ -564,6 +601,7 @@ def check_components_reconcile(
             "model_calls": len(rows),
             "cost": sum((_dec(row.get("model_cost_usd")) for row in rows), Decimal(0)),
             "usage": usage,
+            "refused": any(row.get("state") == STATE_REFUSED for row in rows),
         }
 
     components = receipt.get("components") or []
@@ -584,6 +622,9 @@ def check_components_reconcile(
                 f"component {name!r}: receipt {component.get('known_cost_usd')} USD, "
                 f"ledger {bucket['cost']}"
             )
+        if bucket["refused"] and (component.get("status") != "partial"
+                or "call_refused_unpriced" not in (component.get("missing_reasons") or [])):
+            problems.append(f"component {name!r} hides unpriced refused calls")
         stated_usage = component.get("usage") or {}
         for token_key in RECEIPT_USAGE_KEYS:
             raw = stated_usage.get(token_key)
@@ -655,7 +696,14 @@ def check_partial_cause(receipt: dict[str, Any], settled: list[dict[str, Any]]) 
     """
     honest = []
     defective = []
+    refused = [row for row in settled if row.get("state") == STATE_REFUSED]
+    if refused and (receipt.get("status") != "partial"
+                    or "call_refused_unpriced" not in (receipt.get("missing_reasons") or [])):
+        return Finding("partial_cause", False, "receipt hides unpriced refused calls",
+                       {"refused_call_ids": [row.get("call_id") for row in refused]})
     for row in settled:
+        if row.get("state") == STATE_REFUSED:
+            continue  # Counted, with explicitly unreported usage and price.
         if row.get("model_cost_usd") is not None:
             continue
         reasons = row.get("missing_reasons") or []
@@ -702,9 +750,12 @@ def check_partial_cause(receipt: dict[str, Any], settled: list[dict[str, Any]]) 
             f"{len(honest)} calls are unpriced only because {models} have no "
             "published rate; their usage is fully recorded, so the cost is "
             "unknown rather than zero",
-            {"unpriced_models": models, "unpriced_calls": len(honest)},
+            {"unpriced_models": models, "unpriced_calls": len(honest), "refused_calls": len(refused)},
         )
 
+    if refused:
+        return Finding("partial_cause", True, f"{len(refused)} refused calls remain explicitly unpriced",
+                       {"refused_call_ids": [row.get("call_id") for row in refused]})
     return Finding(
         "partial_cause", True, "every call carries a price; nothing is unexplained"
     )
@@ -739,13 +790,15 @@ def _declared_consumption(item: dict[str, Any]) -> dict[str, Any] | None:
         "calls": counted if counted is not None else claimed,
         "counted_calls": counted,
         "receipt_calls": claimed,
+        "cost_reported": _first_present(receipt, "estimated_cost_usd", "known_cost_usd") is not None,
         "cost_usd": _dec(
             _first_present(receipt, "estimated_cost_usd", "known_cost_usd")
         ),
     }
 
 
-def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) -> Finding:
+def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]],
+                        progress: list[dict[str, Any]] | None = None) -> Finding:
     """What every task cost -- including the ones that never reached the judge.
 
     A task that errored *during* grading still sent calls and still got billed
@@ -769,8 +822,13 @@ def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) ->
         bucket["calls"] += 1
         bucket["cost"] += _dec(row.get("model_cost_usd"))
 
-    results = grade.get("results") or grade.get("tasks") or []
+    results = [*(grade.get("results") or grade.get("tasks") or []), *(progress or [])]
     failed_ids, undeclared = set(), set()
+    result_ids = [item.get("task_id") or item.get("id") for item in results if isinstance(item, dict)]
+    if (len(result_ids) != len(results) or any(not isinstance(value, str) or not value for value in result_ids)
+            or len(result_ids) != len(set(result_ids))):
+        return Finding("task_coverage", False, "task/progress IDs are missing or duplicated")
+    unowned = sorted(set(per_task) - set(result_ids))
     disputed: list[dict[str, Any]] = []
     never_graded: list[str] = []
     if isinstance(results, list):
@@ -820,9 +878,13 @@ def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) ->
                 )
             elif declared["calls"] == 0:
                 never_graded.append(task_id)
+            elif declared["cost_reported"] and declared["cost_usd"] != per_task[task_id]["cost"]:
+                disputed.append({"task_id": task_id, "why": "task cost differs from its own ledger rows",
+                                 "declared_cost_usd": str(declared["cost_usd"]),
+                                 "ledger_cost_usd": str(per_task[task_id]["cost"])})
 
     uncosted = sorted(undeclared - set(per_task))
-    if disputed or uncosted:
+    if disputed or uncosted or unowned:
         parts = []
         if disputed:
             parts.append(
@@ -834,11 +896,13 @@ def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) ->
                 f"{len(uncosted)} graded tasks have no call in the ledger, so they "
                 "appear to have been graded for free"
             )
+        if unowned:
+            parts.append(f"{len(unowned)} ledger task IDs belong to neither a grade nor validated progress")
         return Finding(
             "task_coverage",
             False,
             "; ".join(parts),
-            {"disputed": disputed[:20], "tasks_without_cost": uncosted[:20]},
+            {"disputed": disputed[:20], "tasks_without_cost": uncosted[:20], "unowned_call_tasks": unowned},
         )
 
     failed_cost = {
@@ -951,6 +1015,88 @@ def describe_quality(grade: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def checkpoint_owner(path: Path, checkpoint: dict[str, Any]) -> Path:
+    """Invert exactly core.task_checkpoint.checkpoint_path, not a path glob."""
+    from core.task_checkpoint import checkpoint_path
+
+    if not isinstance(checkpoint, dict):
+        raise ValueError("checkpoint is not a JSON object")
+    task_id = checkpoint.get("task_id")
+    if (path.parent.name != "_progress" or not isinstance(task_id, str)
+            or re.fullmatch(r"[A-Za-z0-9_-]+", task_id) is None):
+        raise ValueError("invalid checkpoint path/task ID")
+    suffix = f"__{task_id}.json"
+    if not path.name.endswith(suffix):
+        raise ValueError("checkpoint filename does not bind its task")
+    owner = path.parent.parent / (path.name[:-len(suffix)] + ".json")
+    if checkpoint_path(owner, task_id) != path:
+        raise ValueError("checkpoint path is not the producer's exact path")
+    return owner
+
+
+def checkpoint_counters(checkpoint: dict[str, Any], grade: dict[str, Any]) -> dict[str, Any]:
+    """Progress is not a grade; retain its separately declared calls/tokens."""
+    if not isinstance(checkpoint, dict) or not isinstance(grade, dict):
+        raise ValueError("checkpoint/grade is not a JSON object")
+    source = checkpoint.get("grader_source_hash")
+    items = checkpoint.get("completed_items")
+    if (checkpoint.get("format") != "task-progress-v1" or not isinstance(source, str)
+            or re.fullmatch(r"[0-9a-f]{64}", source) is None or source != grade.get("grader_source_hash")
+            or not isinstance(checkpoint.get("rubric_fingerprint"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", checkpoint["rubric_fingerprint"]) is None
+            or not isinstance(items, list) or not items or any(not isinstance(item, dict) for item in items)):
+        raise ValueError("invalid checkpoint format, source/rubric binding or item list")
+    ids = [item.get("rubric_item_id") for item in items]
+    if any(not isinstance(value, str) or not value for value in ids) or len(ids) != len(set(ids)):
+        raise ValueError("checkpoint item IDs missing or duplicated")
+    task = {"task_id": checkpoint["task_id"]}
+    for prefix in ("judge", "perception"):
+        for field in ("call_count", "input_tokens", "output_tokens", "cached_tokens"):
+            key = f"{prefix}_{field}"
+            values = [_as_count(item.get(key)) for item in items]
+            if any(value is None for value in values):
+                raise ValueError(f"checkpoint does not report {key}")
+            task[key] = sum(values)
+    return task
+
+
+def check_progress(grade_path: Path, grade: dict[str, Any], calls: list[dict[str, Any]]):
+    progress, records = [], []
+    try:
+        directory = grade_path.parent / "_progress"
+        if directory.is_symlink():
+            raise ValueError("checkpoint directory is a symlink")
+        for path in sorted(directory.glob(grade_path.stem + "__*.json")):
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("checkpoint is not a regular file")
+            checkpoint = json.loads(path.read_text(encoding="utf-8"))
+            if checkpoint_owner(path, checkpoint) != grade_path or grade.get("run_status") != "partial":
+                raise ValueError("checkpoint does not belong to this partial")
+            task = checkpoint_counters(checkpoint, grade)
+            progress.append(task)
+            rows = [row for row in calls if row.get("task_id") == task["task_id"]]
+            for row in rows:
+                if (row.get("state") == STATE_SETTLED and row.get("model_cost_usd") is None
+                        and not (_is_price_absent(row.get("missing_reasons") or [])
+                                 and any(_tokens(row, RECEIPT_USAGE_KEYS).values()))):
+                    raise ValueError("checkpoint call lost its usage, not merely its price")
+            legacy = {"total_judge_calls": task["judge_call_count"] + task["perception_call_count"]}
+            for prefix, stage in (("judge", "main"), ("perception", "perception")):
+                legacy["total_main_judge_calls" if stage == "main" else "total_perception_calls"] = task[f"{prefix}_call_count"]
+                for token in ("input", "output", "cached"):
+                    legacy[f"{stage}_{token}_tokens"] = task[f"{prefix}_{token}_tokens"]
+            finding = check_legacy_counters({"summary": {"cost": legacy}}, rows)
+            if not finding.ok:
+                raise ValueError(f"checkpoint {task['task_id']} counters disagree: {finding.data}")
+            records.append({"file": str(path), "task_id": task["task_id"], "calls": len(rows),
+                            "known_cost_usd": str(sum((_dec(row.get("model_cost_usd")) for row in rows), Decimal(0))),
+                            "unpriced_calls": sum(row.get("model_cost_usd") is None for row in rows)})
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        return Finding("progress_coverage", False, str(exc)), []
+    return Finding("progress_coverage", True, "checkpoint calls accounted separately from completed grades",
+                   {"checkpoints": records}), progress
+
+
 def verify(grade_path: Path) -> tuple[list[Finding], dict[str, Any]]:
     grade = json.loads(grade_path.read_text(encoding="utf-8"))
     receipt = (grade.get("summary") or {}).get("grading_cost") or {}
@@ -974,22 +1120,36 @@ def verify(grade_path: Path) -> tuple[list[Finding], dict[str, Any]]:
     calls = [row for row in rows if row.get("record_type", "call") == "call"]
     runtime = [row for row in rows if row.get("record_type") == "runtime"]
     settled = [row for row in calls if row.get("state") == STATE_SETTLED]
+    # Match the producer: abandoned was never sent; refused was sent but
+    # reports no price/usage. Completed-task receipts exclude active progress,
+    # whose counters and all remaining ledger IDs are checked separately below.
+    accounted = [row for row in calls if row.get("state") != STATE_ABANDONED]
+    result_ids = {row.get("task_id") or row.get("id") for row in (grade.get("tasks") or grade.get("results") or [])}
+    completed = [row for row in accounted if row.get("task_id") in result_ids]
+    progress_finding, progress = check_progress(grade_path, grade, accounted)
     context["ledger_rows"] = len(rows)
     context["call_rows"] = len(calls)
     context["runtime_rows"] = len(runtime)
     context["settled_rows"] = len(settled)
+    context["refused_rows"] = sum(row.get("state") == STATE_REFUSED for row in calls)
+    context["completed_task_call_rows"] = len(completed)
+    context["progress"] = progress_finding.as_dict()
 
     findings.append(check_identity(grade, calls))
     findings.append(check_no_double_billing(calls))
     findings.append(check_all_calls_settled(calls))
-    findings.append(check_usage_reconciles(receipt, settled))
-    findings.append(check_usage_containment(settled))
-    findings.append(check_cost_reconciles(receipt, settled))
-    findings.append(check_components_reconcile(receipt, settled))
-    findings.append(check_price_table(receipt, settled))
-    findings.append(check_partial_cause(receipt, settled))
-    findings.append(check_task_coverage(grade, settled))
-    findings.append(check_legacy_counters(grade, settled))
+    if any(row.get("state") in {STATE_REFUSED, STATE_ABANDONED} for row in calls):
+        findings.append(check_resolved_records(calls))
+    findings.append(check_usage_reconciles(receipt, completed))
+    findings.append(check_usage_containment(accounted))
+    findings.append(check_cost_reconciles(receipt, completed))
+    findings.append(check_components_reconcile(receipt, completed))
+    findings.append(check_price_table(receipt, accounted))
+    findings.append(check_partial_cause(receipt, completed))
+    findings.append(check_task_coverage(grade, accounted, progress))
+    findings.append(check_legacy_counters(grade, completed))
+    if progress or not progress_finding.ok:
+        findings.append(progress_finding)
     return findings, context
 
 

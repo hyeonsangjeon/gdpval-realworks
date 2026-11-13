@@ -35,6 +35,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Optional
 
 from core.cost_metering import read_reported_usage
+from core.grading_retry import Retry429Policy, RetryCallStats, call_with_429_retry
 from core.public_error import public_provider_error_text
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,7 @@ class VisionPerception:
     call_cap: int = VISION_CALL_CAP
     reasoning_effort: str = "medium"
     before_upstream_call: Optional[Callable[[], None]] = None
+    retry_on_429: Retry429Policy = field(default_factory=Retry429Policy)
 
     _calls_used: int = field(default=0, init=False)
     _cache: Dict[str, VisionVerdict] = field(default_factory=dict, init=False)
@@ -312,19 +314,15 @@ class VisionPerception:
                 judge_error="bad_image",
             )
 
-        call_started = 0.0
-        api_attempted = False
+        stats = RetryCallStats()
         input_tokens = 0
         output_tokens = 0
         cached_tokens = 0
         usage_complete = False
-        try:
-            if self.before_upstream_call is not None:
-                self.before_upstream_call()
-            call_started = time.perf_counter()
-            api_attempted = True
+
+        def request():
             self._calls_used += 1
-            response = self.client.responses.create(
+            return self.client.responses.create(
                 model=self.deployment,
                 input=[
                     {
@@ -343,12 +341,19 @@ class VisionPerception:
                 ],
                 reasoning={"effort": self.reasoning_effort},
             )
-            latency_ms = (time.perf_counter() - call_started) * 1000.0
+
+        try:
+            response = call_with_429_retry(
+                request, policy=self.retry_on_429, stats=stats,
+                before_attempt=self.before_upstream_call,
+                can_retry=lambda: self._calls_used < self.call_cap,
+            )
+            latency_ms = stats.latency_ms
             reported = read_reported_usage(response)
             input_tokens = reported.input_tokens
             output_tokens = reported.output_tokens
             cached_tokens = reported.cached_tokens
-            usage_complete = reported.usage_complete
+            usage_complete = reported.usage_complete and stats.failed_attempts == 0
             text = getattr(response, "output_text", "") or ""
             payload = _validate_vision_envelope(text)
             verdict = VisionVerdict(
@@ -357,7 +362,7 @@ class VisionPerception:
                 evidence=payload["evidence"],
                 confidence=payload["confidence"],
                 reasoning=payload["reasoning"],
-                api_call_count=1,
+                api_call_count=stats.attempts,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,
@@ -369,10 +374,7 @@ class VisionPerception:
                 "Vision response failed envelope validation (%s)",
                 type(exc).__name__,
             )
-            latency_ms = (
-                (time.perf_counter() - call_started) * 1000.0
-                if call_started else 0.0
-            )
+            latency_ms = stats.latency_ms
             verdict = VisionVerdict(
                 verdict="judge_error",
                 partial_score=0.0,
@@ -380,7 +382,7 @@ class VisionPerception:
                 confidence=0.0,
                 reasoning="invalid vision response envelope",
                 judge_error="invalid_vision_envelope",
-                api_call_count=int(api_attempted),
+                api_call_count=stats.attempts,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,
@@ -388,10 +390,7 @@ class VisionPerception:
                 usage_complete=usage_complete,
             )
         except Exception as exc:  # noqa: BLE001
-            latency_ms = (
-                (time.perf_counter() - call_started) * 1000.0
-                if call_started else 0.0
-            )
+            latency_ms = stats.latency_ms
             verdict = VisionVerdict(
                 verdict="judge_error",
                 partial_score=0.0,
@@ -399,7 +398,7 @@ class VisionPerception:
                 confidence=0.0,
                 reasoning=f"vision call failed: {type(exc).__name__}",
                 judge_error=public_provider_error_text(exc),
-                api_call_count=int(api_attempted),
+                api_call_count=stats.attempts,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,

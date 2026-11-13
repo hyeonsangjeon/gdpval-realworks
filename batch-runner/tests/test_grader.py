@@ -123,6 +123,7 @@ def test_grader_transport_options_match_factory_defaults(tmp_path):
     config = _config(tmp_path)
     assert grader_transport_options(config) == {
         "timeout": 600,
+        "max_retries": 0,
         "legacy_api_version": "2025-04-01-preview",
     }
 
@@ -130,6 +131,7 @@ def test_grader_transport_options_match_factory_defaults(tmp_path):
     config["judge"]["api_version"] = "custom-version"
     assert grader_transport_options(config) == {
         "timeout": 321,
+        "max_retries": 0,
         "legacy_api_version": "custom-version",
     }
 
@@ -154,7 +156,7 @@ def test_grader_routes_typed_workload_and_closes_lease(tmp_path):
         AzureAIWorkload.GRADER,
         deployment="gpt-5.4-pro",
         timeout=600,
-        max_retries=None,
+        max_retries=0,
         legacy_api_version="2025-04-01-preview",
     )
     grader.close()

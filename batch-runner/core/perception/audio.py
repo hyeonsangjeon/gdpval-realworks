@@ -61,6 +61,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 from core.cost_metering import read_reported_usage
+from core.grading_retry import Retry429Policy, RetryCallStats, call_with_429_retry
 from core.public_error import (
     public_provider_error_text,
     public_task_error,
@@ -730,6 +731,7 @@ class AudioPerception:
     #: throttled; with the shape corrected, an unguarded reader is a reader
     #: that can spend a shard's remaining budget on 429s.
     before_upstream_call: Optional[Callable[[], None]] = None
+    retry_on_429: Retry429Policy = field(default_factory=Retry429Policy)
 
     #: Attempts, not measurements. See :data:`AUDIO_FAILURE_BUDGET`.
     failure_budget: int = AUDIO_FAILURE_BUDGET
@@ -896,40 +898,53 @@ class AudioPerception:
                 f"{AUDIO_MAX_REQUEST_BYTES}",
                 "audio_payload_too_large",
             )
-        if self.before_upstream_call is not None:
-            self.before_upstream_call()
-        # Counted before the call and given back only for rejections that
-        # provably predate inference. A call that vanished into a timeout is
-        # counted as spent because it may well have been.
-        self._calls_used += 1
-        call_started = time.perf_counter()
+        stats = RetryCallStats()
         input_tokens = 0
         output_tokens = 0
         cached_tokens = 0
         usage_complete = False
         text = ""
+
+        def request():
+            # Keep each attempt's existing listen/failure budgets, including
+            # refusals recovered by a later 429 retry. USD reservations are
+            # independently retained by the existing metered client.
+            self._calls_used += 1
+            try:
+                return self.client.chat.completions.create(
+                    model=self.deployment,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text",
+                                 "text": f"{header}\n\nCriterion:\n{criterion}"},
+                                {"type": "input_audio",
+                                 "input_audio": {"data": b64, "format": fmt}},
+                            ],
+                        }
+                    ],
+                    modalities=["text"],
+                )
+            except Exception as error:
+                if _provider_status_code(error) in _UNBILLED_STATUS:
+                    self._calls_used -= 1
+                    self._failures_used += 1
+                raise
+
         try:
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text",
-                             "text": f"{header}\n\nCriterion:\n{criterion}"},
-                            {"type": "input_audio",
-                             "input_audio": {"data": b64, "format": fmt}},
-                        ],
-                    }
-                ],
-                modalities=["text"],
+            response = call_with_429_retry(
+                request, policy=self.retry_on_429, stats=stats,
+                before_attempt=self.before_upstream_call,
+                can_retry=lambda: (self._calls_used < self.call_cap
+                                   and self._failures_used < self.failure_budget),
             )
-            latency_ms = (time.perf_counter() - call_started) * 1000.0
+            latency_ms = stats.latency_ms
             reported = read_reported_usage(response)
             input_tokens = reported.input_tokens
             output_tokens = reported.output_tokens
             cached_tokens = reported.cached_tokens
-            usage_complete = reported.usage_complete
+            usage_complete = reported.usage_complete and stats.failed_attempts == 0
             text = _first_choice_text(response)
             payload = _parse_json_envelope(text)
             verdict, partial_score, confidence = _validated_audio_envelope(
@@ -947,7 +962,7 @@ class AudioPerception:
                 judge_error=(
                     "sub_judge_declined" if verdict == "judge_error" else None
                 ),
-                api_call_count=1,
+                api_call_count=stats.attempts,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,
@@ -959,7 +974,7 @@ class AudioPerception:
             # provider fault, so it is neither retried nor allowed to set
             # ``_blocked_reason`` -- both of those are for the wire. The call
             # is spent either way: tokens came back for it.
-            latency_ms = (time.perf_counter() - call_started) * 1000.0
+            latency_ms = stats.latency_ms
             detail = (
                 f"audio envelope rejected: {exc.kind}"
                 + (f" (value={exc.detail})" if exc.detail else "")
@@ -973,7 +988,7 @@ class AudioPerception:
                 reasoning=detail,
                 judge_error=f"format_error:{exc.kind}",
                 failure_detail=detail,
-                api_call_count=1,
+                api_call_count=stats.attempts,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,
@@ -981,16 +996,8 @@ class AudioPerception:
                 usage_complete=usage_complete,
             )
         except Exception as exc:  # noqa: BLE001
-            latency_ms = (time.perf_counter() - call_started) * 1000.0
+            latency_ms = stats.latency_ms
             status = _provider_status_code(exc)
-            if status in _UNBILLED_STATUS:
-                # Give the slot back. ``call_cap`` is there to bound what a
-                # task spends and to make every task spend it on the same
-                # scale; a request the provider refused before running the
-                # model spent nothing and measured nothing, so charging it
-                # does neither job. It only takes the criterion's turn away.
-                self._calls_used -= 1
-                self._failures_used += 1
             if status in _DETERMINISTIC_STATUS:
                 # The rest of this task's criteria would send the same clip in
                 # the same shape and get the same answer. Recorded once, and
@@ -1026,7 +1033,7 @@ class AudioPerception:
                 reasoning=detail,
                 judge_error=public_provider_error_text(exc),
                 failure_detail=detail,
-                api_call_count=1,
+                api_call_count=stats.attempts,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,

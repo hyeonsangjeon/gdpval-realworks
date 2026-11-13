@@ -55,6 +55,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from core.cost_metering import read_reported_usage
+from core.grading_retry import Retry429Policy, RetryCallStats, call_with_429_retry
 from core.grader_routing import (
     RoutingDecision,
     classify_criterion,
@@ -695,6 +696,7 @@ class ToolCallingJudge:
     compact_threshold: Optional[int] = None
     before_upstream_call: Optional[Callable[[], None]] = None
     visual_file_cap: int = _DEFAULT_VISUAL_FILE_CAP
+    retry_on_429: Retry429Policy = field(default_factory=Retry429Policy)
 
     # Cached: split prompt template into stable + variable halves once at
     # construction (or first use). The stable half is the ``instructions=``
@@ -839,13 +841,26 @@ class ToolCallingJudge:
         # afterwards to tell "ran out of room" from "the model refused".
         last_finalization_reason: Optional[str] = None
 
+        def create_response(kwargs):
+            nonlocal main_api_call_count, main_latency_ms, usage_complete
+            stats = RetryCallStats()
+            try:
+                return call_with_429_retry(
+                    lambda: self._upstream_client(is_retry=finalization_only).responses.create(**kwargs),
+                    policy=self.retry_on_429, stats=stats,
+                    before_attempt=self._guard_upstream_call,
+                )
+            finally:
+                main_api_call_count += stats.attempts
+                main_latency_ms += stats.latency_ms
+                if stats.failed_attempts:
+                    usage_complete = False
+
         while iterations < self.max_iterations + (
             finalization_retries_used if finalization_only else 0
         ):
             iterations += 1
-            call_started: Optional[float] = None
             try:
-                self._guard_upstream_call()
                 # PR3 step 1a — instructions + prompt_cache_key make the
                 # stable scaffold cacheable. compact_threshold (1b) is
                 # set high enough that only long tool loops trip it,
@@ -883,17 +898,8 @@ class ToolCallingJudge:
                         {"type": "auto_compact",
                          "threshold": int(self.compact_threshold)}
                     ]
-                call_started = time.perf_counter()
-                main_api_call_count += 1
-                response = self._upstream_client(
-                    is_retry=finalization_only
-                ).responses.create(**create_kwargs)
-                main_latency_ms += (time.perf_counter() - call_started) * 1000.0
+                response = create_response(create_kwargs)
             except TypeError as exc:
-                if call_started is not None:
-                    main_latency_ms += (
-                        time.perf_counter() - call_started
-                    ) * 1000.0
                 usage_complete = False
                 # SDK older than expected — fall back to the legacy call
                 # shape (no instructions / cache_key / compaction). Log
@@ -903,9 +909,6 @@ class ToolCallingJudge:
                     type(exc).__name__,
                 )
                 try:
-                    self._guard_upstream_call()
-                    call_started = time.perf_counter()
-                    main_api_call_count += 1
                     fallback_kwargs = dict(
                         model=self.model,
                         input=messages,
@@ -921,24 +924,11 @@ class ToolCallingJudge:
                     )
                     if not finalization_only:
                         fallback_kwargs["tools"] = tools
-                    response = self._upstream_client(
-                        is_retry=finalization_only
-                    ).responses.create(**fallback_kwargs)
-                    main_latency_ms += (
-                        time.perf_counter() - call_started
-                    ) * 1000.0
+                    response = create_response(fallback_kwargs)
                 except Exception as exc2:  # noqa: BLE001
-                    if call_started is not None:
-                        main_latency_ms += (
-                            time.perf_counter() - call_started
-                        ) * 1000.0
                     judge_error = public_provider_error_text(exc2)
                     break
             except Exception as exc:  # noqa: BLE001
-                if call_started is not None:
-                    main_latency_ms += (
-                        time.perf_counter() - call_started
-                    ) * 1000.0
                 usage_complete = False
                 judge_error = public_provider_error_text(exc)
                 logger.warning(

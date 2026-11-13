@@ -24,12 +24,19 @@ BASE_SHA = "99e62ed5d4f1b1506841dd70a66c2696ac95b4c6"
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN_PATH = ENVELOPE + "gpt56_sol_ghcp_codex_vm_gate.yaml"
 PLAN = ROOT / PLAN_PATH
-SOURCE_PROFILE_PATH = ENVELOPE + "gpt56_sol_ghcp_source_20261029.yaml"
+SOURCE_PROFILE_PATH = ENVELOPE + "gpt56_sol_ghcp_source_20261113_exp038_prereqs.yaml"
+PREVIOUS_SOURCE_PROFILE_PATH = ENVELOPE + "gpt56_sol_ghcp_source_20261029.yaml"
+PREVIOUS_SOURCE_PROFILE_SHA256 = "baa7a17bf740d717e114efa93c40d653640e705b0d4cf42bb4f19a67673c0bd3"
 ORIGINAL_PLAN_SHA256 = "121ae4dd3cfa901c5dd590d81e66318034efef7d0ecafc966b9db4f4d8740b5c"
-SOURCE_PROFILE_UPDATES = {
+PREVIOUS_SOURCE_PROFILE_UPDATES = {
     "batch-runner/step8_grade.py": "0911eaff30b3c4cfbd6f3dfa0ced2b11319062a154a610dd5d9ddaf79215bf1c",
     "batch-runner/core/grader.py": "50bfd46bdf71a3ad922b83999eb75d44845711ec5ab82d6ee346cf0bfe0ef044",
     "batch-runner/core/grade_payload.py": "50c5ec721a23862aebe9996ddda26167dd8db56850ede26c99e824fa7c09fc21",
+}
+SOURCE_PROFILE_UPDATES = {
+    **PREVIOUS_SOURCE_PROFILE_UPDATES,
+    "batch-runner/step8_grade.py": "89cda44fecc21e7488a602b16a898410ab032fb6fb2b46f8e3cccb21a406f993",
+    "batch-runner/core/grader.py": "810e2fe67ea1574f2b281ee510b59027ff8197756866d651fb83b2206740a6b1",
 }
 SELF = "batch-runner/ghcp_vm_gate_preflight.py"
 INPUT_BUNDLE = "batch-runner/ghcp_vm_input_bundle.py"

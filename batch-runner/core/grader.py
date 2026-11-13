@@ -23,6 +23,7 @@ from core.azure_ai_clients import (
 )
 from core.cost_receipts import RETRY_SEMANTIC, STAGE_GRADING, STAGE_PERCEPTION
 from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
+from core.grading_retry import Retry429Policy
 from core.public_error import public_provider_error_text
 from core.deliverable_selector import (
     CriterionTargetPlan,
@@ -96,6 +97,8 @@ def grader_transport_options(config: dict) -> dict[str, object]:
         raise ValueError("judge.api_version must be a nonempty string")
     return {
         "timeout": timeout,
+        # Controller retries must each pass the receipt/USD reservation gate.
+        "max_retries": 0,
         "legacy_api_version": api_version.strip(),
     }
 
@@ -353,6 +356,9 @@ class Grader:
             )
 
         transport = grader_transport_options(self.config)
+        self._retry_429_policy = Retry429Policy.from_config(
+            self.config.get("tpm_guard", {}).get("retry_on_429")
+        )
         deployment = canonical_deployment(self.config["judge"], "judge")
         self.model = deployment
         grader_route_workloads(self.config)
@@ -2098,6 +2104,7 @@ class Grader:
                     (judge_cfg.get("reasoning") or {}).get("effort", "medium"),
                 ),
                 before_upstream_call=self._apply_tpm_delay,
+                retry_on_429=self._retry_429_policy,
             )
         if aud_cfg.get("model") is not None or aud_cfg.get("deployment") is not None:
             from core.perception.audio import (  # local import
@@ -2118,6 +2125,7 @@ class Grader:
                     aud_cfg.get("trim_seconds", AUDIO_TRIM_SECONDS)
                 ),
                 before_upstream_call=self._apply_tpm_delay,
+                retry_on_429=self._retry_429_policy,
             )
 
         return ToolCallingJudge(
@@ -2141,6 +2149,7 @@ class Grader:
             audio_perception=audio_perception,
             prompt_cache_key=prompt_cache_key,
             before_upstream_call=self._apply_tpm_delay,
+            retry_on_429=self._retry_429_policy,
             visual_file_cap=resolve_visual_file_cap(judge_cfg),
         )
 

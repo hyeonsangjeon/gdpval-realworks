@@ -46,7 +46,9 @@ ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 # A source profile for the SAME pilot/run identity, not another execution right.
 # The original registrations and their source pins remain byte-for-byte intact.
-SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261106_selector_reseal.yaml"
+SOURCE_PROFILE = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261113_exp038_prereqs.yaml"
+SOURCE_PROFILE_SELECTOR_RESEAL = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261106_selector_reseal.yaml"
+SOURCE_PROFILE_SELECTOR_RESEAL_SHA256 = "af5699e82f1d659e3778df376bcdc9dd8ee30b0b6090163accb6a4f21c40fc9b"
 SOURCE_PROFILE_BATCH_PATH = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261105_batch_path.yaml"
 SOURCE_PROFILE_BATCH_PATH_SHA256 = "25d9a2de3ec8350b68ee90b0089086e1c6e6533dc68f2960b60e079646059595"
 SOURCE_PROFILE_GRADER_SEAL = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261030_grader_seal.yaml"
@@ -61,6 +63,8 @@ GRADER_SEAL_READER = "batch-runner/gpt56_pilot_grader_seal.py"
 GRADER_SEAL_READER_SHA256 = "22785d6e18ce6146808b89869ddf7e7c4b0ea4d0e96daa491e52b7a373dae314"
 GRADER_RESEAL_READER = "batch-runner/gpt56_pilot_grader_reseal.py"
 GRADER_RESEAL_READER_SHA256 = "1312ac36cb334fd44413ee024f98e89edf8d6316910795527f8c1ae4a830ad74"
+GRADER_PREREQS_READER = "batch-runner/gpt56_pilot_grader_prereqs_seal.py"
+GRADER_PREREQS_READER_SHA256 = "7d419aa9bba9ffa39d340b5361b2e6ac3be23cc5149d6bc0b389f1c6e282db61"
 SOURCE_PROFILE_TEXT_TOOLS = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_text_tools.yaml"
 SOURCE_PROFILE_TEXT_TOOLS_SHA256 = "31743281de00ae1543e9067ef082e4c1082c66e1da45f126b7c78c09a260abbd"
 SOURCE_PROFILE_NO_WEB = ENVELOPE + "gpt56_sol_foundry_codex_pilot_source_20261029_no_web_diagnostic.yaml"
@@ -121,6 +125,10 @@ SOURCE_PROFILE_BATCH_PATH_DELTA = frozenset({
 #: decision 1: selector fix and reseal). Only this reader's pin moves; the
 #: changed grader files are held by the successor seal, not by source_pins.
 SOURCE_PROFILE_SELECTOR_RESEAL_DELTA = frozenset({"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
+SOURCE_PROFILE_PREREQS_DELTA = frozenset({
+    "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    "batch-runner/step8_grade.py", "batch-runner/core/grader.py",
+})
 #: Codex 0.147.0 ships gpt-5.6-sol at 272,000 tokens in its bundled models.json
 #: and clamps model_context_window to that maximum (258,400 usable at 95%).
 #: Above it, the wire observer also hands Codex this held catalog: the bundled
@@ -128,7 +136,7 @@ SOURCE_PROFILE_SELECTOR_RESEAL_DELTA = frozenset({"batch-runner/gpt56_sol_codex_
 #: and 100% usable, so the requested 1,000,000 stays 1,000,000.
 CODEX_BUNDLED_SOL_CONTEXT_WINDOW = 272_000
 CODEX_LONG_CONTEXT_CATALOG = "batch-runner/codex_catalogs/codex-0.147.0-models-gpt56-sol-1m.json"
-SOURCE_PROFILE_AUXILIARY = {
+SOURCE_PROFILE_SELECTOR_AUXILIARY = {
     "batch-runner/gpt54_disposable_checkout.py":
         "77d6d1957f123b7f32d710be7ffddbd99f6043e00b0313bc7b1cc9802975fa62",
     ENVELOPE + "gpt56_sol_native_usd_cap_20261027.yaml":
@@ -149,6 +157,10 @@ SOURCE_PROFILE_AUXILIARY = {
     "batch-runner/scripts/prepare_codex_sandbox_host.py": "6324b206656abf609af6c6d4f8a1c93c68a0c3d48e53aef0d35955630b66825a",
     "batch-runner/step9_merge_shards.py": "9079fd701fbc7e4cca65fbcc1705f03891e4e13be3a4fb9145a2bb17b1352872",
     ".github/workflows/batch-run.yml": "06519bc2abb0f69fe688cd864dadb536e907a433e2726c5bf60c1115c5c220bb",
+}
+SOURCE_PROFILE_AUXILIARY = {
+    **SOURCE_PROFILE_SELECTOR_AUXILIARY,
+    ".github/workflows/batch-run.yml": "c51ec0fdc048c28058572a2f33d82bf6c8d9e9f0a0b3b638b4eda96c58f48b55",
 }
 PLAN = ROOT / ACTIVE_PLAN
 RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
@@ -434,6 +446,10 @@ def source_plan_snapshot(
                                       sha256=SOURCE_PROFILE_BATCH_PATH_SHA256)
         require(len(batch_path_data) <= 65536)
         batch_path_profile = yaml.safe_load(batch_path_data)
+        selector_data = _read_bytes(_path(ROOT, SOURCE_PROFILE_SELECTOR_RESEAL),
+                                    sha256=SOURCE_PROFILE_SELECTOR_RESEAL_SHA256)
+        require(len(selector_data) <= 65536)
+        selector_profile = yaml.safe_load(selector_data)
         profile_data = _read_bytes(_path(ROOT, SOURCE_PROFILE))
         require(len(profile_data) <= 65536)
         profile = yaml.safe_load(profile_data)
@@ -441,11 +457,17 @@ def source_plan_snapshot(
         require(seal(profile) == expected_plan_sha256)
         # The sole non-source change is the explicitly approved successor
         # grader identity. The original seal and every earlier profile remain.
-        from gpt56_pilot_grader_seal import GRADER_HASH as SEALED_GRADER_HASH
-        from gpt56_pilot_grader_reseal import GRADER_HASH, verify as verify_grader_seal
+        from gpt56_pilot_grader_seal import (
+            GRADER_HASH as SEALED_GRADER_HASH,
+            RECORD as SEALED_RECORD, RECORD_SHA256 as SEALED_RECORD_SHA256,
+        )
+        from gpt56_pilot_grader_reseal import GRADER_HASH as SELECTOR_GRADER_HASH
+        from gpt56_pilot_grader_prereqs_seal import GRADER_HASH, verify as verify_grader_seal
         seal_report, seal_sources = verify_grader_seal(ROOT)
         sealed_contract = json.loads(json.dumps(original))
         sealed_contract["dispatch_grading_identity"]["grader_template_source_hash"] = SEALED_GRADER_HASH
+        selector_contract = json.loads(json.dumps(original))
+        selector_contract["dispatch_grading_identity"]["grader_template_source_hash"] = SELECTOR_GRADER_HASH
         successor_contract = json.loads(json.dumps(original))
         successor_contract["dispatch_grading_identity"]["grader_template_source_hash"] = GRADER_HASH
         require(seal({k: v for k, v in profile.items() if k != "source_pins"})
@@ -456,15 +478,20 @@ def source_plan_snapshot(
                 == seal({k: v for k, v in sealed_contract.items() if k != "source_pins"}))
         require(seal({k: v for k, v in batch_path_profile.items() if k != "source_pins"})
                 == seal({k: v for k, v in sealed_contract.items() if k != "source_pins"}))
+        require(seal({k: v for k, v in selector_profile.items() if k != "source_pins"})
+                == seal({k: v for k, v in selector_contract.items() if k != "source_pins"}))
         require({name for name, digest in grader_seal_profile["source_pins"].items()
                  if digest != long_context_profile["source_pins"][name]}
                 == {"batch-runner/gpt56_sol_codex_pilot_preflight.py"})
         require({name for name, digest in batch_path_profile["source_pins"].items()
                  if digest != grader_seal_profile["source_pins"][name]}
                 == SOURCE_PROFILE_BATCH_PATH_DELTA)
-        require({name for name, digest in profile["source_pins"].items()
+        require({name for name, digest in selector_profile["source_pins"].items()
                  if digest != batch_path_profile["source_pins"][name]}
                 == SOURCE_PROFILE_SELECTOR_RESEAL_DELTA)
+        require({name for name, digest in profile["source_pins"].items()
+                 if digest != selector_profile["source_pins"][name]}
+                == SOURCE_PROFILE_PREREQS_DELTA)
         pins = profile["source_pins"]
         require(type(pins) is dict and set(pins) == REQUIRED_SOURCES)
         require(all(type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value)
@@ -562,8 +589,11 @@ def source_plan_snapshot(
         require(all(name not in SOURCE_PROFILE_AUXILIARY or SOURCE_PROFILE_AUXILIARY[name] == digest
                     for name, digest in seal_sources.items()))
         source_roles = {**pins, **SOURCE_PROFILE_AUXILIARY, **seal_sources,
+                        SEALED_RECORD: SEALED_RECORD_SHA256,
                         GRADER_SEAL_READER: GRADER_SEAL_READER_SHA256,
                         GRADER_RESEAL_READER: GRADER_RESEAL_READER_SHA256,
+                        GRADER_PREREQS_READER: GRADER_PREREQS_READER_SHA256,
+                        SOURCE_PROFILE_SELECTOR_RESEAL: SOURCE_PROFILE_SELECTOR_RESEAL_SHA256,
                         SOURCE_PROFILE_PREVIOUS: SOURCE_PROFILE_PREVIOUS_SHA256,
                         SOURCE_PROFILE_CAPS: SOURCE_PROFILE_CAPS_SHA256,
                         SOURCE_PROFILE_BINDINGS: SOURCE_PROFILE_BINDINGS_SHA256,
@@ -623,6 +653,7 @@ def source_plan_snapshot(
             require(blobs[SOURCE_PROFILE_LONG_CONTEXT] == long_context_data)
             require(blobs[SOURCE_PROFILE_GRADER_SEAL] == grader_seal_data)
             require(blobs[SOURCE_PROFILE_BATCH_PATH] == batch_path_data)
+            require(blobs[SOURCE_PROFILE_SELECTOR_RESEAL] == selector_data)
             def recheck() -> None:
                 for role, data in blobs.items():
                     digest = hashlib.sha256(data).hexdigest()
@@ -645,10 +676,10 @@ def source_plan_snapshot(
         return profile, profile_data, {
             "status": "source_verified", "source_sha": reviewed_source_sha, "source_tree": tree,
             "profile_path": SOURCE_PROFILE, "profile_sha256": hashlib.sha256(profile_data).hexdigest(),
-            "supersedes_profile": SOURCE_PROFILE_BATCH_PATH,
-            "supersedes_profile_sha256": SOURCE_PROFILE_BATCH_PATH_SHA256,
+            "supersedes_profile": SOURCE_PROFILE_SELECTOR_RESEAL,
+            "supersedes_profile_sha256": SOURCE_PROFILE_SELECTOR_RESEAL_SHA256,
             "grader_successor_seal": seal_report,
-            "source_change_reason": "owner_approved_selector_reseal_without_pilot_policy_change",
+            "source_change_reason": "reviewed_exp038_prerequisites_reseal_without_spend_authority",
             "response_capture_readiness": {
                 "status": "next_call_capture_path_only", "live_evidence_observed": False,
                 "eligible_blockers": ["foundry_served_model_version_unverified", "max_and_long_1m_capability_unverified"],
@@ -836,11 +867,13 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
     # merely an arbitrary new value in a plan. All other expected fields stay.
     from gpt56_pilot_grader_seal import GRADER_HASH as SEALED_GRADER_HASH, verify as verify_sealed
     from gpt56_pilot_grader_reseal import GRADER_HASH, verify as verify_grader_seal
+    from gpt56_pilot_grader_prereqs_seal import GRADER_HASH as PREREQS_GRADER_HASH, verify as verify_prereqs_seal
     seal_problem = False
     declared_grader = plan.get("dispatch_grading_identity")
     declared_hash = (declared_grader.get("grader_template_source_hash")
                      if type(declared_grader) is dict else None)
-    for successor_hash, verify_successor in ((GRADER_HASH, verify_grader_seal),
+    for successor_hash, verify_successor in ((PREREQS_GRADER_HASH, verify_prereqs_seal),
+                                             (GRADER_HASH, verify_grader_seal),
                                              (SEALED_GRADER_HASH, verify_sealed)):
         if declared_hash != successor_hash:
             continue
