@@ -33,6 +33,11 @@ two run the workflow's own shell against a scripted ``gh`` and assert what it
 does, because the point of the change is a verdict, not a paragraph.
 
 Nothing here calls a model, signs in to a cloud account, or spends anything.
+
+For exp036/037 the dispatches DID run and eventually passed, but the 30-minute
+wait filtered out in-progress runs and called them never-reported. Keep a
+finite wait covering the child job limits, and report pending/failed/absent
+runs separately without accepting any of them as success.
 """
 
 from __future__ import annotations
@@ -227,27 +232,63 @@ echo "GH_CALL $*" >> "$SIM_LOG"
 case "$1" in
   api)
     case "$2" in
-      *backend-tests.yml*) v="$SIM_BACKEND" ;;
+      *backend-tests.yml*)
+        v="$SIM_BACKEND"
+        if [[ -n "${SIM_BACKEND_AFTER_SECONDS:-}" ]] &&
+           (( $(<"$SIM_CLOCK") >= SIM_BACKEND_AFTER_SECONDS )); then
+          v="$SIM_BACKEND_AFTER"
+        fi
+        ;;
       *deploy.yml*)        v="$SIM_DEPLOY" ;;
       *)                   v="" ;;
     esac
     [[ -z "$v" ]] && exit 0
-    printf '%s\\thttps://example.invalid/run\\n' "$v"
+    url=https://example.invalid/run
+    case "$v" in
+      api-error) exit 1 ;;
+      queued|requested|pending|waiting|in_progress)
+        status=$v; result=- ;;
+      *$'\\t'*) IFS=$'\\t' read -r status result url <<< "$v" ;;
+      *) status=completed; result=$v ;;
+    esac
+    # Apply the workflow's actual --jq expression to a fake API response.
+    # This also exercises the old selector when replaying the baseline.
+    jq -nr --arg status "$status" --arg result "$result" --arg url "$url" \\
+      '{workflow_runs: [{status: $status, conclusion: (if $result == "-" then null else $result end), html_url: $url}]} | '"$4"
     ;;
-  *) : ;;
+  pr)
+    if [[ "$2" == comment ]]; then
+      while IFS= read -r line; do printf '%s\\n' "$line" >> "$SIM_LOG"; done
+    fi
+    ;;
 esac
 """
 
 
-def _run_verification(script: str, tmp_path: Path, backend: str, deploy: str):
+def _run_verification(
+    script: str, tmp_path: Path, backend: str, deploy: str,
+    *, wait_seconds: int = 2, poll_seconds: int = 1,
+    backend_after: tuple[int, str] | None = None,
+):
     root = Path(tempfile.mkdtemp(dir=tmp_path))
     stub_dir = root / "bin"
     stub_dir.mkdir()
+    assert shutil.which("jq"), "the offline gh stub needs jq to run the real projection"
     stub = stub_dir / "gh"
     stub.write_text(GH_STUB, encoding="utf-8")
     stub.chmod(0o755)
     log = root / "calls.log"
     log.touch()
+    clock = root / "clock"
+    clock.write_text("0", encoding="utf-8")
+    # Advance virtual time only; tests never wait minutes or invoke real gh.
+    for name, body in {
+        "date": 'printf "%s\\n" "$(<"$SIM_CLOCK")"',
+        "sleep": 'printf "%s\\n" "$(( $(<"$SIM_CLOCK") + $1 ))" > "$SIM_CLOCK"',
+    }.items():
+        executable = stub_dir / name
+        executable.write_text("#!/usr/bin/env bash\n" + body + "\n", encoding="utf-8")
+        executable.chmod(0o755)
 
     environment = dict(os.environ)
     environment.update(
@@ -255,12 +296,15 @@ def _run_verification(script: str, tmp_path: Path, backend: str, deploy: str):
         SIM_LOG=str(log),
         SIM_BACKEND=backend,
         SIM_DEPLOY=deploy,
+        SIM_CLOCK=str(clock),
+        SIM_BACKEND_AFTER_SECONDS=str(backend_after[0]) if backend_after else "",
+        SIM_BACKEND_AFTER=backend_after[1] if backend_after else "",
         GITHUB_REPOSITORY="owner/repo",
         PR_NUMBER="999",
         PR_HEAD_SHA="a" * 40,
         REQUIRED_WORKFLOWS="backend-tests.yml deploy.yml",
-        WAIT_SECONDS="2",
-        POLL_SECONDS="1",
+        WAIT_SECONDS=str(wait_seconds),
+        POLL_SECONDS=str(poll_seconds),
     )
     completed = subprocess.run(
         ["bash", "-c", script],
@@ -312,3 +356,92 @@ def test_a_failing_result_pr_is_put_back_into_draft(
     assert "--undo" not in quiet and "pr comment" not in quiet, (
         "a passing run must not touch the pull request"
     )
+
+
+def test_wait_covers_child_job_limits_without_removing_its_deadline(batch_run, backend_tests):
+    wait = int(_step(batch_run, "batch-run", VERIFY_STEP)["env"]["WAIT_SECONDS"])
+    longest_backend_job = max(job["timeout-minutes"] for job in backend_tests["jobs"].values())
+    deploy = _load(WORKFLOWS / "deploy.yml")
+    longest = max(longest_backend_job, deploy["jobs"]["validate"]["timeout-minutes"])
+    assert wait == longest * 60 + 600  # finite scheduling/reporting allowance
+    assert wait < batch_run["jobs"]["batch-run"]["timeout-minutes"] * 60
+
+
+@pytest.mark.parametrize("elapsed", [2663, 2719], ids=["exp037", "exp036"])
+def test_real_check_durations_do_not_become_never_reported(batch_run, verify_script, tmp_path, elapsed):
+    wait_env = _step(batch_run, "batch-run", VERIFY_STEP)["env"]
+    completed, calls = _run_verification(
+        verify_script, tmp_path, "in_progress", "success",
+        wait_seconds=int(wait_env["WAIT_SECONDS"]),
+        poll_seconds=int(wait_env["POLL_SECONDS"]),
+        backend_after=(elapsed, "success"),
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "backend-tests.yml -> in_progress" in completed.stdout
+    assert "backend-tests.yml -> success" in completed.stdout
+    assert "never-reported" not in completed.stdout
+    assert "pr ready" not in calls and "pr comment" not in calls
+    assert "event=workflow_dispatch&head_sha=" + "a" * 40 in calls
+
+
+@pytest.mark.parametrize("state", ["", "queued", "requested", "pending", "waiting", "in_progress", "api-error"])
+def test_absent_pending_and_unreadable_checks_stay_red_and_distinct(verify_script, tmp_path, state):
+    completed, calls = _run_verification(verify_script, tmp_path, state, "success")
+    label = state or "never-reported"
+    assert completed.returncode == 1
+    assert "timed out after 2s" in completed.stdout
+    assert f"backend-tests.yml ({label})" in completed.stdout
+    assert f"| `backend-tests.yml` | `{label}` |" in calls
+    if state and state != "api-error":
+        assert "https://example.invalid/run" in calls
+        assert "backend-tests.yml (never-reported)" not in completed.stdout
+    assert "pr ready 999" in calls and "--undo" in calls and "pr comment 999" in calls
+
+
+@pytest.mark.parametrize("verdict", ["failure", "cancelled", "timed_out", "action_required", "neutral", "skipped", "stale", "-", "unknown"])
+def test_terminal_non_success_fails_without_waiting_for_other_checks(verify_script, tmp_path, verdict):
+    completed, calls = _run_verification(verify_script, tmp_path, verdict, "in_progress")
+    assert completed.returncode == 1
+    assert f"backend-tests.yml ({verdict})" in completed.stdout
+    assert "timed out after" not in completed.stdout
+    assert calls.count("GH_CALL api ") == 2
+    assert "--undo" in calls and "pr comment" in calls
+
+
+def test_a_success_conclusion_on_an_unfinished_run_is_not_accepted(verify_script, tmp_path):
+    completed, _ = _run_verification(
+        verify_script, tmp_path,
+        "in_progress\tsuccess\thttps://example.invalid/run", "success",
+    )
+    assert completed.returncode == 1
+    assert "backend-tests.yml (in_progress)" in completed.stdout
+    assert "all required checks succeeded" not in completed.stdout
+
+
+def test_an_unknown_run_status_cannot_pass(verify_script, tmp_path):
+    completed, _ = _run_verification(
+        verify_script, tmp_path,
+        "unrecognized\tsuccess\thttps://example.invalid/run", "success",
+    )
+    assert completed.returncode == 1
+    assert "backend-tests.yml (invalid-run-status)" in completed.stdout
+
+
+@pytest.mark.parametrize("initial", ["", "queued", "api-error"])
+def test_only_observed_completion_can_recover_a_pending_check(verify_script, tmp_path, initial):
+    completed, calls = _run_verification(
+        verify_script, tmp_path, initial, "success", backend_after=(1, "success"),
+    )
+    assert completed.returncode == 0
+    assert "backend-tests.yml -> success" in completed.stdout
+    assert "pr comment" not in calls
+
+
+def test_a_running_check_that_fails_later_is_not_confused_with_absence(verify_script, tmp_path):
+    completed, calls = _run_verification(
+        verify_script, tmp_path, "in_progress", "success", backend_after=(1, "failure"),
+    )
+    assert completed.returncode == 1
+    assert "backend-tests.yml (failure)" in completed.stdout
+    assert "backend-tests.yml (never-reported)" not in completed.stdout
+    assert "--undo" in calls

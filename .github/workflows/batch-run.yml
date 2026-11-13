@@ -1499,7 +1499,10 @@ jobs:
           PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
           PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
           REQUIRED_WORKFLOWS: 'backend-tests.yml deploy.yml'
-          WAIT_SECONDS: '1800'
+          # Backend's longest job is capped at 60 minutes; allow another 10
+          # for scheduling/reporting. The old 30-minute wait expired while
+          # exp036/037 checks were running (both later succeeded in ~45 min).
+          WAIT_SECONDS: '4200'
           POLL_SECONDS: '20'
         run: |
           set -euo pipefail
@@ -1507,26 +1510,49 @@ jobs:
           deadline=$(( $(date +%s) + WAIT_SECONDS ))
           declare -A conclusion=()
           declare -A run_url=()
+          declare -A observed=()
 
           while :; do
             pending=0
+            terminal_failure=0
             for wf in $REQUIRED_WORKFLOWS; do
               [[ -n "${conclusion[$wf]:-}" ]] && continue
               # head_sha is the pin. A dispatch on a branch that moved would
               # report a different SHA and simply never match, which times out
               # red rather than passing on the wrong tree.
-              row=$(gh api \
+              previous=${observed[$wf]:-}
+              if ! row=$(gh api \
                 "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?event=workflow_dispatch&head_sha=$PR_HEAD_SHA&per_page=1" \
-                --jq '.workflow_runs[0] // empty | select(.status == "completed") | "\(.conclusion)\t\(.html_url)"' 2>/dev/null || true)
-              if [[ -n "$row" ]]; then
-                conclusion[$wf]=${row%%$'\t'*}
-                run_url[$wf]=${row##*$'\t'}
-                echo "$wf -> ${conclusion[$wf]}"
-              else
+                --jq '.workflow_runs[0] // empty | [.status, ((. | select(.status == "completed") | .conclusion) // "-"), .html_url] | @tsv' 2>/dev/null); then
+                observed[$wf]=api-error
+              elif [[ -n "$row" ]]; then
+                IFS=$'\t' read -r status result url <<< "$row"
+                run_url[$wf]=$url
+                case "$status" in
+                  completed)
+                    conclusion[$wf]=${result:--}
+                    observed[$wf]=${conclusion[$wf]}
+                    ;;
+                  queued|requested|pending|waiting|in_progress)
+                    observed[$wf]=$status
+                    ;;
+                  *)
+                    conclusion[$wf]=invalid-run-status
+                    observed[$wf]=invalid-run-status
+                    ;;
+                esac
+              fi
+              observed[$wf]=${observed[$wf]:-never-reported}
+              if [[ "${observed[$wf]}" != "$previous" ]]; then
+                echo "$wf -> ${observed[$wf]} ${run_url[$wf]:-}"
+              fi
+              if [[ -z "${conclusion[$wf]:-}" ]]; then
                 pending=$(( pending + 1 ))
+              elif [[ "${conclusion[$wf]}" != "success" ]]; then
+                terminal_failure=1
               fi
             done
-            (( pending == 0 )) && break
+            (( pending == 0 || terminal_failure == 1 )) && break
             if (( $(date +%s) >= deadline )); then
               echo "::error::timed out after ${WAIT_SECONDS}s waiting for dispatched checks on $PR_HEAD_SHA"
               break
@@ -1538,7 +1564,7 @@ jobs:
           for wf in $REQUIRED_WORKFLOWS; do
             verdict=${conclusion[$wf]:-never-reported}
             if [[ "$verdict" != "success" ]]; then
-              failed="${failed}${failed:+, }${wf} (${verdict})"
+              failed="${failed}${failed:+, }${wf} (${observed[$wf]:-$verdict})"
             fi
           done
 
@@ -1556,9 +1582,9 @@ jobs:
             printf '| 워크플로 | 결과 | 실행 |\n|---|---|---|\n'
             for wf in $REQUIRED_WORKFLOWS; do
               printf '| `%s` | `%s` | %s |\n' \
-                "$wf" "${conclusion[$wf]:-never-reported}" "${run_url[$wf]:-—}"
+                "$wf" "${observed[$wf]:-never-reported}" "${run_url[$wf]:-—}"
             done
-            printf '\n`never-reported`는 검사가 **실패한 것이 아니라 아예 시작되지 않았다**는 뜻입니다.\n'
+            printf '\n`never-reported`: 해당 SHA의 dispatch run을 API에서 관측하지 못함. `queued`/`in_progress` 등: 관측했지만 대기 한도 내 미완료. `api-error`: 조회 실패. `action_required`: 승인 필요. `failure` 등: 실행의 실제 종료 결과. 어느 경우도 성공으로 처리하지 않습니다.\n'
             printf 'PR을 draft로 되돌렸습니다. 원인을 확인한 뒤 사람이 다시 열어 주세요.\n'
           } | gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file - || true
 
