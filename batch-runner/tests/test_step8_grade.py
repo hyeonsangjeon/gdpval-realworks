@@ -536,6 +536,7 @@ def test_main_preflight_matches_grader_transport_before_calls(
     assert s8.main() == 0
     assert captured["options"] == {
         "timeout": 600,
+        "max_retries": 0,
         "legacy_api_version": "2025-04-01-preview",
     }
     assert [

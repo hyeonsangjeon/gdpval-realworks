@@ -34,6 +34,7 @@ from core.azure_ai_clients import (
     preflight_routes,
 )
 from core.cost_metering import open_cost_recorder
+from core.grading_retry import Retry429Policy
 from core.cost_receipts import (
     BUCKET_GRADING,
     STATUS_COMPLETE,
@@ -804,6 +805,7 @@ def validate_grading_config(config: dict) -> None:
 
     if int(config.get("tpm_guard", {}).get("max_concurrent", 1)) < 1:
         raise ValueError("tpm_guard.max_concurrent must be >= 1")
+    Retry429Policy.from_config(config.get("tpm_guard", {}).get("retry_on_429"))
 
     rerun_identity = config.get("rerun_identity")
     if rerun_identity is not None:
