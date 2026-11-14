@@ -73,12 +73,28 @@ def _sha256(value: str) -> str:
     return value
 
 
+RUNNER_HOST_POLICY = "linux-boot-namespace-user-ci-image-v2"
+
+
+def validate_runner_image(value: dict) -> None:
+    """A closed, nonsecret image record; historical absence is never ubuntu24."""
+    fixed = {"runner": "ubuntu-24.04", "runner_environment": "github-hosted",
+             "runner_os": "Linux", "runner_arch": "X64", "image_os": "ubuntu24",
+             "os_id": "ubuntu", "os_version_id": "24.04"}
+    _require(type(value) is dict and set(value) == {*fixed, "image_version"}, "runner_image_schema")
+    _same("runner image", {name: value[name] for name in fixed}, fixed)
+    _require(type(value["image_version"]) is str and len(value["image_version"]) <= 64
+             and re.fullmatch(r"[0-9]{8}\.[0-9]+(?:\.[0-9]+)?", value["image_version"]) is not None,
+             "runner_image_version_required")
+
+
 def execution_host_identity(reviewed_source_sha: str) -> dict:
-    """Local metadata only, not an ownership probe or an admission verdict.
+    """Host metadata, with strict live CI image admission but no kernel probe.
 
     A leader can obtain this digest on the intended host before issuing a
     direction. It names the boot/namespace/user and, when present, the exact
-    CI job instance. Raw environment values and boot IDs are never retained.
+    CI job instance. Only the allowlisted image fields are retained verbatim;
+    raw boot IDs, user identity and other environment values remain hashed.
     Actual support still requires TimeBudgetObservation's kernel admission.
     """
     uname = os.uname()
@@ -92,6 +108,7 @@ def execution_host_identity(reviewed_source_sha: str) -> dict:
         "pid_namespace": [namespace.st_dev, namespace.st_ino],
     }
     ci = None
+    runner_image = None
     if os.environ.get("GITHUB_ACTIONS") is not None:
         _require(os.environ.get("GITHUB_ACTIONS") == "true"
                  and os.environ.get("GITHUB_SHA") == reviewed_source_sha
@@ -102,10 +119,22 @@ def execution_host_identity(reviewed_source_sha: str) -> dict:
         _require(all(type(value) is str and 0 < len(value) <= 512 for value in ci.values())
                  and ci["GITHUB_RUN_ID"].isdigit() and ci["GITHUB_RUN_ATTEMPT"].isdigit()
                  and int(ci["GITHUB_RUN_ATTEMPT"]) > 0, "ci_instance_required")
+        from core import runner_environment
+
+        # Real OS admission, not just a caller-supplied ImageOS label. This
+        # study does not inherit the separate owner's Azure-VM exception.
+        observed = runner_environment.require_execution()
+        _require(observed["github_hosted"], "time_budget_github_hosted_required")
+        runner_image = {"runner": "ubuntu-24.04", **{name: observed[name] for name in (
+            "runner_environment", "runner_os", "runner_arch", "image_os", "image_version",
+            "os_id", "os_version_id")}}
+        validate_runner_image(runner_image)
         instance["ci"] = ci
-    return {"policy": "linux-boot-namespace-user-ci-instance-v1",
+        instance["runner_image"] = runner_image
+    return {"policy": RUNNER_HOST_POLICY if runner_image is not None else "linux-boot-namespace-user-ci-instance-v1",
             "instance_sha256": seal(instance), "ci_instance_sha256": None if ci is None else seal(ci),
-            "ownership_confirmed": False}
+            "ownership_confirmed": False,
+            **({"runner_image": runner_image} if runner_image is not None else {})}
 
 
 class _ExecutionDirection:
@@ -341,7 +370,7 @@ def run_first_v2_observation(
     input_registration_root: Path, expected_input_source_sha: str, input_registration_path: str,
     dataset_parquet: Path, reference_root: Path, observation_directory: Path, destination: Path,
 ) -> dict:
-    """One nonrenewable registered first-run task, no outer retry or grading.
+    """One nonrenewable registered r1/r2 task, no outer retry or grading.
 
     Expected identities are caller authority, not values inferred from markers,
     direction bytes or HEAD. A new result destination and adjacent backend work
@@ -350,8 +379,10 @@ def run_first_v2_observation(
     returned terminal control remains uncertainty, not a fabricated study row.
     """
     _require(type(observation) is ObservationIdentity and observation.study_id == registration.STUDY_ID
-             and observation.run_id == RUN and observation.condition == "sandbox_v2"
-             and observation.repeat == 1, "first_registered_v2_cell_only")
+             and observation.condition == "sandbox_v2" and type(observation.repeat) is int
+             and observation.repeat in (1, 2)
+             and observation.run_id == f"gpt54_time_budget_v1_v2_r{observation.repeat}",
+             "registered_v2_cell_only")
     observation = ObservationIdentity(**asdict(observation))
     _same("independent runtime source", observation.reviewed_source_sha, expected_reviewed_source_sha)
     _same("independent frozen source", expected_grader_source_sha, registration.ACCEPTED_BASE_SHA)
@@ -452,12 +483,21 @@ def run_first_v2_observation(
         check_result_parent = held.enter_context(_held_parents(output.parent, (output.name, workspace.name, reservation.name)))
         publication = held.enter_context(_publication_parents(output.parent))
         dependencies = _V2Dependencies(workspace, publication)
+        direction_checks = 0
 
         def require_execution_direction(actual):
-            direction.require_execution_direction(actual)
+            nonlocal direction_checks
+            _require(direction_checks < 2, "direction_admission_repeated")
+            if direction_checks:
+                reread_consumed_handoff()
             check_direction_parent()
             check_result_parent()
-            absent(before_generation=True)
+            # The first call still forbids adoption of ANY workspace/claim.
+            # The final call only accepts this attempt's verified consumed
+            # handoff, with result/reservation still absent. Expiry is last.
+            absent(before_generation=direction_checks == 0)
+            direction_checks += 1
+            direction.require_execution_direction(actual)
 
         raw = registration.consume_observation_handoff(
             plan, **common, preparation_directory=paths["preparation"], expected_preparation_identity=expected,

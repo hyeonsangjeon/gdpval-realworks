@@ -1,6 +1,6 @@
-"""One independently directed registered native r1 observation, never a scheduler.
+"""One independently directed native r1/r2 observation in the shared ABBA order.
 
-Only one selected task in the fixed native r1 run can acquire its permanent
+Only the next selected task in the fixed schedule can acquire its permanent
 private claim. Originals and the full canonical Step0 come from the accepted
 input-only primitives; neither a local marker nor the closed pilot supplies authority.
 """
@@ -48,6 +48,7 @@ REPOSITORY, OWNER, JOB = shared.REPOSITORY, shared.OWNER, "observation"
 TARGET, TARGET_SHA256, BRANCH = shared.TARGET, shared.TARGET_SHA256, "main"
 REQUEST_VERSION = "gpt54-time-budget-first-codex-ci-request-v1"
 ENVELOPE_VERSION = "gpt54-time-budget-first-codex-ci-completion-v1"
+RUNNER_ENVELOPE_VERSION = "gpt54-time-budget-first-codex-ci-completion-v2"
 PURPOSE = "execute_and_privately_retain_first_codex_observation"
 # Legacy Task1 identities also serve the fixed historical uncertainty reader.
 CELL = {"study_id": registration.STUDY_ID, "run_id": "gpt54_time_budget_v1_codex_r1",
@@ -57,10 +58,11 @@ ROOT_NAMES = {"runtime_root": "time-budget-codex-runtime", "frozen_root": "time-
               "state_root": "time-budget-first-codex", "native_root": "time-budget-codex-native",
               "login_root": "time-budget-codex-azure-login"}
 SOURCE_ROLES = {
-    HELPER, WORKFLOW, observation.ENTRYPOINT, observation.host_identity.ENTRYPOINT, shared.HELPER,
+    HELPER, WORKFLOW, observation.ENTRYPOINT, observation.host_identity.ENTRYPOINT, shared.HELPER, shared.schedule.HELPER,
     "batch-runner/codex_ci_input_intake.py", "batch-runner/codex_ci_input_bundle.py",
     "batch-runner/codex_budget_pilot_output.py", "batch-runner/codex_budget_pilot_retention.py",
     "batch-runner/scripts/azure_oidc_identity_preflight.py", "batch-runner/requirements.txt",
+    "batch-runner/core/runner_environment.py", "batch-runner/scripts/prepare_codex_sandbox_host.py",
 }
 _canonical_path, _write, _read = shared._canonical_path, shared._write, shared._read
 
@@ -79,12 +81,14 @@ def _bytes(value) -> bytes:
 
 
 def _selected_cell(compiled: registration.CompiledTimeBudgetRegistration, requested: dict) -> dict:
-    """Bind one requested task to the already source-verified native r1 run."""
-    runs = [run for run in compiled.runs if run.run_id == CELL["run_id"]
-            and run.condition == "codex" and run.repeat == 1]
+    """Bind one requested task to the source-verified native r1/r2 run."""
+    _require(type(requested) is dict and type(requested.get("repeat")) is int,
+             "registered_codex_task_required")
+    runs = [run for run in compiled.runs if run.run_id == requested.get("run_id")
+            and run.condition == "codex" and run.repeat in (1, 2)]
     _require(compiled.runtime_bound and len(runs) == 1 and type(requested) is dict
              and type(requested.get("task_id")) is str and requested["task_id"] in runs[0].task_ids,
-             "registered_first_codex_task_required")
+             "registered_codex_task_required")
     run = runs[0]
     cell = {"study_id": registration.STUDY_ID, "run_id": run.run_id, "condition": run.condition,
             "repeat": run.repeat, "task_id": requested["task_id"]}
@@ -155,7 +159,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
              "independent_dispatch_number_required")
     _same("intended Actions context", ci, {
         "repository": REPOSITORY, "workflow": WORKFLOW, "ref": "refs/heads/main", "actor": OWNER,
-        "job": JOB, "attempt": 1, "run_number": ci["run_number"], "runner": "ubuntu-22.04",
+        "job": JOB, "attempt": 1, "run_number": ci["run_number"], "runner": "ubuntu-24.04",
         "runner_os": "Linux", "runner_arch": "X64"})
     required = {
         "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_REF": "refs/heads/main",
@@ -163,7 +167,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_NUMBER": str(ci["run_number"]), "GITHUB_JOB": JOB,
         "GITHUB_SHA": reviewed_source_sha, "TIME_BUDGET_CODEX_WORKFLOW_SHA": reviewed_source_sha,
         "GITHUB_WORKFLOW_REF": REPOSITORY + "/" + WORKFLOW + "@refs/heads/main",
-        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu22",
+        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu24",
         "JE_ARROW_MALLOC_CONF": "background_thread:false",
     }
     _require(all(os.environ.get(key) == value for key, value in required.items()), "ci_source_cell_or_attempt_refused")
@@ -219,6 +223,7 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         _same("reviewed runtime tree", tree, reviewed_source_tree)
         for role, module in (
             (HELPER, sys.modules[__name__]), (observation.ENTRYPOINT, observation), (shared.HELPER, shared),
+            (shared.schedule.HELPER, shared.schedule),
             (observation.host_identity.ENTRYPOINT, observation.host_identity),
             ("batch-runner/codex_ci_input_intake.py", intake), ("batch-runner/codex_ci_input_bundle.py", originals),
             ("batch-runner/codex_budget_pilot_output.py", storage),
@@ -237,6 +242,8 @@ def checked_request(*, request_json: str, expected_request_sha256: str,
         step0, input_specs = _input_contract(plan, roots["frozen_root"])
         _same("independent full Step0 provenance", request["step0"], step0)
         host = observation.host_identity.execution_host_identity(reviewed_source_sha)
+        _same("live host policy", host["policy"], observation.host_identity.RUNNER_HOST_POLICY)
+        observation.host_identity.validate_runner_image(host["runner_image"])
         context = {"request": request, "request_identity": _identity(data), "plan": plan, "roots": roots,
                    "cell": cell, "host": host, "input_specs": input_specs,
                    "ci": {"run_id": run_id, "run_number": ci["run_number"], "job": JOB, "attempt": 1}}
@@ -385,6 +392,7 @@ def prepare_and_claim(context: dict) -> dict:
             _write(paths["direction"], direction)
             claim = _claim(context, rebuilt)
             _write(root / "claim-reserved.json", claim)
+            _write(root / shared.schedule.CLAIM_NAME, shared.schedule.claim_record(context, claim))
             reread()
         receipt = {"outcome": "unresolved", "claim": claim, "claim_identity": _identity(_encoded(claim)),
                    "returned_commit": None}
@@ -394,12 +402,18 @@ def prepare_and_claim(context: dict) -> dict:
             with _session(None) as (api, token, deadline):
                 parent = context["request"]["storage"]["expected_parent"]
                 _same("independent private parent", storage._metadata(api, TARGET, BRANCH, token, deadline)["sha"], parent)
-                _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
-                         paths=[prefix], token=token) == [], "observation_already_claimed_or_retained")
+                shared.schedule.require_next_remote(context, api, token, deadline,
+                    repository=TARGET, parent=parent, cache=cache)
                 receipt["returned_commit"] = _commit(api, token, deadline, cell=context["cell"], parent=parent,
-                    files={claim_path: _encoded(claim)}, control_path=claim_path, control=claim, cache=cache)
+                    files={claim_path: _encoded(claim), prefix + "/" + shared.schedule.CLAIM_NAME:
+                           _encoded(shared.schedule.claim_record(context, claim))},
+                    control_path=claim_path, control=claim, cache=cache)
                 receipt["outcome"] = "acknowledged"
-        except (Exception, KeyboardInterrupt):
+        except (Exception, KeyboardInterrupt) as error:
+            if isinstance(error, shared.schedule.ScheduleRefused) and str(error) in shared.schedule.REASONS:
+                _write(root / "schedule-refusal.json", {"reason": str(error),
+                    "observation_id": shared.schedule.select(shared.schedule.build_schedule(context["plan"]),
+                                                              context["cell"]).observation_id})
             _write(root / "claim-receipt.json", receipt)
             raise FirstCodexCIRefused("claim_unconfirmed_permanently_reserved") from None
         _write(root / "claim-receipt.json", receipt)
@@ -413,6 +427,8 @@ def _admission(context: dict, sources: ExitStack) -> tuple[dict, dict]:
     marker, _, _ = _reconstruct(context, sources)
     claim = _claim(context, marker)
     _same("same-host permanent claim", _read(paths["root"] / "claim-reserved.json"), claim)
+    _same("same-host schedule admission", _read(paths["root"] / shared.schedule.CLAIM_NAME),
+          shared.schedule.claim_record(context, claim))
     receipt = _read(paths["root"] / "claim-receipt.json")
     _require(type(receipt) is dict and set(receipt) == {"outcome", "claim", "claim_identity", "returned_commit"}
              and receipt["outcome"] == "acknowledged" and storage._hash(receipt["returned_commit"], 40)
@@ -525,8 +541,9 @@ def _result_snapshot(context: dict, marker: dict):
 
 def validate_envelope(value: dict, *, expected_cell: dict | None = None) -> None:
     """Bind an independently expected cell; default only to the legacy Task1 reader."""
-    _same("native completion version", value["format"], ENVELOPE_VERSION)
-    shared.validate_envelope({**value, "format": shared.ENVELOPE_VERSION},
+    versions = {ENVELOPE_VERSION: shared.ENVELOPE_VERSION, RUNNER_ENVELOPE_VERSION: shared.RUNNER_ENVELOPE_VERSION}
+    _require(value.get("format") in versions, "native_completion_version")
+    shared.validate_envelope({**value, "format": versions[value["format"]]},
                              expected_cell=CELL if expected_cell is None else expected_cell)
     _same("native completion unavailable usage", value["usage"], None)
 
@@ -559,14 +576,17 @@ def retain(context: dict) -> dict:
             _require(api.get_paths_info(repo_id=TARGET, repo_type="dataset", revision=parent,
                      paths=[manifest_path, prefix + "/result"], token=token) == [], "output_already_retained")
             revision = _commit(api, token, deadline, cell=context["cell"], parent=parent,
-                files={manifest_path: _encoded(manifest), **{prefix + "/" + name: data for name, data in files.items()}},
+                files={manifest_path: _encoded(manifest), prefix + "/" + shared.schedule.CAPTURE_NAME:
+                       _encoded(shared.schedule.capture_record(context, admission, manifest, payload)),
+                       **{prefix + "/" + name: data for name, data in files.items()}},
                 control_path=manifest_path, control=manifest, cache=cache)
             _objects(api, TARGET, revision, [_object(claim_path, _encoded(admission["claim"]))], token, deadline, written_at=parent)
             outcome = "acknowledged"
     except (Exception, KeyboardInterrupt):
         revision = None  # No lost-response adoption, repeated CAS or new attempt.
     envelope = shared._envelope(context, admission, payload, commit=revision, outcome=outcome)
-    envelope["format"] = ENVELOPE_VERSION
+    envelope["format"] = (RUNNER_ENVELOPE_VERSION if envelope["format"] == shared.RUNNER_ENVELOPE_VERSION
+                          else ENVELOPE_VERSION)
     validate_envelope(envelope, expected_cell=context["cell"])
     _write(paths["root"] / "completion.json", envelope)
     _require(outcome == "acknowledged", "private_retention_unconfirmed")
@@ -597,7 +617,9 @@ def main(argv=None) -> int:
                 validate_envelope(value, expected_cell=context["cell"])
                 for name, expected in {"source": context["request"]["source"], "ci": context["ci"],
                                        "request_sha256": context["request_identity"]["sha256"],
-                                       "host_sha256": context["host"]["instance_sha256"]}.items():
+                                       "host_sha256": context["host"]["instance_sha256"],
+                                       "format": RUNNER_ENVELOPE_VERSION,
+                                       "runner_image": context["host"]["runner_image"]}.items():
                     _same("completion " + name, value[name], expected)
             elif operation != "validate-request":
                 result = {"prepare-and-claim": prepare_and_claim, "execute": execute, "retain": retain}[operation](context)

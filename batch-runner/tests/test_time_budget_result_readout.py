@@ -54,6 +54,15 @@ def source_repository(tmp_path_factory, request):
         shutil.copyfile(ROOT / role, destination)
     registration_path = workspace / subject.registration.REGISTRATION_PATH
     compiler_path = workspace / "batch-runner/gpt54_time_budget_comparison.py"
+    # A synthetic C registration, not the repository's preserved predecessor.
+    # The real study now keeps its old compiler pin in that predecessor and
+    # records current bytes in a separate source successor. This fixture tests
+    # the older two-distinct-registration reader contract without relabelling it.
+    current_plan = subject.registration.load_registration(registration_path)
+    current_hash = subject._identity(compiler_path.read_bytes())["sha256"]
+    current_plan["source_basis"]["registration_compiler"]["sha256"] = current_hash
+    current_plan["source_pins"]["batch-runner/gpt54_time_budget_comparison.py"] = current_hash
+    registration_path.write_text(yaml.safe_dump(current_plan, sort_keys=False))
     current_registration, current_compiler = registration_path.read_bytes(), compiler_path.read_bytes()
     result_plan = subject.registration.load_registration(registration_path)
     if getattr(request, "param", None) == "historical_runtime":

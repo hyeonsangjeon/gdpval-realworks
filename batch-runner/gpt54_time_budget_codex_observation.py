@@ -347,8 +347,13 @@ def run_codex_observation(
             provider_installed = True
             return provider
 
+        direction_checks = 0
+
         def require_execution_direction(actual):
-            direction.require_execution_direction(actual)
+            nonlocal direction_checks
+            _require(direction_checks < 2, "direction_admission_repeated")
+            if direction_checks:
+                reread_handoff()
             for role, local in local_files.items():
                 _read_bytes(local, **entries[role])
                 _read_bytes(paths["runtime_root"] / role, **entries[role])
@@ -358,7 +363,11 @@ def run_codex_observation(
                   direction_paths["native_run_root"])
             check_direction()
             check_output()
-            absent(before_generation=True)
+            absent(before_generation=direction_checks == 0)
+            direction_checks += 1
+            # Provider/root/parent/claim I/O must precede the same admission
+            # clock, including on the consumer's final pre-run check.
+            direction.require_execution_direction(actual)
 
         raw = registration.consume_observation_handoff(
             plan, **common, preparation_directory=prep, expected_preparation_identity=expected,

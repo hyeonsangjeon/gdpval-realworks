@@ -63,6 +63,7 @@ def test_time_budget_native_step0_identity_bound(case, offline, monkeypatch, cap
     case.request["cell"] = selected
     case.request["storage"]["prefix"] = prefix
     case.api.claim, case.api.manifest = claim_path, manifest_path
+    case.api.seed_captured_before(case.seed.plan, selected, case.request["source"])
     assert _invoke(case, monkeypatch, "prepare-and-claim") == 0
     assert len(case.downloads) == 4 and case.api.commits == ["claim"] and offline.auth_calls == []
     step0 = case.root / "inputs" / ci.originals.STEP0

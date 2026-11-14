@@ -169,16 +169,8 @@ def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, local_kern
             monkeypatch.delenv(key)
     # The native callable runs only against the synthetic transport below.
     # Give that unit path explicit admitted host facts after clearing inherited
-    # state; this is not evidence about the NAS or the legacy CI request's host.
+    # state; this is not evidence about the NAS or an actual Actions host.
     request.getfixturevalue("native_hosted_runner")
-    # This legacy controller separately validates its immutable ubuntu22 CI
-    # descriptor. Its callable/transport tests are not host-admission proofs:
-    # freeze the synthetic permitted observation rather than pretending the
-    # descriptor admits a real 22.04 execution under the new global policy.
-    from core import runner_environment
-    synthetic_runner = runner_environment.observe()
-    assert synthetic_runner["eligible_for_execution"]
-    monkeypatch.setattr(runner_environment, "observe", lambda: deepcopy(synthetic_runner))
     real_open, real_stat = Path.open, Path.stat
 
     def proc_open(path, *args, **kwargs):
@@ -198,6 +190,34 @@ def offline(monkeypatch, handoff_sources, actions_layout, dual_roots, local_kern
     assert denied == []
 
 
+@pytest.mark.parametrize("change", ["request22", "image22", "self_hosted", "missing_image", "actual22", "image_drift"])
+def test_codex_ubuntu24_request_guard_before_input_auth_and_storage(case, monkeypatch, offline, change):
+    from core import runner_environment
+
+    if change == "request22":
+        case.request["ci"]["runner"] = "ubuntu-22.04"
+    elif change == "image22":
+        monkeypatch.setenv("ImageOS", "ubuntu22")
+    elif change == "self_hosted":
+        monkeypatch.setenv("RUNNER_ENVIRONMENT", "self-hosted")
+    elif change == "missing_image":
+        monkeypatch.delenv("ImageVersion")
+    elif change == "actual22":
+        monkeypatch.setattr(runner_environment.platform, "freedesktop_os_release",
+                            lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"})
+    arguments = _arguments(case, monkeypatch)
+    reason = ("intended Actions context mismatch" if change == "request22" else
+              "ci_source_cell_or_attempt_refused" if change in {"image22", "self_hosted"} else
+              "final live host mismatch" if change == "image_drift" else "execution_environment_refused")
+    with pytest.raises((ValueError, runner_environment.ExecutionEnvironmentRefused), match="^" + reason + "$"):
+        with ci.checked_request(request_json=ci._bytes(case.request).decode(), **arguments) as context:
+            assert change == "image_drift"
+            assert context["host"]["runner_image"]["image_os"] == "ubuntu24"
+            monkeypatch.setenv("ImageVersion", "20261030.999.1")
+    assert case.downloads == case.api.calls == case.api.commits == offline.auth_calls == []
+    assert not case.root.exists()
+
+
 @pytest.fixture
 def case(handoff_sources, actions_layout, monkeypatch):
     seed, roots = handoff_sources, actions_layout.roots
@@ -215,7 +235,7 @@ def case(handoff_sources, actions_layout, monkeypatch):
         "cell": dict(ci.CELL), "registration_sha256": seal(seed.plan), "dataset_sha256": seal(seed.plan["shared"]["dataset"]),
         "step0": step0,
         "ci": {"repository": ci.REPOSITORY, "workflow": ci.WORKFLOW, "ref": "refs/heads/main", "actor": ci.OWNER,
-               "job": ci.JOB, "attempt": 1, "run_number": 1, "runner": "ubuntu-22.04", "runner_os": "Linux", "runner_arch": "X64"},
+               "job": ci.JOB, "attempt": 1, "run_number": 1, "runner": "ubuntu-24.04", "runner_os": "Linux", "runner_arch": "X64"},
         "paths": {"bootstrap_root": str(actions_layout.bootstrap), **{name: str(path) for name, path in roots.items()}},
         "storage": {"repository_name_sha256": ci.TARGET_SHA256, "branch": ci.BRANCH, "prefix": ci.PREFIX, "expected_parent": "1" * 40},
         "not_before_unix": int(time.time()) - 10, "expires_unix": int(time.time()) + 1800,
@@ -226,7 +246,7 @@ def case(handoff_sources, actions_layout, monkeypatch):
         "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_NUMBER": "1", "GITHUB_JOB": ci.JOB,
         "GITHUB_SHA": seed.runtime_sha, "TIME_BUDGET_CODEX_WORKFLOW_SHA": seed.runtime_sha,
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + ci.WORKFLOW + "@refs/heads/main",
-        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu22",
+        "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted", "ImageOS": "ubuntu24",
         "GITHUB_RUN_ID": "1001", "RUNNER_NAME": "synthetic-native-Actions-host",
         "GITHUB_WORKSPACE": str(actions_layout.bootstrap), "RUNNER_TEMP": str(actions_layout.runner_temp),
         "GDPVAL_CODEX_RUN_ROOT": str(roots["native_root"]), "AZURE_CONFIG_DIR": str(roots["login_root"]),
@@ -239,8 +259,7 @@ def case(handoff_sources, actions_layout, monkeypatch):
         monkeypatch.setenv(key, value)
     store = PrivateStore(prefix=ci.PREFIX)
     prior = ci.shared.PREFIX + "/admission.json"
-    store.trees[store.head][prior] = b"Synthetic prior V2 claim; never adopted or mutated."
-    store.writers[store.head][prior] = store.head
+    store.seed_captured_before(seed.plan, ci.CELL, request["source"])
     value = SimpleNamespace(request=request, root=roots["state_root"], seed=seed, api=store,
                             downloads=[], corrupt_step0=False, prior=prior, prior_bytes=store.trees[store.head][prior])
     value.args = {"reviewed_source_sha": seed.runtime_sha, "reviewed_source_tree": seed.runtime_tree,
@@ -295,7 +314,7 @@ def _workflow_contract(case, layout, monkeypatch):
     assert set(workflow.get("on", workflow.get(True))) == {"workflow_dispatch"}
     assert workflow["permissions"] == {"contents": "read", "id-token": "write"}
     assert workflow["concurrency"] == {"group": "gpt54-time-budget-first-v2-observation", "cancel-in-progress": False}
-    assert job["runs-on"] == "ubuntu-22.04" and job["timeout-minutes"] == 45
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 65
     assert job["env"]["JE_ARROW_MALLOC_CONF"] == "background_thread:false"
     assert "GDPVAL_CODEX_RUN_ROOT" not in job["env"] and "AZURE_CONFIG_DIR" not in job["env"]
     env_bytes = layout.github_env.read_bytes()
@@ -343,6 +362,37 @@ def _workflow_contract(case, layout, monkeypatch):
     assert layout.github_env.read_bytes() == env_bytes
     assert steps[-1]["with"] == {"name": "time-budget-first-codex-completion",
         "path": "${{ runner.temp }}/time-budget-first-codex/completion.json", "if-no-files-found": "error", "retention-days": 7}
+
+
+def test_time_budget_native_repeat_two_bound_capture_roundtrip(case, offline, monkeypatch):
+    item = ci.shared.schedule.build_schedule(case.seed.plan)[10]
+    assert item.condition == "codex" and item.repeat == 2 and item.abba_position == 3
+    case.request["cell"] = item.cell
+    case.request["storage"]["prefix"] = item.prefix
+    case.api.claim, case.api.manifest = item.prefix + "/admission.json", item.prefix + "/output-manifest.json"
+    case.api.seed_captured_before(case.seed.plan, item.cell, case.request["source"])
+    assert _invoke(case, monkeypatch, "prepare-and-claim") == 0
+    marker = ci._read(case.root / "preparation" / ci.registration.HANDOFF_READY)
+    spec = SimpleNamespace(arguments={"observation": deadline.ObservationIdentity(**marker["observation"])},
+                           marker=marker, consumed=case.root / ("preparation" + ci.registration.HANDOFF_CONSUMED_SUFFIX))
+    native = _native_transport(monkeypatch, spec, offline, outcome="success")
+    assert _invoke(case, monkeypatch, "execute") == 0 and native.requests
+    monkeypatch.setenv("HF_TOKEN", TOKEN)
+    assert _invoke(case, monkeypatch, "retain") == 0
+    envelope = ci._read(case.root / "completion.json")
+    assert envelope["repeat"] == 2 and envelope["status"] == "success"
+    record = json.loads(case.api.trees[case.api.head][item.prefix + "/" + ci.shared.schedule.CAPTURE_NAME])
+    assert record["state"] == "captured" and record["binding"]["observation_id"] == item.observation_id
+    assert case.api.commits == ["claim", "output"]
+
+
+def test_time_budget_native_cannot_overtake_v2_before_model(case, monkeypatch, offline):
+    case.api.trees[case.api.head] = {}
+    case.api.writers[case.api.head] = {}
+    assert _invoke(case, monkeypatch, "prepare-and-claim") == 2
+    assert ci._read(case.root / "schedule-refusal.json")["reason"] == "observation_out_of_order"
+    assert case.api.commits == offline.auth_calls == []
+    assert not (case.root / "execution-reserved.json").exists()
 
 
 @pytest.mark.parametrize("case_name", ["roundtrip", "failed", "source", "selection", "step0", "direction", "occupied", "uncertain"])
@@ -772,6 +822,8 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
         ci.MANIFEST: b"Synthetic old native uncertainty; never rewrite.\n",
     })
     case.api.writers[case.api.head].update({ci.CLAIM: case.api.head, ci.MANIFEST: case.api.head})
+    if not keep_task1:
+        case.api.seed_captured_before(case.seed.plan, selected, case.request["source"])
     original_head = case.api.head
     old_objects = dict(case.api.trees[original_head])
     original_trees, original_writers = deepcopy(case.api.trees), deepcopy(case.api.writers)
@@ -795,7 +847,7 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
     assert (guarded.returncode != 0) == (change in {"unregistered_task", "run", "condition", "repeat", "source"})
 
     if change in {"unregistered_task", "run", "condition", "repeat", "namespace", "source"}:
-        reason = ("registered_first_codex_task_required" if change == "unregistered_task" else
+        reason = ("registered_codex_task_required" if change == "unregistered_task" else
                   "private study storage mismatch" if change == "namespace" else
                   "request source mismatch" if change == "source" else "request cell mismatch")
         with pytest.raises(ValueError, match="^" + reason + "$"):
@@ -821,6 +873,8 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
             envelope = ci.shared._envelope(context, {"returned_commit": "2" * 40}, None,
                                            commit="3" * 40, outcome="acknowledged")
         envelope["format"] = ci.ENVELOPE_VERSION
+        # Reconstruct the historical format honestly, without a v2 image label.
+        envelope.pop("runner_image")
         readout.native_execution.validate_envelope(envelope)  # Historical default is independently fixed to Task1.
         with pytest.raises(ValueError, match="^completion constants mismatch$"):
             readout.native_execution.validate_envelope({**envelope, "task_id": task2})
@@ -850,13 +904,13 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
             ci.prepare_and_claim(context)
         assert len(case.downloads) == 4
         assert ci._read(case.root / "claim-receipt.json")["outcome"] == "unresolved"
-        assert case.api.calls == ["metadata", "objects"]  # No old-object body read, adoption or CAS.
+        assert case.api.calls == ["metadata", "objects", "objects"]  # Metadata only; no old body/CAS.
         assert case.api.head == original_head and case.api.commits == offline.auth_calls == []
         assert case.api.trees == original_trees and case.api.writers == original_writers
         with ci.checked_request(**arguments) as context, pytest.raises(
                 ci.FirstCodexCIRefused, match="^execution_refused_or_uncertain$"):
             ci.execute(context)
-        assert case.api.calls == ["metadata", "objects"] and offline.auth_calls == []
+        assert case.api.calls == ["metadata", "objects", "objects"] and offline.auth_calls == []
         assert not (case.root / "execution-reserved.json").exists() and not (case.root / "result").exists()
         assert list((case.root / "observation").iterdir()) == []
         return
@@ -881,7 +935,7 @@ def test_time_budget_native_registered_task_selection(case, actions_layout, offl
     assert config["execution"]["resume_max_rounds"] == 0
     assert config["execution"]["timeout"] == 1200
     claim_tree = dict(case.api.trees[case.api.head])
-    assert set(claim_tree) - set(old_objects) == {claim_path}
+    assert set(claim_tree) - set(old_objects) == {claim_path, selected_prefix + "/" + ci.shared.schedule.CLAIM_NAME}
     assert {name: claim_tree[name] for name in old_objects} == old_objects
     direction_path = case.root / "direction.json"
     direction_bytes = direction_path.read_bytes()

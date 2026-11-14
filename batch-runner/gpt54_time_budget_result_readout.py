@@ -399,6 +399,23 @@ def _project_native(row: dict, control: dict, captured: dict, completion: dict, 
     return summary
 
 
+def _validate_captured_host(host: dict, completion: dict) -> None:
+    """Read legacy evidence without inventing or downgrading an image label."""
+    image_fields = {"runner_image"} if "runner_image" in completion else set()
+    versions = ({execution.RUNNER_ENVELOPE_VERSION, native_execution.RUNNER_ENVELOPE_VERSION}
+                if image_fields else {execution.ENVELOPE_VERSION, native_execution.ENVELOPE_VERSION})
+    _require(completion.get("format") in versions, "captured_runner_image_version")
+    _keys(host, {"policy", "instance_sha256", "ci_instance_sha256", "ownership_confirmed", *image_fields})
+    policy = (execution.observation.RUNNER_HOST_POLICY if image_fields
+              else "linux-boot-namespace-user-ci-instance-v1")
+    _same("host evidence policy", host["policy"], policy)
+    if image_fields:
+        execution.observation.validate_runner_image(host["runner_image"])
+        _same("captured runner image", host["runner_image"], completion["runner_image"])
+    _same("host metadata is not ownership", host["ownership_confirmed"], False)
+    _same("captured host", host["instance_sha256"], completion["host_sha256"])
+
+
 def project_result(data: bytes, context: dict) -> dict:
     """Validate authenticated canonical bytes, then return only typed fields."""
     request, plan = context["request"], context["plan"]
@@ -447,10 +464,7 @@ def project_result(data: bytes, context: dict) -> dict:
     })
     for name in ("preparation_identity", "configuration"):
         validate_reference_record(captured[name])
-    _keys(captured["host"], {"policy", "instance_sha256", "ci_instance_sha256", "ownership_confirmed"})
-    _same("host evidence policy", captured["host"]["policy"], "linux-boot-namespace-user-ci-instance-v1")
-    _same("host metadata is not ownership", captured["host"]["ownership_confirmed"], False)
-    _same("captured host", captured["host"]["instance_sha256"], completion["host_sha256"])
+    _validate_captured_host(captured["host"], completion)
     _same("captured entrypoint", captured["entrypoint"], (native_execution if native else execution).observation.ENTRYPOINT)
     _same("no grading or upload by callable", [captured["grading_performed"], captured["upload_performed"]], [False, False])
     _require(all(storage._hash(captured[name]) for name in ("direction_sha256", "paths_sha256")), "capture_hash_refused")

@@ -1,4 +1,4 @@
-# One explicitly selected registered task of the first V2 run. No grading or replay.
+# One scheduled V2 r1/r2 task; shared ABBA CAS gate. No grading or replay.
 # Source review and this workflow's existence do not authorize a paid dispatch.
 name: GPT-5.4 time budget — one registered V2 observation
 
@@ -18,7 +18,7 @@ on:
         required: true
         type: string
       request_json:
-        description: Nonsecret single-task V2 run-1 request with exact source/input/context/path/private-parent bindings and finite window
+        description: Nonsecret next-cell V2 r1/r2 request with exact source/input/context/path/private-parent bindings and finite window
         required: true
         type: string
 
@@ -27,7 +27,8 @@ permissions:
   contents: read
   id-token: write
 
-# Serializes this route, but only the permanent remote observation CAS admits it.
+# Shared with Codex. The remote schedule gate, not Actions queue ordering,
+# requires the prior capture and admits exactly one observation per job.
 concurrency:
   group: gpt54-time-budget-first-v2-observation
   cancel-in-progress: false
@@ -35,8 +36,11 @@ concurrency:
 jobs:
   observation:
     if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    # 23m declared non-generation steps + registered 1200s generation / 20s
+    # cleanup + >=10m checkout/setup/login/artifact reserve, rounded up to 5m.
+    # Only the outer job changes; registration still owns the model deadline.
+    timeout-minutes: 55
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       HF_HUB_OFFLINE: "1"
@@ -86,7 +90,9 @@ jobs:
               "0818571f-5ff7-4d39-9d2c-ced5ae44299e",
           )
           assert type(request["cell"]["repeat"]) is int
-          assert request["cell"] == {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": "gpt54_time_budget_v1_v2_r1", "condition": "sandbox_v2", "repeat": 1, "task_id": task_id}
+          repeat = request["cell"]["repeat"]
+          assert repeat in (1, 2)
+          assert request["cell"] == {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": f"gpt54_time_budget_v1_v2_r{repeat}", "condition": "sandbox_v2", "repeat": repeat, "task_id": task_id}
           assert request["ci"]["run_number"] == int(os.environ["GITHUB_RUN_NUMBER"])
           PY
 

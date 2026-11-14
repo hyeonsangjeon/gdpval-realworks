@@ -1,5 +1,5 @@
-# Fixed native r1/Task1 only. A source review is not a live execution request.
-name: GPT-5.4 time budget — first registered native observation
+# One scheduled native r1/r2 task. A source review is not a live execution request.
+name: GPT-5.4 time budget — one registered native observation
 
 on:
   workflow_dispatch:
@@ -34,8 +34,11 @@ concurrency:
 jobs:
   observation:
     if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    # 30m declared non-generation steps + registered 1200s generation / 20s
+    # cleanup + >=10m checkout/setup/login/artifact reserve, rounded up to 5m.
+    # Only the outer job changes; registration still owns the model deadline.
+    timeout-minutes: 65
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       HF_HUB_OFFLINE: "1"
@@ -74,9 +77,11 @@ jobs:
           request = json.loads(data)
           assert request["source"] == {"sha": os.environ["REVIEWED_SOURCE_SHA"], "tree": os.environ["REVIEWED_SOURCE_TREE"]}
           assert type(request["cell"]["repeat"]) is int
+          repeat = request["cell"]["repeat"]
+          assert repeat in (1, 2)
           task_id = request["cell"]["task_id"]
           assert task_id in ("02aa1805-c658-4069-8a6a-02dec146063a", "0112fc9b-c3b2-4084-8993-5a4abb1f54f1", "2ea2e5b5-257f-42e6-a7dc-93763f28b19d", "3baa0009-5a60-4ae8-ae99-4955cb328ff3", "0818571f-5ff7-4d39-9d2c-ced5ae44299e")
-          assert request["cell"] == {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": "gpt54_time_budget_v1_codex_r1", "condition": "codex", "repeat": 1, "task_id": task_id}
+          assert request["cell"] == {"study_id": "gpt54_sandboxv2_codex_time_budget_v1", "run_id": f"gpt54_time_budget_v1_codex_r{repeat}", "condition": "codex", "repeat": repeat, "task_id": task_id}
           assert type(request["ci"]["run_number"]) is int
           assert request["ci"]["run_number"] == int(os.environ["GITHUB_RUN_NUMBER"])
           PY
@@ -133,6 +138,34 @@ jobs:
             --expected-request-sha256 "$REQUEST_SHA256" --runtime-root "$RUNNER_TEMP/time-budget-codex-runtime" \
             --frozen-root "$RUNNER_TEMP/time-budget-codex-frozen" --state-root "$RUNNER_TEMP/time-budget-first-codex" \
             --native-root "$GDPVAL_CODEX_RUN_ROOT"
+
+      - name: Install the system sandbox helper without credentials
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v bwrap > /dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq bubblewrap
+          fi
+
+      - name: Prove the pinned Codex sandbox before credentials or observation claim
+        id: sandbox_check
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/time-budget-codex-runtime/batch-runner/scripts/prepare_codex_sandbox_host.py" \
+            --out "$RUNNER_TEMP/time-budget-codex-sandbox-preflight.json"
+
+      - name: Retain the credential-free runner and sandbox proof
+        if: always() && steps.sandbox_check.outcome != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: time-budget-codex-sandbox-preflight
+          path: ${{ runner.temp }}/time-budget-codex-sandbox-preflight.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Verify original inputs and canonical Step0, prepare and permanently claim one native cell
         id: admission

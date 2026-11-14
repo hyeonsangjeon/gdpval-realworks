@@ -68,19 +68,45 @@ def dual_roots(tmp_path_factory):
     # these private test registrations, never the repository's sealed plan.
     frozen_profile = historical.load_plan(roots["frozen"] / prospective.SOURCE_PROFILE)
     fixed_roles = set(frozen_profile["source_pins"]) - prospective.CHANGED_RUNTIME_SOURCES
+    # These source-bound helpers are under test before the branch's one final
+    # commit. Commit their actual working bytes in the synthetic R, rather
+    # than mislabelling them with the repository's older HEAD/tree identity.
+    working_roles = {
+        prospective.COMPILER,
+        "batch-runner/gpt54_time_budget_schedule.py",
+        ".github/workflows/gpt54-time-budget-first-v2.yml",
+        ".github/workflows/gpt54-time-budget-first-codex.yml",
+        "batch-runner/gpt54_time_budget_v2_ci.py",
+        "batch-runner/gpt54_time_budget_codex_ci.py",
+        "batch-runner/gpt54_time_budget_v2_observation.py",
+        "batch-runner/gpt54_time_budget_codex_observation.py",
+        "batch-runner/gpt54_time_budget_result_readout.py",
+        "batch-runner/gpt54_time_budget_grading_execution.py",
+        "batch-runner/gpt54_time_budget_common_grading.py",
+        "batch-runner/gpt54_time_budget_serial_capture.py",
+        "batch-runner/gpt54_time_budget_serial_controller.py",
+        "batch-runner/gpt54_time_budget_paired_readout.py",
+    }
     for name in ("runtime", "substitute"):
         root = roots[name]
+        for role in working_roles:
+            (root / role).write_bytes((repository / role).read_bytes())
         for role in fixed_roles:
             (root / role).write_bytes((roots["frozen"] / role).read_bytes())
+        # These fixtures deliberately exercise the preserved historical
+        # registration path with synthetic inputs, not the real successor.
+        (root / prospective.SOURCE_FOLLOWUP_PATH).unlink(missing_ok=True)
+        (root / prospective.D3_SOURCE_FOLLOWUP_PATH).unlink(missing_ok=True)
         manifest = prospective.load_registration(root / prospective.REGISTRATION_PATH)
         expected = dict(frozen_profile["source_pins"])
         expected.update({role: hashlib.sha256((root / role).read_bytes()).hexdigest()
                          for role in prospective.CHANGED_RUNTIME_SOURCES})
         assert set(expected) == prospective.REQUIRED_SOURCES | prospective.RUNTIME_ADDITIONS
         manifest["source_pins"] = expected
+        manifest["source_basis"]["registration_compiler"]["sha256"] = expected[prospective.COMPILER]
         (root / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
     git("-C", str(roots["runtime"]), "read-tree", original_sha)
-    git("-C", str(roots["runtime"]), "add", "--", *sorted(fixed_roles), prospective.REGISTRATION_PATH)
+    git("-C", str(roots["runtime"]), "add", "-A", "--", "batch-runner", ".github/workflows")
     git("-C", str(roots["runtime"]), "commit", "-m", "test: bind synthetic runtime roles without renewing the study")
     runtime_sha = git("-C", str(roots["runtime"]), "rev-parse", "HEAD").decode().strip()
     substituted = roots["substitute"]
@@ -91,7 +117,7 @@ def dual_roots(tmp_path_factory):
     manifest["source_pins"][role] = hashlib.sha256(changed).hexdigest()
     (substituted / prospective.REGISTRATION_PATH).write_text(json.dumps(manifest, sort_keys=True))
     git("-C", str(substituted), "read-tree", original_sha)
-    git("-C", str(substituted), "add", "--", role, *sorted(fixed_roles), prospective.REGISTRATION_PATH)
+    git("-C", str(substituted), "add", "-A", "--", "batch-runner", ".github/workflows")
     git("-C", str(substituted), "commit", "-m", "test: coherent synthetic source substitution")
     replacement = git("-C", str(substituted), "rev-parse", "HEAD").decode().strip()
     # Cross-root refusal cases must compare existing commits, not fail early
@@ -188,8 +214,26 @@ def model_free(monkeypatch, request, dual_roots):
     assert calls == []
 
 
-def test_current_source_cannot_reuse_the_old_time_budget_registration(dual_roots):
+def test_current_source_requires_explicit_successor_not_an_implicit_repin(dual_roots):
     original = prospective.load_registration(dual_roots["original_root"] / prospective.REGISTRATION_PATH)
+    if (dual_roots["original_root"] / prospective.SOURCE_FOLLOWUP_PATH).exists():
+        with prospective._dual_root_sources(
+            original, runtime_root=dual_roots["original_root"],
+            expected_reviewed_source_sha=dual_roots["original_sha"],
+            frozen_grader_root=dual_roots["frozen"], expected_grader_source_sha=prospective.ACCEPTED_BASE_SHA,
+        ) as (_, _, _, evidence):
+            followup = evidence["runtime"]["source_followup"]
+            if (dual_roots["original_root"] / prospective.D3_SOURCE_FOLLOWUP_PATH).exists():
+                assert followup["path"] == prospective.D3_SOURCE_FOLLOWUP_PATH
+                assert followup["predecessor"]["path"] == prospective.SOURCE_FOLLOWUP_PATH
+                assert followup["predecessor"]["sha256"] == prospective.PREDECESSOR_SCHEDULE_SHA256
+                assert len(followup["source_history"]) == 1
+                followup = followup["source_history"][0]
+            # D3 extends, rather than replaces, schedule -> original registration.
+            assert followup["path"] == prospective.SOURCE_FOLLOWUP_PATH
+            assert followup["predecessor"]["path"] == prospective.REGISTRATION_PATH
+            assert followup["predecessor"]["sha256"] == prospective.PREDECESSOR_REGISTRATION_SHA256
+        return
     with pytest.raises(prospective.TimeBudgetRegistrationRefused, match="^runtime_source_roles$"):
         with prospective._dual_root_sources(
             original, runtime_root=dual_roots["original_root"],
@@ -1457,7 +1501,8 @@ def test_time_budget_observation_deadline_v2_actual_factory(tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("case", ["success", "creation_timeout", "native_recovery", "late_success", "cleanup_expired"])
-def test_time_budget_observation_deadline_codex_actual_entry(tmp_path, monkeypatch, observation_kernel, case):
+def test_time_budget_observation_deadline_codex_actual_entry(
+        tmp_path, monkeypatch, observation_kernel, native_hosted_runner, case):
     import core.codex_runner as native
     from core.codex_runtime_config import LoopbackCodexProvider
     from core.time_budget_observation_deadline import ObservationDeadlineRefused, TIMEOUT, CLEANUP_UNCONFIRMED
@@ -1902,6 +1947,11 @@ def test_time_budget_legacy_role_compatibility_disposable_profile(monkeypatch, c
 
 @pytest.fixture(scope="module")
 def handoff_source_seed(tmp_path_factory, dual_roots):
+    return _handoff_source_fixture(tmp_path_factory, dual_roots)
+
+
+def _handoff_source_fixture(tmp_path_factory, dual_roots, *,
+                            rubric_json='[{"criterion":"synthetic only; not a grade"}]'):
     """Explicit synthetic input declarations in genuine temporary R/F commits.
 
     Only dataset/catalog/envelope/profile metadata is changed in synthetic F;
@@ -1962,7 +2012,7 @@ def handoff_source_seed(tmp_path_factory, dual_roots):
         rows.append({
             "task_id": task_id, "prompt": prompt,
             "occupation": declaration["occupation"], "sector": declaration["sector"],
-            "rubric_json": '[{"criterion":"synthetic only; not a grade"}]',
+            "rubric_json": rubric_json,
             "rubric_pretty": "Synthetic grading metadata; not model input.\n",
             "reference_files": names, "reference_file_urls": [],
             "reference_file_hf_uris": [],
@@ -2665,6 +2715,148 @@ def _consumer_claim(arguments):
     return output.with_name(output.name + prospective.HANDOFF_CONSUMED_SUFFIX)
 
 
+def _d3_execution_window_probe(monkeypatch, case, entry, invoke, *, delay_at,
+                               finished_at=1001, clock_error=None, record_property):
+    """Keep real admission/ownership/cleanup; stop at the model-free run spy.
+
+    The two concrete callers use their existing wall clocks. Actual source,
+    direction, parent and durable-claim checks still execute; only elapsed time
+    and the generation entry (which must never run in this proof) are scripted.
+    """
+    import ghcp_vm_input_bundle as publication
+    import core.time_budget_observation_deadline as deadline
+
+    state = {"now": 1000, "bound": False, "callback": 0, "inside_callback": False,
+             "delayed": False, "clock_failed": False}
+    controls, entries, direction_checks = [], [], []
+    monotonic = _Clock()
+    original_init = deadline.TimeBudgetObservation.__init__
+    original_bind = prospective._bind_observation_runner
+    original_consume = prospective.consume_observation_handoff
+    original_write = publication._write_no_clobber
+    original_exists = os.path.lexists
+    original_check = entry._ExecutionDirection.require_execution_direction
+
+    class SyntheticRunEntry(Exception):
+        pass
+
+    def wall_time():
+        if clock_error is not None and state["bound"] and state["inside_callback"]:
+            state["clock_failed"] = True
+            raise clock_error("synthetic final approval clock failure")
+        return state["now"]
+
+    def delay():
+        state.update(now=finished_at, delayed=True)
+
+    def admit(control, directory, identity):
+        original_init(control, directory, identity, clock=monotonic)
+        controls.append(control)
+
+    def enter(**kwargs):
+        entries.append(state["now"])
+        raise SyntheticRunEntry("offline proof stops before generation")
+
+    def bind(*args, **kwargs):
+        runner, arguments = original_bind(*args, **kwargs)
+        monkeypatch.setattr(runner, "run", enter)
+        state["bound"] = True
+        if delay_at == "runner_preparation":
+            delay()
+        return runner, arguments
+
+    def consume(*args, **kwargs):
+        original_direction = kwargs["require_execution_direction"]
+
+        def direction(binding):
+            state["callback"] += 1
+            state["inside_callback"] = True
+            try:
+                return original_direction(binding)
+            finally:
+                state["inside_callback"] = False
+
+        return original_consume(*args, **{**kwargs, "require_execution_direction": direction})
+
+    def write(path, *args, **kwargs):
+        result = original_write(path, *args, **kwargs)
+        if Path(path) == case.consumed and delay_at == "claim_fsync":
+            delay()
+        return result
+
+    def exists(path):
+        result = original_exists(path)
+        if state["inside_callback"] and Path(path) == case.arguments["destination"]:
+            if ((delay_at == "initial_callback_io" and state["callback"] == 1)
+                    or (delay_at == "final_callback_io" and state["callback"] == 2)):
+                delay()  # A real path check returned, possibly after expiry.
+        return result
+
+    def check(checker, binding):
+        original_check(checker, binding)
+        direction_checks.append(state["now"])
+
+    monkeypatch.setattr(entry, "time", SimpleNamespace(time=wall_time))
+    monkeypatch.setattr(deadline.TimeBudgetObservation, "__init__", admit)
+    monkeypatch.setattr(prospective, "_bind_observation_runner", bind)
+    monkeypatch.setattr(prospective, "consume_observation_handoff", consume)
+    monkeypatch.setattr(publication, "_write_no_clobber", write)
+    monkeypatch.setattr(os.path, "lexists", exists)
+    monkeypatch.setattr(entry._ExecutionDirection, "require_execution_direction", check)
+    result = None
+    caught = None
+    try:
+        result = invoke()
+    except (ValueError, SyntheticRunEntry, RuntimeError, KeyboardInterrupt) as error:
+        caught = error
+    expected_entries = [finished_at] if clock_error is None and finished_at < 1001 else []
+    record_property("d3_window_proof", json.dumps({
+        "delay_at": delay_at, "finished_at": finished_at, "expires_at": 1001,
+        "run_entry_times": entries, "callback_count": state["callback"],
+        "clock_failed": state["clock_failed"], "actual_model_calls": 0,
+    }, sort_keys=True))
+    assert entries == expected_entries, "expired approval reached the downstream run boundary"
+    assert result is None and not case.arguments["destination"].exists()
+    if clock_error is not None:
+        assert state["clock_failed"] and isinstance(caught, clock_error)
+    else:
+        assert state["delayed"], "the selected I/O boundary must actually be exercised"
+        if expected_entries:
+            assert isinstance(caught, SyntheticRunEntry)
+            assert direction_checks[-1] == finished_at
+        else:
+            expected_reason = ("observation_handoff_consumption_refused" if delay_at == "initial_callback_io"
+                               else "direction_not_current")
+            assert isinstance(caught, ValueError) and str(caught) == expected_reason
+            if delay_at == "initial_callback_io":
+                assert str(caught.__context__) == "direction_not_current"
+    if delay_at == "initial_callback_io" and not expected_entries:
+        assert controls == [] and not case.consumed.exists()
+        return
+    assert len(controls) == 1 and case.consumed.is_file()
+    control = controls[0]
+    assert control._finished and control.terminal_reason == "failed" and control.cleanup_complete
+    assert control.first_start is None and control.as_record()["generation_elapsed_seconds"] is None
+    assert control.cleanup_deadline - control.terminal_at == 20
+    assert deadline.TimeBudgetObservation._process_owner is None
+    assert not (control.directory / "host-lease.json").exists()
+    admitted = control.directory / (control.identity.key + ".admitted.json")
+    assert json.loads(admitted.read_bytes()) == case.marker["observation"]
+    claim = case.consumed.read_bytes()
+    receipts = {path.name: path.read_bytes() for path in control.directory.iterdir()}
+    before = list(entries)
+    state["now"] = 1000  # Even a renewed window cannot reuse the consumed claim.
+    with pytest.raises(ValueError, match="already_consumed"):
+        invoke()
+    assert entries == before and len(controls) == 1 and case.consumed.read_bytes() == claim
+    assert {path.name: path.read_bytes() for path in control.directory.iterdir()} == receipts
+    with pytest.raises(deadline.ObservationDeadlineRefused):
+        original_init(object.__new__(deadline.TimeBudgetObservation), control.directory,
+                      control.identity, clock=monotonic)
+    assert deadline.TimeBudgetObservation._process_owner is None
+    assert {path.name: path.read_bytes() for path in control.directory.iterdir()} == receipts
+
+
 def _consumer_no_effects(monkeypatch, arguments):
     from core.time_budget_observation_deadline import TimeBudgetObservation
 
@@ -2737,8 +2929,6 @@ def test_time_budget_handoff_consumer_real_factory_binding(
         assert control.first_start is None
 
     def direction(binding):
-        assert not _consumer_claim(arguments).exists()
-        assert list(arguments["observation_directory"].iterdir()) == []
         assert binding == prospective.ObservationExecutionBinding(
             arguments["expected_preparation_identity"]["sha256"], arguments["expected_preparation_identity"]["size"],
             historical._canonical_json(marker["observation"]), seed.frozen_sha, seed.frozen_tree,
@@ -2747,6 +2937,13 @@ def test_time_budget_handoff_consumer_real_factory_binding(
         )
         with pytest.raises(FrozenInstanceError):
             binding.preparation_sha256 = "0" * 64
+        if controls:
+            assert len(controls) == 1 and _consumer_claim(arguments).is_file()
+            assert controls[0].first_start is None and controls[0].terminal_reason is None
+            events.append("final_direction")
+            return
+        assert not _consumer_claim(arguments).exists()
+        assert list(arguments["observation_directory"].iterdir()) == []
         events.append("direction")
         clock.advance(2000)
 
