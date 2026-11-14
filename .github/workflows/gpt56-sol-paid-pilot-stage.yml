@@ -1,0 +1,111 @@
+name: Sol paid pilot stage (WIP - launch blocked)
+
+on:
+  workflow_call:
+    inputs:
+      execute_paid:
+        type: boolean
+        required: true
+      expected_source_sha:
+        type: string
+        required: true
+      stage_index:
+        type: number
+        required: true
+      predecessor_artifact_id:
+        type: string
+        default: ''
+      predecessor_sha256:
+        type: string
+        default: ''
+    outputs:
+      artifact_id:
+        value: ${{ jobs.stage.outputs.artifact_id }}
+      manifest_sha256:
+        value: ${{ jobs.stage.outputs.manifest_sha256 }}
+
+# No auth permission or secret reference until the real owned bridge is done.
+permissions:
+  contents: read
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.checkpoint.outputs.artifact-id }}
+      manifest_sha256: ${{ steps.execute.outputs.manifest_sha256 }}
+    steps:
+      - name: Repeat paid/source/stage admission before downloads or auth
+        env:
+          EXECUTE_PAID: ${{ inputs.execute_paid }}
+          EXPECTED_SHA: ${{ inputs.expected_source_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          STAGE_INDEX: ${{ inputs.stage_index }}
+          PREVIOUS_ID: ${{ inputs.predecessor_artifact_id }}
+          PREVIOUS_SHA: ${{ inputs.predecessor_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EXECUTE_PAID" == true && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks && "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 && "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" && "$WORKFLOW_SHA" == "$EXPECTED_SHA" ]]
+          [[ "$STAGE_INDEX" =~ ^[0-9]$ ]]
+          if [[ "$STAGE_INDEX" == 0 ]]; then
+            [[ -z "$PREVIOUS_ID" && -z "$PREVIOUS_SHA" ]]
+          else
+            [[ "$PREVIOUS_ID" =~ ^[1-9][0-9]*$ && "$PREVIOUS_SHA" =~ ^[0-9a-f]{64}$ ]]
+          fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.expected_source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10.12'
+      - name: Install unchanged source-verifier dependency closure
+        run: python -m pip install --disable-pip-version-check -r batch-runner/requirements.txt
+      - name: Download exact predecessor checkpoint only
+        if: inputs.stage_index > 0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          artifact-ids: ${{ inputs.predecessor_artifact_id }}
+          path: ${{ runner.temp }}/sol-pilot-predecessor
+          merge-multiple: true
+      - name: Execute owned Step 2 or Step 8 stage (currently refused before auth)
+        id: execute
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_source_sha }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          STAGE_INDEX: ${{ inputs.stage_index }}
+          PREVIOUS_ID: ${{ inputs.predecessor_artifact_id }}
+          PREVIOUS_SHA: ${{ inputs.predecessor_sha256 }}
+          HF_HUB_OFFLINE: '1'
+          HF_DATASETS_OFFLINE: '1'
+          HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          args=(run-stage --execute-paid --expected-source-sha "$EXPECTED_SHA" --stage-index "$STAGE_INDEX")
+          if [[ "$STAGE_INDEX" != 0 ]]; then
+            args+=(--predecessor-artifact-id "$PREVIOUS_ID" --predecessor-sha256 "$PREVIOUS_SHA")
+          fi
+          python batch-runner/gpt56_sol_pilot_launch.py "${args[@]}" > "$RUNNER_TEMP/sol-stage-receipt.json"
+      - name: Publish successful single-wallet checkpoint
+        id: checkpoint
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sol-pilot-wallet-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.stage_index }}
+          path: ${{ runner.temp }}/sol-pilot-checkpoint
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain stage refusal or result
+        if: always() && (steps.execute.outcome == 'success' || steps.execute.outcome == 'failure')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sol-pilot-stage-${{ inputs.stage_index }}-receipt
+          path: ${{ runner.temp }}/sol-stage-receipt.json
+          if-no-files-found: error
+          retention-days: 7
