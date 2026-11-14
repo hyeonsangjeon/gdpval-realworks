@@ -212,6 +212,14 @@ def grade_files_in(repo: Path, commits: list[str]) -> tuple[list[Path], list[str
             status, path = parts[0], parts[-1]
             if not path.endswith(".json"):
                 continue
+            if "_progress" in Path(path).parts:
+                # A task checkpoint (core/task_checkpoint.py, task-progress-v1),
+                # not a grade: the finished items of a task a partial chunk
+                # stopped inside, which step8 deletes once the task is graded
+                # whole. Its arrival is checked where it carries weight -- the
+                # ledger check's in_flight finding holds it against the calls
+                # it accounts for -- and its removal deletes no grade.
+                continue
             if status.startswith("D"):
                 deleted.append(path)
                 continue
