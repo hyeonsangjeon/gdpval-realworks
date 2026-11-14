@@ -12,10 +12,13 @@ import xml.etree.ElementTree as ET
 
 import yaml
 
+from .test_workflow_ubuntu_runner_pins import restore_pre_ubuntu_2404_runner_bytes
+
 
 def test_time_budget_failed_tmp_path_retention(tmp_path, record_property):
     root = Path(__file__).resolve().parents[2]
     workflow_bytes = (root / ".github/workflows/backend-tests.yml").read_bytes()
+    workflow_bytes = restore_pre_ubuntu_2404_runner_bytes("backend-tests.yml", workflow_bytes)
     option = b" -o tmp_path_retention_policy=failed"
     assert workflow_bytes.count(option) == 1
     # The current inventory includes #794's one core-ignore/one pilot selection.

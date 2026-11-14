@@ -22,9 +22,10 @@ HISTORICAL_SHA256 = "47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41
 FOUNDRY = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 FOUNDRY_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 WORKFLOW = ".github/workflows/backend-tests.yml"
-# Current CI inventory adds only the successor-grader core-ignore/pilot target.
-# The partition guard retains and reconstructs the preceding a2e0e2fe bytes.
-CURRENT_WORKFLOW_SHA256 = "75e6db775426a8470d2757f2ae62fafc2a806f0f2684ed59925480956ad3ac65"
+# Current CI adds only hosted-runner pins to the reviewed successor partition.
+# Both preceding byte identities are reconstructed by the partition guard.
+PRE_UBUNTU_2404_WORKFLOW_SHA256 = "75e6db775426a8470d2757f2ae62fafc2a806f0f2684ed59925480956ad3ac65"
+CURRENT_WORKFLOW_SHA256 = "9ec98746110499a2f199e1322a8568effcd7c8b174e04b35661420e64a06af51"
 # approved_pilot_source archives this workflow from immutable commit
 # 8ac891e3e0e4752fe15a00139a2691ddf9df7dce. Pin that Git blob, not the
 # current workflow or the extracted fixture file being checked.

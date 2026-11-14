@@ -73,7 +73,7 @@ jobs:
   # any of that is wrong, it is wrong for free here rather than after a spend.
   free:
     name: Dry run
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -132,7 +132,7 @@ jobs:
     name: Ask it
     needs: free
     if: ${{ inputs.mode == 'paid' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read

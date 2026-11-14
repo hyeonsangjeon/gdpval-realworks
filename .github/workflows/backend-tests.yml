@@ -101,7 +101,7 @@ concurrency:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # 45, not 30, because 30 was inside the noise. Run 34341659511 was
     # cancelled by the old ceiling at 86% and its re-run of the identical tree
     # passed in 22:10; twelve runs before it took 18-22 minutes. A cancelled
@@ -303,7 +303,7 @@ jobs:
           python -m pytest -m "not integration" --tb=short -q -rs -o tmp_path_retention_policy=failed tests/test_time_budget_*.py
 
   comparison-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
@@ -387,7 +387,7 @@ jobs:
             --runner-arch "$PLATFORM_RUNNER_ARCH" --runner-environment "$PLATFORM_RUNNER_ENVIRONMENT"
 
   pilot-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
@@ -461,7 +461,7 @@ jobs:
   # runner after pilot-contracts reached 45 minutes in run 36291932585.
   # The split preserves test membership; hosted headroom remains unverified.
   budget-readout-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
@@ -520,7 +520,7 @@ jobs:
   # The isolated full preflight file still hit the ceiling in run 35593387331.
   # Three disjoint selections retain every node; hosted CI must prove headroom.
   pilot-preflight-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
@@ -578,7 +578,7 @@ jobs:
 
   # This selection retains owner/refusal cases as well as shape cases.
   pilot-external-receipt-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
@@ -636,7 +636,7 @@ jobs:
 
   # Keep all parameter cases of these three publication/attempt functions.
   pilot-external-publication-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
@@ -695,7 +695,7 @@ jobs:
   # Wire contracts need their own budget after the general pilot suite used
   # 41:18 of the shared 45-minute ceiling in run 35559683998.
   wire-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Verify dispatch contract
@@ -754,7 +754,7 @@ jobs:
   # The shared wire file keeps its complementary keyword predicates.
   # The static contract checks both predicates and exactly-once node coverage.
   native-host-contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Run 35811169415/job 107022868111 reported 71 passing tests but exhausted
     # 45 minutes with setup/cleanup. This is CI headroom, not a change to the
     # pilot's 180-minute cell or 30-minute attempt limits.

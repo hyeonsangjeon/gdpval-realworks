@@ -396,7 +396,8 @@ def _exercise_retention_bundle(host, monkeypatch, reference_task, bundle, scenar
         with pytest.raises(comparison.DispatchPlanRefused) as changed_source:
             campaign.compile_pilot("offline-frozen-matrix", approved_sha)
         assert str(changed_source.value) == (
-            "comparison refused: source_pin:.github/workflows/batch-run.yml, "
+            "comparison refused: source_pin:.github/workflows/agentic-v2-stage-run.yml, "
+            "source_pin:.github/workflows/batch-run.yml, "
             "source_pin:batch-runner/gpt54_prepared_input_attestation.py, "
             "source_pin:batch-runner/gpt54_codex_input_capture.py, "
             "source_pin:batch-runner/gpt54_v2_input_capture.py, "
