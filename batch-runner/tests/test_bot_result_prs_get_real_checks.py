@@ -25,7 +25,11 @@ dispatch that fails, or never starts, left the job green exactly as before.
 
 So the runner now dispatches both required workflows against the PR head and
 refuses to finish unless both come back successful, treating a check that never
-reported as a failure rather than as an absence. These tests hold that. They
+reported as a failure rather than as an absence. The wait runs in a job of its
+own, result-pr-checks: inside the batch job it shared the last leg's 360
+minutes with the solve and could only be 30, while Backend Tests takes about 43
+once it starts, so exp037's last leg (run 42823742647) uploaded its results and
+then ended red with its checks still running. These tests hold that. They
 read the required list and the dispatches out of the workflow rather than
 restating them, so adding a dispatch without requiring it — or requiring one
 without dispatching it — fails here instead of at the next result PR. The last
@@ -53,8 +57,10 @@ WORKFLOWS = REPOSITORY_ROOT / ".github" / "workflows"
 BATCH_RUN = WORKFLOWS / "batch-run.yml"
 BACKEND_TESTS = WORKFLOWS / "backend-tests.yml"
 
-# The two steps the change turns on, named as the workflow names them.
+# The two steps the change turns on, named as the workflow names them, and
+# the job the second one runs in.
 DISPATCH_STEP = "Dispatch exact result PR validation"
+CHECKS_JOB = "result-pr-checks"
 VERIFY_STEP = "Verify dispatched result PR checks"
 CONTRACT_STEP = "Verify dispatch contract"
 
@@ -103,7 +109,7 @@ def backend_tests() -> dict:
 
 @pytest.fixture(scope="module")
 def verify_script(batch_run: dict) -> str:
-    return _step(batch_run, "batch-run", VERIFY_STEP)["run"]
+    return _step(batch_run, CHECKS_JOB, VERIFY_STEP)["run"]
 
 
 def test_the_suite_can_be_dispatched_at_a_named_commit(backend_tests: dict) -> None:
@@ -154,7 +160,7 @@ def test_every_required_check_is_one_the_runner_actually_dispatches(
     dispatch_script = _step(batch_run, "batch-run", DISPATCH_STEP)["run"]
     dispatched = set(re.findall(r"gh workflow run (\S+\.yml)", dispatch_script))
     required = set(
-        _step(batch_run, "batch-run", VERIFY_STEP)["env"]["REQUIRED_WORKFLOWS"].split()
+        _step(batch_run, CHECKS_JOB, VERIFY_STEP)["env"]["REQUIRED_WORKFLOWS"].split()
     )
 
     assert dispatched, "the dispatch step no longer dispatches anything"
@@ -312,3 +318,47 @@ def test_a_failing_result_pr_is_put_back_into_draft(
     assert "--undo" not in quiet and "pr comment" not in quiet, (
         "a passing run must not touch the pull request"
     )
+
+
+# -- the wait has a job of its own -------------------------------------------
+
+
+#: Backend Tests' slowest job, measured over its last 40 successful runs:
+#: 34 to 49 minutes once it starts.
+SLOWEST_SUITE_MINUTES = 49
+
+
+def test_the_wait_runs_in_its_own_job_after_the_batch(batch_run: dict) -> None:
+    job = batch_run["jobs"][CHECKS_JOB]
+    assert job["needs"] == "batch-run"
+    # It runs whenever the last leg dispatched checks, even if a later step
+    # of the batch job failed, and never after a cancellation.
+    assert "!cancelled()" in job["if"] and "needs.batch-run.outputs.result_pr_head_sha != ''" in job["if"]
+    assert job["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "write"}
+    # The batch job no longer waits inside its own 360 minutes.
+    assert VERIFY_STEP not in [step.get("name") for step in _steps(batch_run, "batch-run")]
+
+
+def test_the_wait_outlasts_the_suite_and_fits_its_job(batch_run: dict) -> None:
+    job = batch_run["jobs"][CHECKS_JOB]
+    wait = int(_step(batch_run, CHECKS_JOB, VERIFY_STEP)["env"]["WAIT_SECONDS"])
+    assert wait >= (SLOWEST_SUITE_MINUTES + 30) * 60  # the suite, plus room for its queue
+    assert wait + 5 * 60 <= job["timeout-minutes"] * 60  # and the job is not killed mid-wait
+
+
+def test_the_pr_it_waits_for_is_the_one_the_last_leg_dispatched(batch_run: dict) -> None:
+    batch = batch_run["jobs"]["batch-run"]
+    dispatch = _step(batch_run, "batch-run", DISPATCH_STEP)
+    assert dispatch["id"] == "dispatch_checks"
+    assert batch["outputs"] == {
+        "result_pr_number": "${{ steps.dispatch_checks.outputs.pr_number }}",
+        "result_pr_head_sha": "${{ steps.dispatch_checks.outputs.pr_head_sha }}",
+    }
+    # Written only after both dispatches succeeded (set -euo pipefail), so an
+    # empty output means nothing was dispatched and nothing is waited for.
+    script = dispatch["run"]
+    assert script.index('echo "pr_head_sha=$PR_HEAD_SHA" >> "$GITHUB_OUTPUT"') > script.rindex("gh workflow run")
+    assert dispatch["env"]["PR_NUMBER"] == "${{ steps.cpr.outputs.pull-request-number }}"
+    env = _step(batch_run, CHECKS_JOB, VERIFY_STEP)["env"]
+    assert env["PR_NUMBER"] == "${{ needs.batch-run.outputs.result_pr_number }}"
+    assert env["PR_HEAD_SHA"] == "${{ needs.batch-run.outputs.result_pr_head_sha }}"

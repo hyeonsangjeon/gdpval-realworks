@@ -315,6 +315,11 @@ jobs:
     # condition must prove readiness in this job before any Azure/model access.
     runs-on: ubuntu-24.04
     timeout-minutes: 360    # max 6 hours
+    # Read by result-pr-checks below. Both stay empty unless the last leg
+    # opened a result PR and dispatched its checks.
+    outputs:
+      result_pr_number: ${{ steps.dispatch_checks.outputs.pr_number }}
+      result_pr_head_sha: ${{ steps.dispatch_checks.outputs.pr_head_sha }}
     env:
       EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
       EXPERIMENT_NAME_INPUT: ${{ inputs.experiment_name }}
@@ -1456,10 +1461,12 @@ jobs:
       # pins the exact SHA on both sides so a branch update cannot slip a
       # different tree past the check.
       - name: Dispatch exact result PR validation
+        id: dispatch_checks
         if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_BRANCH: ${{ steps.cpr.outputs.pull-request-branch }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
           PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
         run: |
           set -euo pipefail
@@ -1472,7 +1479,52 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --ref "$PR_BRANCH" \
             --raw-field expected_sha="$PR_HEAD_SHA"
+          # Handed to result-pr-checks, which waits for both in its own job.
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=$PR_HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+      # ── Summary step ──
+      - name: Show summary
+        if: always()
+        run: |
+          echo "════════════════════════════════════════"
+          echo "📊 Batch Experiment Complete"
+          echo "════════════════════════════════════════"
+          echo "Experiment: ${{ env.experiment_name }}"
+          echo "YAML Config: $EXPERIMENT_YAML_INPUT"
+          echo "Dry Run: $DRY_RUN_INPUT"
+          echo ""
+          echo "Check artifacts for full pipeline output."
+
+      # ── Upload artifacts ──
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: batch-results-${{ github.run_id }}
+          path: |
+            batch-runner/workspace/
+            batch-runner/results/
+          retention-days: 30
+
+  # Waits for the result PR's dispatched checks in a job of its own. Inside the
+  # batch job the wait shared the last leg's 360 minutes with a 170-minute
+  # watchdog, a task still in flight past it, the office toolchain's setup
+  # and the upload, so it could only be 30 minutes -- while Backend Tests
+  # takes about 43 once it starts. exp037's last leg (run 42823742647)
+  # uploaded its results and then ended red here, its checks still running.
+  # Same contract as before: only an observed success passes, the PR goes
+  # back to draft otherwise, and nothing here writes a check or an approval.
+  result-pr-checks:
+    needs: batch-run
+    if: ${{ !cancelled() && needs.batch-run.outputs.result_pr_head_sha != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
       # Dispatching is not checking. The step above only asks; without this one
       # the job would go green whether the suite passed, failed, or never
       # started -- which is the same silence the empty Checks list already
@@ -1493,13 +1545,14 @@ jobs:
       # not a publish decision about the experiment. Blocking a paid run's
       # upload on it would spend the money and then throw the artifacts away.
       - name: Verify dispatched result PR checks
-        if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
+          PR_NUMBER: ${{ needs.batch-run.outputs.result_pr_number }}
+          PR_HEAD_SHA: ${{ needs.batch-run.outputs.result_pr_head_sha }}
           REQUIRED_WORKFLOWS: 'backend-tests.yml deploy.yml'
-          WAIT_SECONDS: '1800'
+          # Backend Tests' slowest job takes 34 to 49 minutes once it starts
+          # (median 43); 110 minutes leaves room for the queue.
+          WAIT_SECONDS: '6600'
           POLL_SECONDS: '20'
         run: |
           set -euo pipefail
@@ -1565,29 +1618,6 @@ jobs:
           echo "::error::required checks not successful on $PR_HEAD_SHA: $failed"
           exit 1
 
-      # ── Summary step ──
-      - name: Show summary
-        if: always()
-        run: |
-          echo "════════════════════════════════════════"
-          echo "📊 Batch Experiment Complete"
-          echo "════════════════════════════════════════"
-          echo "Experiment: ${{ env.experiment_name }}"
-          echo "YAML Config: $EXPERIMENT_YAML_INPUT"
-          echo "Dry Run: $DRY_RUN_INPUT"
-          echo ""
-          echo "Check artifacts for full pipeline output."
-
-      # ── Upload artifacts ──
-      - name: Upload artifacts
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: batch-results-${{ github.run_id }}
-          path: |
-            batch-runner/workspace/
-            batch-runner/results/
-          retention-days: 30
 
   comparison-admission:
     name: GPT-5.4 comparison — local preparation gate only
