@@ -7,8 +7,9 @@ other run gets ``None`` back before anything is read, written or printed.
 
 :data:`RUNS` holds every Sol run the owner registered, each with its own task
 list and USD ceiling: exp036_sol_fixed5 (approved 2026-11-05),
-exp037_sol_first25 (approved 2026-11-06) and exp038_sol_rest195 (registered,
-not approved: refused before any attempt). For an approved run it swaps the
+exp037_sol_first25 (approved 2026-11-06), exp038_sol_rest195 (registered, not
+approved: refused before any attempt) and its two halves exp039_sol_next98 and
+exp040_sol_last97 (approved 2026-11-14). For an approved run it swaps the
 executor's runner for :class:`SolBatchCodexRunner`, which adds two controls:
 
 * The held #796 1M catalog. Codex 0.147.0's bundled catalog gives gpt-5.6-sol
@@ -239,14 +240,47 @@ RUNS: Mapping[str, SolRun] = MappingProxyType({run.experiment_id: run for run in
         attempt_reserve_usd=Decimal("51"),
         narrative_allowance_usd=Decimal("2.00"),
     ),
-    # Registered, NOT approved: the other 195 tasks need a new owner
-    # approval, which sets the money fields here in the same pull request.
+    # Registered, NOT approved, and never to be: exp037's readout projected
+    # 12 solve legs and 11 grading chunks for these 195 (R3 and R4 failed), so
+    # the owner had them solved as exp039 and exp040 below instead. Kept as
+    # the list the two halves are cut from (test_sol_batch_runs holds them to
+    # it).
     SolRun(
         experiment_id="exp038_sol_rest195",
         grading_config_name="exp038_v2_sol_max",
         task_count=195,
         ordered_task_ids_sha256="18699a1808cb03a6ecfdf9479879f1662b3b49ae5617df6fcbcf391f56269725",
         approval=None,
+    ),
+    # Owner approval 2026-11-14 ("추천대로"): exp038's 195 as two experiments,
+    # USD 2,500 each for solve and grade together. 2,500 = 1,600 solve + 900
+    # grading; 51 per attempt, so attempts start while booked solve spend
+    # <= 1,549. Sized from exp037's 25 measured tasks (solve booking and
+    # grading journal per task), resampled twice (the 25, then the stage's
+    # tasks from them; 100,000 runs): median solve about 840 and grade about
+    # 790, p99.9 about 1,500 and 1,263. The solve gate or the grading ceiling
+    # stops about one run in 1,300 (exp039) and one in 1,700 (exp040).
+    SolRun(
+        experiment_id="exp039_sol_next98",
+        grading_config_name="exp039_v2_sol_max",
+        task_count=98,
+        ordered_task_ids_sha256="147fbb87ac52a0ec8389ecf84ce2f3dee3d839c79849b23afb4f7102b7ced6f8",
+        approval='owner 2026-11-14 ("추천대로": exp038 in two halves, USD 2,500 each)',
+        ceiling_usd=Decimal("2500"),
+        grading_reserve_usd=Decimal("900"),
+        attempt_reserve_usd=Decimal("51"),
+        narrative_allowance_usd=Decimal("2.00"),
+    ),
+    SolRun(
+        experiment_id="exp040_sol_last97",
+        grading_config_name="exp040_v2_sol_max",
+        task_count=97,
+        ordered_task_ids_sha256="8ee5de9e3c352a00c6be1d9289fd73101807ac629719f1066e05be3c127b05d1",
+        approval='owner 2026-11-14 ("추천대로": exp038 in two halves, USD 2,500 each)',
+        ceiling_usd=Decimal("2500"),
+        grading_reserve_usd=Decimal("900"),
+        attempt_reserve_usd=Decimal("51"),
+        narrative_allowance_usd=Decimal("2.00"),
     ),
 )})
 #: Experiment id plus grading config name: grade, ledger and progress file

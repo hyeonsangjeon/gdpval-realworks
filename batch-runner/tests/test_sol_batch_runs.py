@@ -1,4 +1,5 @@
-"""The registry of Sol runs: exp036 unchanged, exp037 approved at USD 700, exp038 registered only.
+"""The registry of Sol runs: exp036 unchanged, exp037 approved at USD 700, exp038 registered only,
+its two halves exp039 and exp040 approved at USD 2,500 each.
 
 Model-free and offline. Every task list is re-derived from the committed
 catalogue and the earlier stages' files, never trusted from the registry.
@@ -33,6 +34,10 @@ REPO_ROOT = BATCH_RUNNER.parent
 EXPERIMENTS = BATCH_RUNNER / "experiments"
 WORKFLOW = REPO_ROOT / ".github/workflows/grade-run.yml"
 EXP036, EXP037, EXP038 = "exp036_sol_fixed5", "exp037_sol_first25", "exp038_sol_rest195"
+EXP039, EXP040 = "exp039_sol_next98", "exp040_sol_last97"
+#: exp037's measured solve minutes per task: the readout's mean of the last
+#: attempts (10.4) and the legs' wall clock with retries and backoff (11.0).
+EXP037_MINUTES_PER_TASK = (10.4, 11.0)
 INFERENCE_SHA = "b" * 40
 #: exp036's measured mean seconds per task (self_report.json at 8708d920).
 EXP036_SECONDS_PER_TASK = 390
@@ -66,7 +71,7 @@ def _task_ids(experiment_id: str) -> list[str]:
 
 def test_the_registry_is_well_formed_and_both_sides_name_the_same_runs():
     assert controls.registry_problems() == []
-    assert set(controls.RUNS) == {EXP036, EXP037, EXP038}
+    assert set(controls.RUNS) == {EXP036, EXP037, EXP038, EXP039, EXP040}
     assert grading.approval_problems() == []
     sol_side = {approval.experiment_id: (approval.config_name, approval.ceiling_usd, approval.approved is not None)
                 for approval in grading.APPROVALS if approval.solve_seed == grading.SOLVE_SEED_SOL_BATCH}
@@ -123,6 +128,26 @@ def test_exp038_is_registered_but_not_approved():
     assert run.approval is None
     assert (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd, run.narrative_allowance_usd) == (
         None, None, None, None)
+
+
+#: The owner's words for exp039 and exp040, quoted on both sides of the twin tables.
+HALVES_OWNER_WORDS = '"추천대로"'
+
+
+@pytest.mark.parametrize("experiment_id", [EXP039, EXP040])
+def test_each_half_of_exp038_holds_the_owner_approved_2500(experiment_id):
+    run = controls.RUNS[experiment_id]
+    approval = {a.experiment_id: a for a in grading.APPROVALS}[experiment_id]
+    assert run.approval.startswith("owner 2026-11-14") and HALVES_OWNER_WORDS in run.approval
+    assert approval.approved.startswith("2026-11-14 owner") and HALVES_OWNER_WORDS in approval.approved
+    assert "USD 2,500" in approval.approved and approval.config_name == run.grading_config_name
+    # 2,500 = 1,600 solve + 900 grading; attempts start while booked solve <= 1,549.
+    assert (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd) == (
+        Decimal("2500"), Decimal("900"), Decimal("51"))
+    assert (run.solve_budget_usd, run.admit_while_at_most_usd) == (Decimal("1600"), Decimal("1549"))
+    assert approval.ceiling_usd == run.ceiling_usd
+    assert run.narrative_allowance_usd == Decimal("2.00") and run.prior_lineage_spend_usd == 0
+    assert dict(run.lost_booking_usd) == {} and run.wall_timeout_minutes == 170
 
 
 def _patched(monkeypatch, experiment_id: str, **changes) -> controls.SolRun:
@@ -221,10 +246,26 @@ def test_exp038_is_every_other_task_in_exp035s_order():
     assert controls.ordered_task_ids_sha256(rest) == run.ordered_task_ids_sha256
 
 
+def test_exp039_and_exp040_are_exp038s_list_cut_in_two_in_order():
+    rest = _task_ids(EXP038)
+    first, second = _task_ids(EXP039), _task_ids(EXP040)
+    # The cut keeps exp038's order: the first 98, then the other 97.
+    assert first == rest[:98] and second == rest[98:] and first + second == rest
+    assert set(first).isdisjoint(second) and set(first + second).isdisjoint(_task_ids(EXP037))
+    for name, tasks in ((EXP039, first), (EXP040, second)):
+        run = controls.RUNS[name]
+        assert len(tasks) == run.task_count
+        assert controls.ordered_task_ids_sha256(tasks) == run.ordered_task_ids_sha256
+    # Every industry lands in both halves.
+    by_id = {task.task_id: task for task in load_task_catalog().sorted_tasks()}
+    for tasks in (first, second):
+        assert len({by_id[task].sector for task in tasks}) == 9
+
+
 # -- the experiment files ---------------------------------------------------------
 
 
-@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038])
+@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038, EXP039, EXP040])
 def test_every_registered_run_is_exp036s_setup_on_its_own_tasks(experiment_id):
     run = controls.RUNS[experiment_id]
     document = _yaml(EXPERIMENTS / f"{experiment_id}.yaml")
@@ -260,7 +301,17 @@ def test_the_relay_legs_cover_the_measured_rate_with_room():
     assert legs[EXP038] >= math.ceil(1.25 * work_minutes[EXP038] / 170)
 
 
-@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038])
+@pytest.mark.parametrize("experiment_id", [EXP039, EXP040])
+def test_each_half_fits_its_relay_legs_at_exp037s_measured_rate(experiment_id):
+    legs = _yaml(EXPERIMENTS / f"{experiment_id}.yaml")["execution"]["relay_max_runs"] + 1
+    for minutes in EXP037_MINUTES_PER_TASK:
+        work = controls.RUNS[experiment_id].task_count * minutes
+        # Seven legs at most at either rate, and a quarter more work still fits.
+        assert math.ceil(work / 170) <= 7
+        assert legs >= math.ceil(1.25 * work / 170)
+
+
+@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038, EXP039, EXP040])
 def test_every_registered_config_is_the_template_and_fits_the_name_budget(monkeypatch, experiment_id):
     monkeypatch.chdir(BATCH_RUNNER)
     name = controls.RUNS[experiment_id].grading_config_name
@@ -374,7 +425,7 @@ def test_the_unapproved_pair_is_refused_before_any_download(monkeypatch):
 @pytest.mark.parametrize("narrowing", [["--tasks", "0ed38524-a4ad-405f-9dee-7b2252659aad"], ["--limit", "3"],
                                        ["--tasks", "0ed38524-a4ad-405f-9dee-7b2252659aad", "--limit", "1"]],
                          ids=["tasks", "limit", "both"])
-@pytest.mark.parametrize("experiment_id", [EXP037, EXP038])
+@pytest.mark.parametrize("experiment_id", [EXP037, EXP038, EXP039, EXP040])
 def test_a_sol_220_grade_cannot_be_narrowed_to_a_subset(tmp_path, monkeypatch, capsys, experiment_id, narrowing):
     # The approval, not the dispatch, defines the scope: a subset would be a
     # _diagnostic/ grade paid under a ceiling sized for the whole stage.
@@ -393,6 +444,7 @@ def test_a_sol_220_grade_cannot_be_narrowed_to_a_subset(tmp_path, monkeypatch, c
 
 @pytest.mark.parametrize("experiment_id, config", [
     (EXP037, "exp036_v2_sol_max"), (EXP036, "exp037_v2_sol_max"), (EXP038, "exp037_v2_sol_max"),
+    (EXP039, "exp040_v2_sol_max"), (EXP040, "exp039_v2_sol_max"), (EXP039, "exp038_v2_sol_max"),
     ("exp035_codex_foundry_full220", "exp037_v2_sol_max"),
 ])
 def test_runs_and_configs_only_grade_their_own_pair(monkeypatch, experiment_id, config):
