@@ -2723,8 +2723,12 @@ GPT-5.6 Sol Max; audio perception remains on `gpt-audio-1.5`. The gpt-5.4 and
 legacy text-extract configs remain explicit historical comparison identities.
 `grade-run.yml` defaults to a model-free dry run. Paid grading additionally
 requires `paid_approval: true` and approval in the protected `grading`
-environment. Continuations preserve the approval input and exact run identity,
-but each newly dispatched chunk requires a fresh protected Environment approval.
+environment. Continuations preserve the approval input and exact run identity.
+Chunk 0 always waits for the protected Environment approval; a continuation the
+workflow dispatched itself inherits it only when the previous chunk's own
+partial (same experiment, config hash and inference revision, last committed
+by the grading job as `partial chunk N-1`) is on `main`. Anything else waits
+for a fresh approval.
 
 ### Step 7: Upload to HuggingFace (`step7_upload_hf.sh`)
 
