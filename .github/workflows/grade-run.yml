@@ -577,6 +577,7 @@ jobs:
             batch-runner/gpt54_v2_grading_input.py
             batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
+            batch-runner/grading_constraints
             batch-runner/prompts
             batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
@@ -623,7 +624,10 @@ jobs:
       - name: Install dependencies
         run: |
           cd batch-runner
-          pip install -r requirements.txt
+          # Exact versions, so every stage of a lineage reads deliverables
+          # with the same libraries; see the file's header for why it sits
+          # outside the grader hash.
+          pip install -r requirements.txt -c grading_constraints/exp037_grade_environment.txt
 
       # The paid job's step 8 runs this same admission and refuses with exit 4
       # when it fails, after approval and the Azure login. Here it costs
@@ -905,6 +909,7 @@ jobs:
             batch-runner/gpt54_v2_grading_input.py
             batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
+            batch-runner/grading_constraints
             batch-runner/prompts
             batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
@@ -956,7 +961,10 @@ jobs:
       - name: Install dependencies
         run: |
           cd batch-runner
-          pip install -r requirements.txt
+          # Exact versions, so every stage of a lineage reads deliverables
+          # with the same libraries; see the file's header for why it sits
+          # outside the grader hash.
+          pip install -r requirements.txt -c grading_constraints/exp037_grade_environment.txt
 
       - name: Determine renderer requirement
         id: renderer
