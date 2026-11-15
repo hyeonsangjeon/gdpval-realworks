@@ -276,8 +276,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # The experiment's name as one component, which is the form the shard
-          # directory stems below are written in.
+          # The experiment's name as one component, which is the form the grade
+          # file stems below are written in.
           GRADE_EXPERIMENT_SLUG: ${{ steps.validate.outputs.experiment_slug }}
           # The identity the grade job commits partials under. Kept in lockstep
           # with the `git config user.email` in the commit step below.
@@ -336,31 +336,63 @@ jobs:
             deny "config_name in ${GRADE_CONFIG} is missing or unsafe"
           fi
 
-          SHARD_FILE="$(printf 'shard-%03d-of-%03d.json' \
-            "$((10#$GRADE_SHARD_INDEX))" "$((10#$GRADE_SHARD_COUNT))")"
-
-          # The partial's own path is the receipt. Its parent stem encodes the
-          # experiment, config name, config hash, rubric SHA, inference SHA and
-          # grader source hash -- so a path match is a full identity match, and
-          # the file can only exist because an approved chunk wrote it.
-          STEMS="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/contents/data/grades/_shards?ref=main" \
-            --jq '.[] | select(.type == "dir") | .name' 2>/dev/null || true)"
+          # The receipt is the previous chunk's own partial, at the path
+          # step8_grade.resolve_grade_output_path gives it: a repeat roots under
+          # _repeats/run-NNN/; only shard_count > 1 forks into
+          # _shards/<stem>/shard-III-of-NNN.json; an unsharded partial is the
+          # canonical <root>/<stem>.json, which is also where a finished grade lives.
+          # So the path alone proves nothing: the receipt must also carry this
+          # config's bytes (cfg_<sha256[:16]>, step8_grade.hash_config) and its last
+          # commit must be the grading job's "partial chunk N-1" commit for exactly
+          # this request. A --tasks/--limit scope roots under _diagnostic/<scope_sha>/,
+          # which this step cannot name, so it keeps the Environment gate.
+          if [[ "$GRADE_TASKS_LIMIT" != "0" || -n "$GRADE_TASKS" ]]; then
+            deny "a narrowed scope's partial lives under _diagnostic/, which this step cannot name"
+          fi
+          GRADES_ROOT="data/grades"
+          if (( 10#$GRADE_RUN_ORDINAL > 1 )); then
+            GRADES_ROOT="${GRADES_ROOT}/_repeats/$(printf 'run-%03d' "$((10#$GRADE_RUN_ORDINAL))")"
+          fi
+          CFG16="$(sha256sum "${RUNNER_TEMP}/grading_config.yaml" | cut -c1-16)"
+          if [[ ! "$CFG16" =~ ^[0-9a-f]{16}$ ]]; then
+            deny "could not hash grading config ${GRADE_CONFIG}"
+          fi
+          WANT_SUBJECT="chore(grades): partial chunk $((10#$GRADE_RESUME_CHUNK - 1)) for ${GRADE_EXPERIMENT_YAML} via ${GRADE_CONFIG}"
+          if (( 10#$GRADE_SHARD_COUNT > 1 )); then
+            RECEIPT="$(printf 'shard-%03d-of-%03d.json' \
+              "$((10#$GRADE_SHARD_INDEX))" "$((10#$GRADE_SHARD_COUNT))")"
+            WANT_SUBJECT="${WANT_SUBJECT} [shard ${GRADE_SHARD_INDEX} of ${GRADE_SHARD_COUNT}]"
+            STEMS="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/contents/${GRADES_ROOT}/_shards?ref=main" \
+              --jq '.[] | select(.type == "dir") | .name' 2>/dev/null || true)"
+          else
+            RECEIPT="<stem>.json"
+            STEMS="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/contents/${GRADES_ROOT}?ref=main" \
+              --jq '.[] | select(.type == "file") | .name | select(endswith(".json")) | rtrimstr(".json")' 2>/dev/null || true)"
+          fi
           MATCH=""
           while IFS= read -r stem; do
             [[ -n "$stem" ]] || continue
             [[ "$stem" == "${GRADE_EXPERIMENT_SLUG}__"* ]] || continue
-            [[ "$stem" == *"__${CONFIG_NAME}__"* ]] || continue
+            [[ "$stem" == *"__${CONFIG_NAME}__cfg_${CFG16}__"* ]] || continue
             [[ "$stem" == *"__inference_${GRADE_INFERENCE_REVISION}__"* ]] || continue
-            candidate="data/grades/_shards/${stem}/${SHARD_FILE}"
-            if gh api "repos/${GITHUB_REPOSITORY}/contents/${candidate}?ref=main" \
-                 --jq '.sha' >/dev/null 2>&1; then
+            if (( 10#$GRADE_SHARD_COUNT > 1 )); then
+              candidate="${GRADES_ROOT}/_shards/${stem}/${RECEIPT}"
+            else
+              candidate="${GRADES_ROOT}/${stem}.json"
+            fi
+            LAST="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits?path=${candidate}&sha=main&per_page=1" \
+              --jq '.[0] // empty | [.commit.author.email, (.commit.message | split("\n")[0])] | @tsv' \
+              2>/dev/null || true)"
+            if [[ "$LAST" == "${GRADE_BOT_EMAIL}"$'\t'"${WANT_SUBJECT}" ]]; then
               MATCH="$candidate"
               break
             fi
           done <<< "$STEMS"
           if [[ -z "$MATCH" ]]; then
-            deny "no committed ${SHARD_FILE} for ${GRADE_EXPERIMENT_YAML}/${CONFIG_NAME} at inference ${GRADE_INFERENCE_REVISION}"
+            deny "no ${RECEIPT} under ${GRADES_ROOT} whose last commit is the bot's '${WANT_SUBJECT}' for ${GRADE_EXPERIMENT_YAML}/${CONFIG_NAME} at inference ${GRADE_INFERENCE_REVISION}"
           fi
 
           AUTHOR_EMAIL="$(gh api \
@@ -577,6 +609,7 @@ jobs:
             batch-runner/gpt54_v2_grading_input.py
             batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
+            batch-runner/grading_constraints
             batch-runner/prompts
             batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
@@ -623,7 +656,10 @@ jobs:
       - name: Install dependencies
         run: |
           cd batch-runner
-          pip install -r requirements.txt
+          # Exact versions, so every stage of a lineage reads deliverables
+          # with the same libraries; see the file's header for why it sits
+          # outside the grader hash.
+          pip install -r requirements.txt -c grading_constraints/exp037_grade_environment.txt
 
       # The paid job's step 8 runs this same admission and refuses with exit 4
       # when it fails, after approval and the Azure login. Here it costs
@@ -905,6 +941,7 @@ jobs:
             batch-runner/gpt54_v2_grading_input.py
             batch-runner/gpt56_pilot_usd_budget.py
             batch-runner/grading_configs
+            batch-runner/grading_constraints
             batch-runner/prompts
             batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
@@ -956,7 +993,10 @@ jobs:
       - name: Install dependencies
         run: |
           cd batch-runner
-          pip install -r requirements.txt
+          # Exact versions, so every stage of a lineage reads deliverables
+          # with the same libraries; see the file's header for why it sits
+          # outside the grader hash.
+          pip install -r requirements.txt -c grading_constraints/exp037_grade_environment.txt
 
       - name: Determine renderer requirement
         id: renderer

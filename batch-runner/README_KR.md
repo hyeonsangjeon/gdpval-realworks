@@ -205,8 +205,11 @@ gpt-5.4와 legacy text-extract config는 명시적으로 선택하는 과거 비
 identity로 보존됩니다.
 `grade-run.yml`은 model-free dry run이 기본입니다. 유료 grading은
 `paid_approval: true`와 보호된 `grading` environment 승인이 추가로 필요하며,
-continuation은 approval input과 exact run identity를 전달합니다. 다만 새로
-dispatch되는 각 chunk는 보호된 environment 승인을 다시 받아야 합니다.
+continuation은 approval input과 exact run identity를 전달합니다. chunk 0은
+언제나 보호된 environment 승인을 기다립니다. workflow가 스스로 dispatch한
+continuation은 이전 chunk의 partial(같은 실험, config hash, inference revision,
+grading job이 `partial chunk N-1`로 마지막 커밋)이 `main`에 있을 때만 그 승인을
+이어받고, 그 밖의 경우는 새 승인을 기다립니다.
 
 ### Step 7: HuggingFace 업로드 (`step7_upload_hf.sh`)
 

@@ -791,3 +791,51 @@ def test_the_script_the_workflow_calls_is_in_the_repository():
         "verify_published_grades.py is not tracked; add a negation for it in "
         ".gitignore or the verify-published job will call a missing file"
     )
+
+
+# --------------------------------------------------------------------------
+# a task checkpoint is not a grade
+# --------------------------------------------------------------------------
+#
+# A partial chunk publishes a task-progress-v1 checkpoint under
+# data/grades/_progress/ for the task its time budget stopped inside, and the
+# chunk that finishes the task deletes it. exp037 (runs 42850641369 and
+# 43310879444) failed verify-published on both: the arrival was parsed as a
+# grade with no tasks array, and the removal was reported as a deleted grade.
+
+
+def _checkpoint(repo: Path) -> Path:
+    # A real checkpoint name is the grade stem plus the task id; the smoke
+    # grade's stem is long enough that the two together pass NAME_MAX, and the
+    # verifier keys on the directory, not the name.
+    rel = Path("data/grades/_progress") / "exp026c__0e386e32-df20-4d1f-b536-7159bc409ad5.json"
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text(json.dumps({"format": "task-progress-v1", "completed_items": []}), encoding="utf-8")
+    return rel
+
+
+def test_a_checkpoint_published_beside_a_grade_is_not_read_as_a_grade(repo: Path):
+    place(repo, "data/grades")
+    _checkpoint(repo)
+    sha = publish(repo, "chore(grades): partial chunk 0 for exp026c via cost_smoke_exp026c_v2_gpt54.yaml")
+    result = verdict(repo, [sha])
+    assert result.get("payload", True) and result.get("no_deletions", True), result
+
+
+def test_removing_a_finished_tasks_checkpoint_deletes_no_grade(repo: Path):
+    rel = _checkpoint(repo)
+    publish(repo, "chore(grades): partial chunk 0 for exp026c via cost_smoke_exp026c_v2_gpt54.yaml")
+    place(repo, "data/grades")
+    (repo / rel).unlink()
+    sha = publish(repo, "chore(grades): grade exp026c via cost_smoke_exp026c_v2_gpt54.yaml")
+    assert verdict(repo, [sha]).get("no_deletions", True) is True
+
+
+def test_deleting_a_real_grade_is_still_reported_next_to_a_checkpoint(repo: Path):
+    grade = place(repo, "data/grades")
+    rel = _checkpoint(repo)
+    publish(repo, "chore(grades): grade exp026c via cost_smoke_exp026c_v2_gpt54.yaml")
+    (repo / grade).unlink()
+    (repo / rel).unlink()
+    sha = publish(repo, "remove a grade")
+    assert verdict(repo, [sha])["no_deletions"] is False

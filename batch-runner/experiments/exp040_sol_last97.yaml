@@ -1,0 +1,247 @@
+# Codex against Foundry — GPT-5.6 Sol, the last 97 of exp038's 195
+# =========================================================
+#
+# Owner decision 2026-11-14 ("추천대로"): exp037's readout failed R3 and R4
+# (12 solve legs and 11 grading chunks projected for the 195, against 9 each),
+# so the 195 of exp038_sol_rest195 are solved as two experiments instead, as
+# that file's header said they would be. This is positions 99-195 of
+# exp038_sol_rest195's list, in the same order; exp039_sol_next98 is the
+# rest. exp038_sol_rest195 stays registered and unapproved, and is never run.
+#
+#   ordered_task_ids_sha256  8ee5de9e3c352a00c6be1d9289fd73101807ac629719f1066e05be3c127b05d1
+#   97 tasks, 4,441 rubric items; every industry: Information 15, Finance 13, Real Estate 12, Wholesale 12, Government 10, Professional Services 10, Retail 10, Manufacturing 9, Health Care 6
+#
+# Money (sol_batch_controls.RUNS and sol_batch_grading.APPROVALS)
+# ---------------------------------------------------------------
+#
+# USD 2,500 for this solve and its grade together, owner 2026-11-14. 2,500 =
+# 1,600 solve + 900 grading; 51 per attempt, so attempts start while booked
+# solve spend <= 1,549. From exp037's 25 measured tasks (solve booking and
+# grading journal per task), resampled twice (the 25, then 97 draws from them;
+# 100,000 runs): median solve about 840 and grade about 790, p99.9 1,500 and
+# 1,263. The solve gate or the grading ceiling stops about 1 run in 1,300.
+#
+# Renderer
+# --------
+#
+# exp037 was graded with PyMuPDF 2.1. grade-run.yml installs the grade job's
+# libraries under batch-runner/grading_constraints/exp037_grade_environment.txt
+# (the versions exp037's last chunk installed), outside the grader hash, so
+# this grade reads deliverables with what exp037's did. The free dry run's
+# "Preflight grading renderer" prints the fingerprint before any spend, and the
+# readout's one_grader flag checks it afterwards.
+#
+# The wall clock and the relay legs
+# ---------------------------------
+#
+# exp037 measured 10.4 minutes per task (11.0 by wall clock, retries
+# included): 97 x 10.4 = 1,009 minutes, 6 legs of 170; at 11.0,
+# 7. relay_max_runs: 10 allows eleven, so four or more legs are spare.
+#
+# Grading runs as one unsharded process in resume chunks of 338 minutes:
+# 4,441 items x 0.96 judged x 24.1 s (exp037's mean) is 6 chunks; at
+# chunk 0's slowest 32 s, 7. grade-run.yml chains eleven. A chunk after
+# the first inherits the approval only through the bot's own auto-retrigger
+# and this lineage's committed partial (grade-run.yml, "Resolve inherited
+# paid approval"). The grade covers the whole registered list:
+# sol_batch_grading.py refuses a dispatch that names tasks or a task limit.
+#
+# Resume stays off, and the money and relay rules are exp037's (see that
+# file's header), with this run's names.
+
+experiment:
+  id: "exp040_sol_last97"
+  name: "Codex command-line tool against Foundry — GPT-5.6 Sol, last 97 of exp038's 195"
+  description: >-
+    Part of the second stage of GPT-5.6 Sol on the whole benchmark: the
+    last 97 of exp038_sol_rest195's 195 tasks (positions 99-195), in
+    exp035's order. Approved 2026-11-14 at USD 2,500 for solve and grade.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-11-15"
+
+control:
+  fixed:
+    - model
+    - reasoning_effort
+    - context_window
+    - prompt
+    - temperature
+    - self_qa
+    - retry_budget
+    - execution_environment
+  changed:
+    # The stage, and nothing else.
+    - tasks
+
+data:
+  # HyeonSang/<experiment.id>, as in exp033-exp036. Step 0 creates it, step 7
+  # uploads to it, and grade-run.yml downloads from it.
+  source: "HyeonSang/exp040_sol_last97"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+    # Positions 99-195 of exp038_sol_rest195's list. sol_batch_controls.RUNS
+    # pins their ordered_task_ids_sha256 8ee5de9e...
+    task_ids:
+      - "8a7b6fca-60cc-4ae3-b649-971753cbf8b9"
+      - "8c823e32-537c-42b2-84ba-635d63c2853a"
+      - "8c8fc328-69fc-4559-a13f-82087baef0a1"
+      - "8f9e8bcd-6102-40da-ab76-23f51d8b21fa"
+      - "90edba97-74f0-425a-8ff6-8b93182eb7cb"
+      - "90f37ff3-e4ed-4a0b-94bb-bed0f7def1ef"
+      - "91060ff0-3eb5-4ddf-9edb-f6758b95499e"
+      - "93b336f3-61f3-4287-86d2-87445e1e0f90"
+      - "94925f49-36bc-42da-b45b-61078d329300"
+      - "99ac6944-4ec6-4848-959c-a460ac705c6f"
+      - "9a0d8d36-6233-4c76-9107-0d1f783c7340"
+      - "9a8c8e28-ce76-408b-83c3-488422892e58"
+      - "9e39df84-ac57-4c9b-a2e3-12b8abf2c797"
+      - "9e8607e7-a38a-491f-ace1-e5ea7dc477cb"
+      - "9efbcd35-186d-49b6-ac24-28ee2bc9a263"
+      - "a0552909-bc66-4a3a-8970-ee0d17b49718"
+      - "a079d38f-c529-436a-beca-3e291f9e62a3"
+      - "a0ef404e-82a6-4507-bff1-633d7c8e0004"
+      - "a10ec48c-168e-476c-8fe3-23b2a5f616ac"
+      - "a1963a68-1bea-4bb1-b7e0-145c92a57449"
+      - "a328feea-47db-4856-b4be-2bdc63dd88fb"
+      - "a45bc83b-22f9-4def-8d89-9c5661b2b86f"
+      - "a46d5cd2-55fe-48fa-a4c6-6aaf6b9991b5"
+      - "a4a9195c-5ebe-4b8d-a0c2-4a6b7a49da8b"
+      - "a69be28f-9a84-47c9-992e-b90446cdca9d"
+      - "a73fbc98-90d4-4134-a54f-2b1d0c838791"
+      - "a74ead3b-f67d-4b1c-9116-f6bb81b29d4f"
+      - "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+      - "a95a5829-34bb-40f3-993b-558aed6dcdef"
+      - "a97369c7-e5cf-40ca-99e8-d06f81c57d53"
+      - "a99d85fc-eff8-48d2-a7d4-42a75d62f18d"
+      - "aa071045-bcb0-4164-bb85-97245d56287e"
+      - "aad21e4c-1d43-45fc-899a-97754a1b1b63"
+      - "ab81b076-e5d8-473a-9bdb-7ea7c38f6ebc"
+      - "ae0c1093-5ea8-4b84-a81e-53ebf7a4321d"
+      - "afe56d05-dac8-47d7-a233-ad1d035ca5bd"
+      - "b1a79ce1-86b0-41fb-97dc-9206dfd7b044"
+      - "b3573f20-5d3e-4954-948f-9461fda693d2"
+      - "b39a5aa7-cd1b-47ad-b249-90afd22f8f21"
+      - "b57efde3-26d6-4742-bbff-2b63c43b4baa"
+      - "b5d2e6f1-62a2-433a-bcdd-95b260cdd860"
+      - "b78fd844-db76-448e-a783-5e9877cb74c2"
+      - "b7a5912e-0e63-41f5-8c22-9cdb8f46ab01"
+      - "b9665ca1-4da4-4ff9-86f2-40b9a8683048"
+      - "bb499d9c-0263-4684-9238-75e8e86077b1"
+      - "bb863dd9-31c2-4f64-911a-ce11f457143b"
+      - "bbe0a93b-ebf0-40b0-98dc-8d9243099034"
+      - "bd72994f-5659-4084-9fab-fc547d1efe3b"
+      - "be830ca0-b352-4658-a5bd-57139d6780ba"
+      - "bf68f2ad-eac5-490a-adec-d847eb45bd6f"
+      - "c2e8f271-7858-412f-b460-472463ad81d9"
+      - "c3525d4d-2012-45df-853e-2d2a0e902991"
+      - "c357f0e2-963d-4eb7-a6fa-3078fe55b3ba"
+      - "c44e9b62-7cd8-4f72-8ad9-f8fbddb94083"
+      - "c6269101-fdc8-4602-b345-eac7597c0c81"
+      - "c657103b-b348-4496-a848-b2b7165d28b2"
+      - "c7d83f01-2874-4876-b7fd-52582ec99e1a"
+      - "c94452e4-39cd-4846-b73a-ab75933d1ad7"
+      - "c9bf9801-9640-45fa-8166-1ab01f2d98e4"
+      - "cd9efc18-d14a-4f69-8531-5d178a08084d"
+      - "ce864f41-8584-49ba-b24f-9c9104b47bf0"
+      - "cebf301e-5ea7-41ae-b117-ad8f43e7ac22"
+      - "cecac8f9-8203-4ebd-ad49-54436a8c4171"
+      - "d025a41c-c439-4ee1-bc79-dd5c94b27a2d"
+      - "d3d255b2-f5f2-4841-9f62-2083ec9ef3da"
+      - "d4525420-a427-4ef2-b4e9-2dcc2d31b3b6"
+      - "d7cfae6f-4a82-4289-955e-c799dfe1e0f4"
+      - "dd724c67-8118-4b99-ab50-4761af705c3b"
+      - "dfb4e0cd-a0b7-454e-b943-0dd586c2764c"
+      - "e14e32ba-d310-4d45-9b8a-6d73d0ece1ae"
+      - "e21cd746-404d-4602-b9d2-01d2812c5b87"
+      - "e222075d-5d62-4757-ae3c-e34b0846583b"
+      - "e4f664ea-0e5c-4e4e-a0d3-a87a33da947a"
+      - "e6429658-4de1-42dd-a9e0-2d2b9b02fb10"
+      - "e996036e-8287-4e7f-8d0a-90a57cb53c45"
+      - "eb54f575-93f9-408b-b9e0-f1208a0b6759"
+      - "ec2fccc9-b7f6-4c73-bf51-896fdb433cec"
+      - "ec591973-04d5-48c0-981c-1ab2fcec2dc1"
+      - "ed2bc14c-99ac-4a2a-8467-482a1a5d67f3"
+      - "ee09d943-5a11-430a-b7a2-971b4e9b01b5"
+      - "ef8719da-18e5-4bfe-b986-399652d77376"
+      - "efca245f-c24f-4f75-a9d5-59201330ab7a"
+      - "f1be6436-ffff-4fee-9e66-d550291a1735"
+      - "f2986c1f-2bbf-4b83-bc93-624a9d617f45"
+      - "f3351922-dbdd-45da-85c5-e7110696bbe5"
+      - "f5d428fd-b38e-41f0-8783-35423dab80f6"
+      - "f841ddcf-2a28-4f6d-bac3-61b607219d3e"
+      - "f84ea6ac-8f9f-428c-b96c-d0884e30f7c7"
+      - "f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb"
+      - "f9f82549-fdde-4462-aff8-e70fba5b8c66"
+      - "fccaa4a1-1c39-49ac-b701-55361a19966b"
+      - "fd3ad420-6f7d-43b1-a990-c0c5c047d071"
+      - "fd6129bd-f095-429b-873c-dcc3137be2c3"
+      - "fe0d3941-e32c-4bf1-a643-b566d2b4cb3c"
+      - "feb5eefc-39f1-4451-9ef9-bffe011b71dd"
+      - "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+      - "ffed32d8-d192-4e3f-8cd4-eda5a730aec3"
+condition_a:
+  name: "Codex command-line tool, Foundry deployment"
+  model:
+    provider: "azure"
+    # Must equal execution.codex.model: CodexAgentRunner.run refuses a
+    # mismatch rather than calling one deployment and recording another.
+    deployment: "gpt-5.6-sol"
+    # Codex owns the request, so these are inherited defaults, not claims
+    # about what was sent. The effort it sends is the one execution.codex
+    # names.
+    temperature: 0.0
+    seed: 42
+    reasoning_effort: null
+  prompt:
+    # Byte-for-byte exp033's, exp034's, exp035's and exp036's.
+    system: |
+      You are completing a professional work task. You have a terminal and a
+      working directory. Do the task and leave the finished deliverables in
+      the working directory as real files.
+    prefix: null
+    body: null
+    suffix: null
+  # Off, for the reason exp033 gives.
+  qa:
+    enabled: false
+    max_retries: 0
+    model: null
+    min_score: 6
+    prompt: ""
+
+execution:
+  mode: "codex_foundry"
+  codex:
+    endpoint_from_route: true
+    model: "gpt-5.6-sol"
+    # exp036's owner conditions 4 and 1: effort, then window. Step 1
+    # carries both keys into the prepared file, and step 2 hands them to Codex.
+    reasoning_effort: "max"
+    model_context_window: 1000000
+    # Both 0 on purpose; retries live in max_retries below, where they are
+    # counted.
+    request_max_retries: 0
+    stream_max_retries: 0
+  # Wall clock for one turn. Unchanged from exp033-exp036.
+  timeout: 1800
+  # Attempts after an infrastructure failure, per task: four at most, as in
+  # exp035. The USD gate can refuse to start any of them.
+  max_retries: 3
+  # Off; see "Resume stays off" in the header.
+  resume_max_rounds: 0
+  # exp036's owner condition 5, kept: a Sol run is compared with Sol runs.
+  install_libreoffice: true
+  # Step 2's watchdog in minutes, used because the dispatch passes
+  # wall_timeout 0. See "The wall clock and the relay legs" in the header.
+  wall_timeout: 170
+  # Leg zero plus ten relay legs, the most batch-run.yml accepts; see the
+  # header.
+  relay_max_runs: 10
+
+output:
+  # Nothing in codex_foundry mode reads this to decide an upload; the
+  # dispatch's dry_run: false does. Written true so the two agree.
+  publish_to_hf: true
+  submit_to_evals: false

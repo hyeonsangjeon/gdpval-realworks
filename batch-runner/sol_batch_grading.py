@@ -29,8 +29,10 @@ inference is not part of it.
 
 :data:`EXP037_FIRST25` (approved 2026-11-06): the first 25 tasks of the Sol
 220 under one USD 700 ceiling for the solve run and its grade together.
-:data:`EXP038_REST195` registers the other 195 with no approval and no ceiling;
-it waits for the owner's decision on exp037's readout.
+:data:`EXP038_REST195` registers the other 195 with no approval and no ceiling,
+and stays that way: after exp037's readout the owner had them run as two
+experiments instead, :data:`EXP039_NEXT98` and :data:`EXP040_LAST97` (approved
+2026-11-14), each under one USD 2,500 ceiling for its solve and grade.
 
 For a Sol run the published task list must be the one sol_batch_controls
 registers, in its order, so the grade covers the whole approved scope and is
@@ -191,6 +193,30 @@ EXP038_REST195 = Approval(
     task_ids_sha256=None,
     approved=None,
 )
+#: exp038's 195 as two experiments (owner 2026-11-14): each twin of its
+#: sol_batch_controls.RUNS entry, USD 2,500 for its solve and grade together.
+EXP039_NEXT98 = Approval(
+    experiment_id="exp039_sol_next98",
+    config_name="exp039_v2_sol_max",
+    ceiling_usd=Decimal("2500"),
+    solve_seed=SOLVE_SEED_SOL_BATCH,
+    exclusive_experiment=True,
+    inference_revision=None,
+    task_ids_sha256=None,
+    approved=("2026-11-14 owner (\"추천대로\"): exp037's readout failed R3 and R4, so solve and grade"
+              " exp038's 195 as two experiments; USD 2,500 for this one's solve and grade together"),
+)
+EXP040_LAST97 = Approval(
+    experiment_id="exp040_sol_last97",
+    config_name="exp040_v2_sol_max",
+    ceiling_usd=Decimal("2500"),
+    solve_seed=SOLVE_SEED_SOL_BATCH,
+    exclusive_experiment=True,
+    inference_revision=None,
+    task_ids_sha256=None,
+    approved=("2026-11-14 owner (\"추천대로\"): exp037's readout failed R3 and R4, so solve and grade"
+              " exp038's 195 as two experiments; USD 2,500 for this one's solve and grade together"),
+)
 #: Every admission this module can open. One approval per experiment and per
 #: config, because an experiment's journals share one directory. Each Sol
 #: entry has a twin in ``sol_batch_controls.RUNS`` with the same config and
@@ -204,7 +230,8 @@ EXP038_REST195 = Approval(
 #: graded under another ceiling (for example a single-hash regrade for the Sol
 #: 220 comparison) until a PR gives the registry a retired state that keeps
 #: journal ownership but admits nothing.
-APPROVALS: tuple[Approval, ...] = (EXP036_SOL_BATCH, EXP035_PARITY, EXP037_FIRST25, EXP038_REST195)
+APPROVALS: tuple[Approval, ...] = (EXP036_SOL_BATCH, EXP035_PARITY, EXP037_FIRST25, EXP038_REST195,
+                                   EXP039_NEXT98, EXP040_LAST97)
 #: The first Sol batch, exp036; ``sol_batch_controls.RUNS`` holds it under the
 #: same id.
 GRADED_EXPERIMENT_ID = EXP036_SOL_BATCH.experiment_id

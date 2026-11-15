@@ -25,7 +25,14 @@ The workflow itself defaults to `dry_run: true`. Any non-dry invocation must
 set `paid_approval: true` and pass the protected `grading` GitHub Environment.
 If a time-bounded run needs another chunk, the exact config, inference revision,
 task limit, and paid-approval input are inherited by the continuation. Each new
-chunk is a separate workflow run and requires a fresh protected Environment
+chunk is a separate workflow run. Chunk 0 always waits for the protected
+Environment approval. A later chunk inherits that approval only when the
+workflow's own auto-retrigger dispatched it and the previous chunk's partial is
+on `main` under the same identity: the grade stem names this experiment, this
+config's hash and the inference revision, and the file's last commit is the
+grading job's own `partial chunk N-1` commit for this request (sharded or not;
+see "Resolve inherited paid approval" in `grade-run.yml`). A person's dispatch,
+a `tasks`/`tasks_limit` scope, or any doubt falls back to a fresh Environment
 approval. Model prices are not guessed: grade payloads and analyses remain
 explicitly `unpriced` until verified FDPO rates are configured.
 

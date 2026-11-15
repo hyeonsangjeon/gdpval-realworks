@@ -750,3 +750,98 @@ def test_a_pinned_null_price_beside_a_settled_receipt_is_not_a_disagreement(tmp_
     assert legacy.ok is True
     assert legacy.data["legacy_estimated_cost_usd"] is None
     assert "gpt-audio-1.5" in legacy.data["legacy_unpriced_models"]
+
+
+# -- a partial chunk: refused calls and the task the clock stopped inside -------
+#
+# exp037's chunk 0 (run 42850641369) published a partial grade that failed this
+# verifier twice over although its bookkeeping reconciled exactly: 22 calls the
+# provider refused with HTTP 429 were counted as calls by the receipt builder
+# (core/cost_receipts.py) but not here, and the 59 calls of task 0e386e32, which
+# the time budget stopped mid-task, were in the run-wide ledger with no task row
+# yet. These pin the reconciliation the receipt builder actually performs.
+
+IN_FLIGHT = "0e386e32-df20-4d1f-b536-7159bc409ad5"
+
+
+def _refused(call_id: str) -> dict:
+    return _call(call_id, cost=None, tokens=(None, None, None, None), state="refused",
+                 missing_reasons=["call_refused_unpriced"], resolved_model=None,
+                 extra={"retry_kind": "none"})
+
+
+def _partial_with_in_flight(tmp_path: Path, *, checkpoint: dict | None, in_flight_rows: list[dict],
+                            status: str = "partial") -> Path:
+    graded = _good_calls()
+    grade_path = _write(tmp_path, graded + in_flight_rows, receipt=_receipt_from(graded))
+    grade = json.loads(grade_path.read_text(encoding="utf-8"))
+    grade["run_status"] = status
+    grade_path.write_text(json.dumps(grade, indent=2), encoding="utf-8")
+    if checkpoint is not None:
+        progress = tmp_path / "_progress"
+        progress.mkdir(exist_ok=True)
+        (progress / f"{grade_path.stem}__{IN_FLIGHT}.json").write_text(json.dumps(checkpoint), encoding="utf-8")
+    return grade_path
+
+
+def _checkpoint_for(rows: list[dict], **changes) -> dict:
+    items = [{"judge_call_count": 1, "perception_call_count": 0,
+              "judge_input_tokens": row["input_tokens"], "perception_input_tokens": 0,
+              "judge_output_tokens": row["output_tokens"], "perception_output_tokens": 0,
+              "judge_cached_tokens": row["cached_input_tokens"], "perception_cached_tokens": 0}
+             for row in rows]
+    checkpoint = {"format": "task-progress-v1", "task_id": IN_FLIGHT, "grader_source_hash": "a" * 64,
+                  "completed_items": items}
+    checkpoint.update(changes)
+    return checkpoint
+
+
+def _in_flight_rows() -> list[dict]:
+    return [_call(f"f{i}", task_id=IN_FLIGHT, tokens=(300 + i, 100, 20, 5)) for i in range(3)]
+
+
+def test_refused_calls_reconcile_as_calls_that_claim_no_amount(tmp_path):
+    rows = _good_calls() + [_refused("r1"), _refused("r2")]
+    receipt = _receipt_from(_good_calls())
+    # The receipt builder counts a refusal as a call that claims no amount, in a
+    # component of its own (it has no resolved model), as exp037's chunk 0 did.
+    receipt["model_calls"] += 2
+    receipt["components"].append({
+        "name": "grading", "stage": "grading", "retry_kind": "none", "provider": "azure",
+        "deployment": None, "requested_model": "gpt-5.4", "resolved_model": None, "api_version": None,
+        "status": "partial", "model_calls": 2, "known_cost_usd": 0.0,
+        "usage": _sum_usage([]), "missing_reasons": ["call_refused_unpriced"],
+    })
+    verdict = _verdict(_write(tmp_path, rows, receipt=receipt))
+    assert [check for check, ok in verdict.items() if not ok] == []
+
+
+def test_a_partial_whose_interrupted_task_is_accounted_for_by_its_checkpoint_passes(tmp_path):
+    rows = _in_flight_rows()
+    findings, context = verify(_partial_with_in_flight(tmp_path, checkpoint=_checkpoint_for(rows), in_flight_rows=rows))
+    assert [f"{f.check}: {f.detail}" for f in findings if not f.ok] == []
+    assert context["in_flight_rows"] == 3
+    assert "accounted for call for call" in next(f for f in findings if f.check == "in_flight").detail
+
+
+@pytest.mark.parametrize("break_it", ["missing", "one_call_short", "tokens_differ", "other_task", "other_grader"])
+def test_an_interrupted_task_its_checkpoint_does_not_account_for_fails(tmp_path, break_it):
+    rows = _in_flight_rows()
+    checkpoint = {
+        "missing": None,
+        "one_call_short": _checkpoint_for(rows[:2]),
+        "tokens_differ": _checkpoint_for([dict(rows[0], output_tokens=999)] + rows[1:]),
+        "other_task": _checkpoint_for(rows, task_id="someone-else"),
+        "other_grader": _checkpoint_for(rows, grader_source_hash="f" * 64),
+    }[break_it]
+    verdict = _verdict(_partial_with_in_flight(tmp_path, checkpoint=checkpoint, in_flight_rows=rows))
+    assert verdict["in_flight"] is False
+
+
+def test_rows_on_no_task_still_fail_a_final_grade(tmp_path):
+    rows = _in_flight_rows()
+    # A checkpoint beside a final grade excuses nothing: nothing is set apart.
+    verdict = _verdict(_partial_with_in_flight(tmp_path, checkpoint=_checkpoint_for(rows), in_flight_rows=rows,
+                                               status="final"))
+    assert verdict["in_flight"] is True
+    assert verdict["cost_reconciles"] is False or verdict["usage_reconciles"] is False

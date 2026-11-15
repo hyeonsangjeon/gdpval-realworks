@@ -75,6 +75,15 @@ COMPONENT_KEY = (
 
 STATE_SETTLED = "settled"
 STATE_RESERVED = "reserved"
+#: Sent, answered with a refusal before any model ran. ``build_receipt`` counts
+#: it as a call and claims no amount for it (cost_receipts.STATE_REFUSED), and
+#: the task's own call counters count it too, so the arithmetic below has to.
+STATE_REFUSED = "refused"
+
+#: A task checkpoint (core/task_checkpoint.py). Not a grade: the finished items
+#: of a task a partial chunk stopped inside, and the only published record of
+#: what that task has spent so far.
+CHECKPOINT_FORMAT = "task-progress-v1"
 
 # A missing_reason that names an absent price is an honest gap: the call
 # happened, the tokens were kept, and no published rate covers the model. Any
@@ -939,6 +948,132 @@ def check_legacy_counters(grade: dict[str, Any], settled: list[dict[str, Any]]) 
     )
 
 
+def _checkpoint_path(grade_path: Path, task_id: str) -> Path:
+    """Where step8 files a task's progress. Mirrors task_checkpoint.checkpoint_path,
+    spelled out so the checker does not import the code it checks."""
+    safe = "".join(ch if (ch.isalnum() or ch in "-_") else "_" for ch in task_id)
+    return grade_path.parent / "_progress" / f"{grade_path.stem}__{safe}.json"
+
+
+def split_in_flight(
+    grade: dict[str, Any], rows: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    """Set apart the rows of tasks a partial grade stopped inside.
+
+    The receipt is summed from task rows (step8 summary.grading_cost), and a
+    task the clock interrupted has no row yet, while its calls are already in
+    the run-wide ledger. Only a ``partial`` grade may hold such rows; on any
+    other status nothing is set apart, so a row on no task still fails the
+    reconciliation exactly as before.
+    """
+    if grade.get("run_status") != "partial":
+        return rows, {}
+    # The same rows check_task_coverage reads, so the two agree on what a
+    # task row is.
+    on_rows = {
+        str(item.get("task_id") or item.get("id") or "")
+        for item in (grade.get("results") or grade.get("tasks") or [])
+        if isinstance(item, dict)
+    }
+    kept: list[dict[str, Any]] = []
+    in_flight: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        task_id = str(row.get("task_id"))
+        if task_id in on_rows:
+            kept.append(row)
+        else:
+            in_flight.setdefault(task_id, []).append(row)
+    return kept, in_flight
+
+
+def check_in_flight(
+    grade: dict[str, Any], grade_path: Path, in_flight: dict[str, list[dict[str, Any]]]
+) -> Finding:
+    """Every call of an interrupted task is accounted for by its checkpoint.
+
+    The checkpoint's completed items carry the same per-item counters a
+    finished task row is summed from, so a checkpoint and its ledger rows must
+    agree call for call and token for token. No checkpoint, a checkpoint for
+    another task or grader, or any disagreement is a failure: those calls would
+    then be spend that no published record of this chunk accounts for.
+
+    What this cannot check: a checkpoint records no reasoning tokens and no
+    dollars, so those of the set-apart rows are not reconciled here. They are
+    when the task's row lands: the ledger is carried whole into every later
+    chunk, and on any status other than ``partial`` nothing is set apart, so
+    the grade that finishes the task reconciles these same rows by usage and
+    cost like every other.
+    """
+    if not in_flight:
+        return Finding("in_flight", True, "no ledger row belongs to a task the grade does not carry")
+    problems: list[str] = []
+    accounted: dict[str, Any] = {}
+    for task_id, rows in sorted(in_flight.items()):
+        path = _checkpoint_path(grade_path, task_id)
+        if not path.is_file():
+            problems.append(
+                f"{len(rows)} calls for {task_id} are in the ledger, but the grade "
+                "has no row for that task and no checkpoint beside it accounts for them"
+            )
+            continue
+        try:
+            checkpoint = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            problems.append(f"the checkpoint for {task_id} does not parse: {exc}")
+            continue
+        if (
+            not isinstance(checkpoint, dict)
+            or checkpoint.get("format") != CHECKPOINT_FORMAT
+            or checkpoint.get("task_id") != task_id
+        ):
+            problems.append(f"{path.name} is not a {CHECKPOINT_FORMAT} checkpoint for {task_id}")
+            continue
+        if checkpoint.get("grader_source_hash") != grade.get("grader_source_hash"):
+            problems.append(f"the checkpoint for {task_id} was written by a different grader")
+            continue
+        items = [i for i in checkpoint.get("completed_items") or [] if isinstance(i, dict)]
+
+        def item_sum(*names: str) -> int:
+            return sum(int(item.get(name) or 0) for item in items for name in names)
+
+        declared = {
+            "calls": item_sum("judge_call_count", "perception_call_count"),
+            "input_tokens": item_sum("judge_input_tokens", "perception_input_tokens"),
+            "output_tokens": item_sum("judge_output_tokens", "perception_output_tokens"),
+            "cached_input_tokens": item_sum("judge_cached_tokens", "perception_cached_tokens"),
+        }
+        ledger = {
+            "calls": len(rows),
+            "input_tokens": sum(int(r.get("input_tokens") or 0) for r in rows),
+            "output_tokens": sum(int(r.get("output_tokens") or 0) for r in rows),
+            "cached_input_tokens": sum(int(r.get("cached_input_tokens") or 0) for r in rows),
+        }
+        if declared != ledger:
+            problems.append(f"{task_id}: its checkpoint declares {declared}, the ledger holds {ledger}")
+            continue
+        accounted[task_id] = {
+            **ledger,
+            "reasoning_tokens": sum(int(r.get("reasoning_tokens") or 0) for r in rows),
+            "completed_items": len(items),
+            "checkpoint": path.name,
+        }
+    if problems:
+        return Finding(
+            "in_flight",
+            False,
+            "; ".join(problems),
+            {"problems": problems, "accounted": accounted},
+        )
+    calls = sum(v["calls"] for v in accounted.values())
+    return Finding(
+        "in_flight",
+        True,
+        f"{calls} calls of {len(accounted)} interrupted task(s) are on no task row "
+        "yet and are accounted for call for call by their checkpoints",
+        {"accounted": accounted},
+    )
+
+
 def describe_quality(grade: dict[str, Any]) -> dict[str, Any]:
     """Score context. Never decides the exit code -- see the module docstring."""
     summary = grade.get("summary") or {}
@@ -974,22 +1109,27 @@ def verify(grade_path: Path) -> tuple[list[Finding], dict[str, Any]]:
     calls = [row for row in rows if row.get("record_type", "call") == "call"]
     runtime = [row for row in rows if row.get("record_type") == "runtime"]
     settled = [row for row in calls if row.get("state") == STATE_SETTLED]
+    counted = [row for row in calls if row.get("state") in (STATE_SETTLED, STATE_REFUSED)]
+    receipted, in_flight = split_in_flight(grade, counted)
     context["ledger_rows"] = len(rows)
     context["call_rows"] = len(calls)
     context["runtime_rows"] = len(runtime)
     context["settled_rows"] = len(settled)
+    context["refused_rows"] = len(counted) - len(settled)
+    context["in_flight_rows"] = sum(len(v) for v in in_flight.values())
 
     findings.append(check_identity(grade, calls))
     findings.append(check_no_double_billing(calls))
     findings.append(check_all_calls_settled(calls))
-    findings.append(check_usage_reconciles(receipt, settled))
+    findings.append(check_usage_reconciles(receipt, receipted))
     findings.append(check_usage_containment(settled))
-    findings.append(check_cost_reconciles(receipt, settled))
-    findings.append(check_components_reconcile(receipt, settled))
+    findings.append(check_cost_reconciles(receipt, receipted))
+    findings.append(check_components_reconcile(receipt, receipted))
     findings.append(check_price_table(receipt, settled))
     findings.append(check_partial_cause(receipt, settled))
-    findings.append(check_task_coverage(grade, settled))
-    findings.append(check_legacy_counters(grade, settled))
+    findings.append(check_task_coverage(grade, receipted))
+    findings.append(check_legacy_counters(grade, receipted))
+    findings.append(check_in_flight(grade, grade_path, in_flight))
     return findings, context
 
 

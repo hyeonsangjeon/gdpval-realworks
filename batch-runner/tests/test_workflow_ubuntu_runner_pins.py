@@ -51,6 +51,86 @@ RUNNER_PINS = {
         ("freeze-check",),
     ),
 }
+# batch-run.yml changed once more after the runner pins: the wait for a result
+# PR's dispatched checks moved out of the batch job into its own job,
+# result-pr-checks (owner decision 2026-11-14). Its bytes are reconstructed in
+# two exact steps, that move first, then the runner lines, so every historical
+# hash above is still checked.
+RESULT_PR_JOB_PIN = (
+    "a7b65f7d8f167cc0b13c940b90b84334dcfed876608696baedccf0a7b414a9cd",  # runner pins only
+    "5f41e8ff0941a516a6f4ae9f46438687268ee94622a6adf37782200e797c9992",  # plus result-pr-checks
+)
+OUTPUTS = (
+    "    # Read by result-pr-checks below. Both stay empty unless the last leg\n"
+    "    # opened a result PR and dispatched its checks.\n"
+    "    outputs:\n"
+    "      result_pr_number: ${{ steps.dispatch_checks.outputs.pr_number }}\n"
+    "      result_pr_head_sha: ${{ steps.dispatch_checks.outputs.pr_head_sha }}\n"
+)
+DISPATCH_ADDED = (
+    ("      - name: Dispatch exact result PR validation\n        id: dispatch_checks\n",
+     "      - name: Dispatch exact result PR validation\n"),
+    ("          PR_BRANCH: ${{ steps.cpr.outputs.pull-request-branch }}\n"
+     "          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}\n"
+     "          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}\n"
+     "        run: |\n",
+     "          PR_BRANCH: ${{ steps.cpr.outputs.pull-request-branch }}\n"
+     "          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}\n"
+     "        run: |\n"),
+    ("            --raw-field expected_sha=\"$PR_HEAD_SHA\"\n"
+     "          # Handed to result-pr-checks, which waits for both in its own job.\n"
+     "          echo \"pr_number=$PR_NUMBER\" >> \"$GITHUB_OUTPUT\"\n"
+     "          echo \"pr_head_sha=$PR_HEAD_SHA\" >> \"$GITHUB_OUTPUT\"\n",
+     "            --raw-field expected_sha=\"$PR_HEAD_SHA\"\n"),
+)
+JOB_START = "  # Waits for the result PR's dispatched checks in a job of its own. Inside the\n"
+JOB_STEPS = "    steps:\n"
+NEXT_JOB = "  comparison-admission:\n"
+STEP_ENV = (
+    ("        env:\n"
+     "          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"
+     "          PR_NUMBER: ${{ needs.batch-run.outputs.result_pr_number }}\n"
+     "          PR_HEAD_SHA: ${{ needs.batch-run.outputs.result_pr_head_sha }}\n"
+     "          REQUIRED_WORKFLOWS: 'backend-tests.yml deploy.yml'\n"
+     "          # Backend Tests' slowest job takes 34 to 49 minutes once it starts\n"
+     "          # (median 43); 110 minutes leaves room for the queue.\n"
+     "          WAIT_SECONDS: '6600'\n"),
+    ("        if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'\n"
+     "        env:\n"
+     "          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"
+     "          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}\n"
+     "          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}\n"
+     "          REQUIRED_WORKFLOWS: 'backend-tests.yml deploy.yml'\n"
+     "          WAIT_SECONDS: '1800'\n"),
+)
+SUMMARY = "      # ── Summary step ──\n"
+
+
+def restore_pre_result_pr_job_bytes(data):
+    """Undo exactly the result-pr-checks move, requiring both complete hashes."""
+    before_hash, after_hash = RESULT_PR_JOB_PIN
+    assert hashlib.sha256(data).hexdigest() == after_hash
+    text = data.decode("utf-8")
+    assert text.count(OUTPUTS) == 1
+    text = text.replace(OUTPUTS, "")
+    for new, old in DISPATCH_ADDED:
+        assert text.count(new) == 1
+        text = text.replace(new, old)
+    start, end = text.index(JOB_START), text.index(NEXT_JOB)
+    job = text[start:end]
+    text = text[:start] + text[end:]
+    assert job.count(JOB_STEPS) == 1 and job.endswith("\n\n")
+    step = job.split(JOB_STEPS, 1)[1][:-1]
+    new_env, old_env = STEP_ENV
+    assert step.count(new_env) == 1
+    step = step.replace(new_env, old_env)
+    assert text.count(SUMMARY) == 1
+    text = text.replace(SUMMARY, step + SUMMARY)
+    restored = text.encode("utf-8")
+    assert hashlib.sha256(restored).hexdigest() == before_hash
+    return restored
+
+
 PREVIOUS_BATCH_RUNNER = (
     "${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' "
     "&& 'ubuntu-24.04' || 'ubuntu-latest' }}"
@@ -59,6 +139,8 @@ PREVIOUS_BATCH_RUNNER = (
 
 def restore_pre_ubuntu_2404_runner_bytes(name, data):
     """Undo exactly the approved runner lines, requiring both complete hashes."""
+    if name == "batch-run.yml" and hashlib.sha256(data).hexdigest() == RESULT_PR_JOB_PIN[1]:
+        data = restore_pre_result_pr_job_bytes(data)
     historical_hash, current_hash, changed_jobs = RUNNER_PINS[name]
     assert hashlib.sha256(data).hexdigest() == current_hash
     jobs = yaml.safe_load(data)["jobs"]
@@ -85,9 +167,12 @@ def restore_pre_ubuntu_2404_runner_bytes(name, data):
 
 @pytest.mark.parametrize("name", RUNNER_PINS)
 def test_only_reviewed_runner_lines_change_and_historical_bytes_survive(name):
-    historical = restore_pre_ubuntu_2404_runner_bytes(name, (WORKFLOWS / name).read_bytes())
+    current = (WORKFLOWS / name).read_bytes()
+    historical = restore_pre_ubuntu_2404_runner_bytes(name, current)
+    if name == "batch-run.yml":
+        current = restore_pre_result_pr_job_bytes(current)
     before = yaml.safe_load(historical)
-    after = yaml.safe_load((WORKFLOWS / name).read_bytes())
+    after = yaml.safe_load(current)
     for job in RUNNER_PINS[name][2]:
         before["jobs"][job]["runs-on"] = "ubuntu-24.04"
     assert before == after
@@ -149,3 +234,31 @@ def test_python_pin_and_time_budget_control_runner_are_unchanged():
     setup = [step for step in preflight["jobs"]["advance-check"]["steps"]
              if step.get("name") == "Setup Python"]
     assert len(setup) == 1 and setup[0]["with"]["python-version"] == "3.10.12"
+
+
+def test_the_result_pr_wait_is_the_only_change_after_the_runner_pins():
+    current = (WORKFLOWS / "batch-run.yml").read_bytes()
+    pinned = restore_pre_result_pr_job_bytes(current)
+    after, before = yaml.safe_load(current), yaml.safe_load(pinned)
+    moved = after["jobs"].pop("result-pr-checks")["steps"]
+    assert [step["name"] for step in moved] == ["Verify dispatched result PR checks"]
+    del after["jobs"]["batch-run"]["outputs"]
+    names = [step.get("name") for step in before["jobs"]["batch-run"]["steps"]]
+    assert "Verify dispatched result PR checks" in names
+    before["jobs"]["batch-run"]["steps"] = [
+        step for step in before["jobs"]["batch-run"]["steps"] if step.get("name") != "Verify dispatched result PR checks"]
+    for document in (after, before):
+        (dispatch,) = [step for step in document["jobs"]["batch-run"]["steps"]
+                       if step.get("name") == "Dispatch exact result PR validation"]
+        dispatch.pop("id", None)
+        dispatch["env"].pop("PR_NUMBER", None)
+        dispatch["run"] = dispatch["run"].split("          # Handed to result-pr-checks")[0].split("# Handed to result-pr-checks")[0].rstrip("\n")
+    assert after == before
+
+
+@pytest.mark.parametrize("mutation", ["extra_byte", "already_restored"])
+def test_the_result_pr_reconstruction_rejects_other_bytes(mutation):
+    data = (WORKFLOWS / "batch-run.yml").read_bytes()
+    data = data + b"\n" if mutation == "extra_byte" else restore_pre_result_pr_job_bytes(data)
+    with pytest.raises(AssertionError):
+        restore_pre_result_pr_job_bytes(data)
