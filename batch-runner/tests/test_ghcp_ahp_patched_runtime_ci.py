@@ -22,7 +22,7 @@ import ghcp_ahp_bundle_manifest as bundle_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/ghcp-ahp-patched-runtime-tests.yml"
-BRANCH = "leader/ghcp-patched-runtime-receipt-20261106"
+BRANCH = "main"
 SUITE = [
     "tests/test_ghcp_ahp_patched_runtime.py",
     "tests/test_ghcp_ahp_patched_runtime_rejections.py",
@@ -37,7 +37,7 @@ EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smok
                "tests/test_ghcp_ahp_server_only_staging.py", "tests/test_ghcp_ahp_runner_userns.py",
                "tests/test_ghcp_sol_offline_rehearsal.py", "tests/test_ghcp_ahp_default_policy.py",
                "tests/test_ghcp_ahp_output_collection.py", "tests/test_ghcp_ahp_token_ledger.py"]
-EXPECTED_COUNTS = {"contracts.xml": 2901, "workflow-guards.xml": 80}
+EXPECTED_COUNTS = {"contracts.xml": 2903, "workflow-guards.xml": 81}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -113,6 +113,33 @@ def test_workflow_runs_only_on_the_named_branch_push():
     assert set(job) == {"name", "if", "runs-on", "timeout-minutes", "steps"}
     assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
     assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "15"
+
+
+def restore_pre_main_producer_workflow(data):
+    """Prove every byte outside the exact branch/count re-anchor is unchanged."""
+    legacy = "leader/ghcp-patched-runtime-receipt-20261106"
+    changes = (
+        (b"    branches: [main]\n", f"    branches: [{legacy}]\n".encode(), 1),
+        (b"    if: github.event_name == 'push' && github.ref == 'refs/heads/main'\n",
+         f"    if: github.event_name == 'push' && github.ref == 'refs/heads/{legacy}'\n".encode(), 5),
+        (b'          expected = {"contracts.xml": 2903, "workflow-guards.xml": 81}\n',
+         b'          expected = {"contracts.xml": 2901, "workflow-guards.xml": 80}\n', 1),
+    )
+    for current, original, count in changes:
+        assert data.count(current) == count
+        data = data.replace(current, original)
+    assert hashlib.sha256(data).hexdigest() == "6e11921e79468f17d8b73be8fd5fbc6e1814b159f69d29b83bffe91c121a7a87"
+    return data
+
+
+def test_reanchor_preserves_every_historical_producer_byte_and_rejects_drift():
+    data = WORKFLOW.read_bytes()
+    assert b"branches: [leader/ghcp-patched-runtime-receipt-20261106]" in restore_pre_main_producer_workflow(data)
+    for damaged in (data + b"\n", data.replace(b"branches: [main]", b"branches: [main, other]", 1),
+                    data.replace(b"    timeout-minutes: 15\n", b"    timeout-minutes: 16\n", 1)):
+        assert damaged != data
+        with pytest.raises(AssertionError):
+            restore_pre_main_producer_workflow(damaged)
 
 
 def test_only_pinned_setup_actions_without_authentication_or_runtime_steps():
