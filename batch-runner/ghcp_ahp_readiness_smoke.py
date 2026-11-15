@@ -28,7 +28,7 @@ import ghcp_ahp_wire_capture as wire
 import ghcp_ahp_zero_turn as zero
 from ghcp_ahp_errors import Refused
 
-BRANCH = "refs/heads/leader/ghcp-patched-runtime-receipt-20261106"
+BRANCH = "refs/heads/main"
 AUTH_MESSAGE = "Authentication is required to use Codex"
 AUTH_SOURCE = "src/vs/platform/agentHost/node/codex/codexAgent.ts:1842-1849"
 WALL_SECONDS = 180

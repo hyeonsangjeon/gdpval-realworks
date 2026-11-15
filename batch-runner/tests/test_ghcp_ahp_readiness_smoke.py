@@ -42,13 +42,22 @@ def test_nas_is_refused_before_any_real_work(monkeypatch, tmp_path):
     assert not (tmp_path / "out").exists()
 
 
-@pytest.mark.parametrize("event,ref", [("workflow_dispatch", ready.BRANCH), ("push", "refs/heads/main"), ("", "")])
+@pytest.mark.parametrize("event,ref", [("workflow_dispatch", ready.BRANCH),
+    ("push", "refs/heads/leader/ghcp-patched-runtime-receipt-20261106"), ("", "")])
 def test_readiness_is_only_the_authorized_branch_push(monkeypatch, event, ref):
     monkeypatch.setattr(ready.load, "ci_identity", lambda: IDENTITY)
     monkeypatch.setenv("GITHUB_EVENT_NAME", event)
     monkeypatch.setenv("GITHUB_REF", ref)
     with pytest.raises(Refused, match="readiness_branch_push_required"):
         ready.context()
+
+
+def test_main_push_readiness_keeps_the_exact_producer_run_and_sha(monkeypatch):
+    assert ready.BRANCH == "refs/heads/main"
+    monkeypatch.setattr(ready.load, "ci_identity", lambda: dict(IDENTITY))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    assert ready.context() == IDENTITY
 
 
 def test_cli_flags_match_the_old_probe_not_the_one_second_import_parent(tmp_path):

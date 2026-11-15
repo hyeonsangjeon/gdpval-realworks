@@ -135,6 +135,29 @@ def test_scope_is_exact_and_generic_activation_stays_locked(context):
         runtime.require_activation()
 
 
+def test_main_merge_identity_is_required_by_both_zero_turn_profiles(context, tmp_path, monkeypatch):
+    import ghcp_ahp_default_policy as default
+
+    assert prewarm.BRANCH == "main"
+    assert context["GITHUB_REF"] == "refs/heads/main"
+    evidence = tmp_path / default.PROFILE
+    write(evidence / "green-ci.json", build())
+    assert prewarm.context(running=True) == default.require_context(evidence) == IDENTITY
+    assert prewarm.select_build(response(), IDENTITY)["head_branch"] == "main"
+    legacy = "leader/ghcp-patched-runtime-receipt-20261106"
+    # Neither a legacy ref, a legacy workflow ref, nor both may enter either
+    # profile, even when the reported commit is exactly the same main SHA.
+    for ref_branch, workflow_branch in ((legacy, "main"), ("main", legacy), (legacy, legacy)):
+        with monkeypatch.context() as scoped:
+            scoped.setenv("GITHUB_REF", "refs/heads/" + ref_branch)
+            scoped.setenv("GITHUB_WORKFLOW_REF", prewarm.REPOSITORY + "/" + prewarm.WORKFLOW
+                          + "@refs/heads/" + workflow_branch)
+            with pytest.raises(probe.Refused, match="prewarm_zero_turn_dispatch_identity_refused"):
+                prewarm.context(running=True)
+            with pytest.raises(probe.Refused, match="prewarm_zero_turn_dispatch_identity_refused"):
+                default.require_context(evidence)
+
+
 @pytest.mark.parametrize("key", ["GITHUB_EVENT_NAME", "GITHUB_REPOSITORY", "GITHUB_REF", "GITHUB_WORKFLOW_REF",
                                "GITHUB_WORKFLOW_SHA", "GHCP_AUTHENTICATED_ZERO_TURN", "GHCP_PAID_EXECUTION", "GHCP_CONNECTION_ONLY"])
 def test_changed_or_absent_dispatch_scope_is_refused(context, monkeypatch, key):
@@ -147,7 +170,8 @@ def test_changed_or_absent_dispatch_scope_is_refused(context, monkeypatch, key):
 
 
 @pytest.mark.parametrize("key,value", [("id", True), ("id", 0), ("id", 9002), ("run_attempt", True), ("run_attempt", 2),
-    ("head_sha", "b" * 40), ("head_branch", "main"), ("path", "wrong.yml"), ("event", "workflow_dispatch"),
+    ("head_sha", "b" * 40), ("head_branch", "leader/ghcp-patched-runtime-receipt-20261106"),
+    ("path", "wrong.yml"), ("event", "workflow_dispatch"),
     ("status", "in_progress"), ("conclusion", "failure"), ("repository", "other/repo"), ("head_repository", "fork/repo")])
 def test_build_origin_status_attempt_and_same_sha_are_not_optional(key, value):
     row = build()
