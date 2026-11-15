@@ -321,6 +321,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   missing/duplicate ownership. Update only the current workflow byte pin,
   reconstruct its unchanged predecessor and retain all historical seals.
   Related partition/seal/workflow-pin tests: 154 passed, no failures or skips.
+
 - Add an isolated, branch-push-only Ubuntu 24.04 AHP capability probe using
   pinned VS Code CLI/server 1.144.0 and its Codex SDK 0.163.0. Kernel-denied
   external networking, an unprivileged PID namespace, fresh child state and

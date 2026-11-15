@@ -115,6 +115,7 @@ and summary JSON; four scoring/judging functions also have identical ASTs. See
 Logs/JUnit: `/ai-work/copilot/_tmp/p5-grader-seal-20261030.dX3prg/`.
 No model/judge call, dispatch, secret access or merge. Claude's pricing/1M
 changes and PR #793 are untouched and can require another reviewed seal.
+
 ## GHCP Codex AHP hosted model-free probe prepared, 2026-10-30
 
 New branch `leader/ghcp-ahp-probe-20261030`, based on main `8f6d00fef`, contains
