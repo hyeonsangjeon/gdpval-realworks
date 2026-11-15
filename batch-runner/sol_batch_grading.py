@@ -29,8 +29,10 @@ inference is not part of it.
 
 :data:`EXP037_FIRST25` (approved 2026-11-06): the first 25 tasks of the Sol
 220 under one USD 700 ceiling for the solve run and its grade together.
-:data:`EXP038_REST195` registers the other 195 with no approval and no ceiling;
-it waits for the owner's decision on exp037's readout.
+:data:`EXP038_REST195` registers the other 195 with no approval and no ceiling,
+and stays that way: after exp037's readout the owner had them run as two
+experiments instead, :data:`EXP039_NEXT98` and :data:`EXP040_LAST97` (approved
+2026-11-14), each under one USD 2,500 ceiling for its solve and grade.
 
 For a Sol run the published task list must be the one sol_batch_controls
 registers, in its order, so the grade covers the whole approved scope and is

@@ -334,7 +334,9 @@ def test_the_wait_runs_in_its_own_job_after_the_batch(batch_run: dict) -> None:
     # It runs whenever the last leg dispatched checks, even if a later step
     # of the batch job failed, and never after a cancellation.
     assert "!cancelled()" in job["if"] and "needs.batch-run.outputs.result_pr_head_sha != ''" in job["if"]
-    assert job["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "write"}
+    # contents: write because GitHub refuses convertPullRequestToDraft to a
+    # GITHUB_TOKEN without it (cli/cli#8910); pull-requests: write for the comment.
+    assert job["permissions"] == {"contents": "write", "actions": "read", "pull-requests": "write"}
     # The batch job no longer waits inside its own 360 minutes.
     assert VERIFY_STEP not in [step.get("name") for step in _steps(batch_run, "batch-run")]
 

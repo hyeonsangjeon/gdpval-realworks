@@ -1520,8 +1520,11 @@ jobs:
     if: ${{ !cancelled() && needs.batch-run.outputs.result_pr_head_sha != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    # contents: write is not for the repository's files: GitHub refuses
+    # convertPullRequestToDraft (gh pr ready --undo) to a GITHUB_TOKEN without
+    # it, and the batch job this step came from had it at workflow level.
     permissions:
-      contents: read
+      contents: write
       actions: read
       pull-requests: write
     steps:

@@ -58,7 +58,7 @@ RUNNER_PINS = {
 # hash above is still checked.
 RESULT_PR_JOB_PIN = (
     "a7b65f7d8f167cc0b13c940b90b84334dcfed876608696baedccf0a7b414a9cd",  # runner pins only
-    "3a7da464488ef12711ae286d1ad9d1cd07102e372131a4a9b94a3cb8ca8e2340",  # plus result-pr-checks
+    "5f41e8ff0941a516a6f4ae9f46438687268ee94622a6adf37782200e797c9992",  # plus result-pr-checks
 )
 OUTPUTS = (
     "    # Read by result-pr-checks below. Both stay empty unless the last leg\n"
