@@ -2999,6 +2999,7 @@ checkout and cloud access.
 | `sandbox_image_digest` | Immutable sandbox image forwarded across relay legs | *(empty)* | Internal; the workflow resolves it when needed |
 | `codex_foundry_confirmed` | States that this batch may spend on the Foundry deployment. Only `execution.mode: codex_foundry` reads it; a `codex_foundry` dispatch without it fails in a job that holds no credentials | `false` | Tick it only when you mean to run a Codex batch, and only for that dispatch |
 | `comparison_reviewed_source_sha` | Caller-reviewed full lowercase 40-hex source commit SHA for GPT-5.4 comparison admission, distinct from relay `source_sha`. Does not authorize launch | *(empty)* | Set only for the exact registered comparison config; leave empty for ordinary batches |
+| `placement_attempt` | Which placement of this same dispatch this is. `placement-reroll` raises it and sends the dispatch again each time the batch job lands on a runner outside Azure, where the Azure login is refused; at most `20`, and each relay leg starts again at `1` | `1` | Internal; leave `1` |
 
 ### Three-task smoke input
 
@@ -3013,6 +3014,7 @@ wall_timeout:          290
 sandbox_image_digest:  <empty>
 codex_foundry_confirmed: false
 comparison_reviewed_source_sha: <empty>
+placement_attempt:     1
 ```
 
 ### How Relay Runs Work

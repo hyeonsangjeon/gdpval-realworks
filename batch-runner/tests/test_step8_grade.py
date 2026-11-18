@@ -3476,6 +3476,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "approve-paid",
         "grade-dry-run",
         "grade",
+        "placement-reroll",
         "pilot-plan",
         "pilot-approve-paid",
         "pilot-live",
@@ -3553,6 +3554,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert grade_job["outputs"] == {
         "published_commits": "${{ steps.published.outputs.commits }}",
         "published_head": "${{ steps.published.outputs.head }}",
+        "placement": "${{ steps.placement.outputs.verdict }}",
     }
 
     # Where that file gets its name, and in what order. It has to be a step:
@@ -3580,10 +3582,34 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "the file is appended to before it is named; the append would go to "
         "a bare '>>' with an empty path and the push would go unrecorded"
     )
+    # The placement check fails the job on purpose, and "Record published
+    # commits" still runs after it (always()). Named first, the file is
+    # there to be found empty rather than an unbound variable to die on.
+    placement_check = [
+        index for index, step in enumerate(grade_job["steps"]) if step.get("id") == "placement"
+    ]
+    assert len(placement_check) == 1 and names_it[0] < placement_check[0]
 
     # The job list above is pinned rather than checked for membership, so that
     # nothing joins a workflow that spends money without being described here.
     # Adding a name to it weakens that unless the newcomer is pinned too.
+    redispatch = parsed["jobs"]["placement-reroll"]
+    assert redispatch["needs"] == ["grade"]
+    assert _gh_expr(redispatch["if"]) == (
+        "!cancelled() && github.run_attempt == '1' && "
+        "!startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "!startsWith(inputs.experiment_yaml, 'retention/') && "
+        "needs.grade.result == 'failure' && "
+        "needs.grade.outputs.placement == 'off-azure'"
+    )
+    assert redispatch["permissions"] == {"contents": "read", "actions": "write"}
+    assert "environment" not in redispatch and "outputs" not in redispatch
+    redispatch_dump = yaml.safe_dump(redispatch)
+    assert re.findall(r"secrets\.\w+", redispatch_dump) == ["secrets.GITHUB_TOKEN"]
+    for forbidden in ("id-token", "azure/login", "actions/checkout", "continue-on-error",
+                      "step8_grade", "sol_batch_grading", "git push"):
+        assert forbidden not in redispatch_dump, forbidden
+    assert "actions/workflows/grade-run.yml/dispatches" in redispatch_dump
     pilot_plan = parsed["jobs"]["pilot-plan"]
     pilot_approval = parsed["jobs"]["pilot-approve-paid"]
     pilot_live = parsed["jobs"]["pilot-live"]
@@ -4038,6 +4064,7 @@ def _run_grade_workflow_input_preflight(**overrides):
         "GRADE_SHARD_COUNT": "1",
         "GRADE_SHARD_INDEX": "0",
         "GRADE_RUN_ORDINAL": "1",
+        "GRADE_PLACEMENT_ATTEMPT": "1",
         **overrides,
     }
     with tempfile.TemporaryDirectory() as step_outputs:

@@ -202,6 +202,7 @@ From **Actions > Run GDPVal Batch Experiment**, use:
 | `sandbox_image_digest` | leave empty |
 | `codex_foundry_confirmed` | leave unticked |
 | `comparison_reviewed_source_sha` | leave empty (GPT-5.4 comparison only) |
+| `placement_attempt` | `1` (raised only by the automatic re-send) |
 
 Expected behavior:
 

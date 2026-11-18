@@ -53,6 +53,11 @@ on:
         required: false
         type: string
         default: ''
+      placement_attempt:
+        description: 'Internal, set by placement-reroll: which placement of this same dispatch this is, 1 to 20; it rises each time batch-run lands outside Azure and is sent again. Leave 1; each relay leg starts again at 1.'
+        required: false
+        type: number
+        default: 1
 
 permissions:
   contents: write        # to commit yaml results
@@ -95,6 +100,9 @@ jobs:
           RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           SANDBOX_IMAGE_DIGEST: ${{ inputs.sandbox_image_digest }}
+          # Raised only by placement-reroll below, once per placement outside
+          # Azure. Same shape as relay_run, its own ceiling.
+          PLACEMENT_ATTEMPT: ${{ inputs.placement_attempt }}
         run: |
           set -euo pipefail
           [[ "$EVENT_NAME" == "workflow_dispatch" ]]
@@ -105,6 +113,8 @@ jobs:
           (( 10#$WALL_TIMEOUT <= 290 ))
           [[ "$RELAY_RUN" =~ ^(0|[1-9][0-9]?)$ ]]
           (( 10#$RELAY_RUN <= 10 ))
+          [[ "$PLACEMENT_ATTEMPT" =~ ^[1-9][0-9]?$ ]]
+          (( 10#$PLACEMENT_ATTEMPT <= 20 ))
           if (( 10#$RELAY_RUN == 0 )); then
             [[ -z "$SOURCE_SHA" ]]
             [[ -z "$RELAY_LINEAGE_ID" ]]
@@ -320,6 +330,9 @@ jobs:
     outputs:
       result_pr_number: ${{ steps.dispatch_checks.outputs.pr_number }}
       result_pr_head_sha: ${{ steps.dispatch_checks.outputs.pr_head_sha }}
+      # Read by placement-reroll below: azure, unknown or off-azure. Set by
+      # the first step, so it is there even when that step ends the job.
+      placement: ${{ steps.placement.outputs.verdict }}
     env:
       EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
       EXPERIMENT_NAME_INPUT: ${{ inputs.experiment_name }}
@@ -333,6 +346,74 @@ jobs:
       COMPARISON_REVIEWED_SOURCE_SHA_INPUT: ${{ inputs.comparison_reviewed_source_sha }}
 
     steps:
+      # GitHub now places ubuntu-24.04 jobs on AWS as well as on Azure
+      # (changelog 2026-10-28), and the Azure tenant's Conditional Access
+      # refuses an OIDC login from outside Azure (AADSTS53003), so a leg that
+      # landed on AWS stopped at Azure Login and waited for a person. This step
+      # runs first, before the checkout and before any credential reaches an
+      # environment. On AWS the job ends here, with nothing installed, used or
+      # written, and placement-reroll below sends the same dispatch again.
+      #
+      # Only an AWS answer stops the job: Amazon in DMI, or an AWS kernel when
+      # DMI names neither cloud. A runner that shows neither goes on, so a
+      # misreading can only end at Azure Login, as before; an Azure VM, which
+      # never reports Amazon DMI, is never sent round again. grade-run.yml's
+      # grade job runs this same script. Probe run 44359457502 read these
+      # values as the runner user, and as root in a job container, on both
+      # clouds.
+      - name: Refuse a runner outside Azure
+        id: placement
+        run: |
+          set -euo pipefail
+          # A GitHub re-run stops here, before any verdict, so placement-reroll
+          # stays skipped. Re-running a refused placement would start a second
+          # copy beside the one placement-reroll already sent, and Sol refuses
+          # re-runs anyway; every legitimate start is a fresh dispatch.
+          if [[ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]]; then
+            echo "::error::This is a re-run (attempt ${GITHUB_RUN_ATTEMPT}). Re-runs are refused. Look in the Actions list for the run placement-reroll already sent; if there is none, send a fresh dispatch with the same inputs."
+            exit 1
+          fi
+          # One line each, with any padding the firmware left trimmed.
+          dmi() {
+            local value=""
+            if [[ -r "/sys/class/dmi/id/$1" ]]; then
+              read -r value < "/sys/class/dmi/id/$1" || true
+            fi
+            printf '%s' "$value"
+          }
+          vendor="$(dmi sys_vendor)"
+          asset_tag="$(dmi chassis_asset_tag)"
+          kernel="$(uname -r)"
+          echo "[placement] sys_vendor='$vendor' chassis_asset_tag='$asset_tag' kernel='$kernel'"
+          # DMI first: it names the machine, while the kernel names the image.
+          # The kernel decides only when DMI shows neither cloud.
+          cloud=""
+          if [[ "$vendor" == "Microsoft Corporation" ||
+                "$asset_tag" == "7783-7084-3265-9085-8269-3286-77" ]]; then
+            cloud=azure
+          elif [[ "$vendor" == Amazon* || "$asset_tag" == Amazon* ]]; then
+            cloud=aws
+          elif [[ "$kernel" == *-azure* ]]; then
+            cloud=azure
+          elif [[ "$kernel" == *-aws* ]]; then
+            cloud=aws
+          fi
+          if [[ "$cloud" == azure ]]; then
+            echo "verdict=azure" >> "$GITHUB_OUTPUT"
+          elif [[ "$cloud" == aws ]]; then
+            echo "verdict=off-azure" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Runner outside Azure"
+              echo ""
+              echo "sys_vendor \`$vendor\`, kernel \`$kernel\`. Stopped before any credential was used; placement-reroll sends the same dispatch again. Do not re-run this run."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::This runner is on AWS, where the Azure login is refused. Stopped before any credential was used; placement-reroll sends the same dispatch again. Do not re-run this run."
+            exit 1
+          else
+            echo "::warning::This runner shows no Azure or AWS sign. Going on, so Azure Login decides as it did before."
+            echo "verdict=unknown" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -776,7 +857,7 @@ jobs:
           python3 scripts/diagnose_codex_sandbox_host.py
 
       - name: 'Codex: preserve pre-call sandbox evidence'
-        if: always() && needs.inspect-mode.outputs.uses_codex_foundry == 'true'
+        if: always() && steps.placement.outcome == 'success' && needs.inspect-mode.outputs.uses_codex_foundry == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codex-batch-sandbox-preflight
@@ -1157,6 +1238,8 @@ jobs:
           # after the first leg had already spent, which is the worst of both.
           # The person authorised this experiment, and its declared bounds
           # (attempts, turns, wall clock) span the whole run, not one leg.
+          # placement_attempt goes out as 1 rather than carried over: it counts
+          # the placements of one leg, and the next leg is a new request.
         run: |
           NEXT_RELAY=$(( RELAY_RUN_INPUT + 1 ))
           MAX_RELAYS="${{ steps.read_config.outputs.relay_max_runs }}"
@@ -1185,7 +1268,8 @@ jobs:
             -f dry_run="$DRY_RUN_INPUT" \
             -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST" \
             -f codex_foundry_confirmed="$CODEX_FOUNDRY_CONFIRMED_INPUT" \
-            -f comparison_reviewed_source_sha="$COMPARISON_REVIEWED_SOURCE_SHA_INPUT"
+            -f comparison_reviewed_source_sha="$COMPARISON_REVIEWED_SOURCE_SHA_INPUT" \
+            -f placement_attempt=1
 
           echo "Relay run #$NEXT_RELAY triggered. This run will now exit."
           exit 0
@@ -1485,7 +1569,7 @@ jobs:
 
       # ── Summary step ──
       - name: Show summary
-        if: always()
+        if: always() && steps.placement.outcome == 'success'
         run: |
           echo "════════════════════════════════════════"
           echo "📊 Batch Experiment Complete"
@@ -1498,7 +1582,7 @@ jobs:
 
       # ── Upload artifacts ──
       - name: Upload artifacts
-        if: always()
+        if: always() && steps.placement.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: batch-results-${{ github.run_id }}
@@ -1506,6 +1590,80 @@ jobs:
             batch-runner/workspace/
             batch-runner/results/
           retention-days: 30
+
+  # Sends the dispatch again when batch-run refused its runner for being
+  # outside Azure. A GitHub re-run cannot do this: a Sol run refuses any
+  # GITHUB_RUN_ATTEMPT but 1 (sol_batch_controls, sol_batch_grading), so it
+  # is a fresh workflow_dispatch on main with every input unchanged and
+  # placement_attempt one higher, and GitHub places the job again. This job
+  # holds no Azure or Hugging Face secret; its token can dispatch workflows
+  # and nothing else. It refuses to run as a re-run itself, and the guard
+  # refuses a re-run of the batch job, which would otherwise start a second
+  # copy of the leg beside the one sent here.
+  #
+  # Twenty placements at most, the dispatched one included, in both this
+  # file and grade-run.yml. The probe's simultaneous jobs split between the
+  # clouds, so each placement looks like a fresh draw: at an 80% AWS share,
+  # twenty all miss about 1% of the time. It cannot be tuned mid-experiment
+  # -- a relay leg refuses a batch-run.yml that changed since its first leg
+  # -- so it is set above the share seen so far. The wait grows by 30
+  # seconds per placement, to 3 minutes, plus up to 14 seconds of jitter.
+  placement-reroll:
+    needs: batch-run
+    if: ${{ !cancelled() && needs.batch-run.result == 'failure' && needs.batch-run.outputs.placement == 'off-azure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    steps:
+      - name: Send the same dispatch again
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
+          EXPERIMENT_NAME_INPUT: ${{ inputs.experiment_name }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          RELAY_RUN_INPUT: ${{ inputs.relay_run }}
+          RELAY_LINEAGE_ID_INPUT: ${{ inputs.relay_lineage_id }}
+          SOURCE_SHA_INPUT: ${{ inputs.source_sha }}
+          WALL_TIMEOUT_INPUT: ${{ inputs.wall_timeout }}
+          SANDBOX_IMAGE_DIGEST_INPUT: ${{ inputs.sandbox_image_digest }}
+          CODEX_FOUNDRY_CONFIRMED_INPUT: ${{ inputs.codex_foundry_confirmed }}
+          COMPARISON_REVIEWED_SOURCE_SHA_INPUT: ${{ inputs.comparison_reviewed_source_sha }}
+          PLACEMENT_ATTEMPT_INPUT: ${{ inputs.placement_attempt }}
+          MAX_PLACEMENTS: '20'
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
+            echo "::error::This is a re-run. Only a first attempt sends the dispatch again, so one refused run cannot start two legs. Check the Actions list for the run it sent before dispatching by hand."
+            exit 1
+          fi
+          [[ "$PLACEMENT_ATTEMPT_INPUT" =~ ^[1-9][0-9]?$ ]]
+          ATTEMPT=$(( 10#$PLACEMENT_ATTEMPT_INPUT ))
+          NEXT_ATTEMPT=$(( ATTEMPT + 1 ))
+          if (( NEXT_ATTEMPT > MAX_PLACEMENTS )); then
+            echo "::error::batch-run landed outside Azure on placement $ATTEMPT of $MAX_PLACEMENTS, the last this job sends. Dispatch it by hand with the same inputs and placement_attempt 1."
+            exit 1
+          fi
+          WAIT_SECONDS=$(( (ATTEMPT * 30 < 180 ? ATTEMPT * 30 : 180) + RANDOM % 15 ))
+          echo "Placement $ATTEMPT of $MAX_PLACEMENTS was outside Azure; sending placement $NEXT_ATTEMPT in ${WAIT_SECONDS}s."
+          sleep "$WAIT_SECONDS"
+          gh workflow run batch-run.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f experiment_yaml="$EXPERIMENT_YAML_INPUT" \
+            -f experiment_name="$EXPERIMENT_NAME_INPUT" \
+            -f dry_run="$DRY_RUN_INPUT" \
+            -f relay_run="$RELAY_RUN_INPUT" \
+            -f relay_lineage_id="$RELAY_LINEAGE_ID_INPUT" \
+            -f source_sha="$SOURCE_SHA_INPUT" \
+            -f wall_timeout="$WALL_TIMEOUT_INPUT" \
+            -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST_INPUT" \
+            -f codex_foundry_confirmed="$CODEX_FOUNDRY_CONFIRMED_INPUT" \
+            -f comparison_reviewed_source_sha="$COMPARISON_REVIEWED_SOURCE_SHA_INPUT" \
+            -f placement_attempt="$NEXT_ATTEMPT"
+          {
+            echo "### Sent again: runner was outside Azure"
+            echo ""
+            echo "batch-run.yml dispatched on main with the same inputs, placement $NEXT_ATTEMPT of $MAX_PLACEMENTS."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Waits for the result PR's dispatched checks in a job of its own. Inside the
   # batch job the wait shared the last leg's 360 minutes with a 170-minute

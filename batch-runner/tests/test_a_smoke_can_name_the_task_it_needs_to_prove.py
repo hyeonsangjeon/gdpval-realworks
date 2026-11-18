@@ -103,6 +103,7 @@ BASELINE = {
     "GRADE_SHARD_COUNT": "1",
     "GRADE_SHARD_INDEX": "0",
     "GRADE_RUN_ORDINAL": "1",
+    "GRADE_PLACEMENT_ATTEMPT": "1",
     "PATH": "/usr/bin:/bin",
 }
 
