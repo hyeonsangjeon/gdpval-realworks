@@ -1514,3 +1514,30 @@ core/grade_payload and the reader. Default historical inspection still refuses
 current drift. This is not frozen-grader-seal renewal, judge validation, a
 completed grade or credential supply. The protected GHCP environment/token
 remains absent by metadata-only inspection; no substitute token is obtained.
+
+## AHP adapter draft (2026-10-30 follow-up)
+
+The existing dispatch-only workflow offers `execution_adapter=ahp-draft`.
+Its connection-only follow-up adds one protected predecessor before the five
+tasks, with `connection_only=true` available to stop after that check. Empty
+auth is still `auth_source_unavailable` before host startup. No automatic CLI
+fallback or parallel paid workflow was added. The legacy `copilot-cli` default
+does not become a Codex Agent Host by virtue of this option.
+
+The offline AHP client counts 64 AHP turns / 32 tools / 1,200 seconds, closes
+client admission before cancel/dispose/owned-host termination and emits redacted
+JSON capture. **0** further client work notifications and **1** already-admitted
+client turn are the finite client-side bounds; server-internal model/tool request
+overshoot and real cancellation latency have **no finite proven bound**.
+Therefore the hard-cap card condition still blocks paid AHP use. Authentication
+also has not proved actual Sol/Max/1M or complete live capture. See the
+[controller/capture contract](ghcp-ahp-model-free-probe.md#client-side-limit-and-capture-follow-up-2026-10-30)
+for source citations, units, limitations and the unchanged model-free probe.
+
+The [connection-only contract](ghcp-ahp-model-free-probe.md#connection-only-prerequisite-2026-10-30)
+specifies the first owner dispatch command, 1-turn/0-tool/120s client limits,
+requested-versus-observed JSON and fail-closed admission. The pinned mapper's
+`usage.model` is a selection echo, so served model and actual thinking level
+remain `not_reported`; no successful five-task run is implied. The new
+`ahp-connection` and existing `paid-task` are the only protected runtime jobs
+referencing authentication. No push/model-free job can enter either one.
