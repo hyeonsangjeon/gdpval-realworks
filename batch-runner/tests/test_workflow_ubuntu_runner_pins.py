@@ -139,6 +139,49 @@ PLACEMENT_GUARD_PIN = (
     "5f41e8ff0941a516a6f4ae9f46438687268ee94622a6adf37782200e797c9992",  # plus result-pr-checks
     "c10622a6ffcdc2fd676aa27de3d6ea85a9cc27308f85ed0a47a26185e534842e",  # plus the placement guard
 )
+# A successor to #810, not a replacement for its historical byte contract.
+COMPARISON_INPUT_PROJECTION_PIN = (
+    PLACEMENT_GUARD_PIN[1],
+    "149d60e571ddbc6aae79ea78c76313a421e3805d1bbcf72e0d830253d377d718",
+)
+COMPARISON_INPUT_PROJECTION = '''          # Placement retries belong to ordinary batches, not this comparison.
+          # Remove only the default counter; keep every old input and its type.
+          COMPARISON_INPUTS="$(python3 -I - <<'PY'
+          import json
+          import os
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError("duplicate comparison input")
+                  result[key] = value
+              return result
+
+          values = json.loads(os.environ["COMPARISON_INPUTS"], object_pairs_hook=unique_object)
+          if type(values) is not dict:
+              raise SystemExit("comparison_placement_attempt_refused")
+          placement = values.pop("placement_attempt", None)
+          if not ((type(placement) is int and placement == 1) or
+                  (type(placement) is str and placement == "1")):
+              raise SystemExit("comparison_placement_attempt_refused")
+          print(json.dumps(values, allow_nan=False))
+          PY
+          )"
+'''
+
+
+def restore_pre_comparison_input_projection_bytes(data):
+    """Undo only the exact comparison adapter, preserving the #810 seal."""
+    before_hash, after_hash = COMPARISON_INPUT_PROJECTION_PIN
+    assert hashlib.sha256(data).hexdigest() == after_hash
+    addition = COMPARISON_INPUT_PROJECTION.encode("utf-8")
+    assert data.count(addition) == 1
+    restored = data.replace(addition, b"", 1)
+    assert hashlib.sha256(restored).hexdigest() == before_hash
+    return restored
+
+
 # Cut whole: the new job, up to the result-pr-checks comment, and the guard
 # step, up to the checkout that used to be the batch job's first step.
 PLACEMENT_CUTS = (
@@ -177,6 +220,8 @@ PLACEMENT_ADDED = (
 
 def restore_pre_placement_guard_bytes(data):
     """Undo exactly the placement guard and its re-send job, requiring both hashes."""
+    if hashlib.sha256(data).hexdigest() == COMPARISON_INPUT_PROJECTION_PIN[1]:
+        data = restore_pre_comparison_input_projection_bytes(data)
     before_hash, after_hash = PLACEMENT_GUARD_PIN
     assert hashlib.sha256(data).hexdigest() == after_hash
     text = data.decode("utf-8")
@@ -202,7 +247,9 @@ PREVIOUS_BATCH_RUNNER = (
 
 def restore_pre_ubuntu_2404_runner_bytes(name, data):
     """Undo exactly the approved runner lines, requiring both complete hashes."""
-    if name == "batch-run.yml" and hashlib.sha256(data).hexdigest() == PLACEMENT_GUARD_PIN[1]:
+    if name == "batch-run.yml" and hashlib.sha256(data).hexdigest() in (
+        PLACEMENT_GUARD_PIN[1], COMPARISON_INPUT_PROJECTION_PIN[1],
+    ):
         data = restore_pre_placement_guard_bytes(data)
     if name == "batch-run.yml" and hashlib.sha256(data).hexdigest() == RESULT_PR_JOB_PIN[1]:
         data = restore_pre_result_pr_job_bytes(data)
@@ -330,7 +377,7 @@ def test_the_result_pr_reconstruction_rejects_other_bytes(mutation):
 
 
 def test_the_placement_guard_is_the_only_change_after_the_result_pr_job():
-    current = (WORKFLOWS / "batch-run.yml").read_bytes()
+    current = restore_pre_comparison_input_projection_bytes((WORKFLOWS / "batch-run.yml").read_bytes())
     after = yaml.safe_load(current)
     before = yaml.safe_load(restore_pre_placement_guard_bytes(current))
     added = after[True]["workflow_dispatch"]["inputs"].pop("placement_attempt")
@@ -364,3 +411,11 @@ def test_the_placement_reconstruction_rejects_other_bytes(mutation):
     data = data + b"\n" if mutation == "extra_byte" else restore_pre_placement_guard_bytes(data)
     with pytest.raises(AssertionError):
         restore_pre_placement_guard_bytes(data)
+
+
+@pytest.mark.parametrize("mutation", ["extra_byte", "already_restored"])
+def test_the_comparison_input_reconstruction_rejects_other_bytes(mutation):
+    data = (WORKFLOWS / "batch-run.yml").read_bytes()
+    data = data + b"\n" if mutation == "extra_byte" else restore_pre_comparison_input_projection_bytes(data)
+    with pytest.raises(AssertionError):
+        restore_pre_comparison_input_projection_bytes(data)
