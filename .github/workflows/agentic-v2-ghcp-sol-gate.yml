@@ -24,6 +24,32 @@ on:
         type: boolean
         default: false
         required: true
+      execution_adapter:
+        description: AHP is a fail-closed draft until native hard caps and served settings are proved
+        type: choice
+        options: [copilot-cli, ahp-draft]
+        default: copilot-cli
+        required: true
+      connection_only:
+        description: For ahp-draft, stop after one CONNECTED turn; never run the fixed five
+        type: boolean
+        default: false
+        required: true
+      capability_only:
+        description: With ahp-draft and connection_only, query capabilities only; no session or model turn
+        type: boolean
+        default: false
+        required: true
+      authenticated_zero_turn:
+        description: One authenticated session/thread with bounded metadata GETs; no inference, fixed five or grader
+        type: boolean
+        default: false
+        required: true
+      default_policy_unpatched:
+        description: Separate choice-3 zero-turn observation of unpatched defaults; never read-only or paid admission
+        type: boolean
+        default: false
+        required: true
 
 permissions:
   contents: read
@@ -47,6 +73,25 @@ jobs:
             echo "::error::Paid execution is not implemented or approved."
             exit 2
           fi
+      # BEGIN DEFAULT_POLICY_SELECTION_GUARD
+      - name: Refuse mixed default-policy inputs before any runtime or credential
+        env:
+          DEFAULT_PROFILE: ${{ inputs.default_policy_unpatched }}
+          AUTH_ZERO: ${{ inputs.authenticated_zero_turn }}
+          PAID: ${{ inputs.execute_paid }}
+          DRY: ${{ inputs.dry_run }}
+          ADAPTER: ${{ inputs.execution_adapter }}
+          CONNECTION: ${{ inputs.connection_only }}
+          CAPABILITY: ${{ inputs.capability_only }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEFAULT_PROFILE" == true ]]; then
+            if [[ "$AUTH_ZERO" != true || "$PAID" != false || "$DRY" != true || "$ADAPTER" != ahp-draft || "$CONNECTION" != false || "$CAPABILITY" != false ]]; then
+              echo "::error::default_policy_unpatched is zero-turn observation only."
+              exit 2
+            fi
+          fi
+      # END DEFAULT_POLICY_SELECTION_GUARD
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # Offline fixtures archive the exact historical grader commit.
@@ -110,7 +155,9 @@ jobs:
             tests/test_ghcp_sol_actions_gate.py tests/test_ghcp_vm_gate_contract.py \
             tests/test_ghcp_vm_input_bundle.py tests/test_ghcp_sol_execution_adapter.py \
             tests/test_ghcp_sol_copilot_smoke.py tests/test_ghcp_sol_runner_environment.py \
-            tests/test_ghcp_sol_grader_contract.py tests/test_ghcp_sol_paid_gate.py
+            tests/test_ghcp_sol_grader_contract.py tests/test_ghcp_sol_paid_gate.py \
+            tests/test_ghcp_ahp_client.py tests/test_ghcp_ahp_connection.py \
+            tests/test_ghcp_ahp_probe.py tests/test_ghcp_ahp_wire_capture.py tests/test_ghcp_ahp_zero_turn.py tests/test_ghcp_ahp_metadata_broker.py
       - name: Fake-token projection only - never launch a CLI
         env:
           PYTHON_EXECUTABLE: ${{ steps.python.outputs.python-path }}
@@ -150,7 +197,7 @@ jobs:
   grader-contract:
     name: Step8 input layout and policy only (no judge)
     needs: [task, paid-task]
-    if: ${{ always() && !cancelled() && needs.task.result == 'success' }}
+    if: ${{ always() && !cancelled() && needs.task.result == 'success' && inputs.connection_only != true && inputs.capability_only != true && inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -208,6 +255,7 @@ jobs:
           include-hidden-files: false
 
   plan:
+    if: inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true
     needs: offline-ci
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -238,6 +286,7 @@ jobs:
 
   task:
     name: Dry capture - ${{ matrix.task_id }}
+    if: inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -281,10 +330,269 @@ jobs:
           retention-days: 7
           include-hidden-files: false
 
+  ahp-zero-turn:
+    name: Authenticated AHP session only - metadata GETs, zero inference
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.authenticated_zero_turn == true && inputs.execute_paid == false && inputs.dry_run == true && inputs.execution_adapter == 'ahp-draft' && inputs.connection_only == false && inputs.capability_only == false && inputs.default_policy_unpatched != true }}
+    needs: offline-ci
+    environment: ghcp-sol-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # Exact same-HEAD green push artifact, never a branch-latest build.
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: '3.12.11'
+      - name: Install only the pinned YAML reader without credentials
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Prepare pinned public AHP bytes without authentication or execution
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_probe.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - name: Fetch the unique green push build for this exact dispatch SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: hyeonsangjeon/gdpval-realworks
+        run: |
+          set -euo pipefail
+          umask 077
+          build_dir="$RUNNER_TEMP/ghcp-zero-turn/build"
+          mkdir -p "$build_dir"
+          gh api "repos/$GH_REPO/actions/workflows/ghcp-ahp-patched-runtime-tests.yml/runs?event=push&status=success&head_sha=$GITHUB_SHA&per_page=100" > "$build_dir/runs.json"
+          build_run="$(python -B batch-runner/ghcp_ahp_prewarm_zero_turn.py select \
+            --runs "$build_dir/runs.json" --output "$build_dir/selected.json")"
+          gh run download "$build_run" --repo "$GH_REPO" \
+            --name "ghcp-patched-load-payload-$build_run-1" --dir "$build_dir/transfer"
+      - name: Stage the tested config-before-prewarm build for zero-turn only
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_prewarm_zero_turn.py prepare \
+            --transfer "$RUNNER_TEMP/ghcp-zero-turn/build/transfer" \
+            --build "$RUNNER_TEMP/ghcp-zero-turn/build/selected.json" \
+            --base "$RUNNER_TEMP/ghcp-zero-turn/prepared" \
+            --output "$RUNNER_TEMP/ghcp-zero-turn/prewarm" \
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - id: runner-userns
+        name: Diagnose bwrap userns and prefer an exact-binary AppArmor profile
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - name: Authenticate once through the exact metadata broker with inference blocked
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GHCP_AUTHENTICATED_ZERO_TURN: 'true'
+          GHCP_PAID_EXECUTION: 'false'
+          GHCP_CONNECTION_ONLY: 'false'
+        run: |
+          set -euo pipefail
+          umask 077
+          # The broker owns exactly two metadata GETs. It launches Agent Host
+          # inside the same loopback-only netns/PID/privilege guards as before.
+          # No secret in argv/file; native/SDK traffic cannot bypass the broker.
+          timeout --signal=TERM --kill-after=10s 150s \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_metadata_broker.py" \
+              --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \
+              --prewarm-zero-turn-preparation "$RUNNER_TEMP/ghcp-zero-turn/prewarm/preparation.json" \
+              --runner-userns-receipt "$RUNNER_TEMP/ghcp-zero-turn/evidence/runner-userns.json" \
+              --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - name: Restore only this job's AppArmor profile or original userns sysctl
+        if: ${{ always() && steps.runner-userns.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py restore \
+            --prepared "$RUNNER_TEMP/ghcp-zero-turn/prewarm/runtime" \
+            --evidence "$RUNNER_TEMP/ghcp-zero-turn/evidence"
+      - name: Retain redacted zero-turn handshake and native evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-ahp-zero-turn-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-zero-turn/evidence/*.json
+            ${{ runner.temp }}/ghcp-zero-turn/evidence/summary.md
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  # BEGIN DEFAULT_POLICY_UNPATCHED_ZERO_TURN
+  ahp-default-policy-zero-turn:
+    name: Unpatched default-policy observation - zero turns, separate admission
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.authenticated_zero_turn == true && inputs.default_policy_unpatched == true && inputs.execute_paid == false && inputs.dry_run == true && inputs.execution_adapter == 'ahp-draft' && inputs.connection_only == false && inputs.capability_only == false }}
+    needs: offline-ci
+    environment: ghcp-sol-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: '3.12.11'
+      - name: Install only the pinned YAML reader without credentials
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Require this exact SHA's unique green push CI without using its patched build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: hyeonsangjeon/gdpval-realworks
+        run: |
+          set -euo pipefail
+          umask 077
+          evidence="$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+          mkdir -p "$evidence"
+          gh api "repos/$GH_REPO/actions/workflows/ghcp-ahp-patched-runtime-tests.yml/runs?event=push&status=success&head_sha=$GITHUB_SHA&per_page=100" > "$evidence/push-runs.json"
+          python -B batch-runner/ghcp_ahp_prewarm_zero_turn.py select \
+            --runs "$evidence/push-runs.json" --output "$evidence/green-ci.json"
+      - name: Prepare only the unchanged pinned vendor release and SDK, no overlay
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_probe.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+      - id: runner-userns
+        name: Preserve the sandbox and prepare only its exact bwrap userns permission
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+      - name: Authenticate once and observe one unpatched default-policy thread, never a turn
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GHCP_AUTHENTICATED_ZERO_TURN: 'true'
+          GHCP_PAID_EXECUTION: 'false'
+          GHCP_CONNECTION_ONLY: 'false'
+        run: |
+          set -euo pipefail
+          umask 077
+          timeout --signal=TERM --kill-after=10s 150s \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_metadata_broker.py" \
+              --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+              --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched" \
+              --runner-userns-receipt "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched/runner-userns.json" \
+              --admission-profile default_policy_unpatched
+      - name: Restore only this job's AppArmor profile or original userns sysctl
+        if: ${{ always() && steps.runner-userns.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_runner_userns.py restore \
+            --prepared "$RUNNER_TEMP/ghcp-default-unpatched/prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-default-unpatched/default_policy_unpatched"
+      - name: Retain the separately labeled default-policy evidence, never runtime state
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-ahp-default-policy-unpatched-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ghcp-default-unpatched/default_policy_unpatched/*.json
+            ${{ runner.temp }}/ghcp-default-unpatched/default_policy_unpatched/default-policy-unpatched-summary.md
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+  # END DEFAULT_POLICY_UNPATCHED_ZERO_TURN
+
+  ahp-connection:
+    name: AHP connection only - one turn, zero tool approvals
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.execution_adapter == 'ahp-draft' && inputs.authenticated_zero_turn != true && inputs.default_policy_unpatched != true }}
+    needs: plan
+    environment: ghcp-sol-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      verified: ${{ steps.connection.outputs.verified }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: python
+        with:
+          python-version: '3.12.11'
+      - name: Install only the pinned YAML reader without credentials
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Verify the runner and prepare pinned public AHP bytes without execution
+        run: |
+          set -euo pipefail
+          umask 077
+          python -B batch-runner/ghcp_ahp_probe.py prepare \
+            --prepared "$RUNNER_TEMP/ghcp-connection-prepared" \
+            --evidence "$RUNNER_TEMP/ghcp-connection-preparation"
+      - name: Reject empty auth and query capabilities or send one connection turn
+        id: connection
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GHCP_PAID_EXECUTION: 'true'
+          GHCP_CONNECTION_ONLY: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          connection_args=()
+          if [[ '${{ inputs.capability_only }}' == true ]]; then
+            [[ '${{ inputs.connection_only }}' == true ]]
+            connection_args+=(--capability-only)
+          fi
+          connection_uid="$(id -u)"
+          connection_gid="$(id -g)"
+          export GHCP_CONNECTION_OUTSIDE_PIDNS="$(readlink /proc/self/ns/pid)"
+          # Only named environment entries survive sudo; no token in argv/file.
+          # This dispatch-only PID namespace has outbound network; the free
+          # push probe retains its separate network-denied namespace/allowlist.
+          timeout --signal=TERM --kill-after=5s 130s \
+            sudo --preserve-env=COPILOT_GITHUB_TOKEN,GHCP_PAID_EXECUTION,GHCP_CONNECTION_ONLY,GHCP_CONNECTION_OUTSIDE_PIDNS,GITHUB_ACTIONS,GITHUB_EVENT_NAME,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,RUNNER_ENVIRONMENT,RUNNER_NAME,RUNNER_OS,RUNNER_ARCH,ImageOS,ImageVersion \
+            unshare --mount --pid --fork --mount-proc --kill-child=KILL \
+            /usr/bin/setpriv --reuid="$connection_uid" --regid="$connection_gid" --init-groups \
+              --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            '${{ steps.python.outputs.python-path }}' -B "$GITHUB_WORKSPACE/batch-runner/ghcp_ahp_connection.py" \
+              --prepared "$RUNNER_TEMP/ghcp-connection-prepared" \
+              --evidence "$RUNNER_TEMP/ghcp-connection-preparation" \
+              --state "$RUNNER_TEMP/ghcp-connection-private" --output "$RUNNER_TEMP/ghcp-connection-export" \
+              "${connection_args[@]}"
+          # Catalog/policy advertisements never verify a served connection.
+          if [[ '${{ inputs.capability_only }}' == true ]]; then
+            printf 'verified=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'verified=true\n' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retain redacted connection receipt and capture only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcp-ahp-connection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ghcp-connection-export/*.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
   paid-task:
     name: Paid task - ${{ matrix.task_id }}
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false }}
-    needs: plan
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.execute_paid == true && inputs.dry_run == false && inputs.connection_only != true && inputs.capability_only != true && inputs.authenticated_zero_turn != true && needs.plan.result == 'success' && (inputs.execution_adapter != 'ahp-draft' || (needs.ahp-connection.result == 'success' && needs.ahp-connection.outputs.verified == 'true')) && inputs.default_policy_unpatched != true }}
+    needs: [plan, ahp-connection]
     environment: ghcp-sol-gate
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -295,6 +603,7 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       GHCP_PAID_EXECUTION: 'true'
+      GHCP_EXECUTION_ADAPTER: ${{ inputs.execution_adapter || 'copilot-cli' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -309,12 +618,14 @@ jobs:
           PIP_CONFIG_FILE: /dev/null
         run: python -m pip install --disable-pip-version-check -r batch-runner/requirements-ghcp-sol-gate.txt
       - name: Prepare only hash-pinned public original inputs without authentication
+        if: inputs.execution_adapter != 'ahp-draft'
         run: |
           set -euo pipefail
           umask 077
           timeout --signal=TERM --kill-after=5s 300s \
             python batch-runner/ghcp_sol_paid_gate.py --prepare-inputs "$RUNNER_TEMP/ghcp-paid-inputs"
       - name: Install the pinned CLI without launching it
+        if: inputs.execution_adapter != 'ahp-draft'
         run: |
           set -euo pipefail
           umask 077
@@ -326,6 +637,12 @@ jobs:
           printf '%s  %s\n' 9aeb4430e9ac9523546db07b227c7aba179a4710a55f9ac29ad143b0f9e1b325 "$cli_dir/release.tar.gz" | sha256sum --check --status
           tar --extract --gzip --file "$cli_dir/release.tar.gz" --directory "$cli_dir" --no-same-owner --no-same-permissions
           printf '%s  %s\n' f19b3554a6b62605db3a26d5255ebe2a3ee39fcd6a357edb18301ea5037f6f0d "$cli_dir/copilot" | sha256sum --check --status
+      - name: Fetch this run's AHP connection evidence before task admission
+        if: inputs.execution_adapter == 'ahp-draft'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ghcp-ahp-connection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ghcp-connection-receipt
       - name: Reject empty auth then supervise exactly one fixed task
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -335,9 +652,11 @@ jobs:
           umask 077
           timeout --signal=TERM --kill-after=5s 1230s \
             python batch-runner/ghcp_sol_paid_gate.py --task-id "$TASK_ID" \
+              --adapter "$GHCP_EXECUTION_ADAPTER" \
               --copilot-bin "$RUNNER_TEMP/ghcp-paid-cli/copilot" \
               --bundle "$RUNNER_TEMP/ghcp-paid-inputs/bundle" \
-              --state-root "$RUNNER_TEMP/ghcp-paid-state" --output "$RUNNER_TEMP/ghcp-paid-export"
+              --state-root "$RUNNER_TEMP/ghcp-paid-state" --output "$RUNNER_TEMP/ghcp-paid-export" \
+              --connection-receipt "$RUNNER_TEMP/ghcp-connection-receipt/connection.json"
       - name: Retain only checked captures - never HOME config or raw state
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
