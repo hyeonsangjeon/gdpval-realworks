@@ -67,6 +67,11 @@ on:
         required: false
         type: number
         default: 1
+      placement_attempt:
+        description: "Which placement of this same request this is (1 = as dispatched). Raised only by placement-reroll, which sends a paid grade again when its runner was outside Azure; at most 20."
+        required: false
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -83,6 +88,14 @@ concurrency:
   # Repeats write to separate paths and could safely overlap, but a variance
   # measurement gains nothing from running them at once and would bill two full
   # corpora against one judge quota simultaneously. Queuing them is free.
+  #
+  # placement_attempt is absent for the reason shard_count is. A request that
+  # placement-reroll sends again is the same chunk of the same shard, so it
+  # has to queue behind the run that sent it, never start beside another copy.
+  # GitHub keeps one pending run per group, so a dispatch into the group while
+  # the re-sent run waits replaces it, and the re-sent run replaces one that
+  # was already waiting. A Sol chunk chain is unsharded and sequential, so
+  # nothing else waits there unless someone dispatches the same chunk by hand.
   group: grade-${{ inputs.experiment_yaml }}-${{ inputs.grading_config }}-shard${{ inputs.shard_index }}
   cancel-in-progress: false
 
@@ -107,6 +120,7 @@ jobs:
       GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
       GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
+      GRADE_PLACEMENT_ATTEMPT: ${{ inputs.placement_attempt }}
     steps:
       - name: Validate workflow context and inputs
         id: validate
@@ -258,6 +272,11 @@ jobs:
             echo "::error::run_ordinal must be an integer between 1 and 10"
             exit 1
           fi
+          # Twenty is placement-reroll's cap; see the note above that job.
+          if [[ ! "$GRADE_PLACEMENT_ATTEMPT" =~ ^([1-9]|1[0-9]|20)$ ]]; then
+            echo "::error::placement_attempt must be an integer between 1 and 20"
+            exit 1
+          fi
 
       # A resume chunk is not a new spending decision. `rerun_identity` pins the
       # corpus (task_ids + expected_task_count), so the bill is bounded the
@@ -406,7 +425,7 @@ jobs:
           emit true
 
   approve-paid:
-    name: Approve paid Sol Max grading (${{ inputs.experiment_yaml }}, ${{ inputs.grading_config }}, chunk ${{ inputs.resume_chunk }}, shard ${{ inputs.shard_index }}/${{ inputs.shard_count }})
+    name: Approve paid Sol Max grading (${{ inputs.experiment_yaml }}, ${{ inputs.grading_config }}, chunk ${{ inputs.resume_chunk }}, shard ${{ inputs.shard_index }}/${{ inputs.shard_count }}, placement ${{ inputs.placement_attempt }})
     needs: validate-request
     # Skipped only for a bot-dispatched resume chunk that proved it continues an
     # already-approved lineage (see "Resolve inherited paid approval").
@@ -797,6 +816,10 @@ jobs:
     outputs:
       published_commits: ${{ steps.published.outputs.commits }}
       published_head: ${{ steps.published.outputs.head }}
+      # Read by placement-reroll. "Refuse a runner outside Azure" writes it
+      # before failing the job, and a failed job keeps its outputs --
+      # verify-published reads published_commits the same way.
+      placement: ${{ steps.placement.outputs.verdict }}
     env:
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
       # The same name as one component. An experiment may sit in a directory,
@@ -889,6 +912,73 @@ jobs:
         run: |
           echo "PUBLISHED_COMMITS_FILE=$RUNNER_TEMP/published_commits.txt" \
             >> "$GITHUB_ENV"
+
+      # GitHub now places ubuntu-24.04 jobs on AWS as well as on Azure
+      # (changelog 2026-10-28), and the Azure tenant's Conditional Access
+      # refuses an OIDC login from outside Azure (AADSTS53003): after the
+      # approval and before any spend, with the run stuck. This step settles it
+      # before the first credential -- the checkout below is the first step
+      # that holds one. On AWS the job ends here and placement-reroll below
+      # sends the same request again.
+      #
+      # The same script as batch-run.yml's batch job. Inside the container DMI
+      # still reads the host's values (sysfs is not namespaced for DMI) and
+      # uname the host's kernel; probe run 44359457502 read them as root and
+      # as uid 1001 on both clouds. Only an AWS answer stops the job, so a
+      # misreading can only end at the login, as before. The verdict is
+      # written before the step fails.
+      - name: Refuse a runner outside Azure
+        id: placement
+        run: |
+          set -euo pipefail
+          # A GitHub re-run stops here, before any verdict, so placement-reroll
+          # stays skipped. Re-running a refused placement would start a second
+          # copy beside the one placement-reroll already sent, and Sol refuses
+          # re-runs anyway; every legitimate start is a fresh dispatch.
+          if [[ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]]; then
+            echo "::error::This is a re-run (attempt ${GITHUB_RUN_ATTEMPT}). Re-runs are refused. Look in the Actions list for the run placement-reroll already sent; if there is none, send a fresh dispatch with the same inputs."
+            exit 1
+          fi
+          # One line each, with any padding the firmware left trimmed.
+          dmi() {
+            local value=""
+            if [[ -r "/sys/class/dmi/id/$1" ]]; then
+              read -r value < "/sys/class/dmi/id/$1" || true
+            fi
+            printf '%s' "$value"
+          }
+          vendor="$(dmi sys_vendor)"
+          asset_tag="$(dmi chassis_asset_tag)"
+          kernel="$(uname -r)"
+          echo "[placement] sys_vendor='$vendor' chassis_asset_tag='$asset_tag' kernel='$kernel'"
+          # DMI first: it names the machine, while the kernel names the image.
+          # The kernel decides only when DMI shows neither cloud.
+          cloud=""
+          if [[ "$vendor" == "Microsoft Corporation" ||
+                "$asset_tag" == "7783-7084-3265-9085-8269-3286-77" ]]; then
+            cloud=azure
+          elif [[ "$vendor" == Amazon* || "$asset_tag" == Amazon* ]]; then
+            cloud=aws
+          elif [[ "$kernel" == *-azure* ]]; then
+            cloud=azure
+          elif [[ "$kernel" == *-aws* ]]; then
+            cloud=aws
+          fi
+          if [[ "$cloud" == azure ]]; then
+            echo "verdict=azure" >> "$GITHUB_OUTPUT"
+          elif [[ "$cloud" == aws ]]; then
+            echo "verdict=off-azure" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Runner outside Azure"
+              echo ""
+              echo "sys_vendor \`$vendor\`, kernel \`$kernel\`. Stopped before any credential was used; placement-reroll sends the same dispatch again. Do not re-run this run."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::This runner is on AWS, where the Azure login is refused. Stopped before any credential was used; placement-reroll sends the same dispatch again. Do not re-run this run."
+            exit 1
+          else
+            echo "::warning::This runner shows no Azure or AWS sign. Going on, so Azure Login decides as it did before."
+            echo "verdict=unknown" >> "$GITHUB_OUTPUT"
+          fi
 
       # Held on the v5 line on purpose. checkout v6 moved persisted
       # credentials out of .git/config into a separate file referenced by an
@@ -1673,6 +1763,9 @@ jobs:
                   # where it would either be refused or overwrite the run this
                   # one exists to be compared against.
                   "run_ordinal": os.environ["GRADE_RUN_ORDINAL"],
+                  # The next chunk is a new request and starts its own count
+                  # of placements; see placement-reroll.
+                  "placement_attempt": "1",
               },
           }))
           PY
@@ -2033,6 +2126,103 @@ jobs:
             ${{ steps.analysis.outputs.analysis_file }}
           retention-days: 30
 
+  # Sends a paid grade again when "Refuse a runner outside Azure" stopped
+  # it. That step runs before the first credential, so the stopped run
+  # graded, spent and wrote nothing, and the same request -- every input as it
+  # was dispatched, placement_attempt plus one -- is asked for again so GitHub
+  # places it afresh.
+  #
+  # A fresh dispatch, never a re-run: sol_batch_grading refuses a run attempt
+  # above 1, and so does this job's `if`. It is the POST the chunk relay makes,
+  # with the same token, and the new run meets the same gates as any other.
+  # Chunk 0 asks the grading environment again, because chunk 0 is the click
+  # that authorizes the corpus. A later chunk sent by this bot inherits through
+  # "Resolve inherited paid approval" on the receipt the relay's own dispatch
+  # used -- chunk N-1's partial, which the stopped run never touched.
+  #
+  # placement_attempt is not in the concurrency key, so the new run is its
+  # group's one pending run until this one ends: the wait the relay's next
+  # chunk already makes. Being the one pending run, it replaces a run already
+  # waiting in the group and is replaced by a later dispatch into it; see the
+  # note on the concurrency group.
+  #
+  # Twenty placements at most, the dispatched one included, as in
+  # batch-run.yml. At an 80% AWS share twenty misses in a row is about 1%,
+  # and a chain that runs out stops red, which is where every off-Azure run
+  # stopped before this job existed. The wait before each send grows by 30s
+  # to 3min: enough not to resubmit straight into the same run of AWS
+  # placements, short enough that an owner approving a re-sent chunk 0 is
+  # not left waiting.
+  placement-reroll:
+    needs: [grade]
+    if: >-
+      ${{
+        !cancelled() &&
+        github.run_attempt == '1' &&
+        !startsWith(inputs.experiment_yaml, 'pilot/') &&
+        !startsWith(inputs.experiment_yaml, 'retention/') &&
+        needs.grade.result == 'failure' &&
+        needs.grade.outputs.placement == 'off-azure'
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Only what the POST needs: no checkout, environment or OIDC identity.
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Send the same request again for a new placement
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Every input as this run received it. A body built from the whole
+          # context cannot leave one out, which a hand-written one can.
+          DISPATCHED_INPUTS: ${{ toJSON(inputs) }}
+          MAX_PLACEMENTS: "20"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import random
+          import time
+
+          # The dispatch API takes every input as a string, as the relay sends
+          # them; the context holds booleans as booleans and numbers as the
+          # dispatcher spelled them. bool is tested first because a bool is
+          # also an int. An input the context leaves out (an empty optional
+          # string) is left out again and takes the same default.
+          body = {}
+          for name, value in json.loads(os.environ["DISPATCHED_INPUTS"]).items():
+              if isinstance(value, bool):
+                  body[name] = "true" if value else "false"
+              elif isinstance(value, (int, float)) and float(value).is_integer():
+                  body[name] = str(int(value))
+              elif isinstance(value, str):
+                  body[name] = value
+              else:
+                  raise SystemExit(f"input {name} arrived as {value!r}; not sending")
+          attempt = int(body.get("placement_attempt", "1"))
+          cap = int(os.environ["MAX_PLACEMENTS"])
+          if not 1 <= attempt < cap:
+              print(f"::error::placement {attempt} of {cap} was outside Azure as well; not sending again. Dispatch it by hand with the same inputs and placement_attempt 1.")
+              raise SystemExit(1)
+          body["placement_attempt"] = str(attempt + 1)
+          wait = min(30 * attempt, 180) + random.randrange(15)
+          print(f"[placement] placement {attempt} of {cap} was off Azure; sending {attempt + 1} in {wait}s", flush=True)
+          time.sleep(wait)
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "placement.json"), "w", encoding="utf-8") as handle:
+              json.dump({"ref": os.environ["GITHUB_REF_NAME"], "inputs": body}, handle)
+          PY
+          # --fail-with-body for the relay's reason: a refused dispatch says why.
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "@$RUNNER_TEMP/placement.json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/grade-run.yml/dispatches"
+          echo "[placement] sent"
+
   # Reserved pilot/ and retention/ selectors never enter generic paid/resume/publication
   # jobs above. These jobs leave inference completion-v1 and HF main unchanged.
   pilot-plan:
@@ -2122,6 +2312,12 @@ jobs:
               strings = {"experiment_yaml", "grading_config", "inference_revision", "tasks"}
               optional = {"inference_revision", "tasks"}
               allowed = numbers | booleans | strings
+              # placement-reroll's counter is not part of a pilot request:
+              # a pilot is never sent again, so only the default passes, and it
+              # stays out of the digest pilot-live recomputes.
+              placement = inputs.pop("placement_attempt", "1") if type(inputs) is dict else "1"
+              if placement != "1" and not (type(placement) is int and placement == 1):
+                  raise ValueError
               if type(inputs) is not dict or not (allowed - optional) <= inputs.keys() <= allowed:
                   raise ValueError
               for key in optional:

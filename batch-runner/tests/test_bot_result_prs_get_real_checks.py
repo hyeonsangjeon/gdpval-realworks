@@ -355,6 +355,8 @@ def test_the_pr_it_waits_for_is_the_one_the_last_leg_dispatched(batch_run: dict)
     assert batch["outputs"] == {
         "result_pr_number": "${{ steps.dispatch_checks.outputs.pr_number }}",
         "result_pr_head_sha": "${{ steps.dispatch_checks.outputs.pr_head_sha }}",
+        # For placement-reroll, not this job; test_a_batch_job_off_azure_is_sent_again.
+        "placement": "${{ steps.placement.outputs.verdict }}",
     }
     # Written only after both dispatches succeeded (set -euo pipefail), so an
     # empty output means nothing was dispatched and nothing is waited for.

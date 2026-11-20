@@ -84,6 +84,9 @@ CONTRACT_BASE = {
     "RELAY_LINEAGE_ID": "exp035:1:1",
     "SOURCE_SHA": "a" * 40,
     "SANDBOX_IMAGE_DIGEST": "",
+    # Without it `set -u` stops the contract at an unbound variable, and every
+    # refusal below would pass for that reason instead of its own.
+    "PLACEMENT_ATTEMPT": "1",
 }
 
 
