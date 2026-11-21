@@ -1827,6 +1827,30 @@ jobs:
           WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
+          # Placement retries belong to ordinary batches, not this comparison.
+          # Remove only the default counter; keep every old input and its type.
+          COMPARISON_INPUTS="$(python3 -I - <<'PY'
+          import json
+          import os
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError("duplicate comparison input")
+                  result[key] = value
+              return result
+
+          values = json.loads(os.environ["COMPARISON_INPUTS"], object_pairs_hook=unique_object)
+          if type(values) is not dict:
+              raise SystemExit("comparison_placement_attempt_refused")
+          placement = values.pop("placement_attempt", None)
+          if not ((type(placement) is int and placement == 1) or
+                  (type(placement) is str and placement == "1")):
+              raise SystemExit("comparison_placement_attempt_refused")
+          print(json.dumps(values, allow_nan=False))
+          PY
+          )"
           # No relay/watchdog wrapper, source-checkout inference, credentials or
           # data fetch. Only compiled prepared-checkout argv are bound, not run.
           env -u PYTHONPATH python3 -I batch-runner/gpt54_workflow_gate.py \
