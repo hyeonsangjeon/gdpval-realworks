@@ -32,6 +32,19 @@
 # list-meter remainders. Expected spend at tenant rates is about 54 (p99.9
 # about 128). The ten first attempts stay booked in exp039 and exp040.
 #
+# If every attempt booked the whole 30 reserve (a cascade of attempts with no
+# reported usage), five would start. A turn that uses Codex's sub-agent tools
+# books its row at list_long_context plus 30 per sub-agent thread
+# (sol_batch_controls.sub_agent_bound_usd), so four threads in one turn, or
+# one in each of four turns, close the gate; exp039's solve ledgers replay at
+# the observed rates to within 0.27 of its bill (192.57 against 192.84), so
+# Sol used no sizable sub-agents there. If the solve closes
+# usd_ceiling_reached with any "*_with_sub_agents" basis in its controls
+# record, that is a booking-rule stop, not an Azure cascade: report it as
+# one and ask the owner before anything else. No re-dispatch under 220 can
+# follow it, because prior_lineage_spend_usd would carry the booked spend,
+# already above the 120 admit line.
+#
 # Renderer
 # --------
 #
@@ -58,8 +71,10 @@
 # paid approval"). The grade covers the whole registered list:
 # sol_batch_grading.py refuses a dispatch that names tasks or a task limit.
 #
-# Resume stays off, and the money and relay rules are exp037's (see that
-# file's header), with this run's names.
+# Resume stays off, and the relay rules are exp037's (see that file's
+# header) with this run's names and figures: the attempt reserve here is 30,
+# on tenant_observed_20261126, not exp037's 51 at the list meter. The money
+# and its booking basis are above.
 
 experiment:
   id: "exp041_sol_retry10"

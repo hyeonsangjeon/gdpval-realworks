@@ -30,6 +30,14 @@ entries land under a fresh dated heading the day they merge to `main`.
     attempt (at least the 29.385 in-flight bound), so attempts start while
     booked solve spend <= 120.00. Twins in `sol_batch_controls.RUNS` and
     `sol_batch_grading.APPROVALS`.
+  - If every attempt booked the whole reserve, five would start. A turn
+    that uses Codex's sub-agent tools books its row at `list_long_context`
+    plus 30 per sub-agent thread (`sub_agent_bound_usd`), so four threads in
+    one turn, or one in each of four turns, close the gate; exp039's solve
+    ledgers replay at the observed rates to within 0.27 of its bill (192.57
+    against 192.84), so Sol used no sizable sub-agents there. Such a stop is
+    a booking-rule stop, not an Azure cascade, and no re-dispatch under 220
+    can follow it.
   - exp039's and exp040's remaining limits (947.32 and 1,025.87 of their USD
     2,500) are `list_long_context` dollars, a different unit from exp041's
     tenant dollars. At the worst list/tenant ratio (22.50 / 5.25, uncached

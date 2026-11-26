@@ -326,7 +326,15 @@ RUNS: Mapping[str, SolRun] = MappingProxyType({run.experiment_id: run for run in
     # tenant_observed_20261126. USD 220 = 150 solve + 70 grading; 30 per
     # attempt (at least the 29.385 in-flight bound), so attempts start while
     # booked solve spend <= 120; if every attempt booked the whole reserve,
-    # five would start. The ceiling is in tenant dollars; exp039's and
+    # five would start. A turn that uses Codex's sub-agent tools books its
+    # row at list_long_context plus 30 per sub-agent thread
+    # (sub_agent_bound_usd), so four threads in one turn, or one in each of
+    # four turns, close the gate; exp039's solve ledgers replay at the
+    # observed rates to within 0.27 of its bill (192.57 against 192.84), so
+    # Sol used no sizable sub-agents there. Such a stop is a booking-rule
+    # stop, not an Azure cascade, and no re-dispatch under 220 can follow
+    # it: prior_lineage_spend_usd would carry the booked spend, already above
+    # the 120 admit line. The ceiling is in tenant dollars; exp039's and
     # exp040's remaining limits (947.32 and 1,025.87) are list_long_context
     # dollars, a different unit. At the worst list/tenant ratio (22.50 / 5.25
     # = 4.2857, uncached input) 220 is at most 942.86 at the list meter,

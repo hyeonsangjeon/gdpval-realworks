@@ -274,9 +274,32 @@ NOT_RETRIED_ZEROS = {
 }
 
 
+#: The parents' root grades the readout reads, by grader source fingerprint: a
+#: later grader-side regrade of either lands a second root grade beside it, as
+#: exp036's selector-fix regrade did.
+PARENT_GRADE_SOURCES = {EXP039: "src_f5fce752e314d028", EXP040: "src_ee5c88d4c83496a7"}
+
+
 def _root_grade(experiment_id: str) -> dict:
-    (path,) = sorted((REPO_ROOT / "data/grades").glob(f"{experiment_id}__judge_*__v2.2.json"))
+    source = PARENT_GRADE_SOURCES[experiment_id]
+    (path,) = sorted((REPO_ROOT / "data/grades").glob(f"{experiment_id}__judge_*__{source}__v2.2.json"))
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_a_parents_second_root_grade_does_not_move_the_one_exp041_is_checked_against(tmp_path, monkeypatch):
+    grades = tmp_path / "data/grades"
+    grades.mkdir(parents=True)
+    for parent, source in PARENT_GRADE_SOURCES.items():
+        (path,) = sorted((REPO_ROOT / "data/grades").glob(f"{parent}__judge_*__{source}__v2.2.json"))
+        (grades / path.name).write_bytes(path.read_bytes())
+        # A grader-side regrade of the same inference lands beside it.
+        regrade = json.loads(path.read_text(encoding="utf-8"))
+        regrade["tasks"] = []
+        (grades / path.name.replace(source, "src_0123456789abcdef")).write_text(json.dumps(regrade), encoding="utf-8")
+    monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+    for parent in PARENT_GRADE_SOURCES:
+        assert len(list(grades.glob(f"{parent}__judge_*__v2.2.json"))) == 2
+        assert len(_root_grade(parent)["tasks"]) in (98, 97)
 
 
 def test_exp041_is_the_ten_azure_side_failures_in_exp038s_order():
@@ -350,6 +373,58 @@ def test_exp041_holds_the_owner_approved_ceiling_on_the_tenant_basis():
               listed.cached_input / booked.cached_input, listed.output / booked.output)
     assert max(ratios) == ratios[0] == Decimal("22.50") / Decimal("5.25")
     assert run.ceiling_usd * Decimal("22.50") / Decimal("5.25") <= min(remainders)
+
+
+def _comment_prose(text: str, marker: str = "#") -> str:
+    """The comment lines of ``text`` as one whitespace-collapsed paragraph."""
+    lines = (line.strip() for line in text.splitlines())
+    return " ".join(" ".join(line[len(marker):].split()) for line in lines if line.startswith(marker))
+
+
+def test_exp041s_money_text_names_the_sub_agent_stop_with_its_figures():
+    # A turn that names sub-agent threads has no request size, so its row books
+    # at list_long_context, and each thread adds the attempt reserve on top.
+    run = controls.RUNS[EXP041]
+    tenant = controls.load_booking_rates(run.booking_basis)
+    row = {"state": "settled", "input_tokens": 400_000, "cached_input_tokens": 300_000, "output_tokens": 2_000,
+           "reasoning_tokens": 0}
+    unsized = {"tier_request_input_tokens": None}
+
+    def booked(threads: int) -> tuple[Decimal, str]:
+        sizes = SimpleNamespace(sub_agent_items=threads, sub_agent_threads=threads)
+        bound = controls.sub_agent_bound_usd(sizes, rates=tenant, reserve=run.attempt_reserve_usd)
+        evidence = dict(unsized, sub_agent_usd=bound) if bound is not None else unsized
+        return controls.book_row(row, rates=tenant, reserve=run.attempt_reserve_usd, evidence=evidence)
+
+    assert booked(0) == (Decimal("2.64"), "settled")
+    assert booked(3) == (Decimal("92.64"), "settled_with_sub_agents")
+    assert booked(4) == (Decimal("122.64"), "settled_with_sub_agents")
+    admit = run.admit_while_at_most_usd
+    # Four threads in one turn close the gate after the first task; one in
+    # each turn closes it after the fourth.
+    assert booked(3)[0] <= admit < booked(4)[0]
+    assert 3 * booked(1)[0] <= admit < 4 * booked(1)[0]
+    # The money text says so wherever it describes the gate.
+    controls_text = (BATCH_RUNNER / "sol_batch_controls.py").read_text(encoding="utf-8")
+    entry = controls_text[controls_text.index("# Owner approval 2026-11-26"):controls_text.index('experiment_id="exp041_sol_retry10"')]
+    header = (EXPERIMENTS / f"{EXP041}.yaml").read_text(encoding="utf-8").split("\nexperiment:")[0]
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    changelog = " ".join(changelog[changelog.index("Register `exp041_sol_retry10`"):].split("\n- ")[0].split())
+    for text in (_comment_prose(entry), _comment_prose(header), changelog.replace("`", "")):
+        for phrase in ("plus 30 per sub-agent thread",
+                       "four threads in one turn, or one in each of four turns, close the gate",
+                       "booking-rule stop, not an Azure cascade",
+                       "within 0.27 of its bill (192.57 against 192.84)"):
+            assert phrase in text, phrase
+
+
+def test_exp041s_header_does_not_send_its_reader_to_exp037s_reserve():
+    header = _comment_prose((EXPERIMENTS / f"{EXP041}.yaml").read_text(encoding="utf-8").split("\nexperiment:")[0])
+    assert "the money and relay rules are exp037's" not in header
+    assert ("the attempt reserve here is 30, on tenant_observed_20261126, not exp037's 51 at the list meter"
+            in header)
+    exp037 = _comment_prose((EXPERIMENTS / f"{EXP037}.yaml").read_text(encoding="utf-8").split("\nexperiment:")[0])
+    assert "plus the 51 attempt reserve" in exp037 and controls.RUNS[EXP041].attempt_reserve_usd == 30
 
 
 # -- the experiment files ---------------------------------------------------------
