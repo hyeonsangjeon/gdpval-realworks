@@ -1,0 +1,173 @@
+# Codex against Foundry — GPT-5.6 Sol, exp039's and exp040's ten Azure-side failures, again
+# ========================================================================================
+#
+# Owner decision 2026-11-26 ("Azure 오류 10건"): the ten tasks exp039_sol_next98
+# and exp040_sol_last97 lost to Azure-side failures are solved and graded once
+# more, with exp040's setup and judge. Only these ten: the two stages'
+# content-filter and grader-side zeros are not in it. Each task's 1-based
+# position in its parent and its first failure:
+#
+#   exp039 #20 2fa8e956, #36 46b34f78            network
+#   exp039 #43 4c18ebae, #54 5a2d70da            Foundry 507 (request buffer limit while retrying upstream)
+#   exp040 #82-#87 efca245f, f1be6436, f2986c1f,  peak-load refusals, 23:53:47-23:55:34 UTC on 2026-11-24
+#          f3351922, f5d428fd, f841ddcf
+#
+# step 2 retries neither turn_failed nor transport_error within a run, so a
+# new run is the only retry. The ten keep exp038_sol_rest195's order:
+#
+#   ordered_task_ids_sha256  58675014aed6ab580517aca4abd58d7d8f074cec8fd95bfcc63c0bf8b1be8cf2
+#   10 tasks, 550 rubric items (exp039's four 195, exp040's six 355)
+#
+# Money (sol_batch_controls.RUNS and sol_batch_grading.APPROVALS)
+# ---------------------------------------------------------------
+#
+# USD 220 for this solve and its grade together, owner 2026-11-26
+# ("USD 220 (추천)"), booked on tenant_observed_20261126, the first run on
+# that basis. 220 = 150 solve + 70 grading; 30 per attempt, so attempts start
+# while booked solve spend <= 120.00. The ceiling is in tenant dollars.
+# exp039's and exp040's remaining limits (947.32 and 1,025.87 of their USD
+# 2,500) are list_long_context ledger dollars, a different unit: at the worst
+# list/tenant ratio (22.50/5.25 = 4.2857, uncached input) 220 is at most
+# 942.86 at the list meter, inside exp039's 947.32 and exp040's 1,025.87
+# list-meter remainders. Expected spend at tenant rates is about 54 (p99.9
+# about 128). The ten first attempts stay booked in exp039 and exp040.
+#
+# Renderer
+# --------
+#
+# exp037 was graded with PyMuPDF 2.1. grade-run.yml installs the grade job's
+# libraries under batch-runner/grading_constraints/exp037_grade_environment.txt
+# (the versions exp037's last chunk installed), outside the grader hash, so
+# this grade reads deliverables with what exp037's did. The free dry run's
+# "Preflight grading renderer" prints the fingerprint before any spend, and the
+# readout's one_grader flag checks it afterwards.
+#
+# The wall clock and the relay legs
+# ---------------------------------
+#
+# exp037 measured 10.4 minutes per task (11.0 by wall clock, retries
+# included): 10 x 11.0 = 110 minutes, so one leg of 170 is expected.
+# relay_max_runs: 10 stays exp040's upper bound; every leg after the first
+# is spare.
+#
+# Grading runs as one unsharded process in resume chunks of 338 minutes:
+# 550 items x 0.96 judged x 24.1 s (exp037's mean) is one chunk; at
+# chunk 0's slowest 32 s, still one. grade-run.yml chains eleven. A chunk after
+# the first inherits the approval only through the bot's own auto-retrigger
+# and this lineage's committed partial (grade-run.yml, "Resolve inherited
+# paid approval"). The grade covers the whole registered list:
+# sol_batch_grading.py refuses a dispatch that names tasks or a task limit.
+#
+# Resume stays off, and the money and relay rules are exp037's (see that
+# file's header), with this run's names.
+
+experiment:
+  id: "exp041_sol_retry10"
+  name: "Codex command-line tool against Foundry — GPT-5.6 Sol, exp039's and exp040's ten Azure-side failures, solved again"
+  description: >-
+    The retry stage of GPT-5.6 Sol on the whole benchmark: the ten tasks
+    exp039_sol_next98 and exp040_sol_last97 lost to Azure-side failures,
+    solved and graded once more, in exp038's order. Approved 2026-11-26 at
+    USD 220 (tenant_observed_20261126) for solve and grade.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-11-26"
+
+control:
+  fixed:
+    - model
+    - reasoning_effort
+    - context_window
+    - prompt
+    - temperature
+    - self_qa
+    - retry_budget
+    - execution_environment
+  changed:
+    # The stage, and nothing else.
+    - tasks
+
+data:
+  # HyeonSang/<experiment.id>, as in exp033-exp036. Step 0 creates it, step 7
+  # uploads to it, and grade-run.yml downloads from it.
+  source: "HyeonSang/exp041_sol_retry10"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+    # exp039's four and exp040's six Azure-side failures, in exp038's order.
+    # sol_batch_controls.RUNS pins their ordered_task_ids_sha256 58675014...
+    task_ids:
+      - "2fa8e956-7b35-4c13-95dc-027f02be318b"
+      - "46b34f78-6c06-4416-87e2-77b6d8b20ce9"
+      - "4c18ebae-dfaa-4b76-b10c-61fcdf26734c"
+      - "5a2d70da-0a42-4a6b-a3ca-763e03f070a5"
+      - "efca245f-c24f-4f75-a9d5-59201330ab7a"
+      - "f1be6436-ffff-4fee-9e66-d550291a1735"
+      - "f2986c1f-2bbf-4b83-bc93-624a9d617f45"
+      - "f3351922-dbdd-45da-85c5-e7110696bbe5"
+      - "f5d428fd-b38e-41f0-8783-35423dab80f6"
+      - "f841ddcf-2a28-4f6d-bac3-61b607219d3e"
+condition_a:
+  name: "Codex command-line tool, Foundry deployment"
+  model:
+    provider: "azure"
+    # Must equal execution.codex.model: CodexAgentRunner.run refuses a
+    # mismatch rather than calling one deployment and recording another.
+    deployment: "gpt-5.6-sol"
+    # Codex owns the request, so these are inherited defaults, not claims
+    # about what was sent. The effort it sends is the one execution.codex
+    # names.
+    temperature: 0.0
+    seed: 42
+    reasoning_effort: null
+  prompt:
+    # Byte-for-byte exp033's, exp034's, exp035's and exp036's.
+    system: |
+      You are completing a professional work task. You have a terminal and a
+      working directory. Do the task and leave the finished deliverables in
+      the working directory as real files.
+    prefix: null
+    body: null
+    suffix: null
+  # Off, for the reason exp033 gives.
+  qa:
+    enabled: false
+    max_retries: 0
+    model: null
+    min_score: 6
+    prompt: ""
+
+execution:
+  mode: "codex_foundry"
+  codex:
+    endpoint_from_route: true
+    model: "gpt-5.6-sol"
+    # exp036's owner conditions 4 and 1: effort, then window. Step 1
+    # carries both keys into the prepared file, and step 2 hands them to Codex.
+    reasoning_effort: "max"
+    model_context_window: 1000000
+    # Both 0 on purpose; retries live in max_retries below, where they are
+    # counted.
+    request_max_retries: 0
+    stream_max_retries: 0
+  # Wall clock for one turn. Unchanged from exp033-exp036.
+  timeout: 1800
+  # Attempts after an infrastructure failure, per task: four at most, as in
+  # exp035. The USD gate can refuse to start any of them.
+  max_retries: 3
+  # Off; see "Resume stays off" in the header.
+  resume_max_rounds: 0
+  # exp036's owner condition 5, kept: a Sol run is compared with Sol runs.
+  install_libreoffice: true
+  # Step 2's watchdog in minutes, used because the dispatch passes
+  # wall_timeout 0. See "The wall clock and the relay legs" in the header.
+  wall_timeout: 170
+  # Leg zero plus ten relay legs, the most batch-run.yml accepts; see the
+  # header.
+  relay_max_runs: 10
+
+output:
+  # Nothing in codex_foundry mode reads this to decide an upload; the
+  # dispatch's dry_run: false does. Written true so the two agree.
+  publish_to_hf: true
+  submit_to_evals: false

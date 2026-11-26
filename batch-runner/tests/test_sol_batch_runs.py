@@ -1,5 +1,6 @@
 """The registry of Sol runs: exp036 unchanged, exp037 approved at USD 700, exp038 registered only,
-its two halves exp039 and exp040 approved at USD 2,500 each.
+its two halves exp039 and exp040 approved at USD 2,500 each, and exp041, the ten tasks those two lost
+to Azure-side failures, approved at USD 220 on the tenant basis.
 
 Model-free and offline. Every task list is re-derived from the committed
 catalogue and the earlier stages' files, never trusted from the registry.
@@ -35,6 +36,7 @@ EXPERIMENTS = BATCH_RUNNER / "experiments"
 WORKFLOW = REPO_ROOT / ".github/workflows/grade-run.yml"
 EXP036, EXP037, EXP038 = "exp036_sol_fixed5", "exp037_sol_first25", "exp038_sol_rest195"
 EXP039, EXP040 = "exp039_sol_next98", "exp040_sol_last97"
+EXP041 = "exp041_sol_retry10"
 #: exp037's measured solve minutes per task: the readout's mean of the last
 #: attempts (10.4) and the legs' wall clock with retries and backoff (11.0).
 EXP037_MINUTES_PER_TASK = (10.4, 11.0)
@@ -71,7 +73,7 @@ def _task_ids(experiment_id: str) -> list[str]:
 
 def test_the_registry_is_well_formed_and_both_sides_name_the_same_runs():
     assert controls.registry_problems() == []
-    assert set(controls.RUNS) == {EXP036, EXP037, EXP038, EXP039, EXP040}
+    assert set(controls.RUNS) == {EXP036, EXP037, EXP038, EXP039, EXP040, EXP041}
     assert grading.approval_problems() == []
     sol_side = {approval.experiment_id: (approval.config_name, approval.ceiling_usd, approval.approved is not None)
                 for approval in grading.APPROVALS if approval.solve_seed == grading.SOLVE_SEED_SOL_BATCH}
@@ -262,10 +264,98 @@ def test_exp039_and_exp040_are_exp038s_list_cut_in_two_in_order():
         assert len({by_id[task].sector for task in tasks}) == 9
 
 
+#: exp039's and exp040's zeros that are not Azure-side failures: content filter
+#: (no deliverables) and grader-side (a selection error, every item excluded).
+#: The owner's retry covers none of them.
+NOT_RETRIED_ZEROS = {
+    "1bff4551-1d54-4e37-b2e0-d5c3f2ea4a45", "22c0809b-f8db-489e-93b3-b4da225e3e0e",
+    "afe56d05-dac8-47d7-a233-ad1d035ca5bd", "e4f664ea-0e5c-4e4e-a0d3-a87a33da947a",
+    "5d0feb24-e8b6-4ace-b64f-d5cd1a8b563d", "7de33b48-5163-4f50-b5f3-8deea8185e57",
+}
+
+
+def _root_grade(experiment_id: str) -> dict:
+    (path,) = sorted((REPO_ROOT / "data/grades").glob(f"{experiment_id}__judge_*__v2.2.json"))
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_exp041_is_the_ten_azure_side_failures_in_exp038s_order():
+    ids = _task_ids(EXP041)
+    assert ids == [task for task in _task_ids(EXP038) if task in set(ids)]
+    # 1-based #20, #36, #43 and #54 of exp039, then #82-#87 of exp040.
+    assert [_task_ids(EXP039).index(task) for task in ids[:4]] == [19, 35, 42, 53]
+    assert ids[4:] == _task_ids(EXP040)[81:87]
+    run = controls.RUNS[EXP041]
+    assert len(ids) == len(set(ids)) == run.task_count == 10
+    assert controls.ordered_task_ids_sha256(ids) == _ordered_task_ids_sha256(ids) == run.ordered_task_ids_sha256 == (
+        "58675014aed6ab580517aca4abd58d7d8f074cec8fd95bfcc63c0bf8b1be8cf2")
+    raw = json.loads((EXPERIMENTS / "execution_envelope/gdpval_task_catalog.json").read_text(encoding="utf-8"))
+    items = {task["task_id"]: task["rubric_item_count"] for task in raw["tasks"]}
+    assert sum(items[task] for task in ids) == 550
+    # Each one is a no-deliverables zero in its parent's root grade, and the
+    # parents' other zeros are the ones the retry does not cover.
+    zeros: dict[str, str] = {}
+    for parent, tasks in ((EXP039, ids[:4]), (EXP040, ids[4:])):
+        rows = {row["task_id"]: row for row in _root_grade(parent)["tasks"]}
+        for task in tasks:
+            assert rows[task]["error"] == "no_deliverables", task
+        zeros.update({task: row["error"] for task, row in rows.items() if row["error"] is not None})
+    assert set(zeros) - set(ids) == NOT_RETRIED_ZEROS
+    assert set(ids).isdisjoint(_task_ids(EXP037))
+    # exp037's measured wall clock per task: ten fit one 170-minute leg.
+    assert 10 * max(EXP037_MINUTES_PER_TASK) <= controls.RUNS[EXP041].wall_timeout_minutes == 170
+
+
+#: The owner's words for exp041, quoted on both sides of the twin tables.
+EXP041_OWNER_WORDS = ('"Azure 오류 10건"', '"USD 220 (추천)"')
+
+
+def _remaining_list_limit(experiment_id: str) -> Decimal:
+    """2,500 minus what the parent's final journal's close line says is committed."""
+    closes = []
+    for path in (REPO_ROOT / grading.JOURNAL_DIR / experiment_id).glob("run-*.combined_usd.jsonl"):
+        last = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+        assert last["event"] == "close", path.name
+        closes.append((last["closed_at"], Decimal(last["committed_usd"])))
+    committed = max(closes)[1]
+    return controls.RUNS[experiment_id].ceiling_usd - committed
+
+
+def test_exp041_holds_the_owner_approved_ceiling_on_the_tenant_basis():
+    run = controls.RUNS[EXP041]
+    approval = {a.experiment_id: a for a in grading.APPROVALS}[EXP041]
+    assert approval is grading.EXP041_RETRY10 and approval.config_name == run.grading_config_name
+    assert run.approval.startswith("owner 2026-11-26") and approval.approved.startswith("2026-11-26 owner")
+    for words in EXP041_OWNER_WORDS:
+        assert words in run.approval and words in approval.approved
+    assert "USD 220" in run.approval and "USD 220" in approval.approved
+    # 220 = 150 solve + 70 grading; attempts start while booked solve <= 120.
+    assert (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd, run.narrative_allowance_usd) == (
+        Decimal("220"), Decimal("70"), Decimal("30"), Decimal("2.00"))
+    assert (run.solve_budget_usd, run.admit_while_at_most_usd) == (Decimal("150"), Decimal("120"))
+    assert run.prior_lineage_spend_usd == 0 and dict(run.lost_booking_usd) == {}
+    assert run.wall_timeout_minutes == 170
+    assert run.booking_basis == approval.booking_basis == controls.BASIS_TENANT_20261126
+    assert approval.ceiling_usd == run.ceiling_usd
+    tenant = controls.load_booking_rates(controls.BASIS_TENANT_20261126)
+    assert run.attempt_reserve_usd >= controls.in_flight_bound_usd(None, rates=tenant) == Decimal("29.385")
+    # The parents' remaining limits, from their final journals' close lines.
+    # They are list_long_context dollars and the ceiling is tenant dollars, so
+    # the ceiling is compared with them only at the worst list/tenant ratio
+    # (uncached input, 22.50 / 5.25).
+    remainders = [_remaining_list_limit(EXP039), _remaining_list_limit(EXP040)]
+    assert remainders == [Decimal("947.31796850"), Decimal("1025.87103700")]
+    listed, booked = controls.load_sol_list_rates(), tenant.booked
+    ratios = ((listed.input + listed.cache_write) / max(booked.input, booked.cache_write),
+              listed.cached_input / booked.cached_input, listed.output / booked.output)
+    assert max(ratios) == ratios[0] == Decimal("22.50") / Decimal("5.25")
+    assert run.ceiling_usd * Decimal("22.50") / Decimal("5.25") <= min(remainders)
+
+
 # -- the experiment files ---------------------------------------------------------
 
 
-@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038, EXP039, EXP040])
+@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038, EXP039, EXP040, EXP041])
 def test_every_registered_run_is_exp036s_setup_on_its_own_tasks(experiment_id):
     run = controls.RUNS[experiment_id]
     document = _yaml(EXPERIMENTS / f"{experiment_id}.yaml")
@@ -311,7 +401,7 @@ def test_each_half_fits_its_relay_legs_at_exp037s_measured_rate(experiment_id):
         assert legs >= math.ceil(1.25 * work / 170)
 
 
-@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038, EXP039, EXP040])
+@pytest.mark.parametrize("experiment_id", [EXP036, EXP037, EXP038, EXP039, EXP040, EXP041])
 def test_every_registered_config_is_the_template_and_fits_the_name_budget(monkeypatch, experiment_id):
     monkeypatch.chdir(BATCH_RUNNER)
     name = controls.RUNS[experiment_id].grading_config_name
@@ -425,7 +515,7 @@ def test_the_unapproved_pair_is_refused_before_any_download(monkeypatch):
 @pytest.mark.parametrize("narrowing", [["--tasks", "0ed38524-a4ad-405f-9dee-7b2252659aad"], ["--limit", "3"],
                                        ["--tasks", "0ed38524-a4ad-405f-9dee-7b2252659aad", "--limit", "1"]],
                          ids=["tasks", "limit", "both"])
-@pytest.mark.parametrize("experiment_id", [EXP037, EXP038, EXP039, EXP040])
+@pytest.mark.parametrize("experiment_id", [EXP037, EXP038, EXP039, EXP040, EXP041])
 def test_a_sol_220_grade_cannot_be_narrowed_to_a_subset(tmp_path, monkeypatch, capsys, experiment_id, narrowing):
     # The approval, not the dispatch, defines the scope: a subset would be a
     # _diagnostic/ grade paid under a ceiling sized for the whole stage.
@@ -445,6 +535,7 @@ def test_a_sol_220_grade_cannot_be_narrowed_to_a_subset(tmp_path, monkeypatch, c
 @pytest.mark.parametrize("experiment_id, config", [
     (EXP037, "exp036_v2_sol_max"), (EXP036, "exp037_v2_sol_max"), (EXP038, "exp037_v2_sol_max"),
     (EXP039, "exp040_v2_sol_max"), (EXP040, "exp039_v2_sol_max"), (EXP039, "exp038_v2_sol_max"),
+    (EXP041, "exp040_v2_sol_max"), (EXP040, "exp041_v2_sol_max"),
     ("exp035_codex_foundry_full220", "exp037_v2_sol_max"),
 ])
 def test_runs_and_configs_only_grade_their_own_pair(monkeypatch, experiment_id, config):

@@ -8,8 +8,10 @@ other run gets ``None`` back before anything is read, written or printed.
 :data:`RUNS` holds every Sol run the owner registered, each with its own task
 list and USD ceiling: exp036_sol_fixed5 (approved 2026-11-05),
 exp037_sol_first25 (approved 2026-11-06), exp038_sol_rest195 (registered, not
-approved: refused before any attempt) and its two halves exp039_sol_next98 and
-exp040_sol_last97 (approved 2026-11-14). For an approved run it swaps the
+approved: refused before any attempt), its two halves exp039_sol_next98 and
+exp040_sol_last97 (approved 2026-11-14), and exp041_sol_retry10, the ten tasks
+those two lost to Azure-side failures (approved 2026-11-26, the first run on
+:data:`BASIS_TENANT_20261126`). For an approved run it swaps the
 executor's runner for :class:`SolBatchCodexRunner`, which adds two controls:
 
 * The held #796 1M catalog. Codex 0.147.0's bundled catalog gives gpt-5.6-sol
@@ -316,6 +318,34 @@ RUNS: Mapping[str, SolRun] = MappingProxyType({run.experiment_id: run for run in
         grading_reserve_usd=Decimal("900"),
         attempt_reserve_usd=Decimal("51"),
         narrative_allowance_usd=Decimal("2.00"),
+    ),
+    # Owner approval 2026-11-26 ("Azure 오류 10건"; "USD 220 (추천)"): solve
+    # and grade once more the ten tasks exp039 and exp040 lost to Azure-side
+    # failures (network, Foundry 507 and peak-load refusals), in exp038's
+    # order; not their content-filter or grader-side zeros. The first run on
+    # tenant_observed_20261126. USD 220 = 150 solve + 70 grading; 30 per
+    # attempt (at least the 29.385 in-flight bound), so attempts start while
+    # booked solve spend <= 120; if every attempt booked the whole reserve,
+    # five would start. The ceiling is in tenant dollars; exp039's and
+    # exp040's remaining limits (947.32 and 1,025.87) are list_long_context
+    # dollars, a different unit. At the worst list/tenant ratio (22.50 / 5.25
+    # = 4.2857, uncached input) 220 is at most 942.86 at the list meter,
+    # inside both, so a tenant ceiling of 220 bounds the list figure by
+    # construction. Expected spend at tenant rates about 54 (p99.9 about 128).
+    # The ten first attempts stay booked in exp039 and exp040; this run starts
+    # from 0.
+    SolRun(
+        experiment_id="exp041_sol_retry10",
+        grading_config_name="exp041_v2_sol_max",
+        task_count=10,
+        ordered_task_ids_sha256="58675014aed6ab580517aca4abd58d7d8f074cec8fd95bfcc63c0bf8b1be8cf2",
+        approval=('owner 2026-11-26 ("Azure 오류 10건": solve and grade again the ten tasks exp039 and'
+                  ' exp040 lost to Azure-side failures; "USD 220 (추천)": USD 220 at tenant_observed_20261126)'),
+        ceiling_usd=Decimal("220"),
+        grading_reserve_usd=Decimal("70"),
+        attempt_reserve_usd=Decimal("30"),
+        narrative_allowance_usd=Decimal("2.00"),
+        booking_basis=BASIS_TENANT_20261126,
     ),
 )})
 #: Experiment id plus grading config name: grade, ledger and progress file
