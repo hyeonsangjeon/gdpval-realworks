@@ -46,12 +46,18 @@ stage's row for the same task only when that earlier row is an
 ``infrastructure`` or ``unclassified_failure`` zero (the cause table's
 INFRASTRUCTURE and UNCLASSIFIED categories: provider- or runner-side
 faults, and failures that name no cause). A retry over any other row (a
-judged task, a content-filter, grader-side, timeout, model or gate zero)
-refuses as any other repeat does, and so does a retry-stage task that
-replaced nothing. Each replacement is listed under
+judged task, a content-filter, grader-side, timeout or model zero) refuses,
+and so does a retry-stage task that replaced nothing. A retry stage does not
+take the USD-gate rule: its row over an earlier ``usd_gate`` (or
+``sol_gate``) zero refuses; register a later ordinary stage for those. Each
+replacement is listed under
 ``retried_after_infrastructure_or_unclassified_zero`` with the stage and
-cause it replaced; the replaced row leaves the scores, but its money stays
-in its own stage's record, as a refused row's does. A retry row that
+cause it replaced. The replaced row leaves the scores and every per-task
+figure (``solve_per_task_*`` and the projection's ``attempted_sample``,
+``time`` and ``file_habits``), but its money stays in its own stage's
+record and in its basis's ``solve`` and ``grading``, as a refused row's
+does: a per-task figure times the task count need not add up to the
+stage money beside it. A retry row that
 itself ended at the USD gate stays a 0, labelled not attempted, and is not
 listed as moved: no later stage is registered to take it. Without
 ``--retry-stage`` the output carries no such key.
@@ -198,7 +204,7 @@ def _journal_lines_by_task(path: Path) -> dict[str, Decimal]:
     return dict(spent)
 
 
-def journal_usd(directory: Path, owner: tuple[str, str] | None = None,
+def journal_usd(directory: Path, owner: tuple[str, str] | None = None, basis: str | None = None,
                 ) -> tuple[dict[str, Decimal], Decimal, list[str]]:
     """Per-task grading USD, the USD no task line holds, and the journals read.
 
@@ -206,7 +212,10 @@ def journal_usd(directory: Path, owner: tuple[str, str] | None = None,
     abandoned and never-concluded reserves, or the close line's in-memory
     total when a conclusion's own line failed to write. A journal that
     function refuses refuses the readout, and so does one whose open line
-    names another (experiment id, config name) than ``owner``.
+    names another (experiment id, config name) than ``owner``, or, given a
+    ``basis``, was booked on another basis or from other rates than that
+    basis pins (sol_batch_grading._read_journal's check with an approval): its
+    money would be reported under a basis it was not booked at.
     """
     grading = _batch_runner_module("sol_batch_grading")
     by_task: dict[str, Decimal] = defaultdict(Decimal)
@@ -222,6 +231,16 @@ def journal_usd(directory: Path, owner: tuple[str, str] | None = None,
             opened_by = (opening.get("experiment_id"), opening.get("config_name"))
             if opened_by != owner:
                 raise SystemExit(f"{path}: opened by {opened_by[0]} / {opened_by[1]}, not by {owner[0]} / {owner[1]}")
+        if basis is not None:
+            opening = json.loads(path.read_text(encoding="utf-8").split("\n", 1)[0])
+            controls = _batch_runner_module("sol_batch_controls")
+            booked_on = opening.get("booking_basis", controls.BASIS_LIST_LONG)
+            if booked_on != basis:
+                raise SystemExit(f"{path}: booked under {booked_on}, but its stage is registered on {basis}")
+            sha = opening.get("booking_rates_sha256")
+            if (sha is None and basis != controls.BASIS_LIST_LONG) or (
+                    sha is not None and sha != controls.booking_source_sha256(basis)):
+                raise SystemExit(f"{path}: booked from other rates than {basis} pins")
         lines = _journal_lines_by_task(path)
         placed = sum(lines.values(), Decimal(0))
         if placed > total:
@@ -354,7 +373,8 @@ def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals
     controls = _batch_runner_module("sol_batch_controls")
     run = controls.registered_run(experiment_id)
     graded = {task["task_id"]: task for task in grade["tasks"]}
-    grading_usd, unattributed, journal_names = journal_usd(journals, (experiment_id, run.grading_config_name))
+    grading_usd, unattributed, journal_names = journal_usd(journals, (experiment_id, run.grading_config_name),
+                                                         run.booking_basis)
     if any(not task.get("error") or (task.get("judge_call_count") or 0) > 0 for task in grade["tasks"]):
         if not journal_names:
             raise SystemExit(f"{journals} holds no combined USD journal, yet {grade_path} judged tasks; "

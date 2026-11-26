@@ -460,8 +460,9 @@ RETRY_TEN = [
 FIRST_FAILURES = {**dict(zip(RETRY_TEN[:4], ("turn_failed", "transport_error", "turn_failed", "turn_failed"))),
                   **{task: "turn_failed" for task in RETRY_TEN[4:]}}
 #: exp041's grading config, a copy of exp040's but for its name and
-#: description. Until PR 2 adds it to the tree, the stand-in registration
-#: grades under exp040's, whose template blocks it copies.
+#: description. Until PR 2 adds it (and exp041's registry entries) to the
+#: tree, the stand-in registration grades under exp040's, whose template
+#: blocks it copies; once PR 2 is in, both are PR 2's own.
 EXP041_CONFIG = ("exp041_v2_sol_max" if (REPO_ROOT / "batch-runner/grading_configs/exp041_v2_sol_max.yaml").is_file()
                  else "exp040_v2_sol_max")
 
@@ -493,18 +494,40 @@ def registry(monkeypatch):
             monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
 
         @staticmethod
-        def register_exp041() -> None:
-            """exp041's twin entries as PR 2 registers them: USD 220 on the tenant basis, exp040's setup."""
-            run = dataclasses.replace(
-                controls.RUNS["exp040_sol_last97"], experiment_id=EXP041, grading_config_name=EXP041_CONFIG,
-                task_count=len(RETRY_TEN), ordered_task_ids_sha256=controls.ordered_task_ids_sha256(RETRY_TEN),
-                approval="test: the exp041 approval PR", ceiling_usd=Decimal("220"),
-                grading_reserve_usd=Decimal("70"), attempt_reserve_usd=Decimal("30"),
-                narrative_allowance_usd=Decimal("2.00"), booking_basis=controls.BASIS_TENANT_20261126)
+        def register_exp041(booking_basis: str | None = None) -> None:
+            """exp041's twin entries: PR 2's own once registered, else a stand-in with their values.
+
+            The stand-in is built from scratch, so it carries no other run's
+            prior-lineage spend, lost bookings or wall timeout. Either way the
+            entries are USD 220 (grading reserve 70, attempt reserve 30,
+            narrative 2.00) on the tenant basis; ``booking_basis`` books both
+            twins on another one.
+            """
+            run = controls.registered_run(EXP041)
+            approval = next((entry for entry in grading.APPROVALS if entry.experiment_id == EXP041), None)
+            if run is None or approval is None:
+                run = controls.SolRun(
+                    experiment_id=EXP041, grading_config_name=EXP041_CONFIG, task_count=len(RETRY_TEN),
+                    ordered_task_ids_sha256=controls.ordered_task_ids_sha256(RETRY_TEN),
+                    approval="test: stand-in for the exp041 approval PR", ceiling_usd=Decimal("220"),
+                    grading_reserve_usd=Decimal("70"), attempt_reserve_usd=Decimal("30"),
+                    narrative_allowance_usd=Decimal("2.00"), booking_basis=controls.BASIS_TENANT_20261126)
+                approval = grading.Approval(
+                    experiment_id=EXP041, config_name=EXP041_CONFIG, ceiling_usd=Decimal("220"),
+                    solve_seed=grading.SOLVE_SEED_SOL_BATCH, exclusive_experiment=True, inference_revision=None,
+                    task_ids_sha256=None, approved="test: stand-in for the exp041 approval PR",
+                    booking_basis=grading.BASIS_TENANT_20261126)
+            assert (run.grading_config_name, run.task_count, run.ordered_task_ids_sha256, run.ceiling_usd,
+                    run.grading_reserve_usd, run.attempt_reserve_usd, run.narrative_allowance_usd,
+                    run.booking_basis) == (
+                EXP041_CONFIG, 10, controls.ordered_task_ids_sha256(RETRY_TEN), Decimal("220"), Decimal("70"),
+                Decimal("30"), Decimal("2.00"), controls.BASIS_TENANT_20261126)
+            assert (approval.config_name, approval.ceiling_usd, approval.solve_seed, approval.booking_basis) == (
+                EXP041_CONFIG, Decimal("220"), grading.SOLVE_SEED_SOL_BATCH, grading.BASIS_TENANT_20261126)
+            if booking_basis is not None:
+                run = dataclasses.replace(run, booking_basis=booking_basis)
+                approval = dataclasses.replace(approval, booking_basis=booking_basis)
             monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
-            approval = dataclasses.replace(
-                grading.EXP040_LAST97, experiment_id=EXP041, config_name=EXP041_CONFIG, ceiling_usd=Decimal("220"),
-                approved="test: the exp041 approval PR", booking_basis=grading.BASIS_TENANT_20261126)
             monkeypatch.setattr(grading, "APPROVALS", tuple(
                 entry for entry in grading.APPROVALS if entry.experiment_id != EXP041) + (approval,))
 
@@ -513,7 +536,8 @@ def registry(monkeypatch):
 
 def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: list[str], *,
                  refused: tuple[str, ...] = (), refused_usd: float = 0.0, harness: tuple[str, ...] = (),
-                 grader_failed: tuple[str, ...] = (), renderer: dict = RENDERER, writer: str | None = None,
+                 grader_failed: tuple[str, ...] = (), grader_refused: tuple[str, ...] = (),
+                 renderer: dict = RENDERER, writer: str | None = None,
                  earlier: dict[str, tuple[str, ...]] | None = None, failed: dict[str, str] | None = None,
                  failed_usd: float = 5.0, config_name: str | None = None,
                  booking_basis: str | None = None) -> list[str]:
@@ -522,7 +546,8 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
     ``refused`` tasks ended at the USD gate (after ``refused_usd`` of earlier
     attempts); ``harness`` tasks were refused by the Sol harness's window check;
     ``grader_failed`` tasks left files the judge was called on but marked no
-    item of; ``failed`` tasks ({task: step 2 error_category}) were attempted,
+    item of; ``grader_refused`` tasks left files the selector refused to
+    choose among (selection_error); ``failed`` tasks ({task: step 2 error_category}) were attempted,
     booked ``failed_usd`` and left nothing to grade. The grade's writer is
     GitHub run ``writer`` (attempt 1), whose journal holds every task's
     grading lines except those of ``earlier`` chunks: {run id: tasks that
@@ -548,7 +573,11 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
                                 "observability": {"error_category": category, "budget_metrics": {
                                     "conservative_cost_usd": refused_usd if task in refused else 0}}})
             continue
-        if task in grader_failed:
+        if task in grader_refused:
+            grade_rows.append({"task_id": task, "error": "selection_error", "selection_error": "ambiguous_main",
+                               "items": [], "grading_wall_time_ms": 1_000, "judge_call_count": 1,
+                               "selection_rule": None})
+        elif task in grader_failed:
             grade_rows.append({"task_id": task, "error": "all_items_score_excluded", "items": [{}] * 10,
                                "score_excluded_items": 10, "grading_wall_time_ms": 60_000, "judge_call_count": 3,
                                "selection_rule": "single_main"})
@@ -781,9 +810,11 @@ def _sol220_first_attempt(readout, tmp_path: Path, failed: dict[str, str] | None
     return stages[0], stages[1], stages[2]
 
 
-def _exp041(readout, tmp_path: Path, **kwargs: object) -> list[str]:
-    return _write_stage(tmp_path, EXP041, _this_tree_hash(readout, EXP041_CONFIG), RETRY_TEN,
-                        config_name=EXP041_CONFIG, booking_basis="tenant_observed_20261126", **kwargs)
+def _exp041(readout, tmp_path: Path, tasks: list[str] = RETRY_TEN,
+            booking_basis: str | None = "tenant_observed_20261126", **kwargs: object) -> list[str]:
+    """exp041's records; ``booking_basis`` None writes journals that name no basis (list_long_context)."""
+    return _write_stage(tmp_path, EXP041, _this_tree_hash(readout, EXP041_CONFIG), tasks,
+                        config_name=EXP041_CONFIG, booking_basis=booking_basis, **kwargs)
 
 
 def test_a_retry_stage_replaces_only_infrastructure_or_unclassified_zeros(tmp_path, registry):
@@ -862,18 +893,7 @@ def test_a_retry_stage_refuses_what_it_may_not_replace(tmp_path, registry, capsy
     # Without --retry-stage, a repeat is a repeat.
     with pytest.raises(SystemExit, match="counts every task once"):
         _run(readout, tmp_path, exp037, exp039, exp040, exp041)
-    # A content-filter zero, a grader-side zero or a judged task is not the provider's loss.
-    for kwargs, cause in (({"failed": {**FIRST_FAILURES, RETRY_TEN[0]: "content_filtered"}}, "content_filter"),
-                          ({"failed": {task: category for task, category in FIRST_FAILURES.items()
-                                       if task != RETRY_TEN[0]}, "grader_failed": (RETRY_TEN[0],)}, "grader_other"),
-                          ({"failed": {task: category for task, category in FIRST_FAILURES.items()
-                                       if task != RETRY_TEN[0]}}, "judged")):
-        failed = kwargs.pop("failed")
-        stages = _sol220_first_attempt(readout, tmp_path, failed, **kwargs)
-        with pytest.raises(SystemExit, match=f"counts every task once: retry stage {EXP041} may replace only an "
-                                             f"infrastructure or unclassified_failure zero, and "
-                                             f"exp039_sol_next98's {RETRY_TEN[0]} is {cause}"):
-            _run(readout, tmp_path, *stages, exp041, extra=retry)
+    # Every other earlier row refuses (test_a_retry_stage_refuses_every_other_earlier_row).
     # A retry-stage task no earlier stage lost: exp040 is not in the union,
     # or the retry stage comes before the stages it retries.
     exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
@@ -886,6 +906,97 @@ def test_a_retry_stage_refuses_what_it_may_not_replace(tmp_path, registry, capsy
     with pytest.raises(SystemExit):
         _run(readout, tmp_path, exp037, exp039, exp040, extra=retry)
     assert f"--retry-stage {EXP041} is not passed with --stage" in capsys.readouterr().err
+    # A retry stage that lists a task twice: its second row may not replace
+    # its first, even when the first is itself an unclassified zero.
+    twice = RETRY_TEN + [RETRY_TEN[0]]
+    registry.list_tasks(EXP041, twice)
+    exp041 = _exp041(readout, tmp_path, tasks=twice, failed={RETRY_TEN[0]: "turn_failed"})
+    with pytest.raises(SystemExit, match=r"a task appears in two stages; a union counts every task once \(only"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
+
+
+#: The earlier rows a retry stage may not replace: every zero cause but the
+#: two it may, and a judged task. Each is (step 2 error_category of the task,
+#: or None when it was not a solve failure; _write_stage options).
+NOT_RETRIED = {
+    "content_filter": ("content_filtered", {}),
+    "turn_timeout": ("timeout", {}),
+    "model_other": ("model_mismatch", {}),
+    "sol_gate": (None, {"harness": (RETRY_TEN[0],)}),
+    "usd_gate": (None, {"refused": (RETRY_TEN[0],)}),
+    "grader_other": (None, {"grader_failed": (RETRY_TEN[0],)}),
+    "grader_refusal": (None, {"grader_refused": (RETRY_TEN[0],)}),
+    "judged": (None, {}),
+}
+
+
+def test_a_retry_stage_replaces_two_causes_and_the_refusal_cases_cover_the_rest():
+    readout = _readout()
+    assert readout.RETRY_REPLACES == {"infrastructure", "unclassified_failure"}
+    assert readout.RETRY_REPLACES <= set(readout.CAUSES.ZERO_CAUSES)
+    assert set(NOT_RETRIED) == set(readout.CAUSES.ZERO_CAUSES) - readout.RETRY_REPLACES | {"judged"}
+
+
+@pytest.mark.parametrize("cause", sorted(NOT_RETRIED))
+def test_a_retry_stage_refuses_every_other_earlier_row(tmp_path, registry, cause):
+    readout = _readout()
+    registry.register_exp041()
+    exp041 = _exp041(readout, tmp_path)
+    category, options = NOT_RETRIED[cause]
+    failed = {task: first for task, first in FIRST_FAILURES.items() if task != RETRY_TEN[0]}
+    if category is not None:
+        failed[RETRY_TEN[0]] = category
+    # Not the provider's loss: a judged task, the model's, the grader's, or a
+    # gate's refusal (a USD-gate zero goes to a later ordinary stage, not a retry).
+    stages = _sol220_first_attempt(readout, tmp_path, failed, **options)
+    with pytest.raises(SystemExit, match=f"counts every task once: retry stage {EXP041} may replace only an "
+                                         f"infrastructure or unclassified_failure zero, and "
+                                         f"exp039_sol_next98's {RETRY_TEN[0]} is {cause}$"):
+        _run(readout, tmp_path, *stages, exp041, extra=("--retry-stage", EXP041))
+
+
+def test_a_retry_stage_on_one_basis_projects_without_moving_its_own_usd_gate_row(tmp_path, registry):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    registry.register_exp041(booking_basis=controls.BASIS_LIST_LONG)
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
+    exp041 = _exp041(readout, tmp_path, booking_basis=None, refused=(RETRY_TEN[0],))
+    document = _run(readout, tmp_path, exp037, exp039, exp040, exp041,
+                    extra=("--retry-stage", EXP041, "--remaining-from", "exp040_sol_last97"))
+    summary = document["summary"]
+    assert summary["usd"]["booking_basis"] == controls.BASIS_LIST_LONG and "by_basis" not in summary["usd"]
+    assert summary["zeros_by_cause"] == {"usd_gate": 1} and summary["moved_by_usd_gate"] == []
+    # The retry's own USD-gate row is not projected onto the next list.
+    assert RETRY_TEN[0] not in document["remaining_task_ids"]
+    assert document["remaining_task_ids"] == _stage_tasks("exp040_sol_last97")
+    assert summary["projection"]["remaining_tasks"] == 97
+
+
+def test_a_journal_booked_on_another_basis_than_its_stage_refuses(tmp_path, registry):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    registry.register_exp041()
+    tenant = controls.BASIS_TENANT_20261126
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
+    retry = ("--retry-stage", EXP041)
+    # A tenant stage whose journal names no basis was booked on list_long_context:
+    # its dollars are not tenant dollars.
+    exp041 = _exp041(readout, tmp_path, booking_basis=None)
+    with pytest.raises(SystemExit, match=f"booked under list_long_context, but its stage is registered on {tenant}"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
+    # The tenant basis from other rates than it pins.
+    exp041 = _exp041(readout, tmp_path)
+    journal = tmp_path / f"{EXP041}.journals" / f"run-{WRITERS[EXP041]}-1.combined_usd.jsonl"
+    opening, rest = journal.read_text(encoding="utf-8").split("\n", 1)
+    journal.write_text(json.dumps({**json.loads(opening), "booking_rates_sha256": "0" * 64}) + "\n" + rest,
+                       encoding="utf-8")
+    with pytest.raises(SystemExit, match=f"booked from other rates than {tenant} pins"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
+    # And the reverse: a list stage whose journal was booked on the tenant basis.
+    exp041 = _exp041(readout, tmp_path)
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path, booking_basis=tenant)
+    with pytest.raises(SystemExit, match=f"booked under {tenant}, but its stage is registered on list_long_context"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
 
 
 # -- the writer's journal ------------------------------------------------------------

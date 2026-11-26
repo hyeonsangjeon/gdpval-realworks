@@ -13,6 +13,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- 2026-11-26: `scripts/sol_stage_readout.py` takes `--retry-stage <id>`
+  (repeatable), a stage passed with `--stage` after the stages it retries.
+  Its row replaces an earlier stage's row only when that row is an
+  `infrastructure` or `unclassified_failure` zero; over any other row (a
+  judged task, a content-filter, grader-side, timeout, model, `sol_gate` or
+  `usd_gate` zero), a repeated task inside the retry stage, or a task no
+  earlier stage lost, the readout refuses. Each replacement is listed under
+  `retried_after_infrastructure_or_unclassified_zero`; the replaced row's
+  money stays in its own stage's record, and a retry stage's own USD-gate
+  row is not listed as moved. Stages on different booking bases are now
+  read together instead of refused: `usd.by_basis` gives each basis its
+  stages and figures, and the top-level `usd` basis and money figures are
+  null. Only a projection across bases refuses. This replaces the entry
+  below that says the readout "refuses to add up stages booked on different
+  bases". A stage's journals must also name its registered basis (none
+  means `list_long_context`) and that basis's rates sha, or the readout
+  refuses.
+
 - 2026-11-26: Register `exp041_sol_retry10` (owner 2026-11-26, "Azure 오류 10건"):
   the ten tasks `exp039_sol_next98` and `exp040_sol_last97` lost to
   Azure-side failures, solved and graded once more, in exp038's order:
