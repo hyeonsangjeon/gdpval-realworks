@@ -17,11 +17,12 @@ executor's runner for :class:`SolBatchCodexRunner`, which adds two controls:
   catalog keeps the request at 1,000,000. Its sha256 is checked on every
   attempt, before Codex starts.
 * A between-attempt USD gate. Before each attempt it books every ledger row of
-  the run at the published long-context list meter, adds what earlier relay
-  legs booked, and refuses to START the attempt once that spend plus the
-  run's attempt reserve would pass the run's solve budget. A running attempt
-  is never stopped, so the last admitted attempt can overshoot; the owner
-  accepted that.
+  the run in the run's booking basis (:data:`BASIS_LIST_LONG`, the published
+  long-context list meter, for every run registered before 2026-11-26), adds
+  what earlier relay legs booked, and refuses to START the attempt once that
+  spend plus the run's attempt reserve would pass the run's solve budget. A
+  running attempt is never stopped, so the last admitted attempt can
+  overshoot; the owner accepted that.
 
 Any other gpt-5.6-sol run on this path is refused before its first attempt, so a
 copied or mistyped experiment file cannot run without the gate.
@@ -48,7 +49,7 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from core import runner_environment
 from core.codex_cost import read_breakdown
-from core.codex_runner import CodexAgentRunner, TurnObservation
+from core.codex_runner import _NOTIFY_TOKEN_USAGE, CodexAgentRunner, TurnObservation
 from core.codex_runtime_config import (
     CodexProviderConfigurationError,
     CodexProviderSettings,
@@ -95,8 +96,9 @@ CATALOG_SHA256 = "41e884c807616100cc92c8b734337725d37ecd096586c598f3c389032e8db4
 PRICE_TABLE_SHA256 = "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e"
 #: The table's long-context Standard Global meter, the higher of its two Global tiers.
 SOL_METER = "long_context_standard_global"
-#: One refused first request: 64,000 input tokens x (10.00 + 12.50) plus
-#: 128,000 output tokens x 45.00 per 1M (1.44 + 5.76).
+#: One refused first request on the list_long_context basis: 64,000 input
+#: tokens x (10.00 + 12.50) plus 128,000 output tokens x 45.00 per 1M
+#: (1.44 + 5.76).
 REFUSED_REQUEST_USD = Decimal("7.20")
 #: Output allowance for the one request a turn that ended unfinished may still
 #: have had in flight; the same 128,000 as REFUSED_REQUEST_USD.
@@ -111,6 +113,29 @@ _NOTHING_IN_FLIGHT = frozenset({"rate_limited", "turn_start_failed"})
 #: The longest step-2 watchdog any registered run may use, in minutes:
 #: 15 setup + 170 + one 131-minute task + 5 + 30 fits the 360-minute job.
 WALL_TIMEOUT_MINUTES = 170
+#: Booking bases. A run's basis is fixed when it is registered and turns into
+#: the rates every booking of the run uses (load_booking_rates).
+#: list_long_context: the #795 list table's long-context Standard Global
+#: meter, uncached input charged at input plus cache write. Every run
+#: registered before 2026-11-26 (exp035 parity, exp036 to exp040) books on it
+#: for good.
+BASIS_LIST_LONG = "list_long_context"
+#: tenant_observed_20261126: the rates Azure billed this tenant, x1.05, on
+#: the short tier up to the record's request-size bound; list_long_context
+#: above it or when the size is unknown.
+BASIS_TENANT_20261126 = "tenant_observed_20261126"
+BOOKING_BASES = frozenset({BASIS_LIST_LONG, BASIS_TENANT_20261126})
+#: The list table's short-context Standard Global meter: no tenant rate may
+#: be above it.
+SOL_SHORT_METER = "short_context_standard_global"
+#: The held record of the tenant's observed rates. Never edited after merge:
+#: a new observation or a wider bound is a new file and a new basis id.
+TENANT_RATES_RELATIVE = "batch-runner/experiments/execution_envelope/sol_batch_tenant_rates_20261126.json"
+TENANT_RATES_PATH = ROOT / TENANT_RATES_RELATIVE
+TENANT_RATES_SHA256 = "11bf182dfb0d9dfa720a788d87e9dc4b89500ed7fae8381e5d7a791cd8c976e2"
+TENANT_RATES_SCHEMA = "sol-batch-tenant-rates-v1"
+#: The refused first request's input, the same 64,000 as REFUSED_REQUEST_USD.
+REFUSED_REQUEST_INPUT_TOKENS = 64_000
 
 
 @dataclass(frozen=True)
@@ -143,7 +168,7 @@ class SolRun:
     #: the digest inference_provenance.json publishes.
     ordered_task_ids_sha256: str
     approval: str | None
-    #: Solve and grade together, at the list meter.
+    #: Solve and grade together, in the run's booking basis.
     ceiling_usd: Decimal | None = None
     #: Kept out of the solve budget for grading and the step 6 narrative.
     grading_reserve_usd: Decimal | None = None
@@ -186,6 +211,9 @@ class SolRun:
         default_factory=lambda: MappingProxyType({}))
     #: This run's watchdog ceiling, at most WALL_TIMEOUT_MINUTES.
     wall_timeout_minutes: int = WALL_TIMEOUT_MINUTES
+    #: One of BOOKING_BASES, fixed for the run's life. Its twin is
+    #: sol_batch_grading.Approval.booking_basis.
+    booking_basis: str = BASIS_LIST_LONG
 
     @property
     def solve_budget_usd(self) -> Decimal:
@@ -332,6 +360,8 @@ def registry_problems(runs: Mapping[str, SolRun] | None = None) -> list[str]:
                 for key, amount in lost.items()):
             problems.append(f"{name}: lost_booking_usd must map (40-hex revision, task id) to a finite "
                             "Decimal of at least 0")
+        if not isinstance(run.booking_basis, str) or run.booking_basis not in BOOKING_BASES:
+            problems.append(f"{name}: booking_basis must be one of {sorted(BOOKING_BASES)}")
         money = (run.ceiling_usd, run.grading_reserve_usd, run.attempt_reserve_usd,
                  run.narrative_allowance_usd)
         if run.approval is None:
@@ -484,7 +514,13 @@ class SolLongContextProviderSettings(CodexProviderSettings):
 
 @dataclass(frozen=True)
 class SolRates:
-    """USD per 1,000,000 tokens on :data:`SOL_METER`, as the pinned table states them."""
+    """USD per 1,000,000 tokens on one meter, as its held source states them.
+
+    The list_long_context basis books at :data:`SOL_METER` of the pinned
+    table; the tenant basis carries its observed and booked rates in this
+    shape too (:class:`SolTenantPricing`). Which one applies is the run's
+    booking basis.
+    """
 
     input: Decimal
     cached_input: Decimal
@@ -493,8 +529,11 @@ class SolRates:
     retrieved: str
 
 
-def load_sol_list_rates(path: Path | str = PRICE_TABLE_PATH) -> SolRates:
-    """Read the published Sol list meter from the #795-pinned price table.
+_RATE_KINDS = ("input", "cached_input", "cache_write", "output")
+
+
+def load_sol_list_rates(path: Path | str = PRICE_TABLE_PATH, *, meter: str = SOL_METER) -> SolRates:
+    """Read a published Sol list meter from the #795-pinned price table.
 
     A list price, not a verified tariff. Any read or parse failure refuses,
     because a gate without rates cannot book anything.
@@ -502,13 +541,135 @@ def load_sol_list_rates(path: Path | str = PRICE_TABLE_PATH) -> SolRates:
     try:
         raw = _read_held(Path(path), PRICE_TABLE_SHA256)
         meters = json.loads(raw)["azure_published_meters"]
-        meter = meters[SOL_MODEL][SOL_METER]
+        rates = meters[SOL_MODEL][meter]
         return SolRates(
-            *(Decimal(meter[key]) for key in ("input", "cached_input", "cache_write", "output")),
+            *(Decimal(rates[key]) for key in _RATE_KINDS),
             str(meters.get("retrieved", "")),
         )
     except Exception:
         raise SolBatchControlsRefused("sol_batch_price_table_unverified") from None
+
+
+@dataclass(frozen=True)
+class SolTenantPricing:
+    """The tenant_observed_20261126 basis, as its held record states it.
+
+    ``booked`` (``observed`` x ``margin``) applies on the short tier: a
+    request whose input is at most ``short_through_input_tokens``. Above that,
+    or when the request's size is unknown, ``fallback`` (the list_long_context
+    rates) applies exactly as on that basis.
+    """
+
+    basis: str
+    observed: SolRates
+    booked: SolRates
+    margin: Decimal
+    short_through_input_tokens: int
+    fallback: SolRates
+    source_relative: str
+    source_sha256: str
+    retrieved: str
+
+
+def _positive_rate(value: Any) -> Decimal:
+    if not isinstance(value, str):
+        raise ValueError("a rate is not a string")
+    rate = Decimal(value)
+    if not rate.is_finite() or rate <= 0:
+        raise ValueError("a rate is not a finite amount above 0")
+    return rate
+
+
+def load_sol_tenant_pricing(path: Path | str = TENANT_RATES_PATH) -> SolTenantPricing:
+    """Read the held tenant-rates record and hold it to what Azure billed.
+
+    Refuses with ``sol_batch_tenant_rates_unverified`` unless the file is the
+    pinned single-link regular file and its figures agree with themselves:
+    booked = observed x margin per kind, each observed rate the billed cost
+    over its quantity at cents, one ShortCo Standard Global meter per kind and
+    no long-context or Data Zone meter billed, a bound inside the held
+    catalog's window, the list_long_context fallback pinned to the #795
+    table, and no rate above the table's short-context list meter. A failure
+    to read the table itself keeps ``sol_batch_price_table_unverified``.
+    """
+    fallback = load_sol_list_rates()
+    short_list = load_sol_list_rates(meter=SOL_SHORT_METER)
+    try:
+        record = json.loads(_read_held(Path(path), TENANT_RATES_SHA256))
+        if (record["schema"] != TENANT_RATES_SCHEMA or record["basis"] != BASIS_TENANT_20261126
+                or record["model"] != SOL_MODEL):
+            raise ValueError("another record")
+        observation = record["observation"]
+        retrieved = observation["queried_at_utc"]
+        if not isinstance(retrieved, str) or not retrieved:
+            raise ValueError("no observation time")
+        observed = {kind: _positive_rate(record["observed_usd_per_million"][kind]) for kind in _RATE_KINDS}
+        booked = {kind: _positive_rate(record["booked_usd_per_million"][kind]) for kind in _RATE_KINDS}
+        margin = _positive_rate(record["safety_margin"])
+        if margin < 1 or any(booked[kind] != observed[kind] * margin for kind in _RATE_KINDS):
+            raise ValueError("booked is not observed x margin")
+        meters = observation["meters"]
+        if not isinstance(meters, list) or len(meters) != len(_RATE_KINDS):
+            raise ValueError("not one meter per kind")
+        by_kind: dict[str, tuple[Decimal, Decimal]] = {}
+        for meter in meters:
+            kind, name = meter["rate_kind"], meter["meter_name"]
+            if (kind not in _RATE_KINDS or kind in by_kind or not isinstance(name, str)
+                    or "ShortCo" not in name or "Std Gl" not in name):
+                raise ValueError("a meter that is not one ShortCo Standard Global meter per kind")
+            by_kind[kind] = (_positive_rate(meter["quantity_million_tokens"]), _positive_rate(meter["cost_usd"]))
+        for kind, (quantity, cost) in by_kind.items():
+            if (cost / quantity).quantize(Decimal("0.01")) != observed[kind]:
+                raise ValueError("an observed rate is not its billed cost over its quantity")
+        if sum((cost for _, cost in by_kind.values()), Decimal(0)) != _positive_rate(observation["period_cost_usd"]):
+            raise ValueError("the meters do not add to the period cost")
+        if (by_kind["input"][0] + by_kind["cache_write"][0]
+                != _positive_rate(observation["uncached_input_million_tokens"])):
+            raise ValueError("uncached input is not the input plus cache-write quantities")
+        if observation["long_context_meters_billed"] != [] or observation["data_zone_meters_billed"] != []:
+            raise ValueError("a long-context or Data Zone meter was billed")
+        bound = record["short_tier_through_request_input_tokens"]
+        if type(bound) is not int or not 0 < bound < CATALOG_SOL_MAX_CONTEXT_WINDOW:
+            raise ValueError("the short-tier bound is not inside the catalog window")
+        named = record["fallback"]
+        if (named["basis"] != BASIS_LIST_LONG or named["meter"] != SOL_METER
+                or named["price_table_sha256"] != PRICE_TABLE_SHA256):
+            raise ValueError("the fallback is not the list_long_context basis")
+        ceiling = {kind: getattr(short_list, kind) for kind in _RATE_KINDS}
+        if any(observed[kind] > ceiling[kind] or booked[kind] > ceiling[kind] for kind in _RATE_KINDS):
+            raise ValueError("a tenant rate is above the short-context list meter")
+    except Exception:
+        raise SolBatchControlsRefused("sol_batch_tenant_rates_unverified") from None
+    return SolTenantPricing(
+        basis=BASIS_TENANT_20261126,
+        observed=SolRates(*(observed[kind] for kind in _RATE_KINDS), retrieved),
+        booked=SolRates(*(booked[kind] for kind in _RATE_KINDS), retrieved),
+        margin=margin,
+        short_through_input_tokens=bound,
+        fallback=fallback,
+        source_relative=TENANT_RATES_RELATIVE,
+        source_sha256=TENANT_RATES_SHA256,
+        retrieved=retrieved,
+    )
+
+
+def load_booking_rates(basis: Any) -> SolRates | SolTenantPricing:
+    """The rates a run books with, from its booking basis; an unknown basis refuses."""
+    if basis == BASIS_LIST_LONG and isinstance(basis, str):
+        return load_sol_list_rates()
+    if basis == BASIS_TENANT_20261126 and isinstance(basis, str):
+        # Read at call time, so the record a run books from is the module's.
+        return load_sol_tenant_pricing(TENANT_RATES_PATH)
+    raise SolBatchControlsRefused("sol_batch_booking_basis_unknown")
+
+
+def booking_source_sha256(basis: Any) -> str:
+    """The sha256 of the held file a basis books from; an unknown basis refuses."""
+    if basis == BASIS_LIST_LONG and isinstance(basis, str):
+        return PRICE_TABLE_SHA256
+    if basis == BASIS_TENANT_20261126 and isinstance(basis, str):
+        return TENANT_RATES_SHA256
+    raise SolBatchControlsRefused("sol_batch_booking_basis_unknown")
 
 
 def _count(value: Any) -> int | None:
@@ -529,9 +690,12 @@ def list_price_usd(
 ) -> Decimal | None:
     """One turn at list price, or ``None`` when its counts cannot be priced.
 
-    Cache writes are booked as max(reported, input - cached): an upper bound
-    on what one turn can write, since Codex's ledger keeps no cache-write
-    count. Reasoning is billed inside output and is never added on top.
+    The list_long_context basis, and the tenant basis's fallback; a run
+    books through :func:`booked_price_usd`, which picks by the run's booking
+    basis. Cache writes are booked as max(reported, input - cached): an upper
+    bound on what one turn can write, since Codex's ledger keeps no
+    cache-write count. Reasoning is billed inside output and is never added
+    on top.
     """
     inputs = _count(input_tokens)
     outputs = _count(output_tokens)
@@ -554,6 +718,131 @@ def list_price_usd(
     return amount.quantize(MONEY_PLACES, rounding=ROUND_CEILING)
 
 
+def _short_price_usd(
+    pricing: SolTenantPricing, *, input_tokens: Any, cached_input_tokens: Any, output_tokens: Any,
+    reported_cache_write_tokens: Any,
+) -> Decimal:
+    """The short-tier booking of counts list_price_usd already found priceable.
+
+    Uncached input is billed once, on the input or the cache-write meter, so
+    max(reported, input - cached) tokens are charged once at the higher of
+    the two booked rates.
+    """
+    inputs = _count(input_tokens)
+    outputs = _count(output_tokens)
+    cached = 0 if cached_input_tokens is None else _count(cached_input_tokens)
+    assert inputs is not None and outputs is not None and cached is not None
+    reported = _count(reported_cache_write_tokens)
+    writes = max(inputs - cached, reported if reported is not None else 0)
+    rates = pricing.booked
+    amount = (
+        writes * max(rates.input, rates.cache_write)
+        + cached * rates.cached_input
+        + outputs * rates.output
+    ) / TOKENS_PER_MILLION
+    return amount.quantize(MONEY_PLACES, rounding=ROUND_CEILING)
+
+
+def _short_tier(pricing: SolTenantPricing, request_input_tokens: Any) -> bool:
+    size = _count(request_input_tokens)
+    return size is not None and size <= pricing.short_through_input_tokens
+
+
+def booked_tier(rates: Any, request_input_tokens: Any) -> str:
+    """``"list"`` on the list_long_context basis; on the tenant basis ``"short"`` or ``"fallback"``."""
+    if not isinstance(rates, SolTenantPricing):
+        return "list"
+    return "short" if _short_tier(rates, request_input_tokens) else "fallback"
+
+
+def booked_price_usd(
+    *,
+    input_tokens: Any,
+    cached_input_tokens: Any,
+    output_tokens: Any,
+    reasoning_tokens: Any = None,
+    reported_cache_write_tokens: Any = None,
+    request_input_tokens: Any = None,
+    rates: Any,
+) -> Decimal | None:
+    """One booking in the run's booking basis, or ``None`` when its counts cannot be priced.
+
+    On the list_long_context basis (any rates that are not a
+    :class:`SolTenantPricing`) it is :func:`list_price_usd`. On the tenant
+    basis a request of at most the record's bound (``request_input_tokens``,
+    the largest request input of the turn) books at the short tier; above
+    it, or of unknown size, it books exactly the list_long_context amount.
+    The validity rules are list_price_usd's on both.
+    """
+    if not isinstance(rates, SolTenantPricing):
+        return list_price_usd(
+            input_tokens=input_tokens, cached_input_tokens=cached_input_tokens,
+            output_tokens=output_tokens, reasoning_tokens=reasoning_tokens,
+            reported_cache_write_tokens=reported_cache_write_tokens, rates=rates,
+        )
+    listed = list_price_usd(
+        input_tokens=input_tokens, cached_input_tokens=cached_input_tokens,
+        output_tokens=output_tokens, reasoning_tokens=reasoning_tokens,
+        reported_cache_write_tokens=reported_cache_write_tokens, rates=rates.fallback,
+    )
+    if listed is None or not _short_tier(rates, request_input_tokens):
+        return listed
+    return _short_price_usd(
+        rates, input_tokens=input_tokens, cached_input_tokens=cached_input_tokens,
+        output_tokens=output_tokens, reported_cache_write_tokens=reported_cache_write_tokens,
+    )
+
+
+def floor_price_usd(
+    *, input_tokens: Any, cached_input_tokens: Any, output_tokens: Any, reasoning_tokens: Any = None,
+    rates: Any,
+) -> Decimal | None:
+    """The lowest booking a ledger row can get in the run's basis: the published-ledger floor.
+
+    On the list basis it is :func:`list_price_usd` with writes = input -
+    cached; on the tenant basis the short tier at any size, with the same
+    writes.
+    """
+    listed = list_price_usd(
+        input_tokens=input_tokens, cached_input_tokens=cached_input_tokens,
+        output_tokens=output_tokens, reasoning_tokens=reasoning_tokens,
+        rates=rates.fallback if isinstance(rates, SolTenantPricing) else rates,
+    )
+    if listed is None or not isinstance(rates, SolTenantPricing):
+        return listed
+    return _short_price_usd(
+        rates, input_tokens=input_tokens, cached_input_tokens=cached_input_tokens,
+        output_tokens=output_tokens, reported_cache_write_tokens=None,
+    )
+
+
+def refused_request_usd(rates: Any) -> Decimal:
+    """One refused first request in the run's basis: 7.20 on the list basis, 3.024 on the tenant one."""
+    if not isinstance(rates, SolTenantPricing):
+        return REFUSED_REQUEST_USD
+    amount = booked_price_usd(
+        input_tokens=REFUSED_REQUEST_INPUT_TOKENS, cached_input_tokens=0,
+        output_tokens=IN_FLIGHT_OUTPUT_TOKENS, request_input_tokens=REFUSED_REQUEST_INPUT_TOKENS,
+        rates=rates,
+    )
+    assert amount is not None
+    return amount
+
+
+def reservation_usd_per_million(rates: Any, allowance_input_tokens: Any) -> tuple[Decimal, Decimal]:
+    """``(per input token, per output token)`` USD per 1M a grading reservation is sized at.
+
+    Every allowance input token is reserved as uncached: input plus cache
+    write on the list basis (and above the tenant bound), the higher of the
+    two booked rates on the tenant short tier.
+    """
+    if not isinstance(rates, SolTenantPricing):
+        return rates.input + rates.cache_write, rates.output
+    if _short_tier(rates, allowance_input_tokens):
+        return max(rates.booked.input, rates.booked.cache_write), rates.booked.output
+    return rates.fallback.input + rates.fallback.cache_write, rates.fallback.output
+
+
 def fmt(amount: Decimal | int | float | str) -> str:
     """USD at the ledger's eight places, rounded up, as JSON-safe text."""
     # A float would carry its binary error into a ceiling rounding.
@@ -561,7 +850,7 @@ def fmt(amount: Decimal | int | float | str) -> str:
     return format(value.quantize(MONEY_PLACES, rounding=ROUND_CEILING), "f")
 
 
-def in_flight_bound_usd(last: Any, *, rates: SolRates) -> Decimal:
+def in_flight_bound_usd(last: Any, *, rates: SolRates | SolTenantPricing) -> Decimal:
     """The most the one request an unfinished turn may still have had in flight can cost.
 
     Codex reports usage only when a request completes, so a turn settled after
@@ -574,7 +863,10 @@ def in_flight_bound_usd(last: Any, *, rates: SolRates) -> Decimal:
     :data:`CATALOG_SOL_MAX_CONTEXT_WINDOW`, all of it uncached, plus
     :data:`IN_FLIGHT_OUTPUT_TOKENS` of output. Without a readable last request
     it is that whole window uncached plus the same output, 29.385 at the list
-    meter, which is also the most it can ever be.
+    meter, which is also the most it can ever be. It is priced in the run's
+    booking basis, with that grown input as the request's size: on the tenant
+    basis a grown input of at most the record's bound books at the short
+    tier, a larger one at list_long_context.
     """
     grown = CATALOG_SOL_MAX_CONTEXT_WINDOW
     try:
@@ -588,20 +880,22 @@ def in_flight_bound_usd(last: Any, *, rates: SolRates) -> Decimal:
         # Counts that cannot describe a request take the window bound.
         if inputs and outputs is not None and cached is not None and cached <= inputs:
             grown = min(CATALOG_SOL_MAX_CONTEXT_WINDOW, inputs + outputs + IN_FLIGHT_TOOL_OUTPUT_TOKENS)
-    amount = list_price_usd(input_tokens=grown, cached_input_tokens=0,
-                            output_tokens=IN_FLIGHT_OUTPUT_TOKENS, rates=rates)
+    amount = booked_price_usd(input_tokens=grown, cached_input_tokens=0,
+                              output_tokens=IN_FLIGHT_OUTPUT_TOKENS, request_input_tokens=grown,
+                              rates=rates)
     assert amount is not None
     return amount
 
 
 def book_row(
-    row: Mapping[str, Any], *, rates: SolRates, reserve: Decimal,
+    row: Mapping[str, Any], *, rates: SolRates | SolTenantPricing, reserve: Decimal,
     evidence: Mapping[str, Any] | None = None,
 ) -> tuple[Decimal, str]:
-    """What one Codex ledger row costs the gate, and on what basis.
+    """What one Codex ledger row costs the gate in the run's booking basis, and on what basis.
 
     ``evidence`` is what the attempt itself reported: its error category,
-    items seen, the thread's cache-write count and, for a turn that settled
+    items seen, the thread's cache-write count, the turn's largest request
+    input (the tenant basis tiers on it) and, for a turn that settled
     without finishing, the bound on the request it left in flight. Usage that
     was never reported books the whole attempt reserve, except a rate refusal
     before any item completed, which books one refused first request. Booking
@@ -613,12 +907,13 @@ def book_row(
         # The turn never started (codex_runner.py:1914).
         return Decimal(0), "abandoned"
     if state == STATE_SETTLED:
-        amount = list_price_usd(
+        amount = booked_price_usd(
             input_tokens=row.get("input_tokens"),
             cached_input_tokens=row.get("cached_input_tokens"),
             output_tokens=row.get("output_tokens"),
             reasoning_tokens=row.get("reasoning_tokens"),
             reported_cache_write_tokens=facts.get("cache_write_input_tokens"),
+            request_input_tokens=facts.get("tier_request_input_tokens"),
             rates=rates,
         )
         if amount is None:
@@ -630,12 +925,12 @@ def book_row(
             return amount + Decimal(in_flight), "settled_partial"
         return amount, "settled"
     if state == STATE_REFUSED:
-        return REFUSED_REQUEST_USD, "refused_request"
+        return refused_request_usd(rates), "refused_request"
     # Reserved: the stream reported no usage (codex_runner.py:1978).
     items_seen = facts.get("items_seen")
     if (facts.get("error_category") == "rate_limited"
             and type(items_seen) is int and items_seen == 0):
-        return REFUSED_REQUEST_USD, "rate_limited_first_request"
+        return refused_request_usd(rates), "rate_limited_first_request"
     return reserve, "usage_unreported"
 
 
@@ -778,6 +1073,97 @@ def _app_server_facts(usage: Any) -> dict[str, Any]:
     }
 
 
+class _RequestSizes:
+    """The input size of each request a turn reported, read off its event stream.
+
+    Codex sends one ``thread/tokenUsage/updated`` notification per completed
+    request, whose ``last.input_tokens`` is that request's input. The tenant
+    basis tiers a turn on its largest request; anything that makes the sizes
+    untrustworthy (an unreadable size, a size that shrank) is recorded so the
+    turn falls back to list_long_context.
+    """
+
+    def __init__(self) -> None:
+        self.updates = 0
+        self.peak: int | None = None
+        self.observed_sum = 0
+        self.previous: int | None = None
+        self.shrank = False
+        self.unreadable = False
+
+    def observe(self, event: Any) -> None:
+        if getattr(event, "method", None) != _NOTIFY_TOKEN_USAGE:
+            return
+        usage = getattr(getattr(event, "payload", None), "token_usage", None)
+        if usage is None:
+            return
+        size = _count(getattr(getattr(usage, "last", None), "input_tokens", None))
+        self.updates += 1
+        if size is None:
+            self.unreadable = True
+            return
+        if self.previous is not None and size < self.previous:
+            self.shrank = True
+        else:
+            self.peak = size if self.peak is None else max(self.peak, size)
+            self.observed_sum += size
+        self.previous = size
+
+    def as_record(self) -> dict[str, Any]:
+        return {"updates": self.updates, "peak": self.peak, "observed_sum": self.observed_sum,
+                "shrank": self.shrank, "unreadable": self.unreadable}
+
+
+class _SizedStream:
+    """A turn's event stream, unchanged, with every event shown to a :class:`_RequestSizes`."""
+
+    def __init__(self, stream: Any, sizes: _RequestSizes) -> None:
+        self._stream = stream
+        self._sizes = sizes
+
+    def __iter__(self) -> Any:
+        for event in self._stream:
+            try:
+                self._sizes.observe(event)
+            except Exception:  # noqa: BLE001 - observing never touches the stream
+                self._sizes.unreadable = True
+            yield event
+
+    def close(self) -> Any:
+        return self._stream.close()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._stream, name)
+
+
+class _SizedTurn:
+    """A turn handle whose ``stream()`` is observed; everything else is the handle's own."""
+
+    def __init__(self, handle: Any, sizes: _RequestSizes) -> None:
+        self._handle = handle
+        self._sizes = sizes
+
+    def stream(self) -> _SizedStream:
+        return _SizedStream(self._handle.stream(), self._sizes)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._handle, name)
+
+
+def tier_request_input_tokens(sizes: _RequestSizes | None, row_input_tokens: Any) -> int | None:
+    """The turn's largest request input, or ``None`` when it cannot be trusted.
+
+    Every request the observer did not see is bounded by the row's input
+    less what it did see, so the size is max(peak, row input - observed sum).
+    """
+    if sizes is None or sizes.updates == 0 or sizes.unreadable or sizes.shrank or sizes.peak is None:
+        return None
+    total = _count(row_input_tokens)
+    if total is None or sizes.observed_sum > total:
+        return None
+    return max(sizes.peak, total - sizes.observed_sum)
+
+
 class SolBatchSession:
     """The gate's state for one step-2 process, which is one relay leg.
 
@@ -787,7 +1173,7 @@ class SolBatchSession:
     """
 
     def __init__(
-        self, *, run: SolRun, ledger: Any, rates: SolRates, record_path: Path | str,
+        self, *, run: SolRun, ledger: Any, rates: SolRates | SolTenantPricing, record_path: Path | str,
         seed_usd: Decimal, prior_legs_usd: Decimal, window_mismatch: bool,
         header: Mapping[str, Any],
     ) -> None:
@@ -861,8 +1247,14 @@ class SolBatchSession:
     def book_attempt(
         self, *, task_id: str | None, before: frozenset[str] | None,
         decision: Mapping[str, str] | None, result: Any, usage: Any,
+        requests: _RequestSizes | None = None,
     ) -> None:
         """Record one admitted attempt: its rows, their booking and the app-server window.
+
+        ``requests`` are the request sizes the turn's stream reported; with
+        the row's input they give the size the tenant basis tiers the row on.
+        Like the reported cache-write count, that size applies only when the
+        attempt added exactly one row.
 
         Never raises. It runs in a ``finally`` after a paid attempt, and an
         exception here would replace that attempt's result.
@@ -893,7 +1285,9 @@ class SolBatchSession:
                 in_flight = in_flight_bound_usd(
                     getattr(usage, "last", None) if usage is not None else None, rates=self.rates)
             new = [entry for entry in self._rows(key) if entry["call_id"] not in before]
+            size = tier_request_input_tokens(requests, new[0].get("input_tokens")) if len(new) == 1 else None
             booked = []
+            tiers = []
             in_flight_booked = False
             for entry in new:
                 # The thread total belongs to this attempt's one turn; with more
@@ -902,7 +1296,10 @@ class SolBatchSession:
                     "error_category": category,
                     "items_seen": diagnostics.get("items_seen"),
                     "cache_write_input_tokens": reported if len(new) == 1 else None,
+                    "tier_request_input_tokens": size,
                 }
+                if entry.get("state") == STATE_SETTLED:
+                    tiers.append(booked_tier(self.rates, size))
                 if in_flight is not None and entry.get("state") == STATE_SETTLED:
                     facts["in_flight_usd"] = in_flight
                     in_flight_booked = True
@@ -922,6 +1319,9 @@ class SolBatchSession:
                 output_tokens=_sum_counts(entry.get("output_tokens") for entry in new),
                 reasoning_tokens=_sum_counts(entry.get("reasoning_tokens") for entry in new),
                 reported_cache_write_tokens=_count(reported),
+                request_sizes=requests.as_record() if requests is not None else None,
+                tier_request_input_tokens=size,
+                tier="+".join(tiers) or None,
                 app_server=app_server,
                 window_matches_request=None if window is None else window == CONTEXT_WINDOW,
                 success=outcome.get("success") is True,
@@ -939,9 +1339,11 @@ class SolBatchSession:
             facts = row["app_server"]
             window = facts["model_context_window"]
             last = facts["last_request_input_tokens"]
+            size = row["tier_request_input_tokens"]
             _say(f"{label}: booked {row['booked_usd']} ({row['basis']}); app-server window "
                  f"{window if window is not None else 'not reported'}; last request input tokens "
-                 f"{last if last is not None else 'not reported'}; solve spend {row['spend_after_usd']}",
+                 f"{last if last is not None else 'not reported'}; tier {row['tier']} at "
+                 f"{size if size is not None else 'unknown'}; solve spend {row['spend_after_usd']}",
                  inline=True)
         self._write()
 
@@ -1052,6 +1454,7 @@ class SolBatchCodexRunner(CodexAgentRunner):
         super().__init__(provider, **kwargs)
         self._sol_session = session
         self._sol_usage: Any = None
+        self._sol_requests: _RequestSizes | None = None
 
     def run(
         self, task_prompt: str, model: str | None = None,
@@ -1080,6 +1483,7 @@ class SolBatchCodexRunner(CodexAgentRunner):
             session.record_refusal(task_id, refusal, decision)
             return result
         self._sol_usage = None
+        self._sol_requests = _RequestSizes()
         result = None
         try:
             result = super().run(
@@ -1095,7 +1499,7 @@ class SolBatchCodexRunner(CodexAgentRunner):
                       "error": f"Executor error (codex_foundry): {exc}"}
         finally:
             session.book_attempt(task_id=task_id, before=before, decision=decision,
-                                 result=result, usage=self._sol_usage)
+                                 result=result, usage=self._sol_usage, requests=self._sol_requests)
         result["budget_metrics"] = session.task_budget(task_id)
         return result
 
@@ -1105,9 +1509,13 @@ class SolBatchCodexRunner(CodexAgentRunner):
         The only coupling to a private method of the sealed class:
         _run_one_turn calls ``self._await_turn(turn_handle)`` when there is no
         deadline or observer. Core keeps only ``.total`` from this object, so
-        the app-server window is otherwise lost.
+        the app-server window is otherwise lost. The handle goes in wrapped,
+        so every token-usage update the stream carries is also counted as one
+        request's size (the tenant basis tiers on the largest); the events
+        themselves pass through unchanged.
         """
-        observed = super()._await_turn(turn_handle, **kwargs)
+        sizes = self._sol_requests if self._sol_requests is not None else _RequestSizes()
+        observed = super()._await_turn(_SizedTurn(turn_handle, sizes), **kwargs)
         result_usage = getattr(observed.result, "usage", None) if observed.result is not None else None
         self._sol_usage = result_usage if result_usage is not None else observed.usage
         return observed
@@ -1137,6 +1545,10 @@ def _require(condition: bool, code: str) -> None:
 
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _rates_record(rates: SolRates) -> dict[str, str]:
+    return {kind: str(getattr(rates, kind)) for kind in _RATE_KINDS}
 
 
 def install(
@@ -1222,7 +1634,7 @@ def _install(
         held_catalog_override()
     except SolLongContextRefused:
         raise SolBatchControlsRefused("sol_batch_catalog_unverified") from None
-    rates = load_sol_list_rates()
+    rates = load_booking_rates(run.booking_basis)
 
     # Tasks this ledger already holds rows for (a local resume) are counted
     # from the ledger, not again from their progress rows.
@@ -1244,6 +1656,57 @@ def _install(
             status = str(row.get("status"))
             statuses[status] = statuses.get(status, 0) + 1
 
+    in_flight_rule = (
+        "a settled turn that did not finish, other than a rate refusal, also "
+        "books the request it may have left in flight: the last reported "
+        f"request's input grown by its output and {IN_FLIGHT_TOOL_OUTPUT_TOKENS} "
+        f"tool-output tokens, capped at {CATALOG_SOL_MAX_CONTEXT_WINDOW}, all "
+        f"uncached, plus {IN_FLIGHT_OUTPUT_TOKENS} output tokens; without one, "
+        f"{CATALOG_SOL_MAX_CONTEXT_WINDOW} uncached input tokens plus "
+        f"{IN_FLIGHT_OUTPUT_TOKENS} output tokens"
+    )
+    if isinstance(rates, SolTenantPricing):
+        bound = rates.short_through_input_tokens
+        pricing: dict[str, Any] = {
+            "refused_request": fmt(refused_request_usd(rates)),
+            "meter": SOL_SHORT_METER,
+            "rates": _rates_record(rates.booked),
+            "observed_rates": _rates_record(rates.observed),
+            "safety_margin": str(rates.margin),
+            "rates_retrieved": rates.retrieved,
+            "rates_source": {"path": rates.source_relative, "sha256": rates.source_sha256},
+            "short_tier_through_request_input_tokens": bound,
+            "fallback": {"basis": BASIS_LIST_LONG, "meter": SOL_METER,
+                         "rates": _rates_record(rates.fallback),
+                         "rates_retrieved": rates.fallback.retrieved,
+                         "price_table_sha256": PRICE_TABLE_SHA256},
+            "price_table_sha256": PRICE_TABLE_SHA256,
+            "cache_write_rule": ("uncached input once: max(reported, input - cached) tokens at "
+                                 "max(input, cache_write) on the short tier; list_long_context above it"),
+            "tier_rule": ("short when the turn's largest request input (observed per request, plus any "
+                          f"unobserved remainder) is at most {bound}; list_long_context otherwise or when "
+                          "unknown"),
+            "in_flight_rule": (f"{in_flight_rule}; priced at the short tier when that grown input is at "
+                               f"most {bound}, else at list_long_context"),
+        }
+    else:
+        pricing = {
+            "refused_request": fmt(REFUSED_REQUEST_USD),
+            "meter": SOL_METER,
+            "rates": _rates_record(rates),
+            "rates_retrieved": rates.retrieved,
+            "price_table_sha256": PRICE_TABLE_SHA256,
+            "cache_write_rule": "max(reported, input - cached)",
+            "in_flight_rule": in_flight_rule,
+        }
+    sources = {
+        _STEP2_RELATIVE: _sha256_file(ROOT / _STEP2_RELATIVE),
+        _THIS_RELATIVE: _sha256_file(Path(__file__).resolve()),
+        CATALOG_RELATIVE: _sha256_file(CATALOG_PATH),
+        _PRICE_TABLE_RELATIVE: _sha256_file(Path(PRICE_TABLE_PATH)),
+    }
+    if isinstance(rates, SolTenantPricing):
+        sources[TENANT_RATES_RELATIVE] = _sha256_file(TENANT_RATES_PATH)
     # Never the endpoint, base_url or auth argv: this file is uploaded.
     header = {
         "schema": RECORD_SCHEMA,
@@ -1273,13 +1736,8 @@ def _install(
             "attempt_reserve": fmt(run.attempt_reserve_usd),
             "solve_budget": fmt(run.solve_budget_usd),
             "admit_while_spend_at_most": fmt(run.admit_while_at_most_usd),
-            "refused_request": fmt(REFUSED_REQUEST_USD),
-            "meter": SOL_METER,
-            "rates": {"input": str(rates.input), "cached_input": str(rates.cached_input),
-                      "cache_write": str(rates.cache_write), "output": str(rates.output)},
-            "rates_retrieved": rates.retrieved,
-            "price_table_sha256": PRICE_TABLE_SHA256,
-            "cache_write_rule": "max(reported, input - cached)",
+            "booking_basis": run.booking_basis,
+            **pricing,
             "reasoning": "inside output",
             "unknown_usage": (
                 "a turn with no reported usage books the attempt reserve; a rate "
@@ -1287,25 +1745,11 @@ def _install(
                 "settled turn without priceable counts books the attempt reserve; "
                 "an abandoned turn books 0"
             ),
-            "in_flight_rule": (
-                "a settled turn that did not finish, other than a rate refusal, also "
-                "books the request it may have left in flight: the last reported "
-                f"request's input grown by its output and {IN_FLIGHT_TOOL_OUTPUT_TOKENS} "
-                f"tool-output tokens, capped at {CATALOG_SOL_MAX_CONTEXT_WINDOW}, all "
-                f"uncached, plus {IN_FLIGHT_OUTPUT_TOKENS} output tokens; without one, "
-                f"{CATALOG_SOL_MAX_CONTEXT_WINDOW} uncached input tokens plus "
-                f"{IN_FLIGHT_OUTPUT_TOKENS} output tokens"
-            ),
             "prior_lineage_spend_usd": fmt(run.prior_lineage_spend_usd),
             "prior_legs_spend_usd": fmt(prior_legs_usd),
             "prior_leg_tasks": prior_tasks,
         },
-        "sources": {
-            _STEP2_RELATIVE: _sha256_file(ROOT / _STEP2_RELATIVE),
-            _THIS_RELATIVE: _sha256_file(Path(__file__).resolve()),
-            CATALOG_RELATIVE: _sha256_file(CATALOG_PATH),
-            _PRICE_TABLE_RELATIVE: _sha256_file(Path(PRICE_TABLE_PATH)),
-        },
+        "sources": sources,
         "window_rule": "stop starting attempts after an app-server window other than 1000000",
         "evidence_boundary": EVIDENCE_BOUNDARY,
     }
@@ -1329,6 +1773,7 @@ def _install(
     _say(f"[sol-batch] reasoning effort {REASONING_EFFORT} (the Codex 0.147.0 catalog default "
          f"for {SOL_MODEL} is low)")
     _say(f"[sol-batch] context window {CONTEXT_WINDOW:,} via held catalog {CATALOG_SHA256[:12]}")
+    _say(f"[sol-batch] booking basis {run.booking_basis} ({booking_source_sha256(run.booking_basis)[:12]})")
     _say(f"[sol-batch] USD gate: {run.ceiling_usd} ceiling − {run.grading_reserve_usd} grading = "
          f"{run.solve_budget_usd} solve budget; {run.attempt_reserve_usd} reserve per attempt; attempts "
          f"start while booked spend ≤ {run.admit_while_at_most_usd:.2f}; prior lineages "

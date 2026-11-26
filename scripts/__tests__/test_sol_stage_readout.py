@@ -576,6 +576,30 @@ def test_two_stages_with_their_own_configs_can_be_one_grader(tmp_path, registry)
     assert summary["one_grader_problems"][0].startswith("exp038_sol_rest195: graded by grader source")
 
 
+def test_a_readout_refuses_to_sum_stages_on_two_bases(tmp_path, registry, monkeypatch):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    # One stage alone reports the basis its money was booked at.
+    report = tmp_path / "self_report.json"
+    report.write_text(json.dumps(SELF_REPORT), encoding="utf-8")
+    journals = tmp_path / "journals"
+    journals.mkdir()
+    shutil.copy(GRADE_JOURNAL, journals)
+    summary = readout.summarise(readout.read_stage("exp036_sol_fixed5", GRADE, report, journals), 5, 0, 0)
+    assert summary["usd"]["booking_basis"] == "list_long_context"
+
+    registry.approve_exp038()
+    run = dataclasses.replace(controls.RUNS["exp038_sol_rest195"], booking_basis=controls.BASIS_TENANT_20261126)
+    monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
+    first, rest = _this_tree_hash(readout, "exp037_v2_sol_max"), _this_tree_hash(readout, "exp038_v2_sol_max")
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", first, _stage_tasks("exp037_sol_first25"))
+    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", rest, _stage_tasks("exp038_sol_rest195"))
+    with pytest.raises(SystemExit) as refused:
+        _run(readout, tmp_path, exp037, exp038)
+    assert str(refused.value).startswith("stages booked on different bases cannot be summed: ")
+    assert "exp038_sol_rest195 (tenant_observed_20261126)" in str(refused.value)
+
+
 def test_a_task_the_usd_gate_refused_is_moved_not_sampled(tmp_path):
     readout = _readout()
     first25 = _stage_tasks("exp037_sol_first25")

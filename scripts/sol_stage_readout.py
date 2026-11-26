@@ -354,6 +354,8 @@ def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals
         "lost_booking_usd": sum(lost.values(), Decimal(0)),
         "grading_usd": grading_total,
         "grading_unattributed_usd": unattributed,
+        # The rates every figure of the stage was booked at (sol_batch_controls.BOOKING_BASES).
+        "booking_basis": run.booking_basis,
         **registered_money(experiment_id),
     }
     rows = []
@@ -466,6 +468,12 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
     later stage replaced; by default, those of ``rows``.
     """
     records = _stage_records(rows) if stages is None else stages
+    # USD booked at different rates is not one unit; adding it up would read
+    # as one figure what is two.
+    bases = sorted({record["booking_basis"] for record in records})
+    if len(bases) > 1:
+        raise SystemExit("stages booked on different bases cannot be summed: " + ", ".join(
+            f"{record['stage']} ({record['booking_basis']})" for record in records))
     projected = remaining_tasks is not None and remaining_items is not None
     judged = [row for row in rows if row["cause"] == "judged"]
     # Never attempted: on the fixed denominator at 0, but not a sample of what
@@ -520,7 +528,8 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
             "selection_rules": dict(Counter(str(row["selection_rule"]) for row in with_files)),
         },
         # Solve: what the stages committed (sol_batch_controls.solve_spend_usd).
-        "usd": {"solve": round(float(sum((record["solve_usd"] for record in records), Decimal(0))), 2),
+        "usd": {"booking_basis": bases[0] if bases else None,
+                "solve": round(float(sum((record["solve_usd"] for record in records), Decimal(0))), 2),
                 "grading": round(grading_total, 2),
                 "grading_unattributed": round(float(unattributed), 2),
                 "solve_per_task_mean": round(statistics.mean(solve), 2) if solve else None,

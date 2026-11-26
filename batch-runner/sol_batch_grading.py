@@ -103,6 +103,12 @@ import yaml
 
 SOLVE_SEED_SOL_BATCH = "sol_batch_controls"
 SOLVE_SEED_NONE = "none"
+#: Twins of sol_batch_controls.BASIS_LIST_LONG, BASIS_TENANT_20261126 and
+#: BOOKING_BASES, as strings so the inert path imports nothing more; a test
+#: holds the two sets equal.
+BASIS_LIST_LONG = "list_long_context"
+BASIS_TENANT_20261126 = "tenant_observed_20261126"
+BOOKING_BASES = frozenset({BASIS_LIST_LONG, BASIS_TENANT_20261126})
 
 
 @dataclass(frozen=True)
@@ -133,6 +139,10 @@ class Approval:
     task_ids_sha256: str | None
     #: The owner's dated approval, or None: registered, not approved.
     approved: str | None
+    #: One of BOOKING_BASES: the rates every reservation and settlement of
+    #: this approval books at, and its journals' basis. A Sol batch entry's
+    #: twin in sol_batch_controls.RUNS names the same one.
+    booking_basis: str = BASIS_LIST_LONG
 
 
 EXP036_SOL_BATCH = Approval(
@@ -387,6 +397,8 @@ def approval_problems(approvals: Sequence[Approval] | None = None) -> list[str]:
                                 "and task scope")
         else:
             problems.append(f"{name}: an unknown solve seed")
+        if not isinstance(approval.booking_basis, str) or approval.booking_basis not in BOOKING_BASES:
+            problems.append(f"{name}: an unknown booking basis")
     return problems
 
 
@@ -447,6 +459,8 @@ class Seed:
     prior_grading_usd: Decimal
     prior_journals: tuple[Mapping[str, str], ...]
     ceiling_usd: Decimal
+    #: The approval's booking basis: the rates this grade reserves and settles at.
+    booking_basis: str = BASIS_LIST_LONG
 
     def committed_floor(self) -> Decimal:
         return self.solve_usd + self.narrative_allowance_usd + self.prior_grading_usd
@@ -464,6 +478,7 @@ class Seed:
             "prior_journals": [dict(journal) for journal in self.prior_journals],
             "committed_floor_usd": _money(self.committed_floor()),
             "ceiling_usd": _money(self.ceiling_usd),
+            "booking_basis": self.booking_basis,
         }
 
 
@@ -590,6 +605,7 @@ def preflight(
         prior_grading_usd=prior,
         prior_journals=tuple(journals),
         ceiling_usd=approval.ceiling_usd,
+        booking_basis=approval.booking_basis,
     )
     if seed.committed_floor() >= seed.ceiling_usd:
         _refuse(
@@ -621,6 +637,8 @@ def _solve_seed(
         _refuse("sol_batch_controls does not approve this run")
     if run.grading_config_name != approval.config_name or run.ceiling_usd != approval.ceiling_usd:
         _refuse("the solve and grade sides name different configs or ceilings")
+    if run.booking_basis != approval.booking_basis:
+        _refuse("the solve and grade sides book under different bases")
     if controls.registry_problems({run.experiment_id: run}):
         _refuse(f"{run.experiment_id}'s registry entry is incomplete")
     try:
@@ -695,7 +713,8 @@ def published_solve(
     published as ``observability.budget_metrics.conservative_cost_usd``; it
     survives relay legs, where each leg's per-turn ledger does not. The
     published cost_ledger.jsonl holds only the last leg's rows, so its settled
-    rows priced at the same list meter are a lower bound: booked spend below
+    rows priced at the run's basis, lowest tier (controls.floor_price_usd),
+    are a lower bound: booked spend below
     it, not counting the run's ``prior_lineage_spend_usd``, means a booking
     was lost, and refuses. A row that reached Codex without a booking refuses
     unless the run's ``lost_booking_usd`` names it for ``revision``. The
@@ -743,7 +762,7 @@ def published_solve(
         floor, status = Decimal(0), "absent"
     else:
         try:
-            rates = controls.load_sol_list_rates()
+            rates = controls.load_booking_rates(run.booking_basis)
         except controls.SolBatchControlsRefused as exc:
             _refuse(str(exc))
         floor = Decimal(0)
@@ -762,7 +781,7 @@ def published_solve(
                 _refuse("cost_ledger.jsonl has a line that is not an object")
             if row.get("record_type") != "call" or row.get("state") != "settled":
                 continue
-            price = controls.list_price_usd(
+            price = controls.floor_price_usd(
                 input_tokens=row.get("input_tokens"),
                 cached_input_tokens=row.get("cached_input_tokens"),
                 output_tokens=row.get("output_tokens"),
@@ -816,8 +835,11 @@ def _journal_owner(record: Mapping[str, Any]) -> Approval | None:
 def _read_journal(path: Path, approval: Approval | None = None) -> tuple[Decimal, str]:
     """``(spent_usd, sha256)`` of one committed journal; anything malformed refuses.
 
-    The open line names the approval that wrote it. With ``approval`` given,
-    a journal written under any other approval refuses too.
+    The open line names the approval that wrote it, and the booking basis
+    it booked under (a line without one predates bases and booked on
+    list_long_context). An unknown basis refuses. With ``approval`` given, a
+    journal written under any other approval or basis, or from other rates
+    than its basis pins (``booking_rates_sha256``), refuses too.
     """
     if not JOURNAL_NAME.fullmatch(path.name):
         _refuse(f"{path.name} is not a combined USD journal name")
@@ -860,6 +882,20 @@ def _read_journal(path: Path, approval: Approval | None = None) -> tuple[Decimal
                 _refuse(f"{path.name} is not the journal of an approved admission")
             if approval is not None and owner is not approval:
                 _refuse(f"{path.name} is not a {approval.experiment_id} / {approval.config_name} journal")
+            basis = record.get("booking_basis", BASIS_LIST_LONG)
+            if not isinstance(basis, str) or basis not in BOOKING_BASES:
+                _refuse(f"{path.name} names an unknown booking basis")
+            if approval is not None:
+                if basis != approval.booking_basis:
+                    _refuse(f"{path.name} was booked under {basis}; this approval books under "
+                            f"{approval.booking_basis}")
+                # The approval is found, so the paid path's import is allowed here.
+                import sol_batch_controls as controls
+
+                sha = record.get("booking_rates_sha256")
+                if (sha is None and basis != BASIS_LIST_LONG) or (
+                        sha is not None and sha != controls.booking_source_sha256(basis)):
+                    _refuse(f"{path.name} was booked from other rates than {basis} pins")
             continue
         ticket = record.get("ticket")
         if event == "reserve":
@@ -994,9 +1030,11 @@ class CombinedGradingAdmission:
         self.seed = seed
         self.journal_path = path
         try:
-            self.rates_sol = controls.load_sol_list_rates()
+            self.rates_sol = controls.load_booking_rates(seed.booking_basis)
+            rates_sha256 = controls.booking_source_sha256(seed.booking_basis)
         except controls.SolBatchControlsRefused as exc:
             _refuse(str(exc))
+        self._tenant = seed.booking_basis != BASIS_LIST_LONG
         self.spent = Decimal(0)
         self.pending: dict[str, Decimal] = {}
         self.stops: list[str] = []
@@ -1012,6 +1050,7 @@ class CombinedGradingAdmission:
                 "open",
                 schema=JOURNAL_SCHEMA,
                 **seed.as_record(),
+                booking_rates_sha256=rates_sha256,
                 github_run_id=os.environ.get("GITHUB_RUN_ID"),
                 github_run_attempt=os.environ.get("GITHUB_RUN_ATTEMPT"),
                 opened_at=_now(),
@@ -1077,8 +1116,7 @@ class CombinedGradingAdmission:
             per_input = rates["input"] + rates["cache_write"]
             per_output = rates["output"]
         else:
-            per_input = self.rates_sol.input + self.rates_sol.cache_write
-            per_output = self.rates_sol.output
+            per_input, per_output = self._controls.reservation_usd_per_million(self.rates_sol, inputs)
         return _ceil8((Decimal(inputs) * per_input + Decimal(outputs) * per_output) / _TOKENS_PER_MILLION)
 
     def _settled_usd(self, model: Any, response: Any) -> tuple[Decimal | None, dict[str, Any]]:
@@ -1098,11 +1136,15 @@ class CombinedGradingAdmission:
             rates = self._usd.AUDIO_STAND_IN_USD_PER_MILLION
             amount = (Decimal(inputs) * rates["input"] + Decimal(outputs) * rates["output"]) / _TOKENS_PER_MILLION
             return _ceil8(amount), tokens
-        return self._controls.list_price_usd(
+        if self._tenant:
+            # Grading tiers on the request's own reported input.
+            tokens["tier"] = self._controls.booked_tier(self.rates_sol, usage.input_tokens)
+        return self._controls.booked_price_usd(
             input_tokens=usage.input_tokens,
             cached_input_tokens=usage.cached_input_tokens,
             output_tokens=usage.output_tokens,
             reasoning_tokens=usage.reasoning_tokens,
+            request_input_tokens=usage.input_tokens,
             rates=self.rates_sol,
         ), tokens
 
@@ -1157,6 +1199,9 @@ class CombinedGradingAdmission:
             self._tickets += 1
             ticket = f"g{self._tickets}"
             try:
+                extra: dict[str, Any] = {}
+                if self._tenant and not self._is_audio(model):
+                    extra["tier"] = self._controls.booked_tier(self.rates_sol, inputs)
                 self._append(
                     "reserve",
                     ticket=ticket,
@@ -1165,6 +1210,9 @@ class CombinedGradingAdmission:
                     model=model if type(model) is str else None,
                     reserve_usd=_money(amount),
                     committed_usd=_money(committed + amount),
+                    allowance_input_tokens=inputs,
+                    allowance_output_tokens=outputs,
+                    **extra,
                 )
             except Exception:  # noqa: BLE001 - an unjournaled request is not sent
                 self._stop(UNVERIFIED, task_id=task_id, detail="journal write failed")
