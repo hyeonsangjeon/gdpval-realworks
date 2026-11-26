@@ -136,6 +136,13 @@ TENANT_RATES_SHA256 = "11bf182dfb0d9dfa720a788d87e9dc4b89500ed7fae8381e5d7a791cd
 TENANT_RATES_SCHEMA = "sol-batch-tenant-rates-v1"
 #: The refused first request's input, the same 64,000 as REFUSED_REQUEST_USD.
 REFUSED_REQUEST_INPUT_TOKENS = 64_000
+#: Codex app-server item notifications; the observer reads sub-agent items off them.
+_NOTIFY_ITEM_EVENTS = frozenset({"item/started", "item/completed"})
+#: Thread items a turn that used Codex's collaboration tools carries: a
+#: spawned or contacted sub-agent, and a collaboration tool call.
+_SUB_AGENT_ITEM_TYPES = frozenset({"subAgentActivity", "collabAgentToolCall"})
+#: Collaboration tools that start no sub-agent request (CollabAgentTool values).
+_COLLAB_TOOLS_WITHOUT_REQUESTS = frozenset({"wait", "closeAgent"})
 
 
 @dataclass(frozen=True)
@@ -586,7 +593,10 @@ def load_sol_tenant_pricing(path: Path | str = TENANT_RATES_PATH) -> SolTenantPr
     Refuses with ``sol_batch_tenant_rates_unverified`` unless the file is the
     pinned single-link regular file and its figures agree with themselves:
     booked = observed x margin per kind, each observed rate the billed cost
-    over its quantity at cents, one ShortCo Standard Global meter per kind and
+    over its quantity at cents, the stated uncached quantity the sum of the
+    input and cache-write quantities (arithmetic only: whether Azure bills
+    uncached input once is shown by the billed windows' ledger replays, not
+    by the record), one ShortCo Standard Global meter per kind and
     no long-context or Data Zone meter billed, a bound inside the held
     catalog's window, the list_long_context fallback pinned to the #795
     table, and no rate above the table's short-context list meter. A failure
@@ -623,9 +633,13 @@ def load_sol_tenant_pricing(path: Path | str = TENANT_RATES_PATH) -> SolTenantPr
                 raise ValueError("an observed rate is not its billed cost over its quantity")
         if sum((cost for _, cost in by_kind.values()), Decimal(0)) != _positive_rate(observation["period_cost_usd"]):
             raise ValueError("the meters do not add to the period cost")
+        # A consistency check on the record's own arithmetic, not evidence
+        # that Azure bills uncached input once: the record's figure is the sum
+        # of these two quantities. The "once" rule rests on the billed
+        # windows' ledger replays (test_the_tenant_basis_reconciles_with_billing).
         if (by_kind["input"][0] + by_kind["cache_write"][0]
                 != _positive_rate(observation["uncached_input_million_tokens"])):
-            raise ValueError("uncached input is not the input plus cache-write quantities")
+            raise ValueError("uncached_input_million_tokens is not the input plus cache-write quantities")
         if observation["long_context_meters_billed"] != [] or observation["data_zone_meters_billed"] != []:
             raise ValueError("a long-context or Data Zone meter was billed")
         bound = record["short_tier_through_request_input_tokens"]
@@ -900,7 +914,25 @@ def book_row(
     was never reported books the whole attempt reserve, except a rate refusal
     before any item completed, which books one refused first request. Booking
     a 429 at the full reserve would let two zero-cost refusals close the gate.
+
+    ``evidence["sub_agent_usd"]``, set only on the tenant basis, is the bound
+    booked for sub-agent threads the turn spawned: their requests reach no
+    ledger row and no stream this process reads. It is added to whatever the
+    row books, and the row's basis gains ``_with_sub_agents``, so the usage
+    counts as incomplete.
     """
+    amount, basis = _book_row_measured(row, rates=rates, reserve=reserve, evidence=evidence)
+    sub_agents = (evidence or {}).get("sub_agent_usd")
+    if sub_agents is not None and basis != "abandoned":
+        return amount + Decimal(sub_agents), f"{basis}_with_sub_agents"
+    return amount, basis
+
+
+def _book_row_measured(
+    row: Mapping[str, Any], *, rates: SolRates | SolTenantPricing, reserve: Decimal,
+    evidence: Mapping[str, Any] | None = None,
+) -> tuple[Decimal, str]:
+    """:func:`book_row` without the sub-agent bound."""
     facts = evidence or {}
     state = row.get("state")
     if state == STATE_ABANDONED:
@@ -1076,32 +1108,79 @@ def _app_server_facts(usage: Any) -> dict[str, Any]:
 class _RequestSizes:
     """The input size of each request a turn reported, read off its event stream.
 
-    Codex sends one ``thread/tokenUsage/updated`` notification per completed
-    request, whose ``last.input_tokens`` is that request's input. The tenant
-    basis tiers a turn on its largest request; anything that makes the sizes
-    untrustworthy (an unreadable size, a size that shrank) is recorded so the
-    turn falls back to list_long_context.
+    Codex 0.147.0 sends a ``thread/tokenUsage/updated`` notification after a
+    completed request: ``last.input_tokens`` is that request's input and
+    ``total.input_tokens`` the thread's running total. When a request fails,
+    is cut off or reports no usage, it sends the previous notification again
+    (the same ``last`` and an unchanged ``total``); that repeat is not a
+    request and is skipped. A total that grew by more than ``last`` means
+    requests the observer never saw; the excess is kept as
+    ``unobserved_input_tokens`` and bounds each of them. The tenant basis
+    tiers a turn on its largest request; anything that makes the sizes
+    untrustworthy (an unreadable size or total, a total that fell or grew by
+    less than ``last``, a size that shrank) is recorded so the turn falls
+    back to list_long_context.
+
+    Sub-agent threads (Codex's ``collaboration`` tools) send their usage to
+    their own turn, never to this stream, and their requests reach no ledger
+    row. The parent stream does carry the ``subAgentActivity`` items and
+    the ``collabAgentToolCall`` items that spawn or message an agent, so
+    they are counted (``sub_agent_items``; a wait or close call starts no
+    request and is not): a turn with any of them cannot be sized, and the
+    tenant basis books a bound for the threads it spawned.
     """
 
     def __init__(self) -> None:
         self.updates = 0
+        self.repeats = 0
         self.peak: int | None = None
         self.observed_sum = 0
+        self.unobserved = 0
         self.previous: int | None = None
+        self.previous_total: int | None = None
         self.shrank = False
         self.unreadable = False
+        self._sub_agent_items: set[str] = set()
+        self._sub_agent_threads: set[str] = set()
+
+    @property
+    def sub_agent_items(self) -> int:
+        return len(self._sub_agent_items)
+
+    @property
+    def sub_agent_threads(self) -> int:
+        """Sub-agent threads seen; at least 1 once any sub-agent item was seen."""
+        if not self._sub_agent_items:
+            return 0
+        return max(1, len(self._sub_agent_threads))
 
     def observe(self, event: Any) -> None:
-        if getattr(event, "method", None) != _NOTIFY_TOKEN_USAGE:
+        method = getattr(event, "method", None)
+        if method in _NOTIFY_ITEM_EVENTS:
+            self._observe_item(getattr(getattr(event, "payload", None), "item", None))
+            return
+        if method != _NOTIFY_TOKEN_USAGE:
             return
         usage = getattr(getattr(event, "payload", None), "token_usage", None)
         if usage is None:
             return
-        size = _count(getattr(getattr(usage, "last", None), "input_tokens", None))
         self.updates += 1
-        if size is None:
+        size = _count(getattr(getattr(usage, "last", None), "input_tokens", None))
+        total = _count(getattr(getattr(usage, "total", None), "input_tokens", None))
+        if size is None or total is None:
             self.unreadable = True
             return
+        if total == self.previous_total and size == self.previous:
+            # Codex re-sent the previous update; no request completed.
+            self.repeats += 1
+            return
+        grown = total - (self.previous_total or 0)
+        if grown < size:
+            # A total that fell, or grew by less than one request's input.
+            self.unreadable = True
+            return
+        self.unobserved += grown - size
+        self.previous_total = total
         if self.previous is not None and size < self.previous:
             self.shrank = True
         else:
@@ -1109,9 +1188,31 @@ class _RequestSizes:
             self.observed_sum += size
         self.previous = size
 
+    def _observe_item(self, item: Any) -> None:
+        if item is None:
+            return
+        root = getattr(item, "root", item)
+        kind = getattr(root, "type", None)
+        if kind not in _SUB_AGENT_ITEM_TYPES:
+            return
+        tool = getattr(root, "tool", None)
+        if kind == "collabAgentToolCall" and getattr(tool, "value", tool) in _COLLAB_TOOLS_WITHOUT_REQUESTS:
+            # Waiting on or closing an agent sends nothing; any agent it names
+            # was spawned, and counted, in this turn.
+            return
+        self._sub_agent_items.add(str(getattr(root, "id", None) or f"unnamed-{len(self._sub_agent_items)}"))
+        thread = getattr(root, "agent_thread_id", None)
+        if isinstance(thread, str) and thread:
+            self._sub_agent_threads.add(thread)
+        for receiver in getattr(root, "receiver_thread_ids", None) or ():
+            if isinstance(receiver, str) and receiver:
+                self._sub_agent_threads.add(receiver)
+
     def as_record(self) -> dict[str, Any]:
-        return {"updates": self.updates, "peak": self.peak, "observed_sum": self.observed_sum,
-                "shrank": self.shrank, "unreadable": self.unreadable}
+        return {"updates": self.updates, "repeats": self.repeats, "peak": self.peak,
+                "observed_sum": self.observed_sum, "unobserved_input_tokens": self.unobserved,
+                "shrank": self.shrank, "unreadable": self.unreadable,
+                "sub_agent_items": self.sub_agent_items, "sub_agent_threads": self.sub_agent_threads}
 
 
 class _SizedStream:
@@ -1153,15 +1254,34 @@ class _SizedTurn:
 def tier_request_input_tokens(sizes: _RequestSizes | None, row_input_tokens: Any) -> int | None:
     """The turn's largest request input, or ``None`` when it cannot be trusted.
 
-    Every request the observer did not see is bounded by the row's input
-    less what it did see, so the size is max(peak, row input - observed sum).
+    Requests the observer missed are bounded by what their notifications'
+    totals grew by beyond ``last`` (``unobserved``), and by the row's input
+    less everything the totals account for, so the size is max(peak,
+    unobserved, row input - observed sum - unobserved). A turn that spawned
+    sub-agents has requests no total counts, so it has no size.
     """
-    if sizes is None or sizes.updates == 0 or sizes.unreadable or sizes.shrank or sizes.peak is None:
+    if (sizes is None or sizes.updates == 0 or sizes.unreadable or sizes.shrank or sizes.peak is None
+            or sizes.sub_agent_items):
         return None
     total = _count(row_input_tokens)
-    if total is None or sizes.observed_sum > total:
+    seen = sizes.observed_sum + sizes.unobserved
+    if total is None or seen > total:
         return None
-    return max(sizes.peak, total - sizes.observed_sum)
+    return max(sizes.peak, sizes.unobserved, total - seen)
+
+
+
+def sub_agent_bound_usd(sizes: _RequestSizes | None, *, rates: Any, reserve: Decimal) -> Decimal | None:
+    """What the tenant basis books for the sub-agent threads a turn spawned, or ``None``.
+
+    Their requests reach no ledger row and no stream this process reads, so
+    each thread the parent stream named books the attempt reserve, the
+    amount a turn with no reported usage books. The list_long_context basis
+    keeps its booking unchanged, for good.
+    """
+    if sizes is None or not isinstance(rates, SolTenantPricing) or not sizes.sub_agent_items:
+        return None
+    return reserve * sizes.sub_agent_threads
 
 
 class SolBatchSession:
@@ -1254,7 +1374,9 @@ class SolBatchSession:
         ``requests`` are the request sizes the turn's stream reported; with
         the row's input they give the size the tenant basis tiers the row on.
         Like the reported cache-write count, that size applies only when the
-        attempt added exactly one row.
+        attempt added exactly one row. On the tenant basis, sub-agent threads
+        the stream named book :func:`sub_agent_bound_usd` once, on the
+        attempt's first row.
 
         Never raises. It runs in a ``finally`` after a paid attempt, and an
         exception here would replace that attempt's result.
@@ -1286,9 +1408,11 @@ class SolBatchSession:
                     getattr(usage, "last", None) if usage is not None else None, rates=self.rates)
             new = [entry for entry in self._rows(key) if entry["call_id"] not in before]
             size = tier_request_input_tokens(requests, new[0].get("input_tokens")) if len(new) == 1 else None
+            sub_agents = sub_agent_bound_usd(requests, rates=self.rates, reserve=self.run.attempt_reserve_usd)
             booked = []
             tiers = []
             in_flight_booked = False
+            sub_agents_booked = False
             for entry in new:
                 # The thread total belongs to this attempt's one turn; with more
                 # rows than turns it cannot be attributed, and the bound applies.
@@ -1303,6 +1427,10 @@ class SolBatchSession:
                 if in_flight is not None and entry.get("state") == STATE_SETTLED:
                     facts["in_flight_usd"] = in_flight
                     in_flight_booked = True
+                if sub_agents is not None and not sub_agents_booked and entry.get("state") != STATE_ABANDONED:
+                    # Once per attempt, on its first row that books anything.
+                    facts["sub_agent_usd"] = sub_agents
+                    sub_agents_booked = True
                 self.evidence[entry["call_id"]] = facts
                 booked.append(book_row(entry, rates=self.rates, reserve=self.run.attempt_reserve_usd,
                                        evidence=facts))
@@ -1314,6 +1442,7 @@ class SolBatchSession:
                 booked_usd=fmt(sum((amount for amount, _ in booked), Decimal(0))),
                 basis="+".join(basis for _, basis in booked) or "no_row",
                 in_flight_usd=fmt(in_flight) if in_flight_booked else None,
+                sub_agent_usd=fmt(sub_agents) if sub_agents_booked else None,
                 input_tokens=_sum_counts(entry.get("input_tokens") for entry in new),
                 cached_input_tokens=_sum_counts(entry.get("cached_input_tokens") for entry in new),
                 output_tokens=_sum_counts(entry.get("output_tokens") for entry in new),
@@ -1510,9 +1639,9 @@ class SolBatchCodexRunner(CodexAgentRunner):
         _run_one_turn calls ``self._await_turn(turn_handle)`` when there is no
         deadline or observer. Core keeps only ``.total`` from this object, so
         the app-server window is otherwise lost. The handle goes in wrapped,
-        so every token-usage update the stream carries is also counted as one
-        request's size (the tenant basis tiers on the largest); the events
-        themselves pass through unchanged.
+        so the token-usage updates and sub-agent items the stream carries are
+        read by :class:`_RequestSizes` (the tenant basis tiers on the largest
+        request); the events themselves pass through unchanged.
         """
         sizes = self._sol_requests if self._sol_requests is not None else _RequestSizes()
         observed = super()._await_turn(_SizedTurn(turn_handle, sizes), **kwargs)
@@ -1683,9 +1812,15 @@ def _install(
             "price_table_sha256": PRICE_TABLE_SHA256,
             "cache_write_rule": ("uncached input once: max(reported, input - cached) tokens at "
                                  "max(input, cache_write) on the short tier; list_long_context above it"),
-            "tier_rule": ("short when the turn's largest request input (observed per request, plus any "
-                          f"unobserved remainder) is at most {bound}; list_long_context otherwise or when "
-                          "unknown"),
+            "tier_rule": ("short when the turn's largest request input is at most "
+                          f"{bound}: the largest request its parent stream's token-usage updates name "
+                          "(a re-sent update is no request), any request they missed bounded by what "
+                          "their totals grew by beyond it and by the row's input less what the totals "
+                          "account for; list_long_context otherwise, or when unknown, or when the turn "
+                          "used Codex's sub-agent tools"),
+            "sub_agent_rule": ("sub-agent threads send their usage to no ledger row and no stream this "
+                               "process reads: each one the parent stream names books the attempt reserve "
+                               "on top of the turn's row, and the turn's usage counts as incomplete"),
             "in_flight_rule": (f"{in_flight_rule}; priced at the short tier when that grown input is at "
                                f"most {bound}, else at list_long_context"),
         }

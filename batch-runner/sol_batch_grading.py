@@ -1007,6 +1007,30 @@ def check_grade_writers(
 # -- the per-request admission ------------------------------------------------
 
 
+def _sdk_retry_policy(client: Any) -> tuple[int, float | None] | None:
+    """``(max_retries, timeout seconds or None)`` of an SDK client, or ``None`` when it retries nothing.
+
+    An OpenAI client carries both; its timeout is a number or an
+    ``httpx.Timeout`` whose read timeout applies to a non-streamed response.
+    A client with no readable ``max_retries`` is not an SDK client that
+    retries. A timeout of ``None`` never times out, so no attempt is hidden
+    by one; a timeout that cannot be read is reported as ``None`` with the
+    retries, and every retry is then assumed.
+    """
+    retries = getattr(client, "max_retries", None)
+    if isinstance(retries, bool) or not isinstance(retries, int) or retries <= 0:
+        return None
+    timeout = getattr(client, "timeout", None)
+    if timeout is None:
+        return None
+    read = getattr(timeout, "read", timeout)
+    if read is None:
+        return None
+    if isinstance(read, bool) or not isinstance(read, (int, float)) or not read > 0:
+        return retries, None
+    return retries, float(read)
+
+
 class CombinedGradingAdmission:
     """The ``usd_admission`` core's CostRecorder applies to every metered grading request.
 
@@ -1015,6 +1039,15 @@ class CombinedGradingAdmission:
     committed total past the ceiling is refused before it is sent. Every
     reservation and conclusion is one fsynced journal line, so the spend of a
     process that dies is still on disk for the next preflight.
+
+    On a tenant basis it also books the attempts an SDK client's own retries
+    hide. One metered call is one reservation and one conclusion, but an
+    OpenAI client with ``max_retries`` above 0 re-sends a request whose
+    attempt timed out, and Azure bills the timed-out attempt it served. Each
+    such attempt lasted at least the client's timeout, so a call that took k
+    whole timeouts books k more reservations (at most ``max_retries``) on top
+    of its conclusion, as ``hidden_attempts``. The list_long_context basis
+    keeps its booking unchanged, for good.
     """
 
     def __init__(self, seed: Seed, journal_path: Path | str):
@@ -1035,6 +1068,11 @@ class CombinedGradingAdmission:
         except controls.SolBatchControlsRefused as exc:
             _refuse(str(exc))
         self._tenant = seed.booking_basis != BASIS_LIST_LONG
+        # Per thread: the retry policy of the client check_client last saw,
+        # which core's metered call checks just before it reserves.
+        self._client_policy = threading.local()
+        self._clock: Callable[[], float] = time.monotonic
+        self._started: dict[str, tuple[float, tuple[int, float | None] | None]] = {}
         self.spent = Decimal(0)
         self.pending: dict[str, Decimal] = {}
         self.stops: list[str] = []
@@ -1152,8 +1190,43 @@ class CombinedGradingAdmission:
 
     def check_client(self, client: Any) -> None:
         # SDK retries are allowed, as the pilot decided on 2026-10-30
-        # (gpt56_pilot_usd_budget.py:631-634); the reservation covers one.
+        # (gpt56_pilot_usd_budget.py:631-634). On the list basis the
+        # reservation covers one; on a tenant basis the client's retry policy
+        # is kept for the reservation that follows, which books the attempts
+        # its retries hide (see the class docstring).
+        if self._tenant:
+            self._client_policy.value = _sdk_retry_policy(client)
         return None
+
+    def _hidden_attempts(self, key: str) -> int:
+        """Attempts an SDK retry hid from this call: one per whole client timeout it took."""
+        started = self._started.pop(key, None)
+        if started is None:
+            return 0
+        start, policy = started
+        if policy is None:
+            return 0
+        retries, timeout = policy
+        if retries == 0:
+            return 0
+        if timeout is None:
+            # A retrying client whose timeout cannot be read: every retry may have happened.
+            return retries
+        try:
+            elapsed = self._clock() - start
+        except Exception:  # noqa: BLE001 - an unreadable clock books every retry the client allows
+            return retries
+        if not elapsed >= timeout:
+            return 0
+        return min(retries, int(elapsed // timeout))
+
+    def _hidden_fields(self, key: str, reserved: Decimal) -> tuple[Decimal, dict[str, Any]]:
+        """``(USD, journal fields)`` for the attempts an SDK retry hid; nothing on the list basis."""
+        if not self._tenant:
+            return Decimal(0), {}
+        attempts = self._hidden_attempts(key)
+        amount = reserved * attempts
+        return amount, {"hidden_attempts": attempts, "hidden_attempts_usd": _money(amount)}
 
     @contextmanager
     def grading_request(self) -> Iterator[None]:
@@ -1198,10 +1271,15 @@ class CombinedGradingAdmission:
                 raise usd.PilotUsdRefused(usd.CEILING, "grading")
             self._tickets += 1
             ticket = f"g{self._tickets}"
+            policy = getattr(self._client_policy, "value", None)
+            self._client_policy.value = None
             try:
                 extra: dict[str, Any] = {}
                 if self._tenant and not self._is_audio(model):
                     extra["tier"] = self._controls.booked_tier(self.rates_sol, inputs)
+                if self._tenant:
+                    extra["sdk_max_retries"] = policy[0] if policy is not None else None
+                    extra["sdk_timeout_sec"] = policy[1] if policy is not None else None
                 self._append(
                     "reserve",
                     ticket=ticket,
@@ -1218,6 +1296,8 @@ class CombinedGradingAdmission:
                 self._stop(UNVERIFIED, task_id=task_id, detail="journal write failed")
                 raise usd.PilotUsdRefused(usd.UNVERIFIED, "grading") from None
             self.pending[ticket] = amount
+            if self._tenant:
+                self._started[ticket] = (self._clock(), policy)
             return {"ticket": ticket, "model": model, "reserve_usd": amount}
 
     def finish(self, ticket: Any, response: Any) -> None:
@@ -1228,18 +1308,21 @@ class CombinedGradingAdmission:
                 reserved = self.pending.pop(key, None)
                 if reserved is None:
                     return
+                hidden, extra = self._hidden_fields(key, reserved)
                 try:
                     amount, tokens = self._settled_usd(ticket.get("model"), response)
                 except Exception:  # noqa: BLE001 - unreadable usage keeps the reservation
                     amount, tokens = None, {}
                 if amount is None:
-                    self.spent += reserved
-                    self._record("abandon", ticket=key, reason="usage_unreported", spent_usd=_money(reserved))
+                    self.spent += reserved + hidden
+                    self._record("abandon", ticket=key, reason="usage_unreported",
+                                 spent_usd=_money(reserved + hidden), **extra)
                     return
                 # A settlement above its reservation is booked as observed; it
                 # is not a stop. The next reservation sees the larger total.
-                self.spent += amount
-                self._record("settle", ticket=key, spent_usd=_money(amount), reserve_usd=_money(reserved), **tokens)
+                self.spent += amount + hidden
+                self._record("settle", ticket=key, spent_usd=_money(amount + hidden),
+                             reserve_usd=_money(reserved), **tokens, **extra)
         except Exception:  # noqa: BLE001 - see docstring
             self._journal_failed = True
 
@@ -1251,8 +1334,10 @@ class CombinedGradingAdmission:
                 reserved = self.pending.pop(key, None)
                 if reserved is None:
                     return
-                self.spent += reserved
-                self._record("abandon", ticket=key, reason="request_failed", spent_usd=_money(reserved))
+                hidden, extra = self._hidden_fields(key, reserved)
+                self.spent += reserved + hidden
+                self._record("abandon", ticket=key, reason="request_failed", spent_usd=_money(reserved + hidden),
+                             **extra)
         except Exception:  # noqa: BLE001 - never displaces the provider's own error
             self._journal_failed = True
 

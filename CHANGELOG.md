@@ -29,8 +29,15 @@ entries land under a fresh dated heading the day they merge to `main`.
   registration; the solve gate, in-flight bounds, refused requests (3.024
   instead of 7.20), the published-ledger floor and grading reservations and
   settlements all book through it. A solve turn tiers on its largest request
-  input, read per request from Codex's token-usage updates plus any
-  remainder the stream did not report. Journals stay
+  input, read per request from Codex's token-usage updates (an update Codex
+  re-sends after a failed or cut-off request is skipped; a request the
+  updates missed is bounded by how far their totals grew and by the row's
+  unreported remainder). A turn that used Codex's sub-agent tools books at
+  `list_long_context` plus one attempt reserve per sub-agent thread, whose
+  requests reach no ledger row, and counts as incomplete usage. A tenant
+  grade also books the judge attempts the OpenAI SDK's own retries hide: one
+  more reservation per whole client timeout a call took, at most
+  `max_retries`. Journals stay
   `sol-batch-grading-journal-v1` and now name their basis and rates sha;
   `sol_stage_readout.py` reports the basis and refuses to add up stages
   booked on different bases.
@@ -40,7 +47,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   - A tenant run's ceiling, reserves and spend are in the new unit. On the
     billed period's quantities the `list_long_context` booking is 2,580.85,
     the observed rates give 779.43 against 778.72 billed, and the booked
-    rates 818.40.
+    rates 818.40. Those period figures price the bill's own quantities; the
+    evidence that uncached input is billed once is the two exp037 grading
+    days, whose committed journals replay within 0.1% of the bill.
 
 - Report the two regrades that ran after the selector fix (#801), and retire
   the pre-fix exp036 card. Both ran on `main` `567f9b3f` and committed their

@@ -33,11 +33,11 @@ import sol_batch_grading as grading
 from core import codex_runner
 from core.codex_cost import CodexTokenTotals, settle_codex_turn
 from core.codex_runner import CodexAgentRunner, TurnObservation
-from core.codex_runtime_config import LoopbackCodexProvider
+from core.codex_runtime_config import LoopbackCodexProvider, requested_model_config_overrides
 from core.cost_receipts import STATE_ABANDONED, STATE_REFUSED, STATE_RESERVED, STATE_SETTLED
 from core.cost_receipts import STAGE_GRADING
 
-from .test_codex_runtime_end_to_end import _RUNTIME_PROBLEM, ScriptedResponses, says, says_run_this
+from .test_codex_runtime_end_to_end import _RUNTIME_PROBLEM, ScriptedResponses, _sse, _usage, says, says_run_this
 from .test_sol_batch_controls import (  # noqa: F401 - fixtures
     AUTH_ARGV, SETTLED, TASKS, _executor, _install_kwargs, _last, _record, _scripted_parent, _settings,
     fixed_auth, ledgers, unit_runner,
@@ -380,6 +380,13 @@ def test_refused_and_in_flight_bookings_on_the_tenant_basis(last, bound):
     ({"state": STATE_ABANDONED}, None, (Decimal(0), "abandoned")),
     (SETTLED, {"tier_request_input_tokens": 60_000, "in_flight_usd": Decimal("3.53325000")},
      (Decimal("3.90705000"), "settled_partial")),
+    # Sub-agent threads book their bound on top, whatever the row books.
+    (SETTLED, {"tier_request_input_tokens": None, "sub_agent_usd": Decimal("51")},
+     (Decimal("52.48000000"), "settled_with_sub_agents")),
+    (SETTLED, {"in_flight_usd": Decimal("3.53325000"), "sub_agent_usd": Decimal("102")},
+     (Decimal("107.01325000"), "settled_partial_with_sub_agents")),
+    ({"state": STATE_RESERVED}, {"sub_agent_usd": Decimal("51")}, (Decimal("102"), "usage_unreported_with_sub_agents")),
+    ({"state": STATE_ABANDONED}, {"sub_agent_usd": Decimal("51")}, (Decimal(0), "abandoned")),
 ])
 def test_book_row_on_the_tenant_basis(row, evidence, booked):
     assert controls.book_row(row, rates=_tenant(), reserve=Decimal("51"), evidence=evidence) == booked
@@ -388,9 +395,26 @@ def test_book_row_on_the_tenant_basis(row, evidence, booked):
 # -- 8. the request-size observer ----------------------------------------------------
 
 
-def _update(size: Any) -> SimpleNamespace:
+def _update(size: Any, total: Any) -> SimpleNamespace:
+    """One thread/tokenUsage/updated: ``size`` is last.input_tokens, ``total`` the thread's total."""
     return SimpleNamespace(method="thread/tokenUsage/updated", payload=SimpleNamespace(
-        token_usage=SimpleNamespace(last=SimpleNamespace(input_tokens=size))))
+        token_usage=SimpleNamespace(last=SimpleNamespace(input_tokens=size),
+                                    total=SimpleNamespace(input_tokens=total))))
+
+
+def _updates(sizes: list) -> list:
+    """One update per request, each total the running sum, as Codex 0.147.0 sends them."""
+    events, total = [], 0
+    for size in sizes:
+        total += size if isinstance(size, int) else 0
+        events.append(_update(size, total))
+    return events
+
+
+def _sub_agent_item(item_type: str, item_id: str, **fields: Any) -> SimpleNamespace:
+    """An item/started event as the parent stream carries it: payload.item.root is the thread item."""
+    return SimpleNamespace(method="item/started", payload=SimpleNamespace(
+        item=SimpleNamespace(root=SimpleNamespace(type=item_type, id=item_id, **fields))))
 
 
 class _FakeStream:
@@ -430,9 +454,11 @@ class _Hostile:
         raise RuntimeError("an event that cannot be read")
 
 
-def _observe(sizes_seen: list, row_input: Any = 400_000) -> tuple[controls._RequestSizes, int | None]:
+def _observe(seen: list, row_input: Any = 400_000) -> tuple[controls._RequestSizes, int | None]:
+    """``seen``: request sizes (running totals added) or ready-made events."""
+    events = seen if seen and not isinstance(seen[0], (int, type(None))) else _updates(seen)
     sizes = controls._RequestSizes()
-    turn = controls._SizedTurn(_FakeHandle([_update(size) for size in sizes_seen]), sizes)
+    turn = controls._SizedTurn(_FakeHandle(events), sizes)
     list(turn.stream())
     return sizes, controls.tier_request_input_tokens(sizes, row_input)
 
@@ -441,7 +467,7 @@ def test_the_request_size_observer():
     other = SimpleNamespace(method="item/completed", payload=None)
     hostile = _Hostile()
     no_usage = SimpleNamespace(method="thread/tokenUsage/updated", payload=SimpleNamespace(token_usage=None))
-    events = [other, _update(50_000), hostile, no_usage, _update(60_000)]
+    events = [other, _update(50_000, 50_000), hostile, no_usage, _update(60_000, 110_000)]
     handle = _FakeHandle(events)
     sizes = controls._RequestSizes()
     turn = controls._SizedTurn(handle, sizes)
@@ -454,18 +480,74 @@ def test_the_request_size_observer():
 
     sizes, size = _observe([50_000, 120_000, 180_000])
     assert size == 180_000
-    assert sizes.as_record() == {"updates": 3, "peak": 180_000, "observed_sum": 350_000, "shrank": False,
-                                 "unreadable": False}
+    assert sizes.as_record() == {"updates": 3, "repeats": 0, "peak": 180_000, "observed_sum": 350_000,
+                                 "unobserved_input_tokens": 0, "shrank": False, "unreadable": False,
+                                 "sub_agent_items": 0, "sub_agent_threads": 0}
     sizes, size = _observe([50_000, 20_000])
     assert sizes.shrank is True and size is None
     sizes, size = _observe([50_000, None])
     assert sizes.unreadable is True and size is None
     assert _observe([])[1] is None and controls.tier_request_input_tokens(None, 400_000) is None
-    # More observed than the row holds: the sizes do not describe this row.
+    # More observed than the row holds, sizes never shrinking: the sizes do not describe this row.
+    assert _observe([200_000, 300_000])[1] is None
     assert _observe([300_000, 200_000])[1] is None
     assert _observe([50_000, 60_000], row_input=None)[1] is None
     # Every request the observer missed is bounded by the unobserved remainder.
     assert _observe([50_000, 60_000])[1] == 290_000
+
+
+def test_the_observer_skips_a_re_sent_update_and_bounds_a_missed_request():
+    # Codex 0.147.0 re-sends the previous update when a request fails, is cut
+    # off or reports no usage: the same last, an unchanged total.
+    sizes, size = _observe([_update(11, 11), _update(11, 11)], row_input=11)
+    assert (size, sizes.updates, sizes.repeats, sizes.observed_sum) == (11, 2, 1, 11)
+    sizes, size = _observe([_update(11, 11), _update(11, 11), _update(25, 36), _update(40, 76)], row_input=76)
+    assert (size, sizes.repeats, sizes.observed_sum, sizes.unobserved) == (40, 1, 76, 0)
+    # A total that grew by more than last: a request the observer never saw,
+    # bounded by the excess (here 150k, above the 120k peak).
+    sizes, size = _observe([_update(50_000, 50_000), _update(120_000, 320_000)], row_input=400_000)
+    assert (size, sizes.unobserved, sizes.observed_sum) == (150_000, 150_000, 170_000)
+    # Ditto with the excess larger than the row allows.
+    assert _observe([_update(50_000, 50_000), _update(120_000, 420_000)], row_input=400_000)[1] is None
+    # A total that fell, or grew by less than last, cannot be read.
+    for events in ([_update(50_000, 50_000), _update(60_000, 40_000)],
+                   [_update(50_000, 50_000), _update(60_000, 100_000)],
+                   [_update(50_000, 40_000)],
+                   [_update(50_000, None)]):
+        sizes, size = _observe(events)
+        assert sizes.unreadable is True and size is None
+    # The same size with a grown total is a new request, not a repeat.
+    sizes, size = _observe([_update(50_000, 50_000), _update(50_000, 100_000)], row_input=100_000)
+    assert (size, sizes.repeats, sizes.observed_sum) == (50_000, 0, 100_000)
+
+
+def test_a_turn_that_used_sub_agents_has_no_size():
+    spawn = _sub_agent_item("collabAgentToolCall", "call-1", tool="spawnAgent", receiver_thread_ids=["child-a"])
+    started = _sub_agent_item("subAgentActivity", "act-1", agent_thread_id="child-a", kind="started")
+    again = SimpleNamespace(method="item/completed", payload=started.payload)
+    other = _sub_agent_item("agentMessage", "msg-1")
+    sizes, size = _observe([_update(150_000, 150_000), spawn, started, again, other,
+                            _update(160_000, 310_000)], row_input=310_000)
+    assert size is None
+    assert (sizes.sub_agent_items, sizes.sub_agent_threads, sizes.peak) == (2, 1, 160_000)
+    second = _sub_agent_item("subAgentActivity", "act-2", agent_thread_id="child-b")
+    sizes, _ = _observe([_update(10, 10), started, second], row_input=10)
+    assert (sizes.sub_agent_items, sizes.sub_agent_threads) == (2, 2)
+    # An item that names no thread still counts one.
+    sizes, _ = _observe([_update(10, 10), _sub_agent_item("collabAgentToolCall", "call-9")], row_input=10)
+    assert (sizes.sub_agent_items, sizes.sub_agent_threads) == (1, 1)
+    # Waiting on or closing an agent sends no request of its own (the SDK's CollabAgentTool enum).
+    wait = _sub_agent_item("collabAgentToolCall", "call-w", tool=SimpleNamespace(value="wait"),
+                           receiver_thread_ids=[])
+    close = _sub_agent_item("collabAgentToolCall", "call-c", tool="closeAgent")
+    sizes, size = _observe([_update(10, 10), wait, close], row_input=10)
+    assert (sizes.sub_agent_items, size) == (0, 10)
+    # Only the tenant basis books a bound for them: one attempt reserve per thread.
+    sizes, _ = _observe([_update(10, 10), started, second], row_input=10)
+    assert controls.sub_agent_bound_usd(sizes, rates=_tenant(), reserve=Decimal("51")) == Decimal("102")
+    assert controls.sub_agent_bound_usd(sizes, rates=controls.load_sol_list_rates(), reserve=Decimal("51")) is None
+    assert controls.sub_agent_bound_usd(_observe([10], 10)[0], rates=_tenant(), reserve=Decimal("51")) is None
+    assert controls.sub_agent_bound_usd(None, rates=_tenant(), reserve=Decimal("51")) is None
 
 
 # -- 9. a tenant run books its attempt at the observed size ---------------------------
@@ -481,8 +563,11 @@ def _tenant_session(ledger, record_path: Path) -> controls.SolBatchSession:
         seed_usd=Decimal(0), prior_legs_usd=Decimal(0), window_mismatch=False, header={})
 
 
-def _streamed_turn(monkeypatch, sizes: list, *, rows: int = 1) -> None:
-    """A turn whose _await_turn reads the handle's stream, as core's does; ``rows`` ledger rows."""
+def _streamed_turn(monkeypatch, sizes: list, *, rows: int = 1, extra: list | None = None) -> None:
+    """A turn whose _await_turn reads the handle's stream, as core's does; ``rows`` ledger rows.
+
+    ``extra`` events follow the token-usage updates on the stream.
+    """
     usage = SimpleNamespace(model_context_window=1_000_000, last=SimpleNamespace(input_tokens=sizes[-1]),
                             total=SimpleNamespace(**_TOTALS))
 
@@ -498,7 +583,7 @@ def _streamed_turn(monkeypatch, sizes: list, *, rows: int = 1) -> None:
     def run(self, task_prompt, model=None, reference_files=None, occupation="professional",
             experiment_prompt=None, perception_text=None, run_id=None, condition_name=None, task_id=None):
         calls = [self._reserve_call(task_id) for _ in range(rows)]
-        self._await_turn(_FakeHandle([_update(size) for size in sizes]))
+        self._await_turn(_FakeHandle(_updates(sizes) + list(extra or [])))
         for call_id in calls:
             settle_codex_turn(self.cost_ledger, call_id, totals=CodexTokenTotals(**{
                 key: value // rows for key, value in _TOTALS.items()}), resolved_model=self.provider.model)
@@ -537,6 +622,48 @@ def test_a_tenant_run_books_its_attempt_at_the_observed_request_size(
     assert result["budget_metrics"] == {"conservative_cost_usd": booked, "usage_complete": True}
     out = capsys.readouterr().out
     assert f"tier {tier} at {size if size is not None else 'unknown'}; solve spend {booked}" in out
+
+
+def test_a_turn_that_spawned_sub_agents_books_their_bound_and_is_incomplete(
+        tmp_path, monkeypatch, capsys, unit_runner, ledgers):
+    spawn = _sub_agent_item("collabAgentToolCall", "call-1", tool="spawnAgent", receiver_thread_ids=["child-a"])
+    started = _sub_agent_item("subAgentActivity", "act-1", agent_thread_id="child-a", kind="started")
+    _streamed_turn(monkeypatch, [50_000, 120_000, 180_000], extra=[spawn, started])
+    ledger = ledgers()
+    record_path = tmp_path / "r.json"
+    result = _runner(_tenant_session(ledger, record_path), ledger).run("prompt", model="gpt-5.6-sol",
+                                                                       task_id=TASKS[0])
+    attempt = _record(record_path)["attempts"][-1]
+    # The row at list_long_context (no size) plus one attempt reserve for the one child thread.
+    assert (attempt["booked_usd"], attempt["basis"], attempt["tier"], attempt["sub_agent_usd"]) == (
+        "53.64000000", "settled_with_sub_agents", "fallback", "51.00000000")
+    assert attempt["request_sizes"]["sub_agent_items"] == 2 and attempt["request_sizes"]["sub_agent_threads"] == 1
+    assert attempt["tier_request_input_tokens"] is None
+    assert result["budget_metrics"] == {"conservative_cost_usd": "53.64000000", "usage_complete": False}
+
+    # The list basis books exactly what it always did.
+    ledger = ledgers("list")
+    record_path = tmp_path / "list.json"
+    session = controls.SolBatchSession(
+        run=_exp036_on(LIST), ledger=ledger, rates=controls.load_sol_list_rates(), record_path=record_path,
+        seed_usd=Decimal(0), prior_legs_usd=Decimal(0), window_mismatch=False, header={})
+    result = _runner(session, ledger).run("prompt", model="gpt-5.6-sol", task_id=TASKS[0])
+    attempt = _record(record_path)["attempts"][-1]
+    assert (attempt["booked_usd"], attempt["basis"], attempt["sub_agent_usd"]) == ("2.64000000", "settled", None)
+    assert result["budget_metrics"] == {"conservative_cost_usd": "2.64000000", "usage_complete": True}
+
+
+def test_each_attempt_starts_its_request_sizes_afresh(tmp_path, monkeypatch, unit_runner, ledgers):
+    _streamed_turn(monkeypatch, [50_000, 120_000, 180_000])
+    ledger = ledgers()
+    record_path = tmp_path / "r.json"
+    runner = _runner(_tenant_session(ledger, record_path), ledger)
+    runner.run("prompt", model="gpt-5.6-sol", task_id=TASKS[0])
+    runner.run("prompt", model="gpt-5.6-sol", task_id=TASKS[0])
+    first, second = _record(record_path)["attempts"]
+    for attempt in (first, second):
+        assert attempt["request_sizes"]["updates"] == 3 and attempt["request_sizes"]["observed_sum"] == 350_000
+        assert (attempt["tier"], attempt["booked_usd"]) == ("short", "0.69300000")
 
 
 def test_a_non_streaming_turn_on_a_tenant_session_books_at_list_long_context(
@@ -615,6 +742,9 @@ def test_a_tenant_run_installs_with_its_basis_on_record(tmp_path, monkeypatch, c
                                "rates_retrieved": "2026-08-29", "price_table_sha256": controls.PRICE_TABLE_SHA256}
     assert usd["price_table_sha256"] == controls.PRICE_TABLE_SHA256
     assert "max(input, cache_write)" in usd["cache_write_rule"] and "187594" in usd["tier_rule"]
+    assert "re-sent update is no request" in usd["tier_rule"] and "sub-agent tools" in usd["tier_rule"]
+    assert "attempt reserve" in usd["sub_agent_rule"] and "incomplete" in usd["sub_agent_rule"]
+    assert "sub_agent_rule" not in legacy["usd"]
     rule = usd["in_flight_rule"]
     assert rule.startswith(_LEGACY_IN_FLIGHT_RULE) and "all uncached" in rule and "1050000" in rule
     assert rule.endswith("priced at the short tier when that grown input is at most 187594, else at "
@@ -667,6 +797,84 @@ def test_a_tenant_grade_reserves_and_settles_on_its_tier(admitted, monkeypatch):
     assert grading._read_journal(admission.journal_path, approval)[0] == Decimal("4.52790000")
     with pytest.raises(grading.CombinedUsdRefused):
         grading._read_journal(legacy.journal_path, approval)
+
+
+class _RetryingClient(FakeResponses):
+    """An OpenAI-shaped client: the SDK's retry policy, and a call that took ``seconds`` on a fake clock."""
+
+    def __init__(self, clock: list, seconds: float, *, max_retries: Any = 2, timeout: Any = 600,
+                 error: BaseException | None = None, **kwargs: Any) -> None:
+        super().__init__(error=error, **kwargs)
+        self.max_retries = max_retries
+        self.timeout = timeout
+        self._clock = clock
+        self._seconds = seconds
+
+    def create(self, **kwargs):
+        self._clock[0] += self._seconds
+        return super().create(**kwargs)
+
+
+def test_a_tenant_grade_books_the_attempts_sdk_retries_hide(admitted):
+    import httpx
+    import openai
+
+    clock = [1_000.0]
+    admission, recorder = admitted(_seed(booking_basis=TENANT), "run-12-1.combined_usd.jsonl")
+    admission._clock = lambda: clock[0]
+    # exp037 run-42850641369-1 seq 854: 611.8 s against the 600 s judge timeout,
+    # 2385 in / 2382 cached / 110 out. One hidden attempt books one more reservation.
+    tokens = {"input_tokens": 2385, "cached": 2382, "output_tokens": 110, "reasoning": 73}
+    calls = [
+        _RetryingClient(clock, 611.8, tokens=tokens),
+        _RetryingClient(clock, 12.0, tokens=tokens),
+        _RetryingClient(clock, 1_900.0, tokens=tokens),                     # capped at max_retries
+        _RetryingClient(clock, 611.8, max_retries=0, tokens=tokens),        # no SDK retries
+        _RetryingClient(clock, 611.8, timeout=httpx.Timeout(600.0), tokens=tokens),
+        _RetryingClient(clock, 611.8, timeout=None, tokens=tokens),         # never times out
+        _RetryingClient(clock, 5.0, timeout="soon", tokens=tokens),         # unreadable: every retry
+    ]
+    with recorder.attributed(task_id="t", stage=STAGE_GRADING):
+        for client in calls:
+            recorder.meter(client, provider="azure", model="gpt-5.6-sol").responses.create(**KWARGS)
+        failing = _RetryingClient(clock, 1_850.0, error=TimeoutError("read timed out"))
+        with pytest.raises(TimeoutError):
+            recorder.meter(failing, provider="azure", model="gpt-5.6-sol").responses.create(**KWARGS)
+    records = _records(admission.journal_path)
+    reserves = [record for record in records if record["event"] == "reserve"]
+    concluded = [record for record in records if record["event"] in ("settle", "abandon")]
+    assert [(r["sdk_max_retries"], r["sdk_timeout_sec"]) for r in reserves] == [
+        (2, 600.0), (2, 600.0), (2, 600.0), (None, None), (2, 600.0), (None, None), (2, None), (2, 600.0)]
+    reserve = Decimal(reserves[0]["reserve_usd"])
+    settle = Decimal("0.00332619")
+    assert [(r["event"], r["hidden_attempts"], Decimal(r["spent_usd"])) for r in concluded] == [
+        ("settle", 1, settle + reserve), ("settle", 0, settle), ("settle", 2, settle + 2 * reserve),
+        ("settle", 0, settle), ("settle", 1, settle + reserve), ("settle", 0, settle),
+        ("settle", 2, settle + 2 * reserve),
+        # Three attempts that each timed out: the reservation plus two hidden ones.
+        ("abandon", 2, 3 * reserve),
+    ]
+    assert all(Decimal(r["hidden_attempts_usd"]) == r["hidden_attempts"] * reserve for r in concluded)
+    assert admission.spent == sum((Decimal(r["spent_usd"]) for r in concluded), Decimal(0))
+    admission.close(0)
+    assert grading.journal_spend(admission.journal_path) == admission.spent
+
+    # A real OpenAI client reads as SDK retries 2 at its timeout; nothing is sent.
+    client = openai.OpenAI(api_key="unused", base_url="http://127.0.0.1:9/v1", timeout=600)
+    assert grading._sdk_retry_policy(client) == (2, 600.0)
+    assert grading._sdk_retry_policy(client.with_options(max_retries=0)) is None
+    assert grading._sdk_retry_policy(SimpleNamespace()) is None
+
+    # The list basis books one conclusion per call, as it always has.
+    clock[0] = 0.0
+    legacy, recorder = admitted(_seed(), "run-13-1.combined_usd.jsonl")
+    legacy._clock = lambda: clock[0]
+    with recorder.attributed(task_id="t", stage=STAGE_GRADING):
+        recorder.meter(_RetryingClient(clock, 1_900.0, tokens=tokens), provider="azure",
+                       model="gpt-5.6-sol").responses.create(**KWARGS)
+    reserve_line, settle_line = _records(legacy.journal_path)[1:3]
+    assert "sdk_max_retries" not in reserve_line and "hidden_attempts" not in settle_line
+    assert settle_line["spent_usd"] == "0.00739950"
 
 
 # -- 12. the published floor -------------------------------------------------------------------
@@ -800,14 +1008,25 @@ def test_every_approved_run_reserve_covers_its_in_flight_window():
 # -- 16. every committed journal replays on its own basis -----------------------------------------
 
 
-def test_every_committed_journal_replays_exactly_on_its_own_basis():
+def _replay_journals(journals: list[Path]) -> tuple[int, int]:
+    """``(gpt-5.6-sol settles, mismatches)``: each journal replayed on the basis its open line names.
+
+    Every journal must name a known basis, the one its approval books under;
+    a journal of an approval registered before the tenant basis must be on
+    list_long_context. A tenant settle may add the attempts SDK retries hid
+    (``hidden_attempts_usd``) on top of its booked price.
+    """
     settles = mismatches = 0
-    journals = sorted(JOURNALS.glob("*/run-*.combined_usd.jsonl"))
-    assert journals
     for path in journals:
         lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        assert lines[0]["event"] == "open", path.name
         basis = lines[0].get("booking_basis", LIST)
-        assert lines[0]["event"] == "open" and basis == LIST, path.name
+        owner = grading._journal_owner(lines[0])
+        assert owner is not None and basis in controls.BOOKING_BASES and basis == owner.booking_basis, path.name
+        if owner in LEGACY_APPROVALS:
+            assert basis == LIST, path.name
+        assert lines[0].get("booking_rates_sha256", controls.PRICE_TABLE_SHA256) == (
+            controls.booking_source_sha256(basis)), path.name
         rates = controls.load_booking_rates(basis)
         models = {line["ticket"]: line.get("model") for line in lines if line.get("event") == "reserve"}
         for line in lines:
@@ -818,7 +1037,15 @@ def test_every_committed_journal_replays_exactly_on_its_own_basis():
                 input_tokens=line["input_tokens"], cached_input_tokens=line["cached_input_tokens"],
                 output_tokens=line["output_tokens"], reasoning_tokens=line["reasoning_tokens"],
                 request_input_tokens=line["input_tokens"], rates=rates)
-            mismatches += replayed != Decimal(line["spent_usd"])
+            hidden = Decimal(line.get("hidden_attempts_usd", "0"))
+            mismatches += replayed + hidden != Decimal(line["spent_usd"])
+    return settles, mismatches
+
+
+def test_every_committed_journal_replays_exactly_on_its_own_basis():
+    journals = sorted(JOURNALS.glob("*/run-*.combined_usd.jsonl"))
+    assert journals
+    settles, mismatches = _replay_journals(journals)
     assert settles >= SOL_SETTLES_AT_DESIGN
     assert mismatches == 0
     for approval in grading.APPROVALS:
@@ -827,6 +1054,36 @@ def test_every_committed_journal_replays_exactly_on_its_own_basis():
         total, read = grading.prior_grading(REPO_ROOT, approval.experiment_id, approval)
         assert read and total > 0, approval.experiment_id
     assert grading.prior_grading(REPO_ROOT, "exp036_sol_fixed5", grading.EXP036_SOL_BATCH)[0] >= Decimal("10.7193625")
+
+
+def test_a_committed_tenant_journal_replays_on_its_own_basis(tmp_path, admitted, monkeypatch):
+    # What grade-run commits for the first tenant run: the replay must take it
+    # on its own basis, and still hold a legacy approval to list_long_context.
+    approval = _tenant_approval(monkeypatch)
+    admission, recorder = admitted(_seed(booking_basis=TENANT), "run-99-1.combined_usd.jsonl")
+    with recorder.attributed(task_id="t", stage=STAGE_GRADING):
+        recorder.meter(FakeResponses(), provider="azure", model="gpt-5.6-sol").responses.create(**KWARGS)
+    admission.close(0)
+    assert grading._journal_owner(_records(admission.journal_path)[0]) is approval
+    assert _replay_journals([admission.journal_path]) == (1, 0)
+
+    forged = tmp_path / "forged" / "run-98-1.combined_usd.jsonl"
+    forged.parent.mkdir()
+    lines = _records(admission.journal_path)
+    lines[0]["booking_basis"] = "tenant_observed_29991231"
+    forged.write_text("".join(json.dumps(line, sort_keys=True) + "\n" for line in lines), encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _replay_journals([forged])
+    # A legacy approval's journal that names the tenant basis is refused by the replay too.
+    legacy = sorted((JOURNALS / "exp037_sol_first25").glob("run-*.combined_usd.jsonl"))[0]
+    copied = tmp_path / "legacy" / legacy.name
+    copied.parent.mkdir()
+    lines = [json.loads(line) for line in legacy.read_text(encoding="utf-8").splitlines()]
+    assert grading._journal_owner(lines[0]) is grading.EXP037_FIRST25
+    lines[0].update(booking_basis=TENANT, booking_rates_sha256=TENANT_RATES_SHA256)
+    copied.write_text("".join(json.dumps(line, sort_keys=True) + "\n" for line in lines), encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _replay_journals([copied])
 
 
 # -- 17. the tenant basis against the bill ------------------------------------------------------------
@@ -847,10 +1104,29 @@ def _replayed(path: Path, pricing: controls.SolTenantPricing) -> Decimal:
 
 
 def test_the_tenant_basis_reconciles_with_billing():
+    """The evidence that Azure bills uncached input once: committed ledgers replayed against billed days.
+
+    The record's ``uncached_input_million_tokens`` is the sum of its own input
+    and cache-write quantities, so the loader's check on it, and the period
+    figure below, are arithmetic on the bill, not evidence of "once". Only
+    the replayable billed windows compare the ledgers' tokens with the bill:
+    had Azure charged the same uncached tokens on both meters, the bill for
+    those days would sit about 9.00 / 5.00 above the observed replay on
+    uncached input, far outside 0.5%.
+    """
     booked = _tenant()
     observed = dataclasses.replace(booked, booked=booked.observed)
     record = json.loads(controls.TENANT_RATES_PATH.read_text(encoding="utf-8"))
     windows = {window["window_utc"]: window for window in record["billed_windows"]}
+    # Every window the record says can be replayed from committed files is.
+    replayable = [window for window in record["billed_windows"]
+                  if window.get("replayable_from_committed_files", True)]
+    assert {window["window_utc"] for window in replayable} == {"2026-11-12", "2026-11-13"}
+    for window in replayable:
+        billed = Decimal(window["sol_cost_usd"]) - Decimal(window["deduction_usd"])
+        path = REPO_ROOT / window["journal"]
+        assert abs(_replayed(path, observed) - billed) <= billed * Decimal("0.005"), window["window_utc"]
+        assert billed <= _replayed(path, booked), window["window_utc"]
 
     first = windows["2026-11-13"]
     billed = Decimal(first["sol_cost_usd"]) - Decimal(first["deduction_usd"])
@@ -870,7 +1146,10 @@ def test_the_tenant_basis_reconciles_with_billing():
     assert abs(_replayed(path, observed) - billed) <= billed * Decimal("0.005")
     assert billed <= _replayed(path, booked) == Decimal("32.13496902") <= billed * Decimal("1.06")
 
-    # The whole period's billed quantities, at the observed and the booked rates.
+    # The whole period's billed quantities, at the observed and the booked
+    # rates: this prices the bill's own quantities (779.43 is the 0.702739M
+    # input-meter tokens at 5.00 instead of 4.00, plus cents rounding), not
+    # the ledgers', so it shows the rates' arithmetic, not "billed once".
     observation = record["observation"]
     quantity = {meter["rate_kind"]: Decimal(meter["quantity_million_tokens"]) for meter in observation["meters"]}
     uncached = Decimal(observation["uncached_input_million_tokens"])
@@ -921,6 +1200,133 @@ def test_loopback_codex_reports_every_request_size(tmp_path, native_hosted_runne
     [row] = ledger.calls_for("task-e2e")
     assert row["state"] == STATE_SETTLED and row["input_tokens"] == 51
     attempt = _record(record_path)["attempts"][-1]
-    assert attempt["request_sizes"] == {"updates": 2, "peak": 40, "observed_sum": 51, "shrank": False,
-                                        "unreadable": False}
+    assert attempt["request_sizes"] == {"updates": 2, "repeats": 0, "peak": 40, "observed_sum": 51,
+                                        "unobserved_input_tokens": 0, "shrank": False, "unreadable": False,
+                                        "sub_agent_items": 0, "sub_agent_threads": 0}
     assert attempt["tier_request_input_tokens"] == 40 and attempt["tier"] == "short"
+
+
+# -- 20. the same, on the configuration production runs ---------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class _SolProductionLoopback(LoopbackCodexProvider):
+    """The held Sol catalog (sol_overrides) and production's zero Codex retries, at a loopback port."""
+
+    def config_overrides(self) -> tuple[str, ...]:
+        prefix = f"model_providers.{self.provider_id}"
+        base = (*super().config_overrides(), f"{prefix}.request_max_retries=0",
+                f"{prefix}.stream_max_retries=0",
+                *requested_model_config_overrides(reasoning_effort="max", model_context_window=1_000_000))
+        return controls.sol_overrides(base)
+
+
+def _u(inputs: int, *, cached: int = 0, output: int = 5) -> dict:
+    return _usage(input_tokens=inputs, output_tokens=output, cached=cached, reasoning=0)
+
+
+def _calls(name: str, arguments: dict, call_id: str, usage: dict):
+    """A reply that calls a collaboration tool, as the held catalog offers it."""
+    def reply(_request: dict, index: int) -> tuple[int, bytes]:
+        item = {"type": "function_call", "id": f"fc_{index}", "call_id": call_id, "name": name,
+                "namespace": "collaboration", "arguments": json.dumps(arguments), "status": "completed"}
+        return 200, _sse([
+            {"type": "response.created", "response": {"id": f"resp_{index}", "status": "in_progress"}},
+            {"type": "response.output_item.done", "output_index": 0, "item": item},
+            {"type": "response.completed", "response": {"id": f"resp_{index}", "status": "completed",
+                                                        "usage": usage}},
+        ])
+    return reply
+
+
+def _fails(_request: dict, index: int) -> tuple[int, bytes]:
+    return 200, _sse([
+        {"type": "response.created", "response": {"id": f"resp_{index}", "status": "in_progress"}},
+        {"type": "response.failed", "response": {"id": f"resp_{index}", "status": "failed",
+                                                 "error": {"code": "server_error", "message": "scripted"}}},
+    ])
+
+
+def _routed(parent: list, child: list):
+    """Requests carrying the sub-agent developer prompt follow ``child``; the rest follow ``parent``."""
+    counts = {"parent": 0, "child": 0}
+
+    def reply(request: dict, index: int) -> tuple[int, bytes]:
+        is_child = any(
+            isinstance(item, dict) and item.get("type") == "message" and item.get("role") == "developer"
+            and "You are an agent in a team of agents" in json.dumps(item)
+            for item in request.get("input") or ())
+        who = "child" if is_child else "parent"
+        script = child if is_child else parent
+        n = counts[who]
+        counts[who] += 1
+        if n >= len(script):
+            return 409, b'{"error":{"message":"unscripted request"}}'
+        return script[n](request, index)
+    return reply, counts
+
+
+def _production_turn(tmp_path, ledgers, script, *, name: str = "e2e") -> tuple[dict, dict, list]:
+    ledger = ledgers(name, run_id="codex-e2e")
+    record_path = tmp_path / f"{name}.json"
+    session = _tenant_session(ledger, record_path)
+    with ScriptedResponses(script) as server:
+        runner = controls.SolBatchCodexRunner(
+            _SolProductionLoopback(port=server.port, model="gpt-5.6-sol"), session=session, timeout=180,
+            cost_ledger=ledger, run_id="codex-e2e", condition_name="condition_a")
+        result = runner.run("Do the task.", model="gpt-5.6-sol", task_id="task-e2e")
+        runner.close()
+    return result, _record(record_path)["attempts"][-1], ledger.calls_for("task-e2e")
+
+
+@pytest.mark.skipif(
+    _RUNTIME_PROBLEM is not None,
+    reason=f"the pinned Codex runtime is not installed: {_RUNTIME_PROBLEM}",
+)
+def test_loopback_production_codex_sizes_requests_and_skips_a_re_sent_update(
+        tmp_path, native_hosted_runner, ledgers):
+    wait = _calls("wait_agent", {"timeout_ms": 10_000}, "c1", _u(11))
+    result, attempt, rows = _production_turn(tmp_path, ledgers, [wait, says("done", usage=_u(40))])
+    assert result["success"] is True, result.get("error")
+    assert [(row["state"], row["input_tokens"]) for row in rows] == [(STATE_SETTLED, 51)]
+    assert attempt["request_sizes"]["updates"] == 2 and attempt["request_sizes"]["repeats"] == 0
+    assert (attempt["tier"], attempt["tier_request_input_tokens"]) == ("short", 40)
+
+    # A final stream that fails: Codex 0.147.0 re-sends the first update; the
+    # row keeps its short tier and books its in-flight bound.
+    result, attempt, rows = _production_turn(tmp_path, ledgers, [wait, _fails], name="failed")
+    assert result["success"] is False
+    assert [(row["state"], row["input_tokens"]) for row in rows] == [(STATE_SETTLED, 11)]
+    sizes = attempt["request_sizes"]
+    assert (sizes["updates"], sizes["repeats"], sizes["observed_sum"]) == (2, 1, 11)
+    assert (attempt["tier"], attempt["tier_request_input_tokens"], attempt["basis"]) == (
+        "short", 11, "settled_partial")
+
+
+@pytest.mark.skipif(
+    _RUNTIME_PROBLEM is not None,
+    reason=f"the pinned Codex runtime is not installed: {_RUNTIME_PROBLEM}",
+)
+def test_loopback_production_codex_books_a_spawned_sub_agent(tmp_path, native_hosted_runner, ledgers):
+    parent = [
+        _calls("spawn_agent", {"task_name": "helper", "message": "Check the file.", "fork_turns": "all"}, "c1",
+               _u(150_000, cached=100_000)),
+        _calls("wait_agent", {"timeout_ms": 20_000}, "c2", _u(160_000, cached=150_000)),
+        says("done", usage=_u(170_000, cached=160_000)),
+    ]
+    # The child's 190k request is above the bound and reaches no ledger row.
+    child = [says("sub", usage=_u(190_000, output=2_000))]
+    route, counts = _routed(parent, child)
+    result, attempt, rows = _production_turn(tmp_path, ledgers, [route] * 12)
+    assert result["success"] is True, result.get("error")
+    assert counts == {"parent": 3, "child": 1}
+    [row] = rows
+    assert (row["input_tokens"], row["cached_input_tokens"]) == (480_000, 410_000)
+    sizes = attempt["request_sizes"]
+    assert sizes["sub_agent_items"] >= 1 and sizes["sub_agent_threads"] == 1
+    assert (attempt["tier"], attempt["tier_request_input_tokens"]) == ("fallback", None)
+    listed = controls.booked_price_usd(input_tokens=480_000, cached_input_tokens=410_000, output_tokens=15,
+                                       rates=_tenant())
+    assert attempt["basis"] == "settled_with_sub_agents" and attempt["sub_agent_usd"] == "51.00000000"
+    assert Decimal(attempt["booked_usd"]) == listed + Decimal("51")
+    assert result["budget_metrics"]["usage_complete"] is False
