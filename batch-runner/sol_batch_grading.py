@@ -33,6 +33,9 @@ inference is not part of it.
 and stays that way: after exp037's readout the owner had them run as two
 experiments instead, :data:`EXP039_NEXT98` and :data:`EXP040_LAST97` (approved
 2026-11-14), each under one USD 2,500 ceiling for its solve and grade.
+:data:`EXP041_RETRY10` (approved 2026-11-26): the ten tasks those two lost to
+Azure-side failures, solved and graded once more under one USD 220 ceiling on
+the tenant_observed_20261126 basis.
 
 For a Sol run the published task list must be the one sol_batch_controls
 registers, in its order, so the grade covers the whole approved scope and is
@@ -227,6 +230,24 @@ EXP040_LAST97 = Approval(
     approved=("2026-11-14 owner (\"추천대로\"): exp037's readout failed R3 and R4, so solve and grade"
               " exp038's 195 as two experiments; USD 2,500 for this one's solve and grade together"),
 )
+#: The ten tasks exp039 and exp040 lost to Azure-side failures, solved and
+#: graded once more (owner 2026-11-26): twin of
+#: sol_batch_controls.RUNS["exp041_sol_retry10"], the first entry booked on
+#: tenant_observed_20261126.
+EXP041_RETRY10 = Approval(
+    experiment_id="exp041_sol_retry10",
+    config_name="exp041_v2_sol_max",
+    ceiling_usd=Decimal("220"),
+    solve_seed=SOLVE_SEED_SOL_BATCH,
+    exclusive_experiment=True,
+    inference_revision=None,
+    task_ids_sha256=None,
+    approved=("2026-11-26 owner (\"Azure 오류 10건\"; \"USD 220 (추천)\"): solve and grade again the ten"
+              " tasks exp039 and exp040 lost to Azure-side failures; USD 220 at tenant_observed_20261126"
+              " for this run's solve and grade together. The parents' remaining limits (947.32 and"
+              " 1,025.87) are at the list meter, and 220 x 22.50 / 5.25 = 942.86 <= 947.32"),
+    booking_basis=BASIS_TENANT_20261126,
+)
 #: Every admission this module can open. One approval per experiment and per
 #: config, because an experiment's journals share one directory. Each Sol
 #: entry has a twin in ``sol_batch_controls.RUNS`` with the same config and
@@ -241,7 +262,7 @@ EXP040_LAST97 = Approval(
 #: 220 comparison) until a PR gives the registry a retired state that keeps
 #: journal ownership but admits nothing.
 APPROVALS: tuple[Approval, ...] = (EXP036_SOL_BATCH, EXP035_PARITY, EXP037_FIRST25, EXP038_REST195,
-                                   EXP039_NEXT98, EXP040_LAST97)
+                                   EXP039_NEXT98, EXP040_LAST97, EXP041_RETRY10)
 #: The first Sol batch, exp036; ``sol_batch_controls.RUNS`` holds it under the
 #: same id.
 GRADED_EXPERIMENT_ID = EXP036_SOL_BATCH.experiment_id

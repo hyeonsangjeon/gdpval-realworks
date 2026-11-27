@@ -1051,9 +1051,49 @@ def test_every_committed_journal_replays_exactly_on_its_own_basis():
     for approval in grading.APPROVALS:
         if approval.approved is None or not (JOURNALS / approval.experiment_id).is_dir():
             continue
-        total, read = grading.prior_grading(REPO_ROOT, approval.experiment_id, approval)
-        assert read and total > 0, approval.experiment_id
+        _assert_prior_grading_reads(REPO_ROOT, approval)
     assert grading.prior_grading(REPO_ROOT, "exp036_sol_fixed5", grading.EXP036_SOL_BATCH)[0] >= Decimal("10.7193625")
+
+
+def _assert_prior_grading_reads(repo_root: Path, approval: grading.Approval) -> None:
+    """An approval's committed journals read, and a legacy approval's spent something.
+
+    A run registered after the tenant basis can commit a journal that spent
+    nothing: a grade whose every row is no_deliverables makes no judge call,
+    and grade-run.yml commits the journal on every outcome.
+    """
+    total, read = grading.prior_grading(repo_root, approval.experiment_id, approval)
+    assert read, approval.experiment_id
+    assert total > 0 or approval not in LEGACY_APPROVALS, approval.experiment_id
+
+
+def test_a_committed_journal_that_spent_nothing_reads_only_for_a_new_run(tmp_path, admitted):
+    # exp041's ten could all lose their deliverables again; its grade then
+    # makes no judge call and commits a journal with spent_usd 0.
+    exp041 = {a.experiment_id: a for a in grading.APPROVALS}["exp041_sol_retry10"]
+    assert exp041 not in LEGACY_APPROVALS and exp041.booking_basis == TENANT
+    directory = tmp_path / grading.JOURNAL_DIR / exp041.experiment_id
+    directory.mkdir(parents=True)
+    run = controls.RUNS[exp041.experiment_id]
+    admission, _ = admitted(_seed(
+        experiment_id=exp041.experiment_id, config_name=exp041.config_name, booking_basis=TENANT,
+        narrative_allowance_usd=run.narrative_allowance_usd, ceiling_usd=exp041.ceiling_usd,
+    ), f"{grading.JOURNAL_DIR}/{exp041.experiment_id}/run-1-1.combined_usd.jsonl")
+    admission.close(0)
+    lines = _records(admission.journal_path)
+    assert [line["event"] for line in lines] == ["open", "close"] and lines[-1]["spent_usd"] == "0.00000000"
+    assert _replay_journals([admission.journal_path]) == (0, 0)
+    _assert_prior_grading_reads(tmp_path, exp041)
+    # A legacy approval's journals are on main and spent; an empty one would be a lost journal.
+    legacy = grading.EXP037_FIRST25
+    directory = tmp_path / grading.JOURNAL_DIR / legacy.experiment_id
+    directory.mkdir(parents=True)
+    admission, _ = admitted(_seed(
+        experiment_id=legacy.experiment_id, config_name=legacy.config_name, ceiling_usd=legacy.ceiling_usd,
+    ), f"{grading.JOURNAL_DIR}/{legacy.experiment_id}/run-1-1.combined_usd.jsonl")
+    admission.close(0)
+    with pytest.raises(AssertionError, match=legacy.experiment_id):
+        _assert_prior_grading_reads(tmp_path, legacy)
 
 
 def test_a_committed_tenant_journal_replays_on_its_own_basis(tmp_path, admitted, monkeypatch):

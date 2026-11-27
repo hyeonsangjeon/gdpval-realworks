@@ -13,6 +13,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- 2026-11-26: Register `exp041_sol_retry10` (owner 2026-11-26, "Azure 오류 10건"):
+  the ten tasks `exp039_sol_next98` and `exp040_sol_last97` lost to
+  Azure-side failures, solved and graded once more, in exp038's order:
+  `2fa8e956`, `46b34f78`, `4c18ebae`, `5a2d70da` (exp039 #20, #36, #43, #54:
+  network and Foundry 507) and `efca245f`, `f1be6436`, `f2986c1f`,
+  `f3351922`, `f5d428fd`, `f841ddcf` (exp040 #82-#87: peak-load refusals);
+  `ordered_task_ids_sha256` `58675014aed6ab580517aca4abd58d7d8f074cec8fd95bfcc63c0bf8b1be8cf2`,
+  550 rubric items. The experiment file is exp040's byte for byte apart from
+  its header, identity, data source and task list, and
+  `exp041_v2_sol_max` is exp040's grading config apart from its name and
+  description, so the solve setup and the judge are exp040's. The
+  content-filter and grader-side zeros are not retried.
+  - USD 220 ("USD 220 (추천)") for the solve and grade together, the first run
+    booked on `tenant_observed_20261126`: 150 solve + 70 grading, 30 per
+    attempt (at least the 29.385 in-flight bound), so attempts start while
+    booked solve spend <= 120.00. Twins in `sol_batch_controls.RUNS` and
+    `sol_batch_grading.APPROVALS`.
+  - If every attempt booked the whole reserve, five would start. A turn
+    that uses Codex's sub-agent tools books its row at `list_long_context`
+    plus 30 per sub-agent thread (`sub_agent_bound_usd`), so four threads in
+    one turn, or one in each of four turns, close the gate; exp039's solve
+    ledgers replay at the observed rates to within 0.27 of its bill (192.57
+    against 192.84), so Sol used no sizable sub-agents there. Such a stop is
+    a booking-rule stop, not an Azure cascade, and no re-dispatch under 220
+    can follow it.
+  - exp039's and exp040's remaining limits (947.32 and 1,025.87 of their USD
+    2,500) are `list_long_context` dollars, a different unit from exp041's
+    tenant dollars. At the worst list/tenant ratio (22.50 / 5.25, uncached
+    input) 220 is at most 942.86 at the list meter, inside both; exp041's
+    list-meter equivalent is reported by replay.
+  - No exp037, exp039 or exp040 file, registry entry or journal changes; the
+    ten first attempts stay booked there. The readout figures for the Sol 220
+    (first attempt, and with the ten retried once) come with the run record
+    after exp041's grade.
+
 - 2026-11-26: Sol runs registered from now on book USD on the new basis
   `tenant_observed_20261126`: the rates Azure billed this tenant for
   gpt-5.6-sol (Cost Management, 2026-11-12 to 11-25, ShortCo Standard Global
