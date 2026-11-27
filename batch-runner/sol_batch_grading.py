@@ -33,6 +33,9 @@ inference is not part of it.
 and stays that way: after exp037's readout the owner had them run as two
 experiments instead, :data:`EXP039_NEXT98` and :data:`EXP040_LAST97` (approved
 2026-11-14), each under one USD 2,500 ceiling for its solve and grade.
+:data:`EXP041_RETRY10` (approved 2026-11-26): the ten tasks those two lost to
+Azure-side failures, solved and graded once more under one USD 220 ceiling on
+the tenant_observed_20261126 basis.
 
 For a Sol run the published task list must be the one sol_batch_controls
 registers, in its order, so the grade covers the whole approved scope and is
@@ -103,6 +106,12 @@ import yaml
 
 SOLVE_SEED_SOL_BATCH = "sol_batch_controls"
 SOLVE_SEED_NONE = "none"
+#: Twins of sol_batch_controls.BASIS_LIST_LONG, BASIS_TENANT_20261126 and
+#: BOOKING_BASES, as strings so the inert path imports nothing more; a test
+#: holds the two sets equal.
+BASIS_LIST_LONG = "list_long_context"
+BASIS_TENANT_20261126 = "tenant_observed_20261126"
+BOOKING_BASES = frozenset({BASIS_LIST_LONG, BASIS_TENANT_20261126})
 
 
 @dataclass(frozen=True)
@@ -133,6 +142,10 @@ class Approval:
     task_ids_sha256: str | None
     #: The owner's dated approval, or None: registered, not approved.
     approved: str | None
+    #: One of BOOKING_BASES: the rates every reservation and settlement of
+    #: this approval books at, and its journals' basis. A Sol batch entry's
+    #: twin in sol_batch_controls.RUNS names the same one.
+    booking_basis: str = BASIS_LIST_LONG
 
 
 EXP036_SOL_BATCH = Approval(
@@ -217,6 +230,24 @@ EXP040_LAST97 = Approval(
     approved=("2026-11-14 owner (\"추천대로\"): exp037's readout failed R3 and R4, so solve and grade"
               " exp038's 195 as two experiments; USD 2,500 for this one's solve and grade together"),
 )
+#: The ten tasks exp039 and exp040 lost to Azure-side failures, solved and
+#: graded once more (owner 2026-11-26): twin of
+#: sol_batch_controls.RUNS["exp041_sol_retry10"], the first entry booked on
+#: tenant_observed_20261126.
+EXP041_RETRY10 = Approval(
+    experiment_id="exp041_sol_retry10",
+    config_name="exp041_v2_sol_max",
+    ceiling_usd=Decimal("220"),
+    solve_seed=SOLVE_SEED_SOL_BATCH,
+    exclusive_experiment=True,
+    inference_revision=None,
+    task_ids_sha256=None,
+    approved=("2026-11-26 owner (\"Azure 오류 10건\"; \"USD 220 (추천)\"): solve and grade again the ten"
+              " tasks exp039 and exp040 lost to Azure-side failures; USD 220 at tenant_observed_20261126"
+              " for this run's solve and grade together. The parents' remaining limits (947.32 and"
+              " 1,025.87) are at the list meter, and 220 x 22.50 / 5.25 = 942.86 <= 947.32"),
+    booking_basis=BASIS_TENANT_20261126,
+)
 #: Every admission this module can open. One approval per experiment and per
 #: config, because an experiment's journals share one directory. Each Sol
 #: entry has a twin in ``sol_batch_controls.RUNS`` with the same config and
@@ -231,7 +262,7 @@ EXP040_LAST97 = Approval(
 #: 220 comparison) until a PR gives the registry a retired state that keeps
 #: journal ownership but admits nothing.
 APPROVALS: tuple[Approval, ...] = (EXP036_SOL_BATCH, EXP035_PARITY, EXP037_FIRST25, EXP038_REST195,
-                                   EXP039_NEXT98, EXP040_LAST97)
+                                   EXP039_NEXT98, EXP040_LAST97, EXP041_RETRY10)
 #: The first Sol batch, exp036; ``sol_batch_controls.RUNS`` holds it under the
 #: same id.
 GRADED_EXPERIMENT_ID = EXP036_SOL_BATCH.experiment_id
@@ -387,6 +418,8 @@ def approval_problems(approvals: Sequence[Approval] | None = None) -> list[str]:
                                 "and task scope")
         else:
             problems.append(f"{name}: an unknown solve seed")
+        if not isinstance(approval.booking_basis, str) or approval.booking_basis not in BOOKING_BASES:
+            problems.append(f"{name}: an unknown booking basis")
     return problems
 
 
@@ -447,6 +480,8 @@ class Seed:
     prior_grading_usd: Decimal
     prior_journals: tuple[Mapping[str, str], ...]
     ceiling_usd: Decimal
+    #: The approval's booking basis: the rates this grade reserves and settles at.
+    booking_basis: str = BASIS_LIST_LONG
 
     def committed_floor(self) -> Decimal:
         return self.solve_usd + self.narrative_allowance_usd + self.prior_grading_usd
@@ -464,6 +499,7 @@ class Seed:
             "prior_journals": [dict(journal) for journal in self.prior_journals],
             "committed_floor_usd": _money(self.committed_floor()),
             "ceiling_usd": _money(self.ceiling_usd),
+            "booking_basis": self.booking_basis,
         }
 
 
@@ -590,6 +626,7 @@ def preflight(
         prior_grading_usd=prior,
         prior_journals=tuple(journals),
         ceiling_usd=approval.ceiling_usd,
+        booking_basis=approval.booking_basis,
     )
     if seed.committed_floor() >= seed.ceiling_usd:
         _refuse(
@@ -621,6 +658,8 @@ def _solve_seed(
         _refuse("sol_batch_controls does not approve this run")
     if run.grading_config_name != approval.config_name or run.ceiling_usd != approval.ceiling_usd:
         _refuse("the solve and grade sides name different configs or ceilings")
+    if run.booking_basis != approval.booking_basis:
+        _refuse("the solve and grade sides book under different bases")
     if controls.registry_problems({run.experiment_id: run}):
         _refuse(f"{run.experiment_id}'s registry entry is incomplete")
     try:
@@ -695,7 +734,8 @@ def published_solve(
     published as ``observability.budget_metrics.conservative_cost_usd``; it
     survives relay legs, where each leg's per-turn ledger does not. The
     published cost_ledger.jsonl holds only the last leg's rows, so its settled
-    rows priced at the same list meter are a lower bound: booked spend below
+    rows priced at the run's basis, lowest tier (controls.floor_price_usd),
+    are a lower bound: booked spend below
     it, not counting the run's ``prior_lineage_spend_usd``, means a booking
     was lost, and refuses. A row that reached Codex without a booking refuses
     unless the run's ``lost_booking_usd`` names it for ``revision``. The
@@ -743,7 +783,7 @@ def published_solve(
         floor, status = Decimal(0), "absent"
     else:
         try:
-            rates = controls.load_sol_list_rates()
+            rates = controls.load_booking_rates(run.booking_basis)
         except controls.SolBatchControlsRefused as exc:
             _refuse(str(exc))
         floor = Decimal(0)
@@ -762,7 +802,7 @@ def published_solve(
                 _refuse("cost_ledger.jsonl has a line that is not an object")
             if row.get("record_type") != "call" or row.get("state") != "settled":
                 continue
-            price = controls.list_price_usd(
+            price = controls.floor_price_usd(
                 input_tokens=row.get("input_tokens"),
                 cached_input_tokens=row.get("cached_input_tokens"),
                 output_tokens=row.get("output_tokens"),
@@ -816,8 +856,11 @@ def _journal_owner(record: Mapping[str, Any]) -> Approval | None:
 def _read_journal(path: Path, approval: Approval | None = None) -> tuple[Decimal, str]:
     """``(spent_usd, sha256)`` of one committed journal; anything malformed refuses.
 
-    The open line names the approval that wrote it. With ``approval`` given,
-    a journal written under any other approval refuses too.
+    The open line names the approval that wrote it, and the booking basis
+    it booked under (a line without one predates bases and booked on
+    list_long_context). An unknown basis refuses. With ``approval`` given, a
+    journal written under any other approval or basis, or from other rates
+    than its basis pins (``booking_rates_sha256``), refuses too.
     """
     if not JOURNAL_NAME.fullmatch(path.name):
         _refuse(f"{path.name} is not a combined USD journal name")
@@ -860,6 +903,20 @@ def _read_journal(path: Path, approval: Approval | None = None) -> tuple[Decimal
                 _refuse(f"{path.name} is not the journal of an approved admission")
             if approval is not None and owner is not approval:
                 _refuse(f"{path.name} is not a {approval.experiment_id} / {approval.config_name} journal")
+            basis = record.get("booking_basis", BASIS_LIST_LONG)
+            if not isinstance(basis, str) or basis not in BOOKING_BASES:
+                _refuse(f"{path.name} names an unknown booking basis")
+            if approval is not None:
+                if basis != approval.booking_basis:
+                    _refuse(f"{path.name} was booked under {basis}; this approval books under "
+                            f"{approval.booking_basis}")
+                # The approval is found, so the paid path's import is allowed here.
+                import sol_batch_controls as controls
+
+                sha = record.get("booking_rates_sha256")
+                if (sha is None and basis != BASIS_LIST_LONG) or (
+                        sha is not None and sha != controls.booking_source_sha256(basis)):
+                    _refuse(f"{path.name} was booked from other rates than {basis} pins")
             continue
         ticket = record.get("ticket")
         if event == "reserve":
@@ -971,6 +1028,30 @@ def check_grade_writers(
 # -- the per-request admission ------------------------------------------------
 
 
+def _sdk_retry_policy(client: Any) -> tuple[int, float | None] | None:
+    """``(max_retries, timeout seconds or None)`` of an SDK client, or ``None`` when it retries nothing.
+
+    An OpenAI client carries both; its timeout is a number or an
+    ``httpx.Timeout`` whose read timeout applies to a non-streamed response.
+    A client with no readable ``max_retries`` is not an SDK client that
+    retries. A timeout of ``None`` never times out, so no attempt is hidden
+    by one; a timeout that cannot be read is reported as ``None`` with the
+    retries, and every retry is then assumed.
+    """
+    retries = getattr(client, "max_retries", None)
+    if isinstance(retries, bool) or not isinstance(retries, int) or retries <= 0:
+        return None
+    timeout = getattr(client, "timeout", None)
+    if timeout is None:
+        return None
+    read = getattr(timeout, "read", timeout)
+    if read is None:
+        return None
+    if isinstance(read, bool) or not isinstance(read, (int, float)) or not read > 0:
+        return retries, None
+    return retries, float(read)
+
+
 class CombinedGradingAdmission:
     """The ``usd_admission`` core's CostRecorder applies to every metered grading request.
 
@@ -979,6 +1060,15 @@ class CombinedGradingAdmission:
     committed total past the ceiling is refused before it is sent. Every
     reservation and conclusion is one fsynced journal line, so the spend of a
     process that dies is still on disk for the next preflight.
+
+    On a tenant basis it also books the attempts an SDK client's own retries
+    hide. One metered call is one reservation and one conclusion, but an
+    OpenAI client with ``max_retries`` above 0 re-sends a request whose
+    attempt timed out, and Azure bills the timed-out attempt it served. Each
+    such attempt lasted at least the client's timeout, so a call that took k
+    whole timeouts books k more reservations (at most ``max_retries``) on top
+    of its conclusion, as ``hidden_attempts``. The list_long_context basis
+    keeps its booking unchanged, for good.
     """
 
     def __init__(self, seed: Seed, journal_path: Path | str):
@@ -994,9 +1084,16 @@ class CombinedGradingAdmission:
         self.seed = seed
         self.journal_path = path
         try:
-            self.rates_sol = controls.load_sol_list_rates()
+            self.rates_sol = controls.load_booking_rates(seed.booking_basis)
+            rates_sha256 = controls.booking_source_sha256(seed.booking_basis)
         except controls.SolBatchControlsRefused as exc:
             _refuse(str(exc))
+        self._tenant = seed.booking_basis != BASIS_LIST_LONG
+        # Per thread: the retry policy of the client check_client last saw,
+        # which core's metered call checks just before it reserves.
+        self._client_policy = threading.local()
+        self._clock: Callable[[], float] = time.monotonic
+        self._started: dict[str, tuple[float, tuple[int, float | None] | None]] = {}
         self.spent = Decimal(0)
         self.pending: dict[str, Decimal] = {}
         self.stops: list[str] = []
@@ -1012,6 +1109,7 @@ class CombinedGradingAdmission:
                 "open",
                 schema=JOURNAL_SCHEMA,
                 **seed.as_record(),
+                booking_rates_sha256=rates_sha256,
                 github_run_id=os.environ.get("GITHUB_RUN_ID"),
                 github_run_attempt=os.environ.get("GITHUB_RUN_ATTEMPT"),
                 opened_at=_now(),
@@ -1077,8 +1175,7 @@ class CombinedGradingAdmission:
             per_input = rates["input"] + rates["cache_write"]
             per_output = rates["output"]
         else:
-            per_input = self.rates_sol.input + self.rates_sol.cache_write
-            per_output = self.rates_sol.output
+            per_input, per_output = self._controls.reservation_usd_per_million(self.rates_sol, inputs)
         return _ceil8((Decimal(inputs) * per_input + Decimal(outputs) * per_output) / _TOKENS_PER_MILLION)
 
     def _settled_usd(self, model: Any, response: Any) -> tuple[Decimal | None, dict[str, Any]]:
@@ -1098,11 +1195,15 @@ class CombinedGradingAdmission:
             rates = self._usd.AUDIO_STAND_IN_USD_PER_MILLION
             amount = (Decimal(inputs) * rates["input"] + Decimal(outputs) * rates["output"]) / _TOKENS_PER_MILLION
             return _ceil8(amount), tokens
-        return self._controls.list_price_usd(
+        if self._tenant:
+            # Grading tiers on the request's own reported input.
+            tokens["tier"] = self._controls.booked_tier(self.rates_sol, usage.input_tokens)
+        return self._controls.booked_price_usd(
             input_tokens=usage.input_tokens,
             cached_input_tokens=usage.cached_input_tokens,
             output_tokens=usage.output_tokens,
             reasoning_tokens=usage.reasoning_tokens,
+            request_input_tokens=usage.input_tokens,
             rates=self.rates_sol,
         ), tokens
 
@@ -1110,8 +1211,43 @@ class CombinedGradingAdmission:
 
     def check_client(self, client: Any) -> None:
         # SDK retries are allowed, as the pilot decided on 2026-10-30
-        # (gpt56_pilot_usd_budget.py:631-634); the reservation covers one.
+        # (gpt56_pilot_usd_budget.py:631-634). On the list basis the
+        # reservation covers one; on a tenant basis the client's retry policy
+        # is kept for the reservation that follows, which books the attempts
+        # its retries hide (see the class docstring).
+        if self._tenant:
+            self._client_policy.value = _sdk_retry_policy(client)
         return None
+
+    def _hidden_attempts(self, key: str) -> int:
+        """Attempts an SDK retry hid from this call: one per whole client timeout it took."""
+        started = self._started.pop(key, None)
+        if started is None:
+            return 0
+        start, policy = started
+        if policy is None:
+            return 0
+        retries, timeout = policy
+        if retries == 0:
+            return 0
+        if timeout is None:
+            # A retrying client whose timeout cannot be read: every retry may have happened.
+            return retries
+        try:
+            elapsed = self._clock() - start
+        except Exception:  # noqa: BLE001 - an unreadable clock books every retry the client allows
+            return retries
+        if not elapsed >= timeout:
+            return 0
+        return min(retries, int(elapsed // timeout))
+
+    def _hidden_fields(self, key: str, reserved: Decimal) -> tuple[Decimal, dict[str, Any]]:
+        """``(USD, journal fields)`` for the attempts an SDK retry hid; nothing on the list basis."""
+        if not self._tenant:
+            return Decimal(0), {}
+        attempts = self._hidden_attempts(key)
+        amount = reserved * attempts
+        return amount, {"hidden_attempts": attempts, "hidden_attempts_usd": _money(amount)}
 
     @contextmanager
     def grading_request(self) -> Iterator[None]:
@@ -1156,7 +1292,15 @@ class CombinedGradingAdmission:
                 raise usd.PilotUsdRefused(usd.CEILING, "grading")
             self._tickets += 1
             ticket = f"g{self._tickets}"
+            policy = getattr(self._client_policy, "value", None)
+            self._client_policy.value = None
             try:
+                extra: dict[str, Any] = {}
+                if self._tenant and not self._is_audio(model):
+                    extra["tier"] = self._controls.booked_tier(self.rates_sol, inputs)
+                if self._tenant:
+                    extra["sdk_max_retries"] = policy[0] if policy is not None else None
+                    extra["sdk_timeout_sec"] = policy[1] if policy is not None else None
                 self._append(
                     "reserve",
                     ticket=ticket,
@@ -1165,11 +1309,16 @@ class CombinedGradingAdmission:
                     model=model if type(model) is str else None,
                     reserve_usd=_money(amount),
                     committed_usd=_money(committed + amount),
+                    allowance_input_tokens=inputs,
+                    allowance_output_tokens=outputs,
+                    **extra,
                 )
             except Exception:  # noqa: BLE001 - an unjournaled request is not sent
                 self._stop(UNVERIFIED, task_id=task_id, detail="journal write failed")
                 raise usd.PilotUsdRefused(usd.UNVERIFIED, "grading") from None
             self.pending[ticket] = amount
+            if self._tenant:
+                self._started[ticket] = (self._clock(), policy)
             return {"ticket": ticket, "model": model, "reserve_usd": amount}
 
     def finish(self, ticket: Any, response: Any) -> None:
@@ -1180,18 +1329,21 @@ class CombinedGradingAdmission:
                 reserved = self.pending.pop(key, None)
                 if reserved is None:
                     return
+                hidden, extra = self._hidden_fields(key, reserved)
                 try:
                     amount, tokens = self._settled_usd(ticket.get("model"), response)
                 except Exception:  # noqa: BLE001 - unreadable usage keeps the reservation
                     amount, tokens = None, {}
                 if amount is None:
-                    self.spent += reserved
-                    self._record("abandon", ticket=key, reason="usage_unreported", spent_usd=_money(reserved))
+                    self.spent += reserved + hidden
+                    self._record("abandon", ticket=key, reason="usage_unreported",
+                                 spent_usd=_money(reserved + hidden), **extra)
                     return
                 # A settlement above its reservation is booked as observed; it
                 # is not a stop. The next reservation sees the larger total.
-                self.spent += amount
-                self._record("settle", ticket=key, spent_usd=_money(amount), reserve_usd=_money(reserved), **tokens)
+                self.spent += amount + hidden
+                self._record("settle", ticket=key, spent_usd=_money(amount + hidden),
+                             reserve_usd=_money(reserved), **tokens, **extra)
         except Exception:  # noqa: BLE001 - see docstring
             self._journal_failed = True
 
@@ -1203,8 +1355,10 @@ class CombinedGradingAdmission:
                 reserved = self.pending.pop(key, None)
                 if reserved is None:
                     return
-                self.spent += reserved
-                self._record("abandon", ticket=key, reason="request_failed", spent_usd=_money(reserved))
+                hidden, extra = self._hidden_fields(key, reserved)
+                self.spent += reserved + hidden
+                self._record("abandon", ticket=key, reason="request_failed", spent_usd=_money(reserved + hidden),
+                             **extra)
         except Exception:  # noqa: BLE001 - never displaces the provider's own error
             self._journal_failed = True
 

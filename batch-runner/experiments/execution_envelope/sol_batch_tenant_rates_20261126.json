@@ -1,0 +1,107 @@
+{
+  "schema": "sol-batch-tenant-rates-v1",
+  "basis": "tenant_observed_20261126",
+  "model": "gpt-5.6-sol",
+  "what_this_is": "Effective rates Azure billed this tenant for gpt-5.6-sol, read from Cost Management; an observation, not a contract or a list price.",
+  "observation": {
+    "source": "Azure Cost Management Query API, ActualCost, USD, daily granularity, UTC",
+    "queried_at_utc": "2026-11-26T00:55Z",
+    "scope": "the Foundry resource batch-runner/README.md names (hjeon-fdpo-foundry-eus2); no subscription, tenant id or endpoint is recorded",
+    "period_utc": {
+      "from": "2026-11-12",
+      "through": "2026-11-25",
+      "partial_days": [
+        "2026-11-25"
+      ]
+    },
+    "meters": [
+      {
+        "meter_name": "5.6 sol ShortCo Inp Std Gl 1M Tokens",
+        "rate_kind": "input",
+        "quantity_million_tokens": "0.702739",
+        "cost_usd": "2.81"
+      },
+      {
+        "meter_name": "5.6 sol ShortCo Cd Inp Std Gl 1M Tokens",
+        "rate_kind": "cached_input",
+        "quantity_million_tokens": "372.770041",
+        "cost_usd": "149.11"
+      },
+      {
+        "meter_name": "5.6 sol ShortCo Cd Wr Std Gl 1M Tokens",
+        "rate_kind": "cache_write",
+        "quantity_million_tokens": "69.506973",
+        "cost_usd": "347.53"
+      },
+      {
+        "meter_name": "5.6 sol ShortCo Opt Std Gl 1M Tokens",
+        "rate_kind": "output",
+        "quantity_million_tokens": "13.963560",
+        "cost_usd": "279.27"
+      }
+    ],
+    "period_cost_usd": "778.72",
+    "long_context_meters_billed": [],
+    "data_zone_meters_billed": [],
+    "uncached_input_million_tokens": "70.209712",
+    "uncached_input_rule": "uncached input is billed once, on the input or the cache-write meter, never both"
+  },
+  "observed_usd_per_million": {
+    "input": "4.00",
+    "cached_input": "0.40",
+    "cache_write": "5.00",
+    "output": "20.00"
+  },
+  "safety_margin": "1.05",
+  "booked_usd_per_million": {
+    "input": "4.20",
+    "cached_input": "0.42",
+    "cache_write": "5.25",
+    "output": "21.00"
+  },
+  "short_tier_through_request_input_tokens": 187594,
+  "bound_evidence": {
+    "cost_ledger": "data/grades/exp039_sol_next98__judge_gpt-5_6-sol__exp039_v2_sol_max__cfg_b1d01ade7e210fe7__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_ea9ea042157011c6fd2a4adaf44ed0c5e69a4d06__src_f5fce752e314d028__v2.2.cost_ledger.jsonl",
+    "call_id": "6c4b4a930e3aa64e3d43138c32ab923bd3bee851d6505fc4ae421b10991385b0",
+    "input_tokens": 187594,
+    "cached_input_tokens": 94347,
+    "concluded_at": "2026-11-24T22:01:52.589+00:00",
+    "journal": "data/grades/_combined_usd/exp039_sol_next98/run-45492421884-1.combined_usd.jsonl",
+    "journal_seq": 376,
+    "billed_day_utc": "2026-11-24",
+    "day_complete": true,
+    "solve_last_request_max_seen": {
+      "exp039": 179880,
+      "exp040_legs_at_hand": 178833,
+      "source": "job logs, not committed"
+    }
+  },
+  "fallback": {
+    "basis": "list_long_context",
+    "price_table": "batch-runner/experiments/execution_envelope/model_price_table.json",
+    "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
+    "meter": "long_context_standard_global"
+  },
+  "billed_windows": [
+    {
+      "window_utc": "2026-11-13",
+      "sol_cost_usd": "23.3567",
+      "deduction_usd": "0",
+      "journal": "data/grades/_combined_usd/exp037_sol_first25/run-43310879444-1.combined_usd.jsonl"
+    },
+    {
+      "window_utc": "2026-11-12",
+      "sol_cost_usd": "35.55",
+      "deduction_usd": "4.97",
+      "deduction": "estimated non-gdpval PyTorch run",
+      "journal": "data/grades/_combined_usd/exp037_sol_first25/run-42850641369-1.combined_usd.jsonl"
+    },
+    {
+      "window_utc": "2026-11-20T13:42Z/2026-11-21T02:46Z",
+      "what": "exp039 solve, five legs",
+      "sol_cost_usd": "192.84",
+      "booked_list_usd": "632.17658900",
+      "replayable_from_committed_files": false
+    }
+  ]
+}

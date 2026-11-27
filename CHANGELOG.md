@@ -13,6 +13,97 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- 2026-11-26: `scripts/sol_stage_readout.py` takes `--retry-stage <id>`
+  (repeatable), a stage passed with `--stage` after the stages it retries.
+  Its row replaces an earlier stage's row only when that row is an
+  `infrastructure` or `unclassified_failure` zero; over any other row (a
+  judged task, a content-filter, grader-side, timeout, model, `sol_gate` or
+  `usd_gate` zero), a repeated task inside the retry stage, or a task no
+  earlier stage lost, the readout refuses. Each replacement is listed under
+  `retried_after_infrastructure_or_unclassified_zero`; the replaced row's
+  money stays in its own stage's record, and a retry stage's own USD-gate
+  row is not listed as moved. Stages on different booking bases are now
+  read together instead of refused: `usd.by_basis` gives each basis its
+  stages and figures, and the top-level `usd` basis and money figures are
+  null. Only a projection across bases refuses. This replaces the entry
+  below that says the readout "refuses to add up stages booked on different
+  bases". A stage's journals must also name its registered basis (none
+  means `list_long_context`) and that basis's rates sha, or the readout
+  refuses.
+
+- 2026-11-26: Register `exp041_sol_retry10` (owner 2026-11-26, "Azure 오류 10건"):
+  the ten tasks `exp039_sol_next98` and `exp040_sol_last97` lost to
+  Azure-side failures, solved and graded once more, in exp038's order:
+  `2fa8e956`, `46b34f78`, `4c18ebae`, `5a2d70da` (exp039 #20, #36, #43, #54:
+  network and Foundry 507) and `efca245f`, `f1be6436`, `f2986c1f`,
+  `f3351922`, `f5d428fd`, `f841ddcf` (exp040 #82-#87: peak-load refusals);
+  `ordered_task_ids_sha256` `58675014aed6ab580517aca4abd58d7d8f074cec8fd95bfcc63c0bf8b1be8cf2`,
+  550 rubric items. The experiment file is exp040's byte for byte apart from
+  its header, identity, data source and task list, and
+  `exp041_v2_sol_max` is exp040's grading config apart from its name and
+  description, so the solve setup and the judge are exp040's. The
+  content-filter and grader-side zeros are not retried.
+  - USD 220 ("USD 220 (추천)") for the solve and grade together, the first run
+    booked on `tenant_observed_20261126`: 150 solve + 70 grading, 30 per
+    attempt (at least the 29.385 in-flight bound), so attempts start while
+    booked solve spend <= 120.00. Twins in `sol_batch_controls.RUNS` and
+    `sol_batch_grading.APPROVALS`.
+  - If every attempt booked the whole reserve, five would start. A turn
+    that uses Codex's sub-agent tools books its row at `list_long_context`
+    plus 30 per sub-agent thread (`sub_agent_bound_usd`), so four threads in
+    one turn, or one in each of four turns, close the gate; exp039's solve
+    ledgers replay at the observed rates to within 0.27 of its bill (192.57
+    against 192.84), so Sol used no sizable sub-agents there. Such a stop is
+    a booking-rule stop, not an Azure cascade, and no re-dispatch under 220
+    can follow it.
+  - exp039's and exp040's remaining limits (947.32 and 1,025.87 of their USD
+    2,500) are `list_long_context` dollars, a different unit from exp041's
+    tenant dollars. At the worst list/tenant ratio (22.50 / 5.25, uncached
+    input) 220 is at most 942.86 at the list meter, inside both; exp041's
+    list-meter equivalent is reported by replay.
+  - No exp037, exp039 or exp040 file, registry entry or journal changes; the
+    ten first attempts stay booked there. The readout figures for the Sol 220
+    (first attempt, and with the ten retried once) come with the run record
+    after exp041's grade.
+
+- 2026-11-26: Sol runs registered from now on book USD on the new basis
+  `tenant_observed_20261126`: the rates Azure billed this tenant for
+  gpt-5.6-sol (Cost Management, 2026-11-12 to 11-25, ShortCo Standard Global
+  meters only) times 1.05, i.e. 4.20 uncached input (charged once, at the
+  higher of the input and cache-write rates, 5.25), 0.42 cached input, 5.25
+  cache write and 21.00 output per 1M tokens, for any request of at most
+  187,594 input tokens. Above that, or when a solve turn's request size is
+  unknown, a booking is exactly today's `list_long_context` amount. The held
+  record is
+  `batch-runner/experiments/execution_envelope/sol_batch_tenant_rates_20261126.json`
+  (sha256 `11bf182dfb0d9dfa720a788d87e9dc4b89500ed7fae8381e5d7a791cd8c976e2`);
+  `model_price_table.json` and its pins do not change. The basis is a
+  per-run field (`SolRun.booking_basis`, `Approval.booking_basis`) fixed at
+  registration; the solve gate, in-flight bounds, refused requests (3.024
+  instead of 7.20), the published-ledger floor and grading reservations and
+  settlements all book through it. A solve turn tiers on its largest request
+  input, read per request from Codex's token-usage updates (an update Codex
+  re-sends after a failed or cut-off request is skipped; a request the
+  updates missed is bounded by how far their totals grew and by the row's
+  unreported remainder). A turn that used Codex's sub-agent tools books at
+  `list_long_context` plus one attempt reserve per sub-agent thread, whose
+  requests reach no ledger row, and counts as incomplete usage. A tenant
+  grade also books the judge attempts the OpenAI SDK's own retries hide: one
+  more reservation per whole client timeout a call took, at most
+  `max_retries`. Journals stay
+  `sol-batch-grading-journal-v1` and now name their basis and rates sha;
+  `sol_stage_readout.py` reports the basis and refuses to add up stages
+  booked on different bases.
+  - exp035 parity and exp036 to exp040 stay on `list_long_context` for good.
+    Every committed journal replays unchanged, and their figures still read
+    "at the Sol list meter (an approval ledger, not an Azure bill)".
+  - A tenant run's ceiling, reserves and spend are in the new unit. On the
+    billed period's quantities the `list_long_context` booking is 2,580.85,
+    the observed rates give 779.43 against 778.72 billed, and the booked
+    rates 818.40. Those period figures price the bill's own quantities; the
+    evidence that uncached input is billed once is the two exp037 grading
+    days, whose committed journals replay within 0.1% of the bill.
+
 - Report the two regrades that ran after the selector fix (#801), and retire
   the pre-fix exp036 card. Both ran on `main` `567f9b3f` and committed their
   own results (runs 42361049576 and 42560225887); no paid or model call was
