@@ -12,6 +12,10 @@ whose grade row has no error), as aggregate-grades.mjs shows it.
         --stage exp037_sol_first25 data/grades/<exp037 grade>.json <self_report.json> \\
         [--stage exp038_sol_rest195 ...] --remaining-from exp038_sol_rest195 [--json out.json]
 
+    python scripts/sol_stage_readout.py --denominator 220 \\
+        --stage exp037_sol_first25 ... --stage exp039_sol_next98 ... --stage exp040_sol_last97 ... \\
+        --stage exp041_sol_retry10 <grade> <self_report.json> --retry-stage exp041_sol_retry10
+
 Each stage is a run registered in sol_batch_controls.RUNS, read from its
 final grade (run_status "final", the stage's own experiment id) and the
 self_report.json of the revision that grade names; the two must list the
@@ -32,7 +36,38 @@ ledger check) still counts 0 on its stage's denominator, but it is left out
 of every per-task cost and time figure and of the projection's sample. A
 ``usd_gate`` task is listed as moved: it belongs on the next stage's list. In
 a union, a later stage's row for that task replaces the refused one; any
-other repeat refuses. ``sol_gate`` tasks count with infrastructure for R2.
+other repeat refuses, except where ``--retry-stage`` allows it (below).
+``sol_gate`` tasks count with infrastructure for R2.
+
+``--retry-stage <id>`` (repeatable) names a stage that solved and graded
+again tasks earlier stages lost. It must also be passed with ``--stage``,
+after the stages it retries. A retry stage's row replaces an earlier
+stage's row for the same task only when that earlier row is an
+``infrastructure`` or ``unclassified_failure`` zero (the cause table's
+INFRASTRUCTURE and UNCLASSIFIED categories: provider- or runner-side
+faults, and failures that name no cause). A retry over any other row (a
+judged task, a content-filter, grader-side, timeout or model zero) refuses,
+and so does a retry-stage task that replaced nothing. A retry stage does not
+take the USD-gate rule: its row over an earlier ``usd_gate`` (or
+``sol_gate``) zero refuses; register a later ordinary stage for those. Each
+replacement is listed under
+``retried_after_infrastructure_or_unclassified_zero`` with the stage and
+cause it replaced. The replaced row leaves the scores and every per-task
+figure (``solve_per_task_*`` and the projection's ``attempted_sample``,
+``time`` and ``file_habits``), but its money stays in its own stage's
+record and in its basis's ``solve`` and ``grading``, as a refused row's
+does: a per-task figure times the task count need not add up to the
+stage money beside it. A retry row that
+itself ended at the USD gate stays a 0, labelled not attempted, and is not
+listed as moved: no later stage is registered to take it. Without
+``--retry-stage`` the output carries no such key.
+
+Money booked on different bases (sol_batch_controls.BOOKING_BASES) is not
+one unit. With every stage on one basis, ``usd`` gives it as
+``booking_basis`` and the sums as before. With several, ``usd`` sums
+nothing across them: its ``booking_basis`` and every money figure are null,
+and ``usd.by_basis`` gives each basis its stages and their own figures.
+``stages`` is unchanged. A projection over stages on several bases refuses.
 
 ``--remaining-from <id>`` projects the next stage from that experiment's
 registered task list (batch-runner/experiments/<id>.yaml) plus the tasks the
@@ -101,6 +136,9 @@ def _load_causes():
 CAUSES = _load_causes()
 INFRASTRUCTURE = CAUSES.INFRASTRUCTURE
 UNCLASSIFIED = CAUSES.UNCLASSIFIED
+#: The zero_cause_of causes of those two category sets: the only earlier rows
+#: a --retry-stage row may replace.
+RETRY_REPLACES = frozenset({"infrastructure", "unclassified_failure"})
 DOCUMENT_EXTENSIONS = frozenset({".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".csv", ".md", ".txt",
                                  ".html", ".htm", ".json", ".eml", ".msg", ".zip"})
 EMAIL_EXTENSIONS = frozenset({".eml", ".msg"})
@@ -166,7 +204,7 @@ def _journal_lines_by_task(path: Path) -> dict[str, Decimal]:
     return dict(spent)
 
 
-def journal_usd(directory: Path, owner: tuple[str, str] | None = None,
+def journal_usd(directory: Path, owner: tuple[str, str] | None = None, basis: str | None = None,
                 ) -> tuple[dict[str, Decimal], Decimal, list[str]]:
     """Per-task grading USD, the USD no task line holds, and the journals read.
 
@@ -174,7 +212,10 @@ def journal_usd(directory: Path, owner: tuple[str, str] | None = None,
     abandoned and never-concluded reserves, or the close line's in-memory
     total when a conclusion's own line failed to write. A journal that
     function refuses refuses the readout, and so does one whose open line
-    names another (experiment id, config name) than ``owner``.
+    names another (experiment id, config name) than ``owner``, or, given a
+    ``basis``, was booked on another basis or from other rates than that
+    basis pins (sol_batch_grading._read_journal's check with an approval): its
+    money would be reported under a basis it was not booked at.
     """
     grading = _batch_runner_module("sol_batch_grading")
     by_task: dict[str, Decimal] = defaultdict(Decimal)
@@ -190,6 +231,16 @@ def journal_usd(directory: Path, owner: tuple[str, str] | None = None,
             opened_by = (opening.get("experiment_id"), opening.get("config_name"))
             if opened_by != owner:
                 raise SystemExit(f"{path}: opened by {opened_by[0]} / {opened_by[1]}, not by {owner[0]} / {owner[1]}")
+        if basis is not None:
+            opening = json.loads(path.read_text(encoding="utf-8").split("\n", 1)[0])
+            controls = _batch_runner_module("sol_batch_controls")
+            booked_on = opening.get("booking_basis", controls.BASIS_LIST_LONG)
+            if booked_on != basis:
+                raise SystemExit(f"{path}: booked under {booked_on}, but its stage is registered on {basis}")
+            sha = opening.get("booking_rates_sha256")
+            if (sha is None and basis != controls.BASIS_LIST_LONG) or (
+                    sha is not None and sha != controls.booking_source_sha256(basis)):
+                raise SystemExit(f"{path}: booked from other rates than {basis} pins")
         lines = _journal_lines_by_task(path)
         placed = sum(lines.values(), Decimal(0))
         if placed > total:
@@ -322,7 +373,8 @@ def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals
     controls = _batch_runner_module("sol_batch_controls")
     run = controls.registered_run(experiment_id)
     graded = {task["task_id"]: task for task in grade["tasks"]}
-    grading_usd, unattributed, journal_names = journal_usd(journals, (experiment_id, run.grading_config_name))
+    grading_usd, unattributed, journal_names = journal_usd(journals, (experiment_id, run.grading_config_name),
+                                                         run.booking_basis)
     if any(not task.get("error") or (task.get("judge_call_count") or 0) > 0 for task in grade["tasks"]):
         if not journal_names:
             raise SystemExit(f"{journals} holds no combined USD journal, yet {grade_path} judged tasks; "
@@ -397,20 +449,51 @@ def read_stage(experiment_id: str, grade_path: Path, report_path: Path, journals
     return rows
 
 
-def union(rows: list[dict]) -> tuple[list[dict], list[str]]:
-    """Every task once: a later stage's row replaces an earlier USD-gate refusal; any other repeat refuses."""
+def union(rows: list[dict], retry_stages: frozenset[str] = frozenset(),
+          ) -> tuple[list[dict], list[str], list[dict[str, str]]]:
+    """Every task once, with the tasks rerun after the USD gate and those a retry stage replaced.
+
+    A later stage's row replaces an earlier USD-gate refusal. A row of a
+    ``retry_stages`` stage replaces an earlier stage's row only when that row
+    is an infrastructure or unclassified_failure zero, and must replace one.
+    Any other repeat refuses.
+    """
     kept: dict[str, dict] = {}
     rerun: list[str] = []
+    retried: list[dict[str, str]] = []
     for row in rows:
-        earlier = kept.get(row["task_id"])
-        if earlier is not None:
-            if earlier["cause"] != "usd_gate" or earlier["stage"] == row["stage"]:
-                raise SystemExit("a task appears in two stages; a union counts every task once (only a task "
-                                 "the USD gate refused may reappear, in a later stage)")
-            rerun.append(row["task_id"])
-            del kept[row["task_id"]]
-        kept[row["task_id"]] = row
-    return list(kept.values()), rerun
+        task_id = row["task_id"]
+        earlier = kept.get(task_id)
+        retry = row["stage"] in retry_stages
+        if earlier is None:
+            if retry:
+                raise SystemExit(f"{row['stage']} is a retry stage, yet no stage before it lost {task_id}; "
+                                 "pass a retry stage after the stages it retries, and only for tasks they lost "
+                                 "to infrastructure or an unclassified failure")
+        elif earlier["stage"] == row["stage"]:
+            raise SystemExit("a task appears in two stages; a union counts every task once (only a task "
+                             "the USD gate refused may reappear, in a later stage)")
+        elif retry:
+            if earlier["cause"] not in RETRY_REPLACES:
+                raise SystemExit(f"a task appears in two stages; a union counts every task once: retry stage "
+                                 f"{row['stage']} may replace only an infrastructure or unclassified_failure "
+                                 f"zero, and {earlier['stage']}'s {task_id} is {earlier['cause']}")
+            retried.append({"task_id": task_id, "replaced_stage": earlier["stage"],
+                            "replaced_cause": earlier["cause"], "cause": row["cause"]})
+            del kept[task_id]
+        elif earlier["cause"] == "usd_gate":
+            rerun.append(task_id)
+            del kept[task_id]
+        else:
+            raise SystemExit("a task appears in two stages; a union counts every task once (only a task "
+                             "the USD gate refused may reappear, in a later stage)")
+        kept[task_id] = row
+    return list(kept.values()), rerun, retried
+
+
+def moved_by_usd_gate(rows: list[dict], retry_stages: frozenset[str] = frozenset()) -> list[str]:
+    """The USD-gate refusals a later stage should take; a retry stage's own are not moved."""
+    return [row["task_id"] for row in rows if row["cause"] == "usd_gate" and row["stage"] not in retry_stages]
 
 
 def remaining_from(repo_root: Path, experiment_id: str, moved: list[str]) -> tuple[int, int, list[str]]:
@@ -454,8 +537,38 @@ def _graders(records: list[dict]) -> tuple[list[dict], list[str]]:
     return list(stages.values()), problems
 
 
+def _usd_figures(records: list[dict], rows: list[dict]) -> dict[str, float | None]:
+    """The money ``records`` committed and what ``rows`` sampled of it, in the one basis they share."""
+    attempted = [row for row in rows if row["cause"] not in CAUSES.NOT_ATTEMPTED]
+    solve = [row["solve_usd"] for row in attempted]
+    judged_items = sum(row["items"] - row["excluded_items"] for row in rows if row["cause"] == "judged")
+    grading_total = float(sum((record["grading_usd"] for record in records), Decimal(0)))
+    per_item = grading_total / judged_items if judged_items else None
+    return {"solve": round(float(sum((record["solve_usd"] for record in records), Decimal(0))), 2),
+            "grading": round(grading_total, 2),
+            "grading_unattributed": round(float(sum((record["grading_unattributed_usd"] for record in records),
+                                                    Decimal(0))), 2),
+            "solve_per_task_mean": round(statistics.mean(solve), 2) if solve else None,
+            "solve_per_task_max": round(max(solve), 2) if solve else None,
+            "grading_per_judged_item": None if per_item is None else round(per_item, 4)}
+
+
+def _usd(records: list[dict], rows: list[dict], bases: list[str]) -> dict[str, Any]:
+    """``usd``: one basis's sums, or, with several, each basis's apart and no sum across them."""
+    if len(bases) <= 1:
+        return {"booking_basis": bases[0] if bases else None, **_usd_figures(records, rows)}
+    basis_of = {record["stage"]: record["booking_basis"] for record in records}
+    by_basis = {}
+    for basis in bases:
+        on_basis = [record for record in records if record["booking_basis"] == basis]
+        by_basis[basis] = {"stages": [record["stage"] for record in on_basis],
+                           **_usd_figures(on_basis, [row for row in rows if basis_of[row["stage"]] == basis])}
+    return {"booking_basis": None, **{field: None for field in _usd_figures([], [])}, "by_basis": by_basis}
+
+
 def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, remaining_items: int | None,
-              rerun: list[str] | None = None, stages: list[dict] | None = None) -> dict:
+              rerun: list[str] | None = None, stages: list[dict] | None = None,
+              retried: list[dict[str, str]] | None = None, retry_stages: frozenset[str] = frozenset()) -> dict:
     """The readout. ``remaining_tasks``/``remaining_items`` None: nothing is projected, R3 and R4 are None.
 
     A projection needs a sample. With no attempted task the solve figures
@@ -465,26 +578,28 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
     there would read as "R3 and R4 hold" with nothing measured.
 
     ``stages`` are the stages' records, including a stage whose every row a
-    later stage replaced; by default, those of ``rows``.
+    later stage replaced; by default, those of ``rows``. With
+    ``retry_stages``, ``retried`` (union's third value) is printed and those
+    stages' USD-gate rows are not listed as moved.
     """
     records = _stage_records(rows) if stages is None else stages
     # USD booked at different rates is not one unit; adding it up would read
     # as one figure what is two.
     bases = sorted({record["booking_basis"] for record in records})
-    if len(bases) > 1:
-        raise SystemExit("stages booked on different bases cannot be summed: " + ", ".join(
-            f"{record['stage']} ({record['booking_basis']})" for record in records))
     projected = remaining_tasks is not None and remaining_items is not None
+    if projected and len(bases) > 1:
+        raise SystemExit("a projection samples one basis's money; stages booked on different bases cannot be "
+                         "projected together: " + ", ".join(
+                             f"{record['stage']} ({record['booking_basis']})" for record in records))
     judged = [row for row in rows if row["cause"] == "judged"]
     # Never attempted: on the fixed denominator at 0, but not a sample of what
     # an attempt costs or takes.
     attempted = [row for row in rows if row["cause"] not in CAUSES.NOT_ATTEMPTED]
-    moved = [row["task_id"] for row in rows if row["cause"] == "usd_gate"]
+    moved = moved_by_usd_gate(rows, retry_stages)
     causes = Counter(row["cause"] for row in rows)
     solve = [row["solve_usd"] for row in attempted]
     # The rubric items the judge marked: the sample of every grading rate.
     judged_items = sum(row["items"] - row["excluded_items"] for row in judged)
-    unattributed = sum((record["grading_unattributed_usd"] for record in records), Decimal(0))
     grading_total = float(sum((record["grading_usd"] for record in records), Decimal(0)))
     # Each side is projected only from a sample of its own.
     solve_sampled = projected and bool(attempted)
@@ -528,13 +643,7 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
             "selection_rules": dict(Counter(str(row["selection_rule"]) for row in with_files)),
         },
         # Solve: what the stages committed (sol_batch_controls.solve_spend_usd).
-        "usd": {"booking_basis": bases[0] if bases else None,
-                "solve": round(float(sum((record["solve_usd"] for record in records), Decimal(0))), 2),
-                "grading": round(grading_total, 2),
-                "grading_unattributed": round(float(unattributed), 2),
-                "solve_per_task_mean": round(statistics.mean(solve), 2) if solve else None,
-                "solve_per_task_max": round(max(solve), 2) if solve else None,
-                "grading_per_judged_item": None if per_item is None else round(per_item, 4)},
+        "usd": _usd(records, rows, bases),
         "time": {"solve_minutes_per_task_mean": None if mean_minutes is None else round(mean_minutes, 1),
                  "grading_seconds_per_judged_item":
                      None if grade_seconds_per_item is None else round(grade_seconds_per_item, 1)},
@@ -548,6 +657,8 @@ def summarise(rows: list[dict], denominator: int, remaining_tasks: int | None, r
             "solve_legs": legs, "grading_chunks": chunks,
         },
     }
+    if retry_stages:
+        summary["retried_after_infrastructure_or_unclassified_zero"] = list(retried or [])
     # The harness's own refusals are not the model's: counted as infrastructure.
     infrastructure = sum(causes.get(cause, 0) for cause in ("infrastructure", "sol_gate", "unclassified_failure"))
     refusals = sum(1 for row in with_files if row["cause"] == "grader_refusal")
@@ -577,7 +688,16 @@ def main(argv: list[str] | None = None) -> int:
                         metavar=("EXPERIMENT_ID", "DIR"),
                         help="read this stage's grading journals from DIR instead of "
                              "data/grades/_combined_usd/EXPERIMENT_ID")
+    parser.add_argument("--retry-stage", action="append", default=[], metavar="EXPERIMENT_ID",
+                        help="this --stage, passed after the stages it retries, replaces their infrastructure "
+                             "and unclassified_failure zeros, and nothing else")
     args = parser.parse_args(argv)
+    passed = [experiment_id for experiment_id, _grade, _report in args.stage]
+    for experiment_id in args.retry_stage:
+        if experiment_id not in passed:
+            parser.error(f"--retry-stage {experiment_id} is not passed with --stage; pass it with --stage, "
+                         "after the stages it retries")
+    retry_stages = frozenset(args.retry_stage)
     if args.remaining_from is not None and (args.remaining_tasks is not None or args.remaining_items is not None):
         parser.error("--remaining-from derives the remaining tasks and items; do not also pass them")
     if (args.remaining_tasks is None) != (args.remaining_items is None):
@@ -594,14 +714,15 @@ def main(argv: list[str] | None = None) -> int:
         stages += _stage_records(stage_rows)
     if len({record["stage"] for record in stages}) != len(stages):
         raise SystemExit("a stage is passed twice; a union counts every task once")
-    rows, rerun = union(rows)
+    rows, rerun, retried = union(rows, retry_stages)
     remaining_tasks, remaining_items = args.remaining_tasks, args.remaining_items
     remaining: dict[str, Any] = {}
     if args.remaining_from is not None:
-        moved = [row["task_id"] for row in rows if row["cause"] == "usd_gate"]
+        moved = moved_by_usd_gate(rows, retry_stages)
         remaining_tasks, remaining_items, task_ids = remaining_from(repo_root, args.remaining_from, moved)
         remaining = {"experiment_id": args.remaining_from, "task_ids": task_ids}
-    summary = summarise(rows, args.denominator or len(rows), remaining_tasks, remaining_items, rerun, stages)
+    summary = summarise(rows, args.denominator or len(rows), remaining_tasks, remaining_items, rerun, stages,
+                        retried, retry_stages)
     if remaining:
         summary["projection"]["remaining_from"] = remaining["experiment_id"]
     tasks = [{key: value for key, value in row.items() if key != "stage_record"} for row in rows]
