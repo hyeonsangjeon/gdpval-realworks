@@ -45,6 +45,14 @@ BUDGET_GLOB = "tests/test_codex_budget_pilot*.py"
 BUDGET_READOUT_GLOB = "tests/test_codex_budget_pilot*readout*.py"
 TIME_BUDGET_GLOB = "tests/test_time_budget_*.py"
 SUCCESSOR_GRADER_TEST = "tests/test_gpt56_grader_successor_seal.py"
+GHCP_AHP_GLOB = "tests/test_ghcp_ahp_*.py"
+GHCP_REHEARSAL_TEST = "tests/test_ghcp_sol_offline_rehearsal.py"
+GHCP_VM_GATE_TEST = "tests/test_ghcp_vm_gate_contract.py"
+GHCP_AHP_RUN = (
+    "cd batch-runner\n"
+    f'python -m pytest -m "not integration" --tb=short -q -rs {GHCP_AHP_GLOB} {GHCP_REHEARSAL_TEST}\n'
+)
+GHCP_AHP_CORE_IGNORES = f" --ignore-glob='{GHCP_AHP_GLOB}' --ignore={GHCP_REHEARSAL_TEST}"
 PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256 = "a2e0e2fe0451b905ab7d2eddd163f9c87b25eede7a6f7e383cb42b3722687664"
 TIME_BUDGET_RUN = (
     "cd batch-runner\n"
@@ -130,6 +138,42 @@ def _without_owned_host_ci_evidence(workflow):
         OWNED_HOST_JUNIT_OPTIONS, "", 1,
     )
     steps.pop()
+    return previous
+
+
+def _without_ghcp_ahp_contracts(workflow):
+    """Validate the exact GHCP AHP split, then undo it.
+
+    Undo this first: the core run line now ends with these two ignores, and
+    _without_time_budget_contracts below requires the time-budget glob to end
+    it. The byte-level twin is restore_pre_ghcp_ahp_job_bytes.
+    """
+    previous = deepcopy(workflow)
+    jobs = previous["jobs"]
+    family = jobs["ghcp-ahp-contracts"]
+    assert set(family) == {"runs-on", "timeout-minutes", "steps"}
+    assert family["runs-on"] == jobs["pytest"]["runs-on"] == "ubuntu-24.04"
+    assert family["timeout-minutes"] == jobs["pytest"]["timeout-minutes"] == 45
+    assert family["steps"] == jobs["pytest"]["steps"][:6] + [{
+        "name": "Run GHCP AHP contracts", "run": GHCP_AHP_RUN,
+    }]
+    # Each name appears once to select and once to ignore, nowhere else.
+    for name in (GHCP_AHP_GLOB, GHCP_REHEARSAL_TEST):
+        assert sum(step.get("run", "").count(name)
+                   for job in jobs.values() for step in job["steps"]) == 2
+    steps = [step for step in jobs["pytest"]["steps"] if step["name"] == "Run tests"]
+    assert len(steps) == 1
+    run = steps[0]["run"]
+    lines = run.splitlines()
+    assert len(lines) == 2 and lines[0] == "cd batch-runner"
+    tokens = shlex.split(lines[1])
+    assert tokens[:3] == ["python", "-m", "pytest"]
+    ignores = [f"--ignore-glob={GHCP_AHP_GLOB}", f"--ignore={GHCP_REHEARSAL_TEST}"]
+    assert tokens[-2:] == ignores and all(tokens.count(token) == 1 for token in ignores)
+    assert run.count(GHCP_AHP_CORE_IGNORES) == 1 and run.endswith(GHCP_AHP_CORE_IGNORES + "\n")
+    steps[0]["run"] = run.removesuffix(GHCP_AHP_CORE_IGNORES + "\n") + "\n"
+    assert shlex.split(steps[0]["run"].splitlines()[1]) == tokens[:-2]
+    jobs.pop("ghcp-ahp-contracts")
     return previous
 
 
@@ -461,6 +505,48 @@ def test_successor_grader_assignment_refuses_missing_or_duplicate_owners(mutatio
         _without_successor_grader_partition(workflow)
 
 
+def test_ghcp_ahp_split_is_the_only_backend_workflow_delta_after_the_runner_pins():
+    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256, PRE_GHCP_AHP_JOB_WORKFLOW_SHA256
+    from .test_workflow_ubuntu_runner_pins import GHCP_AHP_JOB_PIN, restore_pre_ghcp_ahp_job_bytes
+
+    data = WORKFLOW.read_bytes()
+    assert GHCP_AHP_JOB_PIN == (PRE_GHCP_AHP_JOB_WORKFLOW_SHA256, CURRENT_WORKFLOW_SHA256)
+    assert hashlib.sha256(data).hexdigest() == CURRENT_WORKFLOW_SHA256
+    previous = restore_pre_ghcp_ahp_job_bytes(data)
+    assert hashlib.sha256(previous).hexdigest() == PRE_GHCP_AHP_JOB_WORKFLOW_SHA256
+    # Same undo by structure and by bytes; the older undo chain then still runs.
+    assert _without_ghcp_ahp_contracts(yaml.safe_load(data)) == yaml.safe_load(previous)
+    _without_time_budget_contracts(yaml.safe_load(previous))
+    with pytest.raises(AssertionError):
+        _without_time_budget_contracts(yaml.safe_load(data))
+
+
+@pytest.mark.parametrize("mutation", [
+    "core_glob_missing", "core_rehearsal_missing", "job_rehearsal_missing",
+    "job_extra_file", "second_owner", "longer_timeout",
+])
+def test_ghcp_ahp_split_refuses_missing_or_duplicate_owners(mutation):
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    core = next(step for step in workflow["jobs"]["pytest"]["steps"] if step.get("name") == "Run tests")
+    family = workflow["jobs"]["ghcp-ahp-contracts"]
+    run = family["steps"][-1]
+    if mutation == "core_glob_missing":
+        core["run"] = core["run"].replace(f" --ignore-glob='{GHCP_AHP_GLOB}'", "", 1)
+    elif mutation == "core_rehearsal_missing":
+        core["run"] = core["run"].replace(f" --ignore={GHCP_REHEARSAL_TEST}", "", 1)
+    elif mutation == "job_rehearsal_missing":
+        run["run"] = run["run"].replace(" " + GHCP_REHEARSAL_TEST, "", 1)
+    elif mutation == "job_extra_file":
+        run["run"] = run["run"].rstrip("\n") + " " + GHCP_VM_GATE_TEST + "\n"
+    elif mutation == "second_owner":
+        workflow["jobs"]["comparison-contracts"]["steps"].append(
+            {"name": "duplicate owner", "run": "python -m pytest " + GHCP_REHEARSAL_TEST})
+    else:
+        family["timeout-minutes"] = 60
+    with pytest.raises(AssertionError):
+        _without_ghcp_ahp_contracts(workflow)
+
+
 def test_budget_readout_partition_preserves_exact_commands_and_guards():
     """Inspect the split without importing, collecting or running its test files."""
     from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
@@ -576,7 +662,7 @@ def test_budget_readout_partition_preserves_exact_commands_and_guards():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """Ten jobs cover every node once, including time-budget and shared files."""
+    """Eleven jobs cover every node once, including time-budget, GHCP AHP and shared files."""
     from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256
 
     text = WORKFLOW.read_text(encoding="utf-8")
@@ -588,7 +674,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         "pytest", "comparison-contracts", "pilot-contracts", "pilot-preflight-contracts",
         "pilot-external-receipt-contracts", "pilot-external-publication-contracts",
         "wire-contracts", "native-host-contracts", "budget-readout-contracts",
-        "time-budget-contracts",
+        "time-budget-contracts", "ghcp-ahp-contracts",
     }
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["concurrency"] == {
@@ -613,6 +699,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     pilot_publication = jobs["pilot-external-publication-contracts"]["steps"]
     wire = jobs["wire-contracts"]["steps"]
     native_host = jobs["native-host-contracts"]["steps"]
+    ghcp_ahp = jobs["ghcp-ahp-contracts"]["steps"]
     setup_names = [
         "Verify dispatch contract",
         "Checkout",
@@ -642,9 +729,10 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert [step["name"] for step in pilot_publication] == setup_names + ["Run pilot external publication contracts"]
     assert [step["name"] for step in wire] == setup_names + ["Run wire contracts"]
     assert [step["name"] for step in native_host] == setup_names + ["Run native host contracts"]
+    assert [step["name"] for step in ghcp_ahp] == setup_names + ["Run GHCP AHP contracts"]
     assert all(steps[:6] == core[:6] for steps in (
         comparison, pilot, pilot_preflight, pilot_external, pilot_publication,
-        wire, native_host, budget_readouts, time_budget,
+        wire, native_host, budget_readouts, time_budget, ghcp_ahp,
     ))
     assert core[1] == {
         "name": "Checkout",
@@ -693,7 +781,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         (core[6], 1), (comparison[6], 1), (pilot[6], 1),
         (pilot_preflight[6], 1), (pilot_external[6], 1), (pilot_publication[6], 1),
         (wire[6], 1), (native_host[6], 1), (pilot[7], 1), (budget_readouts[6], 1),
-        (time_budget[6], 1),
+        (time_budget[6], 1), (ghcp_ahp[6], 1),
     ):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
@@ -706,7 +794,9 @@ def test_backend_jobs_partition_the_comparison_contracts():
         "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs"
     ]
     assert all(command[:len(prefix)] == prefix for command in argv)
-    excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]
+    # The GHCP AHP pair ends the core line; it is checked on its own below.
+    assert argv[0][-2:] == [f"--ignore-glob={GHCP_AHP_GLOB}", f"--ignore={GHCP_REHEARSAL_TEST}"]
+    excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):-2]
                 if arg.startswith("--ignore=")]
     selected = argv[1][len(prefix):]
     pilot_selected = argv[2][len(prefix):]
@@ -718,12 +808,14 @@ def test_backend_jobs_partition_the_comparison_contracts():
     budget_selected = argv[8][len(prefix):]
     budget_readout_selected = argv[9][len(prefix):]
     time_budget_selected = argv[10][len(prefix):]
+    ghcp_ahp_selected = argv[11][len(prefix):]
     budget_glob = BUDGET_GLOB
     # shlex removes quotes: verify the actual shell expands only the target,
     # while pytest receives the core ignore glob literally.
     assert core[6]["run"].endswith(
-        f" --ignore-glob='{budget_glob}' --ignore-glob='{TIME_BUDGET_GLOB}'\n"
+        f" --ignore-glob='{budget_glob}' --ignore-glob='{TIME_BUDGET_GLOB}'{GHCP_AHP_CORE_IGNORES}\n"
     )
+    assert ghcp_ahp[6]["run"] == GHCP_AHP_RUN
     assert pilot[7]["run"] == BUDGET_NONREADER_RUN
     assert budget_readouts[6]["run"] == BUDGET_READOUT_RUN
     assert time_budget[6]["run"] == TIME_BUDGET_RUN
@@ -731,6 +823,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert _pytest_target_arguments(budget_selected) == ["${budget_contract_files[@]}"]
     assert _pytest_target_arguments(budget_readout_selected) == [BUDGET_READOUT_GLOB]
     assert _pytest_target_arguments(time_budget_selected) == [TIME_BUDGET_GLOB]
+    assert _pytest_target_arguments(ghcp_ahp_selected) == ghcp_ahp_selected == [
+        GHCP_AHP_GLOB, GHCP_REHEARSAL_TEST]
     assert _pytest_target_arguments(["--ignore-glob", budget_glob]) == []
     assert _pytest_target_arguments(["--ignore-glob", TIME_BUDGET_GLOB]) == []
     with pytest.raises(AssertionError, match="missing pytest option value"):
@@ -778,7 +872,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     actual = sorted(comparison_files + pilot_files)
     assert argv[0][len(prefix):] == [
         *[f"--ignore={path}" for path in actual], f"--ignore-glob={budget_glob}",
-        f"--ignore-glob={TIME_BUDGET_GLOB}",
+        f"--ignore-glob={TIME_BUDGET_GLOB}", f"--ignore-glob={GHCP_AHP_GLOB}",
+        f"--ignore={GHCP_REHEARSAL_TEST}",
     ]
     assert excluded == actual
     assert selected == comparison_files
@@ -889,11 +984,32 @@ def test_backend_jobs_partition_the_comparison_contracts():
     time_budget_tests = {path for path in all_tests if fnmatch(path, TIME_BUDGET_GLOB)}
     assert time_budget_tests == set(time_budget_files), "nested time-budget file omitted by shell glob"
     assert not time_budget_tests & (set(excluded) | budget_tests)
+    # The shell expands the GHCP AHP job's glob; pytest matches the core ignore
+    # with fnmatch. Run the job's literal script with python() stubbed to print
+    # its argv, as above, and require both readings to name the same files.
+    expansion = subprocess.run(
+        ["/bin/bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c",
+         'python() { printf "%s\\0" "$@"; }\n' + ghcp_ahp[6]["run"]],
+        cwd=REPO_ROOT, env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        capture_output=True, timeout=10, check=False,
+    )
+    assert expansion.returncode == 0 and expansion.stderr == b"", expansion.stderr
+    expanded = expansion.stdout.decode().split("\0")[:-1]
+    assert expanded[:len(prefix) - 1] == prefix[1:]
+    ghcp_ahp_files = expanded[len(prefix) - 1:]
+    assert len(ghcp_ahp_files) == len(set(ghcp_ahp_files)) > 1
+    assert all((runner / path).is_file() for path in ghcp_ahp_files)
+    ghcp_ahp_tests = {path for path in all_tests if fnmatch(path, GHCP_AHP_GLOB)} | {GHCP_REHEARSAL_TEST}
+    assert ghcp_ahp_tests == set(ghcp_ahp_files), "nested GHCP AHP file omitted by shell glob"
+    assert GHCP_VM_GATE_TEST not in ghcp_ahp_tests
+    assert not ghcp_ahp_tests & (set(excluded) | budget_tests | time_budget_tests)
     previous_core_tests = all_tests - set(excluded)
-    core_tests = previous_core_tests - budget_tests - time_budget_tests
+    core_tests = previous_core_tests - budget_tests - time_budget_tests - ghcp_ahp_tests
+    assert GHCP_VM_GATE_TEST in core_tests
     assert not core_tests & budget_tests
     assert not core_tests & time_budget_tests
-    assert core_tests | budget_tests | time_budget_tests == previous_core_tests
+    assert not core_tests & ghcp_ahp_tests
+    assert core_tests | budget_tests | time_budget_tests | ghcp_ahp_tests == previous_core_tests
     comparison_tests = set(selected)
     assert not set(pilot_selected) & budget_tests
     pilot_tests = set(pilot_selected) | budget_nonreader_files
@@ -904,6 +1020,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
         ("pytest", core_tests), ("comparison-contracts", comparison_tests),
         ("pilot-contracts", pilot_tests), ("budget-readout-contracts", reader_tests),
         ("time-budget-contracts", time_budget_tests),
+        ("ghcp-ahp-contracts", ghcp_ahp_tests),
         ("pilot-preflight-contracts", pilot_preflight_tests),
         ("pilot-external-receipt-contracts", pilot_preflight_tests),
         ("pilot-external-publication-contracts", pilot_preflight_tests),
@@ -926,9 +1043,20 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert time_budget_tests.isdisjoint(
         core_tests | comparison_tests | pilot_tests | reader_tests | pilot_preflight_tests | shared_wire_tests
     )
+    assert ghcp_ahp_tests.isdisjoint(
+        core_tests | comparison_tests | pilot_tests | reader_tests | pilot_preflight_tests
+        | shared_wire_tests | time_budget_tests
+    )
     # Every other file is selected once without a keyword filter. The shared
     # wire and preflight files have exhaustive/disjoint node splits above.
-    assert core_tests | comparison_tests | pilot_tests | reader_tests | pilot_preflight_tests | shared_wire_tests | time_budget_tests == all_tests
+    assert (core_tests | comparison_tests | pilot_tests | reader_tests | pilot_preflight_tests
+            | shared_wire_tests | time_budget_tests | ghcp_ahp_tests) == all_tests
+    # The same claim per file: no file is run by zero job families or by two.
+    # A family is one job, or the jobs that split one shared file by node.
+    families = (core_tests, comparison_tests, pilot_tests, reader_tests, time_budget_tests,
+                ghcp_ahp_tests, pilot_preflight_tests, shared_wire_tests)
+    owner_counts = {path: sum(path in files for files in families) for path in all_tests}
+    assert {path: count for path, count in owner_counts.items() if count != 1} == {}
 
 
 @pytest.mark.parametrize("root", COVERED_ROOTS)
