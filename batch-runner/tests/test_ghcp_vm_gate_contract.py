@@ -23,11 +23,13 @@ FOUNDRY = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 FOUNDRY_SHA256 = "f51d92c35f388f016488f15d5e96acd1f9de10345fb2379dac7e194eadbbe2fd"
 WORKFLOW = ".github/workflows/backend-tests.yml"
 # The hosted-runner pins added only runner lines to the reviewed successor
-# partition; current CI then adds only the ghcp-ahp-contracts job and its core
-# ignores. Every preceding byte identity is reconstructed by the partition guard.
+# partition; CI then added only the ghcp-ahp-contracts job and its core
+# ignores, and current CI adds only the merge-shards-contracts job and its core
+# ignore. Every preceding byte identity is reconstructed by the partition guard.
 PRE_UBUNTU_2404_WORKFLOW_SHA256 = "75e6db775426a8470d2757f2ae62fafc2a806f0f2684ed59925480956ad3ac65"
 PRE_GHCP_AHP_JOB_WORKFLOW_SHA256 = "9ec98746110499a2f199e1322a8568effcd7c8b174e04b35661420e64a06af51"
-CURRENT_WORKFLOW_SHA256 = "8a33a01879a1cf9742502a4ce21ef2a1a3550e2797fdb7b03e6fe2052d8905bb"
+PRE_STEP9_MERGE_JOB_WORKFLOW_SHA256 = "8a33a01879a1cf9742502a4ce21ef2a1a3550e2797fdb7b03e6fe2052d8905bb"
+CURRENT_WORKFLOW_SHA256 = "73d5f636a17398d063d82075634f40ce4835f8dd546e70735d7f0905ef18e07c"
 # approved_pilot_source archives this workflow from immutable commit
 # 8ac891e3e0e4752fe15a00139a2691ddf9df7dce. Pin that Git blob, not the
 # current workflow or the extracted fixture file being checked.
@@ -156,7 +158,7 @@ def test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition()
     assert "--ignore=" + test_path not in arguments
     assert Path(__file__).name.startswith("test_ghcp_")
     for name in ("comparison-contracts", "pilot-contracts", "wire-contracts", "native-host-contracts",
-                 "ghcp-ahp-contracts"):
+                 "ghcp-ahp-contracts", "merge-shards-contracts"):
         assert test_path not in jobs[name]["steps"][-1]["run"]
 
 

@@ -298,21 +298,29 @@ def test_result_check_refuses_missing_reduced_extra_failed_or_skipped_cases(tmp_
 
 
 def restore_main_backend_workflow(data):
-    # Main's reviewed runner pins and successor partition own the workflow, and
-    # this branch adds only the ghcp-ahp-contracts job and its core ignores.
-    # Check its exact bytes AND each existing ownership guard before rebuilding
-    # the unchanged historical bytes; no hash accepts an arbitrary update.
+    # Main's reviewed runner pins and successor partition own the workflow; then
+    # came only the ghcp-ahp-contracts job and its core ignores, and then only
+    # the merge-shards-contracts job and its core ignore. Check its exact bytes
+    # AND each existing ownership guard before rebuilding the unchanged
+    # historical bytes; no hash accepts an arbitrary update.
     from .test_a_test_file_nobody_runs_is_not_a_test import (
         PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256, SUCCESSOR_GRADER_TEST,
-        _without_ghcp_ahp_contracts, _without_successor_grader_partition,
+        _without_ghcp_ahp_contracts, _without_step9_merge_shards, _without_successor_grader_partition,
     )
-    from .test_ghcp_vm_gate_contract import CURRENT_WORKFLOW_SHA256, PRE_GHCP_AHP_JOB_WORKFLOW_SHA256
+    from .test_ghcp_vm_gate_contract import (
+        CURRENT_WORKFLOW_SHA256, PRE_GHCP_AHP_JOB_WORKFLOW_SHA256, PRE_STEP9_MERGE_JOB_WORKFLOW_SHA256,
+    )
     from .test_workflow_ubuntu_runner_pins import (
-        restore_pre_ghcp_ahp_job_bytes, restore_pre_ubuntu_2404_runner_bytes,
+        restore_pre_ghcp_ahp_job_bytes, restore_pre_step9_merge_job_bytes,
+        restore_pre_ubuntu_2404_runner_bytes,
     )
 
     assert hashlib.sha256(data).hexdigest() == CURRENT_WORKFLOW_SHA256
     assert PRE_SUCCESSOR_PARTITION_WORKFLOW_SHA256 == ORIGINAL_WORKFLOWS["backend-tests.yml"]
+    split = _without_step9_merge_shards(yaml.safe_load(data))
+    data = restore_pre_step9_merge_job_bytes(data)
+    assert hashlib.sha256(data).hexdigest() == PRE_STEP9_MERGE_JOB_WORKFLOW_SHA256
+    assert yaml.safe_load(data) == split
     split = _without_ghcp_ahp_contracts(yaml.safe_load(data))
     data = restore_pre_ghcp_ahp_job_bytes(data)
     assert hashlib.sha256(data).hexdigest() == PRE_GHCP_AHP_JOB_WORKFLOW_SHA256

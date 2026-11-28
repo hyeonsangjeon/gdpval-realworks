@@ -239,7 +239,7 @@ def restore_pre_placement_guard_bytes(data):
     return restored
 
 
-# backend-tests.yml changed once after the runner pins: #808's GHCP AHP contract
+# backend-tests.yml changed first after the runner pins: #808's GHCP AHP contract
 # files and the offline rehearsal moved out of the core `pytest` job into
 # ghcp-ahp-contracts, so the core job keeps its 45-minute margin (pre-merge
 # review SF-1, 2026-11-28). Undone in one exact step before the runner lines,
@@ -282,6 +282,48 @@ def restore_pre_ghcp_ahp_job_bytes(data):
     return restored
 
 
+# backend-tests.yml changed again after the GHCP AHP job: the core job's
+# slowest file, tests/test_step9_merge_shards.py (about 4.8 of its 27 test
+# minutes on #808's run), moved into merge-shards-contracts, so a slower
+# runner cannot push the core job past its 45 minutes (2026-11-28). Undone in
+# one exact step before the GHCP AHP step, so every older hash is still checked.
+STEP9_MERGE_JOB_PIN = (
+    "8a33a01879a1cf9742502a4ce21ef2a1a3550e2797fdb7b03e6fe2052d8905bb",  # plus ghcp-ahp-contracts
+    "73d5f636a17398d063d82075634f40ce4835f8dd546e70735d7f0905ef18e07c",  # plus merge-shards-contracts
+)
+STEP9_MERGE_JOB_START = "\n  # tests/test_step9_merge_shards.py took about 4.8 of the core job's 27 test\n"
+STEP9_MERGE_CORE_IGNORE = (
+    " --ignore=tests/test_ghcp_sol_offline_rehearsal.py --ignore=tests/test_step9_merge_shards.py\n",
+    " --ignore=tests/test_ghcp_sol_offline_rehearsal.py\n",
+)
+STEP9_MERGE_COMMENTS = (
+    ("      # GPT-5.4/GPT-5.6, budget-pilot, time-budget, GHCP AHP and step9 merge-shard contracts run in\n"
+     "      # their family jobs; no additional tests are deselected across the twelve jobs. The partition\n",
+     "      # GPT-5.4/GPT-5.6, budget-pilot, time-budget and GHCP AHP contracts run in their family jobs;\n"
+     "      # no additional tests are deselected across the eleven jobs. The partition\n"),
+    ("  # ceiling. `pytest` remains the core check; all twelve job verdicts must be\n",
+     "  # ceiling. `pytest` remains the core check; all eleven job verdicts must be\n"),
+)
+
+
+def restore_pre_step9_merge_job_bytes(data):
+    """Undo exactly the step9 merge-shard job and its core ignore, requiring both hashes."""
+    before_hash, after_hash = STEP9_MERGE_JOB_PIN
+    assert hashlib.sha256(data).hexdigest() == after_hash
+    text = data.decode("utf-8")
+    # The job is the file's last block; cut it whole, from its comment to EOF.
+    assert text.count(STEP9_MERGE_JOB_START) == 1
+    start = text.index(STEP9_MERGE_JOB_START)
+    assert re.findall(r"^  ([A-Za-z0-9_-]+):$", text[start:], re.MULTILINE) == ["merge-shards-contracts"]
+    text = text[:start]
+    for new, old in (STEP9_MERGE_CORE_IGNORE, *STEP9_MERGE_COMMENTS):
+        assert text.count(new) == 1
+        text = text.replace(new, old)
+    restored = text.encode("utf-8")
+    assert hashlib.sha256(restored).hexdigest() == before_hash
+    return restored
+
+
 PREVIOUS_BATCH_RUNNER = (
     "${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' "
     "&& 'ubuntu-24.04' || 'ubuntu-latest' }}"
@@ -290,6 +332,8 @@ PREVIOUS_BATCH_RUNNER = (
 
 def restore_pre_ubuntu_2404_runner_bytes(name, data):
     """Undo exactly the approved runner lines, requiring both complete hashes."""
+    if name == "backend-tests.yml" and hashlib.sha256(data).hexdigest() == STEP9_MERGE_JOB_PIN[1]:
+        data = restore_pre_step9_merge_job_bytes(data)
     if name == "backend-tests.yml" and hashlib.sha256(data).hexdigest() == GHCP_AHP_JOB_PIN[1]:
         data = restore_pre_ghcp_ahp_job_bytes(data)
     if name == "batch-run.yml" and hashlib.sha256(data).hexdigest() in (
@@ -329,7 +373,7 @@ def test_only_reviewed_runner_lines_change_and_historical_bytes_survive(name):
     if name == "batch-run.yml":
         current = restore_pre_result_pr_job_bytes(restore_pre_placement_guard_bytes(current))
     if name == "backend-tests.yml":
-        current = restore_pre_ghcp_ahp_job_bytes(current)
+        current = restore_pre_ghcp_ahp_job_bytes(restore_pre_step9_merge_job_bytes(current))
     before = yaml.safe_load(historical)
     after = yaml.safe_load(current)
     for job in RUNNER_PINS[name][2]:
@@ -461,7 +505,7 @@ def test_the_placement_reconstruction_rejects_other_bytes(mutation):
 
 
 def test_the_ghcp_ahp_job_is_the_only_backend_change_after_the_runner_pins():
-    current = (WORKFLOWS / "backend-tests.yml").read_bytes()
+    current = restore_pre_step9_merge_job_bytes((WORKFLOWS / "backend-tests.yml").read_bytes())
     after = yaml.safe_load(current)
     before = yaml.safe_load(restore_pre_ghcp_ahp_job_bytes(current))
     moved = after["jobs"].pop("ghcp-ahp-contracts")
@@ -476,7 +520,7 @@ def test_the_ghcp_ahp_job_is_the_only_backend_change_after_the_runner_pins():
 
 @pytest.mark.parametrize("mutation", ["extra_byte", "already_restored", "core_ignores_dropped"])
 def test_the_ghcp_ahp_job_reconstruction_rejects_other_bytes(mutation):
-    data = (WORKFLOWS / "backend-tests.yml").read_bytes()
+    data = restore_pre_step9_merge_job_bytes((WORKFLOWS / "backend-tests.yml").read_bytes())
     if mutation == "extra_byte":
         data += b"\n"
     elif mutation == "already_restored":
@@ -486,6 +530,34 @@ def test_the_ghcp_ahp_job_reconstruction_rejects_other_bytes(mutation):
         data = data.replace(new_ignores.encode(), old_ignores.encode(), 1)
     with pytest.raises(AssertionError):
         restore_pre_ghcp_ahp_job_bytes(data)
+
+
+def test_the_step9_merge_job_is_the_only_backend_change_after_the_ghcp_ahp_job():
+    current = (WORKFLOWS / "backend-tests.yml").read_bytes()
+    after = yaml.safe_load(current)
+    before = yaml.safe_load(restore_pre_step9_merge_job_bytes(current))
+    moved = after["jobs"].pop("merge-shards-contracts")
+    assert moved["runs-on"] == "ubuntu-24.04" and moved["timeout-minutes"] == 45
+    assert [step["name"] for step in moved["steps"]][-1] == "Run step9 merge-shard contracts"
+    (core,) = [step for step in after["jobs"]["pytest"]["steps"] if step.get("name") == "Run tests"]
+    new_ignore, old_ignore = STEP9_MERGE_CORE_IGNORE
+    assert core["run"].count(new_ignore) == 1
+    core["run"] = core["run"].replace(new_ignore, old_ignore)
+    assert after == before
+
+
+@pytest.mark.parametrize("mutation", ["extra_byte", "already_restored", "core_ignore_dropped"])
+def test_the_step9_merge_job_reconstruction_rejects_other_bytes(mutation):
+    data = (WORKFLOWS / "backend-tests.yml").read_bytes()
+    if mutation == "extra_byte":
+        data += b"\n"
+    elif mutation == "already_restored":
+        data = restore_pre_step9_merge_job_bytes(data)
+    else:
+        new_ignore, old_ignore = STEP9_MERGE_CORE_IGNORE
+        data = data.replace(new_ignore.encode(), old_ignore.encode(), 1)
+    with pytest.raises(AssertionError):
+        restore_pre_step9_merge_job_bytes(data)
 
 
 @pytest.mark.parametrize("mutation", ["extra_byte", "already_restored"])
