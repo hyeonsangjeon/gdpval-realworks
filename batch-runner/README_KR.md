@@ -409,6 +409,7 @@ preflight는 checkout과 cloud 접근 전에 non-`main` ref 또는 workflow/even
 | `sandbox_image_digest` | relay 전체에 전달되는 immutable sandbox image | *(비움)* | 내부용. 필요 시 workflow가 결정 |
 | `codex_foundry_confirmed` | 이번 batch가 Foundry deployment에 비용을 써도 된다는 선언. `execution.mode: codex_foundry`만 읽으며, 체크하지 않은 `codex_foundry` dispatch는 credential이 없는 job에서 실패 | `false` | Codex batch를 실제로 돌릴 때, 그 dispatch에 한해서만 체크 |
 | `comparison_reviewed_source_sha` | 호출자가 별도로 검토받은 source commit의 소문자 40자리 SHA. GPT-5.4 비교 admission 전용이며 relay `source_sha`와 별개이고 실행 승인이 아님 | *(비움)* | 정확히 등록된 비교 config에서만 지정. 일반 batch에서는 비워 둠 |
+| `placement_attempt` | 같은 dispatch의 몇 번째 배치인지. batch job이 Azure 밖 runner(Azure 로그인이 거부되는 곳)에 배치될 때마다 `placement-reroll`이 1 올려 다시 보냄. 최대 `20`, relay leg마다 `1`부터 다시 셈 | `1` | 내부용. `1` 유지 |
 
 ### 3-task smoke 입력
 
@@ -423,6 +424,7 @@ wall_timeout:          290
 sandbox_image_digest:  <비움>
 codex_foundry_confirmed: false
 comparison_reviewed_source_sha: <비움>
+placement_attempt:     1
 ```
 
 ### 이어달리기(Relay Run) 동작 원리

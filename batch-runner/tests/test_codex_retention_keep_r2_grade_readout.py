@@ -362,8 +362,8 @@ def test_keep_r2_grade_readout_is_fixed_numeric_and_model_free(tmp_path, monkeyp
 def test_keep_r2_grade_readout_routes_and_historical_default_stay_closed(tmp_path, monkeypatch):
     old._workflow()  # Current YAML: exact closed read/plan groups and all paid/secret guards.
     jobs = yaml.safe_load((bridge.ROOT / grade.WORKFLOW).read_bytes())["jobs"]
-    assert list(jobs) == ["validate-request", "approve-paid", "grade-dry-run", "grade", "pilot-plan",
-                          "pilot-approve-paid", "pilot-live", "pilot-readout", "verify-published"]
+    assert list(jobs) == ["validate-request", "approve-paid", "grade-dry-run", "grade", "placement-reroll",
+                          "pilot-plan", "pilot-approve-paid", "pilot-live", "pilot-readout", "verify-published"]
     assert jobs["pilot-readout"]["timeout-minutes"] == 25
     for name in ("pilot-approve-paid", "pilot-live"):
         assert SELECTOR not in jobs[name]["if"]

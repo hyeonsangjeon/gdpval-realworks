@@ -273,6 +273,64 @@ test('the denominator is what was compared, and single judgements are named apar
 
 // ── D. Every published grade payload, read for real ───────────────────────
 
+/** One published payload's reading, checked; returns its standing. */
+function checkPublishedReading(readGraderConsistency, name, payload) {
+  const tasks = payload.tasks ?? [];
+  const reading = readGraderConsistency(tasks);
+  const comparable = tasks.filter((t) => !t.error && (t.scores?.length ?? 0) > 1).length;
+
+  // The standing follows the data, on every payload, with no exceptions.
+  assert.equal(
+    reading.standing === 'measured', comparable > 0,
+    `${name}: the standing does not match what the payload actually carries`,
+  );
+  assert.equal(reading.compared, comparable, `${name}: wrong denominator`);
+
+  if (reading.standing === 'measured') {
+    assert.match(reading.agreeValue, /%$/, `${name}: a measured run printed no percentage`);
+    // Excluding the uncompared tasks can only shrink the denominator, and
+    // where it does, the published figure is not the one the old rule gave.
+    if (reading.judgedOnce > 0) {
+      assert.ok(
+        reading.compared < reading.compared + reading.judgedOnce,
+        `${name}: single judgements were left in the denominator`,
+      );
+      assert.notEqual(
+        reading.agreeValue, theRuleThisReplaces(tasks),
+        `${name}: the figure did not move even though uncompared tasks were dropped`,
+      );
+    }
+    return 'measured';
+  }
+  assert.equal(reading.agreeValue, 'not recorded', `${name}: printed a rate over nothing`);
+  assert.equal(reading.disagreeValue, 'not recorded');
+  assert.equal(reading.agreeFraction, null);
+  // This is the number the page used to show for these runs: unanimity
+  // wherever a task was graded, and, on a run with no graded task (every
+  // row an error, as when a solve left no deliverable), zero divided by the
+  // fabricated one.
+  const graded = tasks.some((t) => !t.error && (t.scores?.length ?? 0) > 0);
+  assert.equal(
+    theRuleThisReplaces(tasks), graded ? '100.0%' : '0.0%',
+    `${name}: expected the old rule to have claimed ${graded ? 'unanimity' : 'a zero'} here`,
+  );
+  return 'single-judgement';
+}
+
+test('a published run with no graded task is not recorded either', async () => {
+  // A retry stage whose solve left no deliverable publishes a grade whose
+  // every row is no_deliverables: nothing judged, nothing compared.
+  const { readGraderConsistency } = await loadReading();
+  const failed = { error: 'no_deliverables', scores: [] };
+  const payload = { tasks: [failed, { ...failed }] };
+  assert.equal(checkPublishedReading(readGraderConsistency, 'judged-nothing', payload), 'single-judgement');
+  // One graded, single-judged task beside them brings the unanimity claim back.
+  payload.tasks.push({ error: null, scores: [7] });
+  assert.equal(theRuleThisReplaces(payload.tasks), '100.0%');
+  assert.equal(checkPublishedReading(readGraderConsistency, 'one-graded', payload), 'single-judgement');
+});
+
+
 test('no published run is called unanimous on tasks that were judged once', async () => {
   const { readGraderConsistency } = await loadReading();
   const grades = await publishedGrades();
@@ -282,42 +340,10 @@ test('no published run is called unanimous on tasks that were judged once', asyn
   let measured = 0;
 
   for (const { name, payload } of grades) {
-    const tasks = payload.tasks ?? [];
-    const reading = readGraderConsistency(tasks);
-    const comparable = tasks.filter((t) => !t.error && (t.scores?.length ?? 0) > 1).length;
-
-    // The standing follows the data, on every payload, with no exceptions.
-    assert.equal(
-      reading.standing === 'measured', comparable > 0,
-      `${name}: the standing does not match what the payload actually carries`,
-    );
-    assert.equal(reading.compared, comparable, `${name}: wrong denominator`);
-
-    if (reading.standing === 'measured') {
+    if (checkPublishedReading(readGraderConsistency, name, payload) === 'measured') {
       measured += 1;
-      assert.match(reading.agreeValue, /%$/, `${name}: a measured run printed no percentage`);
-      // Excluding the uncompared tasks can only shrink the denominator, and
-      // where it does, the published figure is not the one the old rule gave.
-      if (reading.judgedOnce > 0) {
-        assert.ok(
-          reading.compared < reading.compared + reading.judgedOnce,
-          `${name}: single judgements were left in the denominator`,
-        );
-        assert.notEqual(
-          reading.agreeValue, theRuleThisReplaces(tasks),
-          `${name}: the figure did not move even though uncompared tasks were dropped`,
-        );
-      }
     } else {
       singleJudgement += 1;
-      assert.equal(reading.agreeValue, 'not recorded', `${name}: printed a rate over nothing`);
-      assert.equal(reading.disagreeValue, 'not recorded');
-      assert.equal(reading.agreeFraction, null);
-      // This is the number the page used to show for these runs.
-      assert.equal(
-        theRuleThisReplaces(tasks), '100.0%',
-        `${name}: expected the old rule to have claimed unanimity here`,
-      );
     }
   }
 

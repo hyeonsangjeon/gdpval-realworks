@@ -661,12 +661,22 @@ def check_partial_cause(receipt: dict[str, Any], settled: list[dict[str, Any]]) 
     dollar figure is unknown rather than zero. Usage that vanished is a defect
     in the pipeline: the receipt cannot state a cost because it no longer
     knows what was consumed. Only the second is a bug in this repository.
+
+    A third case is neither, and is told apart so the failure names it
+    correctly. A row whose input count is recorded as integer 0 -- not an
+    absent value -- holds a reply that *reported* zero usage. No request this
+    pipeline sends has empty input, so those zeros are not a measurement, and
+    storing them as one counts a paid call as free. That fails whatever else
+    the row says: priced (it reads $0 and balances every other check) or
+    unpriced, with a missing rate or any other reason beside it. exp041's grade
+    holds one such row, a 7.9 s judge turn with every count 0. Only a row with
+    no price and no reason at all stays in the second case: no ledger write
+    produces that shape, so it is read as usage that went missing.
     """
     honest = []
     defective = []
+    reported_zero = []
     for row in settled:
-        if row.get("model_cost_usd") is not None:
-            continue
         reasons = row.get("missing_reasons") or []
         tokens = _tokens(row, RECEIPT_USAGE_KEYS)
         record = {
@@ -678,6 +688,13 @@ def check_partial_cause(receipt: dict[str, Any], settled: list[dict[str, Any]]) 
             "missing_reasons": reasons,
             "usage": tokens,
         }
+        recorded_input = row.get("input_tokens")
+        cost = row.get("model_cost_usd")
+        if type(recorded_input) is int and recorded_input == 0 and (cost is not None or reasons):
+            reported_zero.append({**record, "model_cost_usd": cost})
+            continue
+        if cost is not None:
+            continue
         if _is_price_absent(reasons) and any(tokens.values()):
             honest.append(record)
         else:
@@ -691,7 +708,30 @@ def check_partial_cause(receipt: dict[str, Any], settled: list[dict[str, Any]]) 
             f"{len(defective)} unpriced calls are not explained by a missing "
             "rate: their usage was lost, which is a pipeline defect and not a "
             "gap in the price table",
-            {"discarded_usage": defective[:20], "expected_price_missing": len(honest)},
+            {
+                "discarded_usage": defective[:20],
+                "reported_zero_usage": reported_zero[:20],
+                "expected_price_missing": len(honest),
+            },
+        )
+
+    if reported_zero:
+        detail = (
+            f"{len(reported_zero)} calls are recorded with zero input tokens. No "
+            "request this pipeline sends has empty input, so these are replies "
+            "that reported zero usage, kept as a measurement: the receipt counts "
+            "them as free when their real usage is unknown"
+        )
+        if honest and status == "complete":
+            detail += (
+                f"; separately, the receipt claims complete while {len(honest)} "
+                "calls have no price"
+            )
+        return Finding(
+            "partial_cause",
+            False,
+            detail,
+            {"reported_zero_usage": reported_zero[:20], "expected_price_missing": len(honest)},
         )
 
     if honest and status == "complete":
