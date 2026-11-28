@@ -991,6 +991,47 @@ def test_unknown_usage_and_a_failed_request_keep_their_whole_reservation(admitte
     assert grading.journal_spend(admission.journal_path) == reserve * 2
 
 
+@pytest.mark.parametrize("tokens", [
+    # exp041's judge turn on item 47b68dd3: every count zero, both detail blocks present.
+    {"input_tokens": 0, "cached": 0, "output_tokens": 0, "reasoning": 0},
+    # Output without input is not a call any model served either.
+    {"input_tokens": 0, "cached": 0, "output_tokens": 150, "reasoning": 0},
+])
+def test_a_reply_that_reports_zero_input_keeps_its_whole_reservation(admitted, tokens):
+    """Zero input is a reply that did not measure the call, not a free call.
+
+    Read as a measurement, exp041's zero reply settled at $0 and released a
+    $0.177 reservation. Its real size is unknown; reconstructed from its
+    request size and its retry it was about 5.4k tokens in and 0.6k out.
+    Booked as unreported, the reservation stands.
+    """
+    admission, recorder = admitted(_seed())
+    reserve = _reserve_for(KWARGS)
+    with recorder.attributed(task_id="t", stage=STAGE_GRADING):
+        recorder.meter(FakeResponses(tokens=tokens), provider="azure",
+                       model="gpt-5.6-sol").responses.create(**KWARGS)
+    records = _records(admission.journal_path)
+    assert [(r["event"], r.get("reason")) for r in records[1:]] == [
+        ("reserve", None), ("abandon", "usage_unreported")]
+    assert records[2]["spent_usd"] == format(reserve, "f")
+    assert admission.spent == reserve and admission.pending == {}
+    assert grading.journal_spend(admission.journal_path) == reserve
+
+
+def test_a_measured_call_that_wrote_nothing_still_settles_at_its_input(admitted):
+    """The rule is about input. A real request that produced no output has a
+    measured zero there, and is booked for the input it sent."""
+    admission, recorder = admitted(_seed())
+    with recorder.attributed(task_id="t", stage=STAGE_GRADING):
+        recorder.meter(FakeResponses(tokens={"input_tokens": 3604, "cached": 0, "output_tokens": 0,
+                                             "reasoning": 0}),
+                       provider="azure", model="gpt-5.6-sol").responses.create(**KWARGS)
+    records = _records(admission.journal_path)
+    assert [r["event"] for r in records[1:]] == ["reserve", "settle"]
+    assert records[2]["input_tokens"] == 3604 and records[2]["output_tokens"] == 0
+    assert Decimal(records[2]["spent_usd"]) > 0
+
+
 def test_a_failed_fsync_spends_its_seq_and_the_journal_still_reads(admitted, monkeypatch):
     admission, recorder = admitted(_seed())
     with recorder.attributed(task_id="t", stage=STAGE_GRADING):

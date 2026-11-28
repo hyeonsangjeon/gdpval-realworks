@@ -930,6 +930,29 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- 2026-11-28: A grading reply that reports zero input tokens is no longer
+  booked as a free call in the Sol combined USD journal, and the cost-ledger
+  checker names it for what it is. exp041's grade (run 45980082026) got one:
+  the judge's second turn on item 47b68dd3 of task 4c18ebae took 7.9 s and
+  its usage block reported 0 for every count. The ledger, the judge's tally
+  (item and task `usage_complete: true`) and the journal all took the zeros
+  as a measurement, so the journal settled the call at $0 and released a
+  $0.17720850 reservation. Its real usage is unknown: reconstructed from its
+  request size and its finalization retry it was about 5.4k input and 0.6k
+  output tokens, about $0.03 at the booked tenant rates, and whether Azure
+  billed it is not known. `CombinedGradingAdmission` now treats zero input
+  as unreported and keeps the whole reservation (`abandon
+  usage_unreported`). `verify_cost_ledger.check_partial_cause` fails any
+  settled row recorded with integer-0 input under `reported_zero_usage`,
+  priced or not and whatever reason sits beside it, instead of calling it
+  lost usage; only an unpriced row with no reason at all still reads as
+  lost. The published exp041 grade is not rewritten, so it still fails that
+  check, now for exactly that one call, and a test pins this. Its USD
+  ceiling holds either way: 74.79 committed of 220, or 74.97 with the full
+  reservation. The ledger row and the judge's tally still record zeros,
+  because `core/cost_metering.extract_usage` is byte-pinned in the Sol
+  grader seals; making them record unknown needs a reseal.
+
 - Preserve a local native cap stop while the Sol pilot is waiting for a
   `thread/start` or `turn/start` acknowledgement. Self-review of
   `2bc77ad14..59eb1d4e8` found the two early returns replaced the deadline

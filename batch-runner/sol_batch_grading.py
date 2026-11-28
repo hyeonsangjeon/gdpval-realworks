@@ -1188,6 +1188,13 @@ class CombinedGradingAdmission:
             "output_tokens": usage.output_tokens,
             "reasoning_tokens": usage.reasoning_tokens,
         }
+        if usage.input_tokens == 0:
+            # Every request this admission meters carries instructions and a
+            # prompt, so a reply that reports zero input has not measured the
+            # call. exp041's grade received one: a 7.9 s judge turn with every
+            # count 0, which booked $0 and released a $0.18 reservation. Keep
+            # the reservation instead, as for a reply with no usage block.
+            return None, tokens
         if self._is_audio(model):
             inputs, outputs = usage.input_tokens, usage.output_tokens
             if (type(inputs) is not int or type(outputs) is not int or inputs < 0 or outputs < 0):
