@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- 2026-11-28: Backend Tests runs `tests/test_step9_merge_shards.py` in a new
+  `merge-shards-contracts` job (ubuntu-24.04, 45 minutes, the core job's six
+  setup steps), and the core `pytest` job ignores it. On #808's run it took
+  about 4.8 of the core job's 27 test minutes (29.6 minutes for the whole
+  job), and the next slowest file about 1.3; a runner 1.3x slower, as seen
+  before, would put the core job near 38 of its 45 minutes. The 45-minute
+  ceiling is not raised. `tests/test_shard_merge_roundtrip.py` stays in core
+  (about 4 seconds). Collected locally, the old core selection (15,132 tests)
+  is exactly the new core selection (14,993) plus the new job's (139), with
+  no test in both. The partition guard now covers twelve jobs and still
+  refuses any test file run by no job family or by two. Only the current
+  workflow byte pin changes: one new exact undo step rebuilds the previous
+  bytes (`8a33a018…`) before the GHCP AHP undo step, so every older pin is
+  still checked. The GHCP workflow's 2903/82 counts are unchanged. No grading
+  input, grader seal, `batch-run.yml` or `grade-run.yml` changes.
+
 - 2026-11-28: The GHCP patched-runtime workflow's exact counts are now
   checked on every PR, not only after a merge. That workflow runs only on a
   push to `main` and refuses any count but its literal, so a PR that added
