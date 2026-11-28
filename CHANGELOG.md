@@ -13,6 +13,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- 2026-11-28: Backend Tests runs #808's GHCP AHP contract files
+  (`tests/test_ghcp_ahp_*.py`) and `tests/test_ghcp_sol_offline_rehearsal.py`
+  in a new `ghcp-ahp-contracts` job (ubuntu-24.04, 45 minutes, the core job's
+  six setup steps), and the core `pytest` job ignores them. With them the core
+  job took 44.4 of its 45 minutes on a slow runner (run 43764736072); they add
+  about 3 minutes there. The 45-minute ceiling is not raised, and
+  `test_ghcp_vm_gate_contract.py` stays in the core job, as it requires.
+  Collected locally, the old core selection (18,016 tests) is exactly the new
+  core selection (15,121) plus the new job's (2,895), with no test in both.
+  The partition guard now also refuses any test file run by no job family or
+  by two. Only the current workflow byte pin changes: one new exact undo step
+  rebuilds the previous bytes (`9ec98746…`), so every older pin is still
+  checked. The GHCP workflow's 2901/80 counts are unchanged. No grading
+  input, grader seal, `batch-run.yml` or `grade-run.yml` changes.
+
 - 2026-11-28: Run record `sol220_readout_20261128` (Korean) for GPT-5.6 Sol
   on all 220 tasks, from two `sol_stage_readout.py` outputs committed beside
   it. Fixed-220 mean 79.63 on the first attempt (exp037 + exp039 + exp040)
