@@ -384,6 +384,12 @@ def test_no_published_exp003_figure_can_move_when_the_cap_rises():
     turned away for want of task budget, and none can start being answered
     now. Same argument the audio cap's repin used, and rerunnable by hand:
     ``grep -rl task_visual_budget_exceeded data/grades/``.
+
+    The claim is about exp003 only. Other runs may hold refusals of their
+    own: exp040_sol_last97's grade does (task a73fbc98, cap 112), and that
+    says nothing about exp003. So the check needs the exp_gold_baseline
+    evidence to still be there and no exp003 payload among the refusals;
+    it does not require every refusal to be exp_gold_baseline's.
     """
     refused = [
         str(path.relative_to(REPO_ROOT))
@@ -393,7 +399,7 @@ def test_no_published_exp003_figure_can_move_when_the_cap_rises():
 
     assert refused, "the evidence this cap is argued from has gone missing"
     assert not [p for p in refused if "exp003" in p], refused
-    assert all("exp_gold_baseline" in p for p in refused), refused
+    assert any("exp_gold_baseline" in p for p in refused), refused
 
 
 def test_the_cap_change_adds_one_task_worth_of_renders_to_this_corpus(

@@ -935,9 +935,13 @@ def _denominator_invariant(grades_dir: Path) -> tuple[list[str], list[str]]:
         # SectorHeatmap.tsx draws a cell per sector off those rates, so a
         # run-level count alone would leave each cell as ambiguous as it was.
         by_sector = wow.get("by_sector") or {}
-        if payload["tasks"]:
+        # A sector row is drawn from graded tasks only. A grade whose every row
+        # is an error (no deliverables to judge) has none, so its by_sector is
+        # legitimately empty.
+        graded = [t for t in payload["tasks"] if not t.get("error")]
+        if graded:
             assert not backfill._is_empty(by_sector), (
-                f"{name} graded {len(payload['tasks'])} tasks and agrees with "
+                f"{name} graded {len(graded)} tasks and agrees with "
                 "the current summariser, so an empty by_sector is unexplained"
             )
         for sector, row in by_sector.items():
@@ -1075,6 +1079,32 @@ def test_the_walk_still_fails_a_payload_that_landed_on_the_wrong_side(
     _write(other, "smuggled.json", smuggled)
 
     with pytest.raises(AssertionError, match="published rates were divided by"):
+        _denominator_invariant(other)
+
+
+def test_a_grade_that_judged_nothing_agrees_with_an_empty_by_sector(tmp_path: Path):
+    """Every row an error, as a retry whose solve left no deliverable would be.
+
+    Step 8 writes ``by_sector`` from graded tasks only, so such a grade has an
+    empty one and still agrees with the summariser. One graded task beside it
+    makes an empty ``by_sector`` unexplained again.
+    """
+    failed = dict(NEVER_PRECHECKED[0], task_id="t2", error="no_deliverables", judge_call_count=0)
+    grades = tmp_path / "grades"
+    _write(grades, "judged_nothing.json", _payload([failed]))
+    assert _run(grades, "--apply").returncode == 0
+    assert _wow(grades / "judged_nothing.json")["by_sector"] == {}
+    assert _denominator_invariant(grades) == (["judged_nothing.json"], [])
+
+    other = tmp_path / "other"
+    _write(other, "one_graded.json", _payload([failed, MEASURED[0]]))
+    assert _run(other, "--apply").returncode == 0
+    assert _denominator_invariant(other) == (["one_graded.json"], [])
+    payload = json.loads((other / "one_graded.json").read_text())
+    assert set(payload["summary"]["wow"]["by_sector"]) == {"Finance"}
+    payload["summary"]["wow"]["by_sector"] = {}
+    _write(other, "one_graded.json", payload)
+    with pytest.raises(AssertionError, match="graded 1 tasks"):
         _denominator_invariant(other)
 
 

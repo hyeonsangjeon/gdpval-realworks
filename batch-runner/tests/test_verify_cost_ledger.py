@@ -438,6 +438,108 @@ def test_usage_that_went_missing_fails_even_though_it_looks_the_same(tmp_path):
     partial = next(f for f in findings if f.check == "partial_cause")
     assert partial.ok is False
     assert "usage was lost" in partial.detail
+    assert partial.data["reported_zero_usage"] == []
+
+
+# A reply that *reported* zero usage — a third case, named as such.
+
+def _partial(grade_path: Path):
+    findings, _ = verify(grade_path)
+    return next(f for f in findings if f.check == "partial_cause")
+
+
+def test_an_unpriced_call_whose_reply_reported_zero_usage_fails_by_name(tmp_path):
+    """exp041's row: price_missing is honest, the zeros are not.
+
+    The ledger holds a 7.9 s judge turn with every count 0. Nothing in the
+    row says usage went missing on this side, so "usage was lost" would be the
+    wrong accusation; the failure says what the row shows instead.
+    """
+    calls = _good_calls() + [
+        _call("f5a52b35", cost=None, resolved_model="gpt-5.6-sol", tokens=(0, 0, 0, 0),
+              missing_reasons=["price_missing"])
+    ]
+    partial = _partial(_write(tmp_path, calls))
+    assert partial.ok is False
+    assert "zero input tokens" in partial.detail
+    assert "usage was lost" not in partial.detail
+    assert [row["call_id"] for row in partial.data["reported_zero_usage"]] == ["f5a52b35"]
+
+
+@pytest.mark.parametrize("cost_reasons", [
+    (None, ["usage_partial"]),
+    (None, ["price_missing", "usage_partial"]),
+])
+def test_zero_input_beside_another_reason_is_named_the_same_way_priced_or_not(tmp_path, cost_reasons):
+    """Whether the model has a rate must not change what a zero reply is called."""
+    cost, reasons = cost_reasons
+    calls = _good_calls() + [_call("c12", cost=cost, resolved_model="gpt-5.6-sol",
+                                   tokens=(0, 500, 100, 0), missing_reasons=reasons)]
+    partial = _partial(_write(tmp_path, calls))
+    assert partial.ok is False
+    assert [row["call_id"] for row in partial.data["reported_zero_usage"]] == ["c12"]
+    assert "discarded_usage" not in partial.data
+
+
+def test_a_zero_reply_does_not_hide_a_complete_claim_over_unpriced_calls(tmp_path):
+    calls = _good_calls() + [
+        _call("c13", cost=None, resolved_model="gpt-5.6-sol", missing_reasons=["price_missing"]),
+        _call("c14", cost="0.000000", tokens=(0, 0, 0, 0)),
+    ]
+    receipt = _receipt_from(calls)
+    receipt["status"] = "complete"
+    receipt["estimated_cost_usd"] = receipt["known_cost_usd"]
+    partial = _partial(_write(tmp_path, calls, receipt))
+    assert partial.ok is False
+    assert "zero input tokens" in partial.detail
+    assert "claims complete while 1 calls have no price" in partial.detail
+
+
+def test_a_priced_call_recorded_at_zero_usage_fails_too(tmp_path):
+    """With a rate, the same zeros price the call at $0, and every other
+    check balances around that $0. Only this one can see it."""
+    calls = _good_calls() + [_call("c9", cost="0.000000", tokens=(0, 0, 0, 0))]
+    verdict = _verdict(_write(tmp_path, calls))
+    assert verdict.pop("partial_cause") is False
+    assert all(verdict.values()), verdict
+
+
+def test_zero_input_beside_real_output_is_still_a_reported_zero(tmp_path):
+    calls = _good_calls() + [_call("c10", cost="0.000300", tokens=(0, 0, 150, 0))]
+    partial = _partial(_write(tmp_path, calls))
+    assert partial.ok is False
+    assert [row["call_id"] for row in partial.data["reported_zero_usage"]] == ["c10"]
+
+
+def test_a_measured_call_with_no_output_is_not_a_reported_zero(tmp_path):
+    calls = _good_calls() + [_call("c11", cost="0.004000", tokens=(3604, 0, 0, 0))]
+    assert _verdict(_write(tmp_path, calls))["partial_cause"] is True
+
+
+#: The exp041 grade as published by run 45980082026 (commit 64385e59).
+EXP041_GRADE = (
+    "exp041_sol_retry10__judge_gpt-5_6-sol__exp041_v2_sol_max__cfg_44d3801699c0582d"
+    "__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf"
+    "__inference_08ac4b300b78c0c7f56a20a23d3e6746adacf377__src_e9595b1e599952d5__v2.2.json"
+)
+
+
+def test_the_published_exp041_grade_fails_on_exactly_its_one_zero_reply():
+    """Pin the published evidence as it stands: one call, named correctly.
+
+    The grade file and its ledger are published evidence and are not
+    rewritten, so this check keeps failing on them. Every other check passes;
+    the one failure is the zero-usage judge turn on task 4c18ebae.
+    """
+    grade_path = BATCH_RUNNER_ROOT.parent / "data/grades" / EXP041_GRADE
+    findings, _ = verify(grade_path)
+    failed = [finding for finding in findings if not finding.ok]
+    assert [finding.check for finding in failed] == ["partial_cause"]
+    (row,) = failed[0].data["reported_zero_usage"]
+    assert row["call_id"].startswith("f5a52b35")
+    assert row["task_id"].startswith("4c18ebae")
+    assert row["usage"] == {key: 0 for key in row["usage"]}
+    assert failed[0].data["expected_price_missing"] == 1568
 
 
 def test_a_complete_claim_over_an_unpriced_call_is_caught(tmp_path):

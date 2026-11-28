@@ -259,6 +259,7 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     'sandbox_image_digest',
     'codex_foundry_confirmed',
     'comparison_reviewed_source_sha',
+    'placement_attempt',
   ]
   assert.deepEqual(Object.keys(inputs), inputNames)
   assert.deepEqual(
@@ -272,6 +273,7 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
       sandbox_image_digest: '',
       codex_foundry_confirmed: false,
       comparison_reviewed_source_sha: '',
+      placement_attempt: 1,
     },
   )
   // Off is the whole point of this one, so the default is asserted above like
@@ -335,6 +337,7 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     RELAY_LINEAGE_ID: '',
     SOURCE_SHA: '',
     SANDBOX_IMAGE_DIGEST: '',
+    PLACEMENT_ATTEMPT: '1',
   }
   await execFileAsync('bash', ['-c', dispatchStep.run], { env: validEnv })
   await execFileAsync('bash', ['-c', dispatchStep.run], {
@@ -375,6 +378,11 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     { RELAY_RUN: '-1' },
     { RELAY_RUN: '11' },
     { RELAY_RUN: '999999999999999999999999999999' },
+    { PLACEMENT_ATTEMPT: '' },
+    { PLACEMENT_ATTEMPT: '0' },
+    { PLACEMENT_ATTEMPT: '21' },
+    { PLACEMENT_ATTEMPT: '-1' },
+    { PLACEMENT_ATTEMPT: '01' },
     // Not `SOURCE_SHA: 'b'.repeat(40)`, which is now accepted above. What is
     // still refused is a sha that cannot address a checkpoint: `_lineage_root`
     // hashes this value to find the run's uploaded work, so a malformed one

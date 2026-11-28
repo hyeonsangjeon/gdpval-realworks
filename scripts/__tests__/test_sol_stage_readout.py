@@ -3,7 +3,8 @@
 Model-free and offline: the diagnosis's numbers for exp036, the money the
 grade preflight would count, the cause table it shares with
 merge_parity_regrade.py, the USD-gate rows it moves, the records it refuses,
-and the grader identity two stages with different configs can share.
+the grader identity two stages with different configs can share, the zeros a
+--retry-stage may replace, and money on two booking bases kept apart.
 """
 from __future__ import annotations
 
@@ -425,9 +426,13 @@ def test_the_cause_table_names_the_sol_harness_refusals_by_their_codes():
 
 EXPERIMENTS = REPO_ROOT / "batch-runner/experiments"
 RENDERER = {"libreoffice_binary": "soffice", "libreoffice_version": "LibreOffice 24.2.7.2", "pymupdf_version": "2.1"}
-REVISIONS = {"exp037_sol_first25": "37" * 20, "exp038_sol_rest195": "38" * 20}
-#: The GitHub run that wrote each stage's final grade (runner_evidence.observation).
-WRITERS = {"exp037_sol_first25": "37000000001", "exp038_sol_rest195": "38000000001"}
+REVISIONS = {"exp037_sol_first25": "37" * 20, "exp038_sol_rest195": "38" * 20, "exp039_sol_next98": "39" * 20,
+             "exp040_sol_last97": "40" * 20, "exp041_sol_retry10": "41" * 20}
+#: The GitHub run that wrote each stage's final grade (runner_evidence.observation);
+#: journal names hold run ids matching [1-9][0-9]{0,19}.
+WRITERS = {"exp037_sol_first25": "37000000001", "exp038_sol_rest195": "38000000001",
+           "exp039_sol_next98": "39000000001", "exp040_sol_last97": "40000000001",
+           "exp041_sol_retry10": "41000000001"}
 
 
 def _stage_tasks(experiment_id: str) -> list[str]:
@@ -440,6 +445,26 @@ def _this_tree_hash(readout, config_name: str) -> str:
     relative = f"grading_configs/{config_name}.yaml"
     config = yaml.safe_load((readout.BATCH_RUNNER / relative).read_text(encoding="utf-8"))
     return step8.compute_grader_source_hash(relative, config, batch_root=readout.BATCH_RUNNER)
+
+
+#: The retry stage: exp039's and exp040's ten Azure-side failures, in exp038's order.
+EXP041 = "exp041_sol_retry10"
+RETRY_TEN = [
+    "2fa8e956-7b35-4c13-95dc-027f02be318b", "46b34f78-6c06-4416-87e2-77b6d8b20ce9",
+    "4c18ebae-dfaa-4b76-b10c-61fcdf26734c", "5a2d70da-0a42-4a6b-a3ca-763e03f070a5",
+    "efca245f-c24f-4f75-a9d5-59201330ab7a", "f1be6436-ffff-4fee-9e66-d550291a1735",
+    "f2986c1f-2bbf-4b83-bc93-624a9d617f45", "f3351922-dbdd-45da-85c5-e7110696bbe5",
+    "f5d428fd-b38e-41f0-8783-35423dab80f6", "f841ddcf-2a28-4f6d-bac3-61b607219d3e"]
+#: How each ended in its parent (step 2 error_category): exp039's #20, #36, #43
+#: and #54, then exp040's #82-#87.
+FIRST_FAILURES = {**dict(zip(RETRY_TEN[:4], ("turn_failed", "transport_error", "turn_failed", "turn_failed"))),
+                  **{task: "turn_failed" for task in RETRY_TEN[4:]}}
+#: exp041's grading config, a copy of exp040's but for its name and
+#: description. Until PR 2 adds it (and exp041's registry entries) to the
+#: tree, the stand-in registration grades under exp040's, whose template
+#: blocks it copies; once PR 2 is in, both are PR 2's own.
+EXP041_CONFIG = ("exp041_v2_sol_max" if (REPO_ROOT / "batch-runner/grading_configs/exp041_v2_sol_max.yaml").is_file()
+                 else "exp040_v2_sol_max")
 
 
 @pytest.fixture
@@ -468,26 +493,79 @@ def registry(monkeypatch):
                                       ordered_task_ids_sha256=controls.ordered_task_ids_sha256(tasks))
             monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
 
+        @staticmethod
+        def register_exp041(booking_basis: str | None = None) -> None:
+            """exp041's twin entries: PR 2's own once registered, else a stand-in with their values.
+
+            The stand-in is built from scratch, so it carries no other run's
+            prior-lineage spend, lost bookings or wall timeout. Either way the
+            entries are USD 220 (grading reserve 70, attempt reserve 30,
+            narrative 2.00) on the tenant basis; ``booking_basis`` books both
+            twins on another one.
+            """
+            run = controls.registered_run(EXP041)
+            approval = next((entry for entry in grading.APPROVALS if entry.experiment_id == EXP041), None)
+            if run is None or approval is None:
+                run = controls.SolRun(
+                    experiment_id=EXP041, grading_config_name=EXP041_CONFIG, task_count=len(RETRY_TEN),
+                    ordered_task_ids_sha256=controls.ordered_task_ids_sha256(RETRY_TEN),
+                    approval="test: stand-in for the exp041 approval PR", ceiling_usd=Decimal("220"),
+                    grading_reserve_usd=Decimal("70"), attempt_reserve_usd=Decimal("30"),
+                    narrative_allowance_usd=Decimal("2.00"), booking_basis=controls.BASIS_TENANT_20261126)
+                approval = grading.Approval(
+                    experiment_id=EXP041, config_name=EXP041_CONFIG, ceiling_usd=Decimal("220"),
+                    solve_seed=grading.SOLVE_SEED_SOL_BATCH, exclusive_experiment=True, inference_revision=None,
+                    task_ids_sha256=None, approved="test: stand-in for the exp041 approval PR",
+                    booking_basis=grading.BASIS_TENANT_20261126)
+            assert (run.grading_config_name, run.task_count, run.ordered_task_ids_sha256, run.ceiling_usd,
+                    run.grading_reserve_usd, run.attempt_reserve_usd, run.narrative_allowance_usd,
+                    run.booking_basis) == (
+                EXP041_CONFIG, 10, controls.ordered_task_ids_sha256(RETRY_TEN), Decimal("220"), Decimal("70"),
+                Decimal("30"), Decimal("2.00"), controls.BASIS_TENANT_20261126)
+            assert (approval.config_name, approval.ceiling_usd, approval.solve_seed, approval.booking_basis) == (
+                EXP041_CONFIG, Decimal("220"), grading.SOLVE_SEED_SOL_BATCH, grading.BASIS_TENANT_20261126)
+            if booking_basis is not None:
+                run = dataclasses.replace(run, booking_basis=booking_basis)
+                approval = dataclasses.replace(approval, booking_basis=booking_basis)
+            monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
+            monkeypatch.setattr(grading, "APPROVALS", tuple(
+                entry for entry in grading.APPROVALS if entry.experiment_id != EXP041) + (approval,))
+
     return Registry
 
 
 def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: list[str], *,
                  refused: tuple[str, ...] = (), refused_usd: float = 0.0, harness: tuple[str, ...] = (),
-                 grader_failed: tuple[str, ...] = (), renderer: dict = RENDERER, writer: str | None = None,
-                 earlier: dict[str, tuple[str, ...]] | None = None) -> list[str]:
+                 grader_failed: tuple[str, ...] = (), grader_refused: tuple[str, ...] = (),
+                 renderer: dict = RENDERER, writer: str | None = None,
+                 earlier: dict[str, tuple[str, ...]] | None = None, failed: dict[str, str] | None = None,
+                 failed_usd: float = 5.0, config_name: str | None = None,
+                 booking_basis: str | None = None) -> list[str]:
     """A final grade, a self_report.json and the journals of the runs that graded ``tasks``.
 
     ``refused`` tasks ended at the USD gate (after ``refused_usd`` of earlier
     attempts); ``harness`` tasks were refused by the Sol harness's window check;
     ``grader_failed`` tasks left files the judge was called on but marked no
-    item of. The grade's writer is GitHub run ``writer`` (attempt 1), whose
-    journal holds every task's grading lines except those of ``earlier``
-    chunks: {run id: tasks that chunk graded}, one journal each.
+    item of; ``grader_refused`` tasks left files the selector refused to
+    choose among (selection_error); ``failed`` tasks ({task: step 2 error_category}) were attempted,
+    booked ``failed_usd`` and left nothing to grade. The grade's writer is
+    GitHub run ``writer`` (attempt 1), whose journal holds every task's
+    grading lines except those of ``earlier`` chunks: {run id: tasks that
+    chunk graded}, one journal each. The journals open under ``config_name``
+    (by default the stage's own) and, given a ``booking_basis``, name it and
+    the SHA-256 of the rates it pins, as a journal of that basis does.
     """
     writer = writer or WRITERS[experiment_id]
+    failed = failed or {}
     chunk_of = {task: run_id for run_id, chunk in (earlier or {}).items() for task in chunk}
     grade_rows, report_rows, journals_lines = [], [], {writer: [], **{run_id: [] for run_id in earlier or {}}}
     for task in tasks:
+        if task in failed:
+            grade_rows.append({"task_id": task, "error": "no_deliverables", "judge_call_count": 0})
+            report_rows.append({"task_id": task, "status": "error", "latency_ms": 120_000, "deliverable_files": [],
+                                "observability": {"error_category": failed[task], "budget_metrics": {
+                                    "conservative_cost_usd": failed_usd}}})
+            continue
         if task in refused or task in harness:
             category = "usd_ceiling_reached" if task in refused else "sol_batch_context_window_mismatch"
             grade_rows.append({"task_id": task, "error": "no_deliverables", "judge_call_count": 0})
@@ -495,7 +573,11 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
                                 "observability": {"error_category": category, "budget_metrics": {
                                     "conservative_cost_usd": refused_usd if task in refused else 0}}})
             continue
-        if task in grader_failed:
+        if task in grader_refused:
+            grade_rows.append({"task_id": task, "error": "selection_error", "selection_error": "ambiguous_main",
+                               "items": [], "grading_wall_time_ms": 1_000, "judge_call_count": 1,
+                               "selection_rule": None})
+        elif task in grader_failed:
             grade_rows.append({"task_id": task, "error": "all_items_score_excluded", "items": [{}] * 10,
                                "score_excluded_items": 10, "grading_wall_time_ms": 60_000, "judge_call_count": 3,
                                "selection_rule": "single_main"})
@@ -509,7 +591,7 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
         journal = journals_lines[chunk_of.get(task, writer)]
         journal += [{"event": "reserve", "ticket": f"g{len(journal)}", "task_id": task, "reserve_usd": "1.00000000"},
                     {"event": "settle", "ticket": f"g{len(journal)}", "spent_usd": "0.50000000"}]
-    config_name = f"{experiment_id[:6]}_v2_sol_max"
+    config_name = config_name or f"{experiment_id[:6]}_v2_sol_max"
     grade = {"experiment_id": experiment_id, "run_status": "final",
              "source_inference_revision": REVISIONS[experiment_id], "tasks": grade_rows,
              "grader_source_hash": source_hash, "renderer_fingerprint": renderer,
@@ -526,6 +608,9 @@ def _write_stage(tmp_path: Path, experiment_id: str, source_hash: str, tasks: li
     journals.mkdir()
     opening = {"event": "open", "schema": "sol-batch-grading-journal-v1", "experiment_id": experiment_id,
                "config_name": config_name}
+    if booking_basis is not None:
+        controls = _readout()._batch_runner_module("sol_batch_controls")
+        opening.update(booking_basis=booking_basis, booking_rates_sha256=controls.booking_source_sha256(booking_basis))
     for run_id, journal in journals_lines.items():
         (journals / f"run-{run_id}-1.combined_usd.jsonl").write_text("".join(
             json.dumps({**line, "seq": seq}) + "\n" for seq, line in enumerate([opening, *journal])),
@@ -574,6 +659,61 @@ def test_two_stages_with_their_own_configs_can_be_one_grader(tmp_path, registry)
     summary = _run(readout, tmp_path, exp037, exp038)["summary"]
     assert summary["one_grader"] is False
     assert summary["one_grader_problems"][0].startswith("exp038_sol_rest195: graded by grader source")
+
+
+def test_a_readout_keeps_each_booking_basis_apart(tmp_path, registry, monkeypatch):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    grading = readout._batch_runner_module("sol_batch_grading")
+    # One stage alone reports the basis its money was booked at.
+    report = tmp_path / "self_report.json"
+    report.write_text(json.dumps(SELF_REPORT), encoding="utf-8")
+    journals = tmp_path / "journals"
+    journals.mkdir()
+    shutil.copy(GRADE_JOURNAL, journals)
+    summary = readout.summarise(readout.read_stage("exp036_sol_fixed5", GRADE, report, journals), 5, 0, 0)
+    assert summary["usd"]["booking_basis"] == "list_long_context" and "by_basis" not in summary["usd"]
+
+    registry.approve_exp038()
+    tenant = controls.BASIS_TENANT_20261126
+    run = dataclasses.replace(controls.RUNS["exp038_sol_rest195"], booking_basis=tenant)
+    monkeypatch.setattr(controls, "RUNS", MappingProxyType({**controls.RUNS, run.experiment_id: run}))
+    monkeypatch.setattr(grading, "APPROVALS", tuple(
+        dataclasses.replace(entry, booking_basis=tenant) if entry.experiment_id == run.experiment_id else entry
+        for entry in grading.APPROVALS))
+    first, rest = _this_tree_hash(readout, "exp037_v2_sol_max"), _this_tree_hash(readout, "exp038_v2_sol_max")
+    exp037 = _write_stage(tmp_path, "exp037_sol_first25", first, _stage_tasks("exp037_sol_first25"))
+    exp038 = _write_stage(tmp_path, "exp038_sol_rest195", rest, _stage_tasks("exp038_sol_rest195"),
+                          booking_basis=tenant)
+    summary = _run(readout, tmp_path, exp037, exp038)["summary"]
+    # The scores are one union; the money is two units, never added together.
+    assert summary["tasks"] == 220 and summary["one_grader"] is True
+    assert summary["usd"] == {
+        "booking_basis": None, "solve": None, "grading": None, "grading_unattributed": None,
+        "solve_per_task_mean": None, "solve_per_task_max": None, "grading_per_judged_item": None,
+        "by_basis": {
+            "list_long_context": {
+                "stages": ["exp037_sol_first25"], "solve": 25 * 6.0, "grading": 25 * 0.5,
+                "grading_unattributed": 0.0, "solve_per_task_mean": 6.0, "solve_per_task_max": 6.0,
+                "grading_per_judged_item": 0.05},
+            tenant: {
+                "stages": ["exp038_sol_rest195"], "solve": 195 * 6.0, "grading": 195 * 0.5,
+                "grading_unattributed": 0.0, "solve_per_task_mean": 6.0, "solve_per_task_max": 6.0,
+                "grading_per_judged_item": 0.05}}}
+    # Each stage's record is the one a single-basis readout prints, with no basis field.
+    assert [set(stage) for stage in summary["stages"]] == [{
+        "stage", "ceiling_usd", "solve_usd", "prior_lineage_spend_usd", "lost_booking_usd",
+        "narrative_allowance_usd", "grading_usd", "committed_usd", "left_under_ceiling_usd"}] * 2
+    assert [stage["committed_usd"] for stage in summary["stages"]] == [
+        25 * 6.0 + 2.0 + 25 * 0.5, 195 * 6.0 + 2.0 + 195 * 0.5]
+    # A projection samples money: across two bases it would sum them, so it refuses.
+    for projection in (("--remaining-tasks", "10", "--remaining-items", "550"),
+                       ("--remaining-from", "exp038_sol_rest195")):
+        with pytest.raises(SystemExit) as refused:
+            _run(readout, tmp_path, exp037, exp038, extra=projection)
+        assert str(refused.value).startswith("a projection samples one basis's money; stages booked on "
+                                             "different bases cannot be projected together: ")
+        assert "exp038_sol_rest195 (tenant_observed_20261126)" in str(refused.value)
 
 
 def test_a_task_the_usd_gate_refused_is_moved_not_sampled(tmp_path):
@@ -651,6 +791,212 @@ def test_a_later_stage_replaces_a_refused_row_but_not_its_spend(tmp_path, regist
     exp038 = _write_stage(tmp_path, "exp038_sol_rest195", _this_tree_hash(readout, "exp038_v2_sol_max"), again)
     with pytest.raises(SystemExit, match="counts every task once"):
         _run(readout, tmp_path, exp037, exp038)
+
+
+# -- a retry stage: exp041 over exp039's and exp040's Azure-side zeros -----------------
+
+
+def _sol220_first_attempt(readout, tmp_path: Path, failed: dict[str, str] | None = None,
+                          **exp039: object) -> tuple[list[str], list[str], list[str]]:
+    """exp037, exp039 and exp040 as their final grades left them: ``failed`` lost, every other task judged."""
+    failed = FIRST_FAILURES if failed is None else failed
+    stages = []
+    for experiment_id in ("exp037_sol_first25", "exp039_sol_next98", "exp040_sol_last97"):
+        tasks = _stage_tasks(experiment_id)
+        extra = exp039 if experiment_id == "exp039_sol_next98" else {}
+        stages.append(_write_stage(
+            tmp_path, experiment_id, _this_tree_hash(readout, f"{experiment_id[:6]}_v2_sol_max"), tasks,
+            failed={task: category for task, category in failed.items() if task in tasks}, **extra))
+    return stages[0], stages[1], stages[2]
+
+
+def _exp041(readout, tmp_path: Path, tasks: list[str] = RETRY_TEN,
+            booking_basis: str | None = "tenant_observed_20261126", **kwargs: object) -> list[str]:
+    """exp041's records; ``booking_basis`` None writes journals that name no basis (list_long_context)."""
+    return _write_stage(tmp_path, EXP041, _this_tree_hash(readout, EXP041_CONFIG), tasks,
+                        config_name=EXP041_CONFIG, booking_basis=booking_basis, **kwargs)
+
+
+def test_a_retry_stage_replaces_only_infrastructure_or_unclassified_zeros(tmp_path, registry):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    registry.register_exp041()
+    exp039_tasks, exp040_tasks = _stage_tasks("exp039_sol_next98"), _stage_tasks("exp040_sol_last97")
+    # The ten in exp038's order: exp039's #20, #36, #43 and #54, then exp040's #82-#87.
+    assert [exp039_tasks.index(task) for task in RETRY_TEN[:4]] == [19, 35, 42, 53]
+    assert RETRY_TEN[4:] == exp040_tasks[81:87]
+    assert controls.ordered_task_ids_sha256(RETRY_TEN) == (
+        "58675014aed6ab580517aca4abd58d7d8f074cec8fd95bfcc63c0bf8b1be8cf2")
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
+
+    # The first attempt alone: one basis, no retry key, the ten are its zeros.
+    first = _run(readout, tmp_path, exp037, exp039, exp040)["summary"]
+    assert first["tasks"] == first["denominator"] == 220
+    assert first["zeros_by_cause"] == {"infrastructure": 1, "unclassified_failure": 9}
+    assert first["score_fixed_denominator"] == round(210 * 50.0 / 220, 2)
+    assert first["usd"]["booking_basis"] == "list_long_context" and "by_basis" not in first["usd"]
+    assert "retried_after_infrastructure_or_unclassified_zero" not in first
+
+    # With the retry stage, its ten judged rows replace the ten zeros.
+    exp041 = _exp041(readout, tmp_path)
+    opening = json.loads((tmp_path / f"{EXP041}.journals" / f"run-{WRITERS[EXP041]}-1.combined_usd.jsonl")
+                         .read_text(encoding="utf-8").split("\n", 1)[0])
+    assert opening["booking_basis"] == controls.BASIS_TENANT_20261126
+    assert opening["booking_rates_sha256"] == controls.booking_source_sha256(controls.BASIS_TENANT_20261126)
+    document = _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=("--retry-stage", EXP041))
+    summary = document["summary"]
+    assert summary["tasks"] == summary["denominator"] == 220 and len(document["tasks"]) == 220
+    assert summary["retried_after_infrastructure_or_unclassified_zero"] == [
+        {"task_id": task, "replaced_stage": "exp039_sol_next98" if index < 4 else "exp040_sol_last97",
+         "replaced_cause": "infrastructure" if FIRST_FAILURES[task] == "transport_error" else "unclassified_failure",
+         "cause": "judged"}
+        for index, task in enumerate(RETRY_TEN)]
+    assert summary["zeros_by_cause"] == {} and summary["score_fixed_denominator"] == 50.0
+    assert summary["rerun_after_usd_gate"] == [] and summary["moved_by_usd_gate"] == []
+    assert [row["stage"] for row in document["tasks"] if row["task_id"] in RETRY_TEN] == [EXP041] * 10
+    assert summary["one_grader"] is True, summary["one_grader_problems"]
+    # The replaced rows' solve bookings stay in their own stages' records ...
+    money = {stage["stage"]: stage for stage in summary["stages"]}
+    assert list(money) == ["exp037_sol_first25", "exp039_sol_next98", "exp040_sol_last97", EXP041]
+    assert money["exp039_sol_next98"]["solve_usd"] == 94 * 6.0 + 4 * 5.0
+    assert money["exp040_sol_last97"]["solve_usd"] == 91 * 6.0 + 6 * 5.0
+    assert (money[EXP041]["ceiling_usd"], money[EXP041]["solve_usd"], money[EXP041]["committed_usd"]) == (
+        220.0, 10 * 6.0, 10 * 6.0 + 2.0 + 10 * 0.5)
+    # ... and list and tenant money are never one sum.
+    assert summary["usd"]["booking_basis"] is summary["usd"]["solve"] is None
+    by_basis = summary["usd"]["by_basis"]
+    assert by_basis["list_long_context"]["stages"] == ["exp037_sol_first25", "exp039_sol_next98",
+                                                       "exp040_sol_last97"]
+    assert by_basis["list_long_context"]["solve"] == 25 * 6.0 + 94 * 6.0 + 4 * 5.0 + 91 * 6.0 + 6 * 5.0
+    assert by_basis["list_long_context"]["solve_per_task_mean"] == 6.0
+    assert by_basis["tenant_observed_20261126"] == {
+        "stages": [EXP041], "solve": 60.0, "grading": 5.0, "grading_unattributed": 0.0,
+        "solve_per_task_mean": 6.0, "solve_per_task_max": 6.0, "grading_per_judged_item": 0.05}
+
+    # A retry the USD gate refused stays a 0, not attempted, and is not moved:
+    # no later stage is registered to take it.
+    exp041 = _exp041(readout, tmp_path, refused=(RETRY_TEN[0],))
+    summary = _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=("--retry-stage", EXP041))["summary"]
+    assert summary["zeros_by_cause"] == {"usd_gate": 1} and summary["moved_by_usd_gate"] == []
+    assert summary["retried_after_infrastructure_or_unclassified_zero"][0] == {
+        "task_id": RETRY_TEN[0], "replaced_stage": "exp039_sol_next98", "replaced_cause": "unclassified_failure",
+        "cause": "usd_gate"}
+    assert summary["projection"]["attempted_sample"] == 219
+
+
+def test_a_retry_stage_refuses_what_it_may_not_replace(tmp_path, registry, capsys):
+    readout = _readout()
+    registry.register_exp041()
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
+    exp041 = _exp041(readout, tmp_path)
+    retry = ("--retry-stage", EXP041)
+    # Without --retry-stage, a repeat is a repeat.
+    with pytest.raises(SystemExit, match="counts every task once"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041)
+    # Every other earlier row refuses (test_a_retry_stage_refuses_every_other_earlier_row).
+    # A retry-stage task no earlier stage lost: exp040 is not in the union,
+    # or the retry stage comes before the stages it retries.
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
+    with pytest.raises(SystemExit, match=f"{EXP041} is a retry stage, yet no stage before it lost {RETRY_TEN[4]}"):
+        _run(readout, tmp_path, exp037, exp039, exp041, extra=retry)
+    with pytest.raises(SystemExit, match=f"{EXP041} is a retry stage, yet no stage before it lost {RETRY_TEN[0]}"):
+        _run(readout, tmp_path, exp041, exp037, exp039, exp040, extra=retry)
+    # A --retry-stage that is not passed with --stage.
+    capsys.readouterr()
+    with pytest.raises(SystemExit):
+        _run(readout, tmp_path, exp037, exp039, exp040, extra=retry)
+    assert f"--retry-stage {EXP041} is not passed with --stage" in capsys.readouterr().err
+    # A retry stage that lists a task twice: its second row may not replace
+    # its first, even when the first is itself an unclassified zero.
+    twice = RETRY_TEN + [RETRY_TEN[0]]
+    registry.list_tasks(EXP041, twice)
+    exp041 = _exp041(readout, tmp_path, tasks=twice, failed={RETRY_TEN[0]: "turn_failed"})
+    with pytest.raises(SystemExit, match=r"a task appears in two stages; a union counts every task once \(only"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
+
+
+#: The earlier rows a retry stage may not replace: every zero cause but the
+#: two it may, and a judged task. Each is (step 2 error_category of the task,
+#: or None when it was not a solve failure; _write_stage options).
+NOT_RETRIED = {
+    "content_filter": ("content_filtered", {}),
+    "turn_timeout": ("timeout", {}),
+    "model_other": ("model_mismatch", {}),
+    "sol_gate": (None, {"harness": (RETRY_TEN[0],)}),
+    "usd_gate": (None, {"refused": (RETRY_TEN[0],)}),
+    "grader_other": (None, {"grader_failed": (RETRY_TEN[0],)}),
+    "grader_refusal": (None, {"grader_refused": (RETRY_TEN[0],)}),
+    "judged": (None, {}),
+}
+
+
+def test_a_retry_stage_replaces_two_causes_and_the_refusal_cases_cover_the_rest():
+    readout = _readout()
+    assert readout.RETRY_REPLACES == {"infrastructure", "unclassified_failure"}
+    assert readout.RETRY_REPLACES <= set(readout.CAUSES.ZERO_CAUSES)
+    assert set(NOT_RETRIED) == set(readout.CAUSES.ZERO_CAUSES) - readout.RETRY_REPLACES | {"judged"}
+
+
+@pytest.mark.parametrize("cause", sorted(NOT_RETRIED))
+def test_a_retry_stage_refuses_every_other_earlier_row(tmp_path, registry, cause):
+    readout = _readout()
+    registry.register_exp041()
+    exp041 = _exp041(readout, tmp_path)
+    category, options = NOT_RETRIED[cause]
+    failed = {task: first for task, first in FIRST_FAILURES.items() if task != RETRY_TEN[0]}
+    if category is not None:
+        failed[RETRY_TEN[0]] = category
+    # Not the provider's loss: a judged task, the model's, the grader's, or a
+    # gate's refusal (a USD-gate zero goes to a later ordinary stage, not a retry).
+    stages = _sol220_first_attempt(readout, tmp_path, failed, **options)
+    with pytest.raises(SystemExit, match=f"counts every task once: retry stage {EXP041} may replace only an "
+                                         f"infrastructure or unclassified_failure zero, and "
+                                         f"exp039_sol_next98's {RETRY_TEN[0]} is {cause}$"):
+        _run(readout, tmp_path, *stages, exp041, extra=("--retry-stage", EXP041))
+
+
+def test_a_retry_stage_on_one_basis_projects_without_moving_its_own_usd_gate_row(tmp_path, registry):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    registry.register_exp041(booking_basis=controls.BASIS_LIST_LONG)
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
+    exp041 = _exp041(readout, tmp_path, booking_basis=None, refused=(RETRY_TEN[0],))
+    document = _run(readout, tmp_path, exp037, exp039, exp040, exp041,
+                    extra=("--retry-stage", EXP041, "--remaining-from", "exp040_sol_last97"))
+    summary = document["summary"]
+    assert summary["usd"]["booking_basis"] == controls.BASIS_LIST_LONG and "by_basis" not in summary["usd"]
+    assert summary["zeros_by_cause"] == {"usd_gate": 1} and summary["moved_by_usd_gate"] == []
+    # The retry's own USD-gate row is not projected onto the next list.
+    assert RETRY_TEN[0] not in document["remaining_task_ids"]
+    assert document["remaining_task_ids"] == _stage_tasks("exp040_sol_last97")
+    assert summary["projection"]["remaining_tasks"] == 97
+
+
+def test_a_journal_booked_on_another_basis_than_its_stage_refuses(tmp_path, registry):
+    readout = _readout()
+    controls = readout._batch_runner_module("sol_batch_controls")
+    registry.register_exp041()
+    tenant = controls.BASIS_TENANT_20261126
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path)
+    retry = ("--retry-stage", EXP041)
+    # A tenant stage whose journal names no basis was booked on list_long_context:
+    # its dollars are not tenant dollars.
+    exp041 = _exp041(readout, tmp_path, booking_basis=None)
+    with pytest.raises(SystemExit, match=f"booked under list_long_context, but its stage is registered on {tenant}"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
+    # The tenant basis from other rates than it pins.
+    exp041 = _exp041(readout, tmp_path)
+    journal = tmp_path / f"{EXP041}.journals" / f"run-{WRITERS[EXP041]}-1.combined_usd.jsonl"
+    opening, rest = journal.read_text(encoding="utf-8").split("\n", 1)
+    journal.write_text(json.dumps({**json.loads(opening), "booking_rates_sha256": "0" * 64}) + "\n" + rest,
+                       encoding="utf-8")
+    with pytest.raises(SystemExit, match=f"booked from other rates than {tenant} pins"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
+    # And the reverse: a list stage whose journal was booked on the tenant basis.
+    exp041 = _exp041(readout, tmp_path)
+    exp037, exp039, exp040 = _sol220_first_attempt(readout, tmp_path, booking_basis=tenant)
+    with pytest.raises(SystemExit, match=f"booked under {tenant}, but its stage is registered on list_long_context"):
+        _run(readout, tmp_path, exp037, exp039, exp040, exp041, extra=retry)
 
 
 # -- the writer's journal ------------------------------------------------------------

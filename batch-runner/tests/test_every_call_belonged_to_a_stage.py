@@ -743,16 +743,35 @@ def test_every_published_run_summary_now_names_the_stages_behind_it():
     """
     seen = 0
     for path, _field, receipts in _published_receipt_sets():
-        seen += 1
-        summary = summarise_receipts(receipts)
-        assert summary.components, f"{path} still names no stage"
-        assert len(summary.components) <= _MAX_COMPONENTS, path
-        identities = _identities(summary)
-        assert len(identities) == len(set(identities)), (
-            f"{path} carries a duplicate line: the same stage, retry kind and "
-            f"model appears twice in {identities}"
-        )
+        seen += _names_the_stages_behind_it(path, receipts)
     assert seen >= 21, f"expected the published receipt sets to still be there, saw {seen}"
+
+
+def _made_no_call(receipts) -> bool:
+    """A receipt set no model call went into.
+
+    A grade whose every row is ``no_deliverables`` (nothing to judge) publishes
+    one of these: each row's ``grading_cost`` is ``model_calls`` 0 with
+    ``components: []``. It has no stage to name, so it is held to naming none.
+    """
+    return all(receipt.model_calls == 0 for receipt in receipts)
+
+
+def _names_the_stages_behind_it(path, receipts) -> int:
+    """Check one published receipt set; 1 when it made calls and named their stages, 0 when it made none."""
+    summary = summarise_receipts(receipts)
+    if _made_no_call(receipts):
+        assert not summary.components and summary.model_calls == 0, path
+        assert summary.model_cost_usd == 0, path
+        return 0
+    assert summary.components, f"{path} still names no stage"
+    assert len(summary.components) <= _MAX_COMPONENTS, path
+    identities = _identities(summary)
+    assert len(identities) == len(set(identities)), (
+        f"{path} carries a duplicate line: the same stage, retry kind and "
+        f"model appears twice in {identities}"
+    )
+    return 1
 
 
 def test_the_published_lines_reconstruct_the_published_totals():
@@ -782,10 +801,39 @@ def test_nothing_else_about_a_published_summary_moves():
     summary with its lines removed -- the document as it stood before.
     """
     for path, _field, receipts in _published_receipt_sets():
-        after = summarise_receipts(receipts).as_dict()
-        before = dict(after, components=[])
-        moved = {key for key in before if before[key] != after[key]}
-        assert moved == {"components"}, f"{path}: {sorted(moved)}"
+        _only_the_lines_move(path, receipts)
+
+
+def _only_the_lines_move(path, receipts) -> None:
+    after = summarise_receipts(receipts).as_dict()
+    before = dict(after, components=[])
+    moved = {key for key in before if before[key] != after[key]}
+    # A set no call went into has no line to add, so nothing moves at all.
+    assert moved == (set() if _made_no_call(receipts) else {"components"}), f"{path}: {sorted(moved)}"
+
+
+def test_a_grade_that_judged_nothing_names_no_stage_and_moves_nothing():
+    """A grade whose every row is ``no_deliverables``, as exp041's could be.
+
+    The rows are what step 8 writes for such a task today (exp040's eight:
+    six peak-load losses and two content-filter stops): no judge call, ``grading_cost`` with ``model_calls`` 0
+    and ``components: []``. One row that did call still has to name its stage.
+    """
+    (path,) = sorted(GRADES.glob("exp040_sol_last97__judge_*__src_ee5c88d4c83496a7__v2.2.json"))
+    rows = [row for row in json.loads(path.read_text("utf-8"))["tasks"] if row["error"] == "no_deliverables"]
+    assert len(rows) == 8
+    receipts = [CostReceipt.from_dict(row[BUCKET_GRADING]) for row in rows]
+    assert _made_no_call(receipts)
+    assert _names_the_stages_behind_it(path, receipts) == 0
+    _only_the_lines_move(path, receipts)
+    called = _receipt_with(_component(STAGE_GRADING, RETRY_NONE, STATUS_COMPLETE, calls=1, usd=1))
+    assert not _made_no_call([*receipts, called])
+    assert _names_the_stages_behind_it(path, [*receipts, called]) == 1
+    _only_the_lines_move(path, [*receipts, called])
+    # A set that called without naming a stage still fails.
+    unnamed = _receipt_with(calls=1, usd=1)
+    with pytest.raises(AssertionError, match="still names no stage"):
+        _names_the_stages_behind_it(path, [*receipts, unnamed])
 
 
 def test_no_published_summary_changes_whether_the_reader_accepts_it():
