@@ -6,6 +6,7 @@ The compiler job's shell is parsed, not run, by these offline tests.
 import ast
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -22,7 +23,7 @@ import ghcp_ahp_bundle_manifest as bundle_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/ghcp-ahp-patched-runtime-tests.yml"
-BRANCH = "leader/ghcp-patched-runtime-receipt-20261106"
+BRANCH = "main"
 SUITE = [
     "tests/test_ghcp_ahp_patched_runtime.py",
     "tests/test_ghcp_ahp_patched_runtime_rejections.py",
@@ -37,7 +38,7 @@ EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smok
                "tests/test_ghcp_ahp_server_only_staging.py", "tests/test_ghcp_ahp_runner_userns.py",
                "tests/test_ghcp_sol_offline_rehearsal.py", "tests/test_ghcp_ahp_default_policy.py",
                "tests/test_ghcp_ahp_output_collection.py", "tests/test_ghcp_ahp_token_ledger.py"]
-EXPECTED_COUNTS = {"contracts.xml": 2901, "workflow-guards.xml": 80}
+EXPECTED_COUNTS = {"contracts.xml": 2903, "workflow-guards.xml": 82}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -113,6 +114,33 @@ def test_workflow_runs_only_on_the_named_branch_push():
     assert set(job) == {"name", "if", "runs-on", "timeout-minutes", "steps"}
     assert job["if"] == f"github.event_name == 'push' && github.ref == 'refs/heads/{BRANCH}'"
     assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == "15"
+
+
+def restore_pre_main_producer_workflow(data):
+    """Prove every byte outside the exact branch/count re-anchor is unchanged."""
+    legacy = "leader/ghcp-patched-runtime-receipt-20261106"
+    changes = (
+        (b"    branches: [main]\n", f"    branches: [{legacy}]\n".encode(), 1),
+        (b"    if: github.event_name == 'push' && github.ref == 'refs/heads/main'\n",
+         f"    if: github.event_name == 'push' && github.ref == 'refs/heads/{legacy}'\n".encode(), 5),
+        (b'          expected = {"contracts.xml": 2903, "workflow-guards.xml": 82}\n',
+         b'          expected = {"contracts.xml": 2901, "workflow-guards.xml": 80}\n', 1),
+    )
+    for current, original, count in changes:
+        assert data.count(current) == count
+        data = data.replace(current, original)
+    assert hashlib.sha256(data).hexdigest() == "6e11921e79468f17d8b73be8fd5fbc6e1814b159f69d29b83bffe91c121a7a87"
+    return data
+
+
+def test_reanchor_preserves_every_historical_producer_byte_and_rejects_drift():
+    data = WORKFLOW.read_bytes()
+    assert b"branches: [leader/ghcp-patched-runtime-receipt-20261106]" in restore_pre_main_producer_workflow(data)
+    for damaged in (data + b"\n", data.replace(b"branches: [main]", b"branches: [main, other]", 1),
+                    data.replace(b"    timeout-minutes: 15\n", b"    timeout-minutes: 16\n", 1)):
+        assert damaged != data
+        with pytest.raises(AssertionError):
+            restore_pre_main_producer_workflow(damaged)
 
 
 def test_only_pinned_setup_actions_without_authentication_or_runtime_steps():
@@ -192,6 +220,46 @@ def test_result_check_retains_exact_expected_counts():
                    and any(isinstance(target, ast.Name) and target.id == "expected" for target in node.targets)]
     assert len(assignments) == 1 and ast.literal_eval(assignments[0].value) == EXPECTED_COUNTS
     assert 'env -i PATH="$PATH" LANG=C.UTF-8 RUNNER_TEMP="$RUNNER_TEMP"' in steps()["results"]["run"]
+
+
+def env_i_environment(step):
+    """The exact `env -i` variables a pytest step passes, with $PATH expanded."""
+    words = shlex.split(step["run"].replace("\\\n", " ").partition("env -i ")[2])
+    environment = {}
+    for word in words:
+        key, sign, value = word.partition("=")
+        if not sign or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", key):
+            break
+        assert key not in environment
+        environment[key] = os.environ.get("PATH", "/usr/bin:/bin") if value == "$PATH" else value
+    assert environment == {"PATH": environment["PATH"], "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1",
+                           "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1"}
+    return environment
+
+
+def test_expected_counts_equal_what_pytest_collects_for_the_workflows_own_file_lists():
+    # The producer runs only on a push to main, so a count drift would first
+    # fail after a merge. Collect both reports' files here, on every PR, with
+    # the step's own options, file list and `env -i` variables.
+    selected = steps()
+    reports = {"contracts.xml": selected["contracts"], "workflow-guards.xml": selected["workflow_guards"]}
+    assert set(reports) == set(EXPECTED_COUNTS)
+    assert pytest_args(selected["contracts"])[7:] == SUITE + EXTRA_SUITE
+    collected = {}
+    for name, step in reports.items():
+        args = pytest_args(step)
+        assert args[:5] == ["-q", "-o", "addopts=", "-p", "no:cacheprovider"]
+        assert args[5].startswith("--basetemp=") and args[6].startswith("--junitxml=")
+        files = args[7:]
+        assert files and all(re.fullmatch(r"tests/test_[a-z0-9_]+\.py", item) for item in files)
+        result = subprocess.run(
+            [sys.executable, "-B", "-m", "pytest", "--collect-only", "-q", "-o", "addopts=", "-p", "no:cacheprovider", *files],
+            cwd=ROOT / "batch-runner", env=env_i_environment(step), capture_output=True, text=True, timeout=300)
+        assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+        totals = re.findall(r"^(\d+) tests? collected(?:, \d+ warnings?)? in [0-9.]+s(?: \([0-9:]+\))?$", result.stdout, re.M)
+        assert len(totals) == 1, result.stdout[-2000:]
+        collected[name] = int(totals[0])
+    assert collected == EXPECTED_COUNTS
 
 
 def test_result_check_accepts_complete_zero_failure_counts(tmp_path):

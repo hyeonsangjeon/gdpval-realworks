@@ -4,7 +4,7 @@ name: GHCP patched-runtime model-free tests
 # Keep the original branch probe and its historical hash contracts untouched.
 on:
   push:
-    branches: [leader/ghcp-patched-runtime-receipt-20261106]
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   contracts:
     name: Patched runtime offline contracts plus workflow guards
-    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -91,7 +91,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 2901, "workflow-guards.xml": 80}
+          expected = {"contracts.xml": 2903, "workflow-guards.xml": 82}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
@@ -123,7 +123,7 @@ jobs:
     # Independent checks of one bundle. The import job remains mandatory and its
     # failure remains red; readiness has its OWN same-process load-proof guard.
     needs: patched-codex-server-bundle
-    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -197,7 +197,7 @@ jobs:
   patched-codex-typecheck:
     name: patched Codex module typecheck
     needs: contracts
-    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
@@ -422,7 +422,7 @@ jobs:
   patched-codex-server-bundle:
     name: patched Codex server bundle build
     needs: patched-codex-typecheck
-    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     permissions:
@@ -508,7 +508,7 @@ jobs:
   patched-agent-host-load-smoke:
     name: patched agent host model-free load smoke
     needs: patched-codex-server-bundle
-    if: github.event_name == 'push' && github.ref == 'refs/heads/leader/ghcp-patched-runtime-receipt-20261106'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

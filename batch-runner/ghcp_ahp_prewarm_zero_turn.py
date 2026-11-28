@@ -20,7 +20,7 @@ import ghcp_ahp_zero_turn as zero
 from ghcp_ahp_errors import Refused
 
 REPOSITORY = "hyeonsangjeon/gdpval-realworks"
-BRANCH = "leader/ghcp-patched-runtime-receipt-20261106"
+BRANCH = "main"
 WORKFLOW = ".github/workflows/agentic-v2-ghcp-sol-gate.yml"
 BUILD_WORKFLOW = ".github/workflows/ghcp-ahp-patched-runtime-tests.yml"
 IDENTITY_KEYS = ("github_run_id", "github_run_attempt", "github_sha")
