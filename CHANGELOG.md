@@ -13,6 +13,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- 2026-11-28: The GHCP patched-runtime workflow's exact counts are now
+  checked on every PR, not only after a merge. That workflow runs only on a
+  push to `main` and refuses any count but its literal, so a PR that added
+  one contract case stayed green and broke the next main build. A new guard
+  case runs `pytest --collect-only` with the workflow's own file lists,
+  options and `env -i` variables, and requires 2903 contract cases and 82
+  guard cases. It runs in Backend Tests' `ghcp-ahp-contracts` job. The guard
+  count moves from 81 to 82 for this one case; the restore step still
+  rebuilds the older pinned bytes (`6e11921e…`). No grading input, grader
+  seal, `batch-run.yml` or `grade-run.yml` changes.
+
 - 2026-11-28: Backend Tests runs #808's GHCP AHP contract files
   (`tests/test_ghcp_ahp_*.py`) and `tests/test_ghcp_sol_offline_rehearsal.py`
   in a new `ghcp-ahp-contracts` job (ubuntu-24.04, 45 minutes, the core job's

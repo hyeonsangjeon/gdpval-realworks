@@ -6,6 +6,7 @@ The compiler job's shell is parsed, not run, by these offline tests.
 import ast
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -37,7 +38,7 @@ EXTRA_SUITE = ["tests/test_ghcp_ahp_patchset.py", "tests/test_ghcp_ahp_load_smok
                "tests/test_ghcp_ahp_server_only_staging.py", "tests/test_ghcp_ahp_runner_userns.py",
                "tests/test_ghcp_sol_offline_rehearsal.py", "tests/test_ghcp_ahp_default_policy.py",
                "tests/test_ghcp_ahp_output_collection.py", "tests/test_ghcp_ahp_token_ledger.py"]
-EXPECTED_COUNTS = {"contracts.xml": 2903, "workflow-guards.xml": 81}
+EXPECTED_COUNTS = {"contracts.xml": 2903, "workflow-guards.xml": 82}
 CORRECTION = ROOT / "batch-runner/patches/vscode-2c33b50b-prewarm-chat-context.patch"
 CORRECTION_SHA256 = "555cdcfd54549796e558a0c7cb56155599d9522795c042465aaba7f8af46558a"
 ORIGINAL_WORKFLOWS = {
@@ -122,7 +123,7 @@ def restore_pre_main_producer_workflow(data):
         (b"    branches: [main]\n", f"    branches: [{legacy}]\n".encode(), 1),
         (b"    if: github.event_name == 'push' && github.ref == 'refs/heads/main'\n",
          f"    if: github.event_name == 'push' && github.ref == 'refs/heads/{legacy}'\n".encode(), 5),
-        (b'          expected = {"contracts.xml": 2903, "workflow-guards.xml": 81}\n',
+        (b'          expected = {"contracts.xml": 2903, "workflow-guards.xml": 82}\n',
          b'          expected = {"contracts.xml": 2901, "workflow-guards.xml": 80}\n', 1),
     )
     for current, original, count in changes:
@@ -219,6 +220,46 @@ def test_result_check_retains_exact_expected_counts():
                    and any(isinstance(target, ast.Name) and target.id == "expected" for target in node.targets)]
     assert len(assignments) == 1 and ast.literal_eval(assignments[0].value) == EXPECTED_COUNTS
     assert 'env -i PATH="$PATH" LANG=C.UTF-8 RUNNER_TEMP="$RUNNER_TEMP"' in steps()["results"]["run"]
+
+
+def env_i_environment(step):
+    """The exact `env -i` variables a pytest step passes, with $PATH expanded."""
+    words = shlex.split(step["run"].replace("\\\n", " ").partition("env -i ")[2])
+    environment = {}
+    for word in words:
+        key, sign, value = word.partition("=")
+        if not sign or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", key):
+            break
+        assert key not in environment
+        environment[key] = os.environ.get("PATH", "/usr/bin:/bin") if value == "$PATH" else value
+    assert environment == {"PATH": environment["PATH"], "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1",
+                           "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1"}
+    return environment
+
+
+def test_expected_counts_equal_what_pytest_collects_for_the_workflows_own_file_lists():
+    # The producer runs only on a push to main, so a count drift would first
+    # fail after a merge. Collect both reports' files here, on every PR, with
+    # the step's own options, file list and `env -i` variables.
+    selected = steps()
+    reports = {"contracts.xml": selected["contracts"], "workflow-guards.xml": selected["workflow_guards"]}
+    assert set(reports) == set(EXPECTED_COUNTS)
+    assert pytest_args(selected["contracts"])[7:] == SUITE + EXTRA_SUITE
+    collected = {}
+    for name, step in reports.items():
+        args = pytest_args(step)
+        assert args[:5] == ["-q", "-o", "addopts=", "-p", "no:cacheprovider"]
+        assert args[5].startswith("--basetemp=") and args[6].startswith("--junitxml=")
+        files = args[7:]
+        assert files and all(re.fullmatch(r"tests/test_[a-z0-9_]+\.py", item) for item in files)
+        result = subprocess.run(
+            [sys.executable, "-B", "-m", "pytest", "--collect-only", "-q", "-o", "addopts=", "-p", "no:cacheprovider", *files],
+            cwd=ROOT / "batch-runner", env=env_i_environment(step), capture_output=True, text=True, timeout=300)
+        assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+        totals = re.findall(r"^(\d+) tests? collected(?:, \d+ warnings?)? in [0-9.]+s(?: \([0-9:]+\))?$", result.stdout, re.M)
+        assert len(totals) == 1, result.stdout[-2000:]
+        collected[name] = int(totals[0])
+    assert collected == EXPECTED_COUNTS
 
 
 def test_result_check_accepts_complete_zero_failure_counts(tmp_path):

@@ -91,7 +91,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          expected = {"contracts.xml": 2903, "workflow-guards.xml": 81}
+          expected = {"contracts.xml": 2903, "workflow-guards.xml": 82}
           directory = Path(os.environ["RUNNER_TEMP"]) / "ghcp-patched-ci"
           counts = {}
           for name, total in expected.items():
