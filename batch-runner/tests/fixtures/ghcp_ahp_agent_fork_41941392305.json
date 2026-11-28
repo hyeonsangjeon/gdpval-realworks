@@ -1,0 +1,36 @@
+{
+  "schema_version": "ghcp-ahp-agent-fork-fixture-v1",
+  "provenance": {
+    "kind": "pinned_source_reconstruction_with_observed_directory_values",
+    "run_id": 41941392305,
+    "fork_request_recorded_in_that_run": false,
+    "backend_startup_sha256": "cd29f0f06fc0020ddafd7485c85382b9b1698a650edc59fd4a7766139c05a71f",
+    "vscode_commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+    "sources": {
+      "module": "src/vs/platform/agentHost/node/nodeAgentHostStarter.ts:181",
+      "arguments": "src/vs/platform/agentHost/node/nodeAgentHostStarter.ts:145",
+      "extensionless_path": "src/vs/base/common/network.ts:413",
+      "data_path": "src/vs/server/node/server.main.ts:42",
+      "logs_path": "src/vs/platform/environment/common/environmentService.ts:73",
+      "exec_argv": "resources/server/bin/code-server-linux.sh:24",
+      "telemetry": "cli/src/commands/agent_host.rs:302"
+    }
+  },
+  "observed_state_root": "/tmp/ahp-knk_x0ss",
+  "observed_logs_directory": "server-data/data/logs/20261105T002816",
+  "observed_agent_socket_basename": "code-22b264f5-ca2c-4d56-a967-662fd7f41f8b",
+  "request": {
+    "executable": "${SERVER}/node",
+    "module_path": "${SERVER}/out/bootstrap-fork",
+    "args": [
+      "--type=agentHost",
+      "--logsPath", "${STATE}/server-data/data/logs/20261105T002816",
+      "--user-data-dir", "${STATE}/server-data/data",
+      "--telemetry-level", "off"
+    ],
+    "exec_argv": [],
+    "entrypoint": "vs/platform/agentHost/node/agentHostMain"
+  },
+  "previous_allowed_module_path": "${SERVER}/out/bootstrap-fork.js",
+  "previous_args_check": "Array.isArray only; no exact argument check"
+}

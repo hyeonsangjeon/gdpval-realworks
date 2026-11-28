@@ -1,0 +1,12 @@
+diff --git a/src/vs/platform/agentHost/node/agentService.ts b/src/vs/platform/agentHost/node/agentService.ts
+--- a/src/vs/platform/agentHost/node/agentService.ts
++++ b/src/vs/platform/agentHost/node/agentService.ts
+@@ -6201,7 +6201,7 @@
+ 		// `disposeSession`); warming that draft would outlive it.
+ 		if (isIdleProvisional && !isEphemeral && !this._sessionResidency.isBeingDisposed(session)) {
+ 			// The provider can now read the authoritative session config, not creation defaults.
+-			provider.chats.onChatConfigurationReady?.(defaultChat, this._chatContext(session, defaultChat));
++			provider.chats.onChatConfigurationReady?.(defaultChat, this._chatContext(session, defaultChat, this._knownDefaultChatStorageResource(session, defaultChat) ?? this._newDefaultChatStorageResource(session, defaultChat)));
+ 			this._sessionPrewarmer.onProvisionalSessionCreated({ provider, session, defaultChat, workingDirectories: config?.workingDirectories });
+ 		}
+ 		return session;

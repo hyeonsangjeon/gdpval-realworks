@@ -239,6 +239,49 @@ def restore_pre_placement_guard_bytes(data):
     return restored
 
 
+# backend-tests.yml changed once after the runner pins: #808's GHCP AHP contract
+# files and the offline rehearsal moved out of the core `pytest` job into
+# ghcp-ahp-contracts, so the core job keeps its 45-minute margin (pre-merge
+# review SF-1, 2026-11-28). Undone in one exact step before the runner lines,
+# so both runner-pin hashes above are still checked unchanged.
+GHCP_AHP_JOB_PIN = (
+    "9ec98746110499a2f199e1322a8568effcd7c8b174e04b35661420e64a06af51",  # runner pins only
+    "8a33a01879a1cf9742502a4ce21ef2a1a3550e2797fdb7b03e6fe2052d8905bb",  # plus ghcp-ahp-contracts
+)
+GHCP_AHP_JOB_START = "\n  # #808's GHCP AHP contract files and the offline rehearsal add about 3\n"
+GHCP_AHP_CORE_IGNORES = (
+    " --ignore-glob='tests/test_time_budget_*.py'"
+    " --ignore-glob='tests/test_ghcp_ahp_*.py' --ignore=tests/test_ghcp_sol_offline_rehearsal.py\n",
+    " --ignore-glob='tests/test_time_budget_*.py'\n",
+)
+GHCP_AHP_COMMENTS = (
+    ("      # GPT-5.4/GPT-5.6, budget-pilot, time-budget and GHCP AHP contracts run in their family jobs;\n"
+     "      # no additional tests are deselected across the eleven jobs. The partition\n",
+     "      # GPT-5.4/GPT-5.6, budget-pilot and time-budget contracts run in their family jobs;\n"
+     "      # no additional tests are deselected across the ten jobs. The partition\n"),
+    ("  # ceiling. `pytest` remains the core check; all eleven job verdicts must be\n",
+     "  # ceiling. `pytest` remains the core check; all ten job verdicts must be\n"),
+)
+
+
+def restore_pre_ghcp_ahp_job_bytes(data):
+    """Undo exactly the GHCP AHP family job and its core ignores, requiring both hashes."""
+    before_hash, after_hash = GHCP_AHP_JOB_PIN
+    assert hashlib.sha256(data).hexdigest() == after_hash
+    text = data.decode("utf-8")
+    # The job is the file's last block; cut it whole, from its comment to EOF.
+    assert text.count(GHCP_AHP_JOB_START) == 1
+    start = text.index(GHCP_AHP_JOB_START)
+    assert re.findall(r"^  ([A-Za-z0-9_-]+):$", text[start:], re.MULTILINE) == ["ghcp-ahp-contracts"]
+    text = text[:start]
+    for new, old in (GHCP_AHP_CORE_IGNORES, *GHCP_AHP_COMMENTS):
+        assert text.count(new) == 1
+        text = text.replace(new, old)
+    restored = text.encode("utf-8")
+    assert hashlib.sha256(restored).hexdigest() == before_hash
+    return restored
+
+
 PREVIOUS_BATCH_RUNNER = (
     "${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' "
     "&& 'ubuntu-24.04' || 'ubuntu-latest' }}"
@@ -247,6 +290,8 @@ PREVIOUS_BATCH_RUNNER = (
 
 def restore_pre_ubuntu_2404_runner_bytes(name, data):
     """Undo exactly the approved runner lines, requiring both complete hashes."""
+    if name == "backend-tests.yml" and hashlib.sha256(data).hexdigest() == GHCP_AHP_JOB_PIN[1]:
+        data = restore_pre_ghcp_ahp_job_bytes(data)
     if name == "batch-run.yml" and hashlib.sha256(data).hexdigest() in (
         PLACEMENT_GUARD_PIN[1], COMPARISON_INPUT_PROJECTION_PIN[1],
     ):
@@ -283,6 +328,8 @@ def test_only_reviewed_runner_lines_change_and_historical_bytes_survive(name):
     historical = restore_pre_ubuntu_2404_runner_bytes(name, current)
     if name == "batch-run.yml":
         current = restore_pre_result_pr_job_bytes(restore_pre_placement_guard_bytes(current))
+    if name == "backend-tests.yml":
+        current = restore_pre_ghcp_ahp_job_bytes(current)
     before = yaml.safe_load(historical)
     after = yaml.safe_load(current)
     for job in RUNNER_PINS[name][2]:
@@ -411,6 +458,34 @@ def test_the_placement_reconstruction_rejects_other_bytes(mutation):
     data = data + b"\n" if mutation == "extra_byte" else restore_pre_placement_guard_bytes(data)
     with pytest.raises(AssertionError):
         restore_pre_placement_guard_bytes(data)
+
+
+def test_the_ghcp_ahp_job_is_the_only_backend_change_after_the_runner_pins():
+    current = (WORKFLOWS / "backend-tests.yml").read_bytes()
+    after = yaml.safe_load(current)
+    before = yaml.safe_load(restore_pre_ghcp_ahp_job_bytes(current))
+    moved = after["jobs"].pop("ghcp-ahp-contracts")
+    assert moved["runs-on"] == "ubuntu-24.04" and moved["timeout-minutes"] == 45
+    assert [step["name"] for step in moved["steps"]][-1] == "Run GHCP AHP contracts"
+    (core,) = [step for step in after["jobs"]["pytest"]["steps"] if step.get("name") == "Run tests"]
+    new_ignores, old_ignores = GHCP_AHP_CORE_IGNORES
+    assert core["run"].count(new_ignores) == 1
+    core["run"] = core["run"].replace(new_ignores, old_ignores)
+    assert after == before
+
+
+@pytest.mark.parametrize("mutation", ["extra_byte", "already_restored", "core_ignores_dropped"])
+def test_the_ghcp_ahp_job_reconstruction_rejects_other_bytes(mutation):
+    data = (WORKFLOWS / "backend-tests.yml").read_bytes()
+    if mutation == "extra_byte":
+        data += b"\n"
+    elif mutation == "already_restored":
+        data = restore_pre_ghcp_ahp_job_bytes(data)
+    else:
+        new_ignores, old_ignores = GHCP_AHP_CORE_IGNORES
+        data = data.replace(new_ignores.encode(), old_ignores.encode(), 1)
+    with pytest.raises(AssertionError):
+        restore_pre_ghcp_ahp_job_bytes(data)
 
 
 @pytest.mark.parametrize("mutation", ["extra_byte", "already_restored"])

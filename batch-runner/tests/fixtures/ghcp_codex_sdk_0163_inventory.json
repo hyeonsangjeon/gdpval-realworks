@@ -1,0 +1,43 @@
+{
+  "schema": "public-codex-sdk-inventory-v1",
+  "sdk_version": "0.163.0",
+  "archive_url": "https://main.vscode-cdn.net/agent-sdk/codex/0.163.0/linux-x64.tgz",
+  "archive_sha256": "201b83598aaa2764468788cff3ad450e81e5d1e2f00662be668f94d85e8de294",
+  "provenance": "Public archive member listing and package.json fields, read without running the SDK; binaries in tests are inert ELF-prefixed bytes.",
+  "packages": {
+    "node_modules/@openai/codex/package.json": {
+      "name": "@openai/codex",
+      "version": "0.163.0",
+      "bin": {"codex": "bin/codex.js"},
+      "files": ["bin/codex.js"],
+      "optionalDependencies": {
+        "@openai/codex-linux-x64": "npm:@openai/codex@0.163.0-linux-x64",
+        "@openai/codex-linux-arm64": "npm:@openai/codex@0.163.0-linux-arm64",
+        "@openai/codex-darwin-x64": "npm:@openai/codex@0.163.0-darwin-x64",
+        "@openai/codex-darwin-arm64": "npm:@openai/codex@0.163.0-darwin-arm64",
+        "@openai/codex-win32-x64": "npm:@openai/codex@0.163.0-win32-x64",
+        "@openai/codex-win32-arm64": "npm:@openai/codex@0.163.0-win32-arm64"
+      }
+    },
+    "node_modules/@openai/codex-linux-x64/package.json": {
+      "name": "@openai/codex",
+      "version": "0.163.0-linux-x64",
+      "os": ["linux"],
+      "cpu": ["x64"],
+      "files": ["vendor"]
+    }
+  },
+  "layouts": {
+    "node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-package.json": {
+      "layoutVersion": 1,
+      "version": "0.163.0",
+      "target": "x86_64-unknown-linux-musl",
+      "variant": "codex",
+      "entrypoint": "bin/codex",
+      "resourcesDir": "codex-resources",
+      "pathDir": "codex-path"
+    }
+  },
+  "native_members": ["node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"],
+  "native_member_sizes": {"node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex": 296865480}
+}
