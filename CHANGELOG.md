@@ -13,6 +13,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- 2026-11-28: Run record `sol220_readout_20261128` (Korean) for GPT-5.6 Sol
+  on all 220 tasks, from two `sol_stage_readout.py` outputs committed beside
+  it. Fixed-220 mean 79.63 on the first attempt (exp037 + exp039 + exp040)
+  and 83.71 with exp041's ten Azure-side retries; judged-only 86.30 over 203
+  tasks and 86.46 over 213; zeros 17 to 7 (five content filters, two
+  grader-side, none retried). Money stays per booking basis and is never
+  added across them: USD 3,451.36 booked on `list_long_context` for the
+  first attempt (an approval ledger; the Azure cost of the same work is
+  about USD 960, partly derived and estimated) and USD 74.79 booked of a
+  USD 220 ceiling on `tenant_observed_20261126` for exp041, whose bill is
+  not known yet. The record also covers exp041's setup differences, its
+  verify-published failure on one zero-usage judge call (exp041's
+  verify-published check stays red, since its files are immutable; from
+  later runs, #818 keeps the journal reservation and names the case
+  `reported_zero_usage`, which is still a failure; the ledger row keeps
+  zeros until a grader reseal), and how to reproduce both readouts. The bot
+  report.md files of result PRs #800, #803, #811, #813 and #817 are kept
+  verbatim under `stage_reports/`; those PRs are closed without merging,
+  since a stage under `batch-runner/results/` would reach the reports
+  leaderboard as a fragment (#800 is exp036's five-task pilot, not one of
+  the readout's stages, closed for the same reason). Closing them keeps
+  stages off the reports leaderboard only: the grading view still lists
+  the stage grade cards until a separate follow-up hides them or adds a
+  combined 220 entry.
+
 - 2026-11-26: `scripts/sol_stage_readout.py` takes `--retry-stage <id>`
   (repeatable), a stage passed with `--stage` after the stages it retries.
   Its row replaces an earlier stage's row only when that row is an
